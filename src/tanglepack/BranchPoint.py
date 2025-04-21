@@ -20,30 +20,34 @@ class BranchPoint(Point):
         self.prev_iterate = None
 
 
-    # these methods might not make much sense since a
-    def insert_point_forward(self, node: Point, index):
+    def insert_point_forward(self, node: Point, branch_index):
         """
-        Inserts this object after another point node in the linked list
+        Inserts a point (node) after this point node in the linked list at the given branch index
 
         Paramters:
             node (Point): point to be inserted after
         """
 
-        self.forward_branches[index] = node.forward
-        self.backward_branches[index] = node
-        
-        node.forward[index] = self
+        if self.forward_branches[branch_index] is not None:
+            self.forward_branches[branch_index].backward = node
+            node.forward = self.forward_branches[branch_index]
+
+        self.forward_branches[branch_index] = node        
+        node.backward = self
 
 
-    def insert_point_backward(self, node: Point, index):
+    def insert_point_backward(self, node: Point, branch_index):
         """
         Inserts this object before another point node in the linked list
 
         Paramters:
             node (Point): point to be inserted before
         """
-        
-        self.backward_branches[index] = node.backward
-        self.forward_branches[index] = node
-        
-        node.backward[index] = self
+
+        if self.backward_branches[branch_index] is not None:
+            self.backward_branches[branch_index].forward = node
+            node.backward = self.backward_branches[branch_index]
+
+        self.backward_branches[branch_index] = node
+        node.forward = self
+
