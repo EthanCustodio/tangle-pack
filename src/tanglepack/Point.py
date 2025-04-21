@@ -27,9 +27,8 @@ class Point():
         self.edist = edist
         self.stretch_param = stretch_param
 
-        self.next_manifold = None
-        
-        self.prev_manifold = None
+        self.forward = None
+        self.backward = None
 
         self.next_iterate = None
         self.prev_iterate = None
@@ -40,7 +39,41 @@ class Point():
         return np.array([self.x, self.y])
 
 
-    def insert_manifold_after(self, node: Point):
+    def insert_point_forward(self, node: Point):
+        """
+        Inserts a point (node) object after this point in the linked list
+
+        Paramters:
+            node (Point): point to be inserted after
+        """
+        self.stretch_param = node.stretch_param
+
+        if self.forward is not None:
+            self.forward.backward = node
+            node.forward = self.forward
+
+        self.forward = node
+        node.backward = self
+
+
+    def insert_point_backward(self, node: Point):
+        """
+        Inserts a point (node) object before this point in the linked list
+
+        Paramters:
+            node (Point): point to be inserted before
+        """
+        self.stretch_param = node.stretch_param
+        
+        if self.backward is not None:
+            self.backward.forward = node
+            node.backward = self.backward
+
+        self.backward = node
+        node.forward = self
+
+
+    def insert_next_iterate(self, node: Point):
         """
         Inserts this object after another point node in the linked list
 
@@ -49,13 +82,15 @@ class Point():
         """
         self.stretch_param = node.stretch_param
 
-        self.next_manifold = node.next_manifold
-        self.prev_manifold = node
-        
-        node.next_manifold = self
+        if self.next_iterate is not None:
+            self.next_iterate.prev_iterate = node
+            node.next_iterate = self.next_iterate
+
+        self.next_iterate = node
+        node.prev_iterate = self
 
 
-    def insert_manifold_before(self, node: Point):
+    def insert_prev_iterate(self, node: Point):
         """
         Inserts this object before another point node in the linked list
 
@@ -63,39 +98,11 @@ class Point():
             node (Point): point to be inserted before
         """
         self.stretch_param = node.stretch_param
-        
-        self.prev_manifold = node.prev_manifold
-        self.next_manifold = node
-        
-        node.prev_manifold = self
 
+        if self.prev_iterate is not None:
+            self.prev_iterate.next_iterate = node
+            node.prev_iterate = self.prev_iterate
 
-    def insert_iterate_after(self, node: Point):
-        """
-        Inserts this object after another point node in the linked list
-
-        Paramters:
-            node (Point): point to be inserted after
-        """
-        self.stretch_param = node.stretch_param
-
-
-        self.next_iterate = node.next_iterate
         self.prev_iterate = node
-        
         node.next_iterate = self
 
-
-    def insert_iterate_before(self, node: Point):
-        """
-        Inserts this object before another point node in the linked list
-
-        Paramters:
-            node (Point): point to be inserted before
-        """
-        self.stretch_param = node.stretch_param
-
-        self.prev_iterate = node.prev_iterate
-        self.next_iterate = node
-        
-        node.prev_iterate = self
