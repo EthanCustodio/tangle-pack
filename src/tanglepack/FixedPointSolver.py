@@ -57,8 +57,6 @@ class FixedPointSolver():
 
         fixed_point_full = self.unflatten_trajectory(fixed_point_flattened)
 
-        print(f"This is the fixed point {fixed_point_full}")
-
         return np.array(fixed_point_full)
     
     
