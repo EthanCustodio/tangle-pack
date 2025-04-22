@@ -154,3 +154,6 @@ def test_build_fixed_point_object():
 
     assert all(isinstance(x, BranchPoint) for x in fixed_point.branch_points)
     assert np.allclose(fixed_point.total_jacobian, henon_jacobian(fixed_point.coordinates[0]))
+
+
+    
