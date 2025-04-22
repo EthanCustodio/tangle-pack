@@ -1,11 +1,14 @@
 import numpy as np
 from .Point import Point
+from .BasePoint import BasePoint
 
-class BranchPoint(Point):
+class BranchPoint(BasePoint):
 
     def __init__(self, num_branches, x=None, y=None, cdist=None, edist=None):
 
         super().__init__(x=x, y=y, cdist=cdist, edist=edist)
+
+        self.num_branches = num_branches
 
         self.cdists = np.zeros(num_branches)
         self.edists = np.zeros(num_branches)

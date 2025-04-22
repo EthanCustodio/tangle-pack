@@ -1,7 +1,8 @@
 from __future__ import annotations
 import numpy as np
+from .BasePoint import BasePoint
 
-class Point():
+class Point(BasePoint):
 
     def __init__(self, x=None, y=None, cdist=None, edist=None, stretch_param=None):
         """
@@ -20,11 +21,8 @@ class Point():
             cdist (float): canonical distance from the fixed point
         """
 
-        self.x = x
-        self.y = y
+        super().__init__(x=x, y=y, cdist=cdist, edist=edist)
 
-        self.cdist = cdist
-        self.edist = edist
         self.stretch_param = stretch_param
 
         self.forward = None
