@@ -32,11 +32,6 @@ class Point(BasePoint):
         self.prev_iterate = None
 
 
-    def get_point(self):
-        
-        return np.array([self.x, self.y])
-
-
     def insert_point_forward(self, node: Point):
         """
         Inserts a point (node) object after this point in the linked list

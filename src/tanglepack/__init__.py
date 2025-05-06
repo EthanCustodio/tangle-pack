@@ -1,7 +1,14 @@
 
 """functions to expose"""
-from .Manifold import Manifold
+from .DynamicalSystem import DynamicalSystem
+
+from .BasePoint import BasePoint
+from .Point import Point
+from .BranchPoint import BranchPoint
+
+from .FixedPointSolver import FixedPointSolver
 from .FixedPoint import FixedPoint
-from .FixedPoint2 import FixedPoint2
-from .Manifold2 import Manifold2
-from .InitialManifold import InitialManifold
+
+from .BaseManifold import BaseManifold
+from .ManifoldMachine import ManifoldMachine
+from .ManifoldInitializer import ManifoldInitializer

@@ -1,3 +1,4 @@
+import numpy as np
 
 class BasePoint():
 
@@ -8,3 +9,8 @@ class BasePoint():
 
         self.cdist = cdist
         self.edist = edist
+
+
+    def get_point(self):
+        
+        return np.array([self.x, self.y])

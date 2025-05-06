@@ -54,3 +54,34 @@ class BranchPoint(BasePoint):
         self.backward_branches[branch_index] = node
         node.forward = self
 
+
+    def insert_next_iterate(self, node: Point):
+        """
+        Inserts this object after another point node in the linked list
+
+        Paramters:
+            node (Point): point to be inserted after
+        """
+
+        if self.next_iterate is not None:
+            self.next_iterate.prev_iterate = node
+            node.next_iterate = self.next_iterate
+
+        self.next_iterate = node
+        node.prev_iterate = self
+
+
+    def insert_prev_iterate(self, node: Point):
+        """
+        Inserts this object before another point node in the linked list
+
+        Paramters:
+            node (Point): point to be inserted before
+        """
+
+        if self.prev_iterate is not None:
+            self.prev_iterate.next_iterate = node
+            node.prev_iterate = self.prev_iterate
+
+        self.prev_iterate = node
+        node.next_iterate = self

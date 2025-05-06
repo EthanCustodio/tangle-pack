@@ -2,17 +2,17 @@ import numpy as np
 from scipy.optimize import newton as newton_method
 from scipy.differentiate import jacobian as jacob
 from .FixedPoint import FixedPoint
+from .DynamicalSystem import DynamicalSystem
 
 
 class FixedPointSolver():
 
 
-    def __init__(self, dynamical_map, dynamical_map_inverse=None, jacobian_function=None):
+    def __init__(self, system: DynamicalSystem):
 
-        
-        self.dynamical_map = dynamical_map
-        self.dynamical_map_inverse = dynamical_map_inverse
-        self.jacobian_function = jacobian_function
+        self.dynamical_map = system.map
+        self.dynamical_map_inverse = system.map_inv
+        self.jacobian_function = system.jacobian
 
 
     def construct_fixed_point(self, initial_guess, num_branches):
@@ -21,6 +21,8 @@ class FixedPointSolver():
 
         fixed_point = self.compute_fixed_point(initial_guess)
 
+        #TODO make this more correct for orbits with p > 1 
+        # shoot once for each point in the orbit 
         difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
         accuracy = (np.average(np.linalg.norm(difference, axis=1))) ** (1/3)
 
@@ -34,6 +36,9 @@ class FixedPointSolver():
         point.total_jacobian = total_jacobian
 
         for i in range(period):
+
+            point.branch_points[i].x, point.branch_points[i].y = point.coordinates[i]
+            point.branch_points[i].cdist = 0.0
 
             point.unstable_eigenvectors[i] = eigenvectors[i][0]
             point.stable_eigenvectors[i] = eigenvectors[i][1]

@@ -1,6 +1,7 @@
 import numpy as np
 from tanglepack.FixedPointSolver import FixedPointSolver
 from tanglepack.BranchPoint import BranchPoint
+from tanglepack.DynamicalSystem import DynamicalSystem
 
 
 def henon(point):
@@ -36,10 +37,11 @@ def henon_jacobian(point):
     return np.array([[2*x, 1], [-b, 0]])
 
 
-
 def test_initialization():
 
-    solver = FixedPointSolver(henon, henon_inverse, henon_jacobian)
+    system = DynamicalSystem(henon, henon_inverse, henon_jacobian)
+
+    solver = FixedPointSolver(system)
 
     assert solver.dynamical_map is not None
     assert solver.dynamical_map_inverse is not None
@@ -50,7 +52,9 @@ def test_find_period_one_fixed_point():
 
     tolerance = 1e-5
 
-    solver = FixedPointSolver(henon, henon_inverse, henon_jacobian)
+    system = DynamicalSystem(henon, henon_inverse, henon_jacobian)
+
+    solver = FixedPointSolver(system)
 
     initial_guess = [4, -4]
 
@@ -65,7 +69,9 @@ def test_find_period_two_fixed_point():
 
     tolerance = 1e-5
 
-    solver = FixedPointSolver(henon, henon_inverse, henon_jacobian)
+    system = DynamicalSystem(henon, henon_inverse, henon_jacobian)
+
+    solver = FixedPointSolver(system)
 
     initial_guess = [[4, -4], [4, -4]]
 
@@ -81,7 +87,9 @@ def test_compute_single_jacobian():
 
     tolerance = 1e-8
 
-    solver = FixedPointSolver(henon, henon_inverse, henon_jacobian)
+    system = DynamicalSystem(henon, henon_inverse, henon_jacobian)
+
+    solver = FixedPointSolver(system)
 
     initial_guess = np.array([4, -4])
 
@@ -97,7 +105,9 @@ def test_compute_two_jacobians():
 
     tolerance = 1e-8
 
-    solver = FixedPointSolver(henon, henon_inverse, henon_jacobian)
+    system = DynamicalSystem(henon, henon_inverse, henon_jacobian)
+
+    solver = FixedPointSolver(system)
 
     initial_guess = np.array([[4, -4], [4, -4]])
 
@@ -114,7 +124,9 @@ def test_compute_eigenvectors():
 
     tolerance = 1e-6
 
-    solver = FixedPointSolver(henon, henon_inverse, henon_jacobian)
+    system = DynamicalSystem(henon, henon_inverse, henon_jacobian)
+
+    solver = FixedPointSolver(system)
 
     initial_guess = np.array([4, -4])
 
@@ -146,7 +158,9 @@ def test_compute_eigenvectors():
 
 def test_build_fixed_point_object():
 
-    solver = FixedPointSolver(henon, henon_inverse, henon_jacobian)
+    system = DynamicalSystem(henon, henon_inverse, henon_jacobian)
+
+    solver = FixedPointSolver(system)
     fixed_point = solver.construct_fixed_point([4, -4], num_branches=1)
 
     assert all(isinstance(x, BranchPoint) for x in fixed_point.branch_points)

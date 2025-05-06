@@ -1,5 +1,5 @@
 import numpy as np
-from tanglepack.BranchPoint import BranchPoint
+from .BranchPoint import BranchPoint
 
 class FixedPoint():
 
