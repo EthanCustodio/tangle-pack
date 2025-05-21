@@ -125,4 +125,29 @@ def test_insert_prev_iterate():
     # check if their ends are not
     assert p1.next_iterate == None
     assert p2.prev_iterate == None
+    
 
+def test_insert_next_iterate_error():
+
+    num_branches = 2
+    p = Point(num_branches)
+
+    p1 = Point()
+    p2 = Point()
+    p.insert_next_iterate(p1)
+    
+    with pytest.raises(ValueError):
+        p.insert_next_iterate(p2)
+
+
+def test_insert_prev_iterate_error():
+
+    num_branches = 2
+    p = Point(num_branches)
+
+    p1 = Point()
+    p2 = Point()
+    p.insert_prev_iterate(p1)
+    
+    with pytest.raises(ValueError):
+        p.insert_prev_iterate(p2)

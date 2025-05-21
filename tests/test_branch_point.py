@@ -102,3 +102,65 @@ def test_insert_point_backward_connected():
     assert p1.forward == p
     assert p.forward_branches[0] == None
 
+
+def test_insert_next_iterate():
+
+    num_branches = 2
+    p1 = BranchPoint(num_branches)
+
+    p2 = Point()
+
+    p1.insert_next_iterate(p2)
+
+    # check if they are connected
+    assert p1.next_iterate == p2
+    assert p2.prev_iterate == p1
+
+    # check if their ends are not
+    assert p1.prev_iterate == None
+    assert p2.next_iterate == None
+
+
+def test_insert_prev_iterate():
+
+    num_branches = 2
+    p1 = BranchPoint(num_branches)
+
+    p2 = Point()
+
+    p1.insert_prev_iterate(p2)
+
+    # check if they are connected
+    assert p1.prev_iterate == p2
+    assert p2.next_iterate == p1
+
+    # check if their ends are not
+    assert p1.next_iterate == None
+    assert p2.prev_iterate == None
+
+
+def test_insert_next_iterate_error():
+
+    num_branches = 2
+    p = BranchPoint(num_branches)
+
+    p1 = Point()
+    p2 = Point()
+    p.insert_next_iterate(p1)
+    
+    with pytest.raises(ValueError):
+        p.insert_next_iterate(p2)
+
+
+def test_insert_prev_iterate_error():
+
+    num_branches = 2
+    p = BranchPoint(num_branches)
+
+    p1 = Point()
+    p2 = Point()
+    p.insert_prev_iterate(p1)
+    
+    with pytest.raises(ValueError):
+        p.insert_prev_iterate(p2)
+

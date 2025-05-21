@@ -166,3 +166,14 @@ def test_build_fixed_point_object():
     assert all(isinstance(x, BranchPoint) for x in fixed_point.branch_points)
     assert np.allclose(fixed_point.total_jacobian, henon_jacobian(fixed_point.coordinates[0]))
 
+
+def test_build_fixed_point_object_without_jacobian():
+
+    system = DynamicalSystem(henon, henon_inverse)
+
+    solver = FixedPointSolver(system)
+    fixed_point = solver.construct_fixed_point([4, -4], num_branches=1)
+
+    assert all(isinstance(x, BranchPoint) for x in fixed_point.branch_points)
+    assert np.allclose(fixed_point.total_jacobian, henon_jacobian(fixed_point.coordinates[0]))
+

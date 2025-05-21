@@ -64,8 +64,7 @@ class BranchPoint(BasePoint):
         """
 
         if self.next_iterate is not None:
-            self.next_iterate.prev_iterate = node
-            node.next_iterate = self.next_iterate
+            raise ValueError("next iterate already exists")
 
         self.next_iterate = node
         node.prev_iterate = self
@@ -80,8 +79,7 @@ class BranchPoint(BasePoint):
         """
 
         if self.prev_iterate is not None:
-            self.prev_iterate.next_iterate = node
-            node.prev_iterate = self.prev_iterate
+            raise ValueError("previous iterate already exists")
 
         self.prev_iterate = node
         node.next_iterate = self
