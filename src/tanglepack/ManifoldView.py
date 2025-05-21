@@ -19,10 +19,6 @@ class ManifoldView:
         self.stretch_param = manifold.stretch_param
         self.walk_fwd  = manifold.walk_fwd
         self.walk_back = manifold.walk_back
-
-        if system.map_inv is None:
-            # you can choose to raise here or let numeric code handle it
-            raise ValueError("This system has no inverse map.")
         
         if manifold.stability == "unstable":
             self.map_fwd, self.map_back = system.map, system.map_inv
