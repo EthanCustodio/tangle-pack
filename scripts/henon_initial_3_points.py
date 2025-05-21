@@ -42,8 +42,12 @@ initial_segment = man_maker.get_initial_fundamental_segment(fixed_point, 0, 0, '
 initial_points = initial_segment.get_point_array(branch_index=0)
 print(f'Initial 3 Points: {initial_points}')
 
-plt.figure()
-plt.scatter(*fixed_point.coordinates[0], c='k', s=1)
-plt.scatter(initial_points[:, 0], initial_points[:, 1], c='g', s=1)
-plt.show()
+
+initial_segment.plot(branch_index=0, marker='o', ms=10)
+
+
+# plt.figure()
+# plt.scatter(*fixed_point.coordinates[0], c='k', s=1)
+# plt.scatter(initial_points[:, 0], initial_points[:, 1], c='g', s=1)
+# plt.show()
 

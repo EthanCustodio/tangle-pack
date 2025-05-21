@@ -21,15 +21,6 @@ class BaseManifold():
         self.name = name
 
 
-    def get_point_array(self):
-
-        current_point = self.root
-
-        while current_point is not None:
-
-            pass
-
-
     def get_point_array(self, final_node=None, return_nodes=False, branch_index=None):
         """
         Walks along the manifold in the stability direction and returns either
@@ -42,6 +33,9 @@ class BaseManifold():
         Returns:
             list[Point] or np.ndarray of shape (N, 2)
         """
+
+        #TODO implement caching in this method
+
         points = []
         prev = None
         current = self.root
@@ -49,12 +43,8 @@ class BaseManifold():
         while current is not None and current != final_node:
             points.append(current if return_nodes else current.get_point())
 
-            if prev is None and isinstance(current, BranchPoint):
-                next_node = self.walk_fwd(prev, current, branch_index=branch_index)
-            else:
-                next_node = self.walk_fwd(prev, current)
+            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
 
-            # next_node = self.walk_fwd(prev, current, branch_index=branch_index if prev is None else None)
             prev, current = current, next_node
 
         if not points:
@@ -65,7 +55,7 @@ class BaseManifold():
 
     def walk_fwd(self, prev: Optional[Point], node: Point, branch_index: Optional[int] = None) -> Optional[Point]:  
         """
-        Return the next point along the manifold *in the stability sense*.
+        Return the next point along the manifold walking away from the fixed point.
         If `node` is a BranchPoint, we exit on the other branch of the
         same stability type we entered on.
         `prev` is the point we just came from (None at the root).
@@ -79,8 +69,8 @@ class BaseManifold():
 
     def walk_back(self, nxt: Optional[Point], node: Point, branch_index: Optional[int] = None) -> Optional[Point]:
         """
-        The inverse of `walk_fwd`: step one link *backward* in stability
-        order.  `nxt` is the point we are coming from.
+        The inverse of `walk_fwd`: step one link *backward* toward the fixed point.
+        `nxt` is the point we are coming from.
         """
         if isinstance(node, BranchPoint):
             return self._branch_backward(nxt, node, branch_index)
@@ -110,6 +100,7 @@ class BaseManifold():
 
         plt.title(f'Manifold Plot ({self.stability.capitalize()})')
         plt.axis('equal')
+        plt.show()
 
 
     # ---------- internal helpers -------------------------------------
@@ -118,27 +109,22 @@ class BaseManifold():
         Choose the correct outgoing branch at a BranchPoint when moving
         'forward' along the manifold.
         """
-        if self.stability == "unstable":
-            branches_in  = bp.backward_branches      # the two unstable legs enter *into* bp
-            branches_out = bp.forward_branches       # ... and exit *out of* bp
-        else:  # stable
-            branches_in  = bp.forward_branches
+
+        if self.stability == "stable":
             branches_out = bp.backward_branches
+            branches_in  = bp.forward_branches
+        else:
+            branches_out = bp.forward_branches
+            branches_in  = bp.backward_branches
 
         if prev is None:
             if branch_index is None:
                 raise ValueError("Must supply branch_index when starting walk from root BranchPoint")
             return branches_out[branch_index]
 
-        for idx, p in enumerate(branches_in):
-            if p is prev:
-                return branches_out[1 - idx]  # toggle branch
-        raise ValueError("Prev node is not connected to this BranchPoint")
-
-        # find which entry leg we came from
-        for idx, p in enumerate(branches_in):
-            if p is prev:
-                return branches_out[1 - idx]         # toggle 0 ↔ 1
+        for i, point in enumerate(branches_in):
+            if point is prev:
+                return branches_out[i]  # toggle branch
         raise ValueError("Prev node is not connected to this BranchPoint")
 
 
@@ -147,7 +133,8 @@ class BaseManifold():
         Choose the correct outgoing branch when walking *backward*.
         Symmetric to _branch_forward.
         """
-        if self.stability == "unstable":
+
+        if self.stability == "stable":
             branches_out = bp.backward_branches
             branches_in  = bp.forward_branches
         else:
@@ -157,16 +144,11 @@ class BaseManifold():
         if nxt is None:
             if branch_index is None:
                 raise ValueError("Must supply branch_index when starting walk from root BranchPoint")
-            return branches_out[branch_index]
+            return branches_in[branch_index]
 
-        for idx, p in enumerate(branches_in):
-            if p is nxt:
-                return branches_out[1 - idx]  # toggle branch
+        for i, point in enumerate(branches_out):
+            if point is nxt:
+                return branches_in[i]  # toggle branch
         raise ValueError("Prev node is not connected to this BranchPoint")
-
-        for idx, p in enumerate(branches_in):
-            if p is nxt:
-                return branches_out[1 - idx]
-        raise ValueError("Next node is not connected to this BranchPoint")
     
     
