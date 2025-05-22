@@ -9,7 +9,7 @@ class ManifoldView:
     def __init__(self, manifold: BaseManifold, system: DynamicalSystem):
 
         self.manifold = manifold
-        self.system   = system
+        self.system = system
 
         # cheap aliases so the numeric code looks neat
         self.root = manifold.root
@@ -17,7 +17,7 @@ class ManifoldView:
         self.stability = manifold.stability
         self.name = manifold.name
         self.stretch_param = manifold.stretch_param
-        self.walk_fwd  = manifold.walk_fwd
+        self.walk_fwd = manifold.walk_fwd
         self.walk_back = manifold.walk_back
         
         if manifold.stability == "unstable":

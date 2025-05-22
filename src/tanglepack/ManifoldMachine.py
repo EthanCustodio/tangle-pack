@@ -39,13 +39,13 @@ class ManifoldMachine():
         current_new_manifold = None
 
         while current_point is not None:
-
+              
             iterated = current_point.next_iterate
             if iterated is None:
 
                 new_point = manifold.map_fwd(current_point.get_point())
                 print(f'new point: {new_point}')
-                print(f'current point: {current_point}')
+                print(f'current point: {current_point.get_point()}')
                 time.sleep(0.1)
                 new_dist = current_point.cdist * manifold.stretch_param
                 iterated = Point(x=new_point[0], y=new_point[1], cdist=new_dist, stretch_param=manifold.stretch_param)
@@ -55,9 +55,9 @@ class ManifoldMachine():
             if current_new_manifold is None:
                 new_manifold.root = iterated
                 current_new_manifold = new_manifold.root
+
             else:
                 if isinstance(current_new_manifold, BranchPoint):
-                    # anchor is the branch leg we’re walking on
                     if new_manifold.stability == "unstable":
                         current_new_manifold.insert_point_forward(iterated, branch_index)
                     else:  # stable
@@ -156,6 +156,7 @@ class ManifoldMachine():
 
 
     def iterate_manifold(self, manifold: BaseManifold, branch_index=None):
+        """Maps a manifold forward, refines the manifold and returns the mapped manifold"""
 
         mapped_manifold = self.map_manifold(manifold, branch_index=branch_index)
         self.refine_manifold(manifold=mapped_manifold, final_node=mapped_manifold.tail, branch_index=branch_index)
@@ -334,7 +335,7 @@ class ManifoldMachine():
         # self.refine_two_points(second_two, first_point)
         self.refine_two_points(first_two, first_point)
 
-        
+
     def refine_two_points(self, points, left_point:Point):
         """
         Takes two points and adds a new point between them.
@@ -366,15 +367,6 @@ class ManifoldMachine():
         new_point = Point(x=point[0], y=point[1], cdist=distance)
 
         left_point.insert_point_forward(new_point)
-
-
-    def check_no_inverse(self):
-        """
-        Raises an error if no inverse map was specified
-        """
-
-        if self.fixed_point.dynamical_map_inverse is None:
-            raise ValueError("You must include an inverse map to refine manifolds")
  
     
     @staticmethod
