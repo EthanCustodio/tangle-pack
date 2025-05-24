@@ -66,6 +66,8 @@ class ManifoldInitializer():
         first_point = Point(first_point[0], first_point[1], cdist=distance_first, edist=distance_first, stretch_param=alpha)
         first_back = Point(first_back[0], first_back[1], cdist=distance_prev, edist=distance_prev, stretch_param=alpha)
 
+        first_back.insert_next_iterate(first_point)
+
         if stability == "unstable":
 
             fixed_point.branch_points[orbit_index].insert_point_forward(first_point, branch_index)

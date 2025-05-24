@@ -39,14 +39,19 @@ class Point(BasePoint):
         Paramters:
             node (Point): point to be inserted after
         """
-        self.stretch_param = node.stretch_param
+            
+        if self.forward is node:
+            pass
+            
+        else:
+            self.stretch_param = node.stretch_param
 
-        if self.forward is not None:
-            self.forward.backward = node
-            node.forward = self.forward
+            if self.forward is not None:
+                self.forward.backward = node
+                node.forward = self.forward
 
-        self.forward = node
-        node.backward = self
+            self.forward = node
+            node.backward = self
 
 
     def insert_point_backward(self, node: Point):
@@ -56,14 +61,19 @@ class Point(BasePoint):
         Paramters:
             node (Point): point to be inserted before
         """
-        self.stretch_param = node.stretch_param
         
-        if self.backward is not None:
-            self.backward.forward = node
-            node.backward = self.backward
+        if self.backward is node:
+            pass
 
-        self.backward = node
-        node.forward = self
+        else:
+            self.stretch_param = node.stretch_param
+            
+            if self.backward is not None:
+                self.backward.forward = node
+                node.backward = self.backward
+
+            self.backward = node
+            node.forward = self
 
 
     def insert_next_iterate(self, node: Point):

@@ -53,6 +53,38 @@ class BaseManifold():
         return points if return_nodes else np.vstack(points)
 
 
+    def get_cdist_array(self, final_node=None, return_nodes=False, branch_index=None):
+        """
+        Walks along the manifold in the stability direction and returns either
+        a list of Point objects or an array of (x, y) coordinates.
+
+        Parameters:
+            final_node (Optional[Point]): If specified, stop walking before this node.
+            return_nodes (bool): If True, return list of Point objects; else return np.ndarray of [x, y].
+
+        Returns:
+            list[Point] or np.ndarray of shape (N, 2)
+        """
+
+        #TODO implement caching in this method
+
+        points = []
+        prev = None
+        current = self.root
+
+        while current is not None and current != final_node:
+            points.append(current if return_nodes else current.cdist)
+
+            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
+
+            prev, current = current, next_node
+
+        if not points:
+            return np.array([]) if not return_nodes else []
+
+        return points if return_nodes else np.vstack(points)
+
+
     def walk_fwd(self, prev: Optional[Point], node: Point, branch_index: Optional[int] = None) -> Optional[Point]:  
         """
         Return the next point along the manifold walking away from the fixed point.
@@ -150,5 +182,4 @@ class BaseManifold():
             if point is nxt:
                 return branches_in[i]  # toggle branch
         raise ValueError("Prev node is not connected to this BranchPoint")
-    
     

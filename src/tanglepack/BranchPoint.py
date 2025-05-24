@@ -30,13 +30,16 @@ class BranchPoint(BasePoint):
         Paramters:
             node (Point): point to be inserted after
         """
+        if self.forward_branches[branch_index] is node:
+            pass
 
-        if self.forward_branches[branch_index] is not None:
-            self.forward_branches[branch_index].backward = node
-            node.forward = self.forward_branches[branch_index]
+        else:
+            if self.forward_branches[branch_index] is not None:
+                self.forward_branches[branch_index].backward = node
+                node.forward = self.forward_branches[branch_index]
 
-        self.forward_branches[branch_index] = node        
-        node.backward = self
+            self.forward_branches[branch_index] = node        
+            node.backward = self
 
 
     def insert_point_backward(self, node: Point, branch_index):
@@ -46,13 +49,16 @@ class BranchPoint(BasePoint):
         Paramters:
             node (Point): point to be inserted before
         """
+        if self.backward_branches[branch_index] is node:
+            pass
 
-        if self.backward_branches[branch_index] is not None:
-            self.backward_branches[branch_index].forward = node
-            node.backward = self.backward_branches[branch_index]
+        else:
+            if self.backward_branches[branch_index] is not None:
+                self.backward_branches[branch_index].forward = node
+                node.backward = self.backward_branches[branch_index]
 
-        self.backward_branches[branch_index] = node
-        node.forward = self
+            self.backward_branches[branch_index] = node
+            node.forward = self
 
 
     def insert_next_iterate(self, node: Point):

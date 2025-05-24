@@ -48,6 +48,9 @@ class FixedPointSolver():
 
             point.jacobians[i] = jacobians[i]
 
+            point.branch_points[i].next_iterate = point.branch_points[(i + 1) % period]
+            point.branch_points[i].prev_iterate = point.branch_points[(i - 1) % period]
+
         return point
 
 

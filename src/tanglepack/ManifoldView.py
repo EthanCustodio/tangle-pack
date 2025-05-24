@@ -19,9 +19,12 @@ class ManifoldView:
         self.stretch_param = manifold.stretch_param
         self.walk_fwd = manifold.walk_fwd
         self.walk_back = manifold.walk_back
+        self.get_point_array = manifold.get_point_array
+        self.get_cdist_array = manifold.get_cdist_array
         
         if manifold.stability == "unstable":
             self.map_fwd, self.map_back = system.map, system.map_inv
 
         else:   # stable
             self.map_fwd, self.map_back = system.map_inv, system.map
+
