@@ -41,7 +41,7 @@ def test_initialization_unstable():
     man_maker = ManifoldInitializer(henon)
 
     initial_segment = man_maker.get_initial_fundamental_segment(fixed_point, 0, 0, 'unstable')
-    initial_points = initial_segment.get_point_array(branch_index=0)
+    initial_points = initial_segment.get_point_array()
 
     assert len(initial_points) == 3
 
@@ -61,7 +61,7 @@ def test_initialization_stable():
     man_maker = ManifoldInitializer(henon)
 
     initial_segment = man_maker.get_initial_fundamental_segment(fixed_point, 0, 0, 'stable')
-    initial_points = initial_segment.get_point_array(branch_index=0)
+    initial_points = initial_segment.get_point_array()
 
     assert len(initial_points) == 3
 

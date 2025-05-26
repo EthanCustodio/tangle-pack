@@ -98,6 +98,3 @@ def test_machine_initialization():
     machine = ManifoldMachine(system)
 
     assert machine.system is system
-
-
-def test_no_inverse():

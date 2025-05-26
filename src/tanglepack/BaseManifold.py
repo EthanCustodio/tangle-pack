@@ -12,16 +12,18 @@ class BaseManifold():
                  stability: Literal["stable", "unstable"],
                  stretch_param: float,
                  name = "unnamed",
-                 tail: Optional[Point] = None):
+                 tail: Optional[Point] = None,
+                 branch_index: Optional[int] = None):
         
         self.root = root
         self.tail = tail
         self.stability = stability
         self.stretch_param = stretch_param
         self.name = name
+        self.branch_index = branch_index
 
 
-    def get_point_array(self, final_node=None, return_nodes=False, branch_index=None):
+    def get_point_array(self, final_node=None, return_nodes=False):
         """
         Walks along the manifold in the stability direction and returns either
         a list of Point objects or an array of (x, y) coordinates.
@@ -33,15 +35,20 @@ class BaseManifold():
         Returns:
             list[Point] or np.ndarray of shape (N, 2)
         """
+        if final_node is None:
+            final_node = self.tail
 
-        #TODO implement caching in this method
-
+        branch_index = self.branch_index
+        
         points = []
         prev = None
         current = self.root
 
-        while current is not None and current != final_node:
+        while current is not None:
             points.append(current if return_nodes else current.get_point())
+
+            if current is final_node:
+                break
 
             next_node = self.walk_fwd(prev, current, branch_index=branch_index)
 
@@ -53,7 +60,7 @@ class BaseManifold():
         return points if return_nodes else np.vstack(points)
 
 
-    def get_cdist_array(self, final_node=None, return_nodes=False, branch_index=None):
+    def get_cdist_array(self, final_node=None, return_nodes=False):
         """
         Walks along the manifold in the stability direction and returns either
         a list of Point objects or an array of (x, y) coordinates.
@@ -65,19 +72,120 @@ class BaseManifold():
         Returns:
             list[Point] or np.ndarray of shape (N, 2)
         """
+        if final_node is None:
+            final_node = self.tail
 
-        #TODO implement caching in this method
+        branch_index = self.branch_index
 
         points = []
         prev = None
         current = self.root
 
-        while current is not None and current != final_node:
+        while current is not None:
             points.append(current if return_nodes else current.cdist)
 
             next_node = self.walk_fwd(prev, current, branch_index=branch_index)
 
             prev, current = current, next_node
+
+        if not points:
+            return np.array([]) if not return_nodes else []
+
+        return points if return_nodes else np.vstack(points)
+
+
+    def get_non_iterated_point_array(self, final_node=None, return_nodes=False):
+        """Returns a list of the iterate points if exists otherwise None"""
+
+        if final_node is None:
+            final_node = self.tail
+
+        branch_index = self.branch_index
+        
+        points = []
+        prev = None
+        current = self.root
+
+        while current is not None and current is not final_node:
+
+            if current.next_iterate is None:
+                points.append(current if return_nodes else current.get_point().ravel())
+
+            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
+
+            prev, current = current, next_node
+
+        if current is final_node:
+            points.append(current if return_nodes else current.get_point().ravel())
+
+        if not points:
+            return np.array([]) if not return_nodes else []
+
+        return points if return_nodes else np.vstack(points)
+
+
+    def get_non_iterated_cdist_array(self, final_node=None):
+        """Returns a list of the iterate points if exists otherwise None"""
+
+        if final_node is None:
+            final_node = self.tail
+
+        branch_index = self.branch_index
+        
+        points = []
+        prev = None
+        current = self.root
+
+        while current is not None and current is not final_node:
+
+            if current.next_iterate is None:
+                points.append(current.cdist)
+
+            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
+
+            prev, current = current, next_node
+
+        if current is final_node:
+            points.append(current.cdist)
+
+        if not points:
+            return np.array([])
+
+        return np.vstack(points)
+
+
+    def get_iterated_point_array(self, final_node=None, return_nodes=False):
+        """
+        Walks along the manifold in the stability direction and returns either
+        a list of Point objects or an array of (x, y) coordinates.
+
+        Parameters:
+            final_node (Optional[Point]): If specified, stop walking before this node.
+            return_nodes (bool): If True, return list of Point objects; else return np.ndarray of [x, y].
+
+        Returns:
+            list[Point] or np.ndarray of shape (N, 2)
+        """
+        if final_node is None:
+            final_node = self.tail
+
+        branch_index = self.branch_index
+        
+        points = []
+        prev = None
+        current = self.root
+
+        while current is not None and current is not final_node:
+
+            if current.next_iterate is not None:
+                points.append(current.next_iterate if return_nodes else current.next_iterate.get_point())
+
+            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
+
+            prev, current = current, next_node
+
+        if current is final_node:
+            points.append(current if return_nodes else current.get_point().ravel())
 
         if not points:
             return np.array([]) if not return_nodes else []
@@ -91,7 +199,16 @@ class BaseManifold():
         If `node` is a BranchPoint, we exit on the other branch of the
         same stability type we entered on.
         `prev` is the point we just came from (None at the root).
+
+        Parameters
+        ----------
+        branch_index : int, optional
+        Which branch of a BranchPoint to follow.  If omitted (None),
+        `self.branch_index` is used.
         """
+        if branch_index is None:
+            branch_index = self.branch_index
+
         if isinstance(node, BranchPoint):
             return self._branch_forward(prev, node, branch_index)
 
@@ -103,7 +220,16 @@ class BaseManifold():
         """
         The inverse of `walk_fwd`: step one link *backward* toward the fixed point.
         `nxt` is the point we are coming from.
+
+        Parameters
+        ----------
+        branch_index : int, optional
+        Which branch of a BranchPoint to follow.  If omitted (None),
+        `self.branch_index` is used.
         """
+        if branch_index is None:
+            branch_index = self.branch_index
+
         if isinstance(node, BranchPoint):
             return self._branch_backward(nxt, node, branch_index)
 
@@ -120,7 +246,7 @@ class BaseManifold():
             show_points (bool): Whether to show individual points.
             **kwargs: Additional kwargs for plt.plot().
         """
-        points = self.get_point_array(branch_index=branch_index)
+        points = self.get_point_array()
         
         if points.size == 0:
             raise ValueError("No points available to plot!")

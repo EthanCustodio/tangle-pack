@@ -1,5 +1,6 @@
 from typing import Literal
 from .FixedPoint import FixedPoint
+from .BranchPoint import BranchPoint
 from .DynamicalSystem import DynamicalSystem
 from .ManifoldMachine import ManifoldMachine
 from .BaseManifold import BaseManifold
@@ -78,5 +79,45 @@ class ManifoldInitializer():
             fixed_point.branch_points[orbit_index].insert_point_backward(first_point, branch_index)
             fixed_point.branch_points[orbit_index].insert_point_backward(first_back, branch_index)
 
-        return BaseManifold(fixed_point.branch_points[orbit_index], stability, alpha, tail=first_point)
+        return BaseManifold(fixed_point.branch_points[orbit_index], stability, alpha, tail=first_point, branch_index=branch_index)
 
+
+    def construct_manifold_from_point_list(self, points: list[Point], stability: Literal["stable", "unstable"], stretch_param, branch_index=None):
+        """
+        Constructs a manifold from a list of Point objects
+        The given list is assumed to be in cdist ordering
+        """
+
+        manifold = BaseManifold(points[0], stability, stretch_param)
+
+        current_point = manifold.root
+
+        for i, point in enumerate(points):
+
+            # start inserting the second point in the list
+            if i == 0:
+                continue
+
+            self._insert_point_geometrically(current_point, point, manifold, branch_index)
+                
+            current_point = point
+
+        manifold.tail = points[-1]
+        return manifold
+
+
+    def _insert_point_geometrically(self, p0: Point, new_point: Point, manifold: BaseManifold, branch_index=None):
+        """helper function to insert points smartly
+            based on stability and brach_point'ness"""
+
+        if isinstance(p0, BranchPoint):
+            if manifold.stability == "unstable":
+                p0.insert_point_forward(new_point, branch_index=branch_index)
+            else:
+                p0.insert_point_backward(new_point, branch_index=branch_index)
+
+        else:
+            if manifold.stability == "unstable":
+                p0.insert_point_forward(new_point)
+            else:
+                p0.insert_point_backward(new_point)

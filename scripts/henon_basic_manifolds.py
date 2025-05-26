@@ -39,7 +39,7 @@ print(f'The fixed point is type: {type(fixed_point)}')
 man_maker = tanglepack.ManifoldInitializer(henon)
 
 initial_segment = man_maker.get_initial_fundamental_segment(fixed_point, 0, 0, 'unstable')
-initial_points = initial_segment.get_point_array(branch_index=0)
+initial_points = initial_segment.get_point_array()
 print(f'Initial 3 Points: {initial_points}')
 
 man_machine = tanglepack.ManifoldMachine(henon)
@@ -47,17 +47,16 @@ man_machine = tanglepack.ManifoldMachine(henon)
 manifold1 = initial_segment
 print(f'Type manifold {manifold1}')
 
-num_iterations = 4
+num_iterations = 14
 for i in range(num_iterations):
-    manifold1 = man_machine.grow_manifold(manifold1, branch_index=0)
+    manifold1 = man_machine.grow_manifold(manifold1)
 
-initial_points = manifold1.get_point_array(branch_index=0)
+initial_points = manifold1.get_point_array()
 print(f'First Iterate: {initial_points}')
-
 
 plt.figure()
 plt.scatter(*fixed_point.coordinates[0], c='k', s=5)
-manifold1.plot('blue', branch_index=0)
+manifold1.plot('blue')
 # plt.scatter(initial_points[:, 0], initial_points[:, 1], c='g', s=1)
 plt.show()
 
