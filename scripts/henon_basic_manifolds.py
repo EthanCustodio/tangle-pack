@@ -47,12 +47,12 @@ man_machine = tanglepack.ManifoldMachine(henon)
 manifold1 = initial_segment
 print(f'Type manifold {manifold1}')
 
-num_iterations = 14
+num_iterations = 15
 for i in range(num_iterations):
     manifold1 = man_machine.grow_manifold(manifold1)
 
 initial_points = manifold1.get_point_array()
-print(f'First Iterate: {initial_points}')
+# print(f'First Iterate: {initial_points}')
 
 plt.figure()
 plt.scatter(*fixed_point.coordinates[0], c='k', s=5)
