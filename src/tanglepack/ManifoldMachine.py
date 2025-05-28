@@ -1,5 +1,6 @@
 from collections import deque
 from typing import Literal
+import logging
 
 import numpy as np
 import scipy.integrate as spi
@@ -10,6 +11,9 @@ from .DynamicalSystem import DynamicalSystem
 from .BaseManifold import BaseManifold
 from .ManifoldView import ManifoldView
 from .BranchPoint import BranchPoint
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class ManifoldMachine:
@@ -35,8 +39,6 @@ class ManifoldMachine:
         if isinstance(manifold.root, BranchPoint):
             manifold.root = manifold.walk_fwd(None, temp_root)
 
-        # print(f"current manifold: {manifold.get_point_array()}")
-
         iterated_manifold = self.iterate_manifold(manifold)
 
         grown_manifold = self.merge_manifolds(manifold, iterated_manifold)
@@ -57,8 +59,6 @@ class ManifoldMachine:
 
         initalizer = ManifoldInitializer(self.system)
         viewer = ManifoldView(manifold, self.system)
-
-        # print(f'Iterating these points: \n{manifold.get_point_array()}')
 
         non_iterated_coords = manifold.get_non_iterated_point_array()
         non_iterated_cdists = manifold.get_non_iterated_cdist_array()
@@ -104,15 +104,12 @@ class ManifoldMachine:
 
         # if there were no points that needed to be mapped
         if not len(non_iterated_coords) == 0:
-            # print(f"_____ \n old iterated: \n {old_iterated_points.get_point_array()}")
-            # print(f"new iterated: \n {new_iterated_points.get_point_array()}")
 
             mapped_manifold = self.merge_manifolds(
                 old_iterated_points, new_iterated_points
             )
             self.refine_manifold(mapped_manifold)
 
-            # print(f'merged iterated: \n{mapped_manifold.get_point_array()} \n _________')
             assert (
                 sorted(mapped_manifold.get_cdist_array())
                 == mapped_manifold.get_cdist_array()
@@ -121,7 +118,6 @@ class ManifoldMachine:
             return mapped_manifold
 
         else:
-            # print(f'iterated manifold: \n{old_iterated_points.get_point_array()}')
             return old_iterated_points
 
     def merge_manifolds(self, manifold_1: BaseManifold, manifold_2: BaseManifold):
@@ -202,8 +198,8 @@ class ManifoldMachine:
         Refactor:
             branch_index and final_node can probably be eliminated from the input
         """
-        # print(f"refining this manifold: \n {manifold.get_point_array()}")
-        # print(f"cdists {manifold.get_cdist_array()}")
+        logger.debug("Refining manifold: %r", manifold.get_point_array())
+
         final_node = manifold.tail
 
         num_initial_points = len(manifold.get_point_array())
@@ -213,7 +209,11 @@ class ManifoldMachine:
 
         while current_point is not None:
 
-            # print(f'Checking these points: {(previous_point.get_point(), current_point.get_point())}')
+            logger.debug(
+                "Checking these points:",
+                (previous_point.get_point(), current_point.get_point()),
+            )
+
             self.refine_two_points(
                 (previous_point, current_point), manifold, branch_index
             )
@@ -227,8 +227,10 @@ class ManifoldMachine:
 
         num_final_points = len(manifold.get_point_array())
 
-        print(f"{num_final_points - num_initial_points} POINTS ADDED DURING REFINEMENT")
-        print(f"{num_final_points} Number of Current Points")
+        logger.info(
+            "%d Points added during refinement", num_final_points - num_initial_points
+        )
+        logger.info("%d NUMBER OF CURRENT POINTS", num_final_points)
 
     def refine_two_points(
         self,
@@ -273,8 +275,14 @@ class ManifoldMachine:
 
             triplet = np.vstack((p0.get_point(), p1.get_point(), p2.get_point()))
             try:
-                curvature_area = self.curvature_area(triplet)
-            except LinAlgError:  # Singular Vandermond matrix
+                curvature_area = self._curvature_area(triplet)
+            except LinAlgError:
+                logger.debug(
+                    "Singular Vandermond matrix at cdist %.3g–%.3g; skipping. "
+                    "Points are likely near vertical",
+                    p0.cdist,
+                    p1.cdist,
+                )
                 continue
 
             if abs(curvature_area) < self.area_cutoff:
@@ -404,7 +412,7 @@ class ManifoldMachine:
                 p0.insert_point_backward(new_point)
 
     @staticmethod
-    def linear_fit(points):
+    def _linear_fit(points):
         """
         Takes in three points and gives the linear fit between the first and last
 
@@ -422,7 +430,7 @@ class ManifoldMachine:
         return np.poly1d([m, b])
 
     @staticmethod
-    def parabolic_fit(points):
+    def _parabolic_fit(points):
         """
         Takes in three points and gives the parabolic fit between them
 
@@ -442,7 +450,7 @@ class ManifoldMachine:
         return poly
 
     @staticmethod
-    def curvature_area(points):
+    def _curvature_area(points):
         """
         Takes in three points and gives
         the area of the shape made by a parabolic and linear fit
@@ -454,8 +462,8 @@ class ManifoldMachine:
         x_min = points[0, 0]
         x_max = points[-1, 0]
 
-        parabola = ManifoldMachine.parabolic_fit(points)
-        line = ManifoldMachine.linear_fit(points)
+        parabola = ManifoldMachine._parabolic_fit(points)
+        line = ManifoldMachine._linear_fit(points)
 
         difference = lambda x: np.abs(parabola(x) - line(x))
 

@@ -12,7 +12,7 @@ def henon_map(point):
     x = point[0]
     y = point[1]
 
-    return np.array([y - k + x ** 2, -b * x])
+    return np.array([y - k + x**2, -b * x])
 
 
 def henon_map_inverse(point):
@@ -23,7 +23,7 @@ def henon_map_inverse(point):
     x = point[0]
     y = point[1]
 
-    return np.array([-y / b, x + k - (y ** 2) / (b ** 2)])
+    return np.array([-y / b, x + k - (y**2) / (b**2)])
 
 
 def test_curvature_area():
@@ -34,7 +34,7 @@ def test_curvature_area():
 
     points = np.array([[1, 1], [2, 4], [4, 5]])
 
-    area = ManifoldMachine.curvature_area(points)
+    area = ManifoldMachine._curvature_area(points)
 
     assert abs(area - analytic_area) < 1e-8
 
@@ -44,7 +44,7 @@ def test_linear_fit_simple():
 
     # Line through (0,0) and (2,2) should be y = x
     points = np.array([[0, 0], [1, 1], [2, 2]])
-    line = ManifoldMachine.linear_fit(points)
+    line = ManifoldMachine._linear_fit(points)
 
     assert np.isclose(line(0), 0)
     assert np.isclose(line(1), 1)
@@ -57,8 +57,8 @@ def test_linear_fit_ignores_middle_point():
     points_a = np.array([[0, 0], [1, 999], [2, 2]])  # middle is garbage
     points_b = np.array([[0, 0], [1, 1], [2, 2]])
 
-    line_a = ManifoldMachine.linear_fit(points_a)
-    line_b = ManifoldMachine.linear_fit(points_b)
+    line_a = ManifoldMachine._linear_fit(points_a)
+    line_b = ManifoldMachine._linear_fit(points_b)
 
     # Coefficients should match
     assert np.allclose(line_a.coefficients, line_b.coefficients)
@@ -68,7 +68,7 @@ def test_parabolic_fit_quadratic():
 
     # y = x^2 through three points
     points = np.array([[-1, 1], [0, 0], [1, 1]])
-    poly = ManifoldMachine.parabolic_fit(points)
+    poly = ManifoldMachine._parabolic_fit(points)
 
     # Should exactly interpolate the input points
     for x, y in points:
@@ -79,13 +79,13 @@ def test_parabolic_fit_quadratic():
 
 
 def test_parabolic_fit_general():
-    
+
     # Fit y = 2x^2 + 3x + 1
     x = np.array([-1, 0, 1])
-    y = 2*x**2 + 3*x + 1
+    y = 2 * x**2 + 3 * x + 1
     points = np.column_stack([x, y])
 
-    poly = ManifoldMachine.parabolic_fit(points)
+    poly = ManifoldMachine._parabolic_fit(points)
 
     for x_val, y_val in points:
         assert np.isclose(poly(x_val), y_val)
