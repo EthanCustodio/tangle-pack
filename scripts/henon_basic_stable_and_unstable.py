@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 
 
 def henon_map(point):
-    """defines the henon map for binary horshoe parameters to test basic functionality"""
+    """
+    Defines the henon map for binary horshoe parameters to test basic functionality
+    """
 
     k, b = (10, 1)
 
@@ -15,7 +17,7 @@ def henon_map(point):
 
 
 def henon_map_inverse(point):
-    """defines the inverse henon map for"""
+    """Defines the inverse henon map for"""
 
     k, b = (10, 1)
 
