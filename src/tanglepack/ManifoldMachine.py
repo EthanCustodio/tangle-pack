@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Literal
+from typing import Literal, Tuple
 import logging
 
 import numpy as np
@@ -412,7 +412,7 @@ class ManifoldMachine:
                 p0.insert_point_backward(new_point)
 
     @staticmethod
-    def _linear_fit(points):
+    def _linear_fit(points) -> Tuple[float, float]:
         """
         Takes in three points and gives the linear fit between the first and last
 
@@ -427,10 +427,10 @@ class ManifoldMachine:
         m = (point_two[1] - point_one[1]) / (point_two[0] - point_one[0])
         b = point_one[1] - m * point_one[0]
 
-        return np.poly1d([m, b])
+        return m, b
 
     @staticmethod
-    def _parabolic_fit(points):
+    def _parabolic_fit(points) -> Tuple[float, float, float]:
         """
         Takes in three points and gives the parabolic fit between them
 
@@ -441,13 +441,15 @@ class ManifoldMachine:
         x_vals = points[:, 0]
         y_vals = points[:, 1]
 
-        A = np.vstack([x_vals**2, x_vals, np.ones_like(x_vals)]).T
+        x0, x1, x2 = x_vals[0], x_vals[1], x_vals[2]
+
+        # construct Vandermond matrix
+        A = np.array([[x0**2, x0, 1], [x1**2, x1, 1], [x2**2, x2, 1]], dtype=float)
+
+        Ainv = np.linalg.inv(A)
+
         # Solve for the coefficients [a, b, c].
-        coefficient = np.linalg.solve(A, y_vals)
-
-        poly = np.poly1d(coefficient)
-
-        return poly
+        return tuple(Ainv @ y_vals)
 
     @staticmethod
     def _curvature_area(points):
@@ -462,11 +464,25 @@ class ManifoldMachine:
         x_min = points[0, 0]
         x_max = points[-1, 0]
 
-        parabola = ManifoldMachine._parabolic_fit(points)
-        line = ManifoldMachine._linear_fit(points)
+        a, b, c = ManifoldMachine._parabolic_fit(points)
+        m, d = ManifoldMachine._linear_fit(points)
 
-        difference = lambda x: np.abs(parabola(x) - line(x))
+        # coefficients for the analytic solution to the integral
+        a = a / 3
+        b = 0.5 * (b - m)
+        c = c - d
 
-        area, _ = spi.quad(difference, x_min, x_max)
+        x_3 = x_max**3 - x_min**3
+        x_2 = x_max**2 - x_min**2
+        x_1 = x_max - x_min
+
+        area = a * x_3 + b * x_2 + c * x_1
+
+        # b -= m
+        # c -= d
+
+        # difference = lambda x: np.abs((a * x + b) * x + c)
+
+        # area, _ = spi.fixed_quad(difference, x_min, x_max, n=3)
 
         return area
