@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 from .BasePoint import BasePoint
 
+
 class Point(BasePoint):
 
     def __init__(self, x=None, y=None, cdist=None, edist=None, stretch_param=None):
@@ -9,7 +10,7 @@ class Point(BasePoint):
         Basic functionality of a single point in a manifold.
         Contains the methods for two doubly linked lists.
 
-        Manifold linked list tracks the ordering of points 
+        Manifold linked list tracks the ordering of points
         walking along the manifold the point is on.
 
         Iterate linked list tracks the ordering of how points
@@ -31,7 +32,6 @@ class Point(BasePoint):
         self.next_iterate = None
         self.prev_iterate = None
 
-
     def insert_point_forward(self, node: Point):
         """
         Inserts a point (node) object after this point in the linked list
@@ -39,10 +39,10 @@ class Point(BasePoint):
         Paramters:
             node (Point): point to be inserted after
         """
-            
+
         if self.forward is node:
             pass
-            
+
         else:
             self.stretch_param = node.stretch_param
 
@@ -53,7 +53,6 @@ class Point(BasePoint):
             self.forward = node
             node.backward = self
 
-
     def insert_point_backward(self, node: Point):
         """
         Inserts a point (node) object before this point in the linked list
@@ -61,20 +60,19 @@ class Point(BasePoint):
         Paramters:
             node (Point): point to be inserted before
         """
-        
+
         if self.backward is node:
             pass
 
         else:
             self.stretch_param = node.stretch_param
-            
+
             if self.backward is not None:
                 self.backward.forward = node
                 node.backward = self.backward
 
             self.backward = node
             node.forward = self
-
 
     def insert_next_iterate(self, node: Point):
         """
@@ -91,7 +89,6 @@ class Point(BasePoint):
         self.next_iterate = node
         node.prev_iterate = self
 
-
     def insert_prev_iterate(self, node: Point):
         """
         Inserts this object before another point node in the linked list
@@ -106,4 +103,3 @@ class Point(BasePoint):
 
         self.prev_iterate = node
         node.next_iterate = self
-

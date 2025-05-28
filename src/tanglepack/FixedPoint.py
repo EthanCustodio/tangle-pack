@@ -1,7 +1,8 @@
 import numpy as np
 from .BranchPoint import BranchPoint
 
-class FixedPoint():
+
+class FixedPoint:
 
     def __init__(self, period, num_branches):
 
@@ -21,4 +22,3 @@ class FixedPoint():
 
         self.jacobians = [np.empty((2, 2)) for _ in range(period)]
         self.total_jacobian = np.empty((2, 2))
-

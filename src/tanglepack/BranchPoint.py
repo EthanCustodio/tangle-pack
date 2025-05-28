@@ -2,6 +2,7 @@ import numpy as np
 from .Point import Point
 from .BasePoint import BasePoint
 
+
 class BranchPoint(BasePoint):
 
     def __init__(self, num_branches, x=None, y=None, cdist=None, edist=None):
@@ -22,7 +23,6 @@ class BranchPoint(BasePoint):
         self.next_iterate = None
         self.prev_iterate = None
 
-
     def insert_point_forward(self, node: Point, branch_index):
         """
         Inserts a point (node) after this point node in the linked list at the given branch index
@@ -38,9 +38,8 @@ class BranchPoint(BasePoint):
                 self.forward_branches[branch_index].backward = node
                 node.forward = self.forward_branches[branch_index]
 
-            self.forward_branches[branch_index] = node        
+            self.forward_branches[branch_index] = node
             node.backward = self
-
 
     def insert_point_backward(self, node: Point, branch_index):
         """
@@ -60,7 +59,6 @@ class BranchPoint(BasePoint):
             self.backward_branches[branch_index] = node
             node.forward = self
 
-
     def insert_next_iterate(self, node: Point):
         """
         Inserts this object after another point node in the linked list
@@ -74,7 +72,6 @@ class BranchPoint(BasePoint):
 
         self.next_iterate = node
         node.prev_iterate = self
-
 
     def insert_prev_iterate(self, node: Point):
         """

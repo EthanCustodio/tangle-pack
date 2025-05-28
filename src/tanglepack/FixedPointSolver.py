@@ -5,8 +5,7 @@ from .FixedPoint import FixedPoint
 from .DynamicalSystem import DynamicalSystem
 
 
-class FixedPointSolver():
-
+class FixedPointSolver:
 
     def __init__(self, system: DynamicalSystem):
 
@@ -14,17 +13,16 @@ class FixedPointSolver():
         self.dynamical_map_inverse = system.map_inv
         self.jacobian_function = system.jacobian
 
-
     def construct_fixed_point(self, initial_guess, num_branches):
 
         period, _ = np.shape(np.atleast_2d(initial_guess))
 
         fixed_point = self.compute_fixed_point(initial_guess)
 
-        #TODO make this more correct for orbits with p > 1 
-        # shoot once for each point in the orbit 
+        # TODO make this more correct for orbits with p > 1
+        # shoot once for each point in the orbit
         difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
-        accuracy = (np.average(np.linalg.norm(difference, axis=1))) ** (1/3)
+        accuracy = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
 
         eigenvalues, eigenvectors = self.compute_eigenvectors(fixed_point)
         jacobians, total_jacobian = self.compute_jacobian(fixed_point)
@@ -42,7 +40,7 @@ class FixedPointSolver():
 
             point.unstable_eigenvectors[i] = eigenvectors[i][0]
             point.stable_eigenvectors[i] = eigenvectors[i][1]
-            
+
             point.unstable_eigenvalues[i] = eigenvalues[i][0]
             point.stable_eigenvalues[i] = eigenvalues[i][1]
 
@@ -53,7 +51,6 @@ class FixedPointSolver():
 
         return point
 
-
     def compute_fixed_point(self, initial_guess):
         """
         Computes a fixed point based on the initial guess
@@ -61,13 +58,14 @@ class FixedPointSolver():
 
         initial_guess_flattened = self.flatten_trajectory(initial_guess)
 
-        fixed_point_flattened = newton_method(self.multipoint_shoot_flattened_difference, initial_guess_flattened)
+        fixed_point_flattened = newton_method(
+            self.multipoint_shoot_flattened_difference, initial_guess_flattened
+        )
 
         fixed_point_full = self.unflatten_trajectory(fixed_point_flattened)
 
         return np.array(fixed_point_full)
-    
-    
+
     def compute_eigenvectors(self, fixed_point):
         """
         Computes the eigenvectors for each iterate of the fixed point
@@ -79,7 +77,7 @@ class FixedPointSolver():
         eigenvalue_list = [np.empty((2, 1)) for i in range(period)]
 
         difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
-        initial_step = (np.average(np.linalg.norm(difference, axis=1))) ** (1/3)
+        initial_step = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
 
         for i in range(period):
 
@@ -98,14 +96,13 @@ class FixedPointSolver():
 
             # WARNING POORLY UNDERSTOOD why we multiply by -1. This is henon specific
             # TODO find a way to automatically choose the proper directions
-            eigenvector_list[i][0] = -1*eigenvectors[:, unstable_index].reshape(2, 1)
+            eigenvector_list[i][0] = -1 * eigenvectors[:, unstable_index].reshape(2, 1)
             eigenvector_list[i][1] = eigenvectors[:, 1 - unstable_index].reshape(2, 1)
 
             eigenvalue_list[i][0] = eigenvalues[unstable_index]
             eigenvalue_list[i][1] = eigenvalues[1 - unstable_index]
 
         return eigenvalue_list, eigenvector_list
-
 
     def compute_jacobian(self, fixed_point):
         """
@@ -120,7 +117,7 @@ class FixedPointSolver():
         period, _ = np.shape(np.atleast_2d(fixed_point))
 
         difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
-        initial_step = (np.average(np.linalg.norm(difference, axis=1))) ** (1/3)
+        initial_step = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
 
         jacobians = [np.empty((2, 2)) for i in range(period)]
         total_jacobian = np.identity(2)
@@ -128,7 +125,7 @@ class FixedPointSolver():
         for i in range(period):
             # compute the jacobian at each iterate in the fixed point
 
-            x_i = fixed_point[i] 
+            x_i = fixed_point[i]
 
             if self.jacobian_function is None:
                 # if a jacobian function isn't provided, compute numerically
@@ -143,11 +140,10 @@ class FixedPointSolver():
 
         return jacobians, total_jacobian
 
-
     def multipoint_shoot_flattened_difference(self, trajectory):
         """
         Takes the difference between an iterate and the current trajectory
-        
+
         Parameters:
             trajectory: list of points to map forward
         """
@@ -158,11 +154,10 @@ class FixedPointSolver():
 
         return difference
 
-
     def multipoint_shoot_flattened(self, trajectory):
         """
         Takes a flattened trajectory and iterates it forward
-        
+
         Parameters:
             trajectory: list of points to map forward
         """
@@ -175,12 +170,11 @@ class FixedPointSolver():
 
         return trajectory_flattened_maped
 
-
     @staticmethod
     def flatten_trajectory(trajectory):
         """
         Takes a trajectory and makes it a 2n x 1 vector where n is the number of iterates
-        
+
         Parameters:
             trajectory: list of points
         """
@@ -191,12 +185,11 @@ class FixedPointSolver():
 
         return trajectory_reshaped
 
-
     @staticmethod
     def unflatten_trajectory(trajectory):
         """
         Takes a flattened trajectory and reformats it back into a n x d matrix
-        
+
         Parameters:
             trajectory: list of points
         """
@@ -208,19 +201,19 @@ class FixedPointSolver():
         trajectory_reshaped = np.reshape(trajectory, (number_iterates, 2))
 
         return trajectory_reshaped
-        
 
     def multipoint_shoot(self, trajectory):
         """
         Takes a trajectory and dynamical_maps it forward once
-        
+
         Parameters:
             trajectory: list of points
         """
 
         period, _ = np.shape(np.atleast_2d(trajectory))
 
-        maped_trajectory = np.array([self.dynamical_map(trajectory[i, :]) for i in range(period)])
+        maped_trajectory = np.array(
+            [self.dynamical_map(trajectory[i, :]) for i in range(period)]
+        )
 
         return maped_trajectory
-    
