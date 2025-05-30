@@ -35,7 +35,10 @@ class FixedPointSolver:
 
         for i in range(period):
 
-            point.branch_points[i].x, point.branch_points[i].y = point.coordinates[i]
+            p_x, p_y = point.coordinates[i]
+            point.branch_points[i].set_x(p_x)
+            point.branch_points[i].set_y(p_y)
+
             point.branch_points[i].cdist = 0.0
 
             point.unstable_eigenvectors[i] = eigenvectors[i][0]

@@ -1,3 +1,5 @@
+from typing import Literal
+
 import numpy as np
 from .Point import Point
 from .BasePoint import BasePoint
@@ -5,12 +7,14 @@ from .BasePoint import BasePoint
 
 class BranchPoint(BasePoint):
 
-    def __init__(self, num_branches, x=None, y=None, cdist=None, edist=None):
+    def __init__(self, num_branches, x=None, y=None):
 
-        super().__init__(x=x, y=y, cdist=cdist, edist=edist)
+        super().__init__(x=x, y=y)
 
         self.num_branches = num_branches
 
+        # index 0 is unstable
+        # index 1 is stable
         self.cdists = np.zeros(num_branches)
         self.edists = np.zeros(num_branches)
 
@@ -22,6 +26,15 @@ class BranchPoint(BasePoint):
 
         self.next_iterate = None
         self.prev_iterate = None
+
+    def get_cdist(self, stability: Literal["unstable", "stable"]) -> float:
+        """
+        Get the canonical distance for the manifold of your choice
+        """
+
+        index = 0 if stability == "unstable" else 1
+
+        return self.cdists[index]
 
     def insert_point_forward(self, node: Point, branch_index):
         """
