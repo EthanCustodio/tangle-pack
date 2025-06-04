@@ -180,7 +180,7 @@ class ManifoldMachine:
 
     def refine_manifold(
         self, manifold: BaseManifold, branch_index=None, final_node=None
-    ):
+    ) -> set[Point]:
         """
         Adds additional points in areas of the manifold with high curvature
 
@@ -202,11 +202,16 @@ class ManifoldMachine:
 
         final_node = manifold.tail
 
-        num_initial_points = len(manifold.get_point_array())
+        num_initial_points = (
+            len(manifold.get_point_array())
+            if logger.isEnabledFor(logging.INFO)
+            else None
+        )
 
         previous_point = manifold.root
         current_point = manifold.walk_fwd(None, previous_point)
 
+        modified_points = set()
         while current_point is not None:
 
             logger.debug(
@@ -214,9 +219,10 @@ class ManifoldMachine:
                 (previous_point.get_point(), current_point.get_point()),
             )
 
-            self.refine_two_points(
+            added_points = self.refine_two_points(
                 (previous_point, current_point), manifold, branch_index
             )
+            modified_points.update(added_points)
 
             if current_point is final_node:
                 break
@@ -225,19 +231,22 @@ class ManifoldMachine:
 
             previous_point, current_point = current_point, next_point
 
-        num_final_points = len(manifold.get_point_array())
+        if num_initial_points is not None:
+            num_final_points = len(manifold.get_point_array())
+            logger.info(
+                "%d Points added during refinement",
+                num_final_points - num_initial_points,
+            )
+            logger.info("%d NUMBER OF CURRENT POINTS", num_final_points)
 
-        logger.info(
-            "%d Points added during refinement", num_final_points - num_initial_points
-        )
-        logger.info("%d NUMBER OF CURRENT POINTS", num_final_points)
+        return modified_points
 
     def refine_two_points(
         self,
         points: tuple[Point | BranchPoint, Point | BranchPoint],
         manifold: BaseManifold,
         branch_index=None,
-    ):
+    ) -> set[Point]:
         """
         Iteratively refines the two given points.
         Uses a modified stack structure to iterate through the manifold
@@ -259,6 +268,7 @@ class ManifoldMachine:
         left_point, right_point = points
         pair_queue = deque([(left_point, right_point)])
 
+        modified_points = set()
         while pair_queue:
 
             p0, p1 = pair_queue.pop()
@@ -291,10 +301,13 @@ class ManifoldMachine:
             new_point = self._get_refined_point(p0, p1, viewer, manifold.stability)
 
             self._insert_point_geometrically(p0, new_point, manifold, branch_index)
+            modified_points.update((p0, p1, p2, new_point))
 
             pair_queue.append((p0, new_point))
             pair_queue.append((new_point, p1))
             pair_queue.append((p1, p2))
+
+        return modified_points
 
     def _get_refined_point(
         self,

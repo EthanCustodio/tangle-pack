@@ -7,15 +7,22 @@ from .BasePoint import BasePoint
 
 class BranchPoint(BasePoint):
 
-    def __init__(self, num_branches, x=None, y=None):
+    def __init__(
+        self, num_branches, cdists: tuple[float, float] = None, x=None, y=None
+    ):
+        """
+
+        Parameters:
+            cdists: index 0 stores unstable canonical distance
+                    index 1 stores stable canonical distance
+        """
 
         super().__init__(x=x, y=y)
 
         self.num_branches = num_branches
 
-        # index 0 is unstable
-        # index 1 is stable
-        self.cdists = np.zeros(num_branches)
+        self.cdists = cdists
+
         self.edists = np.zeros(num_branches)
 
         self.forward_branches = [None] * num_branches

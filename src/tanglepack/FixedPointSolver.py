@@ -102,6 +102,7 @@ class FixedPointSolver:
             eigenvector_list[i][0] = -1 * eigenvectors[:, unstable_index].reshape(2, 1)
             eigenvector_list[i][1] = eigenvectors[:, 1 - unstable_index].reshape(2, 1)
 
+            print(f"eigenvalues: {eigenvalues}")
             eigenvalue_list[i][0] = eigenvalues[unstable_index]
             eigenvalue_list[i][1] = eigenvalues[1 - unstable_index]
 
@@ -218,5 +219,7 @@ class FixedPointSolver:
         maped_trajectory = np.array(
             [self.dynamical_map(trajectory[i, :]) for i in range(period)]
         )
+
+        maped_trajectory = np.roll(maped_trajectory, 1, axis=0)
 
         return maped_trajectory

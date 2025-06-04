@@ -12,3 +12,5 @@ from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 from .ManifoldMachine import ManifoldMachine
 from .ManifoldInitializer import ManifoldInitializer
+
+from .Tangle import Tangle

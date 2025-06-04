@@ -9,7 +9,9 @@ class FixedPoint:
         self.period = period
         self.num_branches = num_branches
 
-        self.branch_points = [BranchPoint(num_branches) for _ in range(period)]
+        self.branch_points = [
+            BranchPoint(num_branches, (0.0, 0.0)) for _ in range(period)
+        ]
         self.coordinates = [np.empty((2, 1)) for _ in range(period)]
 
         self.unstable_eigenvectors = [np.empty((2, 1)) for _ in range(period)]
