@@ -1,26 +1,70 @@
+from typing import Optional
+
 import numpy as np
+from numpy.typing import NDArray
 from scipy.optimize import newton as newton_method
 from scipy.differentiate import jacobian as jacob
 from .FixedPoint import FixedPoint
 from .DynamicalSystem import DynamicalSystem
 
+"""
+Dev Notes:
+
+num_branches. There should be a way to remove this entirely from the 
+contruction method. That information is contained within the k_value
+Though we may want to keep it if someone wants to compute both sides. 
+We would need to think through that case more explicitly, it might
+be detrimental to have it in like this actually.
+"""
+
 
 class FixedPointSolver:
+    """
+    Toolbox for computing fixed points of any period and initializing
+    FixedPoint objects.
 
-    def __init__(self, system: DynamicalSystem):
+    Attributes:
+        dynamical_map (func): Function for the map of the system.
+        dynamical_map_invers (func): Function for the inverse map of the system.
+        jacobian_function (func, optional): Function to compute the Jacobian at
+            any point in the system. Without an explicit Jacobian function finite
+            difference will be used to compute the Jacobians.
+    """
+
+    def __init__(self, system: DynamicalSystem) -> None:
+        """
+        Initializes the functions associated with the dynamical system.
+
+        Args:
+            system (DynamicalSystem): Object storing all the system maps.
+        """
 
         self.dynamical_map = system.map
         self.dynamical_map_inverse = system.map_inv
         self.jacobian_function = system.jacobian
 
-    def construct_fixed_point(self, initial_guess, num_branches):
+    def construct_fixed_point(
+        self, initial_guess: NDArray[np.float64], num_branches: int
+    ) -> FixedPoint:
+        """
+        Computes the fixed point from an initial guess using a multipoint
+        shooting Newton's method and initializes a FixedPoint object containing
+        all the information.
+
+        Args:
+            initial_guess (np.ndarray): A (period, 2) array.
+                Each row is an initial guess for one iterate.
+            num_branches (int): Number of branches the fixed point has.
+                Based on inversion.
+
+        Returns:
+            FixedPoint: The fully contstructed fixed point.
+        """
 
         period, _ = np.shape(np.atleast_2d(initial_guess))
 
         fixed_point = self.compute_fixed_point(initial_guess)
 
-        # TODO make this more correct for orbits with p > 1
-        # shoot once for each point in the orbit
         difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
         accuracy = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
 
@@ -59,9 +103,20 @@ class FixedPointSolver:
 
         return point
 
-    def compute_fixed_point(self, initial_guess):
+    def compute_fixed_point(
+        self, initial_guess: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         """
-        Computes a fixed point based on the initial guess
+        Computes the coordinates of a fixed point based on the initial guess. Uses
+        a multipoint shooting Newton's method.
+
+        Args:
+            initial_guess (np.ndarray): A (period, 2) array representing an
+                initial guess for the orbit.
+
+        Returns:
+            np.ndarray: A (period, 2) array representing the converged fixed point
+                coordinates.
         """
 
         initial_guess_flattened = self.flatten_trajectory(initial_guess)
@@ -74,9 +129,25 @@ class FixedPointSolver:
 
         return np.array(fixed_point_full)
 
-    def compute_eigenvectors(self, fixed_point, jacobians=None):
+    def compute_eigenvectors(
+        self,
+        fixed_point: NDArray[np.float64],
+        jacobians: Optional[list[NDArray[np.float64]]] = None,
+    ) -> tuple[list[NDArray[np.float64]], list[list[NDArray[np.float64]]]]:
         """
-        Computes the eigenvectors for each iterate of the fixed point
+        Computes the eigenvectors for each iterate of the fixed point.
+
+        Args:
+            fixed_point (np.ndarray): (period, 2) array of orbit coordinates.
+            jacobians (list of np.ndarray, optional): Full-cycle Jacobians at
+                each iterate. Automatically computes the Jacobians if not provided.
+
+        Returns:
+            tuple: (eigenvalues, eigenvectors), where:
+                eigenvalues: A list of (2, 1) arrays;
+                    [unstable, stable] for each iterate.
+                eigenvectors: A list of two (2, 1) arrays;
+                    [unstable, stable] for each iterate.
         """
 
         if jacobians is None:
@@ -106,10 +177,18 @@ class FixedPointSolver:
 
         return eigenvalue_list, eigenvector_list
 
-    def compute_partial_jacobians(self, fixed_point):
+    def compute_partial_jacobians(
+        self, fixed_point: NDArray[np.float64]
+    ) -> list[NDArray[np.float64]]:
         """
-        computes the partial step jacobians for each step of the
-        fixed point
+        Computes the partial step jacobians for each step of the
+        fixed point.
+
+        Args:
+            fixed_point (np.ndarray): A (period, 2) array representing the fixed point.
+
+        Returns:
+            list[np.ndarray]: List of (2, 2) Jacobians for single steps at each iterate.
         """
 
         period, _ = np.shape(np.atleast_2d(fixed_point))
@@ -136,19 +215,23 @@ class FixedPointSolver:
 
         return partial_jacobians
 
-    def compute_jacobian(self, fixed_point):
+    def compute_jacobian(
+        self, fixed_point: NDArray[np.float64]
+    ) -> list[NDArray[np.float64]]:
         """
-        Computes the Jacobian for the fixed point
-        Computes p matrices for a period p fixed point
+        Computes the Jacobian for the fixed point.
+        Computes p matrices for a period p fixed point.
         This routine computes the Jacobian for each step and then
-        returns the product of those matrices
+        returns the product of those matrices for the full cycle jacobians.
         Will use a jacobian function if provided
-        otherwise it will switch to a finite difference
-        """
+        otherwise it will switch to a finite difference.
 
-        # NOTE
-        # this should now be computing the correct
-        # full cycle jacobians at each point
+        Args:
+            fixed_point (np.ndarray): A (period, 2) array representing the fixed point.
+
+        Returns:
+            list[np.ndarray]: List of (2, 2) full-cycle Jacobians, one per iterate.
+        """
 
         period, _ = np.shape(np.atleast_2d(fixed_point))
 
@@ -169,12 +252,17 @@ class FixedPointSolver:
 
         return true_jacobians
 
-    def multipoint_shoot_flattened_difference(self, trajectory):
+    def multipoint_shoot_flattened_difference(
+        self, trajectory: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         """
-        Takes the difference between an iterate and the current trajectory
+        Takes the difference between an iterate and the current trajectory.
 
-        Parameters:
-            trajectory: list of points to map forward
+        Args:
+            trajectory (np.ndarray): (2 * period, 1) array of points to map forward.
+
+        Returns:
+            np.ndarray: (2 * period, 1) array.
         """
 
         shoot = self.multipoint_shoot_flattened(trajectory)
@@ -183,12 +271,17 @@ class FixedPointSolver:
 
         return difference
 
-    def multipoint_shoot_flattened(self, trajectory):
+    def multipoint_shoot_flattened(
+        self, trajectory: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         """
-        Takes a flattened trajectory and iterates it forward
+        Takes a flattened trajectory and iterates it forward.
 
-        Parameters:
-            trajectory: list of points to map forward
+        Args:
+            trajectory (np.ndarray): (2 * period, 1) array of points to shoot forward.
+
+        Returns:
+            np.ndarray: (2 * period, 1) array of the mapped trajectory.
         """
 
         trajectory_full = self.unflatten_trajectory(trajectory)
@@ -200,12 +293,18 @@ class FixedPointSolver:
         return trajectory_flattened_maped
 
     @staticmethod
-    def flatten_trajectory(trajectory):
+    def flatten_trajectory(trajectory: NDArray[np.float64]) -> NDArray[np.float64]:
         """
-        Takes a trajectory and makes it a 2n x 1 vector where n is the number of iterates
+        Takes a trajectory and makes it a 2n x 1 vector where n is
+        the number of iterates.
 
-        Parameters:
-            trajectory: list of points
+        Args:
+            trajectory (np.ndarray): (period, 2) array of points representing
+                a trajectory.
+
+        Returns
+            np.ndarray: (2 * period, 2) array of points representing a
+                flattened trajectory.
         """
 
         number_iterates, _ = np.shape(np.atleast_2d(trajectory))
@@ -215,12 +314,17 @@ class FixedPointSolver:
         return trajectory_reshaped
 
     @staticmethod
-    def unflatten_trajectory(trajectory):
+    def unflatten_trajectory(trajectory: NDArray[np.float64]) -> NDArray[np.float64]:
         """
-        Takes a flattened trajectory and reformats it back into a n x d matrix
+        Takes a flattened trajectory and reformats it back into a p x 2 matrix.
 
-        Parameters:
-            trajectory: list of points
+        Args:
+            trajectory (np.ndarray): (2 * period, 1) array of points representing a
+                flattened trajectory.
+
+        Returns:
+            np.ndarray: (period, 2) array of points representing an
+                unflattened trajectory.
         """
 
         number_iterates_doubled, _ = np.shape(np.atleast_2d(trajectory))
@@ -231,12 +335,16 @@ class FixedPointSolver:
 
         return trajectory_reshaped
 
-    def multipoint_shoot(self, trajectory):
+    def multipoint_shoot(self, trajectory: NDArray[np.float64]) -> NDArray[np.float64]:
         """
-        Takes a trajectory and dynamical_maps it forward once
+        Takes a trajectory and dynamical_maps it forward once.
 
-        Parameters:
-            trajectory: list of points
+        Args:
+            trajectory (np.ndarray): (period, 2) array of points representing
+                a trajectory.
+
+        Returns:
+            np.ndarray: (period, 2) array of the resulting trajectory.
         """
 
         period, _ = np.shape(np.atleast_2d(trajectory))
