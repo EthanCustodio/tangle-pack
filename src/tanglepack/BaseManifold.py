@@ -428,7 +428,7 @@ class BaseManifold:
         plt.tight_layout()
         return ax
 
-    # ---------- internal helpers -------------------------------------
+    # ---------- internal helpers ----------
     def _branch_forward(
         self, prev: Point, bp: BranchPoint, branch_index: Optional[int] = None
     ) -> Point:
