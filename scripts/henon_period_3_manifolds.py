@@ -157,10 +157,10 @@ plt.ylim([-6, 6])
 
 plt.title("k=2, b=1 Period 3 Nested Tangle")
 
-fig.savefig(
-    "period_3_tangle_plot.png",  # pdf/svg/eps/etc. all work
-    dpi=600,  # print-quality resolution
-    bbox_inches="tight",
-)  # trim extra whitespace
+# fig.savefig(
+#     "period_3_tangle_plot.png",  # pdf/svg/eps/etc. all work
+#     dpi=600,  # print-quality resolution
+#     bbox_inches="tight",
+# )  # trim extra whitespace
 
 plt.show()

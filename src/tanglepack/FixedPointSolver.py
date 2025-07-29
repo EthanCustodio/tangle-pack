@@ -25,7 +25,7 @@ class FixedPointSolver:
 
     Attributes:
         dynamical_map (func): Function for the map of the system.
-        dynamical_map_invers (func): Function for the inverse map of the system.
+        dynamical_map_inverse (func): Function for the inverse map of the system.
         jacobian_function (func, optional): Function to compute the Jacobian at
             any point in the system. Without an explicit Jacobian function finite
             difference will be used to compute the Jacobians.
@@ -58,7 +58,7 @@ class FixedPointSolver:
                 Based on inversion.
 
         Returns:
-            FixedPoint: The fully contstructed fixed point.
+            FixedPoint: The fully constructed fixed point.
         """
 
         period, _ = np.shape(np.atleast_2d(initial_guess))
@@ -286,11 +286,11 @@ class FixedPointSolver:
 
         trajectory_full = self.unflatten_trajectory(trajectory)
 
-        trajectory_full_maped = self.multipoint_shoot(trajectory_full)
+        trajectory_full_mapped = self.multipoint_shoot(trajectory_full)
 
-        trajectory_flattened_maped = self.flatten_trajectory(trajectory_full_maped)
+        trajectory_flattened_mapped = self.flatten_trajectory(trajectory_full_mapped)
 
-        return trajectory_flattened_maped
+        return trajectory_flattened_mapped
 
     @staticmethod
     def flatten_trajectory(trajectory: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -303,7 +303,7 @@ class FixedPointSolver:
                 a trajectory.
 
         Returns
-            np.ndarray: (2 * period, 2) array of points representing a
+            np.ndarray: (2 * period, 1) array of points representing a
                 flattened trajectory.
         """
 
