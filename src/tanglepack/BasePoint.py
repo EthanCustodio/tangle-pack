@@ -101,13 +101,6 @@ class BasePoint:
         self.y = y
         self._set_coords()
 
-    def _set_coords(self):
-        """
-        Sets the coordinate array based on the x and y value of the point.
-        """
-
-        self._coords = np.array([self.x, self.y])
-
     def insert_next_iterate(self, node: BasePoint, num_iterates: int = 1):
         """
         Inserts 'node' after this object 'num_iterates' forward
@@ -241,3 +234,11 @@ class BasePoint:
             return False
         else:
             return True
+
+    # ---------- internal helpers ----------
+    def _set_coords(self):
+        """
+        Sets the coordinate array based on the x and y value of the point.
+        """
+
+        self._coords = np.array([self.x, self.y])
