@@ -24,14 +24,15 @@ class FixedPointSolver:
         difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
         accuracy = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
 
-        eigenvalues, eigenvectors = self.compute_eigenvectors(fixed_point)
-        jacobians, total_jacobian = self.compute_jacobian(fixed_point)
+        jacobians = self.compute_jacobian(fixed_point)
+        partial_jacobians = self.compute_partial_jacobians(fixed_point)
+
+        eigenvalues, eigenvectors = self.compute_eigenvectors(fixed_point, jacobians)
 
         point = FixedPoint(period, num_branches)
 
         point.coordinates = fixed_point
         point.accuracy = accuracy
-        point.total_jacobian = total_jacobian
 
         for i in range(period):
 
@@ -48,9 +49,13 @@ class FixedPointSolver:
             point.stable_eigenvalues[i] = eigenvalues[i][1]
 
             point.jacobians[i] = jacobians[i]
+            point.partial_jacobians[i] = partial_jacobians[i]
 
             point.branch_points[i].next_iterate = point.branch_points[(i + 1) % period]
             point.branch_points[i].prev_iterate = point.branch_points[(i - 1) % period]
+
+        point.set_k_value()
+        point.reset_accuracy()
 
         return point
 
@@ -69,29 +74,22 @@ class FixedPointSolver:
 
         return np.array(fixed_point_full)
 
-    def compute_eigenvectors(self, fixed_point):
+    def compute_eigenvectors(self, fixed_point, jacobians=None):
         """
         Computes the eigenvectors for each iterate of the fixed point
         """
 
+        if jacobians is None:
+            jacobians = self.compute_jacobian(fixed_point)
+
         period, _ = np.shape(np.atleast_2d(fixed_point))
 
-        eigenvector_list = [[np.empty((2, 1)), np.empty((2, 1))] for i in range(period)]
-        eigenvalue_list = [np.empty((2, 1)) for i in range(period)]
-
-        difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
-        initial_step = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
+        eigenvector_list = [[np.empty((2, 1)), np.empty((2, 1))] for _ in range(period)]
+        eigenvalue_list = [np.empty((2, 1)) for _ in range(period)]
 
         for i in range(period):
 
-            x_i = fixed_point[i]
-
-            if self.jacobian_function is None:
-                jacobian = jacob(self.dynamical_map, x_i, initial_step=initial_step)
-                jacobian = jacobian.df
-
-            else:
-                jacobian = self.jacobian_function(x_i)
+            jacobian = jacobians[i]
 
             eigenvalues, eigenvectors = np.linalg.eig(jacobian)
 
@@ -99,7 +97,7 @@ class FixedPointSolver:
 
             # WARNING POORLY UNDERSTOOD why we multiply by -1. This is henon specific
             # TODO find a way to automatically choose the proper directions
-            eigenvector_list[i][0] = -1 * eigenvectors[:, unstable_index].reshape(2, 1)
+            eigenvector_list[i][0] = eigenvectors[:, unstable_index].reshape(2, 1)
             eigenvector_list[i][1] = eigenvectors[:, 1 - unstable_index].reshape(2, 1)
 
             print(f"eigenvalues: {eigenvalues}")
@@ -107,6 +105,36 @@ class FixedPointSolver:
             eigenvalue_list[i][1] = eigenvalues[1 - unstable_index]
 
         return eigenvalue_list, eigenvector_list
+
+    def compute_partial_jacobians(self, fixed_point):
+        """
+        computes the partial step jacobians for each step of the
+        fixed point
+        """
+
+        period, _ = np.shape(np.atleast_2d(fixed_point))
+
+        difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
+        initial_step = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
+
+        partial_jacobians = [np.empty((2, 2)) for i in range(period)]
+
+        for i in range(period):
+
+            # compute the single step jacobian at each iterate in the fixed point
+            x_i = fixed_point[i]
+
+            if self.jacobian_function is None:
+                # if a jacobian function isn't provided, compute numerically
+                jacobian = jacob(self.dynamical_map, x_i, initial_step=initial_step)
+                jacobian = jacobian.df
+
+            else:
+                jacobian = self.jacobian_function(x_i)
+
+            partial_jacobians[i] = jacobian
+
+        return partial_jacobians
 
     def compute_jacobian(self, fixed_point):
         """
@@ -118,31 +146,28 @@ class FixedPointSolver:
         otherwise it will switch to a finite difference
         """
 
+        # NOTE
+        # this should now be computing the correct
+        # full cycle jacobians at each point
+
         period, _ = np.shape(np.atleast_2d(fixed_point))
 
-        difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
-        initial_step = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
+        partial_jacobians = self.compute_partial_jacobians(fixed_point)
 
-        jacobians = [np.empty((2, 2)) for i in range(period)]
-        total_jacobian = np.identity(2)
+        true_jacobians = []
+        # compute each cyclic permutation to get the full cycle jacobians
+        for shift in range(period):
 
-        for i in range(period):
-            # compute the jacobian at each iterate in the fixed point
+            factors = [partial_jacobians[(shift + i) % period] for i in range(period)]
+            factors = factors[::-1]
 
-            x_i = fixed_point[i]
-
-            if self.jacobian_function is None:
-                # if a jacobian function isn't provided, compute numerically
-                jacobian = jacob(self.dynamical_map, x_i, initial_step=initial_step)
-                jacobian = jacobian.df
-
+            if period == 1:
+                product = factors[0].copy()
             else:
-                jacobian = self.jacobian_function(x_i)
+                product = np.linalg.multi_dot(factors)
+            true_jacobians.append(product)
 
-            jacobians[i] = jacobian
-            total_jacobian = jacobian @ total_jacobian
-
-        return jacobians, total_jacobian
+        return true_jacobians
 
     def multipoint_shoot_flattened_difference(self, trajectory):
         """

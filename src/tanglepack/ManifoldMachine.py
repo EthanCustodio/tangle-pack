@@ -7,6 +7,7 @@ import scipy.integrate as spi
 from numpy.linalg import LinAlgError
 
 from .Point import Point
+from .FixedPoint import FixedPoint
 from .DynamicalSystem import DynamicalSystem
 from .BaseManifold import BaseManifold
 from .ManifoldView import ManifoldView
@@ -21,31 +22,131 @@ class ManifoldMachine:
     def __init__(self, system: DynamicalSystem):
 
         self.system = system
-        self.area_cutoff = 1e-2
+        self.area_cutoff = 1e-3
 
-    def grow_manifold(self, manifold: BaseManifold):
+    def grow_manifold(
+        self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
+    ):
         """
-        Takes a manifold and iterates all uniterated points
-        then adds those to the original manifold and returns
-        the result.
+        Grows all the manifolds of a given stability from the fixed_point.
+        This will grow all the manifolds attached to each iterate of the point.
 
         Parameters:
-            manifold: manifold to grow
+            fixed_point: point to grow the manifolds from
+            stability: stability of the manifolds you want to grow
+
+        Note:
+            Currently you have to reset the tail after using this
         """
+
+        branches = []
+        iterated_branches = []
+        temp_roots = []
+        num_iterations = fixed_point.k_value
+
+        # iterate all manifolds
+        for i in range(num_iterations):
+
+            branch_point = fixed_point.branch_points[i]
+
+            # TODO fix this to account for inversion/reflection
+            branch_num = 0  # if stability == "unstable" else 1
+
+            manifold = BaseManifold(
+                branch_point,
+                stability,
+                stretch_param=1,
+                fixed_point=fixed_point,
+                branch_index=branch_num,
+            )
+            branches.append(manifold)
+
+            # this line meant to deal with roots that are fixed points
+            # if it is an intersection behavior is unknown
+            temp_root = manifold.root
+            temp_roots.append(temp_root)
+            if isinstance(manifold.root, BranchPoint):
+                manifold.root = manifold.walk_fwd(None, temp_root)
+
+            # you must walk forward before adding the stretch param
+            # because the fixed point does not have one
+            manifold.stretch_param = manifold.root.stretch_param
+
+            manifold_iterate = self._iterate_without_refine(manifold)
+            iterated_branches.append(manifold_iterate)
+
+        # merge all manifolds
+        iterated_branches = self._shift_list(iterated_branches)
+        merged_manifolds = []
+        for i in range(num_iterations):
+            merged = self.merge_manifolds(branches[i], iterated_branches[i])
+            merged_manifolds.append(merged)
+
+        # refine all manifolds
+        for i in range(num_iterations):
+            self.refine_manifold(merged_manifolds[i])
+
+        # reset all the roots
+        for i in range(num_iterations):
+            merged_manifolds[i].root = temp_roots[i]
+
+        if num_iterations == 1:
+            return merged_manifolds[0]
+
+    def new_grow_manifold(
+        self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
+    ):
+
+        # construct a list of orbit indices based off the stability
+        # this starts at the most recently iterated index and iterates
+        # either clockwise or counterclockwise based on stability
+        orbit_indices = fixed_point.get_iterable_array(stability, shift=1)
+
+        current_manifold = BaseManifold(
+            fixed_point.branch_points[orbit_indices[0]],
+            stability,
+            stretch_param=1,
+            fixed_point=fixed_point,
+            branch_index=0,
+        )
 
         # this line meant to deal with roots that are fixed points
         # if it is an intersection behavior is unknown
-        temp_root = manifold.root
-        if isinstance(manifold.root, BranchPoint):
-            manifold.root = manifold.walk_fwd(None, temp_root)
+        temp_root = current_manifold.root
+        if isinstance(current_manifold.root, BranchPoint):
+            current_manifold.root = current_manifold.walk_fwd(None, temp_root)
 
-        iterated_manifold = self.iterate_manifold(manifold)
+        # you must walk forward before adding the stretch param
+        # because the fixed point does not have one
+        current_manifold.stretch_param = current_manifold.root.stretch_param
 
-        grown_manifold = self.merge_manifolds(manifold, iterated_manifold)
+        for i in range(fixed_point.period):
 
-        grown_manifold.root = temp_root
+            for branch_index in fixed_point.get_branch_array():
 
-        return grown_manifold
+                iterated_manifold = self.iterate_manifold(current_manifold)
+
+                next_index = (i + 1) % fixed_point.period
+                next_orbit_idx = orbit_indices[next_index]
+                # self.merge_manifolds(uniterated_manifolds[i], iterated_manifold)
+
+                next_manifold = BaseManifold(
+                    root=fixed_point.branch_points[next_orbit_idx],
+                    stability=stability,
+                    stretch_param=current_manifold.stretch_param,
+                    fixed_point=fixed_point,
+                    branch_index=branch_index,
+                )
+
+                temp_root = next_manifold.root
+                if isinstance(next_manifold.root, BranchPoint):
+                    next_manifold.root = next_manifold.walk_fwd(None, temp_root)
+
+                current_manifold = next_manifold
+                # current_manifold = self.merge_manifolds(
+                #     next_manifold, iterated_manifold
+                # )
+                # current_manifold._find_tail()
 
     def iterate_manifold(self, manifold: BaseManifold):
         """
@@ -60,9 +161,13 @@ class ManifoldMachine:
         initalizer = ManifoldInitializer(self.system)
         viewer = ManifoldView(manifold, self.system)
 
+        # TODO include input for num_iterations
+        # I don't think we need to do that anymore actually
         non_iterated_coords = manifold.get_non_iterated_point_array()
         non_iterated_cdists = manifold.get_non_iterated_cdist_array()
         non_iterated_points = manifold.get_non_iterated_point_array(return_nodes=True)
+
+        old_points = manifold.get_iterated_point_array(return_nodes=True)
 
         if len(non_iterated_coords):
 
@@ -79,6 +184,8 @@ class ManifoldMachine:
                 for x, y, cdist in zip(xvals, yvals, distances)
             ]
 
+            # TODO include num_iterates
+            # I don't think we need to do that anymore actually
             for i, point in enumerate(non_iterated_points):
                 if manifold.stability == "unstable":
                     point.insert_next_iterate(new_points[i])
@@ -89,20 +196,20 @@ class ManifoldMachine:
                 new_points,
                 manifold.stability,
                 manifold.stretch_param,
+                manifold.fixed_point,
                 manifold.branch_index,
             )
-
-        old_points = manifold.get_iterated_point_array(return_nodes=True)
 
         old_iterated_points = BaseManifold(
             old_points[0],
             manifold.stability,
             manifold.stretch_param,
+            manifold.fixed_point,
             tail=old_points[-1],
             branch_index=manifold.branch_index,
         )
 
-        # if there were no points that needed to be mapped
+        # if there were points that needed to be mapped
         if not len(non_iterated_coords) == 0:
 
             mapped_manifold = self.merge_manifolds(
@@ -120,6 +227,130 @@ class ManifoldMachine:
         else:
             return old_iterated_points
 
+    def iterate_x_times(self, manifold: BaseManifold, num_times=1):
+        """
+        Iterates the manifold x times and returns a new manifold
+
+        Parameters:
+            manifold: manifold to iterate
+            num_times: number of times to iterate
+        """
+
+        current_iterate = manifold
+
+        for _ in range(num_times):
+            current_iterate = self.iterate_manifold(current_iterate)
+
+        return current_iterate
+
+    def _iterate_without_refine(self, manifold: BaseManifold):
+        """
+        Iterates a manifold and returns the result without refinement
+        Meant to be used internally for growing manifolds.
+
+        Parameters:
+            manifold: manifold to be iterated
+        """
+
+        from .ManifoldInitializer import ManifoldInitializer
+
+        initalizer = ManifoldInitializer(self.system)
+        viewer = ManifoldView(manifold, self.system)
+
+        # TODO include input for num_iterations
+        non_iterated_coords = manifold.get_non_iterated_point_array()
+        non_iterated_cdists = manifold.get_non_iterated_cdist_array()
+        non_iterated_points = manifold.get_non_iterated_point_array(return_nodes=True)
+
+        number = [
+            False if point.next_iterate is None else True
+            for point in non_iterated_points
+        ].count(True)
+        print(f"Num Incorrectly labeled points: {number}")
+
+        old_points = manifold.get_iterated_point_array(return_nodes=True)
+
+        if len(non_iterated_coords):
+
+            iterated_points = np.vstack(
+                [viewer.map_fwd(p) for p in non_iterated_coords]
+            )
+            distances = manifold.stretch_param * non_iterated_cdists
+
+            xvals = iterated_points[:, 0]
+            yvals = iterated_points[:, 1]
+
+            new_points = [
+                Point(x, y, cdist, stretch_param=manifold.stretch_param)
+                for x, y, cdist in zip(xvals, yvals, distances)
+            ]
+
+            # TODO include num_iterates
+            for i, point in enumerate(non_iterated_points):
+                if manifold.stability == "unstable":
+                    point.insert_next_iterate(new_points[i])
+                else:
+                    point.insert_prev_iterate(new_points[i])
+
+            new_iterated_points = initalizer.construct_manifold_from_point_list(
+                new_points,
+                manifold.stability,
+                manifold.stretch_param,
+                manifold.fixed_point,
+                manifold.branch_index,
+            )
+
+        # TODO include num_iterates
+        # old_points = manifold.get_iterated_point_array(return_nodes=True)
+
+        number = [True if point is None else False for point in old_points].count(True)
+        print(f"Num Incorrectly labeled points: {number}")
+
+        old_iterated_points = BaseManifold(
+            old_points[0],
+            manifold.stability,
+            manifold.stretch_param,
+            manifold.fixed_point,
+            tail=old_points[-1],
+            branch_index=manifold.branch_index,
+        )
+
+        # if there were points that needed to be mapped
+        if not len(non_iterated_coords) == 0:
+
+            mapped_manifold = self.merge_manifolds(
+                old_iterated_points, new_iterated_points
+            )
+
+            assert (
+                sorted(mapped_manifold.get_cdist_array())
+                == mapped_manifold.get_cdist_array()
+            ).all()
+
+            return mapped_manifold
+
+        else:
+            return old_iterated_points
+
+    def grow_x_times(
+        self,
+        fixed_point: FixedPoint,
+        stability: Literal["unstable", "stable"],
+        num_times=1,
+    ):
+        """
+        Grows all the manifolds of the given stability from the fixed point
+        by iterating them num_times and merging them back together
+
+        Parameters:
+            fixed_point: fixed point to grow the manifolds from
+            stability: stability of the manifolds to grow
+            num_times: number of times iterating the manifolds
+        """
+
+        for _ in range(num_times):
+            self.new_grow_manifold(fixed_point, stability)
+
     def merge_manifolds(self, manifold_1: BaseManifold, manifold_2: BaseManifold):
         """
         O(n) inplace method for merging two linked lists (manifold_1 and manifold_2)
@@ -135,7 +366,8 @@ class ManifoldMachine:
         head_1 = manifold_1.root
         head_2 = manifold_2.root
 
-        # If there are negative cdists this merge method will fail
+        # NOTE If there are negative cdists this merge method will fail
+        # Choose which manifold to start with based on the lower cdist
         if head_1.cdist <= head_2.cdist:
             current_point = head_1
             head_1 = manifold_1.walk_fwd(None, head_1)
@@ -145,36 +377,76 @@ class ManifoldMachine:
             head_2 = manifold_2.walk_fwd(None, head_2)
             output_manifold = manifold_2
 
-        # the termination point right after the manifold tail
+        # set the termination point right after the manifold tail
         over_one_1 = manifold_1.walk_fwd(None, manifold_1.tail)
         over_one_2 = manifold_2.walk_fwd(None, manifold_2.tail)
 
         while head_1 is not over_one_1 and head_2 is not over_one_2:
 
             if head_1.cdist < head_2.cdist:
-                self._insert_point_geometrically(current_point, head_1, manifold_1)
-                head_1 = manifold_1.walk_fwd(None, head_1)
+                next_head = manifold_1.walk_fwd(None, head_1)
+                if manifold_1.walk_fwd(None, current_point) is not head_1:
+                    self._insert_point_geometrically(current_point, head_1, manifold_1)
+                current_point = head_1
+                head_1 = next_head
+                # head_1 = manifold_1.walk_fwd(None, head_1)
 
             elif head_2.cdist < head_1.cdist:
-                self._insert_point_geometrically(current_point, head_2, manifold_2)
-                head_2 = manifold_2.walk_fwd(None, head_2)
+                next_head = manifold_2.walk_fwd(None, head_2)
+                if manifold_2.walk_fwd(None, current_point) is not head_2:
+                    self._insert_point_geometrically(current_point, head_2, manifold_2)
+                current_point = head_2
+                head_2 = next_head
+                # head_2 = manifold_2.walk_fwd(None, head_2)
 
             # they are the same node
             else:
                 if head_1 is head_2:
-                    self._insert_point_geometrically(current_point, head_1, manifold_1)
+                    if manifold_1.walk_fwd(None, current_point) is not head_1:
+                        self._insert_point_geometrically(
+                            current_point, head_1, manifold_1
+                        )
                     head_1 = manifold_1.walk_fwd(None, head_1)
                     head_2 = manifold_2.walk_fwd(None, head_2)
+                    current_point = manifold_1.walk_fwd(None, current_point)
+                else:
+                    raise ValueError(
+                        f"""Two nodes have the same cdist but are different objects \n
+                          cdists: {head_1.cdist}, {head_2.cdist} \n
+                          nodes: {head_1}, {head_2}
+                          """
+                    )
 
-            current_point = manifold_1.walk_fwd(None, current_point)
+            # current_point = manifold_1.walk_fwd(None, current_point)
 
         # manifold_2 emptied first
+        # WARNING: This may fail if we are merging manifold segments that
+        # continue on past the tail node. This scheme doesn't insert the
+        # rest of the remaining manifold, it only inserts the next node (head_1)
+        # the fix is to not use this the _insert_point_geometrically method
+        # probably just set
+        # current_point.forward = head_1 and head_1.backward = current_point
+        # but smartly based on stability of course
+        # it is a bit trickier than that actually because we need the tail of
+        # the non_exausted manifold to link to the over_one of the other manifold
+        # NOTE This should be fixed now :)
+        # manifold_2 emptied first
         if head_1 is not over_one_1:
-            self._insert_point_geometrically(current_point, head_1, manifold_1)
+            self._insert_point_geometrically(
+                current_point, head_1, manifold_1, only_forward=True
+            )
             output_manifold.tail = manifold_1.tail
+            # self._insert_point_geometrically(
+            #     output_manifold.tail, over_one_2, output_manifold, only_forward=True
+            # )
         else:
-            self._insert_point_geometrically(current_point, head_2, manifold_2)
+            self._insert_point_geometrically(
+                current_point, head_2, manifold_2, only_forward=True
+            )
             output_manifold.tail = manifold_2.tail
+            # self._insert_point_geometrically(
+            #     output_manifold.tail, over_one_1, output_manifold, only_forward=True
+            # )
 
         return output_manifold
 
@@ -199,7 +471,6 @@ class ManifoldMachine:
             branch_index and final_node can probably be eliminated from the input
         """
         logger.debug("Refining manifold: %r", manifold.get_point_array())
-
         final_node = manifold.tail
 
         num_initial_points = (
@@ -231,6 +502,7 @@ class ManifoldMachine:
 
             previous_point, current_point = current_point, next_point
 
+        # logging logic
         if num_initial_points is not None:
             num_final_points = len(manifold.get_point_array())
             logger.info(
@@ -273,19 +545,17 @@ class ManifoldMachine:
 
             p0, p1 = pair_queue.pop()
 
+            # if one of the points is past the manifold continue
+            if p0 is None or p1 is None:
+                continue
+
             # Check if points are so close together to cause numerical instability
             if np.linalg.norm(p1.get_point() - p0.get_point()) < 1e-8:
                 continue
 
-            p2 = manifold.walk_fwd(p0, p1)
-
-            # If we are at the last two points in a manifold bail
-            if p2 is None:
-                break
-
-            triplet = np.vstack((p0.get_point(), p1.get_point(), p2.get_point()))
             try:
-                curvature_area = self._curvature_area(triplet)
+                # curvature_area = self._curvature_area(triplet, viewer)
+                curvature_area = self._curvature_area((p0, p1), viewer)
             except LinAlgError:
                 logger.debug(
                     "Singular Vandermond matrix at cdist %.3g–%.3g; skipping. "
@@ -301,11 +571,11 @@ class ManifoldMachine:
             new_point = self._get_refined_point(p0, p1, viewer, manifold.stability)
 
             self._insert_point_geometrically(p0, new_point, manifold, branch_index)
-            modified_points.update((p0, p1, p2, new_point))
+            # modified_points.update((p0, p1, p2, new_point))
+            modified_points.update((p0, p1, new_point))
 
             pair_queue.append((p0, new_point))
             pair_queue.append((new_point, p1))
-            pair_queue.append((p1, p2))
 
         return modified_points
 
@@ -317,8 +587,12 @@ class ManifoldMachine:
         stability: Literal["unstable", "stable"],
     ):
         """ """
-        p0_preiterate = self._get_preiterate(p0, stability)
-        p1_preiterate = self._get_preiterate(p1, stability)
+
+        # num_iterates = viewer.manifold.fixed_point.k_value
+        num_iterates = 1
+
+        p0_preiterate = self._get_preiterate(p0, stability, num_iterates)
+        p1_preiterate = self._get_preiterate(p1, stability, num_iterates)
 
         new_point_coords_back = 0.5 * (
             p1_preiterate.get_point() + p0_preiterate.get_point()
@@ -326,7 +600,10 @@ class ManifoldMachine:
 
         new_distance = 0.5 * (p0.cdist + p1.cdist)
 
-        new_point_coords = viewer.map_fwd(new_point_coords_back)
+        # new_point_coords = viewer.map_fwd(new_point_coords_back)
+        new_point_coords = self._get_iterate(
+            new_point_coords_back, viewer, num_iterates
+        )
 
         x = new_point_coords[0]
         y = new_point_coords[1]
@@ -337,8 +614,27 @@ class ManifoldMachine:
         return new_point
 
     @staticmethod
+    def _get_iterate(
+        point: Point | BranchPoint, viewer: ManifoldView, num_iterates: int
+    ):
+        # for _ in range(num_iterates):
+        point = viewer.map_fwd(point)
+
+        return point
+
+    @staticmethod
+    def _shift_list(to_shift: list):
+        """Shifts the list to the left one"""
+
+        d = deque(to_shift)
+        d.rotate(1)
+        return list(d)
+
+    @staticmethod
     def _get_preiterate(
-        point: Point | BranchPoint, stability: Literal["unstable", "stable"]
+        point: Point | BranchPoint,
+        stability: Literal["unstable", "stable"],
+        num_iterates: int = 1,
     ):
         """
         Helper function to get a point's preiterate based on stability
@@ -349,9 +645,9 @@ class ManifoldMachine:
         """
 
         if stability == "unstable":
-            return point.prev_iterate
+            return point.get_prev_iterate(num_iterates)
         else:
-            return point.next_iterate
+            return point.get_next_iterate(num_iterates)
 
     @staticmethod
     def _cache_preiterate(
@@ -383,6 +679,7 @@ class ManifoldMachine:
         new_point: Point | BranchPoint,
         manifold: BaseManifold,
         branch_index: int = None,
+        only_forward: bool = False,
     ):
         """
         Takes in a point (p0) on the manifold and inserts new_point after it.
@@ -408,30 +705,37 @@ class ManifoldMachine:
             if manifold.stability == "unstable":
                 if p0.forward_branches[branch_index] is new_point:
                     return
-                p0.insert_point_forward(new_point, branch_index=branch_index)
+                p0.insert_point_forward(
+                    new_point, branch_index=branch_index, only_forward=only_forward
+                )
             else:
                 if p0.backward_branches[branch_index] is new_point:
                     return
-                p0.insert_point_backward(new_point, branch_index=branch_index)
+                p0.insert_point_backward(
+                    new_point, branch_index=branch_index, only_forward=only_forward
+                )
 
         else:
             if manifold.stability == "unstable":
                 if p0.forward is new_point:
                     return
-                p0.insert_point_forward(new_point)
+                p0.insert_point_forward(new_point, only_forward=only_forward)
             else:
                 if p0.backward is new_point:
                     return
-                p0.insert_point_backward(new_point)
+                p0.insert_point_backward(new_point, only_forward=only_forward)
 
     @staticmethod
     def _linear_fit(points) -> Tuple[float, float]:
         """
-        Takes in three points and gives the linear fit between the first and last
+        Takes in two points and gives the linear fit between the first and last
 
         Parameters:
-            points: list of three points
+            points: list of two points
         """
+
+        if len(points) != 2:
+            raise ValueError("Linear fit takes in two points")
 
         point_one = points[0]
         point_two = points[-1]
@@ -465,20 +769,95 @@ class ManifoldMachine:
         return tuple(Ainv @ y_vals)
 
     @staticmethod
-    def _curvature_area(points):
+    def _curvature_area(
+        points: Tuple[Point | BranchPoint, Point | BranchPoint], viewer: ManifoldView
+    ):
         """
-        Takes in three points and gives
-        the area of the shape made by a parabolic and linear fit
+        Takes in two points and computes the curvature between them.
+
+        Fits 2 parabolas, a forward and a backward one
+        Fits 1 line between the two points
+
+        Computes 2 integrals from the difference tbetween the curves
+        Returns the larger area
 
         Parameters:
-            points: list of three points
+            points: list of two points
         """
+
+        if len(points) != 2:
+            raise ValueError("Curvature Area takes in two points")
+
+        p0 = points[0]
+        p1 = points[1]
+
+        point_vals = np.vstack((p0.get_point(), p1.get_point()))
+
+        # compute the linear fit
+        m, d = ManifoldMachine._linear_fit([p0.get_point(), p1.get_point()])
+
+        # compute the left quadratic fit and area
+        left = viewer.manifold.walk_back(p1, p0)
+        if left is not None:
+
+            left_points = np.vstack((left.get_point(), p0.get_point(), p1.get_point()))
+
+            a_l, b_l, c_l = ManifoldMachine._parabolic_fit(left_points)
+
+            left_area = abs(
+                ManifoldMachine._compute_single_area(
+                    point_vals, (m, d), (a_l, b_l, c_l)
+                )
+            )
+        else:
+            left_area = 0
+
+        # compute the right quadratic fit and area
+        right = viewer.manifold.walk_fwd(p0, p1)
+        if right is not None:
+
+            right_points = np.vstack(
+                (p0.get_point(), p1.get_point(), right.get_point())
+            )
+
+            a_r, b_r, c_r = ManifoldMachine._parabolic_fit(right_points)
+
+            right_area = abs(
+                ManifoldMachine._compute_single_area(
+                    point_vals, (m, d), (a_r, b_r, c_r)
+                )
+            )
+        else:
+            right_area = 0
+
+        # return whichever area is larger
+        area = left_area if left_area > right_area else right_area
+
+        return area
+
+    @staticmethod
+    def _compute_single_area(
+        points: list,
+        linear_coef: tuple[float, float],
+        quad_coef: tuple[float, float, float],
+    ):
+        """
+        Computes the area between a line and parabola
+        given the coefficients of the two curves and
+        the endpoints
+
+        Parameters:
+            points: two endpoints
+            linear_coef: m, d the linear coefficiencts
+            quad_coef: a, b, c the quadratic coefficients
+        """
+
+        # unpack coefficients
+        m, d = linear_coef
+        a, b, c = quad_coef
 
         x_min = points[0, 0]
         x_max = points[-1, 0]
-
-        a, b, c = ManifoldMachine._parabolic_fit(points)
-        m, d = ManifoldMachine._linear_fit(points)
 
         # coefficients for the analytic solution to the integral
         a = a / 3
@@ -491,11 +870,4 @@ class ManifoldMachine:
 
         area = a * x_3 + b * x_2 + c * x_1
 
-        # b -= m
-        # c -= d
-
-        # difference = lambda x: np.abs((a * x + b) * x + c)
-
-        # area, _ = spi.fixed_quad(difference, x_min, x_max, n=3)
-
-        return area
+        return abs(area)

@@ -42,33 +42,35 @@ man_machine = tanglepack.ManifoldMachine(henon)
 
 tangle = tanglepack.Tangle()
 
-
 initial_guess = [4, -4]
-# initial_guess = [6.104, 0]
 
 fixed_point = fp_solver.construct_fixed_point(initial_guess, 2)
 
 print(f"The fixed point is: {fixed_point.coordinates[0]}")
 
-initial_unstable_segment = man_maker.get_initial_fundamental_segment(
-    fixed_point, 0, 0, "unstable"
-)
-initial_stable_segment = man_maker.get_initial_fundamental_segment(
-    fixed_point, 0, 0, "stable"
-)
+approx_dirs = {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
 
-unstable_manifold = initial_unstable_segment
-stable_manifold = initial_stable_segment
+man_maker.orient_manifolds(fixed_point, approx_dirs)
 
-# grow unstable manifold
-num_iterations = 12
-for i in range(num_iterations):
-    unstable_manifold = man_machine.grow_manifold(unstable_manifold)
+# initial_unstable_segment = man_maker.get_initial_fundamental_segment(
+#     fixed_point, 0, 0, "unstable"
+# )
+initial_stable_segment = man_maker.construct_kevin_way(fixed_point, "stable")
+
+initial_unstable_segment = man_maker.construct_kevin_way(fixed_point, "unstable")
+
+unstable_manifold = initial_unstable_segment[(0, 0)]
+stable_manifold = initial_stable_segment[(0, 0)]
+
+num_iterations = 6
+
+# grow unstable manfold
+man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
+unstable_manifold._find_tail()
 
 # grow stable manifold
-num_iterations = 16
-for i in range(num_iterations):
-    stable_manifold = man_machine.grow_manifold(stable_manifold)
+man_machine.grow_x_times(fixed_point, "stable", num_iterations)
+stable_manifold._find_tail()
 
 
 def intersections():
@@ -93,10 +95,11 @@ intersections()
 tangle.populate_intersection_dict()
 print(f"Intersections: {tangle._intersecting_coords.values()}")
 
-plt.figure()
+fig = plt.figure()
 
-unstable_manifold.plot("blue")
-stable_manifold.plot("red")
+show_points = False
+unstable_manifold.plot("blue", show_points=show_points)
+stable_manifold.plot("red", show_points=show_points)
 plt.scatter(*fixed_point.coordinates[0], c="k", s=7)
 
 for point in tangle._intersecting_coords.values():
@@ -104,4 +107,11 @@ for point in tangle._intersecting_coords.values():
 
 plt.xlim([-15, 15])
 plt.ylim([-15, 15])
+
+# fig.savefig(
+#     "tangle_plot.png",  # pdf/svg/eps/etc. all work
+#     dpi=300,  # print-quality resolution
+#     bbox_inches="tight",
+# )  # trim extra whitespace
+
 plt.show()

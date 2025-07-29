@@ -13,6 +13,7 @@ class ManifoldInitializer:
     def __init__(self, system: DynamicalSystem):
 
         self.system = system
+        self.machine = ManifoldMachine(system)
 
     def get_first_point(
         self,
@@ -33,6 +34,7 @@ class ManifoldInitializer:
             direction_from_fixed_point = fixed_point.stable_eigenvectors[orbit_index]
 
         direction_from_fixed_point = np.asarray(direction_from_fixed_point).flatten()
+        direction_from_fixed_point /= np.linalg.norm(direction_from_fixed_point)
 
         first_point = (
             fixed_point.coordinates[orbit_index] + (step) * direction_from_fixed_point
@@ -46,20 +48,44 @@ class ManifoldInitializer:
         orbit_index,
         branch_index,
         stability: Literal["stable", "unstable"],
+        first_point: Point,
     ):
         """
         Get the iterate of the first point
         """
+        num_iterations = fixed_point.k_value
 
-        first_point = self.get_first_point(
-            fixed_point, orbit_index, branch_index, stability
-        )
+        # first_back = self.get_first_point(
+        #     fixed_point, orbit_index, branch_index, stability
+        # )
+        first_back = first_point.get_point()
+        curr_point = first_point
 
         if stability == "unstable":
-            first_back = self.system.map_inv(first_point)
+            # this scheme establishes a 'fictitious' list of
+            # iterates so we can insert the point we are looking for
+            # at the proper iterate in the cycle
+            # these fictitous points are named so because they are
+            # not part of any geometrical manifold object
+            # when the initial manifold segments are mande these points
+            # are given cdists and made full dudes. Just not inserted
+            # geometrically yet
+            for _ in range(num_iterations):
+                temp_back = self.system.map_inv(first_back)
+                temp_point = Point(temp_back[0], temp_back[1])
+                curr_point.insert_prev_iterate(temp_point)
+                curr_point = curr_point.prev_iterate
+                first_back = temp_back
+            curr_point.next_iterate.prev_iterate = None
 
         else:  # stable branch
-            first_back = self.system.map(first_point)
+            for _ in range(num_iterations):
+                temp_back = self.system.map(first_back)
+                temp_point = Point(temp_back[0], temp_back[1])
+                curr_point.insert_next_iterate(temp_point)
+                curr_point = curr_point.next_iterate
+                first_back = temp_back
+            curr_point.prev_iterate.next_iterate = None
 
         return first_back
 
@@ -81,22 +107,25 @@ class ManifoldInitializer:
             first_point - fixed_point.coordinates[orbit_index]
         )
 
+        first_point = Point(
+            first_point[0],
+            first_point[1],
+            cdist=distance_first,
+            edist=distance_first,
+        )
+
         first_back = self.get_first_point_back(
-            fixed_point, orbit_index, branch_index, stability
+            fixed_point, orbit_index, branch_index, stability, first_point
         )
         distance_prev = np.linalg.norm(
             first_back - fixed_point.coordinates[orbit_index]
         )
 
         alpha = distance_first / distance_prev
+        alpha = alpha ** (1 / fixed_point.k_value)
 
-        first_point = Point(
-            first_point[0],
-            first_point[1],
-            cdist=distance_first,
-            edist=distance_first,
-            stretch_param=alpha,
-        )
+        first_point.stretch_param = alpha
+
         first_back = Point(
             first_back[0],
             first_back[1],
@@ -106,12 +135,22 @@ class ManifoldInitializer:
         )
 
         if stability == "unstable":
-            first_back.insert_next_iterate(first_point)
-        else:
-            first_back.insert_prev_iterate(first_point)
+            # add in the new point to the iterate list
+            first_point.insert_prev_iterate(first_back, fixed_point.k_value)
 
-        if stability == "unstable":
+            # fill the cdist and stretch param info of the
+            # 'fictitious' points added when finding the preiterate
+            previous_point = None
+            current_point = first_point
+            for _ in range(fixed_point.k_value - 1):
 
+                previous_point = current_point
+                current_point = current_point.prev_iterate
+
+                current_point.cdist = previous_point.cdist / alpha
+                current_point.stretch_param = alpha
+
+            # insert the new point in geometrically
             fixed_point.branch_points[orbit_index].insert_point_forward(
                 first_point, branch_index
             )
@@ -119,8 +158,23 @@ class ManifoldInitializer:
                 first_back, branch_index
             )
 
-        else:  # stable
+        else:
+            # add in the new point to the iterate list
+            first_point.insert_next_iterate(first_back, fixed_point.k_value)
 
+            # fill the cdist and stretch param info of the
+            # 'fictitious' points added when finding the preiterate
+            previous_point = None
+            current_point = first_point
+            for _ in range(fixed_point.k_value - 1):
+
+                previous_point = current_point
+                current_point = current_point.next_iterate
+
+                current_point.cdist = previous_point.cdist / alpha
+                current_point.stretch_param = alpha
+
+            # insert the new point in geometrically
             fixed_point.branch_points[orbit_index].insert_point_backward(
                 first_point, branch_index
             )
@@ -132,15 +186,50 @@ class ManifoldInitializer:
             fixed_point.branch_points[orbit_index],
             stability,
             alpha,
+            fixed_point,
             tail=first_point,
             branch_index=branch_index,
         )
+
+    def get_all_initial_segments(
+        self,
+        fixed_point: FixedPoint,
+        stability: Literal["stable", "unstable"],
+    ):
+        """
+        Gets all the initial fundamenal segments for each point
+        in an orbit of a given stability. Returns a list with
+        the manifolds
+
+        Parameters:
+            fixed_point: fixed point to grow manifolds from
+            stability: stability of desired manifolds
+        """
+
+        # define the branch indices to loop over based on inversion
+        if fixed_point.check_inversion():
+            branch_indices = [0, 1]
+        else:
+            branch_indices = [0]
+
+        # construct the initial segments for each branch
+        all_manifolds = []
+        for branch_index in branch_indices:
+            for orbit_index in range(fixed_point.period):
+                all_manifolds.append(
+                    self.get_initial_fundamental_segment(
+                        fixed_point, orbit_index, branch_index, stability
+                    )
+                )
+
+        return all_manifolds
 
     def construct_manifold_from_point_list(
         self,
         points: list[Point],
         stability: Literal["stable", "unstable"],
         stretch_param,
+        fixed_point: FixedPoint,
         branch_index=None,
     ):
         """
@@ -148,7 +237,7 @@ class ManifoldInitializer:
         The given list is assumed to be in cdist ordering
         """
 
-        manifold = BaseManifold(points[0], stability, stretch_param)
+        manifold = BaseManifold(points[0], stability, stretch_param, fixed_point)
 
         current_point = manifold.root
 
@@ -184,3 +273,128 @@ class ManifoldInitializer:
                 p0.insert_point_forward(new_point)
             else:
                 p0.insert_point_backward(new_point)
+
+    @staticmethod
+    def orient_manifolds(
+        fixed_point: FixedPoint,
+        approx_dirs: dict[str, np.ndarray] | None = None,
+    ):
+        """
+        Allows the user to provide an approximate direction for the manifolds.
+        This routine goes through the list of eigenvectors and checks if the
+        approximate direction matches. Give the approximate direction for the
+        0th iterate of the cycle and it will be mapped around.
+
+        TODO make it so you can provide the approx_dirs for an arbitrary iterate
+        TODO make it so you can pass in either stable or unstable dir
+
+        Parameters:
+            approx_dirs: dictionary that looks like
+                            {"unstable": [ux, uy], "stable": [sx, sy]}
+        """
+
+        # if there is inversion there is no need to flip
+        if fixed_point.check_inversion():
+            return None
+
+        unstable_approx = approx_dirs["unstable"]
+        stable_approx = approx_dirs["stable"]
+
+        unstable_dir = fixed_point.unstable_eigenvectors[0].ravel()
+        stable_dir = fixed_point.stable_eigenvectors[0].ravel()
+
+        # check if the eigenvectors and approximate directions align
+        unstable_test = True if np.dot(unstable_approx, unstable_dir) > 0 else False
+        stable_test = True if np.dot(stable_approx, stable_dir) > 0 else False
+
+        # if the vectors do not align flip them
+        if not unstable_test:
+            fixed_point.unstable_eigenvectors[0] *= -1
+
+        if not stable_test:
+            fixed_point.stable_eigenvectors[0] *= -1
+
+        period = fixed_point.period
+
+        for i in range(period - 1):
+
+            partial_jacobian = fixed_point.partial_jacobians[i]
+
+            unstable_approx = (
+                partial_jacobian @ fixed_point.unstable_eigenvectors[i]
+            ).ravel()
+            stable_approx = (
+                partial_jacobian @ fixed_point.stable_eigenvectors[i]
+            ).ravel()
+
+            unstable_dir = fixed_point.unstable_eigenvectors[i + 1].ravel()
+            stable_dir = fixed_point.stable_eigenvectors[i + 1].ravel()
+
+            # check if the eigenvectors and approximate directions align
+            unstable_test = True if np.dot(unstable_approx, unstable_dir) > 0 else False
+            stable_test = True if np.dot(stable_approx, stable_dir) > 0 else False
+
+            # if the vectors do not align flip them
+            if not unstable_test:
+                fixed_point.unstable_eigenvectors[i + 1] *= -1
+
+            if not stable_test:
+                fixed_point.stable_eigenvectors[i + 1] *= -1
+
+    def construct_kevin_way(
+        self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
+    ):
+
+        branch_indices = fixed_point.get_branch_array()
+
+        # construct a list of orbit indices based off the stability
+        orbit_indices = fixed_point.get_iterable_array(stability)
+
+        # generate the output structure
+        initial_segments = {
+            (orbit_index, branch_index): None
+            for branch_index in branch_indices
+            for orbit_index in orbit_indices
+        }
+
+        # create the first initial segment
+        segment = self.get_initial_fundamental_segment(fixed_point, 0, 0, stability)
+        initial_segments[(0, 0)] = segment
+
+        # remove the fixed point as the root for simplicity
+        segment.root = segment.walk_fwd(None, segment.root)
+
+        # iterate over orbit indices
+        # for orbit_index in range(fixed_point.period):
+        for orbit_index in orbit_indices:
+
+            for branch_index in branch_indices:
+
+                # skip over the 0th branch which we already have
+                if branch_index == 0 and orbit_index == 0:
+                    continue
+
+                # iterate the segment
+                segment = self.machine.iterate_manifold(segment)
+
+                # add the segment to the output
+                initial_segments[(orbit_index, branch_index)] = segment
+
+                # attach the segment to the fixed point
+                self.machine._insert_point_geometrically(
+                    fixed_point.branch_points[orbit_index],
+                    segment.root,
+                    segment,
+                    branch_index,
+                )
+
+                # # make the fixed point the root of the manifold
+                # segment.root = fixed_point.branch_points[orbit_index]
+
+        # set the fixed point as the root of each manifold
+        for dict_index in initial_segments:
+
+            orbit_index = dict_index[0]
+            initial_segments[dict_index].root = fixed_point.branch_points[orbit_index]
+
+        return initial_segments
