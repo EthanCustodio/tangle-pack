@@ -12,6 +12,7 @@ from .DynamicalSystem import DynamicalSystem
 from .BaseManifold import BaseManifold
 from .ManifoldView import ManifoldView
 from .BranchPoint import BranchPoint
+from .Bridge import Bridge
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -174,13 +175,15 @@ class ManifoldMachine:
             iterated_points = np.vstack(
                 [viewer.map_fwd(p) for p in non_iterated_coords]
             )
-            distances = manifold.stretch_param * non_iterated_cdists
+            distances = (
+                (manifold.stretch_param * non_iterated_cdists).astype(float).ravel()
+            )
 
             xvals = iterated_points[:, 0]
             yvals = iterated_points[:, 1]
 
             new_points = [
-                Point(x, y, cdist, stretch_param=manifold.stretch_param)
+                Point(x, y, float(cdist), stretch_param=manifold.stretch_param)
                 for x, y, cdist in zip(xvals, yvals, distances)
             ]
 
@@ -226,6 +229,104 @@ class ManifoldMachine:
 
         else:
             return old_iterated_points
+
+    def iterate_bridge(self, manifold: Bridge):
+        """
+        Iterates a bridge forward and returns another bridge.
+
+        Args:
+            manifold (Bridge): Bridge to titerate forward.
+        """
+
+        iterated_manifold = self.iterate_manifold(manifold)
+
+        # we want to check if the resulting manifold conforms to our bridge standards
+        # That could happen in Bridge if we want it to
+
+        return iterated_manifold
+
+    def cut_manifold(self, manifold: BaseManifold) -> list[Bridge]:
+        """
+        Takes a manifold and cuts it into Bridges that connect the intersection points.
+
+        Args:
+            manifold (BaseManifold): Manifold to be cut up.
+        """
+
+        final_node = manifold.tail
+
+        previous_point = manifold.root
+        current_point = manifold.walk_fwd(None, previous_point)
+
+        bridges = []
+
+        left_intersection = None
+        right_intersection = None
+
+        if isinstance(previous_point, BranchPoint):
+            left_intersection = previous_point
+            forming_bridge = True
+        else:
+            forming_bridge = False
+
+        while current_point is not None:
+
+            if isinstance(current_point, BranchPoint):
+                if forming_bridge:
+                    right_intersection = current_point
+                else:
+                    left_intersection = current_point
+                    cached_previous_point = previous_point
+                    forming_bridge = True
+
+                if self._check_bridge_readiness(
+                    left_intersection, right_intersection, forming_bridge
+                ):
+
+                    new_root = cached_previous_point
+                    new_tail = manifold.walk_fwd(previous_point, right_intersection)
+
+                    new_bridge = Bridge(
+                        new_root,
+                        manifold.stability,
+                        manifold.stretch_param,
+                        manifold.fixed_point,
+                        manifold.name,
+                        new_tail,
+                        manifold.branch_index,
+                    )
+
+                    bridges.append(new_bridge)
+                    left_intersection = right_intersection
+                    cached_previous_point = previous_point
+                    right_intersection = None
+                    forming_bridge = True
+
+            if current_point is final_node:
+                break
+
+            next_point = manifold.walk_fwd(previous_point, current_point)
+
+            previous_point, current_point = current_point, next_point
+
+        return bridges
+
+    def _check_bridge_readiness(self, left, right, toggle) -> bool:
+        """
+        Helper function which returns True if a bridge is ready to be formed.
+
+        Args:
+            left (BranchPoint): First point which may form a bridge.
+            right (BranchPoint): Second point which may form a bridge.
+            toggle (bool): Flag telling if we are currently forming a bridge.
+
+        Returns:
+            bool: True if a bridge can be formed from left and right.
+        """
+
+        first_term = left is not None and right is not None
+
+        return first_term and toggle
 
     def iterate_x_times(self, manifold: BaseManifold, num_times=1):
         """
@@ -414,6 +515,7 @@ class ManifoldMachine:
                         f"""Two nodes have the same cdist but are different objects \n
                           cdists: {head_1.cdist}, {head_2.cdist} \n
                           nodes: {head_1}, {head_2}
+                          coordinates: {head_1.get_point()}, {head_2.get_point()}
                           """
                     )
 
@@ -598,7 +700,7 @@ class ManifoldMachine:
             p1_preiterate.get_point() + p0_preiterate.get_point()
         )
 
-        new_distance = 0.5 * (p0.cdist + p1.cdist)
+        new_distance = 0.5 * (float(p0.cdist) + float(p1.cdist))
 
         # new_point_coords = viewer.map_fwd(new_point_coords_back)
         new_point_coords = self._get_iterate(
@@ -607,7 +709,7 @@ class ManifoldMachine:
 
         x = new_point_coords[0]
         y = new_point_coords[1]
-        new_point = Point(x, y, new_distance, stretch_param=p0.stretch_param)
+        new_point = Point(x, y, float(new_distance), stretch_param=p0.stretch_param)
 
         self._cache_preiterate(new_point, new_point_coords_back, stability)
 

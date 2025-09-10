@@ -14,3 +14,4 @@ from .ManifoldMachine import ManifoldMachine
 from .ManifoldInitializer import ManifoldInitializer
 
 from .Tangle import Tangle
+from .TangleWorkbench import TangleWorkbench

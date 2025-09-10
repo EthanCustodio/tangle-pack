@@ -3,10 +3,19 @@ from rtree import index
 from collections import defaultdict
 from itertools import count
 from dataclasses import dataclass
+from typing import Literal, Optional
 
 from .BaseManifold import BaseManifold
 from .Point import Point
 from .BranchPoint import BranchPoint
+from .Bridge import Bridge
+
+"""
+Dev Notes:
+
+WARNING: this code must identify fixed points as intersection points. Consider 
+    the complications of that 
+"""
 
 
 @dataclass(slots=True)
@@ -43,19 +52,49 @@ class _Segment:
 
 
 class Tangle:
+    """_summary_
 
-    _ids = count(0)  # global generator -> every segment is given a unique int key
-
-    def __init__(self):
-        """
-
-        Parameters:
+    Attributes:
             _rtree:         spatial rtree to store all segments based
                             on their bounding boxes
             _seg_lookup:    Dictionary keyed by unique segment ids that
                             stores segments
             _manifold_segs: Dictionary keyed by manifolds which stores
                             a set of all segment ids for that manifold
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
+
+    Yields:
+        _type_: _description_
+    """
+
+    _ids = count(0)  # global generator -> every segment is given a unique int key
+
+    def __init__(self):
+        """
+
+        Initializes the Tangle object with an R-tree for spatial indexing
+        of segments, a lookup dictionary for segments, and a mapping
+        of manifolds to their segments.
+
+        Attributes:
+            _rtree: spatial rtree to store all segments based on their bounding boxes
+            _edge_seen:
+            _seg_lookup: Dictionary keyed by unique segment ids that
+                stores segments
+            _manifold_segs: Dictionary keyed by manifolds which stores
+                a set of all segments
+
+            _intersecting_segments: set of frozensets containing pairs of
+                segment ids that intersect
+            _intersecting_coords: dictionary mapping segment ids to their
+                intersection coordinates
+            _intersecting_points: dictionary mapping segment ids to their
+                corresponding BranchPoint objects
         """
 
         p = index.Property()
@@ -75,9 +114,15 @@ class Tangle:
         finds the true intersections and adds those to a list
         """
 
-        for seg_id_pair in self._intersecting_segments:
+        for seg_id_pair in list(self._intersecting_segments):
 
             seg1_id, seg2_id = seg_id_pair
+
+            if seg1_id not in self._seg_lookup or seg2_id not in self._seg_lookup:
+                # drop stale pair and skip
+                self._intersecting_segments.discard(seg_id_pair)
+                continue
+
             seg_1, seg_2 = self._seg_lookup[seg1_id], self._seg_lookup[seg2_id]
 
             point = self._find_true_intersection(seg_1, seg_2)
@@ -94,10 +139,16 @@ class Tangle:
                 + seg_2.p0_seg1.get_cdist(seg_2.manifold.stability)
             )
 
-            unstable_cdist = seg_1 if seg_1.manifold.stability == "unstable" else seg_2
-            stable_cdist = seg_1 if seg_1.manifold.stability == "unstable" else seg_2
+            unstable_cdist = (
+                seg_1_cdist if seg_1.manifold.stability == "unstable" else seg_2_cdist
+            )
+            stable_cdist = (
+                seg_1_cdist if seg_1.manifold.stability == "stable" else seg_2_cdist
+            )
 
-            branch_point = BranchPoint(2, point[0], point[1])
+            branch_point = BranchPoint(
+                2, (unstable_cdist, stable_cdist), point[0], point[1]
+            )
 
             self._intersecting_coords[seg1_id] = point
             self._intersecting_coords[seg2_id] = point
@@ -190,12 +241,15 @@ class Tangle:
         Parameters:
             seg (_Segment): segment to be inserted
         """
+        # edge key defined by the id of two points
         edge_key = frozenset((id(seg.p0), id(seg.p0_seg1)))
         if edge_key in self._edge_seen:
             return None  # already indexed → do NOT duplicate
 
         # choose a new id there for a new segment
         sid = next(Tangle._ids) if seg.id is None else seg.id
+
+        seg.id = sid  # assign the id to the segment
 
         # insert segment into the rtree and dictionary
         self._rtree.insert(sid, seg.bounds)
@@ -257,24 +311,6 @@ class Tangle:
             or self._seg_lookup[sid].p0_seg1 in nodes
         }
 
-    # def _segments_of_nodes(self, old_ids):
-    #     # rebuild the exact segments we just deleted
-    #     for sid in old_ids:
-    #         segment = self._seg_lookup.get(sid)
-    #         if segment is None:  # already removed
-    #             continue
-    #         yield from (_Segment(None, segment.manifold, segment.p0, segment.p0_seg1))
-
-    # def _promote_to_branchpoint(p_int, seg1, seg2):
-    #     """Return BranchPoint + surrounding pointer surgery."""
-    #     bp = BranchPoint(num_branches=2, x=p_int[0], y=p_int[1])
-    #     # 1️⃣ split seg1 into (p0‑bp) and (bp‑p0_seg1)
-    #     _splice_segment(seg1, bp)
-    #     # 2️⃣ split seg2 similar
-    #     _splice_segment(seg2, bp)
-    #     # 3️⃣ create higher‑level Intersection wrapper if desired
-    #     return bp
-
     def _orientation(a, b, c, eps=1e-15):
         """
         Returns:
@@ -308,3 +344,106 @@ class Tangle:
             return True
 
         return False  # no intersection if collinear or not straddling
+
+    def cut_manifold(self):
+        pass
+
+    def create_bridges(self):
+
+        bridges = {}
+
+        intersecting_segments = []
+
+        seen_ids = set()
+        for sid_pair in self._intersecting_segments:
+
+            for sid in sid_pair:
+                if sid in seen_ids:
+                    continue
+                seen_ids.add(sid)
+
+                seg = self._seg_lookup[sid]
+                if seg.manifold.stability != "unstable":
+                    continue
+
+                cdist = 0.5 * (
+                    seg.p0.get_cdist("unstable") + seg.p0_seg1.get_cdist("unstable")
+                )
+
+                intersecting_segments.append((cdist, seg))
+
+        intersecting_segments.sort(key=lambda x: x[0])  # sort by cdist
+
+        for i in range(len(intersecting_segments) - 1):
+            _, seg1 = intersecting_segments[i]
+            _, seg2 = intersecting_segments[i + 1]
+
+            root_point = self._get_nearby_point(seg1, "root")
+            tail_point = self._get_nearby_point(seg2, "tail")
+
+            # add in a point nearby the intersection so we do not have
+            # dangling tails or bridges that are too short.
+            seg1.p0.insert_point_forward(root_point, seg1.manifold.branch_index)
+            seg1.p0 = root_point
+            seg2.p0_seg1.insert_point_backward(tail_point, seg2.manifold.branch_index)
+            seg2.p0_seg1 = tail_point
+
+            bridge = Bridge(
+                root=root_point,
+                stability=seg1.manifold.stability,
+                stretch_param=seg1.manifold.stretch_param,
+                fixed_point=seg1.manifold.fixed_point,
+                tail=tail_point,
+            )
+
+            bridges[(seg1.id, seg2.id)] = bridge
+
+        # update the global bridge structure somehow here
+
+        return list(bridges.values())
+
+    def _get_nearby_point(self, seg: _Segment, side: Literal["root", "tail"]) -> Point:
+        """
+        Returns a nearby point to the segment's root point.
+        This is used to create a bridge root point.
+        """
+        if side == "root":
+            seg_point = seg.p0
+        elif side == "tail":
+            seg_point = seg.p0_seg1
+        else:
+            raise ValueError(f"Invalid side: {side}")
+
+        intersection_coords = self._intersecting_coords[seg.id]
+
+        new_point = self._linear_interpolation(
+            intersection_coords, seg_point.get_point(), 0.1
+        )
+
+        # this is just an approximation, but it is guaranteed
+        # to be between the two points
+        new_cdist = (
+            seg.p0.get_cdist(seg.manifold.stability)
+            + seg.p0_seg1.get_cdist(seg.manifold.stability)
+        ) / 2
+
+        new_point = Point(new_point[0], new_point[1], new_cdist)
+
+        return new_point
+
+    def _linear_interpolation(self, p0, p1, alpha):
+        """
+        Does a linear interpolation between two points p0 and p1 to get a
+        point that is alpha away from the true intersection point.
+
+        Args:
+            p0 (Point): First Point
+            p1 (Point): Second Point
+            alpha (Float): percent distance to interpolate
+
+        Returns:
+            tuple(float, float): resulting point coordinates
+        """
+        x = (1 - alpha) * p0[0] + alpha * p1[0]
+        y = (1 - alpha) * p0[1] + alpha * p1[1]
+        return (x, y)
