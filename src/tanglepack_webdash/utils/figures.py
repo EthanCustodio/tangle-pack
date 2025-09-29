@@ -22,6 +22,11 @@ def blank_figure():
             showlegend=False,
         )
     )
+
+    figure.update_layout(
+        paper_bgcolor="#0e0f13",  # page background (softer black)
+        plot_bgcolor="#1e1e22",  # plotting area (very dark gray)
+    )
     set_square_aspect(figure, True)
     return figure
 

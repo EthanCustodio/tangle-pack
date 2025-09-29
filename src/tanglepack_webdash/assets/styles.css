@@ -7,23 +7,32 @@
 .controls button:hover { background:#111827; }
  */
 /* ===== Theme vars ===== */
+/* === TanglePack Dash styles (softer black + dark-gray plot section) ===
+   Drop this in src/tanglepack_webdash/assets/styles.css
+*/
+
+/* ===== Theme vars ===== */
 :root {
-  --bg: #000;             /* page background */
-  --fg: #eee;             /* primary text */
-  --muted: #a3a3a3;       /* secondary text */
+  /* Softer near-black page bg + readable text */
+  --bg: #0e0f13;           /* page background (softer than #000) */
+  --fg: #e9e9ec;           /* primary text */
+  --muted: #a6a7ab;        /* secondary text */
 
-  --panel-bg: #6d28d9;    /* purple panel */
-  --panel-bg-2: #5b21b6;  /* darker purple gradient end */
-  --panel-border: #a78bfa;/* light purple border/accent */
+  /* Purple control panel */
+  --panel-bg:   #6d28d9;   /* indigo-600/700 vibe */
+  --panel-bg-2: #5b21b6;   /* darker gradient end */
+  --panel-border: #a78bfa; /* light purple border/accent */
 
-  --input-bg: #1a1030;    /* very dark purple */
-  --input-border: #6d28d9;
-
+  /* Inputs & buttons inside panel */
+  --input-bg: #1a1030;     /* deep purple field bg */
+  --input-border: #7c3aed; /* focus ring */
   --button-bg: #7c3aed;
   --button-bg-hover: #6d28d9;
   --button-text: #fff;
 
-  --graph-border: #3f3f46;/* neutral border around plot container */
+  /* Plot container “card” */
+  --graph-surface: #1e1e22; /* VSCode-like dark gray */
+  --graph-border:  #2a2a31; /* subtle border */
 }
 
 /* ===== Base page ===== */
@@ -35,7 +44,8 @@ body {
   font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* IMPORTANT: do NOT touch Plotly's .main-svg background here.
+/* IMPORTANT:
+   We intentionally do NOT override Plotly’s .main-svg background here.
    Axes/ticks/grid colors come from your figure layout. */
 
 /* ===== Purple control panels ===== */
@@ -50,7 +60,9 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04);
+  box-shadow:
+    0 4px 14px rgba(0,0,0,0.25),
+    inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
 .controls label {
@@ -60,6 +72,7 @@ body {
   margin-right: 6px;
 }
 
+/* Inputs inside the purple panel */
 .controls input[type="text"],
 .controls input[type="number"],
 .controls input[type="search"] {
@@ -75,9 +88,10 @@ body {
 .controls input::placeholder { color: rgba(255,255,255,0.55); }
 .controls input:focus {
   border-color: var(--input-border);
-  box-shadow: 0 0 0 3px rgba(109, 40, 217, 0.35);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.35);
 }
 
+/* Buttons inside the purple panel */
 .controls button, .controls .button {
   padding: 8px 12px;
   background: var(--button-bg);
@@ -93,28 +107,30 @@ body {
 .controls button:hover { background: var(--button-bg-hover); }
 .controls button:active { transform: translateY(1px); }
 
-/* Stack spacing if you have multiple control rows */
+/* Space when stacking multiple control rows */
 .controls + .controls { margin-top: 0; }
 
-/* ===== Plot container border (around the Graph div) ===== */
+/* ===== Plot container (around dcc.Graph id="plot") ===== */
 #plot {
   margin: 10px;
+  background: var(--graph-surface);              /* dark gray “card” */
   border: 1px solid var(--graph-border);
   border-radius: 10px;
   box-shadow: 0 6px 18px rgba(0,0,0,0.25);
 }
 
 /* Status text */
-#status { color: var(--muted); margin: 6px 12px 12px; }
-
-/* ===== Plotly modebar: make icons visible on dark bg ===== */
-.js-plotly-plot .modebar {
-  background: transparent;
+#status {
+  color: var(--muted);
+  margin: 6px 12px 12px;
 }
+
+/* ===== Plotly modebar: keep icons readable on dark bg ===== */
+.js-plotly-plot .modebar { background: transparent; }
 .js-plotly-plot .modebar-btn path,
 .js-plotly-plot .modebar-btn svg {
-  fill: #eee !important;
-  color: #eee !important;
+  fill: #ececf1 !important;
+  color: #ececf1 !important;
 }
 .js-plotly-plot .modebar-btn:hover {
   background: rgba(255,255,255,0.08) !important;

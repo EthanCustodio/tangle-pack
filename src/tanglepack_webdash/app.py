@@ -2,7 +2,11 @@
 from __future__ import annotations
 from dash import Dash
 from .layout import build_layout
-from .callbacks import fixed_point  # registers callbacks on import
+from .callbacks import (
+    fixed_point,
+    session_init,
+    build_system,
+)  # registers callbacks on import
 
 
 def make_app() -> Dash:
@@ -17,6 +21,8 @@ def make_app() -> Dash:
     app.title = "Tangle Workbench"
     app.layout = build_layout()
     # importing modules under .callbacks should register their callbacks with `app`
+    session_init.register(app)
+    build_system.register(app)
     fixed_point.register(app)
     return app
 
