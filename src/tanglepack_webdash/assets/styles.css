@@ -1,0 +1,127 @@
+/* assets/styles.css */
+/* body { background:#000; color:#eee; font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+.controls { display:flex; flex-wrap:wrap; gap:8px; padding:10px; align-items:center; }
+.controls label { opacity:.8; margin-right:6px; }
+.controls input { padding:6px 8px; background:#111; border:1px solid #333; color:#eee; border-radius:6px; }
+.controls button { padding:6px 10px; background:#1f2937; color:#eee; border:1px solid #374151; border-radius:6px; cursor:pointer; }
+.controls button:hover { background:#111827; }
+ */
+/* ===== Theme vars ===== */
+:root {
+  --bg: #000;             /* page background */
+  --fg: #eee;             /* primary text */
+  --muted: #a3a3a3;       /* secondary text */
+
+  --panel-bg: #6d28d9;    /* purple panel */
+  --panel-bg-2: #5b21b6;  /* darker purple gradient end */
+  --panel-border: #a78bfa;/* light purple border/accent */
+
+  --input-bg: #1a1030;    /* very dark purple */
+  --input-border: #6d28d9;
+
+  --button-bg: #7c3aed;
+  --button-bg-hover: #6d28d9;
+  --button-text: #fff;
+
+  --graph-border: #3f3f46;/* neutral border around plot container */
+}
+
+/* ===== Base page ===== */
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* IMPORTANT: do NOT touch Plotly's .main-svg background here.
+   Axes/ticks/grid colors come from your figure layout. */
+
+/* ===== Purple control panels ===== */
+.controls {
+  background: linear-gradient(180deg, var(--panel-bg), var(--panel-bg-2));
+  color: #fff;
+  padding: 10px 12px;
+  margin: 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.controls label {
+  font-weight: 600;
+  letter-spacing: .2px;
+  opacity: .95;
+  margin-right: 6px;
+}
+
+.controls input[type="text"],
+.controls input[type="number"],
+.controls input[type="search"] {
+  padding: 8px 10px;
+  min-width: 120px;
+  background: var(--input-bg);
+  color: var(--fg);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.controls input::placeholder { color: rgba(255,255,255,0.55); }
+.controls input:focus {
+  border-color: var(--input-border);
+  box-shadow: 0 0 0 3px rgba(109, 40, 217, 0.35);
+}
+
+.controls button, .controls .button {
+  padding: 8px 12px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: .2px;
+  transition: background-color .15s ease, transform .02s ease;
+  user-select: none;
+}
+.controls button:hover { background: var(--button-bg-hover); }
+.controls button:active { transform: translateY(1px); }
+
+/* Stack spacing if you have multiple control rows */
+.controls + .controls { margin-top: 0; }
+
+/* ===== Plot container border (around the Graph div) ===== */
+#plot {
+  margin: 10px;
+  border: 1px solid var(--graph-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+}
+
+/* Status text */
+#status { color: var(--muted); margin: 6px 12px 12px; }
+
+/* ===== Plotly modebar: make icons visible on dark bg ===== */
+.js-plotly-plot .modebar {
+  background: transparent;
+}
+.js-plotly-plot .modebar-btn path,
+.js-plotly-plot .modebar-btn svg {
+  fill: #eee !important;
+  color: #eee !important;
+}
+.js-plotly-plot .modebar-btn:hover {
+  background: rgba(255,255,255,0.08) !important;
+}
+
+/* ===== Small screens ===== */
+@media (max-width: 720px) {
+  .controls { padding: 10px; gap: 6px 8px; }
+  .controls input { min-width: 0; width: 140px; }
+}

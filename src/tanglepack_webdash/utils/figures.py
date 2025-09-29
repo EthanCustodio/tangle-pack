@@ -1,0 +1,41 @@
+# tanglepack_webdash/utils/figures.py
+from __future__ import annotations
+import plotly.graph_objects as go
+
+
+def set_square_aspect(fig, enable: bool = True):
+    if enable:
+        fig.update_layout(yaxis=dict(scaleanchor="x", scaleratio=1))
+    else:
+        # remove anchor to go back to free aspect
+        fig.update_layout(yaxis=dict(scaleanchor=None, scaleratio=None))
+    return fig
+
+
+def blank_figure():
+    figure = go.Figure(
+        layout=dict(
+            paper_bgcolor="black",
+            plot_bgcolor="black",
+            xaxis=dict(color="white"),
+            yaxis=dict(color="white"),
+            showlegend=False,
+        )
+    )
+    set_square_aspect(figure, True)
+    return figure
+
+
+def add_fp_trace(fig: go.Figure, x: float, y: float) -> go.Figure:
+    fig.add_trace(
+        go.Scattergl(
+            x=[x],
+            y=[y],
+            mode="markers",
+            marker=dict(size=9, color="white", line=dict(width=1, color="black")),
+            name="FP",
+            hovertemplate="FP: (%{x:.6f}, %{y:.6f})<extra></extra>",
+        )
+    )
+    set_square_aspect(fig, True)
+    return fig

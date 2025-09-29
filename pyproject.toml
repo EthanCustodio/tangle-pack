@@ -5,10 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tanglepack"
 version = "0.1.0"
-description = "A simple example package"
+description = "A simple tangle package"
 authors = [
   { name="Your Name", email="your.email@example.com" }
 ]
+
 dependencies = [
   "asttokens==3.0.0",
   "comm==0.2.2",
@@ -60,3 +61,8 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+[project.scripts]
+tanglepack-gui = "tanglepack_gui.app:main"
+tanglepack-dash = "tanglepack_webdash.app:main"
