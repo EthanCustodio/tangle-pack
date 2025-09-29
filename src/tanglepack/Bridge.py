@@ -29,8 +29,8 @@ class Bridge(BaseManifold):
         stability: Literal["stable", "unstable"],
         stretch_param: float,
         fixed_point: FixedPoint,
+        tail: Point,
         name="unnamed",
-        tail: Point = None,
         branch_index: Optional[int] = None,
     ):
         """

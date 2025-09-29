@@ -88,7 +88,6 @@ shapely==2.1.0
 six==1.17.0
 snakeviz==2.2.2
 stack-data==0.6.3
--e git+https://github.com/EthanCustodio/tangle-pack.git@499945a9b6f297693a57bfcbe9f7a9f05500638c#egg=tanglepack
 tornado==6.4.2
 traitlets==5.14.3
 wcwidth==0.2.13
