@@ -1,6 +1,7 @@
 # tanglepack_webdash/utils/figures.py
 from __future__ import annotations
 import plotly.graph_objects as go
+import numpy as np
 
 
 def set_square_aspect(fig, enable: bool = True):
@@ -44,3 +45,19 @@ def add_fp_trace(fig: go.Figure, x: float, y: float) -> go.Figure:
     )
     set_square_aspect(fig, True)
     return fig
+
+
+def add_manifold_line(fig: go.Figure, arr: np.ndarray, *, color: str, name: str):
+    """arr is (N,2) coordinates."""
+    if arr.size == 0:
+        return
+    fig.add_trace(
+        go.Scattergl(
+            x=arr[:, 0],
+            y=arr[:, 1],
+            mode="lines",
+            line=dict(width=2, color=color),
+            name=name,
+            hoverinfo="skip",
+        )
+    )

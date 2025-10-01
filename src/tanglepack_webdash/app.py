@@ -6,6 +6,8 @@ from .callbacks import (
     fixed_point,
     session_init,
     build_system,
+    manifolds,
+    orientation,
 )  # registers callbacks on import
 
 
@@ -24,6 +26,8 @@ def make_app() -> Dash:
     session_init.register(app)
     build_system.register(app)
     fixed_point.register(app)
+    manifolds.register(app)
+    orientation.register(app)
     return app
 
 

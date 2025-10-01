@@ -4,6 +4,7 @@ import numpy as np
 from dash import Dash, Input, Output, State as DashState, no_update
 from tanglepack.TangleWorkbench import TangleWorkbench
 from ..sessions import get_state
+from ..utils import pointize
 from ..parser import parse_map_text
 from ..utils.figures import blank_figure, add_fp_trace
 
@@ -31,7 +32,9 @@ def register(app: Dash):
             return no_update, f"❌ Bad initial guess: {x0y0_text!r}"
 
         try:
-            state.fp = state.wb.construct_fixed_point(np.array([x0, y0], float))
+            guess = [x0, y0]
+            state.fp = state.wb.construct_fixed_point(guess)
+            # state.fp = state.wb.construct_fixed_point(np.array([x0, y0], float))
             coords = np.asarray(state.fp.coordinates)
             pt = (
                 coords[0]

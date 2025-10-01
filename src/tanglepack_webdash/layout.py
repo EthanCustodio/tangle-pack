@@ -15,25 +15,58 @@ def build_layout():
             ),
             html.Div(
                 [
-                    html.Label("Map and Inverse Map", style={"marginRight": "8px"}),
+                    # html.Label("Map and Inverse Map", style={"marginRight": "8px"}),
+                    # dcc.Input(
+                    #     id="fx",
+                    #     type="text",
+                    #     value="y - 10 + x**2, -x",
+                    #     style={"width": "420px"},
+                    # ),
+                    # dcc.Input(
+                    #     id="fx_inv",
+                    #     type="text",
+                    #     value="-y, x + 10 - y**2",
+                    #     style={"width": "420px"},
+                    # ),
+                    # html.Button(
+                    #     "Build system",
+                    #     id="btn-build",
+                    #     n_clicks=0,
+                    #     style={"marginLeft": "10px"},
+                    # ),
+                ],
+                className="controls",
+            ),
+            html.Div(
+                [
+                    html.Label("Preset:"),
+                    dcc.Dropdown(
+                        id="map-preset",
+                        options=[
+                            {
+                                "label": "Hénon (binary horseshoe)",
+                                "value": "henon_binary",
+                            },
+                            {"label": "Custom (use text boxes)", "value": "custom"},
+                        ],
+                        value="henon_binary",  # default to the known-good preset
+                        style={"width": "260px"},
+                        clearable=False,
+                    ),
+                    # your existing text inputs can stay; they'll be ignored unless "custom"
                     dcc.Input(
                         id="fx",
                         type="text",
                         value="y - 10 + x**2, -x",
-                        style={"width": "420px"},
+                        style={"width": "360px"},
                     ),
                     dcc.Input(
-                        id="fx_inv",
+                        id="finv",
                         type="text",
                         value="-y, x + 10 - y**2",
-                        style={"width": "420px"},
+                        style={"width": "360px"},
                     ),
-                    html.Button(
-                        "Build system",
-                        id="btn-build",
-                        n_clicks=0,
-                        style={"marginLeft": "10px"},
-                    ),
+                    html.Button("Build system", id="btn-build", n_clicks=0),
                 ],
                 className="controls",
             ),
@@ -49,6 +82,17 @@ def build_layout():
                         n_clicks=0,
                         style={"marginLeft": "10px"},
                     ),
+                    dcc.Input(
+                        id="u_dir", type="text", value="-1, 0", style={"width": "120px"}
+                    ),
+                    dcc.Input(
+                        id="s_dir", type="text", value="0, 1", style={"width": "120px"}
+                    ),
+                    html.Button("Set directions", id="btn-orient", n_clicks=0),
+                    html.Button("Reset manifolds", id="btn-reset", n_clicks=0),
+                    html.Button("Init manifolds", id="btn-init", n_clicks=0),
+                    html.Button("Grow ×1 (unstable)", id="btn-grow-u", n_clicks=0),
+                    html.Button("Grow ×1 (stable)", id="btn-grow-s", n_clicks=0),
                 ],
                 className="controls",
             ),
