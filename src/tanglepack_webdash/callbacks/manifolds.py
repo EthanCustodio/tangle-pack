@@ -1,11 +1,13 @@
 from __future__ import annotations
 import numpy as np
+import traceback
 from dash import Dash, Input, Output, State as DashState, no_update, ctx
 from ..sessions import get_state
 from tanglepack_webdash.utils.figures import (
     blank_figure,
     add_fp_trace,
     add_manifold_line,
+    add_manifold_traces,
 )
 
 
@@ -115,3 +117,52 @@ def register(app: Dash):
 
         fig = _figure_from_state(st)
         return fig, f"✅ Grew {stab} ×1."
+
+    @app.callback(
+        Output("plot", "figure", allow_duplicate=True),
+        Output("status", "children", allow_duplicate=True),
+        Output("debug", "children", allow_duplicate=True),
+        Input("btn-grow-turn", "n_clicks"),
+        DashState("sid", "data"),
+        prevent_initial_call=True,
+    )
+    def grow_until_turnaround(_, sid):
+        if not sid:
+            return no_update, "❌ Missing session id.", ""
+        state = get_state(sid)
+
+        if state.wb is None or state.fp is None:
+            return no_update, "⚠️ Need a system + fixed point first.", ""
+
+        try:
+            state.wb.grow_until_turnaround(state.fp, "stable")
+            state.wb.grow_until_turnaround(state.fp, "unstable")
+            # fig = add_manifold_traces(state.fp)
+            fig = _figure_from_state(state)
+            return fig, "✅ Grown until turnaround.", ""
+        except Exception as e:
+            return no_update, f"❌ Grow error: {e}", traceback.format_exc()
+
+    @app.callback(
+        Output("plot", "figure", allow_duplicate=True),
+        Output("status", "children", allow_duplicate=True),
+        Output("debug", "children", allow_duplicate=True),
+        Input("btn-grow-inter", "n_clicks"),
+        DashState("sid", "data"),
+        prevent_initial_call=True,
+    )
+    def grow_until_intersection(_, sid):
+        if not sid:
+            return no_update, "❌ Missing session id.", ""
+        state = get_state(sid)
+
+        if state.wb is None or state.fp is None:
+            return no_update, "⚠️ Need a system + fixed point first.", ""
+
+        try:
+            # state.wb.grown_until_intersection(state.fp, "stable")
+            state.wb.grown_until_intersection(state.fp, "unstable")
+            fig = add_manifold_traces(state.fp)
+            return fig, "✅ Grown until intersection.", ""
+        except Exception as e:
+            return no_update, f"❌ Grow error: {e}", traceback.format_exc()

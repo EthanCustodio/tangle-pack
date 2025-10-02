@@ -61,3 +61,50 @@ def add_manifold_line(fig: go.Figure, arr: np.ndarray, *, color: str, name: str)
             hoverinfo="skip",
         )
     )
+
+
+def add_manifold_traces(fp, fig=None):
+    """
+    Add stable and unstable manifolds for a fixed point to a plotly figure.
+
+    Parameters
+    ----------
+    fp : FixedPoint
+        The fixed point whose manifolds are to be drawn.
+    fig : go.Figure, optional
+        An existing figure. If None, creates a new blank one.
+
+    Returns
+    -------
+    go.Figure
+        The updated figure with manifold traces added.
+    """
+    if fig is None:
+        fig = go.Figure()
+
+    wb = fp.workbench  # FixedPoint knows its workbench
+    for (fixed, stab, _oi, _bi), manifold in wb.manifolds.items():
+        if fixed is not fp:
+            continue
+        arr = manifold.get_point_array()
+        if arr.shape[0] < 2:
+            continue  # nothing to draw yet
+
+        color = "red" if stab == "stable" else "blue"
+        fig.add_trace(
+            go.Scatter(
+                x=arr[:, 0],
+                y=arr[:, 1],
+                mode="lines+markers",
+                name=f"{stab.capitalize()} manifold",
+                line=dict(color=color),
+                marker=dict(size=4, color=color),
+            )
+        )
+
+    fig.update_layout(
+        xaxis=dict(scaleanchor="y", title="x"),
+        yaxis=dict(title="y"),
+        showlegend=True,
+    )
+    return fig

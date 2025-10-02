@@ -39,6 +39,23 @@ def build_layout():
             ),
             html.Div(
                 [
+                    html.Button(
+                        "Grow until Turnaround",
+                        id="btn-grow-turn",
+                        n_clicks=0,
+                        className="btn",
+                    ),
+                    html.Button(
+                        "Grow until Intersection",
+                        id="btn-grow-inter",
+                        n_clicks=0,
+                        className="btn",
+                    ),
+                ],
+                className="control-row",
+            ),
+            html.Div(
+                [
                     html.Label("Preset:"),
                     dcc.Dropdown(
                         id="map-preset",
@@ -98,6 +115,7 @@ def build_layout():
             ),
             dcc.Graph(id="plot", figure=blank_figure(), style={"height": "70vh"}),
             html.Div(id="status", style={"color": "#aaa", "padding": "8px"}),
+            html.Pre(id="debug", style={"whiteSpace": "pre-wrap", "color": "#fca5a5"}),
         ],
         style={
             "background": "#000",

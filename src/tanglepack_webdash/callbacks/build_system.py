@@ -6,6 +6,7 @@ from tanglepack.TangleWorkbench import TangleWorkbench
 from tanglepack_webdash.maps import PRESETS
 from ..sessions import get_state
 from ..parser import parse_map_text
+from ..utils.wrappers import pointize
 from ..utils.figures import blank_figure, add_fp_trace
 
 

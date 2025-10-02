@@ -11,11 +11,13 @@ def henon_binary() -> MapPair:
     k, b = 10.0, 1.0
 
     def f(point: np.ndarray) -> np.ndarray:
-        x, y = float(point[0]), float(point[1])
+        x = np.asarray(point)[0]
+        y = np.asarray(point)[1]
         return np.array([y - k + x * x, -b * x], dtype=float)
 
     def finv(point: np.ndarray) -> np.ndarray:
-        x, y = float(point[0]), float(point[1])
+        x = np.asarray(point)[0]
+        y = np.asarray(point)[1]
         return np.array([-y / b, x + k - (y * y) / (b * b)], dtype=float)
 
     return f, finv
