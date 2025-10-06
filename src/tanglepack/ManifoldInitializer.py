@@ -206,7 +206,7 @@ class ManifoldInitializer:
         alpha = distance_first / distance_prev
         # I injected this sqrt(2) in here to try and break the rational latice
         # that I think is formed without its
-        alpha = alpha ** (np.sqrt(2) / fixed_point.k_value)
+        alpha = alpha ** (1 / fixed_point.k_value)
 
         first_point.stretch_param = alpha
 

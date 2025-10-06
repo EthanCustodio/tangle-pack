@@ -56,6 +56,23 @@ def build_layout():
             ),
             html.Div(
                 [
+                    html.Button(
+                        "Compute Intersections",
+                        id="btn-cmpt_intersections",
+                        n_clicks=0,
+                        className="btn",
+                    ),
+                    html.Button(
+                        "Create Bridges",
+                        id="btn-create-bridges",
+                        n_clicks=0,
+                        className="btn",
+                    ),
+                ],
+                className="control-row",
+            ),
+            html.Div(
+                [
                     html.Label("Preset:"),
                     dcc.Dropdown(
                         id="map-preset",

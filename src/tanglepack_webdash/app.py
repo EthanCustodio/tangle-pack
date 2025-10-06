@@ -8,6 +8,7 @@ from .callbacks import (
     build_system,
     manifolds,
     orientation,
+    intersections,
 )  # registers callbacks on import
 
 
@@ -28,6 +29,7 @@ def make_app() -> Dash:
     fixed_point.register(app)
     manifolds.register(app)
     orientation.register(app)
+    intersections.register(app)
     return app
 
 

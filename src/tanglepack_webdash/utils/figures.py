@@ -32,6 +32,30 @@ def blank_figure():
     return figure
 
 
+def add_intersection_traces(wb, fp, fig=None):
+    """
+    Add intersection points to a Plotly figure.
+    """
+    if fig is None:
+        fig = go.Figure()
+
+    intersections = wb.compute_intersections(fp)
+    if not intersections:
+        return fig
+
+    arr = np.array(intersections)
+    fig.add_trace(
+        go.Scatter(
+            x=arr[:, 0],
+            y=arr[:, 1],
+            mode="markers",
+            name="Intersections",
+            marker=dict(color="white", size=6, symbol="x"),
+        )
+    )
+    return fig
+
+
 def add_fp_trace(fig: go.Figure, x: float, y: float) -> go.Figure:
     fig.add_trace(
         go.Scattergl(

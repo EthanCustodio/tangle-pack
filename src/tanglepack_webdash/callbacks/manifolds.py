@@ -160,9 +160,10 @@ def register(app: Dash):
             return no_update, "⚠️ Need a system + fixed point first.", ""
 
         try:
-            # state.wb.grown_until_intersection(state.fp, "stable")
+            state.wb.grow_until_turnaround(state.fp, "stable")
             state.wb.grown_until_intersection(state.fp, "unstable")
-            fig = add_manifold_traces(state.fp)
+            # fig = add_manifold_traces(state.fp)
+            fig = _figure_from_state(state)
             return fig, "✅ Grown until intersection.", ""
         except Exception as e:
             return no_update, f"❌ Grow error: {e}", traceback.format_exc()
