@@ -5,6 +5,7 @@ from typing_extensions import Annotated
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import networkx as nx
 
 from .DynamicalSystem import DynamicalSystem
 from .FixedPointSolver import FixedPointSolver
@@ -260,13 +261,29 @@ class TangleWorkbench:
 
         return self
 
+    # def compute_intersections(self, fixed_point):
+    #     """This currently only computes homoclinic intersections, we will have
+    #     to modify"""
+
+    #     self.Tangle._intersecting_segments.clear()
+    #     self.Tangle._intersecting_coords.clear()
+    #     self.Tangle._intersecting_points.clear()
+
+    #     self.index_manifolds(fixed_point, "unstable")
+    #     self.index_manifolds(fixed_point, "stable")
+
+    #     self.Tangle.populate_intersection_dict()
+
+    #     points = self.Tangle._intersecting_coords.values()
+
+    #     return points
+
     def compute_intersections(self, fixed_point):
         """This currently only computes homoclinic intersections, we will have
         to modify"""
 
-        self.Tangle._intersecting_segments.clear()
-        self.Tangle._intersecting_coords.clear()
-        self.Tangle._intersecting_points.clear()
+        # Completely clear and rebuild the Tangle state to avoid stale references
+        self.Tangle.clear_all()
 
         self.index_manifolds(fixed_point, "unstable")
         self.index_manifolds(fixed_point, "stable")
@@ -322,6 +339,598 @@ class TangleWorkbench:
         self.plot_all_bridges(bridges)
         self.plot_intersections(fixed_point)
 
+    # def create_intersection_graph(self) -> nx.Graph:
+    #     """
+    #     creates a graph structure connecting all the
+    #     intersections
+    #     """
+
+    #     if self.graph is not None:
+    #         return "graph is not empty"
+
+    #     graph = nx.graph()
+
+    #     intersecting_points = self.Tangle._intersecting_points
+
+    #     manifolds = self.manifolds.values()
+
+    #     for man in manifolds:
+
+    #         manifold_segs = self.Tangle._manifold_segs[man]
+
+    #         if man.stability is "unstable":
+    #             pass
+
+    #         elif man.stability is "stable":
+    #             pass
+
+    # def build_intersection_graph(self, fixed_point: FixedPoint) -> nx.DiGraph:
+    #     """
+    #     Build a directed graph of manifold segment intersections.
+
+    #     Walks along each manifold and creates graph edges between consecutive segments
+    #     that contain intersection points. The direction of edges depends on manifold
+    #     stability:
+    #     - Unstable manifolds: edges go forward (away from fixed point)
+    #     - Stable manifolds: edges go backward (toward fixed point)
+
+    #     Args:
+    #         fixed_point: The fixed point whose manifolds to analyze
+
+    #     Returns:
+    #         A directed NetworkX graph where:
+    #         - Nodes are segment IDs
+    #         - Edges connect consecutive segments along manifold paths
+    #         - Node attributes include: 'segment', 'manifold', 'stability', 'is_intersection'
+    #         - Edge attributes include: 'manifold', 'stability'
+    #     """
+    #     # Ensure intersections are computed
+    #     self.compute_intersections(fixed_point)
+
+    #     # Create directed graph
+    #     G = nx.DiGraph()
+
+    #     # Get the set of all segment IDs that contain intersections
+    #     intersecting_seg_ids = set()
+    #     for seg_id_pair in self.Tangle._intersecting_segments:
+    #         intersecting_seg_ids.update(seg_id_pair)
+
+    #     # Walk through each manifold
+    #     for (fp, stab, oi, bi), manifold in self.manifolds.items():
+    #         if fp is not fixed_point:
+    #             continue
+
+    #         # Get all segments for this manifold
+    #         manifold_seg_ids = self.Tangle._manifold_segs.get(manifold, set())
+
+    #         # Find segments in this manifold that contain intersections
+    #         intersecting_segs_in_manifold = []
+    #         for seg_id in manifold_seg_ids:
+    #             if seg_id in intersecting_seg_ids:
+    #                 seg = self.Tangle._seg_lookup[seg_id]
+    #                 intersecting_segs_in_manifold.append((seg_id, seg))
+
+    #         # Sort by canonical distance to maintain order along manifold
+    #         # Use the average cdist of the two points in the segment
+    #         intersecting_segs_in_manifold.sort(
+    #             key=lambda x: 0.5
+    #             * (x[1].p0.get_cdist(stab) + x[1].p0_seg1.get_cdist(stab))
+    #         )
+
+    #         # Add nodes to graph with attributes
+    #         for seg_id, seg in intersecting_segs_in_manifold:
+    #             if seg_id not in G:
+    #                 G.add_node(
+    #                     seg_id,
+    #                     segment=seg,
+    #                     manifold=manifold,
+    #                     stability=stab,
+    #                     orbit_index=oi,
+    #                     branch_index=bi,
+    #                     is_intersection=True,
+    #                 )
+
+    #         # Create edges between consecutive intersecting segments
+    #         # Direction depends on stability
+    #         if stab == "unstable":
+    #             # For unstable: edges go forward (increasing cdist)
+    #             for i in range(len(intersecting_segs_in_manifold) - 1):
+    #                 seg_id_from = intersecting_segs_in_manifold[i][0]
+    #                 seg_id_to = intersecting_segs_in_manifold[i + 1][0]
+    #                 G.add_edge(
+    #                     seg_id_from,
+    #                     seg_id_to,
+    #                     manifold=manifold,
+    #                     stability=stab,
+    #                     orbit_index=oi,
+    #                     branch_index=bi,
+    #                 )
+    #         else:  # stable
+    #             # For stable: edges go backward (decreasing cdist -> reverse direction)
+    #             for i in range(len(intersecting_segs_in_manifold) - 1):
+    #                 seg_id_from = intersecting_segs_in_manifold[i + 1][0]
+    #                 seg_id_to = intersecting_segs_in_manifold[i][0]
+    #                 G.add_edge(
+    #                     seg_id_from,
+    #                     seg_id_to,
+    #                     manifold=manifold,
+    #                     stability=stab,
+    #                     orbit_index=oi,
+    #                     branch_index=bi,
+    #                 )
+
+    #     return G
+
+    def build_intersection_graph(self, fixed_point: FixedPoint) -> nx.DiGraph:
+        """
+        Build a directed graph of manifold segment intersections.
+
+        Each node represents an intersection point (not a segment). Edges represent
+        the flow along manifolds between intersections:
+        - Unstable edges: flow away from fixed point (increasing cdist)
+        - Stable edges: flow toward fixed point (decreasing cdist)
+
+        Args:
+            fixed_point: The fixed point whose manifolds to analyze
+
+        Returns:
+            A directed NetworkX graph where:
+            - Nodes are intersection points (identified by the pair of intersecting segments)
+            - Edges connect consecutive intersections along each manifold
+            - Node attributes: 'coords', 'branch_point', 'segments' (the two segment IDs)
+            - Edge attributes: 'manifold', 'stability', 'orbit_index', 'branch_index'
+        """
+        # Ensure intersections are computed
+        self.compute_intersections(fixed_point)
+
+        # Create directed graph
+        G = nx.DiGraph()
+
+        # Create nodes for each intersection point
+        # Use frozenset of segment IDs as node identifier (order-independent)
+        intersection_nodes = {}  # maps frozenset(seg_id1, seg_id2) -> node_id
+        node_counter = 0
+
+        for seg_id_pair in self.Tangle._intersecting_segments:
+            seg_id1, seg_id2 = seg_id_pair
+
+            # Get intersection data
+            coords = self.Tangle._intersecting_coords.get(seg_id1)
+            branch_point = self.Tangle._intersecting_points.get(seg_id1)
+
+            # Create node for this intersection
+            node_id = node_counter
+            node_counter += 1
+
+            G.add_node(
+                node_id,
+                coords=coords,
+                branch_point=branch_point,
+                segments=seg_id_pair,
+                seg_id1=seg_id1,
+                seg_id2=seg_id2,
+            )
+
+            # Store mapping for later edge creation
+            intersection_nodes[seg_id_pair] = node_id
+
+        # Now create edges by walking along each manifold
+        for (fp, stab, oi, bi), manifold in self.manifolds.items():
+            if fp is not fixed_point:
+                continue
+
+            # Get all segments for this manifold that contain intersections
+            manifold_seg_ids = self.Tangle._manifold_segs.get(manifold, set())
+
+            intersecting_segs = []
+            for seg_id in manifold_seg_ids:
+                # Check if this segment is part of any intersection
+                for seg_pair in self.Tangle._intersecting_segments:
+                    if seg_id in seg_pair:
+                        seg = self.Tangle._seg_lookup[seg_id]
+                        intersecting_segs.append((seg_id, seg, seg_pair))
+                        break
+
+            # Sort by cdist along this manifold
+            intersecting_segs.sort(
+                key=lambda x: 0.5
+                * (x[1].p0.get_cdist(stab) + x[1].p0_seg1.get_cdist(stab))
+            )
+
+            # Create edges between consecutive intersections
+            if stab == "unstable":
+                # Unstable: edges go forward (increasing cdist)
+                for i in range(len(intersecting_segs) - 1):
+                    from_seg_pair = intersecting_segs[i][2]
+                    to_seg_pair = intersecting_segs[i + 1][2]
+
+                    from_node = intersection_nodes[from_seg_pair]
+                    to_node = intersection_nodes[to_seg_pair]
+
+                    G.add_edge(
+                        from_node,
+                        to_node,
+                        manifold=manifold,
+                        stability=stab,
+                        orbit_index=oi,
+                        branch_index=bi,
+                    )
+            else:  # stable
+                # Stable: edges go backward (toward fixed point, decreasing cdist)
+                for i in range(len(intersecting_segs) - 1):
+                    from_seg_pair = intersecting_segs[i + 1][2]
+                    to_seg_pair = intersecting_segs[i][2]
+
+                    from_node = intersection_nodes[from_seg_pair]
+                    to_node = intersection_nodes[to_seg_pair]
+
+                    G.add_edge(
+                        from_node,
+                        to_node,
+                        manifold=manifold,
+                        stability=stab,
+                        orbit_index=oi,
+                        branch_index=bi,
+                    )
+
+        return G
+
+    # def visualize_intersection_graph(
+    #     self,
+    #     G: nx.DiGraph,
+    #     layout: str = "spring",
+    #     figsize: tuple = (12, 8),
+    #     node_size_scale: float = 300,
+    #     save_path: str = None,
+    # ):
+    #     """
+    #     Visualize the intersection graph with nodes colored by stability.
+
+    #     Args:
+    #         G: The intersection graph from build_intersection_graph()
+    #         layout: Layout algorithm ("spring", "circular", "kamada_kawai", "spectral")
+    #         figsize: Figure size as (width, height)
+    #         node_size_scale: Scale factor for node sizes
+    #         save_path: Optional path to save the figure
+
+    #     Returns:
+    #         matplotlib figure and axis objects
+    #     """
+    #     import matplotlib.pyplot as plt
+
+    #     if G.number_of_nodes() == 0:
+    #         print("Graph has no nodes to visualize")
+    #         return None, None
+
+    #     fig, ax = plt.subplots(figsize=figsize)
+
+    #     # Choose layout
+    #     if layout == "spring":
+    #         pos = nx.spring_layout(G, k=1, iterations=50)
+    #     elif layout == "circular":
+    #         pos = nx.circular_layout(G)
+    #     elif layout == "kamada_kawai":
+    #         pos = nx.kamada_kawai_layout(G)
+    #     elif layout == "spectral":
+    #         pos = nx.spectral_layout(G)
+    #     else:
+    #         pos = nx.spring_layout(G)
+
+    #     # Separate nodes by stability
+    #     unstable_nodes = [
+    #         n for n, d in G.nodes(data=True) if d["stability"] == "unstable"
+    #     ]
+    #     stable_nodes = [n for n, d in G.nodes(data=True) if d["stability"] == "stable"]
+
+    #     # Draw nodes
+    #     nx.draw_networkx_nodes(
+    #         G,
+    #         pos,
+    #         nodelist=unstable_nodes,
+    #         node_color="#3b82f6",  # blue
+    #         node_size=[node_size_scale * (1 + G.degree(n)) for n in unstable_nodes],
+    #         label="Unstable",
+    #         ax=ax,
+    #     )
+
+    #     nx.draw_networkx_nodes(
+    #         G,
+    #         pos,
+    #         nodelist=stable_nodes,
+    #         node_color="#ef4444",  # red
+    #         node_size=[node_size_scale * (1 + G.degree(n)) for n in stable_nodes],
+    #         label="Stable",
+    #         ax=ax,
+    #     )
+
+    #     # Draw edges with arrows
+    #     unstable_edges = [
+    #         (u, v) for u, v, d in G.edges(data=True) if d["stability"] == "unstable"
+    #     ]
+    #     stable_edges = [
+    #         (u, v) for u, v, d in G.edges(data=True) if d["stability"] == "stable"
+    #     ]
+
+    #     nx.draw_networkx_edges(
+    #         G,
+    #         pos,
+    #         edgelist=unstable_edges,
+    #         edge_color="#3b82f6",
+    #         alpha=0.4,
+    #         arrows=True,
+    #         arrowsize=15,
+    #         width=2,
+    #         ax=ax,
+    #     )
+
+    #     nx.draw_networkx_edges(
+    #         G,
+    #         pos,
+    #         edgelist=stable_edges,
+    #         edge_color="#ef4444",
+    #         alpha=0.4,
+    #         arrows=True,
+    #         arrowsize=15,
+    #         width=2,
+    #         ax=ax,
+    #     )
+
+    #     # Draw labels
+    #     nx.draw_networkx_labels(G, pos, font_size=8, font_weight="bold", ax=ax)
+
+    #     ax.set_title(
+    #         "Intersection Graph\n(node size = degree, blue=unstable, red=stable)",
+    #         fontsize=14,
+    #         fontweight="bold",
+    #     )
+    #     ax.legend(loc="upper right")
+    #     ax.axis("off")
+
+    #     plt.tight_layout()
+
+    #     if save_path:
+    #         plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    #         print(f"Graph visualization saved to {save_path}")
+
+    #     return fig, ax
+    # def visualize_intersection_graph(
+    #     self,
+    #     G: nx.DiGraph,
+    #     layout: str = "spring",
+    #     figsize: tuple = (12, 8),
+    #     node_size_scale: float = 300,
+    #     save_path: str = None,
+    #     show_labels: bool = True,
+    # ):
+    #     """
+    #     Visualize the intersection graph with edges colored by stability.
+
+    #     Args:
+    #         G: The intersection graph from build_intersection_graph()
+    #         layout: Layout algorithm ("spring", "circular", "kamada_kawai", "spectral")
+    #         figsize: Figure size as (width, height)
+    #         node_size_scale: Scale factor for node sizes
+    #         save_path: Optional path to save the figure
+    #         show_labels: Whether to show node labels (coordinates)
+
+    #     Returns:
+    #         matplotlib figure and axis objects
+    #     """
+    #     import matplotlib.pyplot as plt
+
+    #     if G.number_of_nodes() == 0:
+    #         print("Graph has no nodes to visualize")
+    #         return None, None
+
+    #     fig, ax = plt.subplots(figsize=figsize)
+
+    #     # Choose layout
+    #     if layout == "spring":
+    #         pos = nx.spring_layout(G, k=1, iterations=50)
+    #     elif layout == "circular":
+    #         pos = nx.circular_layout(G)
+    #     elif layout == "kamada_kawai":
+    #         pos = nx.kamada_kawai_layout(G)
+    #     elif layout == "spectral":
+    #         pos = nx.spectral_layout(G)
+    #     else:
+    #         pos = nx.spring_layout(G)
+
+    #     # Draw nodes (all same color - they're intersection points)
+    #     nx.draw_networkx_nodes(
+    #         G,
+    #         pos,
+    #         node_color="white",
+    #         edgecolors="black",
+    #         linewidths=2,
+    #         node_size=[node_size_scale * (1 + G.degree(n)) for n in G.nodes()],
+    #         ax=ax,
+    #     )
+
+    #     # Separate edges by stability and draw them
+    #     unstable_edges = [
+    #         (u, v) for u, v, d in G.edges(data=True) if d["stability"] == "unstable"
+    #     ]
+    #     stable_edges = [
+    #         (u, v) for u, v, d in G.edges(data=True) if d["stability"] == "stable"
+    #     ]
+
+    #     nx.draw_networkx_edges(
+    #         G,
+    #         pos,
+    #         edgelist=unstable_edges,
+    #         edge_color="#3b82f6",  # blue
+    #         alpha=0.6,
+    #         arrows=True,
+    #         arrowsize=20,
+    #         width=2.5,
+    #         label="Unstable",
+    #         ax=ax,
+    #     )
+
+    #     nx.draw_networkx_edges(
+    #         G,
+    #         pos,
+    #         edgelist=stable_edges,
+    #         edge_color="#ef4444",  # red
+    #         alpha=0.6,
+    #         arrows=True,
+    #         arrowsize=20,
+    #         width=2.5,
+    #         label="Stable",
+    #         ax=ax,
+    #     )
+
+    #     # Create labels showing coordinates
+    #     if show_labels:
+    #         labels = {}
+    #         for node in G.nodes():
+    #             coords = G.nodes[node].get("coords")
+    #             if coords:
+    #                 labels[node] = f"({coords[0]:.2f}, {coords[1]:.2f})"
+    #             else:
+    #                 labels[node] = str(node)
+
+    #         nx.draw_networkx_labels(
+    #             G, pos, labels, font_size=7, font_weight="bold", ax=ax
+    #         )
+
+    #     ax.set_title(
+    #         "Intersection Graph\n"
+    #         + "(white nodes = intersections, blue edges = unstable flow, red edges = stable flow)",
+    #         fontsize=12,
+    #         fontweight="bold",
+    #     )
+    #     ax.legend(loc="upper right", fontsize=10)
+    #     ax.axis("off")
+
+    #     plt.tight_layout()
+
+    #     if save_path:
+    #         plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    #         print(f"Graph visualization saved to {save_path}")
+
+    #     return fig, ax
+    def visualize_intersection_graph(
+        self,
+        G: nx.DiGraph,
+        layout: str = "spring",
+        figsize: tuple = (12, 8),
+        node_size_scale: float = 300,
+        save_path: str = None,
+        show_labels: bool = True,
+    ):
+        """
+        Visualize the intersection graph with edges colored by stability.
+
+        Args:
+            G: The intersection graph from build_intersection_graph()
+            layout: Layout algorithm ("spring", "circular", "kamada_kawai", "spectral")
+            figsize: Figure size as (width, height)
+            node_size_scale: Scale factor for node sizes
+            save_path: Optional path to save the figure
+            show_labels: Whether to show node labels (coordinates)
+
+        Returns:
+            matplotlib figure and axis objects
+        """
+        import matplotlib.pyplot as plt
+
+        if G.number_of_nodes() == 0:
+            print("Graph has no nodes to visualize")
+            return None, None
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # Choose layout
+        if layout == "spring":
+            pos = nx.spring_layout(G, k=1, iterations=50)
+        elif layout == "circular":
+            pos = nx.circular_layout(G)
+        elif layout == "kamada_kawai":
+            pos = nx.kamada_kawai_layout(G)
+        elif layout == "spectral":
+            pos = nx.spectral_layout(G)
+        else:
+            pos = nx.spring_layout(G)
+
+        # Draw nodes (all same color - they're intersection points)
+        nx.draw_networkx_nodes(
+            G,
+            pos,
+            node_color="white",
+            edgecolors="black",
+            linewidths=2,
+            node_size=[node_size_scale * (1 + G.degree(n)) for n in G.nodes()],
+            ax=ax,
+        )
+
+        # Separate edges by stability and draw them
+        unstable_edges = [
+            (u, v) for u, v, d in G.edges(data=True) if d["stability"] == "unstable"
+        ]
+        stable_edges = [
+            (u, v) for u, v, d in G.edges(data=True) if d["stability"] == "stable"
+        ]
+
+        nx.draw_networkx_edges(
+            G,
+            pos,
+            edgelist=unstable_edges,
+            edge_color="#3b82f6",  # blue
+            alpha=0.6,
+            arrows=True,
+            arrowsize=20,
+            width=2.5,
+            label="Unstable",
+            ax=ax,
+        )
+
+        nx.draw_networkx_edges(
+            G,
+            pos,
+            edgelist=stable_edges,
+            edge_color="#ef4444",  # red
+            alpha=0.6,
+            arrows=True,
+            arrowsize=20,
+            width=2.5,
+            label="Stable",
+            ax=ax,
+        )
+
+        # Create labels showing coordinates
+        if show_labels:
+            labels = {}
+            for node in G.nodes():
+                coords = G.nodes[node].get("coords")
+                if coords is not None:
+                    labels[node] = f"({coords[0]:.2f}, {coords[1]:.2f})"
+                else:
+                    labels[node] = str(node)
+
+            nx.draw_networkx_labels(
+                G, pos, labels, font_size=7, font_weight="bold", ax=ax
+            )
+
+        # ax.set_title(
+        #     "Intersection Graph\n"
+        #     + "(white nodes = intersections, blue edges = unstable flow, red edges = stable flow)",
+        #     fontsize=12,
+        #     fontweight="bold",
+        # )
+        ax.set_title("Intersection Graph")
+        ax.legend(loc="upper right", fontsize=10)
+        ax.axis("off")
+
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path, dpi=150, bbox_inches="tight")
+            print(f"Graph visualization saved to {save_path}")
+
+        return fig, ax
+
     def plot_all_bridges(self, bridges):
 
         n = len(bridges)
@@ -331,6 +940,40 @@ class TangleWorkbench:
 
             vibe = colors(i)
             bridge.plot(color=vibe)
+
+    def trim_stable_manifolds(self, fixed_point: FixedPoint):
+        """
+        Trims the stable manifolds attached to the fixed point
+        to just after the last intersection point.
+
+        Args:
+            fixed_point (FixedPoint): fixed point manifolds will be
+                trimmed from
+        """
+
+        intersecting_seg_ids = self.Tangle._intersecting_segments
+        # get a list of all the intersecting segment ids
+        intersecting_seg_ids = [n for pair in intersecting_seg_ids for n in pair]
+
+        for manifold in self._iter_manifolds(fixed_point, "stable"):
+
+            all_segs = list(self.Tangle._manifold_segs[manifold])
+
+            # find all the intersecting segment ids that are on this manifold
+            candidate_segs = list(set(all_segs) & set(intersecting_seg_ids))
+
+            # get the segments
+            segs = [
+                self.Tangle._seg_lookup[candidate_segs[k]]
+                for k in range(len(candidate_segs))
+            ]
+
+            # find the segment with the largest cdist
+            max_seg = max(segs, key=lambda s: s.p0_seg1.get_cdist())
+
+            # set the new truncated tail
+            new_tail = max_seg.p0_seg1
+            manifold.tail = new_tail
 
     def _iter_manifolds(self, fp, stability: Stability | None = None) -> Iterable:
         """Yield all manifolds for a fixed point (optionally filter by stability)."""

@@ -31,27 +31,27 @@ def register(app: Dash):
         DashState("finv", "value"),
         prevent_initial_call=True,
     )
-    def build_system(_n, sid, preset, fx_text, finv_text):
+    def build_systateem(_n, sid, preset, fx_text, finv_text):
         if not sid:
             return "❌ Missing session id."
-        st = get_state(sid)
+        state = get_state(sid)
 
         try:
-            if preset and preset != "custom":
+            if preset and preset != "custateom":
                 label, factory = PRESETS[preset]
                 f, finv = factory()
                 msg_src = f"preset: {label}"
             else:
-                # only if you explicitly choose "custom"
+                # only if you explicitly choose "custateom"
                 f = parse_map_text(fx_text)
                 finv = parse_map_text(finv_text)
-                msg_src = "custom text"
+                msg_src = "custateom text"
         except Exception as e:
-            st.wb = None
-            st.fp = None
+            state.workbench = None
+            state.fp = None
             return f"❌ Build error: {e}"
 
-        st.wb = TangleWorkbench(f, finv)
-        st.fp = None
-        # if you track orientation: st.did_orient = False
-        return f"✅ System built from {msg_src}."
+        state.workbench = TangleWorkbench(f, finv)
+        state.fp = None
+        # if you track orientation: state.did_orient = False
+        return f"✅ Systateem built from {msg_src}."

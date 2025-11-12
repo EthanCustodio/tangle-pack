@@ -24,14 +24,16 @@ def register(app: Dash):
     def orient(_n, sid, u_txt, s_txt):
         if not sid:
             return "❌ Missing session id."
-        st = get_state(sid)
-        if st.wb is None or st.fp is None:
+        state = get_state(sid)
+        if state.workbench is None or state.fp is None:
             return "ℹ️ Build the system and find a fixed point first."
 
         try:
             u_dir = _parse_vec2(u_txt)
             s_dir = _parse_vec2(s_txt)
-            st.wb.orient_eigenvectors(st.fp, {"unstable": u_dir, "stable": s_dir})
+            state.workbench.orient_eigenvectors(
+                state.fp, {"unstable": u_dir, "stable": s_dir}
+            )
             return f"✅ Directions set. Unstable≈({u_dir[0]:.3f}, {u_dir[1]:.3f}), Stable≈({s_dir[0]:.3f}, {s_dir[1]:.3f})"
         except Exception as e:
             return f"❌ Orient error: {e}"

@@ -1,5 +1,6 @@
 import tanglepack
 import numpy as np
+import networkx as nx
 import matplotlib.pyplot as plt
 
 
@@ -44,11 +45,11 @@ workbench.orient_eigenvectors(fixed_point, approx_dirs)
 (unstable_segments, stable_segments) = workbench.initialize_both_manifolds(fixed_point)
 
 # grow the manifolds from the fixed point
-# workbench.grow_n_times(fixed_point, "unstable", num_iterations=6)
+workbench.grow_n_times(fixed_point, "unstable", num_iterations=6)
 # workbench.grow_until_arclength(fixed_point, "unstable", 60)
 # workbench.grow_n_times(fixed_point, "stable", num_iterations=4)
 workbench.grow_until_turnaround(fixed_point, "stable")
-workbench.grown_until_intersection(fixed_point, "unstable")
+# workbench.grown_until_intersection(fixed_point, "unstable")
 
 intersections = workbench.compute_intersections(fixed_point)
 print(intersections)
@@ -56,6 +57,16 @@ print(len(intersections))
 
 bridges = workbench.create_bridges(fixed_point)
 print(f"num bridges {len(bridges)}")
+print(f"type bridges: {type(bridges)}")
+print(bridges)
+
+workbench.trim_stable_manifolds(fixed_point)
+
+graph = workbench.build_intersection_graph(fixed_point)
+
+print(len(graph.nodes()))
+
+workbench.visualize_intersection_graph(graph)
 
 # plot!
 plt.figure()

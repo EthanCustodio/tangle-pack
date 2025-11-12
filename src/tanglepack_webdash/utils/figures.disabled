@@ -1,0 +1,354 @@
+# tanglepack_webdash/utils/figures.py
+from __future__ import annotations
+import plotly.graph_objects as go
+import numpy as np
+
+
+def set_square_aspect(fig, enable: bool = True):
+    if enable:
+        fig.update_layout(yaxis=dict(scaleanchor="x", scaleratio=1))
+    else:
+        # remove anchor to go back to free aspect
+        fig.update_layout(yaxis=dict(scaleanchor=None, scaleratio=None))
+    return fig
+
+
+# def blank_figure():
+#     figure = go.Figure(
+#         layout=dict(
+#             paper_bgcolor="black",
+#             clickmode="event+select",
+#             dragmode="pan",
+#             plot_bgcolor="black",
+#             xaxis=dict(
+#                 showgrid=True,
+#                 gridwidth=0.5,
+#                 gridcolor="rgba(255,255,255,0.06)",
+#                 zeroline=False,
+#             ),
+#             yaxis=dict(
+#                 showgrid=True,
+#                 gridwidth=0.5,
+#                 gridcolor="rgba(255,255,255,0.06)",
+#                 zeroline=False,
+#                 scaleanchor="x",
+#                 scaleratio=1,  # keep square aspect
+#             ),
+#             showlegend=False,
+#         )
+#     )
+
+#     figure.update_layout(
+#         paper_bgcolor="#0e0f13",  # page background (softer black)
+#         plot_bgcolor="#1e1e22",  # plotting area (very dark gray)
+#         xaxis=dict(showgrid=True, gridwidth=0.5, gridcolor="rgba(255,255,255,0.05)"),
+#         yaxis=dict(showgrid=True, gridwidth=0.5, gridcolor="rgba(255,255,255,0.05)"),
+#     )
+
+#     figure.update_xaxes(range=[-15, 15])
+#     figure.update_yaxes(range=[-15, 15])
+
+#     set_square_aspect(figure, True)
+#     return figure
+
+
+CLICK_SURFACE_NAME = "_click_surface"
+
+
+def blank_figure():
+    fig = go.Figure()
+    fig.update_layout(
+        clickmode="event+select",  # <-- REQUIRED so clickData is emitted
+        dragmode="pan",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=40, r=10, t=10, b=40),
+        xaxis=dict(
+            showgrid=True,
+            gridwidth=0.5,
+            gridcolor="rgba(255,255,255,0.06)",
+            zeroline=False,
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridwidth=0.5,
+            gridcolor="rgba(255,255,255,0.06)",
+            zeroline=False,
+            scaleanchor="x",
+            scaleratio=1,
+        ),
+        uirevision="keep",  # don't wipe pan/zoom on redraws
+    )
+    # Give the plot a starting window so the base trace has bounds
+    fig.update_xaxes(range=[-15, 15])
+    fig.update_yaxes(range=[-15, 15])
+
+    # 🔑 PERMANENT FULL-CANVAS TRACE (like px.imshow). Stays at index 0.
+    xr = fig.layout.xaxis.range or [-15, 15]
+    yr = fig.layout.yaxis.range or [-15, 15]
+    xs = np.linspace(xr[0], xr[1], 8)
+    ys = np.linspace(yr[0], yr[1], 8)
+    Z = np.zeros((len(ys), len(xs)))
+
+    fig.add_trace(
+        go.Heatmap(
+            z=Z,
+            x=xs,
+            y=ys,
+            showscale=False,
+            hoverinfo="none",
+            colorscale=[[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0)"]],
+            opacity=0.001,  # invisible, but ALWAYS clickable
+            name=CLICK_SURFACE_NAME,
+            showlegend=False,
+            zorder=0,
+        )
+    )
+
+    return fig
+
+
+# def blank_figure():
+#     fig = go.Figure()
+#     fig.update_layout(
+#         clickmode="event+select",
+#         dragmode="pan",
+#         paper_bgcolor="rgba(0,0,0,0)",
+#         plot_bgcolor="rgba(0,0,0,0)",
+#         margin=dict(l=40, r=10, t=10, b=40),
+#         xaxis=dict(
+#             showgrid=True,
+#             gridwidth=0.5,
+#             gridcolor="rgba(255,255,255,0.06)",
+#             zeroline=False,
+#         ),
+#         yaxis=dict(
+#             showgrid=True,
+#             gridwidth=0.5,
+#             gridcolor="rgba(255,255,255,0.06)",
+#             zeroline=False,
+#             scaleanchor="x",
+#             scaleratio=1,
+#         ),
+#         uirevision="keep",
+#     )
+#     fig.update_xaxes(range=[-15, 15])
+#     fig.update_yaxes(range=[-15, 15])
+
+#     # 🔑 Permanent full-canvas trace (like imshow) so clicks always hit a trace
+#     xr = fig.layout.xaxis.range
+#     yr = fig.layout.yaxis.range
+#     xs = np.linspace(xr[0], xr[1], 8)
+#     ys = np.linspace(yr[0], yr[1], 8)
+#     Z = np.zeros((len(ys), len(xs)))
+#     fig.add_trace(
+#         go.Heatmap(
+#             z=Z,
+#             x=xs,
+#             y=ys,
+#             showscale=False,
+#             hoverinfo="skip",
+#             colorscale=[[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0)"]],
+#             opacity=0.001,  # invisible, but still clickable
+#             name="click-surface",
+#             showlegend=False,
+#             zorder=0,
+#         )
+#     )
+#     return fig
+
+
+def add_intersection_traces(workbench, fp, intersections, fig=None):
+    """
+    Add intersection points to a Plotly figure.
+    """
+    if fig is None:
+        fig = go.Figure()
+    elif not isinstance(fig, go.Figure):
+        fig = go.Figure(fig)
+
+    # intersections = workbench.compute_intersections(fp)
+    # if not intersections:
+    #     return fig
+
+    arr = np.array(intersections)
+
+    arr = np.array(list(workbench.Tangle._intersecting_coords.values()))
+    if arr.size == 0:
+        arr = workbench.compute_intersections(fp)
+        if arr.size == 0:
+            workbench.log.info("No intersections to plot.")
+            return fig
+
+    fig.add_trace(
+        go.Scatter(
+            x=arr[:, 0],
+            y=arr[:, 1],
+            mode="markers",
+            name="Intersections",
+            marker=dict(color="white", size=6),
+            hovertemplate="x=%{x:.3f}<br>y=%{y:.3f}<extra>Intersection</extra>",
+        )
+    )
+    return fig
+
+
+def add_fp_trace(fig: go.Figure, x: float, y: float) -> go.Figure:
+    fig.add_trace(
+        go.Scattergl(
+            x=[x],
+            y=[y],
+            mode="markers",
+            marker=dict(size=9, color="white", line=dict(width=1, color="black")),
+            name="FP",
+            hovertemplate="FP: (%{x:.6f}, %{y:.6f})<extra></extra>",
+        )
+    )
+    set_square_aspect(fig, True)
+    return fig
+
+
+def add_manifold_line(fig: go.Figure, arr: np.ndarray, *, color: str, name: str):
+    """arr is (N,2) coordinates."""
+    if arr.size == 0:
+        return
+    fig.add_trace(
+        go.Scatter(
+            x=arr[:, 0],
+            y=arr[:, 1],
+            mode="lines",
+            line=dict(width=2, color=color),
+            name=name,
+            hoverinfo="none",
+        )
+    )
+
+
+def add_bridges_only(state, fig=None):
+    """
+    Build a figure that shows ONLY: FP point, intersections, and bridge polylines.
+    Regular manifolds are intentionally omitted.
+    `state.bridges` should be a list of Bridge objects for the current FP.
+    """
+    if fig is None:
+        fig = blank_figure()
+
+    # 1) Fixed point
+    if state.fp is not None:
+        coords = np.asarray(state.fp.coordinates)
+        pt = (
+            coords[0]
+            if (coords.ndim == 2 and coords.shape[1] == 2)
+            else coords.reshape(-1)[:2]
+        )
+        add_fp_trace(fig, float(pt[0]), float(pt[1]))
+
+    # 2) Intersections (as circles)
+    intersections = np.array(list(state.workbench.Tangle._intersecting_coords.values()))
+    if intersections.size == 0:
+        intersections = state.workbench.compute_intersections(state.fp)
+    add_intersection_traces(state.workbench, state.fp, intersections, fig)
+
+    # 3) Stable Manifolds
+    add_manifold_traces(state, state.fp, fig, "stable")
+
+    # 3) Bridges (lines)
+    bridges = getattr(state, "bridges", None) or []
+    if bridges:
+        palette = [
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
+            "#bcbd22",
+            "#17becf",
+            "#393b79",
+            "#637939",
+            "#8c6d31",
+            "#843c39",
+            "#7b4173",
+            "#3182bd",
+            "#e6550d",
+            "#31a354",
+            "#756bb1",
+            "#636363",
+        ]
+        for i, B in enumerate(bridges):
+            try:
+                arr = B.get_point_array()  # (N,2) from BaseManifold
+            except Exception:
+                # Fallback: skip if no polyline yet
+                continue
+            if arr.size == 0:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=arr[:, 0],
+                    y=arr[:, 1],
+                    mode="lines",
+                    line=dict(width=2, color=palette[i % len(palette)]),
+                    name=f"Bridge {i+1}",
+                    hoverinfo="skip",
+                )
+            )
+
+    set_square_aspect(fig, True)
+    return fig
+
+
+def add_manifold_traces(state, fp, fig=None, stability=None):
+    """
+    Add stable and unstable manifolds for a fixed point to a plotly figure.
+
+    Parameters
+    ----------
+    fp : FixedPoint
+        The fixed point whose manifolds are to be drawn.
+    fig : go.Figure, optional
+        An existing figure. If None, creates a new blank one.
+
+    Returns
+    -------
+    go.Figure
+        The updated figure with manifold traces added.
+    """
+    if fig is None:
+        fig = go.Figure()
+
+    if stability is None:
+        stabilities = ["unstable", "stable"]
+    else:
+        stabilities = [stability]
+
+    workbench = state.workbench  # FixedPoint knows its workbench
+    for (fixed, stab, _oi, _bi), manifold in workbench.manifolds.items():
+        if fixed is not fp:
+            continue
+        arr = manifold.get_point_array()
+        if arr.shape[0] < 2:
+            continue  # nothing to draw yet
+        if stab not in stabilities:
+            continue
+
+        color = "red" if stab == "stable" else "blue"
+        fig.add_trace(
+            go.Scatter(
+                x=arr[:, 0],
+                y=arr[:, 1],
+                mode="lines+markers",
+                name=f"{stab.capitalize()} manifold",
+                line=dict(color=color),
+                marker=dict(size=4, color=color),
+            )
+        )
+
+    fig.update_layout(
+        xaxis=dict(scaleanchor="y", title="x"),
+        yaxis=dict(title="y"),
+        showlegend=True,
+    )
+    return fig

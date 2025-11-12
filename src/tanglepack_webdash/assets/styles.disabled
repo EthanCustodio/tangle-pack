@@ -99,7 +99,6 @@ body { overflow: hidden; }
 .manifold-section  { background: #2a2148; }
 .bridge-section    { background: #2d2450; }
 .click-section     { background: #302759; }
-.bridge-ops-section { background: #332a62; }
 
 /* Inputs */
 .controls input[type="text"],

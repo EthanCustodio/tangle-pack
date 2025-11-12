@@ -203,29 +203,22 @@ class ManifoldMachine:
                 manifold.branch_index,
             )
 
+        old_iterated_points = BaseManifold(
+            old_points[0],
+            manifold.stability,
+            manifold.stretch_param,
+            manifold.fixed_point,
+            tail=old_points[-1],
+            branch_index=manifold.branch_index,
+        )
+
         # if there were points that needed to be mapped
         if not len(non_iterated_coords) == 0:
 
-            # Only create old_iterated_points if there are some
-            if len(old_points) > 0:
-                old_iterated_points = BaseManifold(
-                    old_points[0],
-                    manifold.stability,
-                    manifold.stretch_param,
-                    manifold.fixed_point,
-                    tail=old_points[-1],
-                    branch_index=manifold.branch_index,
-                )
-
-                mapped_manifold = self.merge_manifolds(
-                    old_iterated_points, new_iterated_points
-                )
-                self.refine_manifold(mapped_manifold)
-            else:
-                # No old iterated points - this is the first iteration of this bridge
-                # Just refine the newly iterated points
-                self.refine_manifold(new_iterated_points)
-                mapped_manifold = new_iterated_points
+            mapped_manifold = self.merge_manifolds(
+                old_iterated_points, new_iterated_points
+            )
+            self.refine_manifold(mapped_manifold)
 
             assert (
                 sorted(mapped_manifold.get_cdist_array())
@@ -235,55 +228,7 @@ class ManifoldMachine:
             return mapped_manifold
 
         else:
-            # All points already have iterates - collect the iterated points
-            # This happens with bridges cut from the middle of a manifold
-            if len(old_points) == 0:
-                raise ValueError("No points in manifold to iterate")
-
-            # The old_points already have their iterates computed
-            # Just need to create a new manifold/bridge from those iterates
-            # The iterated points are already geometrically connected in the iterate chain
-
-            # Get the first and last iterated points
-            first_point = old_points[0]
-            last_point = old_points[-1]
-
-            if manifold.stability == "unstable":
-                first_iterate = first_point.next_iterate
-                last_iterate = last_point.next_iterate
-            else:
-                first_iterate = first_point.prev_iterate
-                last_iterate = last_point.prev_iterate
-
-            if first_iterate is None or last_iterate is None:
-                raise ValueError(
-                    f"Points claim to have iterates but next_iterate/prev_iterate is None"
-                )
-
-            # Check if the input was a Bridge - if so, return a Bridge
-            if isinstance(manifold, Bridge):
-                iterated_bridge = Bridge(
-                    root=first_iterate,
-                    stability=manifold.stability,
-                    stretch_param=manifold.stretch_param,
-                    fixed_point=manifold.fixed_point,
-                    tail=last_iterate,
-                    name=manifold.name,
-                    branch_index=manifold.branch_index,
-                )
-                return iterated_bridge
-            else:
-                # Construct a new BaseManifold
-                iterated_manifold = BaseManifold(
-                    root=first_iterate,
-                    stability=manifold.stability,
-                    stretch_param=manifold.stretch_param,
-                    fixed_point=manifold.fixed_point,
-                    tail=last_iterate,
-                    branch_index=manifold.branch_index,
-                )
-
-                return iterated_manifold
+            return old_iterated_points
 
     def iterate_bridge(self, manifold: Bridge):
         """
@@ -566,13 +511,29 @@ class ManifoldMachine:
                     head_2 = manifold_2.walk_fwd(None, head_2)
                     current_point = manifold_1.walk_fwd(None, current_point)
                 else:
-                    raise ValueError(
-                        f"""Two nodes have the same cdist but are different objects \n
-                          cdists: {head_1.cdist}, {head_2.cdist} \n
-                          nodes: {head_1}, {head_2}
-                          coordinates: {head_1.get_point()}, {head_2.get_point()}
-                          """
+                    print(
+                        f"Cdist collision: skipping duplicate at cdist={head_1.cdist:.15e}"
                     )
+                    if manifold_1.walk_fwd(None, current_point) is not head_1:
+                        self._insert_point_geometrically(
+                            current_point, head_1, manifold_1
+                        )
+                    current_point = head_1
+                    head_1 = manifold_1.walk_fwd(None, head_1)
+                    head_2 = manifold_2.walk_fwd(None, head_2)
+                    logger.debug(
+                        f"Cdist collision: skipping duplicate at cdist={head_1.cdist:.15e}"
+                    )
+                    print(
+                        f"Cdist collision: skipping duplicate at cdist={head_1.cdist:.15e}"
+                    )
+                    # raise ValueError(
+                    #     f"""Two nodes have the same cdist but are different objects \n
+                    #       cdists: {head_1.cdist}, {head_2.cdist} \n
+                    #       nodes: {head_1}, {head_2}
+                    #       coordinates: {head_1.get_point()}, {head_2.get_point()}
+                    #       """
+                    # )
 
             # current_point = manifold_1.walk_fwd(None, current_point)
 
@@ -715,7 +676,7 @@ class ManifoldMachine:
                 curvature_area = self._curvature_area((p0, p1), viewer)
             except LinAlgError:
                 logger.debug(
-                    "Singular Vandermond matrix at cdist %.3gâ€“%.3g; skipping. "
+                    "Singular Vandermond matrix at cdist %.3g–%.3g; skipping. "
                     "Points are likely near vertical",
                     p0.cdist,
                     p1.cdist,

@@ -1,0 +1,117 @@
+// src/tanglepack_webdash/assets/clientside.js
+window.dash_clientside = Object.assign({}, window.dash_clientside, {
+  fp: {
+    _innerPlotDiv: function() {
+      const wrap = document.getElementById("plot");
+      return wrap && wrap.querySelector(".js-plotly-plot");
+    },
+    
+    _fmt3: v => Number.isFinite(v)
+      ? (Math.abs(v) >= 1e4 ? v.toExponential(3) : v.toFixed(3))
+      : "—",
+
+    // Set the click mode (syncs with clicked_points.js)
+    set_mode: function(mode) {
+      window.__click_mode = mode;
+      console.log("[clientside] mode set to:", mode);
+      return "";
+    },
+
+    // Pull points from front-end array into Dash Store
+    pull_points: function(n) {
+      if (!Array.isArray(window.__fp_points)) {
+        window.__fp_points = [];
+        return [];
+      }
+      
+      // Only trigger update if dirty flag is set
+      if (!window.__fp_dirty) {
+        return window.dash_clientside.no_update;
+      }
+      
+      window.__fp_dirty = false;
+      console.log("[clientside] pulling", window.__fp_points.length, "points");
+      return window.__fp_points;
+    },
+
+    // Format points for display
+    points_to_label: function(points) {
+      if (!Array.isArray(points) || points.length === 0) return "";
+      const f = window.dash_clientside.fp._fmt3;
+      return points.map(p => `(${f(p[0])}, ${f(p[1])})`).join("\n");
+    },
+
+    // Keep a visible marker trace in sync with the store
+    sync_points_trace: function(points) {
+      const gd = window.dash_clientside.fp._innerPlotDiv();
+      if (!gd) return "";
+      
+      // Find or create the "Clicked Points" trace
+      let idx = (gd.data || []).findIndex(t => t && t.name === "FP guess");
+      
+      if (!Array.isArray(points) || points.length === 0) {
+        // Remove trace if no points
+        if (idx >= 0) {
+          Plotly.deleteTraces(gd, [idx]);
+        }
+        return "";
+      }
+      
+      const xs = points.map(p => p[0]);
+      const ys = points.map(p => p[1]);
+      
+      if (idx < 0) {
+        // Add new trace
+        Plotly.addTraces(gd, {
+          name: "FP guess",
+          x: xs,
+          y: ys,
+          mode: "markers",
+          type: "scatter",
+          marker: { 
+            symbol: "x",
+            size: 12,
+            color: "yellow",
+            line: { width: 2, color: "orange" }
+          },
+          hovertemplate: "FP guess: (%{x:.4f}, %{y:.4f})<extra></extra>"
+        });
+      } else {
+        // Update existing trace
+        Plotly.restyle(gd, { x: [xs], y: [ys] }, [idx]);
+      }
+      
+      return "";
+    },
+
+    // Live cursor readout on mousemove
+    move_to_label: function(n, evt, figure) {
+      if (!evt || !figure || evt.type !== "mousemove") {
+        return window.dash_clientside.no_update;
+      }
+      
+      const gd = window.dash_clientside.fp._innerPlotDiv();
+      if (!gd || !gd._fullLayout) {
+        return window.dash_clientside.no_update;
+      }
+      
+      const full = gd._fullLayout;
+      const rect = gd.getBoundingClientRect();
+      const px = evt.clientX - rect.left - full.margin.l;
+      const py = evt.clientY - rect.top - full.margin.t;
+      
+      const w = (full._size && full._size.w) || (gd.clientWidth - full.margin.l - full.margin.r);
+      const h = (full._size && full._size.h) || (gd.clientHeight - full.margin.t - full.margin.b);
+      
+      if (px < 0 || py < 0 || px > w || py > h) {
+        return window.dash_clientside.no_update;
+      }
+      
+      const x = full.xaxis.p2c(px);
+      const y = full.yaxis.p2c(py);
+      const f = window.dash_clientside.fp._fmt3;
+      
+      return `x: ${f(x)} | y: ${f(y)}`;
+    },
+  }
+});

@@ -1,0 +1,66 @@
+// assets/click_points.js
+(function () {
+  const CLEAR_BTN_ID = "btn-clear-guesses";
+
+  // front-end source of truth
+  if (!Array.isArray(window.__fp_points)) window.__fp_points = [];
+  if (typeof window.__fp_dirty === "undefined") window.__fp_dirty = false;
+  if (typeof window.__click_mode === "undefined") window.__click_mode = "none";
+
+  function innerPlot() {
+    const wrap = document.getElementById("plot");
+    return wrap && wrap.querySelector(".js-plotly-plot");
+  }
+
+  function onClick(evt) {
+    // ✅ gate by dropdown: only in "fp_guess"
+    if (window.__click_mode !== "fp_guess") return;
+
+    const gd = innerPlot();
+    if (!gd || !gd._fullLayout) return;
+
+    const full = gd._fullLayout;
+    const rect = gd.getBoundingClientRect();
+    const px = evt.clientX - rect.left - full.margin.l;
+    const py = evt.clientY - rect.top  - full.margin.t;
+
+    const w = (full._size && full._size.w) || (gd.clientWidth  - full.margin.l - full.margin.r);
+    const h = (full._size && full._size.h) || (gd.clientHeight - full.margin.t - full.margin.b);
+    if (px < 0 || py < 0 || px > w || py > h) return;
+
+    const x = full.xaxis.p2c(px);
+    const y = full.yaxis.p2c(py);
+
+    window.__fp_points.push([x, y]);
+    window.__fp_dirty = true;                // ✅ mark changed
+    console.log("[fp click]", x, y);
+  }
+
+  function onClearClick() {
+    window.__fp_points = [];
+    window.__fp_dirty = true;                // ✅ mark changed
+    console.log("[fp clear]");
+  }
+
+  function attach() {
+    const gd = innerPlot();
+    if (!gd) { setTimeout(attach, 120); return; }
+
+    gd.removeEventListener("click", onClick);
+    gd.addEventListener("click", onClick);
+
+    const clr = document.getElementById(CLEAR_BTN_ID);
+    if (clr) {
+      clr.removeEventListener("click", onClearClick);
+      clr.addEventListener("click", onClearClick);
+    }
+
+    console.log("✓ click_points.js attached");
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", attach);
+  } else {
+    attach();
+  }
+})();

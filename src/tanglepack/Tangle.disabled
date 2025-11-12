@@ -86,7 +86,7 @@ class Tangle:
             _edge_seen:
             _seg_lookup: Dictionary keyed by unique segment ids that
                 stores segments
-            _manifold_segs Dictionary keyed by manifolds which stores
+            _manifold_segs: Dictionary keyed by manifolds which stores
                 a set of all segments
 
             _intersecting_segments: set of frozensets containing pairs of
@@ -109,27 +109,6 @@ class Tangle:
         self._intersecting_points: dict[int, BranchPoint] = {}
 
         self.bridges = None
-        self.graph = None
-
-    def clear_all(self):
-        """
-        Completely clear all Tangle state, useful when recomputing everything from scratch.
-        """
-        # Reinitialize the rtree
-        p = index.Property()
-        p.dimension = 2
-        self._rtree = index.Index(properties=p)
-
-        # Clear all dictionaries and sets
-        self._edge_seen.clear()
-        self._seg_lookup.clear()
-        self._manifold_segs.clear()
-        self._intersecting_segments.clear()
-        self._intersecting_coords.clear()
-        self._intersecting_points.clear()
-
-        # Note: bridges are kept as they may still be valid
-        # self.bridges = None  # Uncomment if you want to clear bridges too
 
     def populate_intersection_dict(self):
         """
@@ -187,7 +166,7 @@ class Tangle:
         p0_seg2, p1_seg2 = seg2.p0.get_point(), seg2.p0_seg1.get_point()
 
         a, b, c, d = map(np.asarray, (p0_seg1, p1_seg1, p0_seg2, p1_seg2))
-        # 2Ã—2 matrix
+        # 2×2 matrix
         M = np.vstack((b - a, c - d)).T  # [[Bx-Ax, Cx-Dx], [By-Ay, Cy-Dy]]
         rhs = c - a
 
@@ -208,7 +187,7 @@ class Tangle:
         """
         # ---------- A. purge old entries (if any) ----------
         if manifold in self._manifold_segs:
-            # copy â†’ because _remove_segment mutates the same set
+            # copy → because _remove_segment mutates the same set
             for sid in list(self._manifold_segs[manifold]):
                 self._remove_segment(sid)
 
@@ -217,7 +196,7 @@ class Tangle:
 
     def update_manifold(self, manifold: BaseManifold, changed_points: set[Point]):
         """
-        Reâ€‘index only segments that touch the nodes in `changed_nodes`
+        Re‑index only segments that touch the nodes in `changed_nodes`
 
         Note:
             new points from `ManifoldMachine.refine_manifold`.
@@ -251,7 +230,7 @@ class Tangle:
 
             other_segment = self._seg_lookup[candidate_id]
             if other_segment.manifold is seg.manifold:
-                continue  # same manifold â€“ skip or apply rule
+                continue  # same manifold – skip or apply rule
 
             if seg.intersects(other_segment):
                 yield other_segment
@@ -267,7 +246,7 @@ class Tangle:
         # edge key defined by the id of two points
         edge_key = frozenset((id(seg.p0), id(seg.p0_seg1)))
         if edge_key in self._edge_seen:
-            return None  # already indexed â†’ do NOT duplicate
+            return None  # already indexed → do NOT duplicate
 
         # choose a new id there for a new segment
         sid = next(Tangle._ids) if seg.id is None else seg.id
@@ -301,22 +280,9 @@ class Tangle:
         Parameters:
             sid (int): segment id
         """
-        # Check if segment exists before trying to remove it
-        if sid not in self._seg_lookup:
-            return
-
         seg = self._seg_lookup.pop(sid)
-
-        # Safely remove from rtree
-        try:
-            self._rtree.delete(sid, seg.bounds)
-        except Exception:
-            pass  # Segment may have already been deleted from rtree
-
-        # Safely remove from manifold's segment set
-        if seg.manifold in self._manifold_segs:
-            self._manifold_segs[seg.manifold].discard(sid)
-
+        self._rtree.delete(sid, seg.bounds)
+        self._manifold_segs[seg.manifold].remove(sid)
         self._edge_seen.discard(frozenset((id(seg.p0), id(seg.p0_seg1))))
 
     def _segments_of(self, manifold: BaseManifold):

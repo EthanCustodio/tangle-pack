@@ -24,7 +24,7 @@ x, y = symbols("x y")
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, wb_cls):
+    def __init__(self, workbench_cls):
         super().__init__()
         self.setWindowTitle("Tangle Workbench GUI")
         self.canvas = Canvas(self)
@@ -82,8 +82,8 @@ class MainWindow(QMainWindow):
         ):
             v.addWidget(w)
 
-        self.wb_cls = wb_cls
-        self.wb = None
+        self.workbench_cls = workbench_cls
+        self.workbench = None
         self.fp = None
 
         btn_build.clicked.connect(self.on_build)
@@ -139,7 +139,7 @@ class MainWindow(QMainWindow):
             raise ValueError(f"Expected 'a, b' (two numbers). Got: {text!r}")
 
     def on_apply_orientation(self):
-        if self.wb is None or self.fp is None:
+        if self.workbench is None or self.fp is None:
             QMessageBox.warning(
                 self, "Not ready", "Build the map and find a fixed point first."
             )
@@ -148,7 +148,7 @@ class MainWindow(QMainWindow):
             u_dir = self._parse_vec2(self.u_edit.text())
             s_dir = self._parse_vec2(self.s_edit.text())
             approx_dirs = {"unstable": u_dir, "stable": s_dir}
-            self.wb.orient_eigenvectors(self.fp, approx_dirs)
+            self.workbench.orient_eigenvectors(self.fp, approx_dirs)
             self.statusBar().showMessage("Eigenvectors oriented.", 3000)
         except Exception as e:
             QMessageBox.critical(self, "Orientation error", str(e))
@@ -207,7 +207,7 @@ class MainWindow(QMainWindow):
 
     # #     f = self.parse_map(self.f_edit.text())
     # #     finv = self.parse_map(self.inv_edit.text())
-    # #     self.wb = WB(f, finv)  # DynamicalSystem created inside WB
+    # #     self.workbench = WB(f, finv)  # DynamicalSystem created inside WB
     # #     # ready to go  (WB.__init__)  ⟶  DynamicalSystem(f, finv)
     # #     #                                + FixedPointSolver + ManifoldMachine + Tangle
     # #     # (all inside TangleWorkbench)
@@ -224,14 +224,14 @@ class MainWindow(QMainWindow):
     #     try:
     #         from tanglepack.TangleWorkbench import TangleWorkbench
 
-    #         self.wb = TangleWorkbench(f, finv)
+    #         self.workbench = TangleWorkbench(f, finv)
     #         # Optionally update a status bar:
     #         self.statusBar().showMessage("System built.", 3000)
     #     except Exception as e:
     #         QMessageBox.critical(
     #             self, "Workbench error", f"Failed to build system:\n{e}"
     #         )
-    #         self.wb = None
+    #         self.workbench = None
 
     def on_build(self):
         try:
@@ -241,26 +241,26 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Parse error", str(e))
             return
         try:
-            self.wb = self.wb_cls(f, finv)
+            self.workbench = self.workbench_cls(f, finv)
             self.statusBar().showMessage("System built.", 3000)
         except Exception as e:
             QMessageBox.critical(
                 self, "Workbench error", f"Failed to build system:\n{e}"
             )
-            self.wb = None
+            self.workbench = None
 
     # def on_find_fp(self):
     #     x0, y0 = [float(s.strip()) for s in self.x0_edit.text().split(",")]
-    #     self.fp = self.wb.construct_fixed_point(np.array([x0, y0], dtype=float))
-    #     # persists in wb.fixed_points; returns FixedPoint  :contentReference[oaicite:16]{index=16}
+    #     self.fp = self.workbench.construct_fixed_point(np.array([x0, y0], dtype=float))
+    #     # persists in workbench.fixed_points; returns FixedPoint  :contentReference[oaicite:16]{index=16}
 
     def on_find_fp(self):
-        if self.wb is None:
+        if self.workbench is None:
             QMessageBox.warning(self, "Not ready", "Build the map first.")
             return
 
         x0, y0 = [float(s.strip()) for s in self.x0_edit.text().split(",")]
-        self.fp = self.wb.construct_fixed_point(np.array([x0, y0], dtype=float))
+        self.fp = self.workbench.construct_fixed_point(np.array([x0, y0], dtype=float))
 
         # Extract the point for period-1 (or first point if higher period)
         coords = np.asarray(self.fp.coordinates)
@@ -285,13 +285,13 @@ class MainWindow(QMainWindow):
         self.canvas.setYRange(y - 5, y + 5, padding=0)
 
     # def on_init_both(self):
-    #     self.wb.initialize_both_manifolds(
+    #     self.workbench.initialize_both_manifolds(
     #         self.fp
-    #     )  # fills wb.manifolds  :contentReference[oaicite:17]{index=17}
+    #     )  # fills workbench.manifolds  :contentReference[oaicite:17]{index=17}
     #     self._draw_all_manifolds()
 
     def on_init_both(self):
-        if self.wb is None or self.fp is None:
+        if self.workbench is None or self.fp is None:
             QMessageBox.warning(self, "Not ready", "Find a fixed point first.")
             return
 
@@ -299,35 +299,35 @@ class MainWindow(QMainWindow):
             try:
                 u_dir = self._parse_vec2(self.u_edit.text())
                 s_dir = self._parse_vec2(self.s_edit.text())
-                self.wb.orient_eigenvectors(
+                self.workbench.orient_eigenvectors(
                     self.fp, {"unstable": u_dir, "stable": s_dir}
                 )
             except Exception as e:
                 QMessageBox.critical(self, "Orientation error", str(e))
                 return
 
-        self.wb.initialize_both_manifolds(self.fp)
+        self.workbench.initialize_both_manifolds(self.fp)
         self._ensure_branch_indices()
         self._draw_all_manifolds()
 
     # def _draw_all_manifolds(self):
     #     # draw each manifold as one polyline; we’ll make them clickable by segment IDs later
-    #     for key, M in self.wb.manifolds.items():
+    #     for key, M in self.workbench.manifolds.items():
     #         arr = M.get_point_array()
     #         # No per-segment IDs yet; this is the “coarse” view
     #         self.canvas.plot(arr[:, 0], arr[:, 1], pen=None)  # quick sketch
 
     def _ensure_branch_indices(self):
-        if self.wb is None or self.fp is None:
+        if self.workbench is None or self.fp is None:
             return
-        for (kfp, kstab, oi, bi), M in list(self.wb.manifolds.items()):
+        for (kfp, kstab, oi, bi), M in list(self.workbench.manifolds.items()):
             if kfp is self.fp and getattr(M, "branch_index", None) is None:
                 M.branch_index = bi
 
     def _draw_all_manifolds(self):
         self.canvas.clear()
 
-        if self.wb is None or self.fp is None:
+        if self.workbench is None or self.fp is None:
             return
 
         if self.fp is not None:
@@ -342,7 +342,7 @@ class MainWindow(QMainWindow):
         # iterate manifolds via the helper (now branch-aware)
         from .adapters.workbench_view import manifold_arrays_for_fp
 
-        for (kstab, oi, bi), arr in manifold_arrays_for_fp(self.wb, self.fp):
+        for (kstab, oi, bi), arr in manifold_arrays_for_fp(self.workbench, self.fp):
             # choose a pen per stability (explicit colors survive theme toggles)
             pen = (
                 pg.mkPen("b", width=2)
@@ -352,20 +352,20 @@ class MainWindow(QMainWindow):
             self.canvas.plot(arr[:, 0], arr[:, 1], pen=pen)
 
     def on_grow_once(self):
-        self.wb.grow_n_times(
+        self.workbench.grow_n_times(
             self.fp, "unstable", 1
         )  # or "stable"  :contentReference[oaicite:18]{index=18}
         self._draw_all_manifolds()
 
     def on_intersections(self):
         pts = np.array(
-            list(self.wb.compute_intersections(self.fp))
+            list(self.workbench.compute_intersections(self.fp))
         )  # :contentReference[oaicite:19]{index=19}
         if pts.size:
             self.canvas.scatter_intersections(pts)
 
     def on_cut(self):
-        bridges = self.wb.create_bridges(
+        bridges = self.workbench.create_bridges(
             self.fp
         )  # returns Bridge objects  :contentReference[oaicite:20]{index=20}
         # You can draw bridges as separate polylines via Bridge.plot(...) or traverse nodes.
@@ -377,10 +377,10 @@ class MainWindow(QMainWindow):
         sp = vb.mapViewToScene(pg.Point(x, y))
         # Candidates from the R-tree
         tree = (
-            self.wb.Tangle._rtree
+            self.workbench.Tangle._rtree
         )  # spatial index  :contentReference[oaicite:21]{index=21}
         lu = (
-            self.wb.Tangle._seg_lookup
+            self.workbench.Tangle._seg_lookup
         )  # id -> _Segment  :contentReference[oaicite:22]{index=22}
         sids = list(tree.intersection((x, y, x, y)))
         pick, dmin = None, 9e9

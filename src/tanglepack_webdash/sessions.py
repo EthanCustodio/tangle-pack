@@ -10,8 +10,12 @@ from tanglepack.TangleWorkbench import TangleWorkbench
 
 @dataclass
 class WBState:
-    wb: Optional[TangleWorkbench] = None
-    fp: Optional[object] = None  # your FixedPoint object
+    workbench: Optional[TangleWorkbench] = None
+    fp: Optional[object] = None
+    fig: Optional[object] = None
+
+    # Bridges is keyed like (seg1.id, seg2.id)
+    bridges: Optional[dict] = None
     created_at: float = field(default_factory=time.time)
     # extend here: e.g., last_manifolds: dict, ui_prefs: dict, etc.
 
