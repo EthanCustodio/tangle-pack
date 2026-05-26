@@ -261,6 +261,8 @@ class ManifoldMachine:
                 )
 
             # Check if the input was a Bridge - if so, return a Bridge
+            # I might want to do this for the other case as well, not just
+            # if none of the points had already been iterated
             if isinstance(manifold, Bridge):
                 iterated_bridge = Bridge(
                     root=first_iterate,
@@ -293,6 +295,7 @@ class ManifoldMachine:
             manifold (Bridge): Bridge to titerate forward.
         """
 
+        # TODO consider how this method is handling bridge classes
         iterated_manifold = self.iterate_manifold(manifold)
 
         # we want to check if the resulting manifold conforms to our bridge standards
