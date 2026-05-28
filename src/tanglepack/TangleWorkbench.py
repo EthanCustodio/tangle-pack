@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import networkx as nx
 
-from .DynamicalSystem import DynamicalSystem
+from .DynamicalSystem import DynamicalSystem, MapFunc, JacFunc
 from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import ManifoldMachine
@@ -15,22 +15,22 @@ from .Tangle import Tangle
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 
-# MapFunc = Callable[[np.ndarray], np.ndarray]
-
-# A 2D point: exactly shape (2,) and dtype float64
-Point2D = Annotated[npt.NDArray[np.float64], (2,)]
-
-# Function type: takes a 2D point, returns a 2D point
-MapFunc = Callable[[Point2D], Point2D]
 
 Stability = Literal["unstable", "stable"]
 
 
 class TangleWorkbench:
 
-    def __init__(self, dynamical_map: MapFunc, dynamical_map_inverse: MapFunc):
+    def __init__(
+        self,
+        dynamical_map: MapFunc,
+        dynamical_map_inverse: MapFunc,
+        jacobian_function: JacFunc | None = None,
+    ):
 
-        self.dynamical_system = DynamicalSystem(dynamical_map, dynamical_map_inverse)
+        self.dynamical_system = DynamicalSystem(
+            dynamical_map, dynamical_map_inverse, jacobian_function
+        )
 
         self._fp_solver = FixedPointSolver(self.dynamical_system)
         self._man_maker = ManifoldInitializer(self.dynamical_system)
