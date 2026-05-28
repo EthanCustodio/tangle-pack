@@ -558,8 +558,7 @@ class ManifoldMachine:
                 head_2 = next_head
                 # head_2 = manifold_2.walk_fwd(None, head_2)
 
-            # they are the same node
-            else:
+            else:  # they are the same node
                 if head_1 is head_2:
                     if manifold_1.walk_fwd(None, current_point) is not head_1:
                         self._insert_point_geometrically(
@@ -569,13 +568,44 @@ class ManifoldMachine:
                     head_2 = manifold_2.walk_fwd(None, head_2)
                     current_point = manifold_1.walk_fwd(None, current_point)
                 else:
-                    raise ValueError(
-                        f"""Two nodes have the same cdist but are different objects \n
-                          cdists: {head_1.cdist}, {head_2.cdist} \n
-                          nodes: {head_1}, {head_2}
-                          coordinates: {head_1.get_point()}, {head_2.get_point()}
-                          """
+                    # Two different points share the same cdist.  One is
+                    # newly generated (no iterate links); the other is the
+                    # keeper.  Determine the keeper first, then advance the
+                    # appropriate branch and skip the duplicate — no rewiring.
+                    logger.debug(
+                        "Duplicate cdist collision at cdist=%s; coords %s vs %s",
+                        head_1.cdist,
+                        head_1.get_point(),
+                        head_2.get_point(),
                     )
+                    head_1_has_iter = (
+                        head_1.next_iterate is not None
+                        or head_1.prev_iterate is not None
+                    )
+                    head_2_has_iter = (
+                        head_2.next_iterate is not None
+                        or head_2.prev_iterate is not None
+                    )
+                    if head_1_has_iter or not head_2_has_iter:
+                        # head_1 is the keeper (or neither has iterates — pick head_1)
+                        next_head_1 = manifold_1.walk_fwd(None, head_1)
+                        if manifold_1.walk_fwd(None, current_point) is not head_1:
+                            self._insert_point_geometrically(
+                                current_point, head_1, manifold_1
+                            )
+                        current_point = head_1
+                        head_1 = next_head_1
+                        head_2 = manifold_2.walk_fwd(None, head_2)
+                    else:
+                        # head_2 is the keeper
+                        next_head_2 = manifold_2.walk_fwd(None, head_2)
+                        if manifold_2.walk_fwd(None, current_point) is not head_2:
+                            self._insert_point_geometrically(
+                                current_point, head_2, manifold_2
+                            )
+                        current_point = head_2
+                        head_2 = next_head_2
+                        head_1 = manifold_1.walk_fwd(None, head_1)
 
             # current_point = manifold_1.walk_fwd(None, current_point)
 

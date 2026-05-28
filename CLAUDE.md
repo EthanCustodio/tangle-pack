@@ -109,3 +109,14 @@ Built with PySide6 + pyqtgraph. `MainWindow` owns a `Canvas` (pyqtgraph `PlotWid
 ## Files with `.disabled` Extension
 
 Several files have a `.disabled` extension (e.g., `ManifoldMachine.disabled`, `Tangle.disabled`, `clicked_points.disabled`). These are archived old implementations kept for reference — they are not imported anywhere.
+
+## Coding Style
+
+- **Docstrings**: Google-style with `Args:`, `Returns:`, `Raises:`, and `Note:` sections. Write them for every public class, `__init__`, and method. One-sentence private helper docstrings are fine.
+- **Dev Notes**: Module-level `"""Dev Notes: ..."""` blocks are the preferred place for longer-term design questions and open issues — not inline TODOs scattered through methods.
+- **Type hints**: Always annotate function signatures. Use `Literal["unstable", "stable"]` for the stability parameter. Use `Optional[X]` and `NDArray[np.float64]` from `numpy.typing` for array return types.
+- **imports**: `from __future__ import annotations` at the top of every file that uses forward references. Group: stdlib, then numpy/scipy, then local `.` imports.
+- **Naming**: `PascalCase` for classes, `snake_case` for everything else. `_single_leading_underscore` for private methods.
+- **Avoid bare print statements**: Use `logging` (the module already configures a `NullHandler` logger in `ManifoldMachine.py`). Debug output that ends up in production code is a recurring issue — prefer `logger.debug(...)`.
+- **Comments**: Sparse inline comments only when the invariant is non-obvious. Do not leave blocks of commented-out old code in committed files — the dev notes pattern or git history is the right place for those.
+- **Assertions**: Used to check invariants (e.g., cdist ordering after merge). Keep them; they are the primary correctness guard here.
