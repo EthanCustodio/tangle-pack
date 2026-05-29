@@ -119,10 +119,17 @@ class TangleWorkbench:
         branch_index: int = 0,
     ) -> None:
 
-        if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
-            raise ValueError(f"""Manifold for fixed point {fixed_point} 
-                    with stability {stability} has not been initialized.
-                    Please run initialize_manifold first.""")
+        key = (
+            fixed_point,
+            stability,
+            0,
+            branch_index if branch_index is not None else 0,
+        )
+        if self.manifolds.get(key) is None:
+            raise ValueError(
+                f"Manifold for fixed point {fixed_point} with stability {stability} "
+                f"and branch_index {branch_index} has not been initialized."
+            )
 
         self._man_machine.grow_x_times(
             fixed_point, stability, num_iterations, branch_index
@@ -155,6 +162,7 @@ class TangleWorkbench:
         fixed_point: FixedPoint,
         stability: Stability,
         max_iterations: int = 10,
+        branch_index: int = 0,
     ) -> None:
         """
         Grows the manifold until a turnaround is detected or max_iterations is reached.
@@ -165,14 +173,14 @@ class TangleWorkbench:
             max_iterations (int, optional): Maximum number of iterations to grow. Defaults to 50.
         """
 
-        if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
+        if self.manifolds.get((fixed_point, stability, 0, branch_index)) is None:
             raise ValueError(f"""Manifold for fixed point {fixed_point} 
                     with stability {stability} has not been initialized.
                     Please run initialize_manifold first.""")
 
         root = fixed_point.branch_points[0]
-        first_point = self.manifolds.get((fixed_point, stability, 0, 0))
-        first_point = first_point.walk_fwd(None, root, 0)
+        first_point = self.manifolds.get((fixed_point, stability, 0, branch_index))
+        first_point = first_point.walk_fwd(None, root, branch_index)
 
         root_coord = root._coords
         first_point_coords = first_point._coords
@@ -181,10 +189,12 @@ class TangleWorkbench:
 
         for _ in range(max_iterations):
 
-            self.grow_n_times(fixed_point, stability, num_iterations=1)
+            self.grow_n_times(
+                fixed_point, stability, num_iterations=1, branch_index=branch_index
+            )
 
-            tail = self.manifolds.get((fixed_point, stability, 0, 0)).tail
-            first_point = self.manifolds.get((fixed_point, stability, 0, 0))
+            tail = self.manifolds.get((fixed_point, stability, 0, branch_index)).tail
+            first_point = self.manifolds.get((fixed_point, stability, 0, branch_index))
             first_point = first_point.walk_back(None, tail)
 
             tail_coords = tail._coords
@@ -203,23 +213,31 @@ class TangleWorkbench:
             )
 
     def grow_until_arclength(
-        self, fixed_point: FixedPoint, stability: Stability, length: float
+        self,
+        fixed_point: FixedPoint,
+        stability: Stability,
+        length: float,
+        branch_index: int = 0,
     ):
 
-        if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
+        if self.manifolds.get((fixed_point, stability, 0, branch_index)) is None:
             raise ValueError(f"""Manifold for fixed point {fixed_point} 
                     with stability {stability} has not been initialized.
                     Please run initialize_manifold first.""")
 
         # TODO change this so it uses the actual arclength
-        current_distance = self.manifolds.get((fixed_point, stability, 0, 0)).tail.cdist
+        current_distance = self.manifolds.get(
+            (fixed_point, stability, 0, branch_index)
+        ).tail.cdist
 
         while current_distance < length:
 
-            self.grow_n_times(fixed_point, stability, num_iterations=1)
+            self.grow_n_times(
+                fixed_point, stability, num_iterations=1, branch_index=branch_index
+            )
 
             current_distance = self.manifolds.get(
-                (fixed_point, stability, 0, 0)
+                (fixed_point, stability, 0, branch_index)
             ).tail.cdist
 
         else:
