@@ -55,6 +55,19 @@ intersections = workbench.compute_intersections(fixed_point)
 print(intersections)
 print(len(intersections))
 
+# for each bridge find the intersections that are the endpoints
+# add a directed edge between the two intersections
+
+# define bridge class with the endpoints as part of the class
+
+# intersection point within structure should have which stable segment it is on
+# should store which stable branch and which unstable branch it is on
+
+# start thinking about how to write up description of algorithms that will be in the
+# paper. Think about what style to write that in
+
+# read Kevin Pip algorithm
+
 bridges = workbench.create_bridges(fixed_point)
 print(f"num bridges {len(bridges)}")
 print(f"type bridges: {type(bridges)}")

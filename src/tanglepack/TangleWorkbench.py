@@ -15,7 +15,6 @@ from .Tangle import Tangle
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 
-
 Stability = Literal["unstable", "stable"]
 
 
@@ -114,11 +113,9 @@ class TangleWorkbench:
     ) -> None:
 
         if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
-            raise ValueError(
-                f"""Manifold for fixed point {fixed_point} 
+            raise ValueError(f"""Manifold for fixed point {fixed_point} 
                     with stability {stability} has not been initialized.
-                    Please run initialize_manifold first."""
-            )
+                    Please run initialize_manifold first.""")
 
         self._man_machine.grow_x_times(fixed_point, stability, num_iterations)
 
@@ -160,11 +157,9 @@ class TangleWorkbench:
         """
 
         if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
-            raise ValueError(
-                f"""Manifold for fixed point {fixed_point} 
+            raise ValueError(f"""Manifold for fixed point {fixed_point} 
                     with stability {stability} has not been initialized.
-                    Please run initialize_manifold first."""
-            )
+                    Please run initialize_manifold first.""")
 
         root = fixed_point.branch_points[0]
         first_point = self.manifolds.get((fixed_point, stability, 0, 0))
@@ -203,11 +198,9 @@ class TangleWorkbench:
     ):
 
         if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
-            raise ValueError(
-                f"""Manifold for fixed point {fixed_point} 
+            raise ValueError(f"""Manifold for fixed point {fixed_point} 
                     with stability {stability} has not been initialized.
-                    Please run initialize_manifold first."""
-            )
+                    Please run initialize_manifold first.""")
 
         # TODO change this so it uses the actual arclength
         current_distance = self.manifolds.get((fixed_point, stability, 0, 0)).tail.cdist
@@ -228,11 +221,9 @@ class TangleWorkbench:
     ):
 
         if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
-            raise ValueError(
-                f"""Manifold for fixed point {fixed_point} 
+            raise ValueError(f"""Manifold for fixed point {fixed_point} 
                     with stability {stability} has not been initialized.
-                    Please run initialize_manifold first."""
-            )
+                    Please run initialize_manifold first.""")
 
         self.compute_intersections(fixed_point)
 
