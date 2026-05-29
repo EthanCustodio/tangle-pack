@@ -16,6 +16,7 @@ from .Bridge import Bridge
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+logger.setLevel(logging.INFO)
 
 
 class ManifoldMachine:
@@ -676,7 +677,7 @@ class ManifoldMachine:
         while current_point is not None:
 
             logger.debug(
-                "Checking these points:",
+                "Checking these points: %s",
                 (previous_point.get_point(), current_point.get_point()),
             )
 
