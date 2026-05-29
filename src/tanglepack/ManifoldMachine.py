@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Literal, Tuple
+from typing import Literal, Tuple, Optional
 import logging
 
 import numpy as np
@@ -24,7 +24,7 @@ class ManifoldMachine:
     def __init__(self, system: DynamicalSystem):
 
         self.system = system
-        self.area_cutoff = 1e-3
+        self.area_cutoff = 1e-4
 
     def grow_manifold(
         self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
@@ -95,60 +95,127 @@ class ManifoldMachine:
         if num_iterations == 1:
             return merged_manifolds[0]
 
-    def new_grow_manifold(
-        self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
-    ):
+    # def new_grow_manifold(
+    #     self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
+    # ):
 
-        # construct a list of orbit indices based off the stability
-        # this starts at the most recently iterated index and iterates
-        # either clockwise or counterclockwise based on stability
+    #     # construct a list of orbit indices based off the stability
+    #     # this starts at the most recently iterated index and iterates
+    #     # either clockwise or counterclockwise based on stability
+    #     orbit_indices = fixed_point.get_iterable_array(stability, shift=1)
+
+    #     current_manifold = BaseManifold(
+    #         fixed_point.branch_points[orbit_indices[0]],
+    #         stability,
+    #         stretch_param=1,
+    #         fixed_point=fixed_point,
+    #         branch_index=0,
+    #     )
+
+    #     # this line meant to deal with roots that are fixed points
+    #     # if it is an intersection behavior is unknown
+    #     temp_root = current_manifold.root
+    #     if isinstance(current_manifold.root, BranchPoint):
+    #         current_manifold.root = current_manifold.walk_fwd(None, temp_root)
+
+    #     # you must walk forward before adding the stretch param
+    #     # because the fixed point does not have one
+    #     current_manifold.stretch_param = current_manifold.root.stretch_param
+
+    #     for i in range(fixed_point.period):
+
+    #         for branch_index in fixed_point.get_branch_array():
+
+    #             iterated_manifold = self.iterate_manifold(current_manifold)
+
+    #             next_index = (i + 1) % fixed_point.period
+    #             next_orbit_idx = orbit_indices[next_index]
+    #             # self.merge_manifolds(uniterated_manifolds[i], iterated_manifold)
+
+    #             next_manifold = BaseManifold(
+    #                 root=fixed_point.branch_points[next_orbit_idx],
+    #                 stability=stability,
+    #                 stretch_param=current_manifold.stretch_param,
+    #                 fixed_point=fixed_point,
+    #                 branch_index=branch_index,
+    #             )
+
+    #             temp_root = next_manifold.root
+    #             if isinstance(next_manifold.root, BranchPoint):
+    #                 next_manifold.root = next_manifold.walk_fwd(None, temp_root)
+
+    #             current_manifold = next_manifold
+    #             # current_manifold = self.merge_manifolds(
+    #             #     next_manifold, iterated_manifold
+    #             # )
+    #             # current_manifold._find_tail()
+
+    def new_grow_manifold(
+        self,
+        fixed_point: FixedPoint,
+        stability: Literal["unstable", "stable"],
+        branch_index: Optional[int] = None,
+    ):
         orbit_indices = fixed_point.get_iterable_array(stability, shift=1)
 
-        current_manifold = BaseManifold(
-            fixed_point.branch_points[orbit_indices[0]],
-            stability,
-            stretch_param=1,
-            fixed_point=fixed_point,
-            branch_index=0,
-        )
-
-        # this line meant to deal with roots that are fixed points
-        # if it is an intersection behavior is unknown
-        temp_root = current_manifold.root
-        if isinstance(current_manifold.root, BranchPoint):
-            current_manifold.root = current_manifold.walk_fwd(None, temp_root)
-
-        # you must walk forward before adding the stretch param
-        # because the fixed point does not have one
-        current_manifold.stretch_param = current_manifold.root.stretch_param
-
-        for i in range(fixed_point.period):
-
-            for branch_index in fixed_point.get_branch_array():
-
-                iterated_manifold = self.iterate_manifold(current_manifold)
-
-                next_index = (i + 1) % fixed_point.period
-                next_orbit_idx = orbit_indices[next_index]
-                # self.merge_manifolds(uniterated_manifolds[i], iterated_manifold)
-
-                next_manifold = BaseManifold(
-                    root=fixed_point.branch_points[next_orbit_idx],
-                    stability=stability,
-                    stretch_param=current_manifold.stretch_param,
-                    fixed_point=fixed_point,
-                    branch_index=branch_index,
+        if fixed_point.check_inversion():
+            if branch_index is not None:
+                logger.warning(
+                    "branch_index is ignored for inversion points; "
+                    "both branches are grown together."
                 )
+            branches_to_grow = fixed_point.get_branch_array()
+        else:
+            branches_to_grow = (
+                list(range(fixed_point.num_branches))
+                if branch_index is None
+                else [branch_index]
+            )
 
-                temp_root = next_manifold.root
-                if isinstance(next_manifold.root, BranchPoint):
-                    next_manifold.root = next_manifold.walk_fwd(None, temp_root)
+        for b in branches_to_grow:
+            current_manifold = BaseManifold(
+                fixed_point.branch_points[orbit_indices[0]],
+                stability,
+                stretch_param=1,
+                fixed_point=fixed_point,
+                branch_index=b,
+            )
 
-                current_manifold = next_manifold
-                # current_manifold = self.merge_manifolds(
-                #     next_manifold, iterated_manifold
-                # )
-                # current_manifold._find_tail()
+            temp_root = current_manifold.root
+            if isinstance(current_manifold.root, BranchPoint):
+                current_manifold.root = current_manifold.walk_fwd(None, temp_root)
+
+            if current_manifold.root is None:
+                continue  # branch not initialized
+
+            current_manifold.stretch_param = current_manifold.root.stretch_param
+
+            for i in range(fixed_point.period):
+
+                for bi in (
+                    fixed_point.get_branch_array()
+                    if fixed_point.check_inversion()
+                    else [b]
+                ):
+
+                    iterated_manifold = self.iterate_manifold(current_manifold)
+
+                    next_index = (i + 1) % fixed_point.period
+                    next_orbit_idx = orbit_indices[next_index]
+
+                    next_manifold = BaseManifold(
+                        root=fixed_point.branch_points[next_orbit_idx],
+                        stability=stability,
+                        stretch_param=current_manifold.stretch_param,
+                        fixed_point=fixed_point,
+                        branch_index=bi,
+                    )
+
+                    temp_root = next_manifold.root
+                    if isinstance(next_manifold.root, BranchPoint):
+                        next_manifold.root = next_manifold.walk_fwd(None, temp_root)
+
+                    current_manifold = next_manifold
 
     def iterate_manifold(self, manifold: BaseManifold):
         """
@@ -497,6 +564,7 @@ class ManifoldMachine:
         fixed_point: FixedPoint,
         stability: Literal["unstable", "stable"],
         num_times=1,
+        branch_index: Optional[int] = None,
     ):
         """
         Grows all the manifolds of the given stability from the fixed point
@@ -509,7 +577,7 @@ class ManifoldMachine:
         """
 
         for _ in range(num_times):
-            self.new_grow_manifold(fixed_point, stability)
+            self.new_grow_manifold(fixed_point, stability, branch_index)
 
     def merge_manifolds(self, manifold_1: BaseManifold, manifold_2: BaseManifold):
         """

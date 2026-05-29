@@ -8,6 +8,12 @@ from .BaseManifold import BaseManifold
 from .Point import Point
 import numpy as np
 
+import logging
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+logger.setLevel(logging.INFO)
+
 """
 Dev Notes:
 
@@ -94,6 +100,9 @@ class ManifoldInitializer:
 
         direction_from_fixed_point = np.asarray(direction_from_fixed_point).flatten()
         direction_from_fixed_point /= np.linalg.norm(direction_from_fixed_point)
+
+        if branch_index == 1 and not fixed_point.has_inversion():
+            direction_from_fixed_point = -direction_from_fixed_point
 
         first_point = (
             fixed_point.coordinates[orbit_index] + (step) * direction_from_fixed_point
@@ -443,71 +452,167 @@ class ManifoldInitializer:
             if not stable_test:
                 fixed_point.stable_eigenvectors[i + 1] *= -1
 
+    # def construct_kevin_way(
+    #     self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
+    # ) -> Dict[Tuple[int, int], BaseManifold]:
+    #     """
+    #     Constructs the initial segments by taking creating a single fundamental
+    #     segment and mapping it all the way around the fixed point.
+
+    #     Args:
+    #         fixed_point (FixedPoint): Fixed point to grow the manifolds from.
+    #         stability (Literal["unstable", "stable"]): Stabililty of the manifold.
+
+    #     Returns:
+    #         Dict[Tuple[int, int], BaseManifold]: All initial fundamental segments.
+    #             The tuple structure is (orbit_index, branch_index)
+    #     """
+
+    #     branch_indices = fixed_point.get_branch_array()
+
+    #     # construct a list of orbit indices based off the stability
+    #     orbit_indices = fixed_point.get_iterable_array(stability)
+
+    #     # generate the output structure
+    #     initial_segments = {
+    #         (orbit_index, branch_index): None
+    #         for branch_index in branch_indices
+    #         for orbit_index in orbit_indices
+    #     }
+
+    #     # create the first initial segment
+    #     segment = self.get_initial_fundamental_segment(fixed_point, 0, 0, stability)
+    #     initial_segments[(0, 0)] = segment
+
+    #     # remove the fixed point as the root for simplicity
+    #     segment.root = segment.walk_fwd(None, segment.root)
+
+    #     # iterate over orbit indices
+    #     # for orbit_index in range(fixed_point.period):
+    #     for orbit_index in orbit_indices:
+
+    #         for branch_index in branch_indices:
+
+    #             # skip over the 0th branch which we already have
+    #             if branch_index == 0 and orbit_index == 0:
+    #                 continue
+
+    #             # iterate the segment
+    #             segment = self.machine.iterate_manifold(segment)
+
+    #             # add the segment to the output
+    #             initial_segments[(orbit_index, branch_index)] = segment
+
+    #             # attach the segment to the fixed point
+    #             self.machine._insert_point_geometrically(
+    #                 fixed_point.branch_points[orbit_index],
+    #                 segment.root,
+    #                 segment,
+    #                 branch_index,
+    #             )
+
+    #             # # make the fixed point the root of the manifold
+    #             # segment.root = fixed_point.branch_points[orbit_index]
+
+    #     # set the fixed point as the root of each manifold
+    #     for dict_index in initial_segments:
+
+    #         orbit_index = dict_index[0]
+    #         initial_segments[dict_index].root = fixed_point.branch_points[orbit_index]
+
+    #     return initial_segments
+
     def construct_kevin_way(
-        self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
+        self,
+        fixed_point: FixedPoint,
+        stability: Literal["unstable", "stable"],
+        num_branches: int = 1,
     ) -> Dict[Tuple[int, int], BaseManifold]:
         """
-        Constructs the initial segments by taking creating a single fundamental
+        Constructs the initial segments by creating a single fundamental
         segment and mapping it all the way around the fixed point.
 
         Args:
             fixed_point (FixedPoint): Fixed point to grow the manifolds from.
-            stability (Literal["unstable", "stable"]): Stabililty of the manifold.
+            stability (Literal["unstable", "stable"]): Stability of the manifold.
+            num_branches (int): Number of branches to initialize. Must be 1 or 2.
+                Ignored for inversion points, which always initialize both branches.
 
         Returns:
             Dict[Tuple[int, int], BaseManifold]: All initial fundamental segments.
-                The tuple structure is (orbit_index, branch_index)
+                The tuple structure is (orbit_index, branch_index).
         """
 
-        branch_indices = fixed_point.get_branch_array()
-
-        # construct a list of orbit indices based off the stability
         orbit_indices = fixed_point.get_iterable_array(stability)
 
-        # generate the output structure
-        initial_segments = {
-            (orbit_index, branch_index): None
-            for branch_index in branch_indices
-            for orbit_index in orbit_indices
-        }
+        if fixed_point.check_inversion():
+            if num_branches > 1:
+                logger.debug(
+                    "num_branches is ignored for inversion points; "
+                    "both branches are always initialized."
+                )
+            branch_indices = fixed_point.get_branch_array()  # always [0, 1]
 
-        # create the first initial segment
-        segment = self.get_initial_fundamental_segment(fixed_point, 0, 0, stability)
-        initial_segments[(0, 0)] = segment
+            initial_segments = {
+                (orbit_index, branch_index): None
+                for branch_index in branch_indices
+                for orbit_index in orbit_indices
+            }
 
-        # remove the fixed point as the root for simplicity
-        segment.root = segment.walk_fwd(None, segment.root)
+            segment = self.get_initial_fundamental_segment(fixed_point, 0, 0, stability)
+            initial_segments[(0, 0)] = segment
+            segment.root = segment.walk_fwd(None, segment.root)
 
-        # iterate over orbit indices
-        # for orbit_index in range(fixed_point.period):
-        for orbit_index in orbit_indices:
+            for orbit_index in orbit_indices:
+                for branch_index in branch_indices:
+                    if branch_index == 0 and orbit_index == 0:
+                        continue
+                    segment = self.machine.iterate_manifold(segment)
+                    initial_segments[(orbit_index, branch_index)] = segment
+                    self.machine._insert_point_geometrically(
+                        fixed_point.branch_points[orbit_index],
+                        segment.root,
+                        segment,
+                        branch_index,
+                    )
 
-            for branch_index in branch_indices:
-
-                # skip over the 0th branch which we already have
-                if branch_index == 0 and orbit_index == 0:
-                    continue
-
-                # iterate the segment
-                segment = self.machine.iterate_manifold(segment)
-
-                # add the segment to the output
-                initial_segments[(orbit_index, branch_index)] = segment
-
-                # attach the segment to the fixed point
-                self.machine._insert_point_geometrically(
-                    fixed_point.branch_points[orbit_index],
-                    segment.root,
-                    segment,
-                    branch_index,
+        else:
+            if num_branches not in (1, 2):
+                raise ValueError(f"num_branches must be 1 or 2, got {num_branches}")
+            if num_branches > fixed_point.num_branches:
+                raise ValueError(
+                    f"num_branches={num_branches} exceeds the fixed point's "
+                    f"allocated num_branches={fixed_point.num_branches}"
                 )
 
-                # # make the fixed point the root of the manifold
-                # segment.root = fixed_point.branch_points[orbit_index]
+            branch_indices = list(range(num_branches))
 
-        # set the fixed point as the root of each manifold
+            initial_segments = {
+                (orbit_index, branch_index): None
+                for branch_index in branch_indices
+                for orbit_index in orbit_indices
+            }
+
+            for b in branch_indices:
+                segment = self.get_initial_fundamental_segment(
+                    fixed_point, 0, b, stability
+                )
+                initial_segments[(0, b)] = segment
+                segment.root = segment.walk_fwd(None, segment.root)
+
+                for orbit_index in orbit_indices:
+                    if orbit_index == 0:
+                        continue
+                    segment = self.machine.iterate_manifold(segment)
+                    initial_segments[(orbit_index, b)] = segment
+                    self.machine._insert_point_geometrically(
+                        fixed_point.branch_points[orbit_index],
+                        segment.root,
+                        segment,
+                        b,
+                    )
+
         for dict_index in initial_segments:
-
             orbit_index = dict_index[0]
             initial_segments[dict_index].root = fixed_point.branch_points[orbit_index]
 

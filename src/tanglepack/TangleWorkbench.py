@@ -74,9 +74,13 @@ class TangleWorkbench:
 
         self._man_maker.orient_manifolds(fixed_point, approx_dirs)
 
-    def initialize_manifold(self, fixed_point: FixedPoint, stability: Stability):
+    def initialize_manifold(
+        self, fixed_point: FixedPoint, stability: Stability, num_branches: int = 1
+    ):
 
-        initial_segments = self._man_maker.construct_kevin_way(fixed_point, stability)
+        initial_segments = self._man_maker.construct_kevin_way(
+            fixed_point, stability, num_branches
+        )
 
         for (orbit_index, branch_index), manifold in initial_segments.items():
 
@@ -86,22 +90,24 @@ class TangleWorkbench:
 
         return initial_segments
 
-    def initialize_both_manifolds(self, fixed_point: FixedPoint):
+    def initialize_both_manifolds(self, fixed_point: FixedPoint, num_branches: int = 1):
 
-        unstable_segments = self.initialize_manifold(fixed_point, "unstable")
-        stable_segments = self.initialize_manifold(fixed_point, "stable")
+        unstable_segments = self.initialize_manifold(
+            fixed_point, "unstable", num_branches
+        )
+        stable_segments = self.initialize_manifold(fixed_point, "stable", num_branches)
 
-        for (orbit_index, branch_index), manifold in unstable_segments.items():
+        # for (orbit_index, branch_index), manifold in unstable_segments.items():
 
-            self.manifolds[(fixed_point, "unstable", orbit_index, branch_index)] = (
-                manifold
-            )
+        #     self.manifolds[(fixed_point, "unstable", orbit_index, branch_index)] = (
+        #         manifold
+        #     )
 
-        for (orbit_index, branch_index), manifold in stable_segments.items():
+        # for (orbit_index, branch_index), manifold in stable_segments.items():
 
-            self.manifolds[(fixed_point, "stable", orbit_index, branch_index)] = (
-                manifold
-            )
+        #     self.manifolds[(fixed_point, "stable", orbit_index, branch_index)] = (
+        #         manifold
+        #     )
 
         return (unstable_segments, stable_segments)
 
@@ -110,6 +116,7 @@ class TangleWorkbench:
         fixed_point: FixedPoint,
         stability: Stability,
         num_iterations: int,
+        branch_index: int = 0,
     ) -> None:
 
         if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
@@ -117,7 +124,9 @@ class TangleWorkbench:
                     with stability {stability} has not been initialized.
                     Please run initialize_manifold first.""")
 
-        self._man_machine.grow_x_times(fixed_point, stability, num_iterations)
+        self._man_machine.grow_x_times(
+            fixed_point, stability, num_iterations, branch_index
+        )
 
         for (fp, stab, _orbit_index, _branch_index), manifold in self.manifolds.items():
 

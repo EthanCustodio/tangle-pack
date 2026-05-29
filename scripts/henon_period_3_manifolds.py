@@ -95,7 +95,7 @@ print(f"points! {initial_unstable_segments[(0, 0)].get_point_array()}")
 # stable_manifold = initial_stable_segments[(0, 0)]
 
 # grow unstable manifold
-num_iterations = 6
+num_iterations = 7
 man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
 man_machine.grow_x_times(fixed_point, "stable", num_iterations)
 
@@ -106,9 +106,21 @@ man_machine.grow_x_times(fixed_point, "stable", num_iterations)
 
 # grow stable manifold
 # num_iterations = 7
-num_iterations = 6
+num_iterations = 7
 man_machine.grow_x_times(fixed_point_zero, "stable", num_iterations)
 man_machine.grow_x_times(fixed_point_zero, "unstable", num_iterations)
+
+
+# approx_dir = {"unstable": [0, -1], "stable": [-1, -1]}
+
+# man_maker.orient_manifolds(fixed_point, approx_dir)
+
+# initial_unstable_segments_new = man_maker.construct_kevin_way(fixed_point, "unstable")
+# initial_stable_segments_new = man_maker.construct_kevin_way(fixed_point, "stable")
+
+# num_iterations = 7
+# man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
+# man_machine.grow_x_times(fixed_point, "stable", num_iterations)
 
 # plt.figure()
 # initial_unstable_segment.plot(show_points=True)
