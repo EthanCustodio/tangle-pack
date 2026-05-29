@@ -62,11 +62,13 @@ print(bridges)
 
 workbench.trim_stable_manifolds(fixed_point)
 
-graph = workbench.build_intersection_graph(fixed_point)
+new_bridges = workbench._man_machine.iterate_bridge(bridges[2])
 
-print(len(graph.nodes()))
+# graph = workbench.build_intersection_graph(fixed_point)
 
-workbench.visualize_intersection_graph(graph)
+# print(len(graph.nodes()))
+
+# workbench.visualize_intersection_graph(graph)
 
 # plot!
 plt.figure()
@@ -74,6 +76,7 @@ plt.figure()
 workbench.plot_tangle(fixed_point, "stable", color="r")
 workbench.plot_intersections(fixed_point)
 workbench.plot_all_bridges(bridges)
+new_bridges.plot()
 
 plt.xlim([-15, 15])
 plt.ylim([-15, 15])

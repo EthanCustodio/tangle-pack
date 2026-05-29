@@ -37,8 +37,8 @@ class BasePoint:
         Args:
             x (float): x-coordinate of the point. Defaults to None.
             y (float): y-coordinate of the point. Defaults to None.
-            cdist (float, optional): anonical distance from the fixed point. Defaults to None.
-            edist (float, optional): he pre-iterate of the point. Defaults to None.
+            cdist (float, optional): canonical distance from the fixed point. Defaults to None.
+            edist (float, optional): the pre-iterate of the point. Defaults to None.
         """
 
         self.x = x
