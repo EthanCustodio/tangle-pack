@@ -543,11 +543,6 @@ class Tangle:
                 tail=tail_point,
             )
 
-            bridge_list = list(bridges.values())
-            for i in range(len(bridge_list) - 1):
-                bridge_list[i].next_bridge = bridge_list[i + 1]
-                bridge_list[i + 1].prev_bridge = bridge_list[i]
-
             bridges[(seg1.id, seg2.id)] = bridge
 
         # update the global bridge structure somehow here
@@ -559,6 +554,11 @@ class Tangle:
         #     self.bridges = merged
 
         # return list(self.bridges.values())
+        bridge_list = list(bridges.values())
+        for i in range(len(bridge_list) - 1):
+            bridge_list[i].next_bridge = bridge_list[i + 1]
+            bridge_list[i + 1].prev_bridge = bridge_list[i]
+
         return bridge_list
 
     def _get_nearby_point(self, seg: _Segment, side: Literal["root", "tail"]) -> Point:

@@ -13,6 +13,7 @@ from .BaseManifold import BaseManifold
 from .ManifoldMachine import ManifoldMachine
 from .ManifoldInitializer import ManifoldInitializer
 
+from .Intersection import Intersection
+from .Bridge import Bridge
 from .Tangle import Tangle
 from .TangleWorkbench import TangleWorkbench
-from .Intersection import Intersection

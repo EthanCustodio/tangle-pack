@@ -1,4 +1,4 @@
-from typing import Callable, Literal, Iterable
+from typing import Callable, Literal, Iterable, Optional
 import numpy.typing as npt
 from typing_extensions import Annotated
 
@@ -14,6 +14,8 @@ from .ManifoldMachine import ManifoldMachine
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
+from .Bridge import Bridge
+from .Intersection import Intersection
 
 Stability = Literal["unstable", "stable"]
 
@@ -40,6 +42,8 @@ class TangleWorkbench:
         self.fixed_points = []
         # manifolds are keyed like (fixed_point, stability, orbit_index, branch_index)
         self.manifolds: dict[tuple[FixedPoint, Stability, int, int], BaseManifold] = {}
+
+        self._bridges: list[Bridge] = None
 
     def construct_fixed_point(self, initial_guess) -> FixedPoint:
         """
@@ -315,8 +319,8 @@ class TangleWorkbench:
 
     def create_bridges(self, fixed_point: FixedPoint):
 
-        bridges = self.Tangle.create_bridges()
-
+        bridges = self.Tangle.create_bridges()  # for_manifold=None → all intersections
+        self._bridges.extend(bridges)
         return bridges
 
     def create_resonance_zone(self, fixed_point: FixedPoint):
@@ -339,6 +343,84 @@ class TangleWorkbench:
         self.plot_tangle(fixed_point, "stable", color="r")
         self.plot_all_bridges(bridges)
         self.plot_intersections(fixed_point)
+
+    @property
+    def uniiterated_bridges(self) -> list[Bridge]:
+        """All bridges that have not yet been iterated forward."""
+        return [b for b in self._bridges if not b.iterated]
+
+    def iterate_bridge(self, bridge: Bridge) -> list[Bridge]:
+        """
+        Map a bridge forward one iterate, add the result to the tangle, detect new
+        intersections with the stable manifold, cut the result into new bridges,
+        and return those bridges.
+
+        Marks the original bridge as iterated and wires parent/child links.
+
+        Args:
+            bridge: A bridge created by create_bridges() or a previous iterate_bridge().
+
+        Returns:
+            List of new Bridge objects from cutting the iterated result.
+            If the iterated bridge makes no new crossings, returns a single-element
+            list containing the unsplit iterated bridge.
+
+        Raises:
+            ValueError: If bridge has already been iterated.
+            ValueError: If create_bridges() has not been called yet.
+        """
+        if bridge.iterated:
+            raise ValueError(
+                "This bridge has already been iterated. Check bridge.children for the results."
+            )
+        if not self._bridges:
+            raise ValueError(
+                "No bridges registered. Call create_bridges() before iterate_bridge()."
+            )
+
+        # 1. map forward
+        iterated = self._man_machine.iterate_bridge(bridge)
+
+        # 2. add to tangle (stable manifold already indexed from compute_intersections)
+        self.Tangle.add_manifold(iterated)
+
+        # 3. resolve only new crossings involving the iterated bridge
+        new_intersections = self.Tangle.populate_intersections_for_manifold(iterated)
+
+        # 4. cut at crossings
+        if new_intersections:
+            new_bridges = self.Tangle.create_bridges(for_manifold=iterated)
+        else:
+            # no crossings — iterated bridge is already a valid unsplit bridge
+            new_bridges = [iterated]
+
+        # 5. wire genealogy
+        bridge.iterated = True
+        bridge.children = new_bridges
+        for nb in new_bridges:
+            nb.parent = bridge
+
+        # 6. register
+        self._bridges.extend(new_bridges)
+
+        return new_bridges
+
+    def iterate_all_bridges(self) -> list[Bridge]:
+        """
+        Iterate all bridges that have not yet been mapped forward.
+
+        Returns:
+            All new bridges produced across all iterations.
+        """
+        pending = list(
+            self.uniiterated_bridges
+        )  # snapshot before loop mutates _bridges
+
+        all_new: list[Bridge] = []
+        for bridge in pending:
+            all_new.extend(self.iterate_bridge(bridge))
+
+        return all_new
 
     def visualize_intersection_graph(
         self,
@@ -459,15 +541,31 @@ class TangleWorkbench:
 
         return fig, ax
 
-    def plot_all_bridges(self, bridges):
+    # def plot_all_bridges(self, bridges):
 
+    #     n = len(bridges)
+    #     colors = cm.get_cmap("tab20", n)  # or 'tab10', 'nipy_spectral', etc.
+
+    #     for i, bridge in enumerate(bridges):
+
+    #         vibe = colors(i)
+    #         bridge.plot(color=vibe)
+
+    def plot_all_bridges(self, bridges: Optional[list[Bridge]] = None) -> None:
+        """
+        Plot a list of bridges. If no list is supplied, plots all registered bridges.
+
+        Args:
+            bridges: List of bridges to plot. Defaults to self._bridges.
+        """
+        if bridges is None:
+            bridges = self._bridges
         n = len(bridges)
-        colors = cm.get_cmap("tab20", n)  # or 'tab10', 'nipy_spectral', etc.
-
+        if n == 0:
+            return
+        colors = cm.get_cmap("tab20", n)
         for i, bridge in enumerate(bridges):
-
-            vibe = colors(i)
-            bridge.plot(color=vibe)
+            bridge.plot(color=colors(i))
 
     def trim_stable_manifolds(self, fixed_point: FixedPoint):
         """

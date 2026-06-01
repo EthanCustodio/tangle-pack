@@ -89,7 +89,7 @@ plt.figure()
 # workbench.plot_tangle(fixed_point, "unstable", color="b")
 workbench.plot_tangle(fixed_point, "stable", color="r")
 workbench.plot_intersections(fixed_point)
-workbench.plot_all_bridges(bridges)
+workbench.plot_all_bridges()
 # new_bridges.plot()
 # bridges.plot()
 
