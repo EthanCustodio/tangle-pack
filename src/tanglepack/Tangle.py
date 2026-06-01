@@ -5,6 +5,7 @@ from itertools import count
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from .Intersection import Intersection
 from .BaseManifold import BaseManifold
 from .Point import Point
 from .BranchPoint import BranchPoint
@@ -108,8 +109,11 @@ class Tangle:
         self._intersecting_coords: dict[int, tuple[float, float]] = {}
         self._intersecting_points: dict[int, BranchPoint] = {}
 
-        self.bridges = None
-        self.graph = None
+        self._intersections: list[Intersection] = []
+        self._intersection_by_seg: dict[int, Intersection] = {}
+        self._processed_pairs: set[frozenset[int]] = set()
+
+        # self.bridges = None
 
     def clear_all(self):
         """
@@ -128,8 +132,9 @@ class Tangle:
         self._intersecting_coords.clear()
         self._intersecting_points.clear()
 
-        # Note: bridges are kept as they may still be valid
-        # self.bridges = None  # Uncomment if you want to clear bridges too
+        self._intersections.clear()
+        self._intersection_by_seg.clear()
+        self._processed_pairs.clear()
 
     def populate_intersection_dict(self):
         """
@@ -138,6 +143,9 @@ class Tangle:
         """
 
         for seg_id_pair in list(self._intersecting_segments):
+
+            if seg_id_pair in self._processed_pairs:
+                continue  # already processed this pair
 
             seg1_id, seg2_id = seg_id_pair
 
@@ -173,10 +181,24 @@ class Tangle:
                 2, (unstable_cdist, stable_cdist), point[0], point[1]
             )
 
+            intersection = Intersection.from_segments(
+                coords=tuple(point),
+                unstable_cdist=unstable_cdist,
+                stable_cdist=stable_cdist,
+                seg1_id=seg1_id,
+                seg2_id=seg2_id,
+            )
+
+            self._intersections.append(intersection)
+            self._intersection_by_seg[seg1_id] = intersection
+            self._intersection_by_seg[seg2_id] = intersection
+
             self._intersecting_coords[seg1_id] = point
             self._intersecting_coords[seg2_id] = point
             self._intersecting_points[seg1_id] = branch_point
             self._intersecting_points[seg2_id] = branch_point
+
+            self._processed_pairs.add(seg_id_pair)
 
     def _find_true_intersection(self, seg1: _Segment, seg2: _Segment):
         """
@@ -255,6 +277,84 @@ class Tangle:
 
             if seg.intersects(other_segment):
                 yield other_segment
+
+    def populate_intersections_for_manifold(
+        self, manifold: BaseManifold
+    ) -> list[Intersection]:
+        """
+        Resolve only crossing pairs that involve a segment from `manifold`.
+
+        Use this after add_manifold() when incrementally adding an iterated bridge
+        rather than rebuilding the full tangle from scratch.
+
+        Args:
+            manifold: The newly added manifold to resolve intersections for.
+
+        Returns:
+            List of newly created Intersection objects.
+        """
+        manifold_seg_ids = self._manifold_segs.get(manifold, set())
+        new_intersections: list[Intersection] = []
+
+        for seg_id_pair in list(self._intersecting_segments):
+            if seg_id_pair in self._processed_pairs:
+                continue
+            # only process pairs where at least one segment belongs to manifold
+            if not (seg_id_pair & manifold_seg_ids):
+                continue
+
+            seg1_id, seg2_id = tuple(seg_id_pair)  # frozenset unpack
+
+            if seg1_id not in self._seg_lookup or seg2_id not in self._seg_lookup:
+                self._intersecting_segments.discard(seg_id_pair)
+                continue
+
+            seg_1 = self._seg_lookup[seg1_id]
+            seg_2 = self._seg_lookup[seg2_id]
+
+            point = self._find_true_intersection(seg_1, seg_2)
+
+            seg_1_cdist = 0.5 * (
+                seg_1.p0.get_cdist(seg_1.manifold.stability)
+                + seg_1.p0_seg1.get_cdist(seg_1.manifold.stability)
+            )
+            seg_2_cdist = 0.5 * (
+                seg_2.p0.get_cdist(seg_2.manifold.stability)
+                + seg_2.p0_seg1.get_cdist(seg_2.manifold.stability)
+            )
+
+            unstable_cdist = (
+                seg_1_cdist if seg_1.manifold.stability == "unstable" else seg_2_cdist
+            )
+            stable_cdist = (
+                seg_1_cdist if seg_1.manifold.stability == "stable" else seg_2_cdist
+            )
+
+            # keep existing BranchPoint creation for backward compat
+            branch_point = BranchPoint(
+                2, (unstable_cdist, stable_cdist), point[0], point[1]
+            )
+            self._intersecting_coords[seg1_id] = point
+            self._intersecting_coords[seg2_id] = point
+            self._intersecting_points[seg1_id] = branch_point
+            self._intersecting_points[seg2_id] = branch_point
+
+            # new Intersection object
+            intersection = Intersection.from_segments(
+                coords=tuple(point),
+                unstable_cdist=unstable_cdist,
+                stable_cdist=stable_cdist,
+                seg1_id=seg1_id,
+                seg2_id=seg2_id,
+            )
+            self._intersections.append(intersection)
+            self._intersection_by_seg[seg1_id] = intersection
+            self._intersection_by_seg[seg2_id] = intersection
+            new_intersections.append(intersection)
+
+            self._processed_pairs.add(seg_id_pair)
+
+        return new_intersections
 
     # ------------- internal helpers -----------------
     def _insert_segment(self, seg: _Segment) -> int:
@@ -367,8 +467,8 @@ class Tangle:
         Returns True if there's a proper intersection, False otherwise.
         Ignores collinearity for simplicity (treat collinear as not intersecting).
         """
-        (p0_seg1, p1_seg1) = segA
-        (p0_seg2, p1_seg2) = segB
+        p0_seg1, p1_seg1 = segA
+        p0_seg2, p1_seg2 = segB
 
         o1 = Tangle._orientation(p0_seg1, p1_seg1, p0_seg2)
         o2 = Tangle._orientation(p0_seg1, p1_seg1, p1_seg2)
@@ -384,14 +484,25 @@ class Tangle:
     def cut_manifold(self):
         pass
 
-    def create_bridges(self):
+    def create_bridges(
+        self, for_manifold: Optional[BaseManifold] = None
+    ) -> list[Bridge]:
 
         bridges = {}
 
         intersecting_segments = []
 
+        manifold_seg_ids = (
+            self._manifold_segs.get(for_manifold, set())
+            if for_manifold is not None
+            else None
+        )
+
         seen_ids = set()
         for sid_pair in self._intersecting_segments:
+
+            if manifold_seg_ids is not None and not (sid_pair & manifold_seg_ids):
+                continue  # skip pairs not involving the target manifold
 
             for sid in sid_pair:
                 if sid in seen_ids:
@@ -432,17 +543,23 @@ class Tangle:
                 tail=tail_point,
             )
 
+            bridge_list = list(bridges.values())
+            for i in range(len(bridge_list) - 1):
+                bridge_list[i].next_bridge = bridge_list[i + 1]
+                bridge_list[i + 1].prev_bridge = bridge_list[i]
+
             bridges[(seg1.id, seg2.id)] = bridge
 
         # update the global bridge structure somehow here
-        if self.bridges is None:
-            self.bridges = bridges
-        else:
-            merged = self.bridges.copy()
-            merged.update(bridges)
-            self.bridges = merged
+        # if self.bridges is None:
+        #     self.bridges = bridges
+        # else:
+        #     merged = self.bridges.copy()
+        #     merged.update(bridges)
+        #     self.bridges = merged
 
-        return list(self.bridges.values())
+        # return list(self.bridges.values())
+        return bridge_list
 
     def _get_nearby_point(self, seg: _Segment, side: Literal["root", "tail"]) -> Point:
         """

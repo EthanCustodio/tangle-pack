@@ -42,7 +42,7 @@ approx_dirs = {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
 workbench.orient_eigenvectors(fixed_point, approx_dirs)
 
 # get the initial segments
-(unstable_segments, stable_segments) = workbench.initialize_both_manifolds(fixed_point)
+unstable_segments, stable_segments = workbench.initialize_both_manifolds(fixed_point)
 
 # grow the manifolds from the fixed point
 workbench.grow_n_times(fixed_point, "unstable", num_iterations=6)
@@ -75,7 +75,8 @@ print(bridges)
 
 workbench.trim_stable_manifolds(fixed_point)
 
-new_bridges = workbench._man_machine.iterate_bridge(bridges[2])
+print(f"These are the new bridges: {bridges}")
+# new_bridges = workbench._man_machine.iterate_bridge(bridges[2])
 
 # graph = workbench.build_intersection_graph(fixed_point)
 
@@ -89,7 +90,8 @@ plt.figure()
 workbench.plot_tangle(fixed_point, "stable", color="r")
 workbench.plot_intersections(fixed_point)
 workbench.plot_all_bridges(bridges)
-new_bridges.plot()
+# new_bridges.plot()
+# bridges.plot()
 
 plt.xlim([-15, 15])
 plt.ylim([-15, 15])

@@ -15,3 +15,4 @@ from .ManifoldInitializer import ManifoldInitializer
 
 from .Tangle import Tangle
 from .TangleWorkbench import TangleWorkbench
+from .Intersection import Intersection

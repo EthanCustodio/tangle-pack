@@ -1,4 +1,11 @@
+from __future__ import annotations
 from typing import Optional, Literal
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .Intersection import Intersection
+
 from numpy.typing import NDArray
 
 import numpy as np
@@ -57,6 +64,14 @@ class Bridge(BaseManifold):
             root, stability, stretch_param, fixed_point, name, tail, branch_index
         )
 
+        self.iterated: bool = False
+        self.parent: Optional[Bridge] = None
+        self.children: list[Bridge] = []
+        self.next_bridge: Optional[Bridge] = None
+        self.prev_bridge: Optional[Bridge] = None
+        self.first_intersection: Optional[Intersection] = None
+        self.second_intersection: Optional[Intersection] = None
+
         # we likely in here want to have these bridges have a quick reference
         # to the two intersection points that define it.
         # bridges are uniquely defined based on the two intersection points
@@ -90,7 +105,10 @@ class Bridge(BaseManifold):
             raise ValueError("A tail must be specified to construct a bridge.")
 
     def map_forward(self):
-
+        """
+        Not implemented here; iteration is handled by TangleWorkbench.iterate_bridge().
+        ManifoldMachine owns the map logic and BranchPoint insertion.
+        """
         # if we are going to include this then we have to think about
         # the dependecy hell of combining this with ManifoldMachine.
         # We should probably just use manifold machine to map these forward

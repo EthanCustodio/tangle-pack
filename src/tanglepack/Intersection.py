@@ -29,11 +29,13 @@ class Intersection:
         unstable_cdist: float = None,
         stable_cdist: float = None,
         seg_ids: Optional[frozenset[int]] = None,
+        id: Optional[int] = None,
     ):
         self.coords = coords
         self.unstable_cdist = unstable_cdist
         self.stable_cdist = stable_cdist
         self.seg_ids = seg_ids
+        self.id = id
 
     @classmethod
     def from_segments(
@@ -69,7 +71,6 @@ class Intersection:
         return cls(coords, unstable_cdist, stable_cdist, None, label)
 
     # --- helpers ---
-
     @property
     def is_synthetic(self) -> bool:
         """True if this intersection was not detected from crossing segments."""
