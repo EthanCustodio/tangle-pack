@@ -5,7 +5,7 @@ from itertools import count
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from .Intersection import Intersection
+from .Intersection import Intersection, ManifoldKey
 from .BaseManifold import BaseManifold
 from .Point import Point
 from .BranchPoint import BranchPoint
@@ -115,6 +115,11 @@ class Tangle:
 
         # self.bridges = None
 
+    @staticmethod
+    def _key_of(seg: _Segment) -> Optional[ManifoldKey]:
+        """Read the ManifoldKey stored on the segment's manifold, if set."""
+        return getattr(seg.manifold, "manifold_key", None)
+
     def clear_all(self):
         """
         Completely clear all Tangle state, useful when recomputing everything from scratch.
@@ -181,12 +186,24 @@ class Tangle:
                 2, (unstable_cdist, stable_cdist), point[0], point[1]
             )
 
+            if (
+                seg_1.manifold.stability == "unstable"
+                or seg_2.manifold.stability != "unstable"
+            ):
+                manifold_a_key, cdist_a = Tangle._key_of(seg_1), seg_1_cdist
+                manifold_b_key, cdist_b = Tangle._key_of(seg_2), seg_2_cdist
+            else:
+                manifold_a_key, cdist_a = Tangle._key_of(seg_2), seg_2_cdist
+                manifold_b_key, cdist_b = Tangle._key_of(seg_1), seg_1_cdist
+
             intersection = Intersection.from_segments(
                 coords=tuple(point),
-                unstable_cdist=unstable_cdist,
-                stable_cdist=stable_cdist,
+                unstable_cdist=cdist_a,
+                stable_cdist=cdist_b,
                 seg1_id=seg1_id,
                 seg2_id=seg2_id,
+                manifold_a_key=manifold_a_key,
+                manifold_b_key=manifold_b_key,
             )
 
             self._intersections.append(intersection)
@@ -339,14 +356,34 @@ class Tangle:
             self._intersecting_points[seg1_id] = branch_point
             self._intersecting_points[seg2_id] = branch_point
 
-            # new Intersection object
+            if (
+                seg_1.manifold.stability == "unstable"
+                or seg_2.manifold.stability != "unstable"
+            ):
+                manifold_a_key, cdist_a = Tangle._key_of(seg_1), seg_1_cdist
+                manifold_b_key, cdist_b = Tangle._key_of(seg_2), seg_2_cdist
+            else:
+                manifold_a_key, cdist_a = Tangle._key_of(seg_2), seg_2_cdist
+                manifold_b_key, cdist_b = Tangle._key_of(seg_1), seg_1_cdist
+
             intersection = Intersection.from_segments(
                 coords=tuple(point),
-                unstable_cdist=unstable_cdist,
-                stable_cdist=stable_cdist,
+                unstable_cdist=cdist_a,
+                stable_cdist=cdist_b,
                 seg1_id=seg1_id,
                 seg2_id=seg2_id,
+                manifold_a_key=manifold_a_key,
+                manifold_b_key=manifold_b_key,
             )
+
+            # new Intersection object
+            # intersection = Intersection.from_segments(
+            #     coords=tuple(point),
+            #     unstable_cdist=unstable_cdist,
+            #     stable_cdist=stable_cdist,
+            #     seg1_id=seg1_id,
+            #     seg2_id=seg2_id,
+            # )
             self._intersections.append(intersection)
             self._intersection_by_seg[seg1_id] = intersection
             self._intersection_by_seg[seg2_id] = intersection

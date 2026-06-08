@@ -2,6 +2,7 @@ from typing import Literal, Optional
 from .FixedPoint import FixedPoint
 from .BranchPoint import BranchPoint
 from .Point import Point
+from .Intersection import ManifoldKey
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -43,6 +44,7 @@ class BaseManifold:
         name="unnamed",
         tail: Optional[Point | BranchPoint] = None,
         branch_index: Optional[int] = None,
+        manifold_key: Optional[ManifoldKey] = None,
     ):
         """
         Initializes the manifold.
@@ -68,6 +70,7 @@ class BaseManifold:
         self.fixed_point = fixed_point
         self.name = name
         self.branch_index = branch_index
+        self.manifold_key = manifold_key
         if self.tail is None:
             self._find_tail()
 

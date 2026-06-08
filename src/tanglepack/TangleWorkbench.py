@@ -16,6 +16,7 @@ from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 from .Bridge import Bridge
 from .Intersection import Intersection
+from .IntersectionRegistry import IntersectionRegistry
 
 Stability = Literal["unstable", "stable"]
 
@@ -43,6 +44,7 @@ class TangleWorkbench:
         # manifolds are keyed like (fixed_point, stability, orbit_index, branch_index)
         self.manifolds: dict[tuple[FixedPoint, Stability, int, int], BaseManifold] = {}
 
+        self._intersection_registry = IntersectionRegistry()
         self._bridges: list[Bridge] = []
 
     def construct_fixed_point(self, initial_guess) -> FixedPoint:
@@ -88,9 +90,9 @@ class TangleWorkbench:
 
         for (orbit_index, branch_index), manifold in initial_segments.items():
 
-            self.manifolds[(fixed_point, stability, orbit_index, branch_index)] = (
-                manifold
-            )
+            key = (fixed_point, stability, orbit_index, branch_index)
+            manifold.manifold_key = key  # ← new
+            self.manifolds[key] = manifold
 
         return initial_segments
 
@@ -289,15 +291,17 @@ class TangleWorkbench:
 
         # Completely clear and rebuild the Tangle state to avoid stale references
         self.Tangle.clear_all()
+        self._intersection_registry = IntersectionRegistry()
 
         self.index_manifolds(fixed_point, "unstable")
         self.index_manifolds(fixed_point, "stable")
 
         self.Tangle.populate_intersection_dict()
 
-        points = self.Tangle._intersecting_coords.values()
+        for intersection in self.Tangle._intersections:
+            self._intersection_registry.add(intersection)
 
-        return points
+        return list(self.Tangle._intersecting_coords.values())
 
     def plot_intersections(self, fp, ax=None, **scatter_kwargs):
         """
@@ -349,6 +353,10 @@ class TangleWorkbench:
         """All bridges that have not yet been iterated forward."""
         return [b for b in self._bridges if not b.iterated]
 
+    @property
+    def intersection_registry(self) -> IntersectionRegistry:
+        return self._intersection_registry
+
     def iterate_bridge(self, bridge: Bridge) -> list[Bridge]:
         """
         Map a bridge forward one iterate, add the result to the tangle, detect new
@@ -387,6 +395,9 @@ class TangleWorkbench:
         # 3. resolve only new crossings involving the iterated bridge
         new_intersections = self.Tangle.populate_intersections_for_manifold(iterated)
 
+        for ix in new_intersections:
+            self._intersection_registry.add(ix)
+
         # 4. cut at crossings
         if new_intersections:
             new_bridges = self.Tangle.create_bridges(for_manifold=iterated)
@@ -404,6 +415,35 @@ class TangleWorkbench:
         self._bridges.extend(new_bridges)
 
         return new_bridges
+
+    def infer_iterate_table(self, max_depth: int = 10) -> int:
+        """
+        Fill in the registry's iterate table by predicting cdist values of forward
+        and backward iterates and checking for matches.
+
+        Args:
+            max_depth: How many iterate levels to search forward and backward.
+
+        Returns:
+            Number of new iterate relationships added.
+        """
+        return self._intersection_registry.infer_iterates(max_depth)
+
+    def populate_registry(self) -> IntersectionRegistry:
+        """Rebuild the intersection registry from the current Tangle state."""
+        self._intersection_registry = IntersectionRegistry()
+        for intersection in self.Tangle._intersections:
+            self._intersection_registry.add(intersection)
+        return self._intersection_registry
+
+    def build_intersection_graph(self) -> nx.MultiDiGraph:
+        """
+        Return the live intersection graph from the registry.
+
+        Accessing this property triggers a rebuild of adjacency edges if any
+        intersections have been added since the last access.
+        """
+        return self._intersection_registry.graph
 
     def iterate_all_bridges(self) -> list[Bridge]:
         """
