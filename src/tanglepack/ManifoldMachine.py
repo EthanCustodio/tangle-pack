@@ -827,20 +827,20 @@ class ManifoldMachine:
             if abs(curvature_area) < self.area_cutoff:
                 continue
 
-            # Skip refinement if either point's preiterate is missing.
-            # This happens when bridge boundary points (root/tail inserted by
-            # create_bridges) are mixed into a manifold with already-iterated
-            # interior points and the iterate chain is incomplete for some members
-            # of the merged manifold.
-            if (ManifoldMachine._get_preiterate(p0, manifold.stability, 1) is None
-                    or ManifoldMachine._get_preiterate(p1, manifold.stability, 1) is None):
-                logger.debug(
-                    "Skipping refinement for pair at cdist %.3g–%.3g: "
-                    "preiterate missing on one or both points.",
-                    p0.cdist,
-                    p1.cdist,
-                )
-                continue
+            # # Skip refinement if either point's preiterate is missing.
+            # # This happens when bridge boundary points (root/tail inserted by
+            # # create_bridges) are mixed into a manifold with already-iterated
+            # # interior points and the iterate chain is incomplete for some members
+            # # of the merged manifold.
+            # if (ManifoldMachine._get_preiterate(p0, manifold.stability, 1) is None
+            #         or ManifoldMachine._get_preiterate(p1, manifold.stability, 1) is None):
+            #     logger.debug(
+            #         "Skipping refinement for pair at cdist %.3g–%.3g: "
+            #         "preiterate missing on one or both points.",
+            #         p0.cdist,
+            #         p1.cdist,
+            #     )
+            #     continue
 
             new_point = self._get_refined_point(p0, p1, viewer, manifold.stability)
 

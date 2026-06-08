@@ -455,6 +455,29 @@ class IntersectionRegistry:
 
     # ── cdist-based lookup ─────────────────────────────────────────────────
 
+    def nearest_by_unstable_cdist(self, cdist: float) -> Optional[int]:
+        """
+        Return the ID of the intersection whose unstable_cdist is closest to cdist.
+
+        Uses the sorted _unstable_order list for O(log n) positioning.
+
+        Args:
+            cdist: Target unstable cdist value.
+
+        Returns:
+            Matching ID, or None if the registry is empty.
+        """
+        if not self._unstable_order:
+            return None
+        keys = [self._store[i].unstable_cdist for i in self._unstable_order]
+        pos = bisect.bisect_left(keys, cdist)
+        candidates = []
+        if pos < len(self._unstable_order):
+            candidates.append(self._unstable_order[pos])
+        if pos > 0:
+            candidates.append(self._unstable_order[pos - 1])
+        return min(candidates, key=lambda id_: abs(self._store[id_].unstable_cdist - cdist))
+
     def find_by_cdist(
         self,
         unstable_cdist: float,

@@ -325,6 +325,7 @@ class TangleWorkbench:
 
         bridges = self.Tangle.create_bridges()  # for_manifold=None → all intersections
         self._bridges.extend(bridges)
+        self._assign_bridge_intersections(bridges)
         return bridges
 
     def create_resonance_zone(self, fixed_point: FixedPoint):
@@ -413,21 +414,56 @@ class TangleWorkbench:
 
         # 6. register
         self._bridges.extend(new_bridges)
+        self._assign_bridge_intersections(new_bridges)
 
         return new_bridges
 
-    def infer_iterate_table(self, max_depth: int = 10) -> int:
+    def infer_iterate_table(self, coord_tol: float = 0.01) -> int:
         """
-        Fill in the registry's iterate table by predicting cdist values of forward
-        and backward iterates and checking for matches.
+        Scan all iterated bridges and record the n=1 forward iterate relationship for
+        each boundary intersection.
+
+        Bridge topology identifies *which* intersections to process (only the two
+        endpoints of each iterated bridge). The map is then applied directly to their
+        coordinates and the closest registered intersection within ``coord_tol`` is
+        recorded as the image. This avoids cdist ambiguity that arises when original
+        and new intersections overlap in arc-length.
 
         Args:
-            max_depth: How many iterate levels to search forward and backward.
+            coord_tol: Maximum Euclidean distance (in phase-space units) between
+                ``f(i_src)`` and a candidate intersection for the match to be accepted.
+                Defaults to 0.01, which is ~10× the expected linear-intersection
+                approximation error for well-resolved manifolds.
 
         Returns:
-            Number of new iterate relationships added.
+            Number of new iterate relationships recorded.
         """
-        return self._intersection_registry.infer_iterates(max_depth)
+        registry = self._intersection_registry
+        f = self.dynamical_system.map
+        all_items = [(ix_id, ix.get_point()) for ix_id, ix in registry]
+        recorded = 0
+
+        for bridge in self._bridges:
+            if not bridge.iterated or not bridge.children:
+                continue
+
+            for src_id in (bridge.first_intersection, bridge.second_intersection):
+                if src_id is None or (src_id, 1) in registry.iterate_table:
+                    continue
+
+                f_coords = f(registry[src_id].get_point())
+
+                best_id, best_dist = None, float("inf")
+                for tgt_id, tgt_coords in all_items:
+                    d = float(np.linalg.norm(f_coords - tgt_coords))
+                    if d < best_dist:
+                        best_dist, best_id = d, tgt_id
+
+                if best_id is not None and best_id != src_id and best_dist < coord_tol:
+                    registry.register_iterate(src_id, 1, best_id)
+                    recorded += 1
+
+        return recorded
 
     def populate_registry(self) -> IntersectionRegistry:
         """Rebuild the intersection registry from the current Tangle state."""
@@ -436,14 +472,76 @@ class TangleWorkbench:
             self._intersection_registry.add(intersection)
         return self._intersection_registry
 
+    def _assign_bridge_intersections(self, bridges: list[Bridge]) -> None:
+        """
+        Populate first_intersection / second_intersection on each bridge by
+        matching its root and tail cdists against the registry.
+
+        Bridge root and tail points are created at the same cdist as the
+        intersection they flank (both computed as the midpoint of the crossing
+        segment), so a nearest-unstable-cdist lookup is exact up to float precision.
+
+        Args:
+            bridges: Freshly created Bridge objects whose endpoint fields are unset.
+        """
+        registry = self._intersection_registry
+        for bridge in bridges:
+            root_u = bridge.root.get_cdist("unstable")
+            tail_u = bridge.tail.get_cdist("unstable")
+            bridge.first_intersection = registry.nearest_by_unstable_cdist(root_u)
+            bridge.second_intersection = registry.nearest_by_unstable_cdist(tail_u)
+
     def build_intersection_graph(self) -> nx.MultiDiGraph:
         """
-        Return the live intersection graph from the registry.
+        Build the intersection graph from bridge topology.
 
-        Accessing this property triggers a rebuild of adjacency edges if any
-        intersections have been added since the last access.
+        Unstable edges are derived from registered bridges (one edge per bridge,
+        connecting the two intersection points it spans), so disconnected pieces
+        of the unstable manifold — e.g., an original bridge and its iterated
+        children — appear as separate paths rather than one merged chain.
+
+        Stable edges connect consecutive intersections in stable-cdist order,
+        which is correct because the stable manifold is a single connected piece.
+
+        Iterate edges come from the iterate table registered by infer_iterate_table().
         """
-        return self._intersection_registry.graph
+        registry = self._intersection_registry
+        G = nx.MultiDiGraph()
+
+        for ix_id, ix in registry:
+            G.add_node(
+                ix_id,
+                coords=ix.coords,
+                unstable_cdist=ix.unstable_cdist,
+                stable_cdist=ix.stable_cdist,
+                manifold_a_key=ix.manifold_a_key,
+                manifold_b_key=ix.manifold_b_key,
+                label=ix.label,
+            )
+
+        stable_ids = registry.by_stable_cdist
+        for i in range(len(stable_ids) - 1):
+            u, v = stable_ids[i], stable_ids[i + 1]
+            G.add_edge(u, v, key=f"adj_s_{i}", type="adjacency", stability="stable")
+
+        for bridge in self._bridges:
+            a = bridge.first_intersection
+            b = bridge.second_intersection
+            if a is not None and b is not None and a != b and a in G and b in G:
+                G.add_edge(a, b, type="adjacency", stability="unstable")
+
+        for src_id, n_to_tgt in registry.iterate_table._forward.items():
+            for n, tgt_id in n_to_tgt.items():
+                if src_id in G and tgt_id in G:
+                    G.add_edge(
+                        src_id, tgt_id,
+                        key=f"iter_{src_id}_{n}",
+                        type="iterate",
+                        stability="unstable",
+                        n=n,
+                    )
+
+        return G
 
     def iterate_all_bridges(self) -> list[Bridge]:
         """
@@ -465,11 +563,12 @@ class TangleWorkbench:
     def visualize_intersection_graph(
         self,
         G: nx.DiGraph,
-        layout: str = "spring",
+        layout: str = "kamada_kawai",
         figsize: tuple = (12, 8),
         node_size_scale: float = 300,
         save_path: str = None,
         show_labels: bool = True,
+        label_mode: str = "coords",
     ):
         """
         Visualize the intersection graph with edges colored by stability.
@@ -480,7 +579,12 @@ class TangleWorkbench:
             figsize: Figure size as (width, height)
             node_size_scale: Scale factor for node sizes
             save_path: Optional path to save the figure
-            show_labels: Whether to show node labels (coordinates)
+            show_labels: Whether to show node labels
+            label_mode: Content of node labels. One of:
+                ``"coords"`` — (x, y) coordinates (default)
+                ``"cdist"``  — unstable and stable arc-length distances
+                ``"id"``     — the intersection point ID
+                ``"all"``    — coordinates, cdist, and ID together
 
         Returns:
             matplotlib figure and axis objects
@@ -505,6 +609,9 @@ class TangleWorkbench:
         else:
             pos = nx.spring_layout(G)
 
+        mode_size_multiplier = {"coords": 1.0, "cdist": 1.0, "id": 1.0, "all": 2.5}
+        effective_scale = node_size_scale * mode_size_multiplier.get(label_mode, 1.0)
+
         # Draw nodes (all same color - they're intersection points)
         nx.draw_networkx_nodes(
             G,
@@ -512,9 +619,30 @@ class TangleWorkbench:
             node_color="white",
             edgecolors="black",
             linewidths=2,
-            node_size=[node_size_scale * (1 + G.degree(n)) for n in G.nodes()],
+            node_size=[effective_scale * (1 + G.degree(n)) for n in G.nodes()],
             ax=ax,
         )
+
+        def _arc3_mid_arrow_coords(
+            p0_data: np.ndarray, p1_data: np.ndarray, rad: float
+        ) -> tuple[np.ndarray, np.ndarray]:
+            """Return (xy, xytext) in data coords for a midpoint arrow on an arc3 edge.
+
+            Computed in display coordinates using matplotlib's exact Arc3 formula
+            (ctrl = mid + rad*(dy, -dx)), then converted back to data coordinates.
+            """
+            trans = ax.transData
+            inv = trans.inverted()
+            p0 = trans.transform(p0_data)
+            p1 = trans.transform(p1_data)
+            mid = (p0 + p1) * 0.5
+            dp = p1 - p0
+            ctrl = np.array([mid[0] + rad * dp[1], mid[1] - rad * dp[0]])
+            bm = 0.25 * p0 + 0.5 * ctrl + 0.25 * p1
+            norm = np.linalg.norm(dp)
+            direction = dp / norm if norm > 1e-6 else np.array([1.0, 0.0])
+            eps = direction * 4.0  # 4 display-pixel offset gives the arrow its direction
+            return inv.transform(bm + eps), inv.transform(bm - eps)
 
         # Separate edges by stability and draw them
         unstable_edges = [
@@ -524,41 +652,60 @@ class TangleWorkbench:
             (u, v) for u, v, d in G.edges(data=True) if d["stability"] == "stable"
         ]
 
-        nx.draw_networkx_edges(
-            G,
-            pos,
-            edgelist=unstable_edges,
-            edge_color="#3b82f6",  # blue
-            alpha=0.6,
-            arrows=True,
-            arrowsize=20,
-            width=2.5,
-            label="Unstable",
-            ax=ax,
-        )
+        for edgelist, color, rad in [
+            (unstable_edges, "#3b82f6", 0.2),
+            (stable_edges, "#ef4444", -0.2),
+        ]:
+            nx.draw_networkx_edges(
+                G,
+                pos,
+                edgelist=edgelist,
+                edge_color=color,
+                alpha=0.5,
+                arrows=True,
+                arrowsize=25,
+                width=2.0,
+                connectionstyle=f"arc3,rad={rad}",
+                ax=ax,
+            )
+            for u, v in edgelist:
+                p0, p1 = np.array(pos[u]), np.array(pos[v])
+                xy, xytext = _arc3_mid_arrow_coords(p0, p1, rad)
+                ax.annotate(
+                    "",
+                    xy=xy,
+                    xytext=xytext,
+                    arrowprops=dict(
+                        arrowstyle="-|>",
+                        color=color,
+                        lw=1.5,
+                        mutation_scale=18,
+                    ),
+                    alpha=0.85,
+                )
 
-        nx.draw_networkx_edges(
-            G,
-            pos,
-            edgelist=stable_edges,
-            edge_color="#ef4444",  # red
-            alpha=0.6,
-            arrows=True,
-            arrowsize=20,
-            width=2.5,
-            label="Stable",
-            ax=ax,
-        )
-
-        # Create labels showing coordinates
         if show_labels:
             labels = {}
             for node in G.nodes():
-                coords = G.nodes[node].get("coords")
-                if coords is not None:
-                    labels[node] = f"({coords[0]:.2f}, {coords[1]:.2f})"
-                else:
-                    labels[node] = str(node)
+                data = G.nodes[node]
+                coords = data.get("coords")
+                u_cd = data.get("unstable_cdist")
+                s_cd = data.get("stable_cdist")
+
+                parts: list[str] = []
+                if label_mode in ("coords", "all"):
+                    if coords is not None:
+                        parts.append(f"({coords[0]:.2f}, {coords[1]:.2f})")
+                    else:
+                        parts.append("(?)")
+                if label_mode in ("cdist", "all"):
+                    u_str = f"{u_cd:.3f}" if u_cd is not None else "?"
+                    s_str = f"{s_cd:.3f}" if s_cd is not None else "?"
+                    parts.append(f"u:{u_str} s:{s_str}")
+                if label_mode in ("id", "all"):
+                    parts.append(f"id:{node}")
+
+                labels[node] = "\n".join(parts) if parts else str(node)
 
             nx.draw_networkx_labels(
                 G, pos, labels, font_size=7, font_weight="bold", ax=ax
@@ -570,7 +717,14 @@ class TangleWorkbench:
             fontsize=12,
             fontweight="bold",
         )
-        ax.legend(loc="upper right", fontsize=10)
+
+        from matplotlib.lines import Line2D
+
+        legend_handles = [
+            Line2D([0], [0], color="#3b82f6", linewidth=2.5, label="Unstable"),
+            Line2D([0], [0], color="#ef4444", linewidth=2.5, label="Stable"),
+        ]
+        ax.legend(handles=legend_handles, loc="upper right", fontsize=10)
         ax.axis("off")
 
         plt.tight_layout()
@@ -579,6 +733,7 @@ class TangleWorkbench:
             plt.savefig(save_path, dpi=150, bbox_inches="tight")
             print(f"Graph visualization saved to {save_path}")
 
+        plt.show()
         return fig, ax
 
     # def plot_all_bridges(self, bridges):
