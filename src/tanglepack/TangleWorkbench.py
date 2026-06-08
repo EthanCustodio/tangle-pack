@@ -43,7 +43,7 @@ class TangleWorkbench:
         # manifolds are keyed like (fixed_point, stability, orbit_index, branch_index)
         self.manifolds: dict[tuple[FixedPoint, Stability, int, int], BaseManifold] = {}
 
-        self._bridges: list[Bridge] = None
+        self._bridges: list[Bridge] = []
 
     def construct_fixed_point(self, initial_guess) -> FixedPoint:
         """
