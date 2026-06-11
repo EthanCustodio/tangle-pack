@@ -51,6 +51,8 @@ fp_solver = tanglepack.FixedPointSolver(henon)
 man_maker = tanglepack.ManifoldInitializer(henon)
 man_machine = tanglepack.ManifoldMachine(henon)
 
+man_machine.area_cutoff = 1e-7
+
 tangle = tanglepack.Tangle()
 
 initial_guess = [[0, 1], [-1, 0], [-1, 1]]
@@ -72,7 +74,8 @@ orbit_index = 0
 #     fixed_point, orbit_index, 0, "stable"
 # )
 
-approx_dir = {"unstable": [0, 1], "stable": [1, 1]}
+# approx_dir = {"unstable": [0, 1], "stable": [1, 1]}
+approx_dir = {"unstable": [0, -1], "stable": [-1, -1]}
 
 man_maker.orient_manifolds(fixed_point, approx_dir)
 
@@ -95,7 +98,7 @@ print(f"points! {initial_unstable_segments[(0, 0)].get_point_array()}")
 # stable_manifold = initial_stable_segments[(0, 0)]
 
 # grow unstable manifold
-num_iterations = 7
+num_iterations = 13
 man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
 man_machine.grow_x_times(fixed_point, "stable", num_iterations)
 
@@ -103,6 +106,7 @@ man_machine.grow_x_times(fixed_point, "stable", num_iterations)
 #     manifold._find_tail()
 
 # unstable_manifold._find_tail()
+man_machine.area_cutoff = 1e-4
 
 # grow stable manifold
 # num_iterations = 7

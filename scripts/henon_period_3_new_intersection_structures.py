@@ -31,14 +31,21 @@ def henon_jacobian(point):
 # ── Numeric phase ──────────────────────────────────────────────────────────
 wb = tanglepack.TangleWorkbench(henon_map, henon_map_inverse, henon_jacobian)
 
+wb._man_machine.area_cutoff = 1e-7
+
 # Period-3 inner fixed point
 fp3 = wb.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
-wb.orient_eigenvectors(fp3, {"unstable": np.array([0, 1]), "stable": np.array([1, 1])})
+# wb.orient_eigenvectors(fp3, {"unstable": np.array([0, 1]), "stable": np.array([1, 1])})
+wb.orient_eigenvectors(
+    fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
+)
 wb.initialize_both_manifolds(fp3)
-wb.grow_n_times(fp3, "unstable", num_iterations=7)
-wb.grow_n_times(fp3, "stable", num_iterations=7)
+wb.grow_n_times(fp3, "unstable", num_iterations=12)
+wb.grow_n_times(fp3, "stable", num_iterations=12)
+
 
 # Outer period-1 fixed point
+wb._man_machine.area_cutoff = 1e-4
 fp1 = wb.construct_fixed_point([4, -4])
 wb.orient_eigenvectors(fp1, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])})
 wb.initialize_both_manifolds(fp1)
@@ -48,10 +55,15 @@ wb.grow_n_times(fp1, "stable", num_iterations=7)
 # ── Intersection phase (period-3 homoclinic intersections) ─────────────────
 wb.compute_intersections(fp3)
 wb.trim_stable_manifolds(fp3)
-bridges = wb.create_bridges(fp3)
 
-new_bridges = wb.iterate_bridge(bridges[0])
-wb.iterate_bridge(new_bridges[0])
+wb.compute_intersections(fp1)
+wb.trim_stable_manifolds(fp1)
+
+bridges = wb.create_bridges(fp3)
+bridges1 = wb.create_bridges(fp1)
+
+# new_bridges = wb.iterate_bridge(bridges[0])
+# wb.iterate_bridge(new_bridges[0])
 
 new_links = wb.infer_iterate_table()
 print(f"Recorded {new_links} iterate relationships")
@@ -113,6 +125,7 @@ wb.plot_tangle(fp3, "stable", color="r")
 wb.plot_tangle(fp1, "unstable", color="b")
 wb.plot_tangle(fp1, "stable", color="r")
 wb.plot_intersections(fp3)
+wb.plot_intersections(fp1)
 wb.plot_all_bridges()
 
 plt.xlim([-6, 6])

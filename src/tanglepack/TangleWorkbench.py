@@ -11,6 +11,7 @@ from .DynamicalSystem import DynamicalSystem, MapFunc, JacFunc
 from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import ManifoldMachine
+from .BranchPoint import BranchPoint
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
@@ -146,6 +147,8 @@ class TangleWorkbench:
             if fp is fixed_point and stab == stability:
 
                 manifold._find_tail()
+
+        # self._close_iterate_gaps(fixed_point, stability)
 
     def plot_tangle(
         self,
@@ -534,7 +537,8 @@ class TangleWorkbench:
             for n, tgt_id in n_to_tgt.items():
                 if src_id in G and tgt_id in G:
                     G.add_edge(
-                        src_id, tgt_id,
+                        src_id,
+                        tgt_id,
                         key=f"iter_{src_id}_{n}",
                         type="iterate",
                         stability="unstable",
@@ -641,7 +645,9 @@ class TangleWorkbench:
             bm = 0.25 * p0 + 0.5 * ctrl + 0.25 * p1
             norm = np.linalg.norm(dp)
             direction = dp / norm if norm > 1e-6 else np.array([1.0, 0.0])
-            eps = direction * 4.0  # 4 display-pixel offset gives the arrow its direction
+            eps = (
+                direction * 4.0
+            )  # 4 display-pixel offset gives the arrow its direction
             return inv.transform(bm + eps), inv.transform(bm - eps)
 
         # Separate edges by stability and draw them
@@ -801,3 +807,23 @@ class TangleWorkbench:
         for (kfp, kstab, _oi, _bi), M in self.manifolds.items():
             if kfp is fp and (stability is None or kstab == stability):
                 yield M
+
+    def _close_iterate_gaps(self, fixed_point: FixedPoint, stability: str) -> None:
+        """One extra iterate pass on orbit 0 to wire up dangling tail points."""
+        orbit_indices = fixed_point.get_iterable_array(stability, shift=1)
+        current_manifold = BaseManifold(
+            fixed_point.branch_points[orbit_indices[0]],
+            stability,
+            stretch_param=1,
+            fixed_point=fixed_point,
+            branch_index=0,
+        )
+        temp_root = current_manifold.root
+        if isinstance(current_manifold.root, BranchPoint):
+            current_manifold.root = current_manifold.walk_fwd(None, temp_root)
+        if current_manifold.root is None:
+            return
+        current_manifold.stretch_param = current_manifold.root.stretch_param
+        self._man_machine.iterate_manifold(
+            current_manifold
+        )  # side-effect: sets next_iterate
