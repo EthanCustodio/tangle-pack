@@ -6,11 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `tanglepack` is a Python library for computing and visualizing **heteroclinic/homoclinic tangles** — the stable and unstable manifolds of saddle fixed points in 2D discrete dynamical systems (area-preserving maps). The core scientific workflow is: define a map → find a fixed point → initialize manifolds → grow them iteratively → detect intersections → extract bridges and resonance zones.
 
-There are two frontends built on top of the core library:
-- **`tanglepack_gui`**: A desktop app using PySide6 + pyqtgraph
-- **`tanglepack_webdash`**: A browser-based app using Plotly Dash
+The frontend built on top of the core library is **`tanglepack_webdash`**: a browser-based app using Plotly Dash.
 
-The desktop app is depcricated and should not be considered further
+## Fundamental Invariant — Which Manifolds Can Intersect
+
+This is a hard physical law of the system, not a convention, and it must inform every piece of intersection/bridge logic:
+
+- **Two unstable manifolds can never intersect each other.** Two stable manifolds can never intersect each other. This holds whether the manifolds belong to the same fixed point or to different fixed points.
+- **Only an unstable manifold can cross a stable manifold** (homoclinic when they share a fixed point, heteroclinic when they belong to different fixed points).
+
+Why: a point on a stable manifold converges to that manifold's fixed point under forward iteration; a point on an unstable manifold converges to its fixed point under backward iteration. A shared point of two stable manifolds would have to converge forward to *both* fixed points at once (and a shared point of two unstable manifolds would have to converge backward to both) — impossible. The same uniqueness argument forbids a manifold from crossing itself.
+
+**Implication for the code:** a same-stability pair (u×u or s×s) appearing in `_intersecting_segments` is *always* a numerical artifact — two near-parallel polygonal approximations straddling near a tangency, not a real crossing. Such pairs should be filtered out (and are worth logging), but they must never be treated as a legitimate geometric case to model.
 
 ## Commands
 
@@ -25,12 +32,6 @@ pytest
 pytest tests/test_manifold_machine.py          # single test file
 pytest tests/test_manifold_machine.py::test_fn # single test
 pytest --cov=tanglepack                        # with coverage
-```
-
-**Run the desktop GUI:**
-```bash
-tanglepack-gui
-# or: python -m tanglepack_gui.app
 ```
 
 **Run the web dashboard:**
@@ -90,7 +91,7 @@ Points form two simultaneous doubly-linked lists inside `Point`:
 
 **Intersection detection (`Tangle`):**
 
-The `Tangle` class uses an `rtree` spatial index. Each adjacent pair of `Point`s on a manifold is registered as a `_Segment`. Candidate intersecting segments are found via bounding-box queries, then exact intersection is computed. Results stored in `_intersecting_segments` (set of `(seg_id1, seg_id2)` pairs), `_intersecting_coords`, and `_intersecting_points`. Always call `Tangle.clear_all()` before recomputing to avoid stale references.
+The `Tangle` class uses an `rtree` spatial index. Each adjacent pair of `Point`s on a manifold is registered as a `_Segment`. Candidate intersecting segments are found via bounding-box queries, then exact intersection is computed. Results stored in `_intersecting_segments` (set of `(seg_id1, seg_id2)` pairs), `_intersecting_coords`, and `_intersecting_points`. Always call `Tangle.clear_all()` before recomputing to avoid stale references. Per the fundamental invariant above, every legitimate crossing is exactly one unstable + one stable segment; any same-stability pair that slips into `_intersecting_segments` is a numerical artifact and must be filtered before building `Intersection`s.
 
 ## Web Dashboard Architecture (`src/tanglepack_webdash/`)
 
@@ -101,10 +102,6 @@ Built with Plotly Dash. Per-session state is stored in `sessions.py` (`WBState` 
 - `assets/` — clientside JS for click handling (`clicked_points.js`, `bridge_selection.js`, `cursor_readout.js`)
 - `utils/figures.py` — converts manifold/bridge data into Plotly figure traces
 - `maps.py` — string-to-lambda parser for user-supplied map expressions
-
-## Desktop GUI Architecture (`src/tanglepack_gui/`)
-
-Built with PySide6 + pyqtgraph. `MainWindow` owns a `Canvas` (pyqtgraph `PlotWidget`) and a side dock with controls. Map expressions are parsed from text input via `sympy` (`adapters/map_parser.py`). `adapters/workbench_view.py` converts `TangleWorkbench` manifold data into numpy arrays for plotting.
 
 ## Files with `.disabled` Extension
 

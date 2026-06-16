@@ -11,6 +11,11 @@ from .Point import Point
 from .BranchPoint import BranchPoint
 from .Bridge import Bridge
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 """
 Dev Notes:
 
@@ -106,11 +111,14 @@ class Tangle:
         self._manifold_segs: defaultdict[BaseManifold, set[int]] = defaultdict(set)
 
         self._intersecting_segments: set[frozenset[int]] = set()
-        self._intersecting_coords: dict[int, tuple[float, float]] = {}
-        self._intersecting_points: dict[int, BranchPoint] = {}
+        # keyed by the crossing's segment pair, so one segment can host many crossings
+        self._intersecting_coords: dict[frozenset[int], tuple[float, float]] = {}
+        self._intersecting_points: dict[frozenset[int], BranchPoint] = {}
 
         self._intersections: list[Intersection] = []
-        self._intersection_by_seg: dict[int, Intersection] = {}
+        self._intersection_by_seg: defaultdict[int, list[Intersection]] = defaultdict(
+            list
+        )
         self._processed_pairs: set[frozenset[int]] = set()
 
         # self.bridges = None
@@ -145,14 +153,23 @@ class Tangle:
         """
         Takes all intersection pairs in _intersection_segments and
         finds the true intersections and adds those to a list
-        """
 
+        Resolve every detected crossing pair into an Intersection.
+
+        Each crossing is keyed by its segment PAIR (frozenset of the two segment
+        ids), so a single segment may participate in many crossings without any
+        being overwritten. Only unstable x stable pairs are kept. A same-stability
+        pair (u x u or s x s) is geometrically impossible (see CLAUDE.md's
+        fundamental invariant) -- if one appears it is a polygonal/numerical
+        artifact of two near-parallel manifolds straddling, so it is logged and
+        discarded, never turned into an Intersection.
+        """
         for seg_id_pair in list(self._intersecting_segments):
 
             if seg_id_pair in self._processed_pairs:
                 continue  # already processed this pair
 
-            seg1_id, seg2_id = seg_id_pair
+            seg1_id, seg2_id = tuple(seg_id_pair)
 
             if seg1_id not in self._seg_lookup or seg2_id not in self._seg_lookup:
                 # drop stale pair and skip
@@ -161,19 +178,25 @@ class Tangle:
 
             seg_1, seg_2 = self._seg_lookup[seg1_id], self._seg_lookup[seg2_id]
 
+            # A real crossing is always one unstable + one stable segment. A
+            # same-stability pair cannot be a true crossing (fundamental
+            # invariant); it is a near-tangency artifact -- log and drop it.
+            if seg_1.manifold.stability == seg_2.manifold.stability:
+                logger.warning(
+                    "Discarding impossible %s x %s segment pair %s as a "
+                    "numerical artifact (near-tangency / under-resolved manifold)",
+                    seg_1.manifold.stability,
+                    seg_2.manifold.stability,
+                    tuple(seg_id_pair),
+                )
+                self._processed_pairs.add(seg_id_pair)
+                continue
+
             point = self._find_true_intersection(seg_1, seg_2)
 
-            # Figure out how to compute the canonical distance
-            # must compute differently for stable or unstable
-            seg_1_cdist = 0.5 * (
-                seg_1.p0.get_cdist(seg_1.manifold.stability)
-                + seg_1.p0_seg1.get_cdist(seg_1.manifold.stability)
-            )
-
-            seg_2_cdist = 0.5 * (
-                seg_2.p0.get_cdist(seg_2.manifold.stability)
-                + seg_2.p0_seg1.get_cdist(seg_2.manifold.stability)
-            )
+            # cdist interpolated at the true crossing (not the segment midpoint)
+            seg_1_cdist = self._cdist_at_point(seg_1, point)
+            seg_2_cdist = self._cdist_at_point(seg_2, point)
 
             unstable_cdist = (
                 seg_1_cdist if seg_1.manifold.stability == "unstable" else seg_2_cdist
@@ -186,10 +209,7 @@ class Tangle:
                 2, (unstable_cdist, stable_cdist), point[0], point[1]
             )
 
-            if (
-                seg_1.manifold.stability == "unstable"
-                or seg_2.manifold.stability != "unstable"
-            ):
+            if seg_1.manifold.stability == "unstable":
                 manifold_a_key, cdist_a = Tangle._key_of(seg_1), seg_1_cdist
                 manifold_b_key, cdist_b = Tangle._key_of(seg_2), seg_2_cdist
             else:
@@ -207,13 +227,11 @@ class Tangle:
             )
 
             self._intersections.append(intersection)
-            self._intersection_by_seg[seg1_id] = intersection
-            self._intersection_by_seg[seg2_id] = intersection
+            self._intersection_by_seg[seg1_id].append(intersection)
+            self._intersection_by_seg[seg2_id].append(intersection)
 
-            self._intersecting_coords[seg1_id] = point
-            self._intersecting_coords[seg2_id] = point
-            self._intersecting_points[seg1_id] = branch_point
-            self._intersecting_points[seg2_id] = branch_point
+            self._intersecting_coords[seg_id_pair] = tuple(point)
+            self._intersecting_points[seg_id_pair] = branch_point
 
             self._processed_pairs.add(seg_id_pair)
 
@@ -329,16 +347,23 @@ class Tangle:
             seg_1 = self._seg_lookup[seg1_id]
             seg_2 = self._seg_lookup[seg2_id]
 
+            # A same-stability pair cannot be a true crossing (fundamental
+            # invariant); it is a near-tangency artifact -- log and drop it.
+            if seg_1.manifold.stability == seg_2.manifold.stability:
+                logger.warning(
+                    "Discarding impossible %s x %s segment pair %s as a "
+                    "numerical artifact (near-tangency / under-resolved manifold)",
+                    seg_1.manifold.stability,
+                    seg_2.manifold.stability,
+                    tuple(seg_id_pair),
+                )
+                self._processed_pairs.add(seg_id_pair)
+                continue
+
             point = self._find_true_intersection(seg_1, seg_2)
 
-            seg_1_cdist = 0.5 * (
-                seg_1.p0.get_cdist(seg_1.manifold.stability)
-                + seg_1.p0_seg1.get_cdist(seg_1.manifold.stability)
-            )
-            seg_2_cdist = 0.5 * (
-                seg_2.p0.get_cdist(seg_2.manifold.stability)
-                + seg_2.p0_seg1.get_cdist(seg_2.manifold.stability)
-            )
+            seg_1_cdist = self._cdist_at_point(seg_1, point)
+            seg_2_cdist = self._cdist_at_point(seg_2, point)
 
             unstable_cdist = (
                 seg_1_cdist if seg_1.manifold.stability == "unstable" else seg_2_cdist
@@ -347,19 +372,13 @@ class Tangle:
                 seg_1_cdist if seg_1.manifold.stability == "stable" else seg_2_cdist
             )
 
-            # keep existing BranchPoint creation for backward compat
             branch_point = BranchPoint(
                 2, (unstable_cdist, stable_cdist), point[0], point[1]
             )
-            self._intersecting_coords[seg1_id] = point
-            self._intersecting_coords[seg2_id] = point
-            self._intersecting_points[seg1_id] = branch_point
-            self._intersecting_points[seg2_id] = branch_point
+            self._intersecting_coords[seg_id_pair] = tuple(point)
+            self._intersecting_points[seg_id_pair] = branch_point
 
-            if (
-                seg_1.manifold.stability == "unstable"
-                or seg_2.manifold.stability != "unstable"
-            ):
+            if seg_1.manifold.stability == "unstable":
                 manifold_a_key, cdist_a = Tangle._key_of(seg_1), seg_1_cdist
                 manifold_b_key, cdist_b = Tangle._key_of(seg_2), seg_2_cdist
             else:
@@ -376,17 +395,9 @@ class Tangle:
                 manifold_b_key=manifold_b_key,
             )
 
-            # new Intersection object
-            # intersection = Intersection.from_segments(
-            #     coords=tuple(point),
-            #     unstable_cdist=unstable_cdist,
-            #     stable_cdist=stable_cdist,
-            #     seg1_id=seg1_id,
-            #     seg2_id=seg2_id,
-            # )
             self._intersections.append(intersection)
-            self._intersection_by_seg[seg1_id] = intersection
-            self._intersection_by_seg[seg2_id] = intersection
+            self._intersection_by_seg[seg1_id].append(intersection)
+            self._intersection_by_seg[seg2_id].append(intersection)
             new_intersections.append(intersection)
 
             self._processed_pairs.add(seg_id_pair)
@@ -521,130 +532,126 @@ class Tangle:
     def cut_manifold(self):
         pass
 
-    # def create_bridges(
-    #     self, for_manifold: Optional[BaseManifold] = None
-    # ) -> list[Bridge]:
+    def create_bridges(self, for_manifold=None, fixed_point=None):
+        """
+        Cut every indexed unstable manifold into bridges at its crossings with the
+        stable manifold(s).
 
-    #     bridges = {}
+        Crossings are grouped by their parent unstable manifold and sorted by the
+        true crossing cdist, so bridges never span two manifolds and a single
+        segment that hosts several crossings is handled correctly (each crossing is
+        a distinct cut, not deduped by segment id).
 
-    #     intersecting_segments = []
+        Args:
+            for_manifold: If given, only build bridges for crossings that involve a
+                segment of this specific manifold.
+            fixed_point: If given, only build bridges on unstable manifolds that
+                emanate from this fixed point. Each Bridge still records its own
+                fixed_point, so a global call (fixed_point=None) followed by
+                filtering on bridge.fixed_point is equivalent to per-fixed-point
+                calls.
 
-    #     manifold_seg_ids = (
-    #         self._manifold_segs.get(for_manifold, set())
-    #         if for_manifold is not None
-    #         else None
-    #     )
-
-    #     seen_ids = set()
-    #     for sid_pair in self._intersecting_segments:
-
-    #         if manifold_seg_ids is not None and not (sid_pair & manifold_seg_ids):
-    #             continue  # skip pairs not involving the target manifold
-
-    #         for sid in sid_pair:
-    #             if sid in seen_ids:
-    #                 continue
-    #             seen_ids.add(sid)
-
-    #             seg = self._seg_lookup[sid]
-    #             if seg.manifold.stability != "unstable":
-    #                 continue
-
-    #             cdist = 0.5 * (
-    #                 seg.p0.get_cdist("unstable") + seg.p0_seg1.get_cdist("unstable")
-    #             )
-
-    #             intersecting_segments.append((cdist, seg))
-
-    #     intersecting_segments.sort(key=lambda x: x[0])  # sort by cdist
-
-    #     for i in range(len(intersecting_segments) - 1):
-    #         _, seg1 = intersecting_segments[i]
-    #         _, seg2 = intersecting_segments[i + 1]
-
-    #         root_point = self._get_nearby_point(seg1, "root")
-    #         tail_point = self._get_nearby_point(seg2, "tail")
-
-    #         # add in a point nearby the intersection so we do not have
-    #         # dangling tails or bridges that are too short.
-    #         seg1.p0.insert_point_forward(root_point, seg1.manifold.branch_index)
-    #         seg1.p0 = root_point
-    #         seg2.p0_seg1.insert_point_backward(tail_point, seg2.manifold.branch_index)
-    #         seg2.p0_seg1 = tail_point
-
-    #         bridge = Bridge(
-    #             root=root_point,
-    #             stability=seg1.manifold.stability,
-    #             stretch_param=seg1.manifold.stretch_param,
-    #             fixed_point=seg1.manifold.fixed_point,
-    #             tail=tail_point,
-    #         )
-
-    #         bridges[(seg1.id, seg2.id)] = bridge
-
-    #     # update the global bridge structure somehow here
-    #     # if self.bridges is None:
-    #     #     self.bridges = bridges
-    #     # else:
-    #     #     merged = self.bridges.copy()
-    #     #     merged.update(bridges)
-    #     #     self.bridges = merged
-
-    #     # return list(self.bridges.values())
-    #     bridge_list = list(bridges.values())
-    #     for i in range(len(bridge_list) - 1):
-    #         bridge_list[i].next_bridge = bridge_list[i + 1]
-    #         bridge_list[i + 1].prev_bridge = bridge_list[i]
-
-    #     return bridge_list
-
-    def create_bridges(self, for_manifold=None):
+        Returns:
+            List of Bridge objects, doubly linked via next_bridge / prev_bridge.
+        """
         from collections import defaultdict
 
-        # --- 1. Collect intersecting unstable segments, grouped by manifold ---
-        manifold_segs: dict[BaseManifold, list[tuple[float, _Segment]]] = defaultdict(
-            list
+        for_manifold_segs = (
+            self._manifold_segs.get(for_manifold, set())
+            if for_manifold is not None
+            else None
         )
-        seen_ids: set[int] = set()
+
+        # --- 1. Collect crossings grouped by their parent unstable manifold ---
+        # Each crossing captures the ORIGINAL segment endpoints (p0, p1) now,
+        # before any boundary point is spliced in. Nothing downstream reads
+        # seg.p0 / seg.p0_seg1 again, so a segment that hosts several crossings is
+        # never corrupted by a previous crossing's insertion (the line-696 bug).
+        # entry: (cdist, crossing_coords, orig_p0, orig_p1)
+        manifold_crossings: dict[
+            BaseManifold,
+            list[tuple[float, tuple[float, float], Point, Point]],
+        ] = defaultdict(list)
 
         for sid_pair in self._intersecting_segments:
-            if for_manifold is not None and not (
-                sid_pair & self._manifold_segs.get(for_manifold, set())
+            if for_manifold_segs is not None and not (sid_pair & for_manifold_segs):
+                continue
+            if sid_pair not in self._intersecting_coords:
+                continue  # not a resolved unstable x stable crossing
+
+            sid1, sid2 = tuple(sid_pair)
+            seg_1, seg_2 = self._seg_lookup[sid1], self._seg_lookup[sid2]
+
+            if seg_1.manifold.stability == "unstable":
+                u_seg = seg_1
+            elif seg_2.manifold.stability == "unstable":
+                u_seg = seg_2
+            else:
+                continue  # no unstable segment (shouldn't happen post-filter)
+
+            if (
+                fixed_point is not None
+                and u_seg.manifold.fixed_point is not fixed_point
             ):
                 continue
-            for sid in sid_pair:
-                if sid in seen_ids:
-                    continue
-                seen_ids.add(sid)
-                seg = self._seg_lookup[sid]
-                if seg.manifold.stability != "unstable":
-                    continue
-                cdist = 0.5 * (
-                    seg.p0.get_cdist("unstable") + seg.p0_seg1.get_cdist("unstable")
-                )
-                manifold_segs[seg.manifold].append((cdist, seg))
 
-        # --- 2. Within each manifold, sort by cdist and create bridges ---
+            coords = self._intersecting_coords[sid_pair]
+            p0, p1 = u_seg.p0, u_seg.p0_seg1  # ORIGINAL endpoints
+            cdist = self._cdist_between(
+                p0, p1, u_seg.manifold.stability, np.asarray(coords)
+            )
+            manifold_crossings[u_seg.manifold].append((cdist, coords, p0, p1))
+
+        # --- 2. Build bridges and queue boundary-point insertions ---
+        # Boundary points are NOT spliced immediately. Each is queued against its
+        # original segment (keyed by the unordered pair of endpoint object ids),
+        # then spliced in a single ordered pass (step 3). This is what makes
+        # multiple crossings on one segment correct.
         all_bridges: list[Bridge] = []
 
-        for manifold, segs in manifold_segs.items():
-            segs.sort(key=lambda x: x[0])
+        # seg_key -> (p0, p1, branch_index, list[(t, boundary_point)])
+        pending_inserts: dict[
+            frozenset[int], tuple[Point, Point, int, list[tuple[float, Point]]]
+        ] = {}
 
-            for i in range(len(segs) - 1):
-                _, seg1 = segs[i]
-                _, seg2 = segs[i + 1]
+        def _queue(
+            p0: Point, p1: Point, branch_index: int, t: float, point: Point
+        ) -> None:
+            key = frozenset((id(p0), id(p1)))
+            if key not in pending_inserts:
+                pending_inserts[key] = (p0, p1, branch_index, [])
+            pending_inserts[key][3].append((t, point))
 
-                root_point = self._get_nearby_point(seg1, "root")
-                tail_point = self._get_nearby_point(seg2, "tail")
+        for manifold, crossings in manifold_crossings.items():
+            crossings.sort(key=lambda c: c[0])
 
-                # cache pre-iterates on boundary points (see Fix 2)
-                self._cache_boundary_preiterate(root_point, seg1, manifold.stability)
-                self._cache_boundary_preiterate(tail_point, seg2, manifold.stability)
+            for i in range(len(crossings) - 1):
+                _, coords1, p0_a, p1_a = crossings[i]
+                _, coords2, p0_b, p1_b = crossings[i + 1]
 
-                seg1.p0.insert_point_forward(root_point, manifold.branch_index)
-                seg1.p0 = root_point
-                seg2.p0_seg1.insert_point_backward(tail_point, manifold.branch_index)
-                seg2.p0_seg1 = tail_point
+                # The bridge boundary points are placed just OUTSIDE each crossing
+                # (root toward the lower endpoint of C_i's segment, tail toward the
+                # higher endpoint of C_{i+1}'s segment). This bracketing is
+                # intentional: per Bridge's contract the root/tail straddle the two
+                # intersections so the forward image of the bridge still straddles
+                # the image intersections and iterate_bridge can detect them.
+                root_point, t_root = self._boundary_point(
+                    p0_a, p1_a, manifold.stability, coords1, "root"
+                )
+                tail_point, t_tail = self._boundary_point(
+                    p0_b, p1_b, manifold.stability, coords2, "tail"
+                )
+
+                # cache pre-iterates against the original endpoints
+                self._cache_boundary_preiterate(
+                    root_point, p0_a, p1_a, manifold.stability
+                )
+                self._cache_boundary_preiterate(
+                    tail_point, p0_b, p1_b, manifold.stability
+                )
+
+                _queue(p0_a, p1_a, manifold.branch_index, t_root, root_point)
+                _queue(p0_b, p1_b, manifold.branch_index, t_tail, tail_point)
 
                 bridge = Bridge(
                     root=root_point,
@@ -656,41 +663,78 @@ class Tangle:
                 )
                 all_bridges.append(bridge)
 
-        # wire next_bridge / prev_bridge doubly-linked list
+        # --- 3. Splice every segment's boundary points in one ordered pass ---
+        # An original segment [p0, p1] is an adjacent pair (p0.forward is p1), so
+        # the queued points can be linked straight between them in ascending t.
+        for p0, p1, branch_index, inserts in pending_inserts.values():
+            inserts.sort(key=lambda x: x[0])
+            prev = p0
+            for _, point in inserts:
+                # insert_point_forward splices `point` between prev and prev.forward
+                # (= p1 on the first iteration) and fixes both back-links. The
+                # branch_index argument is what a BranchPoint root needs; on a
+                # plain Point it lands in the only_forward slot exactly as the
+                # original per-crossing code passed it.
+                prev.insert_point_forward(point, branch_index)
+                prev = point
+
+        # --- 4. Wire next_bridge / prev_bridge doubly-linked list ---
         for i in range(len(all_bridges) - 1):
             all_bridges[i].next_bridge = all_bridges[i + 1]
             all_bridges[i + 1].prev_bridge = all_bridges[i]
 
         return all_bridges
 
-    def _get_nearby_point(self, seg: _Segment, side: Literal["root", "tail"]) -> Point:
+    def _boundary_point(
+        self,
+        p0: Point,
+        p1: Point,
+        stability: str,
+        intersection_coords: tuple[float, float],
+        side: Literal["root", "tail"],
+    ) -> tuple[Point, float]:
         """
-        Returns a nearby point to the segment's root point.
-        This is used to create a bridge root point.
+        Create a bridge boundary Point just outside the segment [p0, p1], offset
+        10% from the crossing toward the endpoint on `side`, and return it together
+        with its fractional position `t` along [p0, p1].
+
+        The segment endpoints are passed in explicitly (not read from a live
+        `_Segment`) so the offset and cdist are always computed against the
+        ORIGINAL endpoints captured before any splicing. The returned `t` lets the
+        caller splice several boundary points into one segment in correct
+        geometric order.
+
+        Args:
+            p0: Lower-cdist endpoint of the original segment.
+            p1: Higher-cdist endpoint of the original segment.
+            stability: Manifold stability, for the cdist interpolation.
+            intersection_coords: True (x, y) of the crossing.
+            side: "root" offsets toward p0 (lower cdist); "tail" toward p1.
+
+        Returns:
+            (boundary_point, t) where t is the clamped fractional position of the
+            boundary point along [p0, p1].
         """
         if side == "root":
-            seg_point = seg.p0
+            seg_point = p0
         elif side == "tail":
-            seg_point = seg.p0_seg1
+            seg_point = p1
         else:
             raise ValueError(f"Invalid side: {side}")
-
-        intersection_coords = self._intersecting_coords[seg.id]
 
         new_point = self._linear_interpolation(
             intersection_coords, seg_point.get_point(), 0.1
         )
 
-        # this is just an approximation, but it is guaranteed
-        # to be between the two points
-        new_cdist = (
-            seg.p0.get_cdist(seg.manifold.stability)
-            + seg.p0_seg1.get_cdist(seg.manifold.stability)
-        ) / 2
+        # cdist evaluated at the crossing (preserves prior behaviour), against the
+        # original endpoints so it cannot be corrupted by earlier insertions.
+        new_cdist = self._cdist_between(
+            p0, p1, stability, np.asarray(intersection_coords)
+        )
 
-        new_point = Point(new_point[0], new_point[1], new_cdist)
-
-        return new_point
+        boundary = Point(new_point[0], new_point[1], new_cdist)
+        t = self._fractional_position(p0, p1, np.asarray(new_point))
+        return boundary, t
 
     def _linear_interpolation(self, p0, p1, alpha):
         """
@@ -712,7 +756,8 @@ class Tangle:
     def _cache_boundary_preiterate(
         self,
         boundary_point: Point,
-        seg: _Segment,
+        p0: Point,
+        p1: Point,
         stability: str,
     ) -> None:
         """
@@ -721,10 +766,10 @@ class Tangle:
 
         Uses the same weighted interpolation as `_linear_interpolation`: the boundary
         point sits alpha=0.1 away from the intersection toward seg_point, so the
-        preiterate is interpolated with the same weight.
+        preiterate is interpolated with the same weight. The endpoints p0, p1 are
+        passed explicitly (the ORIGINAL segment endpoints) so the cached preiterate
+        is never read off a mutated `_Segment`.
         """
-        p0, p1 = seg.p0, seg.p0_seg1
-
         if stability == "unstable":
             pre0 = p0.prev_iterate
             pre1 = p1.prev_iterate
@@ -746,3 +791,56 @@ class Tangle:
             boundary_point.prev_iterate = cached
         else:
             boundary_point.next_iterate = cached
+
+    def iter_intersection_coords(self) -> list[tuple[float, float]]:
+        """Return the (x, y) of every detected crossing, exactly one per crossing."""
+        return list(self._intersecting_coords.values())
+
+    def _cdist_at_point(self, seg: _Segment, point: np.ndarray) -> float:
+        """
+        Interpolate the cdist of `seg`'s manifold at the true crossing `point`.
+
+        Uses the fractional projection of `point` onto the segment, so two
+        crossings that share one segment receive distinct cdists (unlike the old
+        segment-midpoint value).
+        """
+        return self._cdist_between(
+            seg.p0, seg.p0_seg1, seg.manifold.stability, point
+        )
+
+    @staticmethod
+    def _cdist_between(
+        p0: Point,
+        p1: Point,
+        stability: str,
+        point: np.ndarray,
+    ) -> float:
+        """
+        Interpolate cdist at `point` between the two explicit endpoints p0, p1.
+
+        Endpoint-based variant of `_cdist_at_point`: takes the Point objects
+        directly rather than reading them off a `_Segment`. This lets
+        `create_bridges` evaluate cdists against the ORIGINAL segment endpoints
+        captured before any boundary points are spliced in, so it never reads a
+        mutated `seg.p0` / `seg.p0_seg1` (the source of the multi-crossing bridge
+        corruption).
+        """
+        a = p0.get_point()
+        b = p1.get_point()
+        ab = b - a
+        denom = float(ab @ ab)
+        t = 0.0 if denom == 0.0 else float((np.asarray(point) - a) @ ab) / denom
+        t = min(1.0, max(0.0, t))
+        ca = p0.get_cdist(stability)
+        cb = p1.get_cdist(stability)
+        return (1 - t) * ca + t * cb
+
+    @staticmethod
+    def _fractional_position(p0: Point, p1: Point, point: np.ndarray) -> float:
+        """Fractional projection t of `point` onto the segment [p0, p1], clamped to [0, 1]."""
+        a = p0.get_point()
+        b = p1.get_point()
+        ab = b - a
+        denom = float(ab @ ab)
+        t = 0.0 if denom == 0.0 else float((np.asarray(point) - a) @ ab) / denom
+        return min(1.0, max(0.0, t))

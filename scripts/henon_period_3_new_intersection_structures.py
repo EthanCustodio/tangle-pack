@@ -53,10 +53,8 @@ wb.grow_n_times(fp1, "unstable", num_iterations=7)
 wb.grow_n_times(fp1, "stable", num_iterations=7)
 
 # ── Intersection phase (period-3 homoclinic intersections) ─────────────────
-wb.compute_intersections(fp3)
+wb.compute_intersections([fp3, fp1])
 wb.trim_stable_manifolds(fp3)
-
-wb.compute_intersections(fp1)
 wb.trim_stable_manifolds(fp1)
 
 bridges = wb.create_bridges(fp3)
@@ -134,7 +132,10 @@ plt.title("k=2, b=1 Period 3 Nested Tangle")
 plt.tight_layout()
 
 # ── Intersection graph ─────────────────────────────────────────────────────
-wb.visualize_intersection_graph(G, label_mode="all")
+wb.visualize_intersection_graph(G, layout="kamada-kawai")
+# wb.visualize_intersection_graph(
+#     G, display_mode="compact", node_color_by="unstable_cdist"
+# )
 
 # --- Dense array exports ---
 F = registry.as_forward_array(max_depth=5)  # shape (N, 5), -1 = unknown
