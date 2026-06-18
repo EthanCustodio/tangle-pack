@@ -5,7 +5,7 @@ from typing import Dict, Optional
 import threading
 import time
 
-from tanglepack.TangleWorkbench import TangleWorkbench
+from tanglepack import TangleWorkbench
 
 
 @dataclass

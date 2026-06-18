@@ -1,25 +1,39 @@
-"""functions to expose"""
+"""Top-level tanglepack API.
 
-from .DynamicalSystem import DynamicalSystem
+The library is organized into three subpackages:
 
-from .BasePoint import BasePoint
-from .Point import Point
-from .BranchPoint import BranchPoint
+* :mod:`tanglepack.numerics` — the numerical engine (dynamical system, fixed
+  points, manifold growth, intersection detection). Entry point: ``TangleWorkbench``.
+* :mod:`tanglepack.topology` — the topological view of a computed tangle
+  (``Trellis``, strong pips, pseudoneighbors).
+* :mod:`tanglepack.loom` — cross-layer ("meta") algorithms that read topology
+  results and act on the numerical layer (``TangleSession``, resonance zones).
 
-from .FixedPointSolver import FixedPointSolver
-from .FixedPoint import FixedPoint
+The most-used names from every layer are re-exported here, so ``tanglepack.X``
+keeps working regardless of which subpackage ``X`` now lives in.
+"""
 
-from .BaseManifold import BaseManifold
-from .ManifoldMachine import ManifoldMachine
-from .ManifoldInitializer import ManifoldInitializer
+from . import numerics, topology, loom
 
-from .Bridge import Bridge
-from .Tangle import Tangle
-from .TangleWorkbench import TangleWorkbench
-
-from .IterateTable import IterateTable
-from .IntersectionRegistry import IntersectionRegistry
-from .Intersection import Intersection, ManifoldKey
+from .numerics import (
+    DynamicalSystem,
+    BasePoint,
+    Point,
+    BranchPoint,
+    FixedPointSolver,
+    FixedPoint,
+    BaseManifold,
+    ManifoldView,
+    ManifoldMachine,
+    ManifoldInitializer,
+    Bridge,
+    Tangle,
+    TangleWorkbench,
+    IterateTable,
+    IntersectionRegistry,
+    Intersection,
+    ManifoldKey,
+)
 
 from .topology import (
     Trellis,
@@ -27,4 +41,11 @@ from .topology import (
     Hole,
     PseudoneighborPair,
     StrongPipResult,
+)
+
+from .loom import (
+    TangleSession,
+    ResonanceZone,
+    define_resonance_zone,
+    trim_stable_at_intersection,
 )

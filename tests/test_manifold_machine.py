@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
-from tanglepack.ManifoldMachine import ManifoldMachine
-from tanglepack.DynamicalSystem import DynamicalSystem
+from tanglepack import ManifoldMachine
+from tanglepack import DynamicalSystem
 
 
 def henon_map(point):

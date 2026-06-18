@@ -1,7 +1,7 @@
 import numpy as np
-from tanglepack.FixedPointSolver import FixedPointSolver
-from tanglepack.BranchPoint import BranchPoint
-from tanglepack.DynamicalSystem import DynamicalSystem
+from tanglepack import FixedPointSolver
+from tanglepack import BranchPoint
+from tanglepack import DynamicalSystem
 
 
 def henon(point):

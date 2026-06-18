@@ -251,53 +251,49 @@ class IntersectionRegistry:
                 n=n,
             )
 
-    def infer_iterates(
-        self,
-        max_depth: int = 10,
-        tol_multiplier: float = 10.0,
-    ) -> int:
+    def iterate_orbit(
+        self, start_id: int, max_len: Optional[int] = None
+    ) -> list[int]:
         """
-        Scan all registered intersections and infer iterate relationships by
-        predicting cdists and checking for matches.
+        Return an intersection's forward orbit — one cut point per stable branch.
 
-        Reads lambda_u per intersection from its manifold_a_key, so this works
-        correctly with multiple fixed points in the same registry.
+        Chases the iterate table's n=1 links forward from ``start_id``
+        (``start -> M(start) -> M^2(start) -> …``), stopping after one full lap of the
+        orbit (an iterate landing on an already-visited stable branch), when the table
+        has no further forward link, or at ``max_len`` points. For a period-p anchor
+        this yields the start plus its p-1 iterates — the points that bound a period-p
+        resonance zone.
 
-        Unlike v1, this method takes no lambda_u parameter.
+        The table is populated by :meth:`TangleWorkbench.infer_iterates` (called
+        automatically by ``compute_intersections``), so this just reads it; if the
+        table has not been filled, only ``start_id`` is returned.
 
         Args:
-            max_depth: How many iterate levels to search forward and backward.
-            tol_multiplier: Scale factor on cdist_tol for matching.
+            start_id: Registry id to start from (e.g. a strong pip).
+            max_len: Hard cap on the number of points returned. Defaults to the
+                anchor's ``k_value`` (one full lap of the orbit).
 
         Returns:
-            Number of new iterate relationships recorded.
+            Ordered list ``[start_id, M(start_id), …]``; always includes ``start_id``.
         """
-        tol = self.cdist_tol * tol_multiplier
-        recorded = 0
+        bkey = self._store[start_id].manifold_b_key
+        if max_len is None:
+            max_len = getattr(bkey[0], "k_value", 1) if bkey is not None else 1
 
-        for source_id, source in self._store.items():
-            lambda_u = self._get_lambda_u(source)
-            if lambda_u is None:
-                continue
-
-            for n in range(1, max_depth + 1):
-                if (source_id, n) not in self.iterate_table:
-                    pred_u = (lambda_u**n) * source.unstable_cdist
-                    pred_s = source.stable_cdist / (lambda_u**n)
-                    target_id = self.find_by_cdist(pred_u, pred_s, tol)
-                    if target_id is not None:
-                        self.register_iterate(source_id, n, target_id)
-                        recorded += 1
-
-                if (source_id, -n) not in self.iterate_table:
-                    pred_u = source.unstable_cdist / (lambda_u**n)
-                    pred_s = source.stable_cdist * (lambda_u**n)
-                    target_id = self.find_by_cdist(pred_u, pred_s, tol)
-                    if target_id is not None:
-                        self.register_iterate(source_id, -n, target_id)
-                        recorded += 1
-
-        return recorded
+        orbit = [start_id]
+        seen_branches = {bkey}
+        current = start_id
+        while len(orbit) < max_len:
+            nxt = self.iterate_table[current, 1]
+            if nxt is None:
+                break
+            branch = self._store[nxt].manifold_b_key
+            if branch in seen_branches:
+                break
+            orbit.append(nxt)
+            seen_branches.add(branch)
+            current = nxt
+        return orbit
 
     # ── query interface ────────────────────────────────────────────────────
 

@@ -1,9 +1,9 @@
 import pytest
 import numpy as np
 
-from tanglepack.ManifoldInitializer import ManifoldInitializer
-from tanglepack.DynamicalSystem import DynamicalSystem
-from tanglepack.FixedPointSolver import FixedPointSolver
+from tanglepack import ManifoldInitializer
+from tanglepack import DynamicalSystem
+from tanglepack import FixedPointSolver
 
 
 def henon_map(point):

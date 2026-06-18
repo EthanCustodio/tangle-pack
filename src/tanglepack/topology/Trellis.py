@@ -6,16 +6,16 @@ from typing import Iterable, Literal, Optional, Union, TYPE_CHECKING
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ..Intersection import Intersection, ManifoldKey
-from ..IntersectionRegistry import IntersectionRegistry
+from ..numerics.Intersection import Intersection, ManifoldKey
+from ..numerics.IntersectionRegistry import IntersectionRegistry
 from .TrellisBranch import TrellisBranch
 from .TopologyResults import Hole, PseudoneighborPair, StrongPipResult
 
 if TYPE_CHECKING:
-    from ..FixedPoint import FixedPoint
-    from ..DynamicalSystem import DynamicalSystem
-    from ..Bridge import Bridge
-    from ..TangleWorkbench import TangleWorkbench
+    from ..numerics.FixedPoint import FixedPoint
+    from ..numerics.DynamicalSystem import DynamicalSystem
+    from ..numerics.Bridge import Bridge
+    from ..numerics.TangleWorkbench import TangleWorkbench
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -546,12 +546,33 @@ class Trellis:
         target = ax if ax is not None else plt
         return target.scatter(coords[:, 0], coords[:, 1], **scatter_kwargs)
 
+    def strong_pip_cut_points(self) -> list[int]:
+        """
+        The strong pip together with its iterates — one cut point per stable branch.
+
+        For a period-1 anchor this is just the strong pip. For a period-k anchor the
+        resonance zone is bounded by the strong pip *and its k-1 forward iterates*,
+        which land one on each stable branch; this returns all of them (via
+        ``registry.iterate_orbit``, capped at the fixed point's ``k_value``). Requires
+        the iterate table to be inferred; otherwise only the strong pip is returned.
+
+        Returns:
+            Ordered list of intersection ids, or an empty list if no strong pip is set.
+        """
+        if self.strong_pip is None:
+            return []
+        key = self.registry[self.strong_pip].manifold_b_key
+        max_len = getattr(key[0], "k_value", None) if key is not None else None
+        return self.registry.iterate_orbit(self.strong_pip, max_len=max_len)
+
     def plot_strong_pip(self, ax=None, **scatter_kwargs):
         """
-        Scatter-plot the chosen strong pip in green, on top of the tangle.
+        Scatter-plot the strong-pip cut points in green, on top of the tangle.
 
-        Pairs with the usual intersection scatter (drawn in black): call this after
-        plotting the tangle and intersections to highlight the one strong pip.
+        For a period-1 anchor this is the single chosen strong pip; for a period-k
+        anchor it is the k points (strong pip + iterates) that bound the resonance
+        zone — see :meth:`strong_pip_cut_points`. Call after plotting the tangle and
+        intersections to highlight them.
 
         Args:
             ax: Optional matplotlib Axes to draw on. Defaults to the current axes
@@ -570,12 +591,13 @@ class Trellis:
             )
             return None
 
-        x, y = self.registry[self.strong_pip].coords
+        ids = self.strong_pip_cut_points()
+        coords = np.array([self.registry[i].coords for i in ids])
         scatter_kwargs.setdefault("color", "green")
         scatter_kwargs.setdefault("s", 7)
         scatter_kwargs.setdefault("zorder", 12)
         target = ax if ax is not None else plt
-        return target.scatter([x], [y], **scatter_kwargs)
+        return target.scatter(coords[:, 0], coords[:, 1], **scatter_kwargs)
 
     # ── misc ────────────────────────────────────────────────────────────────
 
@@ -597,6 +619,6 @@ class Trellis:
 
 def _is_single_fixed_point(obj) -> bool:
     """True if obj is a single FixedPoint rather than an iterable of them."""
-    from ..FixedPoint import FixedPoint
+    from ..numerics.FixedPoint import FixedPoint
 
     return isinstance(obj, FixedPoint)

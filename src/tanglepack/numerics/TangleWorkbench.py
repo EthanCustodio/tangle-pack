@@ -288,7 +288,7 @@ class TangleWorkbench:
                     with stability {stability} has not been initialized.
                     Please run initialize_manifold first.""")
 
-        self.compute_intersections(fixed_point)
+        self.compute_intersections(fixed_point, infer_iterates=False)
 
         num_initial_intersections = len(self.Tangle._intersecting_segments)
         print(f"current intersections {num_initial_intersections}")
@@ -297,7 +297,7 @@ class TangleWorkbench:
 
             self.grow_n_times(fixed_point, stability, num_iterations=1)
 
-            self.compute_intersections(fixed_point)
+            self.compute_intersections(fixed_point, infer_iterates=False)
             num_current_intersections = len(self.Tangle._intersecting_segments)
 
             if num_current_intersections > num_initial_intersections:
@@ -315,7 +315,9 @@ class TangleWorkbench:
 
         return self
 
-    def compute_intersections(self, fixed_points, *, reset: bool = True):
+    def compute_intersections(
+        self, fixed_points, *, reset: bool = True, infer_iterates: bool = True
+    ):
         """
         Compute intersections among the manifolds of one or more fixed points.
 
@@ -329,6 +331,11 @@ class TangleWorkbench:
                 manifolds should be co-indexed and intersected.
             reset: If True (default) the Tangle and registry are cleared first. Pass
                 False to accumulate further manifolds into an existing computation.
+            infer_iterates: If True (default) fill the iterate table from the freshly
+                computed crossings via :meth:`infer_iterates` (the M^1 forward iterate
+                of every intersection, by canonical-distance mapping). Pass False to
+                skip it — used by the growth loops that call this many times and do not
+                need the table.
 
         Returns:
             List of (x, y) coordinates, one per detected crossing.
@@ -348,6 +355,9 @@ class TangleWorkbench:
 
         for intersection in self.Tangle._intersections:
             self._intersection_registry.add(intersection)
+
+        if infer_iterates:
+            self.infer_iterates()
 
         return self.Tangle.iter_intersection_coords()
 
@@ -373,7 +383,7 @@ class TangleWorkbench:
                 color="k").
         """
         if len(self._intersection_registry) == 0 and fp is not None:
-            self.compute_intersections(fp)
+            self.compute_intersections(fp, infer_iterates=False)
 
         # Pull coords (and ids, for labelling) from the registry so we can filter
         # by fixed point; an intersection belongs to fp if fp is among the fixed
@@ -576,60 +586,105 @@ class TangleWorkbench:
         for bridge in self._bridges:
             if not bridge.iterated or not bridge.children:
                 continue
-
-            fp = bridge.fixed_point
-            lambda_u = float(
-                np.abs(np.asarray(fp.unstable_eigenvalues[0]).ravel()[0])
-            )
-            beta = lambda_u ** (1.0 / fp.k_value)  # per single-map-step cdist factor
-
             for src_id in (bridge.first_intersection, bridge.second_intersection):
-                if src_id is None or (src_id, 1) in registry.iterate_table:
+                if src_id is None:
                     continue
-                src = registry[src_id]
-                if src.manifold_b_key is None:
-                    continue
-
-                # Predict the image: branches advanced one orbit step, unstable cdist
-                # stretched by beta, stable cdist contracted by beta. The unstable
-                # branch may be absent on the source (iterated bridge) — then it is
-                # simply not predicted.
-                b_key = self._advance_key_forward(src.manifold_b_key, fp)
-                a_key = (
-                    self._advance_key_forward(src.manifold_a_key, fp)
-                    if src.manifold_a_key is not None
-                    else None
-                )
-                u_pred = src.unstable_cdist * beta
-                s_pred = src.stable_cdist / beta
-
-                best_id, best_err = None, float("inf")
-                for tgt_id, tgt in registry:
-                    if tgt_id == src_id:
-                        continue
-                    if tgt.manifold_b_key != b_key:
-                        continue
-                    if (
-                        a_key is not None
-                        and tgt.manifold_a_key is not None
-                        and tgt.manifold_a_key != a_key
-                    ):
-                        continue
-                    u_rel = abs(tgt.unstable_cdist - u_pred) / (
-                        abs(u_pred) + registry.cdist_tol
-                    )
-                    s_rel = abs(tgt.stable_cdist - s_pred) / (
-                        abs(s_pred) + registry.cdist_tol
-                    )
-                    err = max(u_rel, s_rel)
-                    if err < best_err:
-                        best_err, best_id = err, tgt_id
-
-                if best_id is not None and best_err <= cdist_rtol:
-                    registry.register_iterate(src_id, 1, best_id)
+                if self._register_forward_iterate(src_id, registry, cdist_rtol):
                     recorded += 1
 
         return recorded
+
+    def infer_iterates(self, cdist_rtol: float = 0.05) -> int:
+        """
+        Fill the iterate table for *every* intersection by canonical-distance mapping.
+
+        For each registered intersection this records its n=1 forward image M(i) — the
+        intersection one orbit step forward, found by predicting the image's branches
+        (``_advance_key_forward``) and canonical distances (unstable stretched by the
+        per-step factor ``lambda_u ** (1 / k_value)``, stable contracted by it) and
+        matching against the registry. This generalizes :meth:`infer_iterate_table`,
+        which records the same relationship but only for bridge-boundary intersections.
+
+        :meth:`compute_intersections` calls this automatically, so the table is dense
+        as soon as intersections are computed; iterating bridges then keeps it current
+        through the bridge machinery. Idempotent: it skips intersections that already
+        have an n=1 entry, so repeated calls are cheap.
+
+        Args:
+            cdist_rtol: Maximum relative canonical-distance error for a match (default
+                0.05, comfortably above per-step scaling noise).
+
+        Returns:
+            Number of new iterate relationships recorded.
+        """
+        registry = self._intersection_registry
+        recorded = 0
+        for src_id in registry.all_ids():
+            if self._register_forward_iterate(src_id, registry, cdist_rtol):
+                recorded += 1
+        return recorded
+
+    def _register_forward_iterate(
+        self, src_id: int, registry: IntersectionRegistry, cdist_rtol: float
+    ) -> bool:
+        """
+        Record the n=1 forward iterate of one intersection, if it can be identified.
+
+        The image f(src) lies on the branches one orbit step forward (see
+        ``_advance_key_forward``), with the unstable canonical distance stretched and
+        the stable one contracted by the per-step factor ``lambda_u ** (1 / k_value)``.
+        The image is matched by stable branch (always present) plus canonical distance,
+        with the unstable branch as an extra constraint when both source and candidate
+        carry it (intersections born from iterated bridges have no unstable branch).
+        Coordinates are deliberately not used — they drift under the nonlinear map,
+        whereas canonical distances and branch keys are exact.
+
+        Returns:
+            True if a new iterate edge was recorded, else False.
+        """
+        if (src_id, 1) in registry.iterate_table:
+            return False
+        src = registry[src_id]
+        if src.manifold_b_key is None:
+            return False
+        fp = src.manifold_b_key[0]
+        evals = getattr(fp, "unstable_eigenvalues", None)
+        if not evals:
+            return False
+        lambda_u = float(np.abs(np.asarray(evals[0]).ravel()[0]))
+        beta = lambda_u ** (1.0 / fp.k_value)  # per single-map-step cdist factor
+
+        b_key = self._advance_key_forward(src.manifold_b_key, fp)
+        a_key = (
+            self._advance_key_forward(src.manifold_a_key, fp)
+            if src.manifold_a_key is not None
+            else None
+        )
+        u_pred = src.unstable_cdist * beta
+        s_pred = src.stable_cdist / beta
+
+        best_id, best_err = None, float("inf")
+        for tgt_id, tgt in registry:
+            if tgt_id == src_id:
+                continue
+            if tgt.manifold_b_key != b_key:
+                continue
+            if (
+                a_key is not None
+                and tgt.manifold_a_key is not None
+                and tgt.manifold_a_key != a_key
+            ):
+                continue
+            u_rel = abs(tgt.unstable_cdist - u_pred) / (abs(u_pred) + registry.cdist_tol)
+            s_rel = abs(tgt.stable_cdist - s_pred) / (abs(s_pred) + registry.cdist_tol)
+            err = max(u_rel, s_rel)
+            if err < best_err:
+                best_err, best_id = err, tgt_id
+
+        if best_id is not None and best_err <= cdist_rtol:
+            registry.register_iterate(src_id, 1, best_id)
+            return True
+        return False
 
     def _advance_key_forward(
         self, key: tuple[FixedPoint, Stability, int, int], fixed_point: FixedPoint

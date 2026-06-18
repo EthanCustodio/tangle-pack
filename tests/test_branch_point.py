@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
-from tanglepack.BranchPoint import BranchPoint
-from tanglepack.Point import Point
+from tanglepack import BranchPoint
+from tanglepack import Point
 
 def test_point_creation():
 

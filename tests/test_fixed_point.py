@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
-from tanglepack.BranchPoint import BranchPoint
-from tanglepack.FixedPoint import FixedPoint
+from tanglepack import BranchPoint
+from tanglepack import FixedPoint
 
 
 def test_create_fixed_point():

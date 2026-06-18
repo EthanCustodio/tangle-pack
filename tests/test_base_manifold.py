@@ -1,7 +1,7 @@
 import pytest
-from tanglepack.Point import Point
-from tanglepack.BranchPoint import BranchPoint
-from tanglepack.BaseManifold import BaseManifold
+from tanglepack import Point
+from tanglepack import BranchPoint
+from tanglepack import BaseManifold
 import numpy as np
 import matplotlib
 matplotlib.use("Agg") #suppresses graphics

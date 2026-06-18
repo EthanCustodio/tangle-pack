@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from tanglepack.Point import Point
+from tanglepack import Point
 
 def test_point_creation():
 

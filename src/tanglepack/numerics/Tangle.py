@@ -469,12 +469,24 @@ class Tangle:
 
     def _segments_of(self, manifold: BaseManifold):
         """
-        Generator which returns the segments in a manifold
+        Yield the segments of a manifold, from the root up to and including the
+        segment that ends at ``manifold.tail``.
+
+        ``tail`` bounds the indexed extent: for an untrimmed manifold it is the true
+        end (kept current by ``BaseManifold._find_tail`` after every growth step), so
+        the whole manifold is indexed; for a trimmed manifold (``tail`` moved to an
+        interior point, e.g. by ``trim_stable_manifolds`` or the loom resonance-zone
+        trim) only the segments up to the trim are indexed. ``tail is None`` falls
+        back to walking to the physical end of the linked list.
         """
+        tail = manifold.tail
         prev_point = None
         curr_point = manifold.root
 
         while curr_point is not None:
+
+            if curr_point is tail:
+                break
 
             next_point = manifold.walk_fwd(prev_point, curr_point)
             if next_point is None:

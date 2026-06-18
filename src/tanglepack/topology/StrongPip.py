@@ -4,12 +4,12 @@ import logging
 import math
 from typing import Iterable, Optional, TYPE_CHECKING
 
-from ..Intersection import ManifoldKey
+from ..numerics.Intersection import ManifoldKey
 from .TopologyResults import StrongPipResult
 
 if TYPE_CHECKING:
     from .Trellis import Trellis
-    from ..FixedPoint import FixedPoint
+    from ..numerics.FixedPoint import FixedPoint
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

@@ -1,9 +1,9 @@
 import pytest
 import numpy as np
-from tanglepack.ManifoldView import ManifoldView
-from tanglepack.DynamicalSystem import DynamicalSystem
-from tanglepack.BaseManifold import BaseManifold
-from tanglepack.Point import Point
+from tanglepack import ManifoldView
+from tanglepack import DynamicalSystem
+from tanglepack import BaseManifold
+from tanglepack import Point
 
 
 def henon(point):

@@ -7,8 +7,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 if TYPE_CHECKING:
-    from ..FixedPoint import FixedPoint
-    from ..Intersection import ManifoldKey
+    from ..numerics.FixedPoint import FixedPoint
+    from ..numerics.Intersection import ManifoldKey
 
 """
 Dev Notes:

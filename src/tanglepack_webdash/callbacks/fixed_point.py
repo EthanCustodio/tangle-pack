@@ -3,7 +3,7 @@ from __future__ import annotations
 import traceback
 import numpy as np
 from dash import Dash, Input, Output, State as DashState, no_update
-from tanglepack.TangleWorkbench import TangleWorkbench
+from tanglepack import TangleWorkbench
 from ..sessions import get_state
 from ..utils.wrappers import pointize
 from ..parser import parse_map_text
