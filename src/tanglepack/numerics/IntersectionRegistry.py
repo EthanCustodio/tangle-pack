@@ -142,6 +142,82 @@ class IntersectionRegistry:
             )
         )
 
+    def reindex_from(self, old: "IntersectionRegistry") -> dict[int, int]:
+        """
+        Re-number this registry so crossings carried over from ``old`` keep their id.
+
+        IDs are normally insertion-order integers, so any rebuild of the registry
+        (e.g. the recompute after trimming a stable manifold for a resonance zone)
+        renumbers every crossing from zero. That invalidates ids the caller is
+        holding — a strong pip chosen as id 7 becomes some unrelated integer. This
+        re-aligns the freshly built registry against ``old``: every intersection
+        that matches one in ``old`` (same canonical distances within ``cdist_tol``
+        and the same two branch keys — the exact/stable identity used by
+        :meth:`_find_collision`) is given back its old id. Crossings with no match
+        in ``old`` (genuinely new geometry) are assigned fresh ids above every
+        preserved one, so no id is ever reused for a different point.
+
+        Call this after all intersections have been added but before the iterate
+        table is filled (the table is keyed by id). The sorted orderings, cdist
+        index, and graph nodes are rebuilt with the final ids.
+
+        Args:
+            old: The registry that existed before the rebuild, whose ids should be
+                preserved wherever the same crossing reappears.
+
+        Returns:
+            Mapping ``{final_id: matched_old_id_or_None}`` for every intersection
+            now stored — useful for logging/debugging the remap.
+        """
+        intersections = list(self._store.values())
+
+        used: set[int] = set()
+        final_id: dict[int, int] = {}  # id(intersection object) -> assigned id
+        for ix in intersections:
+            match = old._find_collision(ix)
+            if match is not None and match not in used:
+                final_id[id(ix)] = match
+                used.add(match)
+
+        counter = 0
+        for ix in intersections:
+            if id(ix) not in final_id:
+                while counter in used:
+                    counter += 1
+                final_id[id(ix)] = counter
+                used.add(counter)
+
+        # Rebuild every id-keyed structure from scratch with the final ids.
+        self._store = {}
+        self._unstable_order = []
+        self._stable_order = []
+        self._cdist_index = {}
+        self._graph = nx.MultiDiGraph()
+        self.iterate_table = IterateTable()
+        self._next_id = (max(used) + 1) if used else 0
+
+        remap: dict[int, int] = {}
+        for ix in intersections:
+            fid = final_id[id(ix)]
+            ix.id = fid
+            self._store[fid] = ix
+            self._insert_into_unstable_order(fid, ix.unstable_cdist)
+            self._insert_into_stable_order(fid, ix.stable_cdist)
+            self._cdist_index[self._cdist_key(ix)] = fid
+            self._graph.add_node(
+                fid,
+                coords=ix.coords,
+                unstable_cdist=ix.unstable_cdist,
+                stable_cdist=ix.stable_cdist,
+                manifold_a_key=ix.manifold_a_key,
+                manifold_b_key=ix.manifold_b_key,
+                label=ix.label,
+            )
+            remap[fid] = old._find_collision(ix)
+        self._graph_adjacency_dirty = True
+
+        return remap
+
     def __getitem__(self, id: int) -> Intersection:
         """registry[id] → Intersection. Raises KeyError if id is unknown."""
         return self._store[id]

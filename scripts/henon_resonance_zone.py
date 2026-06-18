@@ -110,6 +110,8 @@ T1.plot_strong_pip_candidates()
 T3.plot_strong_pip(s=40)
 T3.plot_strong_pip_candidates()
 
+session.workbench.plot_intersections(fp1, show_ids=True)
+
 plt.xlim([-8, 8])
 plt.ylim([-8, 8])
 plt.title("Nested resonance zones (outer period-1, inner period-3)")

@@ -288,7 +288,7 @@ def define_resonance_zone(
             if fixed_points is None
             else list(fixed_points)
         )
-        workbench.compute_intersections(fps)
+        workbench.compute_intersections(fps, preserve_ids=True)
         intersection_ids = workbench.intersection_registry.all_ids()
 
     return ResonanceZone(

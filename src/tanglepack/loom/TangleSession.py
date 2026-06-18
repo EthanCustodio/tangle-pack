@@ -199,7 +199,7 @@ class TangleSession:
                 if fixed_points is None
                 else list(fixed_points)
             )
-            self.workbench.compute_intersections(fps)
+            self.workbench.compute_intersections(fps, preserve_ids=True)
             self.invalidate_trellises()
             recomputed = self.workbench.intersection_registry.all_ids()
             for rz in self.resonance_zones.values():

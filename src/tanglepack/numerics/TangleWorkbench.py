@@ -316,7 +316,12 @@ class TangleWorkbench:
         return self
 
     def compute_intersections(
-        self, fixed_points, *, reset: bool = True, infer_iterates: bool = True
+        self,
+        fixed_points,
+        *,
+        reset: bool = True,
+        infer_iterates: bool = True,
+        preserve_ids: bool = False,
     ):
         """
         Compute intersections among the manifolds of one or more fixed points.
@@ -336,6 +341,12 @@ class TangleWorkbench:
                 of every intersection, by canonical-distance mapping). Pass False to
                 skip it — used by the growth loops that call this many times and do not
                 need the table.
+            preserve_ids: If True (and ``reset`` is True), re-align the rebuilt
+                registry against the one being replaced so any crossing that reappears
+                keeps its previous id (see :meth:`IntersectionRegistry.reindex_from`).
+                Used by the resonance-zone recompute so a strong pip chosen as id N is
+                still id N after the stable manifolds are trimmed. Defaults to False —
+                the growth loops renumber freely.
 
         Returns:
             List of (x, y) coordinates, one per detected crossing.
@@ -343,6 +354,7 @@ class TangleWorkbench:
         if isinstance(fixed_points, FixedPoint):
             fixed_points = [fixed_points]
 
+        old_registry = self._intersection_registry
         if reset:
             self.Tangle.clear_all()
             self._intersection_registry = IntersectionRegistry()
@@ -355,6 +367,9 @@ class TangleWorkbench:
 
         for intersection in self.Tangle._intersections:
             self._intersection_registry.add(intersection)
+
+        if reset and preserve_ids and len(old_registry) > 0:
+            self._intersection_registry.reindex_from(old_registry)
 
         if infer_iterates:
             self.infer_iterates()
