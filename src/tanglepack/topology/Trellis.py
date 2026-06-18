@@ -194,6 +194,28 @@ class Trellis:
         return self.registry.all_ids()
 
     @property
+    def own_intersection_ids(self) -> list[int]:
+        """
+        IDs of the intersections that actually belong to this trellis.
+
+        The registry is shared across every fixed point on the workbench, so in a
+        nested / multi-tangle session it holds intersections this trellis does not
+        own. An intersection belongs here iff it lies on one of this trellis's
+        branches (its unstable or stable side resolves to a branch we hold), which
+        is precisely the set ``from_workbench`` bucketed onto the branches. The
+        topological algorithms default to this set so that, e.g., the inner
+        period-3 trellis is not classified against the outer fixed point's
+        crossings.
+
+        Returns:
+            Sorted list of owned intersection IDs.
+        """
+        ids: set[int] = set()
+        for branch in self.branches.values():
+            ids.update(branch.intersection_ids)
+        return sorted(ids)
+
+    @property
     def by_stable_cdist(self) -> list[int]:
         """All intersection IDs sorted ascending by stable canonical distance."""
         return self.registry.by_stable_cdist
@@ -409,7 +431,9 @@ class Trellis:
         set_strong_pip(), or pass ``choose_default=False`` to leave it unset.
 
         Args:
-            intersection_ids: Intersections to test; defaults to every intersection.
+            intersection_ids: Intersections to test; defaults to this trellis's own
+                intersections (see :attr:`own_intersection_ids`), not the whole
+                shared registry.
             tol: Optional canonical-distance slack.
             collision_rtol: Relative slack on the cdist collision test (default
                 1e-2) so that a point's own orbit does not disqualify it.
@@ -420,6 +444,11 @@ class Trellis:
             The list of candidate intersection IDs.
         """
         from .StrongPip import classify_strong_pips as _classify_strong_pips
+
+        # Default to *this* trellis's intersections, not the whole shared registry,
+        # so a nested trellis is classified only against its own tangle's crossings.
+        if intersection_ids is None:
+            intersection_ids = self.own_intersection_ids
 
         results = _classify_strong_pips(
             self, intersection_ids, tol=tol, collision_rtol=collision_rtol

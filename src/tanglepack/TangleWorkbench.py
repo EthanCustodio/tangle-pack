@@ -1,3 +1,4 @@
+import logging
 from typing import Callable, Literal, Iterable, Optional
 import numpy.typing as npt
 from typing_extensions import Annotated
@@ -20,6 +21,9 @@ from .Intersection import Intersection
 from .IntersectionRegistry import IntersectionRegistry
 
 Stability = Literal["unstable", "stable"]
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class TangleWorkbench:
@@ -311,24 +315,6 @@ class TangleWorkbench:
 
         return self
 
-    def compute_intersections(self, fixed_point):
-        """This currently only computes homoclinic intersections, we will have
-        to modify"""
-
-        # Completely clear and rebuild the Tangle state to avoid stale references
-        self.Tangle.clear_all()
-        self._intersection_registry = IntersectionRegistry()
-
-        self.index_manifolds(fixed_point, "unstable")
-        self.index_manifolds(fixed_point, "stable")
-
-        self.Tangle.populate_intersection_dict()
-
-        for intersection in self.Tangle._intersections:
-            self._intersection_registry.add(intersection)
-
-        return list(self.Tangle._intersecting_coords.values())
-
     def compute_intersections(self, fixed_points, *, reset: bool = True):
         """
         Compute intersections among the manifolds of one or more fixed points.
@@ -366,15 +352,19 @@ class TangleWorkbench:
         return self.Tangle.iter_intersection_coords()
 
     def plot_intersections(
-        self, fp, ax=None, show_ids=False, id_fontsize=8, **scatter_kwargs
+        self, fp=None, ax=None, show_ids=False, id_fontsize=8, **scatter_kwargs
     ):
         """
-        Scatter-plot the last computed intersections for this session.
-        If none computed yet for this fp, computes them first.
+        Scatter-plot computed intersections, optionally restricted to one fixed point.
+
+        In a nested / multi-tangle session the registry holds the crossings of
+        every fixed point at once. Pass ``fp`` to plot only that tangle's
+        intersections; pass None to plot all of them. If nothing has been computed
+        yet, the intersections for ``fp`` are computed first.
 
         Args:
-            fp: Fixed point whose intersections to plot (used only if none are
-                computed yet).
+            fp: Fixed point whose intersections to plot. None plots every computed
+                intersection.
             ax: Optional matplotlib Axes. Defaults to the current axes (plt).
             show_ids: If True, label each intersection with its registry id
                 (the same ids used by the Trellis / strong-pip API).
@@ -382,12 +372,21 @@ class TangleWorkbench:
             **scatter_kwargs: Forwarded to scatter (defaults: s=7, zorder=10,
                 color="k").
         """
-        pts = np.array(self.Tangle.iter_intersection_coords())
-        if pts.size == 0:
-            pts = self.compute_intersections(fp)
-            if pts.size == 0:
-                self.log.info("No intersections to plot.")
-                return
+        if len(self._intersection_registry) == 0 and fp is not None:
+            self.compute_intersections(fp)
+
+        # Pull coords (and ids, for labelling) from the registry so we can filter
+        # by fixed point; an intersection belongs to fp if fp is among the fixed
+        # points of its two manifold sides.
+        items = [
+            (iid, ix)
+            for iid, ix in self._intersection_registry
+            if fp is None or fp in ix.fixed_points
+        ]
+        if not items:
+            logger.info("No intersections to plot.")
+            return
+        pts = np.array([ix.coords for _iid, ix in items])
 
         # sensible defaults; caller can override with kwargs
         scatter_kwargs.setdefault("s", 7)
@@ -397,7 +396,7 @@ class TangleWorkbench:
         target.scatter(pts[:, 0], pts[:, 1], **scatter_kwargs)
 
         if show_ids:
-            for iid, intersection in self._intersection_registry:
+            for iid, intersection in items:
                 x, y = intersection.coords
                 target.annotate(
                     str(iid),
