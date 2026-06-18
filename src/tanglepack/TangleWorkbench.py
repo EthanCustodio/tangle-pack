@@ -24,6 +24,29 @@ Stability = Literal["unstable", "stable"]
 
 class TangleWorkbench:
 
+    # Fixed palette of cool hues (blues, cyans, teals, greens, purples) used to
+    # color bridges. Deliberately excludes any warm hue near red so a bridge is
+    # never mistaken for the stable manifold (always plotted red). The ordering
+    # interleaves hue families so consecutive bridges stay visually distinct.
+    _COOL_BRIDGE_PALETTE = [
+        "#1f77b4",  # blue
+        "#2ca02c",  # green
+        "#9467bd",  # purple
+        "#17becf",  # cyan
+        "#0050ef",  # strong blue
+        "#008080",  # teal
+        "#6a3d9a",  # deep purple
+        "#33a02c",  # leaf green
+        "#1b9e77",  # blue-green
+        "#386cb0",  # slate blue
+        "#7570b3",  # indigo
+        "#66c2a5",  # mint
+        "#5e4fa2",  # violet
+        "#3690c0",  # ocean blue
+        "#41ab5d",  # emerald
+        "#54278f",  # royal purple
+    ]
+
     def __init__(
         self,
         dynamical_map: MapFunc,
@@ -1051,12 +1074,14 @@ class TangleWorkbench:
         n = len(bridges)
         if n == 0:
             return
-        # Cycle the 20 discrete tab20 colors by index (mod 20) rather than
-        # resampling the colormap across all n bridges. Resampling makes adjacent
+        # Cycle a fixed cool-color palette by index (mod len) rather than
+        # resampling a colormap across all n bridges. Resampling makes adjacent
         # bridges nearly identical in hue, so a run of consecutive bridges reads as
         # a single colour spanning several intersections; cycling guarantees
-        # neighbouring bridges are always visually distinct.
-        palette = cm.get_cmap("tab20").colors
+        # neighbouring bridges are always visually distinct. The palette is
+        # restricted to cool hues (blues, cyans, teals, greens, purples) so that
+        # no bridge is ever confused with the stable manifold, which is always red.
+        palette = self._COOL_BRIDGE_PALETTE
         for i, bridge in enumerate(bridges):
             bridge.plot(color=palette[i % len(palette)])
 
