@@ -20,3 +20,11 @@ from .TangleWorkbench import TangleWorkbench
 from .IterateTable import IterateTable
 from .IntersectionRegistry import IntersectionRegistry
 from .Intersection import Intersection, ManifoldKey
+
+from .topology import (
+    Trellis,
+    TrellisBranch,
+    Hole,
+    PseudoneighborPair,
+    StrongPipResult,
+)

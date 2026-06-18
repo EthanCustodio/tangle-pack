@@ -31,7 +31,7 @@ def henon_jacobian(point):
 # ── Numeric phase ──────────────────────────────────────────────────────────
 wb = tanglepack.TangleWorkbench(henon_map, henon_map_inverse, henon_jacobian)
 
-wb._man_machine.area_cutoff = 1e-7
+wb._man_machine.area_cutoff = 1e-8
 
 # Period-3 inner fixed point
 fp3 = wb.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])

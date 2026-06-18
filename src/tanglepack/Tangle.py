@@ -661,6 +661,11 @@ class Tangle:
                     tail=tail_point,
                     branch_index=manifold.branch_index,
                 )
+                # A bridge is a segment of its parent unstable manifold, so it lives
+                # on the same branch. Carrying the parent's manifold_key means every
+                # intersection later detected on this bridge (or on its forward
+                # image) records which unstable branch it belongs to.
+                bridge.manifold_key = manifold.manifold_key
                 all_bridges.append(bridge)
 
         # --- 3. Splice every segment's boundary points in one ordered pass ---

@@ -19,8 +19,16 @@ class IntersectionRegistry:
     Master store of all intersection points in the tangle.
 
     IDs are contiguous integers (0, 1, 2, …) assigned in insertion order.
-    Duplicate intersections (same cdists within tolerance) are detected and
-    deduped — the existing ID is returned rather than creating a second entry.
+    An intersection is uniquely identified by (unstable_cdist, stable_cdist,
+    unstable branch, stable branch) — the two cdists plus the two manifold keys it
+    crosses on. Duplicates (a match on all four, cdists within tolerance) are
+    detected and deduped — the existing ID is returned rather than creating a
+    second entry. The branch keys are required because canonical distance is
+    measured per branch: the periodic anchor of every branch sits at cdist (0, 0),
+    so cdist alone would wrongly merge the distinct anchors of a period-p orbit
+    into one. Branch keys are used rather than phase-space coordinates because the
+    coordinates are only approximate (drift under the nonlinear map), while the
+    cdists and branch identity are exact/stable.
 
     Primary interface:
         registry.add(intersection)               → int (assigned ID)
@@ -553,13 +561,25 @@ class IntersectionRegistry:
         return abs(fp.unstable_eigenvalues[0])
 
     def _find_collision(self, intersection: Intersection) -> Optional[int]:
-        """Linear scan for an existing intersection within cdist_tol."""
+        """
+        Linear scan for an existing intersection that is the same crossing.
+
+        A duplicate must match on both canonical distances (within cdist_tol) and
+        on the two branches it crosses (manifold_a_key = unstable branch,
+        manifold_b_key = stable branch). The branch test is what keeps the
+        per-branch anchors apart: they all share cdist (0, 0) but lie on different
+        branches, so a cdist-only test would collapse them into one. Branch keys
+        are exact discrete labels, so this needs no positional tolerance and does
+        not rely on the (approximate, drift-prone) phase-space coordinates.
+        """
         for id, existing in self._store.items():
             if (
                 abs(existing.unstable_cdist - intersection.unstable_cdist)
                 < self.cdist_tol
                 and abs(existing.stable_cdist - intersection.stable_cdist)
                 < self.cdist_tol
+                and existing.manifold_a_key == intersection.manifold_a_key
+                and existing.manifold_b_key == intersection.manifold_b_key
             ):
                 return id
         return None

@@ -19,6 +19,12 @@ Why: a point on a stable manifold converges to that manifold's fixed point under
 
 **Implication for the code:** a same-stability pair (u×u or s×s) appearing in `_intersecting_segments` is *always* a numerical artifact — two near-parallel polygonal approximations straddling near a tangency, not a real crossing. Such pairs should be filtered out (and are worth logging), but they must never be treated as a legitimate geometric case to model.
 
+## Area Preservation
+
+These maps are **area-preserving**: mapping any region forward (or backward) produces a region of exactly the same area. This is a fundamental property of the system, not an approximation.
+
+A consequence used by the topological layer: for an intersection point, the product of its stable and unstable canonical distances behaves like a preserved area (one forward iterate scales the unstable cdist up by the per-step eigenvalue factor and the stable cdist down by the same factor, so the product is unchanged along an iterate chain). Note, however, that two *different* iterate chains generally have *different* such products — equal products do not imply two points are on the same chain, so do not use the product alone to decide chain membership. Compare the stable and unstable canonical distances individually (a collision on both means the same point) when you need to know whether two intersections are iterates.
+
 ## Commands
 
 **Install (editable):**

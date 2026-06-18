@@ -342,10 +342,22 @@ class TangleWorkbench:
 
         return self.Tangle.iter_intersection_coords()
 
-    def plot_intersections(self, fp, ax=None, **scatter_kwargs):
+    def plot_intersections(
+        self, fp, ax=None, show_ids=False, id_fontsize=8, **scatter_kwargs
+    ):
         """
         Scatter-plot the last computed intersections for this session.
         If none computed yet for this fp, computes them first.
+
+        Args:
+            fp: Fixed point whose intersections to plot (used only if none are
+                computed yet).
+            ax: Optional matplotlib Axes. Defaults to the current axes (plt).
+            show_ids: If True, label each intersection with its registry id
+                (the same ids used by the Trellis / strong-pip API).
+            id_fontsize: Font size of the id labels. Adjust to taste.
+            **scatter_kwargs: Forwarded to scatter (defaults: s=7, zorder=10,
+                color="k").
         """
         pts = np.array(self.Tangle.iter_intersection_coords())
         if pts.size == 0:
@@ -358,7 +370,20 @@ class TangleWorkbench:
         scatter_kwargs.setdefault("s", 7)
         scatter_kwargs.setdefault("zorder", 10)
         scatter_kwargs.setdefault("color", "k")
-        plt.scatter(pts[:, 0], pts[:, 1], **scatter_kwargs)
+        target = ax if ax is not None else plt
+        target.scatter(pts[:, 0], pts[:, 1], **scatter_kwargs)
+
+        if show_ids:
+            for iid, intersection in self._intersection_registry:
+                x, y = intersection.coords
+                target.annotate(
+                    str(iid),
+                    (x, y),
+                    textcoords="offset points",
+                    xytext=(4, 4),
+                    fontsize=id_fontsize,
+                    zorder=scatter_kwargs["zorder"] + 1,
+                )
 
     def create_bridges(self, fixed_point: Optional[FixedPoint] = None):
         """
@@ -440,6 +465,15 @@ class TangleWorkbench:
         # 1. map forward
         iterated = self._man_machine.iterate_bridge(bridge)
 
+        # The iterated bridge is M(bridge): a segment of the unstable manifold one
+        # orbit step forward of the parent's branch. Recording that key lets the
+        # crossings detected on it carry their unstable branch identity (and lets
+        # those bridges advance the key again if iterated further).
+        if bridge.manifold_key is not None:
+            iterated.manifold_key = self._advance_key_forward(
+                bridge.manifold_key, bridge.fixed_point
+            )
+
         # 2. add to tangle (stable manifold already indexed from compute_intersections)
         self.Tangle.add_manifold(iterated)
 
@@ -485,50 +519,124 @@ class TangleWorkbench:
 
         return new_bridges
 
-    def infer_iterate_table(self, coord_tol: float = 0.01) -> int:
+    def infer_iterate_table(self, cdist_rtol: float = 0.05) -> int:
         """
         Scan all iterated bridges and record the n=1 forward iterate relationship for
         each boundary intersection.
 
         Bridge topology identifies *which* intersections to process (only the two
-        endpoints of each iterated bridge). The map is then applied directly to their
-        coordinates and the closest registered intersection within ``coord_tol`` is
-        recorded as the image. This avoids cdist ambiguity that arises when original
-        and new intersections overlap in arc-length.
+        endpoints of each iterated bridge). The image f(i_src) is then identified by
+        canonical distance and branch identity rather than phase-space coordinates,
+        which drift under the nonlinear map and are only approximate. Under one
+        application of M the image lies on the branches one orbit step forward of the
+        source (see _advance_key_forward), with the unstable cdist stretched and the
+        stable cdist contracted by the per-step factor lambda_u ** (1 / k_value).
+
+        The stable branch (manifold_b_key) is the reliable discriminator: the stable
+        manifold is always indexed, so every intersection carries it. The unstable
+        branch (manifold_a_key) is missing on intersections born from an iterated
+        bridge (those bridges are not indexed manifolds), so it is used only as an
+        extra constraint when both source and candidate have it. Stable branch plus
+        canonical distance resolves the arc-length ambiguity that motivated the old
+        coordinate-based match.
 
         Args:
-            coord_tol: Maximum Euclidean distance (in phase-space units) between
-                ``f(i_src)`` and a candidate intersection for the match to be accepted.
-                Defaults to 0.01, which is ~10× the expected linear-intersection
-                approximation error for well-resolved manifolds.
+            cdist_rtol: Maximum relative canonical-distance error between the predicted
+                image and a candidate (on the correct stable branch) for the match to
+                be accepted. Defaults to 0.05, comfortably above per-step scaling noise.
 
         Returns:
             Number of new iterate relationships recorded.
         """
         registry = self._intersection_registry
-        f = self.dynamical_system.map
-        all_items = [(ix_id, ix.get_point()) for ix_id, ix in registry]
         recorded = 0
 
         for bridge in self._bridges:
             if not bridge.iterated or not bridge.children:
                 continue
 
+            fp = bridge.fixed_point
+            lambda_u = float(
+                np.abs(np.asarray(fp.unstable_eigenvalues[0]).ravel()[0])
+            )
+            beta = lambda_u ** (1.0 / fp.k_value)  # per single-map-step cdist factor
+
             for src_id in (bridge.first_intersection, bridge.second_intersection):
                 if src_id is None or (src_id, 1) in registry.iterate_table:
                     continue
+                src = registry[src_id]
+                if src.manifold_b_key is None:
+                    continue
 
-                f_coords = f(registry[src_id].get_point())
+                # Predict the image: branches advanced one orbit step, unstable cdist
+                # stretched by beta, stable cdist contracted by beta. The unstable
+                # branch may be absent on the source (iterated bridge) — then it is
+                # simply not predicted.
+                b_key = self._advance_key_forward(src.manifold_b_key, fp)
+                a_key = (
+                    self._advance_key_forward(src.manifold_a_key, fp)
+                    if src.manifold_a_key is not None
+                    else None
+                )
+                u_pred = src.unstable_cdist * beta
+                s_pred = src.stable_cdist / beta
 
-                best_id, best_dist = None, float("inf")
-                for tgt_id, tgt_coords in all_items:
-                    d = float(np.linalg.norm(f_coords - tgt_coords))
-                    if d < best_dist:
-                        best_dist, best_id = d, tgt_id
+                best_id, best_err = None, float("inf")
+                for tgt_id, tgt in registry:
+                    if tgt_id == src_id:
+                        continue
+                    if tgt.manifold_b_key != b_key:
+                        continue
+                    if (
+                        a_key is not None
+                        and tgt.manifold_a_key is not None
+                        and tgt.manifold_a_key != a_key
+                    ):
+                        continue
+                    u_rel = abs(tgt.unstable_cdist - u_pred) / (
+                        abs(u_pred) + registry.cdist_tol
+                    )
+                    s_rel = abs(tgt.stable_cdist - s_pred) / (
+                        abs(s_pred) + registry.cdist_tol
+                    )
+                    err = max(u_rel, s_rel)
+                    if err < best_err:
+                        best_err, best_id = err, tgt_id
 
-                if best_id is not None and best_id != src_id and best_dist < coord_tol:
+                if best_id is not None and best_err <= cdist_rtol:
                     registry.register_iterate(src_id, 1, best_id)
                     recorded += 1
+
+        return recorded
+
+    def _advance_key_forward(
+        self, key: tuple[FixedPoint, Stability, int, int], fixed_point: FixedPoint
+    ) -> tuple[FixedPoint, Stability, int, int]:
+        """
+        Return the manifold key one forward application of the map advances `key` to.
+
+        Under one application of M the orbit index advances by one (M cycles the
+        periodic orbit). For a fixed point with inversion the branch index flips each
+        time the orbit index wraps past the last orbit point (a full orbit returns to
+        the same point on the opposite eigenvector branch; two full orbits = k_value
+        steps return to the start).
+
+        Note:
+            The non-inversion path is exercised by the period-1 and period-3 tests;
+            the inversion branch-flip is implemented from first principles but has not
+            yet been validated against a computed inversion trellis.
+        """
+        fp, stability, orbit_index, branch_index = key
+        period = fixed_point.period
+        if orbit_index == period - 1:
+            new_orbit_index = 0
+            new_branch_index = (
+                1 - branch_index if fixed_point.check_inversion() else branch_index
+            )
+        else:
+            new_orbit_index = orbit_index + 1
+            new_branch_index = branch_index
+        return (fp, stability, new_orbit_index, new_branch_index)
 
         return recorded
 
