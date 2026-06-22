@@ -21,6 +21,7 @@ from .ResonanceZone import (
     define_resonance_zone,
     trim_stable_at_intersection,
 )
+from .Blast import BlastResult, BlastStep, blast_zone
 from .TangleSession import TangleSession
 
 __all__ = [
@@ -29,4 +30,7 @@ __all__ = [
     "BoundaryArc",
     "define_resonance_zone",
     "trim_stable_at_intersection",
+    "blast_zone",
+    "BlastResult",
+    "BlastStep",
 ]

@@ -7,6 +7,7 @@ from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import MapFunc, JacFunc
 from ..topology.Trellis import Trellis
 from .ResonanceZone import ResonanceZone, define_resonance_zone
+from .Blast import BlastResult, blast_zone
 
 if TYPE_CHECKING:
     from ..numerics.FixedPoint import FixedPoint
@@ -266,6 +267,42 @@ class TangleSession:
             list(self.workbench.bridges) if bridges is None else list(bridges)
         )
         return {bridge: self.classify_bridge(bridge) for bridge in bridges}
+
+    # ── blasting ─────────────────────────────────────────────────────────────
+
+    def blast_zone(
+        self,
+        zone: "ResonanceZone | tuple",
+        num_iterations: int,
+        *,
+        fixed_point: Optional["FixedPoint"] = None,
+        strict: bool = False,
+    ) -> BlastResult:
+        """
+        Repeatedly iterate the bridges inside a resonance zone.
+
+        Each step maps every un-iterated interior bridge forward (cutting the image
+        into child bridges at its new stable-manifold crossings) and keeps the children
+        that land back inside the zone, recursing up to ``num_iterations`` times.
+        Bridges that leave the zone are never re-iterated — iterating exterior bridges
+        many times grows them exponentially. See :mod:`tanglepack.loom.Blast`.
+
+        Args:
+            zone: A :class:`ResonanceZone` or its ``(fixed_point, branch_index)`` key.
+            num_iterations: Maximum number of blast steps.
+            fixed_point: Restrict to bridges from this fixed point (default: all).
+            strict: Re-raise a bridge's forward-map failure instead of skipping it.
+
+        Returns:
+            A :class:`~tanglepack.loom.Blast.BlastResult` genealogy of the blast.
+        """
+        return blast_zone(
+            self,
+            zone,
+            num_iterations,
+            fixed_point=fixed_point,
+            strict=strict,
+        )
 
     def plot_resonance_zones(
         self,
