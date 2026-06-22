@@ -16,6 +16,7 @@ Entry points:
 """
 
 from .ResonanceZone import (
+    BoundaryArc,
     ResonanceZone,
     define_resonance_zone,
     trim_stable_at_intersection,
@@ -25,6 +26,7 @@ from .TangleSession import TangleSession
 __all__ = [
     "TangleSession",
     "ResonanceZone",
+    "BoundaryArc",
     "define_resonance_zone",
     "trim_stable_at_intersection",
 ]

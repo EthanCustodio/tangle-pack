@@ -450,6 +450,32 @@ class TangleWorkbench:
         self._assign_bridge_intersections(bridges)
         return bridges
 
+    def clear_bridges(self) -> None:
+        """Discard all registered bridges (e.g. before recutting after a retrim)."""
+        self._bridges.clear()
+
+    def rebuild_bridges(
+        self, fixed_point: Optional[FixedPoint] = None
+    ) -> list[Bridge]:
+        """
+        Clear all existing bridges and recut them against the current crossings.
+
+        Bridges are segments of an unstable manifold between consecutive crossings, so
+        trimming a stable manifold (e.g. to define a resonance zone) and recomputing
+        intersections invalidates them: the shorter stable arc produces fewer crossings
+        and therefore different bridges. Call this after such a recompute so the stale
+        bridges are dropped and recut against the new (shorter) stable manifold.
+
+        Args:
+            fixed_point: If given, only rebuild bridges for that fixed point's unstable
+                manifolds; otherwise rebuild for every indexed unstable manifold.
+
+        Returns:
+            The freshly created bridges.
+        """
+        self.clear_bridges()
+        return self.create_bridges(fixed_point)
+
     def create_resonance_zone(self, fixed_point: FixedPoint):
 
         # grow stable manifold until it turns around
@@ -470,6 +496,11 @@ class TangleWorkbench:
         self.plot_tangle(fixed_point, "stable", color="r")
         self.plot_all_bridges(bridges)
         self.plot_intersections(fixed_point)
+
+    @property
+    def bridges(self) -> list[Bridge]:
+        """All bridges registered so far (originals and iterated children)."""
+        return list(self._bridges)
 
     @property
     def uniiterated_bridges(self) -> list[Bridge]:

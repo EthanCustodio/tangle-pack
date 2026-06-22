@@ -200,11 +200,72 @@ class TangleSession:
                 else list(fixed_points)
             )
             self.workbench.compute_intersections(fps, preserve_ids=True)
+            # Stable manifolds are now trimmed; recut bridges against the new crossings.
+            self.workbench.rebuild_bridges()
             self.invalidate_trellises()
             recomputed = self.workbench.intersection_registry.all_ids()
             for rz in self.resonance_zones.values():
                 rz.intersection_ids = recomputed
         return self.resonance_zones
+
+    # ── bridge ↔ resonance-zone classification ───────────────────────────────
+
+    @staticmethod
+    def _bridge_test_point(bridge) -> Optional["NDArray"]:
+        """The midpoint node of a bridge, used as its representative point.
+
+        Returns the geometric middle node so a bridge that forms a zone's own unstable
+        boundary arc lands exactly on that zone's boundary (and, with boundary-inclusive
+        containment, is attributed to it). ``None`` for an empty bridge.
+        """
+        pts = bridge.get_point_array()
+        if pts is None or len(pts) == 0:
+            return None
+        return pts[len(pts) // 2]
+
+    def classify_bridge(self, bridge) -> Optional[ResonanceZone]:
+        """
+        Determine which resonance zone a single bridge lies in.
+
+        Tests the bridge's representative midpoint against every stored zone's frozen
+        boundary (boundary included) and returns the innermost containing zone — the
+        one of smallest area when zones nest. A bridge on a zone's own unstable
+        boundary arc is counted as inside that (innermost) zone.
+
+        Args:
+            bridge: A :class:`~tanglepack.numerics.Bridge.Bridge`.
+
+        Returns:
+            The innermost :class:`ResonanceZone` containing the bridge, or ``None`` if
+            it lies outside every zone (or no zones are defined).
+        """
+        point = self._bridge_test_point(bridge)
+        if point is None:
+            return None
+        containing = [
+            rz for rz in self.resonance_zones.values() if rz.contains_point(point)
+        ]
+        if not containing:
+            return None
+        return min(containing, key=lambda rz: rz.area)
+
+    def classify_bridges(
+        self, bridges: Optional[Iterable] = None
+    ) -> dict:
+        """
+        Classify many bridges by resonance zone.
+
+        Args:
+            bridges: Bridges to classify. Defaults to every bridge on the workbench.
+
+        Returns:
+            A dict mapping each bridge to its innermost containing :class:`ResonanceZone`
+            (or ``None``); see :meth:`classify_bridge`.
+        """
+        bridges = (
+            list(self.workbench.bridges) if bridges is None else list(bridges)
+        )
+        return {bridge: self.classify_bridge(bridge) for bridge in bridges}
 
     def plot_resonance_zones(
         self,
@@ -247,7 +308,11 @@ class TangleSession:
         target = ax if ax is not None else plt
         handles = []
         for i, rz in enumerate(self.resonance_zones.values()):
-            poly = rz.boundary_polygon(self.workbench)
+            poly = (
+                rz.boundary_vertices
+                if rz.boundary_vertices is not None
+                else rz.boundary_polygon(self.workbench)
+            )
             if poly.size == 0:
                 continue
             color = palette[i % len(palette)]
