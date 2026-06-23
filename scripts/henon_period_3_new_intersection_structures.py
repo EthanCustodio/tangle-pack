@@ -126,13 +126,15 @@ wb.plot_intersections(fp3)
 wb.plot_intersections(fp1)
 wb.plot_all_bridges()
 
-plt.xlim([-6, 6])
-plt.ylim([-6, 6])
+# plt.xlim([-1.002, -0.997])
+# plt.ylim([0.028, 0.031])
+plt.xlim([-1, 1])
+plt.ylim([0.28, 3.1])
 plt.title("k=2, b=1 Period 3 Nested Tangle")
 plt.tight_layout()
 
 # ── Intersection graph ─────────────────────────────────────────────────────
-wb.visualize_intersection_graph(G, layout="kamada-kawai")
+# wb.visualize_intersection_graph(G, layout="kamada-kawai")
 # wb.visualize_intersection_graph(
 #     G, display_mode="compact", node_color_by="unstable_cdist"
 # )

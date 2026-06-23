@@ -313,16 +313,14 @@ class ManifoldMachine:
             # Just need to create a new manifold/bridge from those iterates
             # The iterated points are already geometrically connected in the iterate chain
 
-            # Get the first and last iterated points
-            first_point = old_points[0]
-            last_point = old_points[-1]
-
-            if manifold.stability == "unstable":
-                first_iterate = first_point.next_iterate
-                last_iterate = last_point.next_iterate
-            else:
-                first_iterate = first_point.prev_iterate
-                last_iterate = last_point.prev_iterate
+            # ``old_points`` are already the iterates (forward images) of this
+            # manifold's points -- ``get_iterated_point_array`` returned each point's
+            # image. The iterated manifold is therefore bracketed by those images
+            # directly; do NOT step one more iterate forward (that image does not
+            # exist yet and was the source of the spurious "next_iterate is None"
+            # failure when re-iterating an already-iterated child bridge).
+            first_iterate = old_points[0]
+            last_iterate = old_points[-1]
 
             if first_iterate is None or last_iterate is None:
                 raise ValueError(
@@ -1071,16 +1069,26 @@ class ManifoldMachine:
         p0 = points[0]
         p1 = points[1]
 
-        point_vals = np.vstack((p0.get_point(), p1.get_point()))
+        # Work in a frame where the chord p0->p1 lies on the x-axis. The curvature
+        # area is a geometric (rotation-invariant) quantity, but the line/parabola
+        # fits are expressed as y-of-x, so a near-vertical segment would otherwise
+        # give a singular Vandermonde matrix (and the chord slope would blow up).
+        # Rotating the local points onto the chord keeps every fit well-conditioned
+        # regardless of the segment's orientation.
+        rotate = ManifoldMachine._chord_frame(p0.get_point(), p1.get_point())
 
-        # compute the linear fit
-        m, d = ManifoldMachine._linear_fit([p0.get_point(), p1.get_point()])
+        point_vals = np.vstack((rotate(p0.get_point()), rotate(p1.get_point())))
+
+        # chord is the x-axis in this frame: m ~ 0, d ~ 0
+        m, d = ManifoldMachine._linear_fit([point_vals[0], point_vals[1]])
 
         # compute the left quadratic fit and area
         left = viewer.manifold.walk_back(p1, p0)
         if left is not None:
 
-            left_points = np.vstack((left.get_point(), p0.get_point(), p1.get_point()))
+            left_points = np.vstack(
+                (rotate(left.get_point()), point_vals[0], point_vals[1])
+            )
 
             a_l, b_l, c_l = ManifoldMachine._parabolic_fit(left_points)
 
@@ -1097,7 +1105,7 @@ class ManifoldMachine:
         if right is not None:
 
             right_points = np.vstack(
-                (p0.get_point(), p1.get_point(), right.get_point())
+                (point_vals[0], point_vals[1], rotate(right.get_point()))
             )
 
             a_r, b_r, c_r = ManifoldMachine._parabolic_fit(right_points)
@@ -1114,6 +1122,40 @@ class ManifoldMachine:
         area = left_area if left_area > right_area else right_area
 
         return area
+
+    @staticmethod
+    def _chord_frame(p0_xy: np.ndarray, p1_xy: np.ndarray):
+        """
+        Return a function rotating points into the frame whose x-axis is the
+        chord ``p0 -> p1`` (origin at ``p0``).
+
+        Used so the curvature fits stay well-conditioned for segments of any
+        orientation, including near-vertical ones. Falls back to the identity
+        (translation only) for a degenerate zero-length chord.
+
+        Args:
+            p0_xy: Coordinates of the first endpoint.
+            p1_xy: Coordinates of the second endpoint.
+
+        Returns:
+            Callable mapping an (x, y) point into the chord frame.
+        """
+        p0_xy = np.asarray(p0_xy, dtype=float).ravel()
+        p1_xy = np.asarray(p1_xy, dtype=float).ravel()
+
+        chord = p1_xy - p0_xy
+        length = float(np.hypot(chord[0], chord[1]))
+        if length == 0.0:
+            return lambda pt: np.asarray(pt, dtype=float).ravel() - p0_xy
+
+        ux, uy = chord[0] / length, chord[1] / length
+        # rotation by -theta maps the chord direction onto +x
+        rot = np.array([[ux, uy], [-uy, ux]], dtype=float)
+
+        def to_frame(pt: np.ndarray) -> np.ndarray:
+            return rot @ (np.asarray(pt, dtype=float).ravel() - p0_xy)
+
+        return to_frame
 
     @staticmethod
     def _compute_single_area(

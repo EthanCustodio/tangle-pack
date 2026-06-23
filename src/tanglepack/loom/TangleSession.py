@@ -275,8 +275,9 @@ class TangleSession:
         zone: "ResonanceZone | tuple",
         num_iterations: int,
         *,
-        fixed_point: Optional["FixedPoint"] = None,
+        fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
         strict: bool = False,
+        min_separation: Optional[float] = None,
     ) -> BlastResult:
         """
         Repeatedly iterate the bridges inside a resonance zone.
@@ -292,6 +293,9 @@ class TangleSession:
             num_iterations: Maximum number of blast steps.
             fixed_point: Restrict to bridges from this fixed point (default: all).
             strict: Re-raise a bridge's forward-map failure instead of skipping it.
+            min_separation: Drop a child bridge whose interior comes within this
+                distance of an already-kept sibling, to avoid precision-driven merges
+                of near-coincident unstable curves (default: disabled).
 
         Returns:
             A :class:`~tanglepack.loom.Blast.BlastResult` genealogy of the blast.
@@ -302,6 +306,7 @@ class TangleSession:
             num_iterations,
             fixed_point=fixed_point,
             strict=strict,
+            min_separation=min_separation,
         )
 
     def plot_resonance_zones(

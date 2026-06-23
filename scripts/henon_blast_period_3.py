@@ -54,7 +54,7 @@ session.initialize_both_manifolds(fp3)
 session.grow_n_times(fp3, "unstable", num_iterations=10)
 session.grow_n_times(fp3, "stable", num_iterations=6)
 
-session.workbench._man_machine.area_cutoff = 1e-4
+session.workbench._man_machine.area_cutoff = 1e-7
 fp1 = session.construct_fixed_point([4, -4])
 session.orient_eigenvectors(
     fp1, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
@@ -74,41 +74,59 @@ T1 = session.trellis(fp1)
 T1.classify_strong_pips()
 T3 = session.trellis(fp3)
 T3.classify_strong_pips()
-T1.set_strong_pip(7)
+# Use each trellis's default strong pip (smallest unstable cdist). Intersection
+# ids are not stable across refinement changes, so we do not hard-code one.
+T1.set_strong_pip(25)
+
 session.add_resonance_zones([T1.strong_pip, T3.strong_pip])
 
 
-# --- blast the inner period-3 zone ----------------------------------------------
-inner_zone = max(session.resonance_zones.values(), key=lambda z: z.area)
-result = session.blast_zone(inner_zone, num_iterations=1, fixed_point=fp1)
+# --- blast both resonance zones, bridges from both fixed points -----------------
+# The two zones overlap (the small period-3 zone sits inside the large period-1
+# zone), and a bridge is iterated at most once, so blast the SMALLER, more specific
+# zone first -- otherwise the large blast consumes the small zone's bridges and the
+# small blast finds nothing left to iterate.
+small_zone = min(session.resonance_zones.values(), key=lambda z: z.area)
+large_zone = max(session.resonance_zones.values(), key=lambda z: z.area)
 
-print("\nBlast of the inner period-3 resonance zone")
-print("=" * 60)
-print(f"requested iterations:      {result.num_iterations_requested}")
-print(f"completed iterations:      {result.completed_iterations}")
-print(f"terminated early:          {result.terminated_early}")
-print(f"bridges skipped:           {result.skipped}")
-print(f"max interior depth:        {result.max_depth_reached()}")
-print(f"distinct interior bridges: {len(result.all_interior_bridges())}")
-print("\ninterior frontier size by generation:")
-print("  " + ", ".join(str(len(f)) for f in result.interior_bridges_by_iteration))
+# min_separation stops iterating a bridge once its image folds back onto curve that
+# already exists within that distance -- beyond it the folds are iterates-of-iterates
+# whose accumulated error makes them cross ("zig-zag"). It keeps the blast on the
+# well-resolved side of the precision limit; lower it to resolve finer folds.
+result_small = session.blast_zone(
+    small_zone, num_iterations=12, fixed_point=[fp1, fp3], min_separation=1e-4
+)
+result_large = session.blast_zone(
+    large_zone, num_iterations=12, fixed_point=[fp1, fp3], min_separation=1e-3
+)
+
+for name, result in (("small", result_small), ("large", result_large)):
+    print(f"\nBlast of the {name} resonance zone")
+    print("=" * 60)
+    print(f"completed iterations:      {result.completed_iterations}")
+    print(f"terminated early:          {result.terminated_early}")
+    print(f"distinct interior bridges: {len(result.all_interior_bridges())}")
+    print("interior frontier size by generation:")
+    print("  " + ", ".join(str(len(f)) for f in result.interior_bridges_by_iteration))
 
 
 # --- plot -----------------------------------------------------------------------
+# Every bridge the blast computed is registered in the workbench (`session.workbench
+# .bridges`), so we plot the whole tangle straight from there -- no need to reach
+# into the blast results. `plot_tangle` draws the grown manifold linked-lists (the
+# red/blue curves); `plot_all_bridges` draws every registered bridge, original and
+# iterated.
 plt.figure(figsize=(8, 8))
 session.plot_resonance_zones(alpha=0.3)
 
 for fp in (fp3, fp1):
     session.workbench.plot_tangle(fp, "stable", color="r", linewidth=0.8)
-    session.workbench.plot_tangle(fp, "unstable", color="b", linewidth=0.6)
 
-for bridge in result.all_interior_bridges():
-    pts = bridge.get_point_array()
-    if pts is not None and len(pts):
-        pts = np.asarray(pts)
-        plt.plot(pts[:, 0], pts[:, 1], color="orange", linewidth=1.0)
+session.workbench.plot_all_bridges()
+
+print(f"\nbridges registered in the workbench: {len(session.workbench.bridges)}")
 
 plt.xlim([-8, 8])
 plt.ylim([-8, 8])
-plt.title("Blasted inner period-3 resonance zone (interior bridge images)")
+plt.title("Blasted resonance zones — all bridges from the workbench")
 plt.show()

@@ -540,6 +540,20 @@ class TangleWorkbench:
                 "No bridges registered. Call create_bridges() before iterate_bridge()."
             )
 
+        # 0. If this bridge's forward image is a stretch of manifold that has already
+        #    been grown, that section is already cut into bridges -- reuse those
+        #    existing objects instead of mapping the points forward again. Re-mapping
+        #    would lay a second, slightly-different polyline over curve that already
+        #    exists (the "zig-zag"), spawn overlapping duplicate bridges, and trip the
+        #    same-stability (unstable x unstable) detector along the near-coincident
+        #    pair. Only when the image runs past the grown extent is there genuinely
+        #    new curve to compute (handled below).
+        existing_image = self._existing_image_bridges(bridge)
+        if existing_image is not None:
+            bridge.iterated = True
+            bridge.children = existing_image
+            return existing_image
+
         # 1. map forward
         iterated = self._man_machine.iterate_bridge(bridge)
 
@@ -562,15 +576,23 @@ class TangleWorkbench:
             self._intersection_registry.add(ix)
 
         # 4. cut at crossings
-        if new_intersections:
-            new_bridges = self.Tangle.create_bridges(for_manifold=iterated)
-        else:
-            # No crossings: the iterated manifold is itself one unsplit bridge.
-            # ManifoldMachine.iterate_bridge returns a BaseManifold, so wrap it as
-            # a Bridge (carrying its manifold_key) — downstream consumers
-            # (uniiterated_bridges, infer_iterate_table, genealogy) require Bridge
-            # attributes such as .iterated / .children. This branch is only reached
-            # when an iterated bridge happens not to cross the stable manifold.
+        new_bridges = (
+            self.Tangle.create_bridges(for_manifold=iterated)
+            if new_intersections
+            else []
+        )
+
+        # A bridge is bounded by two crossings, so create_bridges yields nothing when
+        # the image crosses the stable manifold fewer than twice -- either zero times
+        # (no crossing) or exactly once (a single new homoclinic point cannot bound a
+        # bridge on its own). Either way the forward image is still a real piece of
+        # unstable manifold whose dynamics must be carried forward, so keep it as one
+        # unsplit bridge rather than dropping it. (Any new crossing was already
+        # registered above; it is picked up as a bridge boundary on later iterates,
+        # once a second crossing appears alongside it.) ManifoldMachine.iterate_bridge
+        # may return a BaseManifold, so wrap it as a Bridge -- downstream consumers
+        # (uniiterated_bridges, genealogy) need the Bridge attributes.
+        if not new_bridges:
             if isinstance(iterated, Bridge):
                 new_bridges = [iterated]
             else:
@@ -585,17 +607,29 @@ class TangleWorkbench:
                 wrapped.manifold_key = getattr(iterated, "manifold_key", None)
                 new_bridges = [wrapped]
 
-        # 5. wire genealogy
-        bridge.iterated = True
-        bridge.children = new_bridges
-        for nb in new_bridges:
-            nb.parent = bridge
-
-        # 6. register
-        self._bridges.extend(new_bridges)
+        # 5. identify each child by its two bounding intersections
         self._assign_bridge_intersections(new_bridges)
 
-        return new_bridges
+        # 5b. Single-copy invariant: a bridge is uniquely defined by the two
+        #     intersections it connects, so a freshly cut child that matches a bridge
+        #     already computed IS that bridge. Return the existing persistent object
+        #     instead of a duplicate, and register only the genuinely new children.
+        #     This always returns the full set of children (the caller still sees
+        #     every piece of the image) -- it just points at the one stored copy.
+        #     Iterating the fixed-point bridge, for instance, re-traces curve already
+        #     held, so its children resolve to existing bridges and nothing is added.
+        existing_ids = {id(b) for b in self._bridges}
+        children = self._canonical_children(new_bridges)
+
+        # 6. wire genealogy; register only the genuinely new bridges
+        bridge.iterated = True
+        bridge.children = children
+        for nb in children:
+            if id(nb) not in existing_ids:
+                nb.parent = bridge
+                self._bridges.append(nb)
+
+        return children
 
     def infer_iterate_table(self, cdist_rtol: float = 0.05) -> int:
         """
@@ -769,6 +803,181 @@ class TangleWorkbench:
         for intersection in self.Tangle._intersections:
             self._intersection_registry.add(intersection)
         return self._intersection_registry
+
+    def _bridge_signature(self, bridge: Bridge) -> Optional[tuple[float, float]]:
+        """
+        Canonical identity of a bridge: the sorted unstable cdists of its two
+        bounding intersections.
+
+        Unstable canonical distance is monotonic and unique along one fixed point's
+        unstable manifold and is invariant of which manifold detected the crossing,
+        so this pair identifies the physical piece of curve a bridge spans (whereas
+        the intersection *ids* are not stable -- a re-detected crossing gets a fresh
+        id because its detecting unstable branch differs).
+
+        Returns:
+            ``(low, high)`` cdists, or ``None`` if either bounding intersection is
+            unknown.
+        """
+        reg = self._intersection_registry
+        fi, si = bridge.first_intersection, bridge.second_intersection
+        if fi is None or si is None or fi not in reg or si not in reg:
+            return None
+        a = float(reg[fi].unstable_cdist)
+        b = float(reg[si].unstable_cdist)
+        return (min(a, b), max(a, b))
+
+    @staticmethod
+    def _signatures_match(
+        s1: tuple[float, float],
+        s2: tuple[float, float],
+        rtol: float = 2e-3,
+        atol: float = 1e-7,
+    ) -> bool:
+        """Whether two bridge cdist signatures denote the same piece of curve.
+
+        The tolerance is scaled by the bridges' SPAN (width), not their absolute
+        cdist. Two copies of the same bridge agree on the shared intersection
+        exactly and differ on a re-detected endpoint only by a tiny fraction of the
+        span (the detection drift of a crossing found on a coarser iterated bridge).
+        Two *distinct* bridges -- even adjacent ones sharing one intersection --
+        differ on the other endpoint by about a full span. A span-relative tolerance
+        therefore separates them cleanly at any cdist magnitude, where an
+        absolute-cdist-scaled tolerance would wrongly merge thin neighbouring bridges
+        far out along the manifold. The small ``atol`` floor covers the fixed point's
+        cdist-0 endpoint.
+        """
+        span = min(s1[1] - s1[0], s2[1] - s2[0])
+        tol = max(rtol * span, atol)
+        return all(abs(a - b) <= tol for a, b in zip(s1, s2))
+
+    @staticmethod
+    def _manifold_identity(bridge: Bridge) -> tuple:
+        """Identity of the unstable manifold a bridge lives on.
+
+        Canonical distance is measured per ``(fixed_point, orbit_index, branch)`` --
+        each periodic-orbit anchor sits at its own cdist (0, 0) -- so bridge
+        signatures may only be compared within one such manifold. The orbit/branch
+        come from the bridge's ``manifold_key`` when present (a freshly iterated
+        child carries the advanced key, i.e. the image's manifold); otherwise the
+        branch falls back to the ``branch_index`` attribute and the orbit to 0.
+        """
+        mk = getattr(bridge, "manifold_key", None)
+        if mk is not None:
+            branch = mk[3] if mk[3] is not None else 0
+            return (id(bridge.fixed_point), mk[2], branch)
+        bi = getattr(bridge, "branch_index", None)
+        return (id(bridge.fixed_point), 0, 0 if bi is None else bi)
+
+    def _same_manifold(self, a: Bridge, b: Bridge) -> bool:
+        """Whether two bridges live on the same unstable manifold (see _manifold_identity)."""
+        return self._manifold_identity(a) == self._manifold_identity(b)
+
+    def _find_existing_bridge(self, child: Bridge) -> Optional[Bridge]:
+        """Return the registered same-manifold bridge whose signature matches, if any."""
+        signature = self._bridge_signature(child)
+        if signature is None:
+            return None
+        for existing in self._bridges:
+            if not self._same_manifold(existing, child):
+                continue
+            sig = self._bridge_signature(existing)
+            if sig is not None and self._signatures_match(signature, sig):
+                return existing
+        return None
+
+    def _existing_image_bridges(self, bridge: Bridge) -> Optional[list[Bridge]]:
+        """
+        The already-computed bridges that tile this bridge's forward image, if the
+        image lies entirely within the grown extent of the image's manifold.
+
+        Under one application of the map a point at unstable cdist ``c`` images to
+        ``stretch_param * c`` on the manifold one orbit step forward (see
+        :meth:`_advance_key_forward`) -- for a period-1 fixed point that is the SAME
+        manifold, but for a period-p orbit it is the NEXT orbit branch's manifold,
+        each branch carrying its own cdist coordinate from its anchor. So a bridge
+        spanning ``[c0, c1]`` images onto ``[a*c0, a*c1]`` of the advanced manifold.
+        If that range is already grown, it is already cut into bridges and those are
+        the forward image -- no need (and actively harmful) to re-map and re-cut.
+        Returns those existing bridges in cdist order, or ``None`` when the bridge has
+        no signature/per-step factor, or its image runs past the grown extent of the
+        advanced manifold (genuinely new curve that must be computed).
+
+        Args:
+            bridge: The bridge about to be iterated.
+
+        Returns:
+            The existing image bridges, or ``None`` to fall through to real iteration.
+        """
+        sig = self._bridge_signature(bridge)
+        alpha = getattr(bridge, "stretch_param", None)
+        if sig is None or not alpha or alpha <= 0:
+            return None
+
+        img_lo, img_hi = alpha * sig[0], alpha * sig[1]
+
+        # The image lives on the manifold one orbit step forward.
+        mk = getattr(bridge, "manifold_key", None)
+        if mk is not None:
+            adv_key = self._advance_key_forward(mk, bridge.fixed_point)
+            image_identity = (
+                id(adv_key[0]),
+                adv_key[2],
+                adv_key[3] if adv_key[3] is not None else 0,
+            )
+        else:
+            image_identity = self._manifold_identity(bridge)
+
+        same: list[tuple[tuple[float, float], Bridge]] = []
+        max_grown = 0.0
+        for other in self._bridges:
+            if other is bridge or self._manifold_identity(other) != image_identity:
+                continue
+            s = self._bridge_signature(other)
+            if s is None:
+                continue
+            same.append((s, other))
+            max_grown = max(max_grown, s[1])
+
+        # Image must lie within the grown extent to be reusable.
+        if not same or img_hi > max_grown * (1.0 + 1e-3):
+            return None
+
+        # Select the existing bridges whose midpoint falls in the image range. The
+        # margin absorbs the small drift between predicted and computed image cdists.
+        margin = 0.05 * (img_hi - img_lo)
+        covering = sorted(
+            (
+                (s, b)
+                for s, b in same
+                if img_lo - margin <= 0.5 * (s[0] + s[1]) <= img_hi + margin
+            ),
+            key=lambda sb: sb[0],
+        )
+        return [b for _s, b in covering] or None
+
+    def _canonical_children(self, new_bridges: list[Bridge]) -> list[Bridge]:
+        """
+        Map freshly cut children onto the single persistent bridge per signature.
+
+        A bridge is identified by the two intersections it connects (see
+        :meth:`_bridge_signature`). A child whose signature matches a bridge already
+        registered -- including the parent itself -- is that same bridge, so the
+        existing persistent object is returned in its place to keep exactly one copy
+        of each computed bridge. Genuinely new children (and any with no identifiable
+        signature) pass through unchanged for the caller to register.
+
+        Args:
+            new_bridges: Freshly cut child bridges, intersections already assigned.
+
+        Returns:
+            The children with duplicates replaced by their existing canonical copy.
+        """
+        canonical: list[Bridge] = []
+        for child in new_bridges:
+            existing = self._find_existing_bridge(child)
+            canonical.append(existing if existing is not None else child)
+        return canonical
 
     def _assign_bridge_intersections(self, bridges: list[Bridge]) -> None:
         """

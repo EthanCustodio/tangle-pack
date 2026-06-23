@@ -178,18 +178,9 @@ class Tangle:
 
             seg_1, seg_2 = self._seg_lookup[seg1_id], self._seg_lookup[seg2_id]
 
-            # A real crossing is always one unstable + one stable segment. A
-            # same-stability pair cannot be a true crossing (fundamental
-            # invariant); it is a near-tangency artifact -- log and drop it.
+            # A real crossing is always one unstable + one stable segment.
             if seg_1.manifold.stability == seg_2.manifold.stability:
-                logger.warning(
-                    "Discarding impossible %s x %s segment pair %s as a "
-                    "numerical artifact (near-tangency / under-resolved manifold)",
-                    seg_1.manifold.stability,
-                    seg_2.manifold.stability,
-                    tuple(seg_id_pair),
-                )
-                self._processed_pairs.add(seg_id_pair)
+                self._discard_same_stability(seg_id_pair, seg_1, seg_2)
                 continue
 
             point = self._find_true_intersection(seg_1, seg_2)
@@ -255,6 +246,48 @@ class Tangle:
         t, s = np.linalg.solve(M, rhs)  # t on AB, s on CD
         # (Optional sanity: assert 0<=t<=1 and 0<=s<=1 if you didn't already know)
         return a + t * (b - a)
+
+    @staticmethod
+    def _same_unstable_branch(seg_1: _Segment, seg_2: _Segment) -> bool:
+        """
+        Whether two segments lie on the same manifold branch -- one physical curve.
+
+        A bridge and its forward images are all sections of the single unstable
+        manifold of a given (fixed point, orbit index, branch), even though they are
+        held as separate objects. Two segments of one curve can never cross (the
+        manifold is simple), so the Tangle must treat the whole branch as "self" --
+        the bare object-identity check is too narrow once a branch is split across
+        bridge/image objects. Falls back to object identity when a key is missing.
+        """
+        k1 = getattr(seg_1.manifold, "manifold_key", None)
+        k2 = getattr(seg_2.manifold, "manifold_key", None)
+        if k1 is None or k2 is None:
+            return seg_1.manifold is seg_2.manifold
+        # key = (fixed_point, stability, orbit_index, branch_index)
+        return k1[0] is k2[0] and k1[1] == k2[1] and k1[2] == k2[2] and k1[3] == k2[3]
+
+    def _discard_same_stability(
+        self, seg_id_pair: "frozenset[int]", seg_1: _Segment, seg_2: _Segment
+    ) -> None:
+        """
+        Drop a same-stability segment pair -- it can never be a real crossing.
+
+        By the fundamental invariant two unstable manifolds (or two stable manifolds)
+        never cross, whether they belong to the same fixed point or different ones. So
+        every same-stability pair the spatial index turns up is a near-tangency: one
+        curve folding near itself, two orbit branches sharing a resonance island, or
+        two fixed points' manifolds running close. None is a malfunction to surface --
+        it is expected geometry for a folded tangle -- so all are dropped (logged at
+        debug, not warning). A genuine *transversal* self-crossing (a real numerics
+        bug) is caught by the invariant test ``test_no_same_stability_crossing``, not
+        by flagging every near-tangency here.
+        """
+        logger.debug(
+            "Dropping same-stability (%s) segment pair %s as a near-tangency",
+            seg_1.manifold.stability,
+            tuple(seg_id_pair),
+        )
+        self._processed_pairs.add(seg_id_pair)
 
     def add_manifold(self, manifold: BaseManifold):
         """
@@ -347,17 +380,8 @@ class Tangle:
             seg_1 = self._seg_lookup[seg1_id]
             seg_2 = self._seg_lookup[seg2_id]
 
-            # A same-stability pair cannot be a true crossing (fundamental
-            # invariant); it is a near-tangency artifact -- log and drop it.
             if seg_1.manifold.stability == seg_2.manifold.stability:
-                logger.warning(
-                    "Discarding impossible %s x %s segment pair %s as a "
-                    "numerical artifact (near-tangency / under-resolved manifold)",
-                    seg_1.manifold.stability,
-                    seg_2.manifold.stability,
-                    tuple(seg_id_pair),
-                )
-                self._processed_pairs.add(seg_id_pair)
+                self._discard_same_stability(seg_id_pair, seg_1, seg_2)
                 continue
 
             point = self._find_true_intersection(seg_1, seg_2)
@@ -614,26 +638,18 @@ class Tangle:
             )
             manifold_crossings[u_seg.manifold].append((cdist, coords, p0, p1))
 
-        # --- 2. Build bridges and queue boundary-point insertions ---
-        # Boundary points are NOT spliced immediately. Each is queued against its
-        # original segment (keyed by the unordered pair of endpoint object ids),
-        # then spliced in a single ordered pass (step 3). This is what makes
-        # multiple crossings on one segment correct.
+        # --- 2. Build bridges as two points picked from the single manifold ---
+        # A bridge is defined by a head and a tail point taken from its parent
+        # unstable manifold: the real point just BELOW its first crossing and the
+        # real point just ABOVE its last crossing. These are existing manifold points
+        # that already carry the iterate links, so iterating a bridge follows the one
+        # underlying manifold's iterate structure (head.next_iterate, tail.next_iterate)
+        # instead of spawning a parallel, slightly-offset set of points. Using fresh
+        # 10%-offset "straddle" points was what laid a second polyline over existing
+        # curve (the zig-zag), produced overlapping duplicate bridges, and -- because
+        # each crossing got two distinct offset points that mapped to near-coincident
+        # images -- tripped the unstable x unstable detector all along the tangle.
         all_bridges: list[Bridge] = []
-
-        # seg_key -> (p0, p1, branch_index, list[(t, boundary_point)])
-        pending_inserts: dict[
-            frozenset[int], tuple[Point, Point, int, list[tuple[float, Point]]]
-        ] = {}
-
-        def _queue(
-            p0: Point, p1: Point, branch_index: int, t: float, point: Point
-        ) -> None:
-            key = frozenset((id(p0), id(p1)))
-            if key not in pending_inserts:
-                pending_inserts[key] = (p0, p1, branch_index, [])
-            pending_inserts[key][3].append((t, point))
-
         for manifold, crossings in manifold_crossings.items():
             crossings.sort(key=lambda c: c[0])
 
@@ -641,36 +657,25 @@ class Tangle:
                 _, coords1, p0_a, p1_a = crossings[i]
                 _, coords2, p0_b, p1_b = crossings[i + 1]
 
-                # The bridge boundary points are placed just OUTSIDE each crossing
-                # (root toward the lower endpoint of C_i's segment, tail toward the
-                # higher endpoint of C_{i+1}'s segment). This bracketing is
-                # intentional: per Bridge's contract the root/tail straddle the two
-                # intersections so the forward image of the bridge still straddles
-                # the image intersections and iterate_bridge can detect them.
-                root_point, t_root = self._boundary_point(
-                    p0_a, p1_a, manifold.stability, coords1, "root"
-                )
-                tail_point, t_tail = self._boundary_point(
-                    p0_b, p1_b, manifold.stability, coords2, "tail"
-                )
+                head = p0_a  # real point just below crossing i
+                tail = p1_b  # real point just above crossing i+1
 
-                # cache pre-iterates against the original endpoints
-                self._cache_boundary_preiterate(
-                    root_point, p0_a, p1_a, manifold.stability
-                )
-                self._cache_boundary_preiterate(
-                    tail_point, p0_b, p1_b, manifold.stability
-                )
-
-                _queue(p0_a, p1_a, manifold.branch_index, t_root, root_point)
-                _queue(p0_b, p1_b, manifold.branch_index, t_tail, tail_point)
+                # Two consecutive crossings on the SAME segment have no real point
+                # between them; refine the manifold (splice one true point on the
+                # segment, between the two crossings) so head/tail bracket distinct
+                # crossings rather than spanning both.
+                if p0_a is p0_b and p1_a is p1_b:
+                    mid = self._insert_crossing_separator(
+                        p0_a, p1_a, coords1, coords2, manifold
+                    )
+                    tail = mid
 
                 bridge = Bridge(
-                    root=root_point,
+                    root=head,
                     stability=manifold.stability,
                     stretch_param=manifold.stretch_param,
                     fixed_point=manifold.fixed_point,
-                    tail=tail_point,
+                    tail=tail,
                     branch_index=manifold.branch_index,
                 )
                 # A bridge is a segment of its parent unstable manifold, so it lives
@@ -680,27 +685,49 @@ class Tangle:
                 bridge.manifold_key = manifold.manifold_key
                 all_bridges.append(bridge)
 
-        # --- 3. Splice every segment's boundary points in one ordered pass ---
-        # An original segment [p0, p1] is an adjacent pair (p0.forward is p1), so
-        # the queued points can be linked straight between them in ascending t.
-        for p0, p1, branch_index, inserts in pending_inserts.values():
-            inserts.sort(key=lambda x: x[0])
-            prev = p0
-            for _, point in inserts:
-                # insert_point_forward splices `point` between prev and prev.forward
-                # (= p1 on the first iteration) and fixes both back-links. The
-                # branch_index argument is what a BranchPoint root needs; on a
-                # plain Point it lands in the only_forward slot exactly as the
-                # original per-crossing code passed it.
-                prev.insert_point_forward(point, branch_index)
-                prev = point
-
         # --- 4. Wire next_bridge / prev_bridge doubly-linked list ---
         for i in range(len(all_bridges) - 1):
             all_bridges[i].next_bridge = all_bridges[i + 1]
             all_bridges[i + 1].prev_bridge = all_bridges[i]
 
         return all_bridges
+
+    def _insert_crossing_separator(
+        self,
+        p0: Point,
+        p1: Point,
+        coords1: tuple[float, float],
+        coords2: tuple[float, float],
+        manifold: BaseManifold,
+    ) -> Point:
+        """
+        Splice one real point into the adjacent segment ``[p0, p1]`` between two
+        crossings that share it, and return it.
+
+        Two consecutive crossings on the same segment have no manifold point between
+        them, so neighbouring bridges cannot bracket them with distinct real points.
+        This refines the manifold by inserting a true point on the segment at the
+        midpoint of the two crossings (its cdist interpolated against the original
+        endpoints), restoring one-crossing-per-segment locally.
+
+        Args:
+            p0: Lower-cdist endpoint of the shared segment.
+            p1: Higher-cdist endpoint of the shared segment.
+            coords1: Coordinates of the lower crossing on the segment.
+            coords2: Coordinates of the higher crossing on the segment.
+            manifold: The manifold the segment belongs to.
+
+        Returns:
+            The freshly inserted separator point.
+        """
+        mid_xy = 0.5 * (np.asarray(coords1) + np.asarray(coords2))
+        cdist = self._cdist_between(p0, p1, manifold.stability, mid_xy)
+        separator = Point(float(mid_xy[0]), float(mid_xy[1]), cdist)
+        if isinstance(p0, BranchPoint):
+            p0.insert_point_forward(separator, manifold.branch_index)
+        else:
+            p0.insert_point_forward(separator)
+        return separator
 
     def _boundary_point(
         self,
@@ -743,11 +770,12 @@ class Tangle:
             intersection_coords, seg_point.get_point(), 0.1
         )
 
-        # cdist evaluated at the crossing (preserves prior behaviour), against the
-        # original endpoints so it cannot be corrupted by earlier insertions.
-        new_cdist = self._cdist_between(
-            p0, p1, stability, np.asarray(intersection_coords)
-        )
+        # cdist evaluated at the boundary point's ACTUAL location (the 10% offset
+        # point), not at the crossing: a Point's cdist must reflect where the point
+        # physically sits, otherwise the error is baked in and scaled up every time
+        # the bridge is iterated. Evaluated against the original endpoints p0, p1 so
+        # it cannot be corrupted by earlier insertions.
+        new_cdist = self._cdist_between(p0, p1, stability, np.asarray(new_point))
 
         boundary = Point(new_point[0], new_point[1], new_cdist)
         t = self._fractional_position(p0, p1, np.asarray(new_point))

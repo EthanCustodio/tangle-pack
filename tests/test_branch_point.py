@@ -6,15 +6,15 @@ from tanglepack import Point
 def test_point_creation():
 
     num_branches = 2
-    p = BranchPoint(num_branches, 1.0, 2.0)
+    p = BranchPoint(num_branches, x=1.0, y=2.0)
 
     assert p.x == 1.0
     assert p.y == 2.0
-    assert p.next_iterate == None
-    assert p.prev_iterate == None
+    assert p.next_iterate is None
+    assert p.prev_iterate is None
 
-    assert len(p.cdists) == num_branches
     assert len(p.forward_branches) == num_branches
+    assert len(p.backward_branches) == num_branches
 
 
 def test_insert_point_forward():

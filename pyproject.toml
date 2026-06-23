@@ -63,6 +63,16 @@ dependencies = [
 where = ["src"]
 
 
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+  "slow: long-running growth/blast integration tests",
+  "regression: pins a known bug (xfail until fixed)",
+]
+
+
 [project.scripts]
 tanglepack-gui = "tanglepack_gui.app:main"
 tanglepack-dash = "tanglepack_webdash.app:main"
