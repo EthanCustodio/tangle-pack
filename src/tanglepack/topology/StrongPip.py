@@ -59,11 +59,18 @@ The fixed point itself is reported by the detector as an intersection at canonic
 distance 0 on both manifolds; it is the anchor z'_0, not a transverse crossing, so
 it is excluded from N (both as a candidate and as a disqualifier).
 
-Branch cycle / inversion: forward_stable_branch_cycle() is validated for the
-non-inversion case (k_value == period). The inversion ordering (k_value == 2*period,
-branch_index flips after each full orbit) is implemented from first principles but
-has not yet been validated against a computed inversion trellis — revisit when one
-is available.
+Same-periodic-point restriction: a strong pip is a property of a single periodic
+point's homoclinic tangle, so only crossings between two manifolds of q0's own
+fixed point may disqualify it. A nested session detects heteroclinic crossings too
+(e.g. a period-1 outer tangle meeting a period-3 inner tangle); those are real and
+kept for other purposes, but they must not enter N for strong-pip classification.
+The disqualifier loop therefore skips any r whose stable branch is not on q0's
+fixed point (it is absent from the branch cycle) or whose unstable branch is known
+to be on a different fixed point. The whole orbit of a period-p point counts as one
+"periodic point" here — the restriction is on the FixedPoint object, not on the
+orbit index or branch index. The unstable key (manifold_a_key) is legitimately None
+on points born from iterated bridges; those are kept (the stable key is the reliable
+discriminator), so only a *known* foreign unstable key is rejected.
 
 Branch cycle / inversion: forward_stable_branch_cycle() is validated for the
 non-inversion case (k_value == period). The inversion ordering (k_value == 2*period,
@@ -211,6 +218,18 @@ def is_strong_pip(
             continue  # the anchoring fixed point, not a transverse intersection
         r_branch = r.manifold_b_key
         if r_branch is None:
+            continue
+        # A strong pip is a property of one periodic point's own tangle, so only
+        # crossings between two manifolds of THIS fixed point may disqualify q0.
+        # pos_r below already confirms r's stable branch belongs to fixed_point;
+        # here we also reject the case where r's unstable branch is known to
+        # belong to a *different* fixed point — a heteroclinic crossing (e.g. a
+        # period-1 outer tangle meeting this period-3 inner tangle). Those
+        # crossings are real and kept elsewhere, but must not be used to classify
+        # a strong pip. A None unstable key is an iterated-bridge homoclinic point
+        # on this tangle (manifold_b_key is the reliable discriminator throughout
+        # the code), so it is kept.
+        if r.manifold_a_key is not None and r.manifold_a_key[0] is not fixed_point:
             continue
         pos_r = pos_map.get(r_branch)
         if pos_r is None:
