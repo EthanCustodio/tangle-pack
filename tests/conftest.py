@@ -18,15 +18,16 @@ from tanglepack import TangleWorkbench, TangleSession
 # Maps
 # --------------------------------------------------------------------------- #
 def _henon_map(point):
+    # Batch-capable (coordinate on axis 0): a single (2,) point or a (2, N) batch.
     k, b = 10, 1
     x, y = point
-    return np.array([y - k + x**2, -b * x])
+    return np.stack([y - k + x**2, -b * x], axis=0)
 
 
 def _henon_map_inverse(point):
     k, b = 10, 1
     x, y = point
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
 
 
 def _henon_jacobian(point):
@@ -87,22 +88,24 @@ def _stable_manifold(workbench, fp, branch_index: int = 0):
 
 @pytest.fixture
 def grown_unstable(initialized):
-    """``(workbench, fp, manifold)`` with the unstable manifold grown 5 times.
+    """``(workbench, fp, manifold)`` with the unstable manifold grown 7 times.
 
-    Capped at 5: with the k=10 binary-horseshoe map, refinement currently
-    explodes the point count beyond ~6 iterations (a known bug pinned by the
-    regression suite), so the fast fixtures stay at 5 to remain snappy.
+    7 iterations of the k=10 binary-horseshoe map develops a small tangle that
+    actually crosses the stable manifold (a handful of intersections/bridges)
+    while staying snappy. The old "explodes beyond ~6 iterations" cap was an
+    artifact of a mislocated orbit (the multipoint solver used to root-find
+    element-wise); with the orbit located properly the count grows gradually.
     """
     workbench, fp = initialized
-    workbench.grow_n_times(fp, "unstable", num_iterations=5)
+    workbench.grow_n_times(fp, "unstable", num_iterations=7)
     return workbench, fp, _unstable_manifold(workbench, fp)
 
 
 @pytest.fixture
 def grown_both(initialized):
-    """``(workbench, fp)`` with unstable grown 5x and stable grown to turnaround."""
+    """``(workbench, fp)`` with unstable grown 7x and stable grown to turnaround."""
     workbench, fp = initialized
-    workbench.grow_n_times(fp, "unstable", num_iterations=5)
+    workbench.grow_n_times(fp, "unstable", num_iterations=7)
     workbench.grow_until_turnaround(fp, "stable")
     return workbench, fp
 
@@ -121,13 +124,13 @@ def small_tangle(grown_both):
 def _p3_map(point):
     k, b = 2, 1
     x, y = point
-    return np.array([y - k + x**2, -b * x])
+    return np.stack([y - k + x**2, -b * x], axis=0)
 
 
 def _p3_map_inverse(point):
     k, b = 2, 1
     x, y = point
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
 
 
 def _p3_jacobian(point):
@@ -152,8 +155,8 @@ def henon_p3_session():
         fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
     )
     session.initialize_both_manifolds(fp3)
-    session.grow_n_times(fp3, "unstable", num_iterations=10)
-    session.grow_n_times(fp3, "stable", num_iterations=6)
+    session.grow_n_times(fp3, "unstable", num_iterations=13)
+    session.grow_n_times(fp3, "stable", num_iterations=9)
 
     session.workbench._man_machine.area_cutoff = 1e-4
     fp1 = session.construct_fixed_point([4, -4])
@@ -161,7 +164,7 @@ def henon_p3_session():
         fp1, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
     )
     session.initialize_both_manifolds(fp1)
-    session.grow_n_times(fp1, "unstable", num_iterations=7)
+    session.grow_n_times(fp1, "unstable", num_iterations=11)
     session.grow_until_turnaround(fp1, "stable")
 
     session.compute_intersections([fp3, fp1])

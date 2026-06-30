@@ -1,11 +1,15 @@
+import logging
 from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.optimize import newton as newton_method
+from scipy.optimize import fsolve
 from scipy.differentiate import jacobian as jacob
 from .FixedPoint import FixedPoint
 from .DynamicalSystem import DynamicalSystem
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 """
 Dev Notes:
@@ -121,9 +125,23 @@ class FixedPointSolver:
 
         initial_guess_flattened = self.flatten_trajectory(initial_guess)
 
-        fixed_point_flattened = newton_method(
-            self.multipoint_shoot_flattened_difference, initial_guess_flattened
-        )
+        # Multipoint shooting couples every coordinate (residual_i = map(x_{i-1}) -
+        # x_i), so this is a multivariate root-find. ``scipy.optimize.newton`` on an
+        # array solves each coordinate as an INDEPENDENT scalar problem, which only
+        # "converges" when the guess is already the answer (e.g. the exact orbit at
+        # k=2) and silently returns a non-orbit otherwise -- the source of the
+        # k-sensitive, eigenvector-flip-requiring behaviour. ``fsolve`` (MINPACK
+        # hybrd) solves the coupled system properly and, staying near the guess,
+        # also keeps the orbit labelling consistent with ``initial_guess``.
+        shape = np.shape(initial_guess_flattened)
+        fixed_point_flattened = fsolve(
+            lambda x: np.ravel(
+                self.multipoint_shoot_flattened_difference(np.reshape(x, shape))
+            ),
+            np.ravel(initial_guess_flattened),
+            xtol=1e-13,
+            maxfev=10000,
+        ).reshape(shape)
 
         fixed_point_full = self.unflatten_trajectory(fixed_point_flattened)
 
@@ -171,7 +189,7 @@ class FixedPointSolver:
             eigenvector_list[i][0] = eigenvectors[:, unstable_index].reshape(2, 1)
             eigenvector_list[i][1] = eigenvectors[:, 1 - unstable_index].reshape(2, 1)
 
-            print(f"eigenvalues: {eigenvalues}")
+            logger.debug("eigenvalues at orbit index %d: %s", i, eigenvalues)
             eigenvalue_list[i][0] = eigenvalues[unstable_index]
             eigenvalue_list[i][1] = eigenvalues[1 - unstable_index]
 
@@ -204,8 +222,15 @@ class FixedPointSolver:
             x_i = fixed_point[i]
 
             if self.jacobian_function is None:
-                # if a jacobian function isn't provided, compute numerically
-                jacobian = jacob(self.dynamical_map, x_i, initial_step=initial_step)
+                # if a jacobian function isn't provided, compute numerically. The
+                # finite-difference step reuses the orbit residual^(1/3); when the
+                # orbit is located exactly (residual 0) that is 0, which makes the
+                # difference stencil degenerate (nan). Fall back to scipy's own
+                # default step in that case.
+                if initial_step > 0:
+                    jacobian = jacob(self.dynamical_map, x_i, initial_step=initial_step)
+                else:
+                    jacobian = jacob(self.dynamical_map, x_i)
                 jacobian = jacobian.df
 
             else:

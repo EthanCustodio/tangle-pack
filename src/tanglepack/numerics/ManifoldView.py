@@ -26,6 +26,10 @@ class ManifoldView:
 
         if manifold.stability == "unstable":
             self.map_fwd, self.map_back = system.map, system.map_inv
+            self.map_fwd_batch = system.map_batch
+            self.map_back_batch = system.map_inv_batch
 
         else:  # stable
             self.map_fwd, self.map_back = system.map_inv, system.map
+            self.map_fwd_batch = system.map_inv_batch
+            self.map_back_batch = system.map_batch

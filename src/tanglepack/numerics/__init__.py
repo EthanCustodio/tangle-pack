@@ -32,6 +32,8 @@ from .IterateTable import IterateTable
 from .IntersectionRegistry import IntersectionRegistry
 from .Intersection import Intersection, ManifoldKey
 
+from .gpu import enable_gpu, disable_gpu
+
 __all__ = [
     "DynamicalSystem",
     "BasePoint",
@@ -50,4 +52,6 @@ __all__ = [
     "IntersectionRegistry",
     "Intersection",
     "ManifoldKey",
+    "enable_gpu",
+    "disable_gpu",
 ]

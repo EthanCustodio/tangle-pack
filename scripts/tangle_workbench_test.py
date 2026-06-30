@@ -14,7 +14,7 @@ def henon_map(point):
     x = point[0]
     y = point[1]
 
-    return np.array([y - k + x**2, -b * x])
+    return np.stack([y - k + x**2, -b * x], axis=0)
 
 
 def henon_map_inverse(point):
@@ -25,7 +25,7 @@ def henon_map_inverse(point):
     x = point[0]
     y = point[1]
 
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
 
 
 # initialize the workbench

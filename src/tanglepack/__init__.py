@@ -33,6 +33,8 @@ from .numerics import (
     IntersectionRegistry,
     Intersection,
     ManifoldKey,
+    enable_gpu,
+    disable_gpu,
 )
 
 from .topology import (

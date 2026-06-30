@@ -14,6 +14,18 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 logger.setLevel(logging.INFO)
 
+# Floor for the seed-step length used to start a fundamental segment. The seed step
+# itself is dynamic -- the located orbit's residual^(1/3) (``fixed_point.accuracy``)
+# -- which scales the step with how well the orbit is pinned down and so keeps the
+# seed comfortably inside the linear regime around the fixed point. The only failure
+# mode is an exactly-located orbit (the rational period-3 orbit at Henon k=2), where
+# the residual is 0 and the step would collapse to 0 (a 0/0 nan downstream). This
+# floor is the "minimally small but numerically robust" length used in that case;
+# it sits at the same scale (~cbrt machine eps) that a machine-precision orbit
+# already produces, so k=2 stays continuous with its neighbours. See the seed-step
+# dev note below.
+_MIN_SEED_STEP = 5e-6
+
 """
 Dev Notes:
 
@@ -43,6 +55,19 @@ then it needs to go down to a lower level. Potentially in BaseManifold.
 
 The get_initial_fundamental segment code is quite long.
 Make it more concise or split it into multiple functions.
+
+Seed step. get_first_point seeds the fundamental segment a distance
+``max(fixed_point.accuracy, _MIN_SEED_STEP)`` along the eigenvector. The dynamic
+``accuracy`` term (orbit residual^(1/3)) scales the step with how well the orbit is
+located and keeps it comfortably inside the linear regime around the fixed point --
+this is the intended behaviour. The floor only guards the degenerate case: once the
+solver (fsolve) locates an orbit exactly (the rational period-3 orbit at Henon k=2),
+the residual is 0 and the bare step would be 0, giving a 0/0 nan. Note the side
+effect of an accurate solver: for a generic k the residual is ~machine eps so the
+seed is ~5e-6 and tangles develop more slowly per iteration than they used to (more
+iterations are needed for a full tangle). That interacts with the OPEN refinement
+explosion -- see ManifoldMachine and the project memory: at k=2.1 fp3 stable the
+point count is fine through iter 6 (~628) then blows up ~380x at iter 7 (~240k).
 """
 
 
@@ -91,7 +116,10 @@ class ManifoldInitializer:
                 to get the first point of.
         """
 
-        step = fixed_point.accuracy
+        # Dynamic seed step (orbit residual^(1/3)) keeps us in the linear regime;
+        # floor it so an exactly-located orbit (residual 0, e.g. k=2) does not
+        # collapse the step to 0 and produce a 0/0 nan downstream.
+        step = max(fixed_point.accuracy, _MIN_SEED_STEP)
 
         if stability == "unstable":
             direction_from_fixed_point = fixed_point.unstable_eigenvectors[orbit_index]

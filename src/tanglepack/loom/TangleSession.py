@@ -5,7 +5,7 @@ from typing import Iterable, Optional, TYPE_CHECKING
 
 from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import MapFunc, JacFunc
-from ..topology.Trellis import Trellis
+from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
 from .Blast import BlastResult, blast_zone
 
@@ -102,6 +102,13 @@ class TangleSession:
         changes the registry — growing manifolds, recomputing intersections, or
         defining a resonance zone. :meth:`resonance_zone` clears the cache for you.
 
+        A cached Trellis whose registry is no longer the workbench's current one
+        (every :meth:`compute_intersections` builds a fresh registry — e.g. inside
+        a resonance-zone recompute) is transparently rebuilt, so a session never
+        hands back a snapshot bound to a stale registry. The candidate/strong-pip
+        slots of the rebuilt Trellis start empty; re-run classification (or use the
+        session-level :meth:`classify_strong_pips`, which does so for you).
+
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None for all
                 of the workbench's fixed points. The cache key is by identity.
@@ -111,7 +118,11 @@ class TangleSession:
             The Trellis for the requested fixed point(s).
         """
         cache_key = self._cache_key(fixed_points)
-        if rebuild or cache_key not in self._trellises:
+        cached = self._trellises.get(cache_key)
+        stale = cached is not None and (
+            cached.registry is not self.workbench.intersection_registry
+        )
+        if rebuild or cached is None or stale:
             self._trellises[cache_key] = Trellis.from_workbench(
                 self.workbench, fixed_points
             )
@@ -129,6 +140,144 @@ class TangleSession:
         if isinstance(fixed_points, (list, tuple, set, frozenset)):
             return frozenset(id(fp) for fp in fixed_points)
         return id(fixed_points)
+
+    def _resolve_fixed_points(
+        self, fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]"
+    ) -> list["FixedPoint"]:
+        """Normalize a fixed-point selector to a list (None → every fixed point)."""
+        if fixed_point is None:
+            return list(self.workbench.fixed_points)
+        if _is_single_fixed_point(fixed_point):
+            return [fixed_point]
+        return list(fixed_point)
+
+    # ── strong-pip convenience (per fixed point) ─────────────────────────────
+    #
+    # Each fixed point owns its own (single-fixed-point) Trellis, so a nested
+    # session has one trellis per tangle. These helpers fan a single call out
+    # across the fixed points and route every access through :meth:`trellis`, so
+    # they always operate on a fresh (auto-rebuilt) snapshot rather than a stale
+    # ``T1``/``T3`` variable kept across a resonance-zone recompute.
+
+    def classify_strong_pips(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ):
+        """
+        Classify strong-pip candidates for one, several, or every fixed point.
+
+        For each selected fixed point this builds (or reuses) its per-fixed-point
+        Trellis and runs :meth:`Trellis.classify_strong_pips`, so the inner and
+        outer tangles of a nested session are each classified against their own
+        crossings. Routing through :meth:`trellis` means a trellis left stale by a
+        resonance-zone recompute is rebuilt and reclassified rather than silently
+        reusing dropped candidates.
+
+        Args:
+            fixed_point: A single FixedPoint (→ returns that fixed point's candidate
+                list), an iterable of them, or None for every fixed point on the
+                workbench (→ returns a ``{fixed_point: candidates}`` dict).
+            **kwargs: Forwarded to :meth:`Trellis.classify_strong_pips` (``tol``,
+                ``collision_rtol``, ``choose_default``).
+
+        Returns:
+            A candidate-id list for a single fixed point, or a dict mapping each
+            fixed point to its candidate-id list.
+        """
+        results = {
+            fp: self.trellis(fp).classify_strong_pips(**kwargs)
+            for fp in self._resolve_fixed_points(fixed_point)
+        }
+        if _is_single_fixed_point(fixed_point):
+            return results[fixed_point]
+        return results
+
+    def set_strong_pip(self, fixed_point: "FixedPoint", intersection_id: int) -> int:
+        """Choose ``intersection_id`` as the strong pip for ``fixed_point``'s trellis."""
+        return self.trellis(fixed_point).set_strong_pip(intersection_id)
+
+    def strong_pip(self, fixed_point: "FixedPoint") -> Optional[int]:
+        """The chosen strong-pip id for ``fixed_point``'s trellis (or None)."""
+        return self.trellis(fixed_point).strong_pip
+
+    def strong_pip_candidates(self, fixed_point: "FixedPoint") -> list[int]:
+        """The strong-pip candidate ids for ``fixed_point``'s trellis."""
+        return self.trellis(fixed_point).strong_pip_candidates
+
+    def plot_strong_pip_candidates(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        classify: bool = True,
+        ax=None,
+        **scatter_kwargs,
+    ) -> list:
+        """
+        Scatter the strong-pip candidates of one, several, or every fixed point.
+
+        Loops over the selected fixed points' trellises (default: all), so the
+        candidates of both the inner and outer tangle of a nested session are
+        drawn in a single call — no per-trellis bookkeeping. See
+        :meth:`Trellis.plot_strong_pip_candidates`.
+
+        Args:
+            fixed_point: Fixed point selector; None (default) plots every one.
+            classify: If a trellis has no candidates yet, classify it first
+                (default True). Pass False to plot only already-classified trellises.
+            ax: Optional matplotlib Axes (defaults to the current axes).
+            **scatter_kwargs: Forwarded to :meth:`Trellis.plot_strong_pip_candidates`.
+
+        Returns:
+            List of the matplotlib handles drawn (one per fixed point that had
+            candidates to plot).
+        """
+        handles = []
+        for fp in self._resolve_fixed_points(fixed_point):
+            trellis = self.trellis(fp)
+            if classify and not trellis.strong_pip_candidates:
+                trellis.classify_strong_pips()
+            handle = trellis.plot_strong_pip_candidates(ax=ax, **scatter_kwargs)
+            if handle is not None:
+                handles.append(handle)
+        return handles
+
+    def plot_strong_pip(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        classify: bool = True,
+        ax=None,
+        **scatter_kwargs,
+    ) -> list:
+        """
+        Scatter the chosen strong-pip cut points of one, several, or every fixed point.
+
+        Companion to :meth:`plot_strong_pip_candidates`. For each selected fixed
+        point this draws the strong pip (and, for a period-k anchor, its iterates
+        bounding the resonance zone) via :meth:`Trellis.plot_strong_pip`.
+
+        Args:
+            fixed_point: Fixed point selector; None (default) plots every one.
+            classify: If a trellis has no strong pip chosen yet, classify it first
+                (which also picks the default strong pip). Pass False to plot only
+                trellises that already have one.
+            ax: Optional matplotlib Axes (defaults to the current axes).
+            **scatter_kwargs: Forwarded to :meth:`Trellis.plot_strong_pip`.
+
+        Returns:
+            List of the matplotlib handles drawn (one per fixed point with a strong
+            pip).
+        """
+        handles = []
+        for fp in self._resolve_fixed_points(fixed_point):
+            trellis = self.trellis(fp)
+            if classify and trellis.strong_pip is None:
+                trellis.classify_strong_pips()
+            handle = trellis.plot_strong_pip(ax=ax, **scatter_kwargs)
+            if handle is not None:
+                handles.append(handle)
+        return handles
 
     # ── cross-layer ("loom") algorithms ──────────────────────────────────────
 

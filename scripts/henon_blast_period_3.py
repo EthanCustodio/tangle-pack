@@ -12,28 +12,40 @@ The script prints the surviving interior-frontier size per generation (it stays 
 rather than exploding) and shades the zone with every interior bridge produced.
 
 Run:  PYTHONPATH=src python scripts/henon_blast_period_3.py
+
+Set ``TANGLEPACK_GPU=1`` to run the batched map evaluations on the GPU (needs
+CuPy; ``pip install tanglepack[gpu]``). Falls back to the CPU automatically if
+CuPy is unavailable. The Hénon maps below are written batch-capable (coordinate
+on axis 0, built with ``np.stack``) so a single vectorized call maps every point
+of a layer/iteration at once -- on the CPU normally, on the GPU when enabled.
 """
 
 import logging
+import os
 
 logging.basicConfig(level=logging.WARNING)
 
 import numpy as np
 import matplotlib.pyplot as plt
 
+import tanglepack
 from tanglepack import TangleSession
+
+# Declare up-front whether this run should use the GPU. Enabling it only changes
+# where the batched map is evaluated; the rest of the pipeline is untouched.
+USE_GPU = os.environ.get("TANGLEPACK_GPU", "0") == "1"
 
 
 def henon_map(point):
     k, b = 2, 1
     x, y = point
-    return np.array([y - k + x**2, -b * x])
+    return np.stack([y - k + x**2, -b * x], axis=0)
 
 
 def henon_map_inverse(point):
     k, b = 2, 1
     x, y = point
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
 
 
 def henon_jacobian(point):
@@ -45,14 +57,21 @@ def henon_jacobian(point):
 # --- build the nested tangle (identical to henon_bridge_classification.py) -------
 session = TangleSession(henon_map, henon_map_inverse, henon_jacobian)
 
+if USE_GPU:
+    try:
+        tanglepack.enable_gpu(session)
+        print("GPU acceleration enabled for the batched map evaluations.")
+    except ImportError as exc:
+        print(f"GPU requested but unavailable ({exc}); continuing on the CPU.")
+
 session.workbench._man_machine.area_cutoff = 1e-7
 fp3 = session.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
 session.orient_eigenvectors(
     fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
 )
 session.initialize_both_manifolds(fp3)
-session.grow_n_times(fp3, "unstable", num_iterations=10)
-session.grow_n_times(fp3, "stable", num_iterations=6)
+session.grow_n_times(fp3, "unstable", num_iterations=13)
+session.grow_n_times(fp3, "stable", num_iterations=9)
 
 session.workbench._man_machine.area_cutoff = 1e-7
 fp1 = session.construct_fixed_point([4, -4])
@@ -60,7 +79,7 @@ session.orient_eigenvectors(
     fp1, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
 )
 session.initialize_both_manifolds(fp1)
-session.grow_n_times(fp1, "unstable", num_iterations=7)
+session.grow_n_times(fp1, "unstable", num_iterations=11)
 session.grow_until_turnaround(fp1, "stable")
 
 session.compute_intersections([fp3, fp1])
@@ -76,7 +95,7 @@ T3 = session.trellis(fp3)
 T3.classify_strong_pips()
 # Use each trellis's default strong pip (smallest unstable cdist). Intersection
 # ids are not stable across refinement changes, so we do not hard-code one.
-T1.set_strong_pip(25)
+T1.set_strong_pip(10)
 
 session.add_resonance_zones([T1.strong_pip, T3.strong_pip])
 
@@ -94,7 +113,7 @@ large_zone = max(session.resonance_zones.values(), key=lambda z: z.area)
 # whose accumulated error makes them cross ("zig-zag"). It keeps the blast on the
 # well-resolved side of the precision limit; lower it to resolve finer folds.
 result_small = session.blast_zone(
-    small_zone, num_iterations=12, fixed_point=[fp1, fp3], min_separation=1e-4
+    small_zone, num_iterations=14, fixed_point=[fp1, fp3], min_separation=1e-4
 )
 result_large = session.blast_zone(
     large_zone, num_iterations=12, fixed_point=[fp1, fp3], min_separation=1e-3

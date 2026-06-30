@@ -4,7 +4,6 @@ import logging
 
 import numpy as np
 import scipy.integrate as spi
-from numpy.linalg import LinAlgError
 
 from .Point import Point
 from .FixedPoint import FixedPoint
@@ -17,6 +16,43 @@ from .Bridge import Bridge
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 logger.setLevel(logging.INFO)
+
+"""
+Dev Notes:
+
+NOT A BUG -- refinement "explosion" at high development is just exponential
+manifold growth into the map's escape region, and we never need to grow that far.
+
+Symptom: at the k=2.1 inner period-3 fp ``construct_fixed_point([[0,1],[-1,0],
+[-1,1]])`` with a tight area_cutoff (1e-7), a manifold arm grows gradually for a
+while and then the point count and runtime blow up in a single iteration (in one
+seen case to ~2e5 points; pushing one further hit millions and tens of GB).
+
+Diagnosis (instrumented, 2026-06): the blow-up is NOT a tight-fold refinement
+artifact (the earlier guess in this note). It is the arm ESCAPING to infinity. Two
+signals settle it, traced per growth iteration on both the stable [1,1] and the
+unstable [0,1] arm of that fp:
+  * The minimum segment length never shrinks -- it sits at the ~1.4e-6 seed
+    spacing the whole time. A tight fold would drive it toward zero; there is no
+    tight fold.
+  * The point count tracks coordinate divergence exactly. For the unstable [0,1]
+    arm: iter 8 -> 478 pts, max|coord| ~ 3; iter 9 -> ~9.9k pts, max|coord| ~ 2e3;
+    iter 10 -> ~1.5e6 pts, max|coord| ~ 2e26. The arm flies off to infinity, and
+    refinement faithfully (and pointlessly) tries to resolve segments that span an
+    ever-larger, diverging curve -- each inserted preiterate-midpoint maps even
+    farther out, a divergence feedback, not fold resolution.
+
+So the manifold is simply growing exponentially and escaping, which is the
+expected behaviour of these maps for arms that leave the trapped region (cf.
+``test_high_stretch_period3_growth``, which stops at iter 4 noting "the arm escapes
+by the fifth iterate"). There is nothing to fix in ``refine_manifold`` /
+``_refine_layer``: a fully developed tangle needs only a handful of iterations, and
+arms are meant to be grown with a stop condition (``grow_until_turnaround`` /
+``grow_until_arclength`` / ``grown_until_intersection``), NOT a large fixed
+iteration count that walks an escaping arm out to infinity. The ``< 1e-8`` spatial
+guard in ``_refine_layer`` stays as-is; it is fine for the regime we actually use.
+See project memory ``solver-rootcause-and-seed-step``.
+"""
 
 
 class ManifoldMachine:
@@ -240,12 +276,8 @@ class ManifoldMachine:
 
         if len(non_iterated_coords):
 
-            iterated_points = np.vstack(
-                [viewer.map_fwd(p) for p in non_iterated_coords]
-            )
-            distances = (
-                (manifold.stretch_param * non_iterated_cdists).astype(float).ravel()
-            )
+            iterated_points = viewer.map_fwd_batch(non_iterated_coords)
+            distances = np.ravel(manifold.stretch_param * non_iterated_cdists)
 
             xvals = iterated_points[:, 0]
             yvals = iterated_points[:, 1]
@@ -296,6 +328,11 @@ class ManifoldMachine:
                 self.refine_manifold(new_iterated_points)
                 mapped_manifold = new_iterated_points
 
+            # cdist is the manifold's ordering key, so the geometric list must be
+            # cdist-sorted. It is only *non-decreasing*, not strictly increasing:
+            # where a high-stretch fold has collapsed adjacent cdists to within a
+            # float ULP the refiner bridges the gap with equal-cdist points (a tie
+            # is harmless -- such points are spliced geometrically, never re-sorted).
             assert (
                 sorted(mapped_manifold.get_cdist_array())
                 == mapped_manifold.get_cdist_array()
@@ -495,16 +532,14 @@ class ManifoldMachine:
             False if point.next_iterate is None else True
             for point in non_iterated_points
         ].count(True)
-        print(f"Num Incorrectly labeled points: {number}")
+        logger.debug("Num incorrectly labeled points: %d", number)
 
         old_points = manifold.get_iterated_point_array(return_nodes=True)
 
         if len(non_iterated_coords):
 
-            iterated_points = np.vstack(
-                [viewer.map_fwd(p) for p in non_iterated_coords]
-            )
-            distances = manifold.stretch_param * non_iterated_cdists
+            iterated_points = viewer.map_fwd_batch(non_iterated_coords)
+            distances = np.ravel(manifold.stretch_param * non_iterated_cdists)
 
             xvals = iterated_points[:, 0]
             yvals = iterated_points[:, 1]
@@ -533,7 +568,7 @@ class ManifoldMachine:
         # old_points = manifold.get_iterated_point_array(return_nodes=True)
 
         number = [True if point is None else False for point in old_points].count(True)
-        print(f"Num Incorrectly labeled points: {number}")
+        logger.debug("Num incorrectly labeled points: %d", number)
 
         old_iterated_points = BaseManifold(
             old_points[0],
@@ -551,6 +586,11 @@ class ManifoldMachine:
                 old_iterated_points, new_iterated_points
             )
 
+            # cdist is the manifold's ordering key, so the geometric list must be
+            # cdist-sorted. It is only *non-decreasing*, not strictly increasing:
+            # where a high-stretch fold has collapsed adjacent cdists to within a
+            # float ULP the refiner bridges the gap with equal-cdist points (a tie
+            # is harmless -- such points are spliced geometrically, never re-sorted).
             assert (
                 sorted(mapped_manifold.get_cdist_array())
                 == mapped_manifold.get_cdist_array()
@@ -619,7 +659,6 @@ class ManifoldMachine:
                     self._insert_point_geometrically(current_point, head_1, manifold_1)
                 current_point = head_1
                 head_1 = next_head
-                # head_1 = manifold_1.walk_fwd(None, head_1)
 
             elif head_2.cdist < head_1.cdist:
                 next_head = manifold_2.walk_fwd(None, head_2)
@@ -627,10 +666,10 @@ class ManifoldMachine:
                     self._insert_point_geometrically(current_point, head_2, manifold_2)
                 current_point = head_2
                 head_2 = next_head
-                # head_2 = manifold_2.walk_fwd(None, head_2)
 
-            else:  # they are the same node
+            else:  # they share a cdist
                 if head_1 is head_2:
+                    # The same physical node appears in both lists.
                     if manifold_1.walk_fwd(None, current_point) is not head_1:
                         self._insert_point_geometrically(
                             current_point, head_1, manifold_1
@@ -639,10 +678,13 @@ class ManifoldMachine:
                     head_2 = manifold_2.walk_fwd(None, head_2)
                     current_point = manifold_1.walk_fwd(None, current_point)
                 else:
-                    # Two different points share the same cdist.  One is
-                    # newly generated (no iterate links); the other is the
-                    # keeper.  Determine the keeper first, then advance the
-                    # appropriate branch and skip the duplicate — no rewiring.
+                    # Two different points collided onto the same cdist. cdist is
+                    # the only ordering key, so once it saturates (one ULP at large
+                    # magnitude exceeds the true separation near a fold) it can no
+                    # longer order the pair -- keeping both and ordering by the tied
+                    # key scrambles them into a spike. The newly generated point has
+                    # no iterate links yet; keep the established (iterate-linked)
+                    # point and skip the duplicate.
                     logger.debug(
                         "Duplicate cdist collision at cdist=%s; coords %s vs %s",
                         head_1.cdist,
@@ -677,8 +719,6 @@ class ManifoldMachine:
                         current_point = head_2
                         head_2 = next_head_2
                         head_1 = manifold_1.walk_fwd(None, head_1)
-
-            # current_point = manifold_1.walk_fwd(None, current_point)
 
         # manifold_2 emptied first
         # WARNING: This may fail if we are merging manifold segments that
@@ -715,24 +755,28 @@ class ManifoldMachine:
         self, manifold: BaseManifold, branch_index=None, final_node=None
     ) -> set[Point]:
         """
-        Adds additional points in areas of the manifold with high curvature
+        Adds additional points in areas of the manifold with high curvature.
 
-        Checks every consecutive set of three points in the manifold.
-        Performs a linear and a parabolic fit between them.
-        If the area bounded by those curves is less than self.area_cutoff
-        then add additional points.
-        Iterates through the manifold until max_passes is reached.
+        Refines breadth-first: every consecutive pair of points is a candidate.
+        For each pair a left and right parabola plus a chord are fit and the
+        bounded area is measured; pairs whose area exceeds ``self.area_cutoff``
+        get a new point inserted at the (forward image of the) midpoint of their
+        preiterates. A pair that is refined spawns its two child pairs, which are
+        checked in the next layer. All of a layer's midpoints are mapped forward
+        in a single batched call, so the dynamical map is evaluated once per
+        layer rather than once per inserted point.
 
         Parameters:
             manifold (BaseManifold): current manifold
             branch_index: Optional if starting at a fixed point
-            final_node: Optional otherwise set as manifold.tail
+            final_node: Unused; kept for backwards-compatible signature.
 
-        Refactor:
-            branch_index and final_node can probably be eliminated from the input
+        Note:
+            The per-pair decision depends only on local geometry and preiterates,
+            so the breadth-first traversal reaches the same ``area < cutoff``
+            stopping condition as the old depth-first scheme.
         """
         logger.debug("Refining manifold: %r", manifold.get_point_array())
-        final_node = manifold.tail
 
         num_initial_points = (
             len(manifold.get_point_array())
@@ -740,122 +784,155 @@ class ManifoldMachine:
             else None
         )
 
+        viewer = ManifoldView(manifold, self.system)
+
+        # Layer 0: every consecutive geometric pair from root to tail.
+        layer: list[tuple] = []
         previous_point = manifold.root
         current_point = manifold.walk_fwd(None, previous_point)
-
-        modified_points = set()
         while current_point is not None:
-
-            logger.debug(
-                "Checking these points: %s",
-                (previous_point.get_point(), current_point.get_point()),
-            )
-
-            added_points = self.refine_two_points(
-                (previous_point, current_point), manifold, branch_index
-            )
-            modified_points.update(added_points)
-
-            if current_point is final_node:
+            layer.append((previous_point, current_point))
+            if current_point is manifold.tail:
                 break
-
             next_point = manifold.walk_fwd(previous_point, current_point)
-
             previous_point, current_point = current_point, next_point
 
-        # logging logic
+        modified_points: set = set()
+        while layer:
+            layer = self._refine_layer(
+                layer, manifold, viewer, branch_index, modified_points
+            )
+
         if num_initial_points is not None:
             num_final_points = len(manifold.get_point_array())
-            logger.info(
-                "%d Points added during refinement",
+            logger.debug(
+                "%d points added during refinement (%d total)",
                 num_final_points - num_initial_points,
+                num_final_points,
             )
-            logger.info("%d NUMBER OF CURRENT POINTS", num_final_points)
 
         return modified_points
 
-    def refine_two_points(
+    def _refine_layer(
         self,
-        points: tuple[Point | BranchPoint, Point | BranchPoint],
+        layer: list[tuple],
         manifold: BaseManifold,
-        branch_index=None,
-    ) -> set[Point]:
+        viewer: ManifoldView,
+        branch_index,
+        modified_points: set,
+    ) -> list[tuple]:
         """
-        Iteratively refines the two given points.
-        Uses a modified stack structure to iterate through the manifold
-        and continuously refine the points that it creates as needed.
+        Refine one breadth-first layer of pairs and return the next layer.
 
-        Parameters:
-            points (tuple): set of two points to check for refinement
-            manifold (BaseManifold): manifold the two points are on
-            branch_index: Optional input if starting at a fixed point
+        Computes curvature areas for the whole layer at once, inserts a new
+        point into each pair that needs refining (mapping all midpoints forward
+        in a single batched call), and returns the child pairs of the refined
+        pairs as the next layer.
 
-        Refactor:
-            branch_index is probably unnecessary since it was
-            put into manifold
-            adaptively change area_cuttoff refine as the manifolds increase in length
-                or we are at smaller scales
+        Args:
+            layer: list of ``(p0, p1)`` node pairs to consider.
+            manifold: the manifold being refined.
+            viewer: view binding the manifold to the dynamical system.
+            branch_index: branch index for inserting after a BranchPoint.
+            modified_points: set accumulating every touched/created point.
+
+        Returns:
+            The next layer of ``(p0, p1)`` pairs (empty when refinement is done).
         """
-        viewer = ManifoldView(manifold, self.system)
+        stability = manifold.stability
 
-        left_point, right_point = points
-        pair_queue = deque([(left_point, right_point)])
+        # Gather node references and per-pair geometry, dropping pairs that are
+        # degenerate or missing the data needed to refine (mirrors the old
+        # per-pair guards: dead endpoints, near-coincident points, and missing
+        # preiterates on bridge boundary points).
+        p0_nodes, p1_nodes = [], []
+        p0_xy, p1_xy, left_xy, right_xy = [], [], [], []
+        pre_mid, c0_list, c1_list = [], [], []
 
-        modified_points = set()
-        while pair_queue:
+        nan_row = np.array([np.nan, np.nan])
 
-            p0, p1 = pair_queue.pop()
-
-            # if one of the points is past the manifold continue
+        for p0, p1 in layer:
             if p0 is None or p1 is None:
                 continue
 
-            # Check if points are so close together to cause numerical instability
-            if np.linalg.norm(p1.get_point() - p0.get_point()) < 1e-8:
+            a = p0.get_point()
+            b = p1.get_point()
+            if np.hypot(b[0] - a[0], b[1] - a[1]) < 1e-8:
                 continue
 
-            try:
-                # curvature_area = self._curvature_area(triplet, viewer)
-                curvature_area = self._curvature_area((p0, p1), viewer)
-            except LinAlgError:
+            pre0 = ManifoldMachine._get_preiterate(p0, stability, 1)
+            pre1 = ManifoldMachine._get_preiterate(p1, stability, 1)
+            if pre0 is None or pre1 is None:
                 logger.debug(
-                    "Singular Vandermond matrix at cdist %.3gâ€“%.3g; skipping. "
-                    "Points are likely near vertical",
-                    p0.cdist,
-                    p1.cdist,
-                )
-                continue
-
-            if abs(curvature_area) < self.area_cutoff:
-                continue
-
-            # Skip refinement if either point's preiterate is missing.
-            # This happens when bridge boundary points (root/tail inserted by
-            # create_bridges) are mixed into a manifold with already-iterated
-            # interior points and the iterate chain is incomplete for some members
-            # of the merged manifold.
-            if (
-                ManifoldMachine._get_preiterate(p0, manifold.stability, 1) is None
-                or ManifoldMachine._get_preiterate(p1, manifold.stability, 1) is None
-            ):
-                logger.debug(
-                    "Skipping refinement for pair at cdist %.3g–%.3g: "
+                    "Skipping refinement for pair at cdist %.3g-%.3g: "
                     "preiterate missing on one or both points.",
                     p0.cdist,
                     p1.cdist,
                 )
                 continue
 
-            new_point = self._get_refined_point(p0, p1, viewer, manifold.stability)
+            left = manifold.walk_back(p1, p0)
+            right = manifold.walk_fwd(p0, p1)
+
+            p0_nodes.append(p0)
+            p1_nodes.append(p1)
+            p0_xy.append(a)
+            p1_xy.append(b)
+            left_xy.append(left.get_point() if left is not None else nan_row)
+            right_xy.append(right.get_point() if right is not None else nan_row)
+            pre_mid.append(0.5 * (pre0.get_point() + pre1.get_point()))
+            c0_list.append(float(p0.cdist))
+            c1_list.append(float(p1.cdist))
+
+        if not p0_nodes:
+            return []
+
+        areas = self._curvature_area_batch(
+            np.array(p0_xy),
+            np.array(p1_xy),
+            np.array(left_xy),
+            np.array(right_xy),
+        )
+
+        # Refine every pair whose curvature area exceeds the cutoff. The new point
+        # takes the cdist midpoint of its neighbours; at a high-stretch fold the
+        # curve has expanded so much that adjacent points are far apart in space
+        # while their cdists have collapsed to within a float ULP, so that midpoint
+        # may round exactly onto an endpoint. That tie is harmless here -- the point
+        # is spliced geometrically between its neighbours, not re-sorted by cdist --
+        # and bridging the gap is exactly what keeps the curve smooth instead of
+        # leaving a coarse spike. The ``< 1e-8`` spacing guard above guarantees the
+        # subdivision still terminates once the two points effectively coincide.
+        c0_arr = np.array(c0_list)
+        c1_arr = np.array(c1_list)
+        mid_cd = 0.5 * (c0_arr + c1_arr)
+
+        flagged = np.flatnonzero(areas >= self.area_cutoff)
+        if flagged.size == 0:
+            return []
+
+        pre_mid = np.array(pre_mid)
+        new_coords = viewer.map_fwd_batch(pre_mid[flagged])
+        new_cdists = mid_cd[flagged]
+
+        next_layer: list[tuple] = []
+        for out_idx, pair_idx in enumerate(flagged):
+            p0 = p0_nodes[pair_idx]
+            p1 = p1_nodes[pair_idx]
+            x, y = new_coords[out_idx]
+            new_point = Point(
+                x, y, float(new_cdists[out_idx]), stretch_param=manifold.stretch_param
+            )
+            # Cache the preiterate so the child pairs can be refined next layer.
+            self._cache_preiterate(new_point, pre_mid[pair_idx], stability)
 
             self._insert_point_geometrically(p0, new_point, manifold, branch_index)
-            # modified_points.update((p0, p1, p2, new_point))
             modified_points.update((p0, p1, new_point))
 
-            pair_queue.append((p0, new_point))
-            pair_queue.append((new_point, p1))
+            next_layer.append((p0, new_point))
+            next_layer.append((new_point, p1))
 
-        return modified_points
+        return next_layer
 
     def _get_refined_point(
         self,
@@ -907,6 +984,7 @@ class ManifoldMachine:
         d = deque(to_shift)
         d.rotate(1)
         return list(d)
+
 
     @staticmethod
     def _get_preiterate(
@@ -1027,24 +1105,35 @@ class ManifoldMachine:
     @staticmethod
     def _parabolic_fit(points) -> Tuple[float, float, float]:
         """
-        Takes in three points and gives the parabolic fit between them
+        Takes in three points and gives the parabolic fit ``y = a x^2 + b x + c``
+        between them.
+
+        Uses the closed-form divided-difference (Newton) solution rather than
+        building and inverting the 3x3 Vandermonde matrix. This is both faster
+        (no ``np.linalg.inv``) and the basis for the vectorized curvature path.
 
         Parameters:
             points: list of three points
+
+        Raises:
+            ZeroDivisionError: if two of the three x-values coincide (the
+                divided differences are then singular). Callers in the chord
+                frame avoid this for non-degenerate triplets.
         """
 
         x_vals = points[:, 0]
         y_vals = points[:, 1]
 
         x0, x1, x2 = x_vals[0], x_vals[1], x_vals[2]
+        y0, y1, y2 = y_vals[0], y_vals[1], y_vals[2]
 
-        # construct Vandermond matrix
-        A = np.array([[x0**2, x0, 1], [x1**2, x1, 1], [x2**2, x2, 1]], dtype=float)
+        s01 = (y1 - y0) / (x1 - x0)
+        s12 = (y2 - y1) / (x2 - x1)
+        a = (s12 - s01) / (x2 - x0)
+        b = s01 - a * (x0 + x1)
+        c = y0 - a * x0**2 - b * x0
 
-        Ainv = np.linalg.inv(A)
-
-        # Solve for the coefficients [a, b, c].
-        return tuple(Ainv @ y_vals)
+        return a, b, c
 
     @staticmethod
     def _curvature_area(
@@ -1121,6 +1210,89 @@ class ManifoldMachine:
         # return whichever area is larger
         area = left_area if left_area > right_area else right_area
 
+        return area
+
+    @staticmethod
+    def _curvature_area_batch(
+        p0: np.ndarray,
+        p1: np.ndarray,
+        left: np.ndarray,
+        right: np.ndarray,
+    ) -> np.ndarray:
+        """
+        Vectorized form of :meth:`_curvature_area` over many pairs at once.
+
+        Mirrors the scalar routine exactly: for each row the chord ``p0->p1`` is
+        rotated onto the x-axis, a left parabola through ``(left, p0, p1)`` and a
+        right parabola through ``(p0, p1, right)`` are fit with the closed-form
+        divided differences, the closed-form integral between each parabola and
+        the chord is taken, and the larger of the two areas is returned.
+
+        Args:
+            p0: ``(M, 2)`` first endpoints.
+            p1: ``(M, 2)`` second endpoints.
+            left: ``(M, 2)`` left neighbours; rows that are ``NaN`` (no
+                neighbour) contribute ``0`` on the left side.
+            right: ``(M, 2)`` right neighbours; ``NaN`` rows contribute ``0`` on
+                the right side.
+
+        Returns:
+            ``(M,)`` array of curvature areas. Degenerate rows (zero-length
+            chord, coincident x-values after rotation) yield ``0`` so they are
+            never flagged for refinement.
+        """
+        p0 = np.asarray(p0, dtype=float)
+        p1 = np.asarray(p1, dtype=float)
+        left = np.asarray(left, dtype=float)
+        right = np.asarray(right, dtype=float)
+
+        chord = p1 - p0
+        length = np.hypot(chord[:, 0], chord[:, 1])
+        safe_len = np.where(length == 0.0, 1.0, length)
+        ux = chord[:, 0] / safe_len
+        uy = chord[:, 1] / safe_len
+
+        def to_frame(pt):
+            rel = pt - p0
+            xf = ux * rel[:, 0] + uy * rel[:, 1]
+            yf = -uy * rel[:, 0] + ux * rel[:, 1]
+            return xf, yf
+
+        x0, y0 = to_frame(p0)  # ~ (0, 0)
+        x1, y1 = to_frame(p1)  # ~ (length, 0)
+
+        # line through the two endpoints (the chord, ~ the x-axis here)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            m = (y1 - y0) / (x1 - x0)
+        d = y0 - m * x0
+
+        def side_area(third):
+            xt, yt = to_frame(third)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                # parabola through (xt, yt), (x0, y0), (x1, y1)
+                s_ab = (y0 - yt) / (x0 - xt)
+                s_bc = (y1 - y0) / (x1 - x0)
+                a = (s_bc - s_ab) / (x1 - xt)
+                b = s_ab - a * (xt + x0)
+                c = yt - a * xt**2 - b * xt
+
+                # closed-form integral between parabola and chord (see
+                # _compute_single_area): coefficients of (quad - line)
+                aa = a / 3.0
+                bb = 0.5 * (b - m)
+                cc = c - d
+                area = np.abs(
+                    aa * (x1**3 - x0**3)
+                    + bb * (x1**2 - x0**2)
+                    + cc * (x1 - x0)
+                )
+            return np.where(np.isfinite(area), area, 0.0)
+
+        left_area = side_area(left)
+        right_area = side_area(right)
+
+        area = np.maximum(left_area, right_area)
+        area = np.where(length == 0.0, 0.0, area)
         return area
 
     @staticmethod

@@ -22,6 +22,7 @@ dependencies = [
   "fonttools==4.56.0",
   "iniconfig==2.0.0",
   "ipykernel==6.29.5",
+  "ipympl==0.10.0",
   "ipython==8.32.0",
   "jedi==0.19.2",
   "jupyter_client==8.6.3",
@@ -58,6 +59,11 @@ dependencies = [
   "traitlets==5.14.3",
   "wcwidth==0.2.13"
 ]
+
+[project.optional-dependencies]
+# GPU acceleration for the batched map evaluation (see tanglepack.enable_gpu).
+# Pick the wheel matching your CUDA toolkit, e.g. cupy-cuda12x.
+gpu = ["cupy-cuda12x"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -11,14 +11,15 @@ def henon_binary() -> MapPair:
     k, b = 10.0, 1.0
 
     def f(point: np.ndarray) -> np.ndarray:
+        # Batch-capable (coordinate on axis 0): a single (2,) point or a (2, N) batch.
         x = np.asarray(point)[0]
         y = np.asarray(point)[1]
-        return np.array([y - k + x * x, -b * x], dtype=float)
+        return np.stack([y - k + x * x, -b * x], axis=0)
 
     def finv(point: np.ndarray) -> np.ndarray:
         x = np.asarray(point)[0]
         y = np.asarray(point)[1]
-        return np.array([-y / b, x + k - (y * y) / (b * b)], dtype=float)
+        return np.stack([-y / b, x + k - (y * y) / (b * b)], axis=0)
 
     return f, finv
 

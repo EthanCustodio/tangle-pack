@@ -4,15 +4,22 @@ These helpers encode the hard physical/numerical laws every manifold must obey
 and are shared across the test suite. They deliberately have no ``test_`` prefix
 so pytest does not collect them as tests.
 
-The four fundamental invariants (see CLAUDE.md):
+The fundamental invariants (see CLAUDE.md):
 
-1. Monotonicity   - along a manifold's geometric ordering, cdist is strictly
-                    increasing (``assert_cdist_monotonic``).
+0. Smooth curve   - a manifold is a simple non-self-intersecting curve, sampled
+                    densely; no node juts off it (``assert_no_geometric_spikes``).
+                    This is the *observable* correctness property -- a scrambled
+                    manifold shows it as a spike even when cdist looks fine.
+1. Monotonicity   - along a manifold's geometric ordering, cdist is
+                    non-decreasing (``assert_cdist_monotonic``). It is *not*
+                    guaranteed strictly increasing: at a high-stretch fold the
+                    refiner bridges sub-ULP gaps with equal-cdist points, so ties
+                    are legitimate. Pass ``strict=True`` only for low-stretch
+                    growth that is known to stay injective.
 2. Iterate law    - ``c_iterate = stretch_param * c`` along the iterate chain, in
                     the growth direction (``assert_iterate_relation``).
 3. One-to-one     - the geometric and iterate linked lists are acyclic and
-                    mutually consistent; no cdist collisions in a finished
-                    manifold (``assert_one_to_one`` / ``assert_no_cdist_collision``).
+                    mutually consistent (``assert_one_to_one``).
 4. Area preserved - for an intersection chain ``unstable_cdist * stable_cdist`` is
                     invariant (``assert_area_preserved_along_chain``).
 
@@ -93,9 +100,13 @@ def assert_no_cdist_collision(
 ) -> None:
     """Assert no two distinct nodes share a cdist (within ``atol``).
 
-    A finished manifold must have none; the single collision edge case is
-    tolerated only *inside* ``ManifoldMachine.merge_manifolds`` and must not
-    leak into the result.
+    Note:
+        cdist ties are *legitimate* at a high-stretch fold, where the refiner
+        bridges a sub-ULP gap with equal-cdist points (they are spliced
+        geometrically, never re-sorted, so they cannot scramble the curve). This
+        check therefore applies only to low-stretch growth that is expected to
+        stay injective; for the general correctness property use
+        ``assert_no_geometric_spikes`` instead.
     """
     stability = manifold.stability
     cdists = sorted(manifold_cdists(manifold, stability))
@@ -104,6 +115,78 @@ def assert_no_cdist_collision(
         assert gap > atol, (
             f"cdist collision: two nodes within {atol} at cdist {cdists[i]!r} "
             f"(gap={gap!r}, stability={stability!r})"
+        )
+
+
+def find_geometric_spikes(
+    manifold: BaseManifold,
+    *,
+    length_ratio: float = 30.0,
+    edge_skip: int = 3,
+) -> list[tuple[int, float]]:
+    """Find the over-long polyline segments that mark a scrambled manifold.
+
+    A manifold is a smooth simple curve sampled densely enough that refinement
+    keeps every step short. The high-stretch bug instead leaves two geometrically
+    distant points adjacent in the linked list (their cdists collapsed to within a
+    float ULP and could no longer order them), so the polyline darts across a long
+    segment to a misplaced point and back -- the visible "spike". This flags every
+    segment whose length exceeds ``length_ratio`` times the median segment length.
+
+    The first/last ``edge_skip`` segments are ignored: the manifold's seed near the
+    fixed point is legitimately a single long-but-straight step (the initial
+    coarse segment before any refinement), not a scramble.
+
+    Args:
+        manifold: The manifold (or bridge) to inspect.
+        length_ratio: A segment longer than this many median segment lengths is a
+            spike.
+        edge_skip: Number of segments at each end to ignore (the coarse seed).
+
+    Returns:
+        A list of ``(segment_index, segment_length)`` for each flagged segment.
+    """
+    nodes = walk_nodes(manifold)
+    pts = [np.asarray(n.get_point(), dtype=float) for n in nodes]
+    if len(pts) < 2 * edge_skip + 2:
+        return []
+
+    seglen = [float(np.linalg.norm(pts[i + 1] - pts[i])) for i in range(len(pts) - 1)]
+    positive = [s for s in seglen if s > 0]
+    if not positive:
+        return []
+    median_seg = float(np.median(positive))
+    threshold = length_ratio * median_seg
+
+    spikes = []
+    for i in range(edge_skip, len(seglen) - edge_skip):
+        if seglen[i] > threshold:
+            spikes.append((i, seglen[i]))
+    return spikes
+
+
+def assert_no_geometric_spikes(
+    manifold: BaseManifold,
+    *,
+    length_ratio: float = 30.0,
+    edge_skip: int = 3,
+) -> None:
+    """Assert the manifold has no over-long (scrambled) segments (see
+    :func:`find_geometric_spikes`).
+
+    Raises:
+        AssertionError: Reporting how many spikes were found and the worst one.
+    """
+    spikes = find_geometric_spikes(
+        manifold, length_ratio=length_ratio, edge_skip=edge_skip
+    )
+    if spikes:
+        worst = max(spikes, key=lambda s: s[1])
+        raise AssertionError(
+            f"{len(spikes)} geometric spike(s) on the {manifold.stability!r} "
+            f"manifold: segment {worst[0]} is {worst[1]:.3e} long, "
+            f"{worst[1] / (length_ratio):.3e} = {length_ratio:g}x the median "
+            f"(a misplaced point the polyline darts out to and back)."
         )
 
 
