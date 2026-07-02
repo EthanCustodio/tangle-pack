@@ -86,228 +86,155 @@ class BaseManifold:
 
         self.tail = previous_point
 
+    def _walk_nodes(self, final_node=None, stop_at_final=True):
+        """
+        Yield every node from the root along the stability direction.
+
+        The single traversal all the array getters share.
+
+        Args:
+            final_node (Optional[Point]): Last node to yield (inclusive).
+                Defaults to the manifold's tail; None walks the physical end
+                of the linked list.
+            stop_at_final (bool): If False, ignore final_node and walk the
+                whole linked list.
+        """
+        if final_node is None:
+            final_node = self.tail
+
+        prev = None
+        current = self.root
+
+        while current is not None:
+            yield current
+
+            if stop_at_final and current is final_node:
+                break
+
+            prev, current = current, self.walk_fwd(
+                prev, current, branch_index=self.branch_index
+            )
+
+    @staticmethod
+    def _stack_points(points, return_nodes):
+        """Return the collected nodes as-is, or stacked into an array."""
+        if not points:
+            return [] if return_nodes else np.array([])
+        return points if return_nodes else np.vstack(points)
+
     def get_point_array(self, final_node=None, return_nodes=False):
         """
         Walks along the manifold in the stability direction and returns either
         a list of Point objects or an array of (x, y) coordinates.
 
         Parameters:
-            final_node (Optional[Point]): If specified, stop walking before this node.
+            final_node (Optional[Point]): If specified, stop walking at this node.
             return_nodes (bool): If True, return a list of Point objects;
                 else return an np.ndarray of [x, y]. Defaults to False.
 
         Returns:
             list[Point] or np.ndarray of shape (N, 2)
         """
-        if final_node is None:
-            final_node = self.tail
-
-        branch_index = self.branch_index
-
-        points = []
-        prev = None
-        current = self.root
-
-        while current is not None:
-            points.append(current if return_nodes else current.get_point())
-
-            if current is final_node:
-                break
-
-            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
-
-            prev, current = current, next_node
-
-        if not points:
-            return np.array([]) if not return_nodes else []
-
-        return points if return_nodes else np.vstack(points)
+        points = [
+            node if return_nodes else node.get_point()
+            for node in self._walk_nodes(final_node)
+        ]
+        return self._stack_points(points, return_nodes)
 
     def get_cdist_array(self, final_node=None, return_nodes=False):
         """
         Walks along the manifold in the stability direction and returns either
-        a list of Point objects or an array of (x, y) coordinates.
+        a list of Point objects or an array of their canonical distances.
 
-        Parameters:
-            final_node (Optional[Point]): If specified, stop walking before this node.
-            return_nodes (bool): If True, return a list of Point objects;
-                else return an np.ndarray of [x, y]. Defaults to False.
+        Note:
+            This walk has always covered the whole linked list; final_node is
+            accepted for signature symmetry with the other getters but is not
+            honored (a trimmed tail does not shorten the returned array).
 
         Returns:
-            list[Point] or np.ndarray of shape (N, 2)
+            list[Point] or np.ndarray of shape (N, 1)
         """
-        if final_node is None:
-            final_node = self.tail
-
-        branch_index = self.branch_index
-
-        points = []
-        prev = None
-        current = self.root
-
-        while current is not None:
-            points.append(current if return_nodes else current.cdist)
-
-            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
-
-            prev, current = current, next_node
-
-        if not points:
-            return np.array([]) if not return_nodes else []
-
-        return points if return_nodes else np.vstack(points)
+        points = [
+            node if return_nodes else node.cdist
+            for node in self._walk_nodes(final_node, stop_at_final=False)
+        ]
+        return self._stack_points(points, return_nodes)
 
     def get_non_iterated_point_array(
         self, num_iterates: int = 1, final_node=None, return_nodes=False
     ):
         """
-        Returns a list of the iterate points if exists otherwise None
+        Returns the points that do not have a num_iterates-step iterate yet.
 
         Args:
             num_iterates (int, optional): Number of iterates. Defaults to 1.
-            final_node (_type_, optional): If specified, stop walking before this node.
-                Defaults to None.
+            final_node (Optional[Point]): If specified, stop walking at this node.
             return_nodes (bool, optional): If True, return a list of Point objects;
                 else return an np.ndarray of [x, y]. Defaults to False.
 
         Returns:
             list[Point] or np.ndarray of shape (N, 2)
         """
-
-        if final_node is None:
-            final_node = self.tail
-
-        branch_index = self.branch_index
-
         points = []
-        prev = None
-        current = self.root
+        for node in self._walk_nodes(final_node):
+            has_iterate = getattr(node, self._iter_method("exists"))
+            if not has_iterate(num_iterates):
+                points.append(node if return_nodes else node.get_point().ravel())
 
-        while current is not None and current is not final_node:
-
-            # setup helper function
-            check_iteration = getattr(current, self._iter_method("exists"))
-
-            if not check_iteration(num_iterates):
-                points.append(current if return_nodes else current.get_point().ravel())
-
-            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
-
-            prev, current = current, next_node
-
-        if current is final_node and final_node is not None:
-            check_iteration = getattr(current, self._iter_method("exists"))
-            if not check_iteration(num_iterates):
-                points.append(current if return_nodes else current.get_point().ravel())
-
-        if not points:
-            return np.array([]) if not return_nodes else []
-
-        return points if return_nodes else np.vstack(points)
+        return self._stack_points(points, return_nodes)
 
     def get_non_iterated_cdist_array(self, num_iterates: int = 1, final_node=None):
         """
-        Returns a list of the iterate points if exists otherwise None
+        Returns the canonical distances of the points that do not have a
+        num_iterates-step iterate yet.
 
         Args:
             num_iterates (int, optional): Number of iterates. Defaults to 1.
-            final_node (_type_, optional): If specified, stop walking before this node.
-                Defaults to None.
+            final_node (Optional[Point]): If specified, stop walking at this node.
 
         Returns:
             np.ndarray of shape (N, 1)
         """
+        cdists = []
+        for node in self._walk_nodes(final_node):
+            has_iterate = getattr(node, self._iter_method("exists"))
+            if not has_iterate(num_iterates):
+                cdists.append(node.cdist)
 
-        if final_node is None:
-            final_node = self.tail
-
-        branch_index = self.branch_index
-
-        points = []
-        prev = None
-        current = self.root
-
-        while current is not None and current is not final_node:
-
-            # setup helper function
-            check_iteration = getattr(current, self._iter_method("exists"))
-
-            if not check_iteration(num_iterates):
-                points.append(current.cdist)
-
-            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
-
-            prev, current = current, next_node
-
-        if current is final_node and final_node is not None:
-            check_iteration = getattr(current, self._iter_method("exists"))
-            if not check_iteration(num_iterates):
-                points.append(current.cdist)
-
-        if not points:
-            return np.array([])
-
-        return np.vstack(points)
+        return self._stack_points(cdists, return_nodes=False)
 
     def get_iterated_point_array(
         self, num_iterates: int = 1, final_node=None, return_nodes=False
     ):
         """
         Walks along the manifold in the stability direction and returns either
-        a list of Point objects or an array of (x, y) coordinates corresponding to the
-        points in the manifold that have already been iterated.
+        a list of Point objects or an array of (x, y) coordinates corresponding to
+        the num_iterates-step iterates of the points that have them.
 
         Parameters:
-            final_node (Optional[Point]): If specified, stop walking before this node.
+            final_node (Optional[Point]): If specified, stop walking at this node.
             return_nodes (bool): If True, return list of Point objects;
                 else return np.ndarray of [x, y]. Defaults to False.
 
         Returns:
             list[Point] or np.ndarray of shape (N, 2)
+
+        Raises:
+            ValueError: A point claims to have an iterate that is actually None.
         """
-        if final_node is None:
-            final_node = self.tail
-
-        branch_index = self.branch_index
-
         points = []
-        prev = None
-        current = self.root
+        for node in self._walk_nodes(final_node):
+            has_iterate = getattr(node, self._iter_method("exists"))
+            if not has_iterate(num_iterates):
+                continue
 
-        while current is not None and current is not final_node:
+            iterate = getattr(node, self._iter_method("get"))(num_iterates)
+            if iterate is None:
+                raise ValueError("Iterate computed incorrectly, NoneType added")
 
-            # setup helper functions
-            check_iteration = getattr(current, self._iter_method("exists"))
-            get_iterate = getattr(current, self._iter_method("get"))
+            points.append(iterate if return_nodes else iterate.get_point().ravel())
 
-            if check_iteration(num_iterates):
-                points.append(
-                    get_iterate(num_iterates)
-                    if return_nodes
-                    else get_iterate(num_iterates).get_point().ravel()
-                )
-
-                if get_iterate(num_iterates) is None:
-                    raise ValueError("Iterate computed incorrectly, NoneType added")
-
-            next_node = self.walk_fwd(prev, current, branch_index=branch_index)
-
-            prev, current = current, next_node
-
-        if current is final_node and final_node is not None:
-            check_iteration = getattr(current, self._iter_method("exists"))
-
-            if check_iteration(num_iterates):
-                points.append(
-                    get_iterate(num_iterates)
-                    if return_nodes
-                    else get_iterate(num_iterates).get_point().ravel()
-                )
-
-        if not points:
-            return np.array([]) if not return_nodes else []
-
-        return points if return_nodes else np.vstack(points)
+        return self._stack_points(points, return_nodes)
 
     def walk_fwd(
         self, prev: Optional[Point], node: Point, branch_index: Optional[int] = None

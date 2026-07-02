@@ -93,8 +93,10 @@ T1 = session.trellis(fp1)
 T1.classify_strong_pips()
 T3 = session.trellis(fp3)
 T3.classify_strong_pips()
-# Use each trellis's default strong pip (smallest unstable cdist). Intersection
-# ids are not stable across refinement changes, so we do not hard-code one.
+# Pin a specific candidate for the outer zone rather than the default (the
+# default, smallest unstable cdist, gives a different zone boundary). CAUTION:
+# intersection ids are not stable across growth/refinement changes -- if this
+# raises, pick again from the candidate list in the error message.
 T1.set_strong_pip(10)
 
 session.add_resonance_zones([T1.strong_pip, T3.strong_pip])

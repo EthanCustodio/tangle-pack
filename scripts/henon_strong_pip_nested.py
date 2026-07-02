@@ -48,8 +48,8 @@ session.orient_eigenvectors(
     fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
 )
 session.initialize_both_manifolds(fp3)
-session.grow_n_times(fp3, "unstable", num_iterations=10)
-session.grow_n_times(fp3, "stable", num_iterations=6)
+session.grow_n_times(fp3, "unstable", num_iterations=14)
+session.grow_n_times(fp3, "stable", num_iterations=9)
 
 # Period-1 outer fixed point.
 fp1 = session.construct_fixed_point([4, -4])
@@ -57,8 +57,8 @@ session.orient_eigenvectors(
     fp1, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
 )
 session.initialize_both_manifolds(fp1)
-session.grow_n_times(fp1, "unstable", num_iterations=7)
-session.grow_n_times(fp1, "stable", num_iterations=4)
+session.grow_n_times(fp1, "unstable", num_iterations=12)
+session.grow_n_times(fp1, "stable", num_iterations=9)
 
 # Nested tangles: co-index BOTH fixed points into one Tangle/registry so the
 # inner (period-3) and outer (period-1) crossings coexist. Computing them

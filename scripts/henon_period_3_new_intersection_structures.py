@@ -40,8 +40,8 @@ wb.orient_eigenvectors(
     fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
 )
 wb.initialize_both_manifolds(fp3)
-wb.grow_n_times(fp3, "unstable", num_iterations=12)
-wb.grow_n_times(fp3, "stable", num_iterations=12)
+wb.grow_n_times(fp3, "unstable", num_iterations=14)
+wb.grow_n_times(fp3, "stable", num_iterations=14)
 
 
 # Outer period-1 fixed point

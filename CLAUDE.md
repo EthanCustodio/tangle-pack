@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `tanglepack` is a Python library for computing and visualizing **heteroclinic/homoclinic tangles** — the stable and unstable manifolds of saddle fixed points in 2D discrete dynamical systems (area-preserving maps). The core scientific workflow is: define a map → find a fixed point → initialize manifolds → grow them iteratively → detect intersections → extract bridges and resonance zones.
 
-The frontend built on top of the core library is **`tanglepack_webdash`**: a browser-based app using Plotly Dash.
+There is currently no GUI frontend: the old Dash dashboard (`tanglepack_webdash`) and PySide6 GUI (`tanglepack_gui`) were removed in July 2026 (recoverable from git history) and a new GUI will be built from scratch later. The library is used through scripts, notebooks, and the `TangleWorkbench`/`TangleSession` APIs.
 
 ## Fundamental Invariant — Which Manifolds Can Intersect
 
@@ -40,12 +40,6 @@ pytest tests/test_manifold_machine.py::test_fn # single test
 pytest --cov=tanglepack                        # with coverage
 ```
 
-**Run the web dashboard:**
-```bash
-tanglepack-dash
-# or: python -m tanglepack_webdash.app
-```
-
 **Run a scripted example:**
 ```bash
 python scripts/tangle_workbench_test.py
@@ -62,7 +56,7 @@ wb = tanglepack.TangleWorkbench(my_map, my_map_inverse)
 fp = wb.construct_fixed_point([4, -4])
 wb.orient_eigenvectors(fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])})
 wb.initialize_both_manifolds(fp)
-wb.grow_n_times(fp, "unstable", num_iterations=6)
+wb.grow_n_times(fp, "unstable", num_iterations=8)
 wb.grow_until_turnaround(fp, "stable")
 intersections = wb.compute_intersections(fp)
 bridges = wb.create_bridges(fp)
@@ -99,19 +93,7 @@ Points form two simultaneous doubly-linked lists inside `Point`:
 
 The `Tangle` class uses an `rtree` spatial index. Each adjacent pair of `Point`s on a manifold is registered as a `_Segment`. Candidate intersecting segments are found via bounding-box queries, then exact intersection is computed. Results stored in `_intersecting_segments` (set of `(seg_id1, seg_id2)` pairs), `_intersecting_coords`, and `_intersecting_points`. Always call `Tangle.clear_all()` before recomputing to avoid stale references. Per the fundamental invariant above, every legitimate crossing is exactly one unstable + one stable segment; any same-stability pair that slips into `_intersecting_segments` is a numerical artifact and must be filtered before building `Intersection`s.
 
-## Web Dashboard Architecture (`src/tanglepack_webdash/`)
-
-Built with Plotly Dash. Per-session state is stored in `sessions.py` (`WBState` dataclass in an in-memory `_REGISTRY` dict). Each browser session gets its own `TangleWorkbench` instance.
-
-- `layout/` — Dash component trees (sections for fixed point, manifolds, bridges, orientation, etc.)
-- `callbacks/` — one module per UI feature; each exports `register(app)` which attaches `@app.callback` handlers
-- `assets/` — clientside JS for click handling (`clicked_points.js`, `bridge_selection.js`, `cursor_readout.js`)
-- `utils/figures.py` — converts manifold/bridge data into Plotly figure traces
-- `maps.py` — string-to-lambda parser for user-supplied map expressions
-
-## Files with `.disabled` Extension
-
-Several files have a `.disabled` extension (e.g., `ManifoldMachine.disabled`, `Tangle.disabled`, `clicked_points.disabled`). These are archived old implementations kept for reference — they are not imported anywhere.
+Indexing is two-tier for speed: `compute_intersections` bulk-loads every segment into the rtree in one stream (`Tangle.add_manifolds`), while `iterate_bridge` registers iterated bridges **query-only** (`add_manifold(..., index_segments=False)`) — a bridge is unstable manifold, so everything it can legitimately cross is stable and already indexed; inserting its segments would only enable detecting bridge×bridge artifacts that get discarded anyway.
 
 ## Coding Style
 
