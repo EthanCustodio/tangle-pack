@@ -795,8 +795,6 @@ class TangleWorkbench:
             new_branch_index = branch_index
         return (fp, stability, new_orbit_index, new_branch_index)
 
-        return recorded
-
     def populate_registry(self) -> IntersectionRegistry:
         """Rebuild the intersection registry from the current Tangle state."""
         self._intersection_registry = IntersectionRegistry()

@@ -116,14 +116,12 @@ class BasePoint:
             ValueError: The desired iterate does not exist.
         """
 
-        self.stretch_param = node.stretch_param
-
         current_node = self
 
         for _ in range(num_iterates - 1):
 
             if current_node.next_iterate is None:
-                raise ValueError(f"Itermediate iterates does not exist")
+                raise ValueError("Intermediate iterates do not exist")
 
             current_node = current_node.next_iterate
 
@@ -148,14 +146,12 @@ class BasePoint:
             ValueError: The desired iterate does not exist.
         """
 
-        self.stretch_param = node.stretch_param
-
         current_node = self
 
         for i in range(num_iterates - 1):
 
             if current_node.prev_iterate is None:
-                raise ValueError(f"Itermediate iterates do not exist")
+                raise ValueError("Intermediate iterates do not exist")
 
             current_node = current_node.prev_iterate
 

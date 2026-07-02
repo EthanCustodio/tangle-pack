@@ -66,18 +66,20 @@ class Point(BasePoint):
         """
 
         if self.forward is node:
-            pass
+            return
 
-        else:
-            self.stretch_param = node.stretch_param
+        # A freshly created point (e.g. a crossing separator) may not carry a
+        # stretch parameter yet; let it inherit ours. Never the other way round.
+        if node.stretch_param is None:
+            node.stretch_param = self.stretch_param
 
-            if self.forward is not None:
-                if not only_forward:
-                    self.forward.backward = node
-                    node.forward = self.forward
+        if self.forward is not None:
+            if not only_forward:
+                self.forward.backward = node
+                node.forward = self.forward
 
-            self.forward = node
-            node.backward = self
+        self.forward = node
+        node.backward = self
 
     def insert_point_backward(self, node: Point, only_forward: bool = False):
         """
@@ -90,15 +92,17 @@ class Point(BasePoint):
         """
 
         if self.backward is node:
-            pass
+            return
 
-        else:
-            self.stretch_param = node.stretch_param
+        # See insert_point_forward: the inserted node inherits a missing
+        # stretch parameter; the host point is never overwritten.
+        if node.stretch_param is None:
+            node.stretch_param = self.stretch_param
 
-            if self.backward is not None:
-                if not only_forward:
-                    self.backward.forward = node
-                    node.backward = self.backward
+        if self.backward is not None:
+            if not only_forward:
+                self.backward.forward = node
+                node.backward = self.backward
 
-            self.backward = node
-            node.forward = self
+        self.backward = node
+        node.forward = self

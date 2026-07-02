@@ -1,5 +1,6 @@
 import numpy as np
 from rtree import index
+from rtree.core import RTreeError
 from collections import defaultdict
 from itertools import count
 from dataclasses import dataclass
@@ -302,36 +303,11 @@ class Tangle:
             for sid in list(self._manifold_segs[manifold]):
                 self._remove_segment(sid)
 
-        seg_ids = {self._insert_segment(s) for s in self._segments_of(manifold)}
-        self._manifold_segs[manifold].update(seg_ids)
-
-    def update_manifold(self, manifold: BaseManifold, changed_points: set[Point]):
-        """
-        Reâ€‘index only segments that touch the nodes in `changed_nodes`
-
-        Note:
-            new points from `ManifoldMachine.refine_manifold`.
-        """
-        # get which segments in manifold share a point with changed_points
-        # and delete them from memory before we add them back
-        dirty = self._segments_touching(manifold, changed_points)
-        for sid in dirty:  # remove old versions
-            self._remove_segment(sid)
-
-        # Collects all the new segments which need to be added
-        rebuilt_segments = set()
-        for point in changed_points:
-            prev_point = manifold.walk_back(None, point)
-            next_point = manifold.walk_fwd(None, point)
-
-            if prev_point is not None:
-                rebuilt_segments.add(_Segment(manifold, prev_point, point))
-            if next_point is not None:
-                rebuilt_segments.add(_Segment(manifold, point, next_point))
-
-        # new_ids = {self._insert_segment(s) for s in self._segments_of_nodes(dirty)}
-        new_ids = {self._insert_segment(s) for s in rebuilt_segments}
-        self._manifold_segs[manifold].update(new_ids)
+        # _insert_segment records each new id in _manifold_segs itself; collecting
+        # its return values here would sweep the None it returns for already-seen
+        # edges into the id set and poison later lookups.
+        for segment in self._segments_of(manifold):
+            self._insert_segment(segment)
 
     def intersections_for_segment(self, seg: _Segment):
         """
@@ -429,17 +405,20 @@ class Tangle:
         return new_intersections
 
     # ------------- internal helpers -----------------
-    def _insert_segment(self, seg: _Segment) -> int:
+    def _insert_segment(self, seg: _Segment) -> Optional[int]:
         """
         Inserts a segment into the rtree and local dictionary
 
         Parameters:
             seg (_Segment): segment to be inserted
+
+        Returns:
+            The segment id, or None if this edge was already indexed.
         """
         # edge key defined by the id of two points
         edge_key = frozenset((id(seg.p0), id(seg.p0_seg1)))
         if edge_key in self._edge_seen:
-            return None  # already indexed â†’ do NOT duplicate
+            return None  # already indexed -> do NOT duplicate
 
         # choose a new id there for a new segment
         sid = next(Tangle._ids) if seg.id is None else seg.id
@@ -482,8 +461,10 @@ class Tangle:
         # Safely remove from rtree
         try:
             self._rtree.delete(sid, seg.bounds)
-        except Exception:
-            pass  # Segment may have already been deleted from rtree
+        except RTreeError:
+            # Segment may have already been deleted from the rtree; anything
+            # else deserves to surface rather than be swallowed.
+            logger.debug("rtree delete failed for segment %s", sid, exc_info=True)
 
         # Safely remove from manifold's segment set
         if seg.manifold in self._manifold_segs:

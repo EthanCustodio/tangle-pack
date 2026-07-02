@@ -103,7 +103,6 @@ class FixedPointSolver:
             point.branch_points[i].prev_iterate = point.branch_points[(i - 1) % period]
 
         point.set_k_value()
-        point.reset_accuracy()
 
         return point
 

@@ -82,27 +82,23 @@ class Bridge(BaseManifold):
 
     def _check_input_types(self, root: Point, tail: Point):
         """
-        Checks if the root and tail used to construct the bridge are
-        Point objects rather than BranchPoints.
+        Checks that the tail used to construct the bridge is a Point object
+        rather than a BranchPoint.
 
         Args:
             root (Point): Root of the bridge. Adjacent to the first intersection point.
             tail (Point): Tail of the bridge. Adjacent to the second intersection point.
 
         Raises:
-            TypeError: Root must be a Point.
-            TypeError: Tail must be a Point.
             ValueError: A tail must be specified to construct a bridge.
+            TypeError: Tail must be a Point.
         """
-
-        # if not isinstance(root, Point):
-        #     raise TypeError(f"Root must be a Point, not {type(root).__name__}")
-
-        if not isinstance(tail, Point):
-            raise TypeError(f"Tail must be a Point, not {type(tail).__name__}")
 
         if tail is None:
             raise ValueError("A tail must be specified to construct a bridge.")
+
+        if not isinstance(tail, Point):
+            raise TypeError(f"Tail must be a Point, not {type(tail).__name__}")
 
     def map_forward(self):
         """

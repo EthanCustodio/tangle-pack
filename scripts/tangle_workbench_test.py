@@ -45,7 +45,10 @@ workbench.orient_eigenvectors(fixed_point, approx_dirs)
 unstable_segments, stable_segments = workbench.initialize_both_manifolds(fixed_point)
 
 # grow the manifolds from the fixed point
-workbench.grow_n_times(fixed_point, "unstable", num_iterations=6)
+# 8 growth iterations gives the 3+ bridges the rest of this script works with
+# (the fsolve fixed-point fix made manifolds develop more slowly per iteration,
+# so the old count of 6 no longer produced any crossings)
+workbench.grow_n_times(fixed_point, "unstable", num_iterations=8)
 # workbench.grow_until_arclength(fixed_point, "unstable", 60)
 # workbench.grow_n_times(fixed_point, "stable", num_iterations=4)
 workbench.grow_until_turnaround(fixed_point, "stable")

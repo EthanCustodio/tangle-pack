@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 from collections import deque
 
 import numpy as np
@@ -93,21 +93,25 @@ class FixedPoint:
         self.jacobians = [np.empty((2, 2)) for _ in range(period)]
         self.partial_jacobians = [np.empty((2, 2)) for _ in range(period)]
 
+        # Filled in by set_k_value() once the eigenvalues are known.
+        self.k_value: Optional[int] = None
+
     def check_inversion(self) -> bool:
         """
         Returns True if the Fixed Point has inversion
         False if it does not.
+
+        Raises:
+            ValueError: If called before set_k_value().
         """
 
-        return True if self.period is not self.k_value else False
+        if self.k_value is None:
+            raise ValueError(
+                "k_value has not been set yet; call set_k_value() after the "
+                "eigenvalues are computed."
+            )
 
-    def reset_accuracy(self):
-        """
-        Resets the accuracy based on the k value to account
-        for mapping around the whole orbit.
-        """
-
-        self.accuracy = self.accuracy
+        return self.period != self.k_value
 
     def set_k_value(self):
         """
