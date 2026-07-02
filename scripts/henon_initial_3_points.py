@@ -39,11 +39,11 @@ print(f'The fixed point is type: {type(fixed_point)}')
 man_maker = tanglepack.ManifoldInitializer(henon)
 
 initial_segment = man_maker.get_initial_fundamental_segment(fixed_point, 0, 0, 'unstable')
-initial_points = initial_segment.get_point_array(branch_index=0)
+initial_points = initial_segment.get_point_array()
 print(f'Initial 3 Points: {initial_points}')
 
 
-initial_segment.plot(branch_index=0, marker='o', ms=10)
+initial_segment.plot(marker='o', ms=10)
 
 
 # plt.figure()

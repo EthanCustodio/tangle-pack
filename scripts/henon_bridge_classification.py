@@ -52,8 +52,8 @@ session.orient_eigenvectors(
     fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
 )
 session.initialize_both_manifolds(fp3)
-session.grow_n_times(fp3, "unstable", num_iterations=10)
-session.grow_n_times(fp3, "stable", num_iterations=6)
+session.grow_n_times(fp3, "unstable", num_iterations=13)
+session.grow_n_times(fp3, "stable", num_iterations=9)
 
 # outer period-1 fixed point
 session.workbench._man_machine.area_cutoff = 1e-4
@@ -62,7 +62,7 @@ session.orient_eigenvectors(
     fp1, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
 )
 session.initialize_both_manifolds(fp1)
-session.grow_n_times(fp1, "unstable", num_iterations=7)
+session.grow_n_times(fp1, "unstable", num_iterations=11)
 session.grow_until_turnaround(fp1, "stable")
 
 # co-compute the nested tangle and cut bridges
@@ -78,7 +78,10 @@ T1 = session.trellis(fp1)
 T1.classify_strong_pips()
 T3 = session.trellis(fp3)
 T3.classify_strong_pips()
-T1.set_strong_pip(7)
+# The pip previously pinned here (id 7) predates the fsolve solver recalibration;
+# intersection ids shifted when the growth counts were rebalanced. Use the default
+# pip classify_strong_pips() selects (smallest unstable cdist); re-pin a specific
+# candidate with T1.set_strong_pip(id) if a different zone boundary is wanted.
 
 # one resonance zone per fixed point (single final recompute keeps the nesting)
 session.add_resonance_zones([T1.strong_pip, T3.strong_pip])

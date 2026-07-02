@@ -19,7 +19,7 @@ wb = tanglepack.TangleWorkbench(henon_map, henon_map_inverse)
 fp = wb.construct_fixed_point([4, -4])
 wb.orient_eigenvectors(fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])})
 wb.initialize_both_manifolds(fp)
-wb.grow_n_times(fp, "unstable", num_iterations=6)
+wb.grow_n_times(fp, "unstable", num_iterations=8)
 wb.grow_until_turnaround(fp, "stable")
 
 wb.compute_intersections(fp)  # also populates registry

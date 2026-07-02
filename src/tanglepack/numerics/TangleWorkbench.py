@@ -359,9 +359,13 @@ class TangleWorkbench:
             self.Tangle.clear_all()
             self._intersection_registry = IntersectionRegistry()
 
+        # gather every manifold first so a fresh Tangle can bulk-load the whole
+        # segment set into the rtree in one pass
+        manifolds_to_index = []
         for fp in fixed_points:
-            self.index_manifolds(fp, "unstable")
-            self.index_manifolds(fp, "stable")
+            manifolds_to_index.extend(self._iter_manifolds(fp, "unstable"))
+            manifolds_to_index.extend(self._iter_manifolds(fp, "stable"))
+        self.Tangle.add_manifolds(manifolds_to_index)
 
         self.Tangle.populate_intersection_dict()
 
@@ -566,8 +570,11 @@ class TangleWorkbench:
                 bridge.manifold_key, bridge.fixed_point
             )
 
-        # 2. add to tangle (stable manifold already indexed from compute_intersections)
-        self.Tangle.add_manifold(iterated)
+        # 2. register with the tangle. The bridge is unstable manifold, so every
+        #    curve it can legitimately cross is stable and already in the rtree
+        #    from compute_intersections -- querying finds all its crossings, and
+        #    skipping the rtree inserts keeps repeated blasting fast.
+        self.Tangle.add_manifold(iterated, index_segments=False)
 
         # 3. resolve only new crossings involving the iterated bridge
         new_intersections = self.Tangle.populate_intersections_for_manifold(iterated)

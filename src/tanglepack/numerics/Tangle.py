@@ -36,6 +36,10 @@ class _Segment:
     manifold: BaseManifold
     p0: Point | BranchPoint
     p0_seg1: Point | BranchPoint
+    # False for segments that were only queried against the rtree, never
+    # inserted into it (iterated bridges) -- _remove_segment must not try to
+    # delete those from the rtree.
+    in_rtree: bool = True
 
     @property
     def bounds(self):
@@ -290,16 +294,29 @@ class Tangle:
         )
         self._processed_pairs.add(seg_id_pair)
 
-    def add_manifold(self, manifold: BaseManifold):
+    def add_manifold(self, manifold: BaseManifold, index_segments: bool = True):
         """
-        Indexes every segment of a manifold in the rtree
+        Registers every segment of a manifold and detects its crossings.
+
+        Args:
+            manifold (BaseManifold): The manifold to register.
+            index_segments (bool): If True (default) each segment is also
+                inserted into the rtree so later additions can find it. Pass
+                False for an iterated bridge: a bridge is unstable manifold,
+                so by the fundamental invariant the only curves it can
+                legitimately cross are stable ones, and those are already in
+                the index. Its crossings are found by querying; inserting its
+                segments too would only let later bridges detect
+                bridge-x-bridge (unstable x unstable) pairs, which are
+                numerical artifacts that get discarded anyway. Skipping the
+                inserts is what keeps repeated bridge iteration fast.
 
         Note:
             Does not check if segments have already been inserted
         """
         # ---------- A. purge old entries (if any) ----------
         if manifold in self._manifold_segs:
-            # copy â†’ because _remove_segment mutates the same set
+            # copy, because _remove_segment mutates the same set
             for sid in list(self._manifold_segs[manifold]):
                 self._remove_segment(sid)
 
@@ -307,7 +324,65 @@ class Tangle:
         # its return values here would sweep the None it returns for already-seen
         # edges into the id set and poison later lookups.
         for segment in self._segments_of(manifold):
-            self._insert_segment(segment)
+            self._insert_segment(segment, index_in_rtree=index_segments)
+
+    def add_manifolds(self, manifolds: list[BaseManifold]):
+        """
+        Index every segment of several manifolds at once.
+
+        On a freshly cleared Tangle the segments are handed to the rtree as one
+        bulk (stream) load, which is far faster than inserting them one at a
+        time — the per-segment inserts dominated the runtime of every full
+        recompute. On a Tangle that already holds segments this falls back to
+        ``add_manifold`` for each manifold.
+
+        Args:
+            manifolds (list[BaseManifold]): The manifolds to index.
+        """
+        if self._seg_lookup:
+            for manifold in manifolds:
+                self.add_manifold(manifold)
+            return
+
+        new_segments = []
+        for manifold in manifolds:
+            for segment in self._segments_of(manifold):
+                edge_key = frozenset((id(segment.p0), id(segment.p0_seg1)))
+                if edge_key in self._edge_seen:
+                    continue
+
+                segment.id = next(Tangle._ids)
+                self._edge_seen.add(edge_key)
+                self._seg_lookup[segment.id] = segment
+                self._manifold_segs[segment.manifold].add(segment.id)
+                new_segments.append(segment)
+
+        if not new_segments:
+            return
+
+        properties = index.Property()
+        properties.dimension = 2
+        self._rtree = index.Index(
+            ((seg.id, seg.bounds, None) for seg in new_segments),
+            properties=properties,
+        )
+
+        # Every segment is queried, so each crossing pair comes up twice (once
+        # from each side); keeping only the lower-id side does each exact
+        # intersection test once.
+        for segment in new_segments:
+            for candidate_id in self._rtree.intersection(segment.bounds):
+                if candidate_id >= segment.id:
+                    continue
+
+                other = self._seg_lookup[candidate_id]
+                if other.manifold is segment.manifold:
+                    continue
+
+                if segment.intersects(other):
+                    self._intersecting_segments.add(
+                        frozenset((segment.id, candidate_id))
+                    )
 
     def intersections_for_segment(self, seg: _Segment):
         """
@@ -405,12 +480,19 @@ class Tangle:
         return new_intersections
 
     # ------------- internal helpers -----------------
-    def _insert_segment(self, seg: _Segment) -> Optional[int]:
+    def _insert_segment(
+        self, seg: _Segment, index_in_rtree: bool = True
+    ) -> Optional[int]:
         """
-        Inserts a segment into the rtree and local dictionary
+        Registers a segment, detects its crossings, and (optionally) inserts
+        it into the rtree.
 
         Parameters:
             seg (_Segment): segment to be inserted
+            index_in_rtree (bool): If False the segment is registered and its
+                crossings against the indexed segments are detected, but it is
+                not itself made findable. See add_manifold for when this is
+                the right call.
 
         Returns:
             The segment id, or None if this edge was already indexed.
@@ -426,7 +508,9 @@ class Tangle:
         seg.id = sid  # assign the id to the segment
 
         # insert segment into the rtree and dictionary
-        self._rtree.insert(sid, seg.bounds)
+        if index_in_rtree:
+            self._rtree.insert(sid, seg.bounds)
+        seg.in_rtree = index_in_rtree
         self._edge_seen.add(edge_key)
         self._seg_lookup[sid] = seg
         self._manifold_segs[seg.manifold].add(sid)
@@ -458,13 +542,16 @@ class Tangle:
 
         seg = self._seg_lookup.pop(sid)
 
-        # Safely remove from rtree
-        try:
-            self._rtree.delete(sid, seg.bounds)
-        except RTreeError:
-            # Segment may have already been deleted from the rtree; anything
-            # else deserves to surface rather than be swallowed.
-            logger.debug("rtree delete failed for segment %s", sid, exc_info=True)
+        # Safely remove from rtree (query-only segments were never in it)
+        if seg.in_rtree:
+            try:
+                self._rtree.delete(sid, seg.bounds)
+            except RTreeError:
+                # Segment may have already been deleted from the rtree; anything
+                # else deserves to surface rather than be swallowed.
+                logger.debug(
+                    "rtree delete failed for segment %s", sid, exc_info=True
+                )
 
         # Safely remove from manifold's segment set
         if seg.manifold in self._manifold_segs:

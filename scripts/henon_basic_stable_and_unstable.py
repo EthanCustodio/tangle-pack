@@ -59,17 +59,14 @@ stable_manifold = initial_stable_segment
 print(f"unstable stretchiness: {unstable_manifold.stretch_param}")
 print(f"stable stretchiness: {stable_manifold.stretch_param}")
 
-# grow unstable manifold
-num_iterations = 12
-# for i in range(num_iterations):
-#     unstable_manifold = man_machine.grow_manifold(unstable_manifold)
+# Grow both manifolds. The old counts (12 unstable / 16 stable) predate the
+# fsolve fixed-point fix; at k=10 the horseshoe folding makes the point count
+# explode exponentially past ~8 iterations, so those counts now run for hours.
+num_iterations = 8
+
 man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
 unstable_manifold._find_tail()
 
-# grow stable manifold
-num_iterations = 16
-# for i in range(num_iterations):
-#     stable_manifold = man_machine.grow_manifold(stable_manifold)
 man_machine.grow_x_times(fixed_point, "stable", num_iterations)
 stable_manifold._find_tail()
 

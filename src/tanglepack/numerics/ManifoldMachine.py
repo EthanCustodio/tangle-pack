@@ -333,10 +333,7 @@ class ManifoldMachine:
             # where a high-stretch fold has collapsed adjacent cdists to within a
             # float ULP the refiner bridges the gap with equal-cdist points (a tie
             # is harmless -- such points are spliced geometrically, never re-sorted).
-            assert (
-                sorted(mapped_manifold.get_cdist_array())
-                == mapped_manifold.get_cdist_array()
-            ).all()
+            assert (np.diff(mapped_manifold.get_cdist_array(), axis=0) >= 0).all()
 
             return mapped_manifold
 
@@ -591,10 +588,7 @@ class ManifoldMachine:
             # where a high-stretch fold has collapsed adjacent cdists to within a
             # float ULP the refiner bridges the gap with equal-cdist points (a tie
             # is harmless -- such points are spliced geometrically, never re-sorted).
-            assert (
-                sorted(mapped_manifold.get_cdist_array())
-                == mapped_manifold.get_cdist_array()
-            ).all()
+            assert (np.diff(mapped_manifold.get_cdist_array(), axis=0) >= 0).all()
 
             return mapped_manifold
 
