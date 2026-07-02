@@ -4,9 +4,9 @@ __pycache__/
 *.pyo
 *.pyd
 .ipynb_checkpoints/
-*.ipynb
 *.egg-info/
 .pytest_cache/
+.coverage
 .eggs/
 build/
 dist/
