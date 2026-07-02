@@ -188,9 +188,6 @@ class BaseManifold:
             # setup helper function
             check_iteration = getattr(current, self._iter_method("exists"))
 
-            # if getattr(current, self._iter_attr()) is None:
-            #     points.append(current if return_nodes else current.get_point().ravel())
-
             if not check_iteration(num_iterates):
                 points.append(current if return_nodes else current.get_point().ravel())
 
@@ -234,9 +231,6 @@ class BaseManifold:
 
             # setup helper function
             check_iteration = getattr(current, self._iter_method("exists"))
-
-            # if getattr(current, self._iter_attr()) is None:
-            #     points.append(current.cdist)
 
             if not check_iteration(num_iterates):
                 points.append(current.cdist)
@@ -302,7 +296,6 @@ class BaseManifold:
 
         if current is final_node and final_node is not None:
             check_iteration = getattr(current, self._iter_method("exists"))
-            # points.append(current if return_nodes else current.get_point().ravel())
 
             if check_iteration(num_iterates):
                 points.append(
@@ -387,25 +380,21 @@ class BaseManifold:
 
         plt.title(f"Manifold Plot ({self.stability.capitalize()})")
         plt.axis("equal")
-        # plt.show()
 
     def plot_colormap(self):
-
-        from matplotlib.collections import LineCollection
 
         pts = self.get_point_array()  # (N, 2) ndarray
         if pts.size == 0:
             raise ValueError("No points available to plot!")
 
-        idx = np.arange(len(pts))  # 0 … N‑1
+        idx = np.arange(len(pts))
         norm = plt.Normalize(idx.min(), idx.max())
-        cmap = "coolwarm"  # pick any Matplotlib cmap
+        cmap = "coolwarm"
 
-        # 1⃣  draw the grey polyline so the geometry is clear
+        # grey polyline so the geometry is clear, then color-by-index scatter
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.plot(pts[:, 0], pts[:, 1], color="0.7", lw=1, zorder=1)
 
-        # 2⃣  colour‑by‑index scatter
         sc = ax.scatter(
             pts[:, 0],
             pts[:, 1],
@@ -417,17 +406,8 @@ class BaseManifold:
             zorder=3,
         )
 
-        # 3⃣  optional: colour‑by‑index segments instead of scatter (uncomment)
-        # segs  = np.stack([pts[:-1], pts[1:]], axis=1)
-        # lc    = LineCollection(segs, cmap=cmap, norm=norm, linewidth=2)
-        # lc.set_array(idx[:-1])
-        # ax.add_collection(lc)
-
-        # 4⃣  cosmetics
-        # plt.colorbar(sc, ax=ax, pad=0.02, label="Point order (0 → last)")
         ax.set_aspect("equal")
         ax.set_title(f"Manifold Plot ({self.stability.capitalize()})")
-        # ax.set_aspect("equal", adjustable="box")
         plt.tight_layout()
         return ax
 

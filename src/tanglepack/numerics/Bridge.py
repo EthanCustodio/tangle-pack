@@ -100,16 +100,3 @@ class Bridge(BaseManifold):
         if not isinstance(tail, Point):
             raise TypeError(f"Tail must be a Point, not {type(tail).__name__}")
 
-    def map_forward(self):
-        """
-        Not implemented here; iteration is handled by TangleWorkbench.iterate_bridge().
-        ManifoldMachine owns the map logic and BranchPoint insertion.
-        """
-        # if we are going to include this then we have to think about
-        # the dependecy hell of combining this with ManifoldMachine.
-        # We should probably just use manifold machine to map these forward
-        # Although you can imagine that mapping a bridge we might have special things
-        # Maybe we just create a method map_bridge which just calles iterate_manifold
-        # and does some more behind the scenes work.
-
-        pass

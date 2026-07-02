@@ -131,60 +131,6 @@ class ManifoldMachine:
         if num_iterations == 1:
             return merged_manifolds[0]
 
-    # def new_grow_manifold(
-    #     self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
-    # ):
-
-    #     # construct a list of orbit indices based off the stability
-    #     # this starts at the most recently iterated index and iterates
-    #     # either clockwise or counterclockwise based on stability
-    #     orbit_indices = fixed_point.get_iterable_array(stability, shift=1)
-
-    #     current_manifold = BaseManifold(
-    #         fixed_point.branch_points[orbit_indices[0]],
-    #         stability,
-    #         stretch_param=1,
-    #         fixed_point=fixed_point,
-    #         branch_index=0,
-    #     )
-
-    #     # this line meant to deal with roots that are fixed points
-    #     # if it is an intersection behavior is unknown
-    #     temp_root = current_manifold.root
-    #     if isinstance(current_manifold.root, BranchPoint):
-    #         current_manifold.root = current_manifold.walk_fwd(None, temp_root)
-
-    #     # you must walk forward before adding the stretch param
-    #     # because the fixed point does not have one
-    #     current_manifold.stretch_param = current_manifold.root.stretch_param
-
-    #     for i in range(fixed_point.period):
-
-    #         for branch_index in fixed_point.get_branch_array():
-
-    #             iterated_manifold = self.iterate_manifold(current_manifold)
-
-    #             next_index = (i + 1) % fixed_point.period
-    #             next_orbit_idx = orbit_indices[next_index]
-    #             # self.merge_manifolds(uniterated_manifolds[i], iterated_manifold)
-
-    #             next_manifold = BaseManifold(
-    #                 root=fixed_point.branch_points[next_orbit_idx],
-    #                 stability=stability,
-    #                 stretch_param=current_manifold.stretch_param,
-    #                 fixed_point=fixed_point,
-    #                 branch_index=branch_index,
-    #             )
-
-    #             temp_root = next_manifold.root
-    #             if isinstance(next_manifold.root, BranchPoint):
-    #                 next_manifold.root = next_manifold.walk_fwd(None, temp_root)
-
-    #             current_manifold = next_manifold
-    #             # current_manifold = self.merge_manifolds(
-    #             #     next_manifold, iterated_manifold
-    #             # )
-    #             # current_manifold._find_tail()
 
     def new_grow_manifold(
         self,
@@ -287,8 +233,6 @@ class ManifoldMachine:
                 for x, y, cdist in zip(xvals, yvals, distances)
             ]
 
-            # TODO include num_iterates
-            # I don't think we need to do that anymore actually
             for i, point in enumerate(non_iterated_points):
                 if manifold.stability == "unstable":
                     point.insert_next_iterate(new_points[i])
@@ -546,7 +490,6 @@ class ManifoldMachine:
                 for x, y, cdist in zip(xvals, yvals, distances)
             ]
 
-            # TODO include num_iterates
             for i, point in enumerate(non_iterated_points):
                 if manifold.stability == "unstable":
                     point.insert_next_iterate(new_points[i])
@@ -560,9 +503,6 @@ class ManifoldMachine:
                 manifold.fixed_point,
                 manifold.branch_index,
             )
-
-        # TODO include num_iterates
-        # old_points = manifold.get_iterated_point_array(return_nodes=True)
 
         number = [True if point is None else False for point in old_points].count(True)
         logger.debug("Num incorrectly labeled points: %d", number)
@@ -935,13 +875,14 @@ class ManifoldMachine:
         viewer: ManifoldView,
         stability: Literal["unstable", "stable"],
     ):
-        """ """
+        """
+        Reference single-pair refinement: the midpoint of the two preiterates
+        mapped one step forward. The batched _refine_layer is the live path;
+        this scalar version is kept as the pinned reference implementation.
+        """
 
-        # num_iterates = viewer.manifold.fixed_point.k_value
-        num_iterates = 1
-
-        p0_preiterate = self._get_preiterate(p0, stability, num_iterates)
-        p1_preiterate = self._get_preiterate(p1, stability, num_iterates)
+        p0_preiterate = self._get_preiterate(p0, stability)
+        p1_preiterate = self._get_preiterate(p1, stability)
 
         new_point_coords_back = 0.5 * (
             p1_preiterate.get_point() + p0_preiterate.get_point()
@@ -949,10 +890,7 @@ class ManifoldMachine:
 
         new_distance = 0.5 * (float(p0.cdist) + float(p1.cdist))
 
-        # new_point_coords = viewer.map_fwd(new_point_coords_back)
-        new_point_coords = self._get_iterate(
-            new_point_coords_back, viewer, num_iterates
-        )
+        new_point_coords = self._get_iterate(new_point_coords_back, viewer)
 
         x = new_point_coords[0]
         y = new_point_coords[1]
@@ -963,13 +901,9 @@ class ManifoldMachine:
         return new_point
 
     @staticmethod
-    def _get_iterate(
-        point: Point | BranchPoint, viewer: ManifoldView, num_iterates: int
-    ):
-        # for _ in range(num_iterates):
-        point = viewer.map_fwd(point)
-
-        return point
+    def _get_iterate(point: Point | BranchPoint, viewer: ManifoldView):
+        """Map a point one step forward in the manifold's stability direction."""
+        return viewer.map_fwd(point)
 
     @staticmethod
     def _shift_list(to_shift: list):
