@@ -30,31 +30,32 @@ from tanglepack import TangleSession
 
 
 def henon_map(point):
-    k, b = 10, 1
+    k, b = 2.8, 1
     x, y = point
     return np.stack([y - k + x**2, -b * x], axis=0)
 
 
 def henon_map_inverse(point):
-    k, b = 10, 1
+    k, b = 2.8, 1
     x, y = point
     return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
 
 
 def henon_jacobian(point):
-    k, b = 10, 1
+    k, b = 2.8, 1
     x, y = point
     return np.array([[2 * x, 1], [-b, 0]])
 
 
 session = TangleSession(henon_map, henon_map_inverse, henon_jacobian)
+session.workbench._man_machine.area_cutoff = 1e-7
 
 fp = session.construct_fixed_point([4, -4])
 session.orient_eigenvectors(
     fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
 )
 session.initialize_both_manifolds(fp)
-session.grow_n_times(fp, "unstable", num_iterations=9)
+session.grow_n_times(fp, "unstable", num_iterations=10)
 session.grow_until_turnaround(fp, "stable")
 session.compute_intersections([fp])
 session.trim_stable_manifolds(fp)
@@ -70,7 +71,7 @@ trellis = session.trellis(fp)
 # left and right of the stable manifold.
 trellis.classify_strong_pips()
 print(f"Strong-pip candidates: {trellis.strong_pip_candidates}")
-trellis.set_strong_pip(2)
+trellis.set_strong_pip(1)
 pip = trellis.strong_pip
 print(f"Chosen strong pip: {pip}")
 
@@ -82,7 +83,7 @@ trellis.set_strong_pip(pip)
 
 # Blasting registers the children's new stable-manifold crossings, so the
 # trellis snapshot must be refreshed (and the pip re-established) afterward.
-session.blast_zone(zone, num_iterations=2, fixed_point=[fp], min_separation=1e-2)
+session.blast_zone(zone, num_iterations=10, fixed_point=[fp], min_separation=1e-3)
 trellis = session.trellis(fp)
 trellis.classify_strong_pips(choose_default=False)
 trellis.set_strong_pip(pip)

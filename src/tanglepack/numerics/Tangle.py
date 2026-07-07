@@ -437,7 +437,81 @@ class Tangle:
             if intersection is not None:
                 new_intersections.append(intersection)
 
-        return new_intersections
+        return self._collapse_noise_crossings(new_intersections)
+
+    def _collapse_noise_crossings(
+        self, intersections: list[Intersection], rtol: float = 1e-9
+    ) -> list[Intersection]:
+        """
+        Collapse multiple detections of one transversal crossing into one.
+
+        A forward-mapped (iterated-bridge) polyline carries coordinate noise
+        amplified by the map; near a crossing it can zig-zag across the stable
+        curve, so one physical crossing is detected several times within noise
+        of a single point of the bridge — unstable cdists agreeing to ~1e-12
+        RELATIVE, versus >= 1e-3 between genuine neighbouring crossings. Noise
+        flips add detections in PAIRS while a genuine transversal crossing
+        adds one, so within each noise-run (consecutive unstable cdists closer
+        than ``rtol`` relative): an odd-length run keeps its median detection,
+        an even-length run is a grazing artifact with no net crossing and is
+        dropped entirely. Dropped crossings are purged from every tangle
+        structure so bridge cutting never sees them.
+
+        Args:
+            intersections: Freshly resolved crossings of one query manifold.
+            rtol: Relative unstable-cdist gap under which two detections are
+                the same point of the manifold.
+
+        Returns:
+            The surviving crossings.
+        """
+        if len(intersections) < 2:
+            return intersections
+
+        ordered = sorted(intersections, key=lambda ix: ix.unstable_cdist)
+        runs: list[list[Intersection]] = [[ordered[0]]]
+        for previous, current in zip(ordered, ordered[1:]):
+            gap = current.unstable_cdist - previous.unstable_cdist
+            if gap <= rtol * max(abs(current.unstable_cdist), 1.0):
+                runs[-1].append(current)
+            else:
+                runs.append([current])
+
+        kept: list[Intersection] = []
+        for run in runs:
+            if len(run) == 1:
+                kept.append(run[0])
+                continue
+            if len(run) % 2 == 1:
+                keep = run[len(run) // 2]
+                kept.append(keep)
+            else:
+                keep = None
+            logger.info(
+                "Collapsed %d noise detections of one crossing at unstable "
+                "cdist %.9g (%s)",
+                len(run),
+                run[0].unstable_cdist,
+                "kept median" if keep is not None else "grazing pair dropped",
+            )
+            for ix in run:
+                if ix is not keep:
+                    self._purge_crossing(ix)
+        return kept
+
+    def _purge_crossing(self, intersection: Intersection) -> None:
+        """Remove one resolved crossing from every tangle structure."""
+        pair = intersection.seg_ids
+        if intersection in self._intersections:
+            self._intersections.remove(intersection)
+        if pair:
+            for seg_id in pair:
+                by_seg = self._intersection_by_seg.get(seg_id)
+                if by_seg and intersection in by_seg:
+                    by_seg.remove(intersection)
+            self._intersecting_segments.discard(pair)
+            self._intersecting_coords.pop(pair, None)
+            self._intersecting_points.pop(pair, None)
 
     # ------------- internal helpers -----------------
     def _insert_segment(
