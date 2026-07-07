@@ -119,8 +119,12 @@ class TangleSession:
         """
         cache_key = self._cache_key(fixed_points)
         cached = self._trellises.get(cache_key)
+        registry = self.workbench.intersection_registry
         stale = cached is not None and (
-            cached.registry is not self.workbench.intersection_registry
+            cached.registry is not registry
+            # Blasting (iterate_bridge) adds crossings to the SAME registry
+            # object; the snapshot's per-branch orderings miss them.
+            or getattr(cached, "_built_registry_size", None) != len(registry)
         )
         if rebuild or cached is None or stale:
             self._trellises[cache_key] = Trellis.from_workbench(
@@ -277,6 +281,102 @@ class TangleSession:
             handle = trellis.plot_strong_pip(ax=ax, **scatter_kwargs)
             if handle is not None:
                 handles.append(handle)
+        return handles
+
+    # ── pseudoneighbor convenience (per fixed point) ─────────────────────────
+
+    def compute_pseudoneighbors(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ):
+        """
+        Find reference pseudoneighbors for one, several, or every fixed point.
+
+        For each selected fixed point this builds (or reuses) its
+        per-fixed-point Trellis and runs
+        :meth:`Trellis.compute_pseudoneighbors`, so each tangle of a nested
+        session is checked against its own crossings.
+
+        Args:
+            fixed_point: A single FixedPoint (→ returns that fixed point's
+                reference-pair list), an iterable of them, or None for every
+                fixed point (→ returns a ``{fixed_point: references}`` dict).
+            **kwargs: Forwarded to :meth:`Trellis.compute_pseudoneighbors`
+                (``extend``, ``collision_rtol``, ``match_rtol``, ``tol``).
+
+        Returns:
+            A reference-pair list for a single fixed point, or a dict mapping
+            each fixed point to its list.
+        """
+        results = {
+            fp: self.trellis(fp).compute_pseudoneighbors(**kwargs)
+            for fp in self._resolve_fixed_points(fixed_point)
+        }
+        if _is_single_fixed_point(fixed_point):
+            return results[fixed_point]
+        return results
+
+    def plot_pseudoneighbors(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        compute: bool = True,
+        ax=None,
+        **scatter_kwargs,
+    ) -> list:
+        """
+        Scatter the pseudoneighbors of one, several, or every fixed point.
+
+        Args:
+            fixed_point: Fixed point selector; None (default) plots every one.
+            compute: If a trellis has no pseudoneighbors yet, compute them
+                first (default True). Pass False to plot only already-computed
+                trellises.
+            ax: Optional matplotlib Axes (defaults to the current axes).
+            **scatter_kwargs: Forwarded to :meth:`Trellis.plot_pseudoneighbors`
+                (including ``include_trajectories``).
+
+        Returns:
+            List of the matplotlib handles drawn (one per fixed point with
+            pairs to plot).
+        """
+        handles = []
+        for fp in self._resolve_fixed_points(fixed_point):
+            trellis = self.trellis(fp)
+            if compute and not trellis.pseudoneighbors:
+                trellis.compute_pseudoneighbors()
+            handle = trellis.plot_pseudoneighbors(ax=ax, **scatter_kwargs)
+            if handle is not None:
+                handles.append(handle)
+        return handles
+
+    def plot_holes(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        ax=None,
+        **scatter_kwargs,
+    ) -> list:
+        """
+        Scatter the punched holes of one, several, or every fixed point.
+
+        Holes must have been punched already (:meth:`Trellis.punch_holes`);
+        trellises without holes are skipped.
+
+        Args:
+            fixed_point: Fixed point selector; None (default) plots every one.
+            ax: Optional matplotlib Axes (defaults to the current axes).
+            **scatter_kwargs: Forwarded to :meth:`Trellis.plot_holes`.
+
+        Returns:
+            List of the matplotlib handles drawn.
+        """
+        handles = []
+        for fp in self._resolve_fixed_points(fixed_point):
+            handle = self.trellis(fp).plot_holes(ax=ax, **scatter_kwargs)
+            if handle is not None:
+                handles.extend(handle)
         return handles
 
     # ── cross-layer ("loom") algorithms ──────────────────────────────────────
@@ -448,8 +548,14 @@ class TangleSession:
 
         Returns:
             A :class:`~tanglepack.loom.Blast.BlastResult` genealogy of the blast.
+
+        Note:
+            Blasting registers the children's new stable-manifold crossings, so
+            any cached Trellis is invalidated — take a fresh :meth:`trellis`
+            (and re-establish its strong pip) before continuing topological
+            work.
         """
-        return blast_zone(
+        result = blast_zone(
             self,
             zone,
             num_iterations,
@@ -457,6 +563,8 @@ class TangleSession:
             strict=strict,
             min_separation=min_separation,
         )
+        self.invalidate_trellises()
+        return result
 
     def plot_resonance_zones(
         self,

@@ -118,6 +118,19 @@ def small_tangle(grown_both):
     return workbench, fp
 
 
+@pytest.fixture
+def henon_tangle_with_bridges(grown_both):
+    """``(workbench, fp)`` grown two extra unstable iterations (the 7 of
+    ``grown_both`` leave too few crossings for a full pseudoneighbor reference
+    window), with intersections, trimmed stable manifold, and bridges."""
+    workbench, fp = grown_both
+    workbench.grow_n_times(fp, "unstable", num_iterations=2)
+    workbench.compute_intersections([fp])
+    workbench.trim_stable_manifolds(fp)
+    workbench.create_bridges(fp)
+    return workbench, fp
+
+
 # --------------------------------------------------------------------------- #
 # Heavy nested period-3 session (for the blast regression test)
 # --------------------------------------------------------------------------- #

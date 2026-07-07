@@ -9,7 +9,12 @@ import matplotlib.pyplot as plt
 from ..numerics.Intersection import Intersection, ManifoldKey
 from ..numerics.IntersectionRegistry import IntersectionRegistry
 from .TrellisBranch import TrellisBranch
-from .TopologyResults import Hole, PseudoneighborPair, StrongPipResult
+from .TopologyResults import (
+    Hole,
+    PseudoneighborPair,
+    StablePartitionResult,
+    StrongPipResult,
+)
 
 if TYPE_CHECKING:
     from ..numerics.FixedPoint import FixedPoint
@@ -65,6 +70,8 @@ class Trellis:
             many steps can instead use canonical-distance scaling — see scale_cdist).
         pseudoneighbors: Output slot — pseudoneighbor pairs found by the algorithm.
         holes: Output slot — holes punched for pseudoneighbor pairs.
+        stable_partitions: Output slot — stable-manifold partitions built from
+            the holes (one per branch and side).
         strong_pip_candidates: Output slot — IDs of every intersection that
             qualifies as a strong pip.
         strong_pip: The single chosen strong pip (an intersection ID), or None.
@@ -78,16 +85,27 @@ class Trellis:
         branches: dict[ManifoldKey, TrellisBranch],
         bridges: list["Bridge"],
         dynamical_system: Optional["DynamicalSystem"] = None,
+        manifolds: Optional[dict] = None,
     ):
         self.fixed_points = fixed_points
         self.registry = registry
         self.branches = branches
         self.bridges = bridges
         self.dynamical_system = dynamical_system
+        # Live reference to the workbench's manifolds (keyed like branches).
+        # Purely geometric consumers (hole placement inside narrow lobes) walk
+        # the actual curve nodes through this; None degrades to chord fallbacks.
+        self.manifolds = manifolds or {}
+        # Registry size when this snapshot bucketed its branches. In-place
+        # additions (e.g. blasting registers new crossings on the SAME
+        # registry) leave the object identity unchanged but stale the
+        # per-branch orderings; the session's staleness guard compares this.
+        self._built_registry_size = len(registry)
 
         # ── algorithm output slots (filled by topological algorithms) ────────
         self.pseudoneighbors: list[PseudoneighborPair] = []
         self.holes: list[Hole] = []
+        self.stable_partitions: list[StablePartitionResult] = []
 
         # Every intersection that *qualifies* as a strong pip is a candidate.
         # A trellis has exactly one actual strong pip — a unique choice made from
@@ -180,6 +198,7 @@ class Trellis:
             branches=branches,
             bridges=bridges,
             dynamical_system=workbench.dynamical_system,
+            manifolds=workbench.manifolds,
         )
 
     # ── intersection access ─────────────────────────────────────────────────
@@ -376,6 +395,11 @@ class Trellis:
             self.holes.append(pair.hole)
 
     @property
+    def reference_pseudoneighbors(self) -> list[PseudoneighborPair]:
+        """The recorded pairs found on the reference window W^S(r_n, r_{n+p})."""
+        return [p for p in self.pseudoneighbors if p.is_reference]
+
+    @property
     def strong_pip_intersection(self) -> Optional[Intersection]:
         """The chosen strong pip as an Intersection, or None if unset."""
         return None if self.strong_pip is None else self.registry[self.strong_pip]
@@ -504,10 +528,226 @@ class Trellis:
         )
         return self.set_strong_pip(chosen)
 
+    def compute_pseudoneighbors(
+        self,
+        *,
+        extend: bool = True,
+        collision_rtol: float = 1e-2,
+        match_rtol: float = 0.05,
+        tol: Optional[float] = None,
+        verbose: bool = False,
+    ) -> list[PseudoneighborPair]:
+        """
+        Find the reference pseudoneighbor pairs and record them on the trellis.
+
+        Thin wrapper around :func:`topology.Pseudoneighbor.compute_pseudoneighbors`.
+        Clears any previously recorded pseudoneighbors and holes first. With
+        ``extend=True`` (default) the reference pairs are also mapped through
+        the iterate table and the full trajectories recorded alongside them.
+
+        The reference window starts at the chosen strong pip's cut point on
+        each branch (run classify_strong_pips() / set_strong_pip() first);
+        without one, the outermost intersection is used as a fallback.
+
+        Args:
+            extend: Also record the iterated (non-reference) pairs.
+            collision_rtol: Relative slack of the endpoint-collision test (a
+                landing skipped only when BOTH its cdists match an endpoint).
+            match_rtol: Relative tolerance of the r_{n+p} cdist fallback.
+            tol: Absolute canonical-distance slack (defaults to the registry's
+                ``cdist_tol``).
+            verbose: Print :meth:`describe_pseudoneighbors` when done.
+
+        Returns:
+            The reference pairs (also available as
+            :attr:`reference_pseudoneighbors`).
+        """
+        from .Pseudoneighbor import (
+            compute_pseudoneighbors as _compute,
+            extend_pseudoneighbor_trajectories as _extend,
+        )
+
+        self.pseudoneighbors.clear()
+        self.holes.clear()
+        references = _compute(
+            self, collision_rtol=collision_rtol, match_rtol=match_rtol, tol=tol
+        )
+        for pair in references:
+            self.add_pseudoneighbor(pair)
+        if extend:
+            for pair in _extend(self, references):
+                self.add_pseudoneighbor(pair)
+        if verbose:
+            print(self.describe_pseudoneighbors())
+        return references
+
+    def describe_pseudoneighbors(self) -> str:
+        """Human-readable report of the recorded pseudoneighbor pairs."""
+        references = self.reference_pseudoneighbors
+        lines = [f"{len(references)} reference pseudoneighbor pair(s):"]
+        for pair in references:
+            a = self.registry[pair.intersection_a]
+            b = self.registry[pair.intersection_b]
+            lines.append(
+                f"  ({pair.intersection_a}, {pair.intersection_b})  "
+                f"stable cdists ({a.stable_cdist:.4g}, {b.stable_cdist:.4g})  "
+                f"unstable cdists ({a.unstable_cdist:.4g}, {b.unstable_cdist:.4g})"
+            )
+        lines.append(
+            f"{len(self.pseudoneighbors)} pair(s) total including trajectories"
+        )
+        return "\n".join(lines)
+
+    def punch_holes(
+        self,
+        pairs: Optional[Iterable[PseudoneighborPair]] = None,
+        *,
+        epsilon: float = 0.05,
+        propagate: bool = True,
+        in_zone=None,
+        verbose: bool = False,
+    ) -> list[Hole]:
+        """
+        Punch the holes for the recorded pseudoneighbor pairs.
+
+        Thin wrapper around :func:`topology.StablePartition.punch_holes`; with
+        ``propagate=True`` (default) the reference bridges are also mapped
+        backward and their generated holes punched (see
+        :func:`topology.StablePartition.propagate_reference_holes`). All holes
+        are stored in :attr:`holes`.
+
+        Args:
+            pairs: Pairs to punch holes for; defaults to every recorded pair.
+            epsilon: Inward nudge of the hole off the manifold it hugs.
+            propagate: Also punch the backward-propagated holes.
+            in_zone: Optional resonance-zone membership test (e.g.
+                ``ResonanceZone.contains_point``) deciding each hole's
+                ``interior`` flag from its position; holes outside the zone
+                are excluded from the partition of this zone.
+            verbose: Print :meth:`describe_holes` when done.
+
+        Returns:
+            The punched holes.
+        """
+        from .StablePartition import (
+            punch_holes as _punch,
+            propagate_reference_holes as _propagate,
+        )
+
+        self._warn_missing_pseudoneighbors()
+        self.holes.clear()
+        holes = _punch(self, pairs, epsilon=epsilon, in_zone=in_zone)
+        if propagate:
+            holes += _propagate(self, in_zone=in_zone)
+        self.holes.extend(holes)
+        if verbose:
+            print(self.describe_holes())
+        return holes
+
+    def describe_holes(self) -> str:
+        """Human-readable report of the punched holes, by side and zone."""
+        lines = []
+        for side in ("left", "right"):
+            count = sum(1 for h in self.holes if h.side == side)
+            lines.append(f"{count} hole(s) on the {side} side")
+        different_zone = [
+            h
+            for h in self.holes
+            if h.interior is False and h.iterate not in (0, None)
+        ]
+        if different_zone:
+            lines.append(
+                f"{len(different_zone)} hole(s) belong to a different resonance "
+                "zone (ignored by the partition)"
+            )
+        return "\n".join(lines)
+
+    def partition_stable_manifold(
+        self,
+        branch_key: Optional[ManifoldKey] = None,
+        *,
+        verbose: bool = False,
+    ) -> list[StablePartitionResult]:
+        """
+        Partition stable branch(es) by the punched holes, one result per side.
+
+        Thin wrapper around
+        :func:`topology.StablePartition.partition_stable_manifold`, run for
+        both sides of each selected branch. Results are stored in
+        :attr:`stable_partitions` (replacing previous ones for those branches).
+
+        Args:
+            branch_key: A single stable branch to partition, or None (default)
+                for every stable branch of the trellis.
+            verbose: Print :meth:`describe_stable_partitions` when done.
+
+        Returns:
+            The partition results (two per branch: left and right).
+        """
+        from .StablePartition import partition_stable_manifold as _partition
+
+        self._warn_missing_pseudoneighbors()
+        keys = (
+            [branch_key]
+            if branch_key is not None
+            else [b.key for b in self.stable_branches]
+        )
+        results = [
+            _partition(self, key, side) for key in keys for side in ("left", "right")
+        ]
+        self.stable_partitions = [
+            p for p in self.stable_partitions if p.branch_key not in keys
+        ] + results
+        if verbose:
+            print(self.describe_stable_partitions())
+        return results
+
+    def _warn_missing_pseudoneighbors(self) -> None:
+        """Warn for every fixed point with no recorded pseudoneighbor pairs.
+
+        Hole punching and partitioning cover every fixed point held by this
+        trellis automatically, but only from the pairs already recorded — a
+        fixed point whose pseudoneighbors were never computed silently
+        contributes nothing, so flag it.
+        """
+        covered = {
+            pair.branch_key[0]
+            for pair in self.pseudoneighbors
+            if pair.branch_key is not None
+        }
+        for fp in self.fixed_points:
+            if fp not in covered:
+                logger.warning(
+                    "No pseudoneighbors recorded for %r; run "
+                    "compute_pseudoneighbors() first — holes and partitions "
+                    "will be empty for it",
+                    fp,
+                )
+
+    def describe_stable_partitions(self) -> str:
+        """Human-readable report of the stored partitions, interval notation."""
+        lines = []
+        for result in self.stable_partitions:
+            lines.append(
+                f"{result.side} partition (p{result.branch_key[0].period}, "
+                f"orbit {result.branch_key[2]}):"
+            )
+            for iv in result.intervals:
+                lo = "[" if iv.closed_lo else "("
+                hi = "]" if iv.closed_hi else ")"
+                lo_name = "anchor" if iv.lo_id is None else f"id {iv.lo_id}"
+                hi_name = "end" if iv.hi_id is None else f"id {iv.hi_id}"
+                lines.append(
+                    f"  {lo}{iv.lo_cdist:.4g}, {iv.hi_cdist:.4g}{hi}  "
+                    f"({lo_name} → {hi_name})"
+                )
+        return "\n".join(lines)
+
     def clear_results(self) -> None:
         """Empty all algorithm-output slots, leaving the input trellis intact."""
         self.pseudoneighbors.clear()
         self.holes.clear()
+        self.stable_partitions.clear()
         self.strong_pip_candidates.clear()
         self.strong_pip = None
 
@@ -598,6 +838,145 @@ class Trellis:
         scatter_kwargs.setdefault("zorder", 12)
         target = ax if ax is not None else plt
         return target.scatter(coords[:, 0], coords[:, 1], **scatter_kwargs)
+
+    def plot_pseudoneighbors(
+        self, ax=None, *, include_trajectories: bool = True, **scatter_kwargs
+    ):
+        """
+        Scatter-plot the pseudoneighbor pair members, on top of the tangle.
+
+        Every branch has pseudoneighbors — only the reference computation is
+        restricted to the fundamental segment — so by default all recorded
+        pairs (references and their iterated appearances) are drawn.
+
+        Args:
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            include_trajectories: If True (default) every recorded pair is
+                drawn; pass False for the reference pairs only.
+            **scatter_kwargs: Forwarded to scatter. Defaults are
+                color="darkorange", s=7 (matching plot_intersections),
+                zorder=13 (above the strong-pip markers); override any of them.
+
+        Returns:
+            The matplotlib PathCollection, or None if there are no pairs.
+        """
+        pairs = (
+            self.pseudoneighbors if include_trajectories
+            else self.reference_pseudoneighbors
+        )
+        if not pairs:
+            logger.info(
+                "No pseudoneighbors to plot; call compute_pseudoneighbors() first."
+            )
+            return None
+
+        ids = sorted({i for p in pairs for i in p.as_tuple()})
+        coords = np.array([self.registry[i].coords for i in ids])
+        scatter_kwargs.setdefault("color", "darkorange")
+        scatter_kwargs.setdefault("s", 7)
+        scatter_kwargs.setdefault("zorder", 13)
+        target = ax if ax is not None else plt
+        return target.scatter(coords[:, 0], coords[:, 1], **scatter_kwargs)
+
+    # One marker per reference-pseudoneighbor orbit: every hole descending
+    # from the same reference (matching Hole.origin) shares the symbol.
+    _HOLE_MARKERS = ("x", "+", "*", "^", "s", "D", "v", "P")
+
+    # One color per reference-pseudoneighbor orbit, matching the markers, so
+    # an orbit reads as a single consistent shape+color across the figure.
+    _HOLE_COLORS = (
+        "purple", "teal", "darkgreen", "crimson",
+        "chocolate", "navy", "olive", "deeppink",
+    )
+
+    def plot_holes(self, ax=None, *, show_iterates: bool = True, **scatter_kwargs):
+        """
+        Scatter-plot the punched holes, on top of the tangle.
+
+        Each reference pseudoneighbor's orbit gets its own marker symbol AND
+        color — the reference hole and every hole generated from it (forward,
+        backward, or propagated) share them — and each hole is labelled with
+        its iterate (0 = reference, negative = backward). Sides are reported
+        by the partition, not encoded here.
+
+        Args:
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            show_iterates: Annotate each hole with its iterate number
+                (default True).
+            **scatter_kwargs: Forwarded to scatter. Defaults are s=40,
+                zorder=14; override any of them. A color= override disables
+                the by-orbit coloring, a marker= override the by-orbit markers.
+
+        Returns:
+            List of matplotlib PathCollections (one per orbit drawn), or None
+            if there are no holes.
+        """
+        if not self.holes:
+            logger.info("No holes to plot; call punch_holes() first.")
+            return None
+
+        scatter_kwargs.setdefault("s", 40)
+        scatter_kwargs.setdefault("zorder", 14)
+        origins = sorted({h.origin for h in self.holes if h.origin is not None})
+        style_of = {
+            origin: (
+                self._HOLE_MARKERS[i % len(self._HOLE_MARKERS)],
+                self._HOLE_COLORS[i % len(self._HOLE_COLORS)],
+            )
+            for i, origin in enumerate(origins)
+        }
+        target = ax if ax is not None else plt
+
+        handles = []
+        groups = sorted(
+            {h.origin for h in self.holes},
+            key=lambda origin: (origin is None, origin or ()),
+        )
+        for origin in groups:
+            batch = [h for h in self.holes if h.origin == origin]
+            coords = np.array([h.coords for h in batch])
+            marker, color = style_of.get(origin, ("x", "gray"))
+            kwargs = dict(scatter_kwargs)
+            kwargs.setdefault("marker", marker)
+            kwargs.setdefault("color", color)
+            handles.append(target.scatter(coords[:, 0], coords[:, 1], **kwargs))
+            if show_iterates:
+                axes = target if ax is not None else plt.gca()
+                for hole in batch:
+                    if hole.iterate is None:
+                        continue
+                    axes.annotate(
+                        str(hole.iterate),
+                        hole.coords,
+                        textcoords="offset points",
+                        xytext=(4, 4),
+                        fontsize=8,
+                        color=color,
+                        zorder=15,
+                    )
+        return handles
+
+    def plot_stable_partition(self, ax=None, **line_kwargs):
+        """
+        Draw the stored stable partitions as number lines (one row each).
+
+        See :func:`topology.StablePartition.plot_stable_partition` — the x-axis
+        is stable canonical distance, closed endpoints are filled markers and
+        open endpoints hollow ones.
+
+        Args:
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes.
+            **line_kwargs: Forwarded to the interval plot calls.
+
+        Returns:
+            The Axes drawn on, or None if no partitions are stored.
+        """
+        from .StablePartition import plot_stable_partition as _plot
+
+        return _plot(self.stable_partitions, ax=ax, **line_kwargs)
 
     # ── misc ────────────────────────────────────────────────────────────────
 

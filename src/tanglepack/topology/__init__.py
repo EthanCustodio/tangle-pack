@@ -12,20 +12,48 @@ layer has already produced.
 
 from .Trellis import Trellis
 from .TrellisBranch import TrellisBranch
-from .TopologyResults import Hole, PseudoneighborPair, StrongPipResult
+from .TopologyResults import (
+    Hole,
+    PartitionInterval,
+    PseudoneighborPair,
+    StablePartitionResult,
+    StrongPipResult,
+)
 from .StrongPip import (
     is_strong_pip,
     classify_strong_pips,
     forward_stable_branch_cycle,
+)
+from .Pseudoneighbor import (
+    compute_pseudoneighbors,
+    extend_pseudoneighbor_trajectories,
+    forward_unstable_branch_cycle,
+)
+from .StablePartition import (
+    bridge_for_pair,
+    partition_stable_manifold,
+    plot_stable_partition,
+    propagate_reference_holes,
+    punch_holes,
 )
 
 __all__ = [
     "Trellis",
     "TrellisBranch",
     "Hole",
+    "PartitionInterval",
     "PseudoneighborPair",
+    "StablePartitionResult",
     "StrongPipResult",
     "is_strong_pip",
     "classify_strong_pips",
     "forward_stable_branch_cycle",
+    "compute_pseudoneighbors",
+    "extend_pseudoneighbor_trajectories",
+    "forward_unstable_branch_cycle",
+    "bridge_for_pair",
+    "partition_stable_manifold",
+    "plot_stable_partition",
+    "propagate_reference_holes",
+    "punch_holes",
 ]

@@ -41,7 +41,9 @@ from .topology import (
     Trellis,
     TrellisBranch,
     Hole,
+    PartitionInterval,
     PseudoneighborPair,
+    StablePartitionResult,
     StrongPipResult,
 )
 
