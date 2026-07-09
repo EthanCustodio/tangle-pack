@@ -37,16 +37,25 @@ class Hole:
         coords: Phase-space (x, y) where the hole is placed.
         near_intersection_id: Registry ID of the pseudoneighbor the hole hugs.
         pair: The pseudoneighbor pair this hole belongs to (back-reference).
-        side: Which side of the oriented stable manifold (looking toward the
-            anchor point) the hole lies on. None until classified.
+        side: Which side of the oriented stable manifold (standing on the
+            manifold looking toward the anchor point; standard orientation,
+            positive cross = left) the hole's bridge approaches its defining
+            intersections from. None until classified.
         interior: True if the hole lies inside the resonance zone (its stable
             position is below the zone's cut on that branch), False if outside.
             None when no resonance-zone cut is known.
-        bounding_ids: Registry IDs of the two intersections bounding the region
-            the hole is punched in — the pair itself for a directly punched
-            hole, the containing bridge's endpoints for a propagated one. These
-            are the partition boundaries of the Stable Manifold Partition
-            Algorithm.
+        bounding_ids: Registry IDs of the two intersections defining the bridge
+            the hole belongs to — the pair's own bridge for a directly punched
+            hole, the containing bridge for a propagated one. These are the
+            partition boundaries of the Stable Manifold Partition Algorithm.
+        openings: The partition intervals this hole opens, one record per
+            defining intersection: ``(intersection_id, which, row)`` where
+            ``which`` is ``"anchorward"``/``"outward"`` (which side of that
+            intersection along the stable manifold the hole abuts — decided by
+            the hole's side of the bridge arc) and ``row`` is the left/right
+            partition the opening acts on. None means the legacy inward
+            default (outward of the near bound, anchorward of the far bound,
+            on ``side``).
         iterate: Position of this hole along its reference orbit — 0 for the
             reference hole itself, negative for backward iterates, positive
             for forward ones. None when unknown.
@@ -61,6 +70,7 @@ class Hole:
     side: Optional[Literal["left", "right"]] = None
     interior: Optional[bool] = None
     bounding_ids: Optional[tuple[int, int]] = None
+    openings: Optional[list[tuple[int, str, str]]] = None
     iterate: Optional[int] = None
     origin: Optional[tuple[int, int]] = None
 

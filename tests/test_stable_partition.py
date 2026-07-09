@@ -79,11 +79,12 @@ def _spans(intervals):
 
 
 def test_side_of_cross_product():
-    """Left/right follow the sign of cross(tangent, displacement): negative
-    cross is left (the author's convention)."""
+    """Left/right follow the standard orientation: standing on the manifold
+    facing along the tangent (toward the anchor), positive cross = left hand
+    (the author's dynamical-direction convention, 2026-07-09)."""
     tangent = np.array([0.0, -1.0])  # toward the anchor, pointing down
-    assert _side_of(tangent, np.array([-1.0, 0.0])) == "left"
-    assert _side_of(tangent, np.array([1.0, 0.0])) == "right"
+    assert _side_of(tangent, np.array([1.0, 0.0])) == "left"   # facing south, east is left
+    assert _side_of(tangent, np.array([-1.0, 0.0])) == "right"
     assert _side_of(tangent, np.array([0.0, -2.0])) is None  # collinear
 
 
