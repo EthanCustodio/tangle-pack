@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Callable
+from typing import Annotated, Callable
 
 import numpy as np
 import numpy.typing as npt
-from typing_extensions import Annotated
 
 from numpy import float64
 
