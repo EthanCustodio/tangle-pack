@@ -71,7 +71,7 @@ trellis = session.trellis(fp)
 # left and right of the stable manifold.
 trellis.classify_strong_pips()
 print(f"Strong-pip candidates: {trellis.strong_pip_candidates}")
-trellis.set_strong_pip(1)
+trellis.set_strong_pip(5)
 pip = trellis.strong_pip
 print(f"Chosen strong pip: {pip}")
 
@@ -83,7 +83,7 @@ trellis.set_strong_pip(5)
 
 # Blasting registers the children's new stable-manifold crossings, so the
 # trellis snapshot must be refreshed (and the pip re-established) afterward.
-session.blast_zone(zone, num_iterations=2, fixed_point=[fp], min_separation=1e-3)
+session.blast_zone(zone, num_iterations=8, fixed_point=[fp], min_separation=1e-5)
 trellis = session.trellis(fp)
 trellis.classify_strong_pips(choose_default=False)
 trellis.set_strong_pip(5)
