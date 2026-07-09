@@ -1,7 +1,6 @@
 import logging
-from typing import Callable, Literal, Iterable, Optional
+from typing import Annotated, Callable, Literal, Iterable, Optional
 import numpy.typing as npt
-from typing_extensions import Annotated
 
 import numpy as np
 import matplotlib.pyplot as plt
