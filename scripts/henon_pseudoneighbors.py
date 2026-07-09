@@ -79,14 +79,14 @@ session.add_resonance_zones([pip])  # trim at the pip + recompute (ids preserved
 zone = session.resonance_zones[(fp, 0)]
 trellis = session.trellis(fp)  # fresh snapshot of the truncated trellis
 trellis.classify_strong_pips(choose_default=False)
-trellis.set_strong_pip(pip)
+trellis.set_strong_pip(5)
 
 # Blasting registers the children's new stable-manifold crossings, so the
 # trellis snapshot must be refreshed (and the pip re-established) afterward.
-session.blast_zone(zone, num_iterations=8, fixed_point=[fp], min_separation=1e-3)
+session.blast_zone(zone, num_iterations=2, fixed_point=[fp], min_separation=1e-3)
 trellis = session.trellis(fp)
 trellis.classify_strong_pips(choose_default=False)
-trellis.set_strong_pip(pip)
+trellis.set_strong_pip(5)
 
 # 1. Reference pseudoneighbors + full trajectories.
 reference_pseudoneighbors = session.compute_pseudoneighbors(fp, verbose=True)
