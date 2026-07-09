@@ -83,13 +83,13 @@ trellis.set_strong_pip(pip)
 
 # Blasting registers the children's new stable-manifold crossings, so the
 # trellis snapshot must be refreshed (and the pip re-established) afterward.
-session.blast_zone(zone, num_iterations=10, fixed_point=[fp], min_separation=1e-3)
+session.blast_zone(zone, num_iterations=8, fixed_point=[fp], min_separation=1e-3)
 trellis = session.trellis(fp)
 trellis.classify_strong_pips(choose_default=False)
 trellis.set_strong_pip(pip)
 
 # 1. Reference pseudoneighbors + full trajectories.
-references = session.compute_pseudoneighbors(fp, verbose=True)
+reference_pseudoneighbors = session.compute_pseudoneighbors(fp, verbose=True)
 
 # 2. Holes: one per pair, plus the backward-propagated ones. The zone's
 # containment test flags holes that belong to a different resonance zone
@@ -97,7 +97,7 @@ references = session.compute_pseudoneighbors(fp, verbose=True)
 holes = trellis.punch_holes(in_zone=zone.contains_point, verbose=True)
 
 # 3. The partition of each stable branch, both sides.
-results = trellis.partition_stable_manifold(verbose=True)
+stable_partition = trellis.partition_stable_manifold(verbose=True)
 
 # Figure 1: the tangle with pseudoneighbors and holes. plot_tangle draws the
 # grown manifold linked-lists; the blasted images live in the bridge children,

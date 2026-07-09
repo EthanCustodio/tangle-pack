@@ -156,34 +156,31 @@ def test_cut_splits_interval_and_keeps_first_exterior_hole(stable_line):
         (1.0, 2.0, False, False),
         (2.0, 2.5, True, True),
     ]
+    # The exterior region (5, 6) ends at the branch end, so the outermost
+    # point owns itself as a singleton.
     assert _spans(result.exterior_intervals) == [
         (2.5, 5.0, False, True),
         (5.0, 6.0, False, False),
+        (6.0, 6.0, True, True),
     ]
 
 
-def test_hole_in_another_zone_is_excluded(stable_line):
-    """An out-of-zone hole (interior=False) at a non-reference iterate belongs
-    to a different resonance zone and must not open any interval here, while
-    an out-of-zone REFERENCE hole (iterate 0) is an exterior hole and does."""
+def test_all_holes_participate_regardless_of_flags(stable_line):
+    """Every hole on a side shapes the partition identically — the interior
+    flag and the iterate label are descriptive only (a zone-membership gate
+    split otherwise identical holes by nudge luck and was removed)."""
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
-    other_zone = _hole(ids[0], ids[1], "left", interior=False)
-    other_zone.iterate = -1
-    trellis.holes.append(other_zone)
+    outside = _hole(ids[0], ids[1], "left", interior=False)
+    outside.iterate = -9
+    trellis.holes.append(outside)
 
     result = partition_stable_manifold(trellis, branch_key, "left")
-    assert _spans(result.intervals) == [(0.0, 6.0, True, True)]
 
-    exterior_ref = _hole(ids[2], ids[3], "left", interior=False)
-    exterior_ref.iterate = 0
-    trellis.holes.append(exterior_ref)
-
-    result = partition_stable_manifold(trellis, branch_key, "left")
     assert _spans(result.intervals) == [
-        (0.0, 3.0, True, True),
-        (3.0, 4.0, False, False),
-        (4.0, 6.0, True, True),
+        (0.0, 1.0, True, True),
+        (1.0, 2.0, False, False),
+        (2.0, 6.0, True, True),
     ]
 
 
@@ -199,6 +196,30 @@ def test_partition_warns_without_pseudoneighbors(stable_line, caplog):
 
     warnings = [r for r in caplog.records if "compute_pseudoneighbors" in r.message]
     assert len(warnings) == 2
+
+
+def test_shared_boundary_never_closed_on_both_sides(stable_line):
+    """A partition assigns each point to exactly one piece: adjacent intervals
+    must never both include their shared boundary ("]["). Interleaved hole
+    regions (1,4) and (2,5) exercise the worst case: each piece is open
+    exactly at the ends where it touches a bounding point of a region that
+    contains it, and every shared point is owned by exactly one piece."""
+    trellis, ids = stable_line
+    branch_key = (trellis.fixed_points[0], "stable", 0, 0)
+    trellis.holes.append(_hole(ids[0], ids[3], "left"))
+    trellis.holes.append(_hole(ids[1], ids[4], "left"))
+
+    result = partition_stable_manifold(trellis, branch_key, "left")
+
+    for previous, current in zip(result.intervals, result.intervals[1:]):
+        assert not (previous.closed_hi and current.closed_lo)
+    assert _spans(result.intervals) == [
+        (0.0, 1.0, True, True),
+        (1.0, 2.0, False, True),   # inside (1,4) only at its lower end
+        (2.0, 4.0, False, False),  # inside BOTH regions: open piece
+        (4.0, 5.0, True, False),   # inside (2,5) only at its upper end
+        (5.0, 6.0, True, True),
+    ]
 
 
 def test_partition_requires_a_stable_branch(stable_line):

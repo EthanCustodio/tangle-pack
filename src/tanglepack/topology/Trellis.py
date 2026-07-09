@@ -622,8 +622,8 @@ class Trellis:
             propagate: Also punch the backward-propagated holes.
             in_zone: Optional resonance-zone membership test (e.g.
                 ``ResonanceZone.contains_point``) deciding each hole's
-                ``interior`` flag from its position; holes outside the zone
-                are excluded from the partition of this zone.
+                descriptive ``interior`` flag from its position. Purely
+                informational — the partition treats every hole equally.
             verbose: Print :meth:`describe_holes` when done.
 
         Returns:
@@ -650,15 +650,10 @@ class Trellis:
         for side in ("left", "right"):
             count = sum(1 for h in self.holes if h.side == side)
             lines.append(f"{count} hole(s) on the {side} side")
-        different_zone = [
-            h
-            for h in self.holes
-            if h.interior is False and h.iterate not in (0, None)
-        ]
-        if different_zone:
+        outside = [h for h in self.holes if h.interior is False]
+        if outside:
             lines.append(
-                f"{len(different_zone)} hole(s) belong to a different resonance "
-                "zone (ignored by the partition)"
+                f"{len(outside)} hole(s) lie outside the resonance zone"
             )
         return "\n".join(lines)
 
@@ -737,9 +732,12 @@ class Trellis:
                 hi = "]" if iv.closed_hi else ")"
                 lo_name = "anchor" if iv.lo_id is None else f"id {iv.lo_id}"
                 hi_name = "end" if iv.hi_id is None else f"id {iv.hi_id}"
+                singleton = (
+                    "  (singleton)" if iv.lo_cdist == iv.hi_cdist else ""
+                )
                 lines.append(
                     f"  {lo}{iv.lo_cdist:.4g}, {iv.hi_cdist:.4g}{hi}  "
-                    f"({lo_name} → {hi_name})"
+                    f"({lo_name} → {hi_name}){singleton}"
                 )
         return "\n".join(lines)
 

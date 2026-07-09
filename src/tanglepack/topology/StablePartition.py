@@ -76,20 +76,32 @@ fixed in conversation with the author (July 2026):
   the same bridge differ exactly there, and BOTH are punched (per the author:
   no cross-orbit deduplication, even on the same bridge and side; only a
   same-orbit same-iterate duplicate of a recorded pair's hole is skipped).
-* Interior/exterior: the resonance zone cuts each stable branch at the strong
-  pip (or its iterate); a hole is interior iff its region's outer stable cdist
-  is at or below that cut. With no strong pip chosen, interior is None and the
-  partition treats everything as interior.
-* Exterior partition: exterior bridge dynamics are degenerate (images are
-  copies marching toward the anchor), so only the FIRST (outermost, i.e. the
-  reference) exterior hole is used per side — confirmed by the author.
+* Interior/exterior: Hole.interior records whether the hole's position lies
+  inside the resonance zone (via the in_zone test, else the cdist-vs-cut
+  fallback). It is DESCRIPTIVE ONLY — the partition treats every hole on a
+  side equally, with no exceptions by iterate, endpoint identity, or zone
+  membership ("all holes on manifolds should be treated equal" — author.
+  A zone-membership gate was tried and rejected: the deep backward sub-arcs
+  hug the zone's own boundary bridge, so the point-in-polygon test split
+  otherwise identical holes by the luck of a nudge direction).
+* Beyond-cut regions (only possible on an UNTRIMMED manifold): the exterior
+  bridge dynamics are degenerate (images are copies marching toward the
+  anchor), so only the outermost beyond-cut hole region is used per side —
+  confirmed by the author.
 * Partition intervals: boundaries are the hole regions' bounding intersections
   (Hole.bounding_ids) plus the anchor and the branch's outermost intersection.
-  An interval whose two boundaries bound a punched hole is open at both ends;
-  every other interval is closed. A boundary point flanked by hole regions on
-  both sides belongs to neither and is emitted as a degenerate closed
-  singleton [x, x]. A non-hole interval straddling the resonance-zone cut is
-  split there, with the cut point assigned to the interior side.
+  A piece is OPEN at an end iff that end's intersection bounds a hole region
+  CONTAINING the piece — so a wide propagated region spanning several
+  boundaries opens the region-facing end of every piece inside it, not just
+  its exact boundary pair. A boundary point excluded by every neighbouring
+  piece owns itself as a closed singleton [x, x]. No point is special: the
+  fixed point or the strong pip become singletons only when a hole region's
+  geometry happens to leave them unowned (a region reaching the anchor-most
+  or outermost boundary), exactly like any pinched interior point. Each
+  point belongs to exactly one piece: a shared boundary two pieces would
+  both include goes to the anchor-side piece, so "](" occurs but "]["
+  never does. A closed interval straddling the resonance-zone cut is split
+  there, with the cut point assigned to the interior side.
 
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
 StrongPip/Pseudoneighbor but is unvalidated. Containing-bridge lookup compares
@@ -388,7 +400,7 @@ def partition_stable_manifold(
 
     cut_cdist = _cut_cdist_by_branch(trellis).get(branch_key)
 
-    hole_regions = _hole_regions_on_branch(trellis, branch_key, side, cut_cdist)
+    hole_regions = _hole_regions_on_branch(trellis, branch_key, side)
     if cut_cdist is None:
         intervals = _build_intervals(trellis, branch, hole_regions, cut_cdist)
         return StablePartitionResult(
@@ -422,8 +434,10 @@ def plot_stable_partition(
     Draw stable partitions as number lines (stable cdist on the x-axis).
 
     Each partition occupies one row; its intervals are horizontal segments
-    with filled endpoint markers where closed and hollow ones where open.
-    The resonance-zone cut, when known, is a dashed vertical line.
+    with a bracket at each end — [ ] closed, ( ) open — every boundary
+    labelled with its intersection id, and a circle marking each singleton
+    piece [x, x] (a point pinched between two open intervals). Dotted
+    vertical lines mark the beginning and end of the manifold.
 
     Args:
         results: One StablePartitionResult or an iterable of them.
@@ -464,9 +478,14 @@ def plot_stable_partition(
             # meeting at one intersection point stay individually readable:
             # e.g. "](" = closed on the anchor side, open on the outward side.
             if interval.lo_cdist == interval.hi_cdist:
-                target.annotate(
-                    "[]", (interval.lo_cdist, row), ha="center", va="center",
-                    fontsize=13, fontweight="bold", color=color, zorder=6,
+                # A singleton piece [x, x] — a point pinched between two open
+                # intervals. Brackets are illegible at zero width; a FILLED
+                # circle marks the closed point, with the neighbours' open
+                # parentheses either side.
+                target.plot(
+                    interval.lo_cdist, row, marker="o", markersize=9,
+                    markerfacecolor=color, markeredgecolor=color,
+                    zorder=7,
                 )
             else:
                 target.annotate(
@@ -515,7 +534,8 @@ def plot_stable_partition(
     target.set_ylim(-0.6, len(results) - 0.4)
     target.set_xlabel("stable canonical distance")
     target.set_title(
-        "Stable manifold partition — [ ] closed, ( ) open; numbers = intersection ids"
+        "Stable manifold partition — [ ] closed, ( ) open, ○ singleton; "
+        "numbers = ids"
     )
     return target
 
@@ -833,26 +853,20 @@ def _hole_regions_on_branch(
     trellis: "Trellis",
     branch_key: "ManifoldKey",
     side: Side,
-    cut_cdist: Optional[float],
 ) -> list[tuple[tuple[int, int], tuple[float, float]]]:
     """
     The hole regions on one stable branch and side.
 
-    A hole outside the resonance zone (``interior is False``) is an EXTERIOR
-    hole only on the orbit's first forward lap (iterate 0 .. k-1): those are
-    the trajectory's first appearances — the reference on the pip's branch
-    plus its first k-1 forward images, one per branch — whose lobes hang off
-    the zone boundary, and the exterior partition uses just that first hole
-    per branch. An out-of-zone hole at any other iterate — e.g. the backward
-    image of an interior hole escaping through the boundary — lives in a
-    DIFFERENT resonance zone and must not shape this zone's partition.
-    (Beyond-cut regions, which only exist on an untrimmed manifold, keep the
-    legacy exterior handling regardless of iterate.)
+    Every hole on this side participates — a hole is a hole, with no
+    exceptions by iterate, endpoint identity, or zone-membership of its
+    plotted position (the deep backward sub-arcs hug the zone's own boundary
+    bridge, so a point-in-polygon test on the marker was a coin flip that
+    treated otherwise identical holes differently — author-rejected). The
+    ``Hole.interior`` flag remains descriptive only.
 
     Returns a list of ((lo_id, hi_id), (lo_cdist, hi_cdist)) tuples sorted by
     lo_cdist, deduplicated by bounding pair.
     """
-    tol = trellis.registry.cdist_tol
     regions: dict[tuple[int, int], tuple[float, float]] = {}
     for hole in trellis.holes:
         if hole.side != side or hole.bounding_ids is None:
@@ -868,19 +882,6 @@ def _hole_regions_on_branch(
                 hole.bounding_ids,
             )
             continue
-        k = int(getattr(branch_key[0], "k_value", branch_key[0].period))
-        first_lap = hole.iterate is None or 0 <= hole.iterate < k
-        if hole.interior is False and not first_lap:
-            hi_c = max(a.stable_cdist, b.stable_cdist)
-            beyond_cut = cut_cdist is not None and hi_c > cut_cdist + tol
-            if not beyond_cut:
-                logger.debug(
-                    "Hole %s at iterate %s lies in a different resonance zone; "
-                    "excluded from this partition",
-                    hole.bounding_ids,
-                    hole.iterate,
-                )
-                continue
         lo_id, hi_id = _near_far(trellis, *hole.bounding_ids)
         regions[(lo_id, hi_id)] = (
             trellis.intersection(lo_id).stable_cdist,
@@ -918,24 +919,65 @@ def _build_intervals(
         unique[bid if bid is not None else ("anchor", cdist)] = (bid, cdist)
     ordered = sorted(unique.values(), key=lambda b: b[1])
 
-    hole_pairs = {frozenset(ids) for ids, _ in hole_regions}
+    def _end_is_open(boundary_id: Optional[int], lo_c: float, hi_c: float) -> bool:
+        """A piece is open at an end iff that end's intersection bounds a hole
+        region CONTAINING the piece — the piece borders that hole's punched
+        region right up to the bounding point. A hole region spanning several
+        boundaries (a wide propagated hole) thereby opens the region-facing
+        end of every piece inside it, not just its exact boundary pair."""
+        if boundary_id is None:
+            return False
+        for (a_id, b_id), (a_c, b_c) in hole_regions:
+            if boundary_id in (a_id, b_id) and (
+                a_c <= lo_c + tol and hi_c <= b_c + tol
+            ):
+                return True
+        return False
+
     intervals: list[PartitionInterval] = []
     for (lo_id, lo_c), (hi_id, hi_c) in zip(ordered, ordered[1:]):
-        is_hole = frozenset((lo_id, hi_id)) in hole_pairs
-        prev_is_hole = intervals and not intervals[-1].closed_hi
-        if is_hole and prev_is_hole:
-            # A point flanked by hole regions on both sides: closed singleton.
-            intervals.append(
-                PartitionInterval(lo_id, lo_id, lo_c, lo_c, True, True)
-            )
         intervals.append(
             PartitionInterval(
-                lo_id, hi_id, lo_c, hi_c, closed_lo=not is_hole, closed_hi=not is_hole
+                lo_id, hi_id, lo_c, hi_c,
+                closed_lo=not _end_is_open(lo_id, lo_c, hi_c),
+                closed_hi=not _end_is_open(hi_id, lo_c, hi_c),
             )
         )
 
+    # A boundary point excluded by every neighbouring piece owns itself as a
+    # closed singleton: a point pinched between two hole regions, the fixed
+    # point when a region starts at the anchor, or the outermost point when a
+    # region ends at the branch end.
+    with_singletons: list[PartitionInterval] = []
+    if intervals and not intervals[0].closed_lo:
+        first = intervals[0]
+        with_singletons.append(
+            PartitionInterval(
+                first.lo_id, first.lo_id, first.lo_cdist, first.lo_cdist, True, True
+            )
+        )
+    for position, interval in enumerate(intervals):
+        with_singletons.append(interval)
+        following = intervals[position + 1] if position + 1 < len(intervals) else None
+        if not interval.closed_hi and (following is None or not following.closed_lo):
+            with_singletons.append(
+                PartitionInterval(
+                    interval.hi_id, interval.hi_id,
+                    interval.hi_cdist, interval.hi_cdist, True, True,
+                )
+            )
+    intervals = with_singletons
+
     if cut_cdist is not None:
         intervals = _split_at_cut(intervals, cut_cdist)
+
+    # A partition assigns each point to exactly ONE piece. Two adjacent
+    # intervals both closed at their shared boundary ("][") would claim the
+    # point twice; by convention it belongs to the anchor-side piece, so the
+    # outward interval opens its lower end ("](").
+    for previous, current in zip(intervals, intervals[1:]):
+        if previous.closed_hi and current.closed_lo:
+            current.closed_lo = False
     return intervals
 
 
