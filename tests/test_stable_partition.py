@@ -1,9 +1,9 @@
 """Hole punching, backward propagation, and the stable-manifold partition.
 
 The synthetic tests fabricate holes directly on a hand-built trellis to pin the
-interval logic (open/closed ends, singletons, the resonance-zone cut, the
-first-exterior-hole rule) without any manifold numerics; the Hénon tests run
-the real punch → propagate → partition pipeline on a computed tangle.
+interval logic (open/closed ends, singletons, the resonance-zone cut) without
+any manifold numerics; the Hénon tests run the real punch → propagate →
+partition pipeline on a computed tangle.
 """
 
 from __future__ import annotations
@@ -130,9 +130,10 @@ def test_point_between_two_holes_is_closed_singleton(stable_line):
     ]
 
 
-def test_cut_splits_interval_and_keeps_first_exterior_hole(stable_line):
+def test_cut_splits_interval_and_every_hole_participates(stable_line):
     """The branch splits at the resonance-zone cut (the cut point belongs to
-    the interior side) and only the outermost exterior hole participates."""
+    the interior side) and every hole opens its interval — interior/exterior
+    is a reporting split only, never a filter (author, July 2026)."""
     trellis, ids = stable_line
     fp = trellis.fixed_points[0]
     branch_key = (fp, "stable", 0, 0)
@@ -145,8 +146,8 @@ def test_cut_splits_interval_and_keeps_first_exterior_hole(stable_line):
     trellis.strong_pip = cut
 
     trellis.holes.append(_hole(ids[0], ids[1], "right"))  # interior
-    trellis.holes.append(_hole(ids[2], ids[3], "right"))  # exterior, inner: dropped
-    trellis.holes.append(_hole(ids[4], ids[5], "right"))  # exterior, outermost: kept
+    trellis.holes.append(_hole(ids[2], ids[3], "right"))  # exterior
+    trellis.holes.append(_hole(ids[4], ids[5], "right"))  # exterior, outermost
 
     result = partition_stable_manifold(trellis, branch_key, "right")
 
@@ -156,10 +157,28 @@ def test_cut_splits_interval_and_keeps_first_exterior_hole(stable_line):
         (1.0, 2.0, False, False),
         (2.0, 2.5, True, True),
     ]
-    # The exterior region (5, 6) ends at the branch end, so the outermost
-    # point owns itself as a singleton.
+    # Both exterior regions open their intervals; the region (5, 6) ends at
+    # the branch end, so the outermost point owns itself as a singleton.
     assert _spans(result.exterior_intervals) == [
-        (2.5, 5.0, False, True),
+        (2.5, 3.0, False, True),
+        (3.0, 4.0, False, False),
+        (4.0, 5.0, True, True),
+        (5.0, 6.0, False, False),
+        (6.0, 6.0, True, True),
+    ]
+
+
+def test_hole_at_branch_end_pinches_endpoint_singleton(stable_line):
+    """A hole abutting the outermost intersection opens the interior interval
+    and leaves the branch-end point as a closed singleton."""
+    trellis, ids = stable_line
+    branch_key = (trellis.fixed_points[0], "stable", 0, 0)
+    trellis.holes.append(_hole(ids[4], ids[5], "left"))
+
+    result = partition_stable_manifold(trellis, branch_key, "left")
+
+    assert _spans(result.intervals) == [
+        (0.0, 5.0, True, True),
         (5.0, 6.0, False, False),
         (6.0, 6.0, True, True),
     ]
@@ -202,8 +221,8 @@ def test_shared_boundary_never_closed_on_both_sides(stable_line):
     """A partition assigns each point to exactly one piece: adjacent intervals
     must never both include their shared boundary ("]["). Interleaved hole
     regions (1,4) and (2,5) exercise the worst case: each piece is open
-    exactly at the ends where it touches a bounding point of a region that
-    contains it, and every shared point is owned by exactly one piece."""
+    exactly at the hole-facing sides of the regions' bounding intersections,
+    and every shared point is owned by exactly one piece."""
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
     trellis.holes.append(_hole(ids[0], ids[3], "left"))
