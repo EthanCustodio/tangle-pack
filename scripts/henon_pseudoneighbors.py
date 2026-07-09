@@ -83,7 +83,7 @@ trellis.set_strong_pip(5)
 
 # Blasting registers the children's new stable-manifold crossings, so the
 # trellis snapshot must be refreshed (and the pip re-established) afterward.
-session.blast_zone(zone, num_iterations=8, fixed_point=[fp], min_separation=1e-5)
+session.blast_zone(zone, num_iterations=13, fixed_point=[fp], min_separation=1e-5)
 trellis = session.trellis(fp)
 trellis.classify_strong_pips(choose_default=False)
 trellis.set_strong_pip(5)
@@ -102,27 +102,27 @@ stable_partition = trellis.partition_stable_manifold(verbose=True)
 # Figure 1: the tangle with pseudoneighbors and holes. plot_tangle draws the
 # grown manifold linked-lists; the blasted images live in the bridge children,
 # so plot_all_bridges draws the unstable manifold's full computed extent
-# (same pattern as henon_blast_period_3.py).
-plt.figure(figsize=(9, 9))
-session.plot_tangle(fp, "stable", color="r", linewidth=1)
-session.plot_tangle(fp, "unstable", color="b", linewidth=1)
-session.workbench.plot_all_bridges()
-session.plot_intersections(fp, show_ids=True)
-session.plot_pseudoneighbors(fp, s=40)
-session.plot_holes(fp)
-plt.title("Pseudoneighbors (orange) and holes (marker+color = orbit, label = iterate)")
+# # (same pattern as henon_blast_period_3.py).
+# plt.figure(figsize=(9, 9))
+# session.plot_tangle(fp, "stable", color="r", linewidth=1)
+# session.plot_tangle(fp, "unstable", color="b", linewidth=1)
+# session.workbench.plot_all_bridges()
+# session.plot_intersections(fp, show_ids=True)
+# session.plot_pseudoneighbors(fp, s=40)
+# session.plot_holes(fp)
+# plt.title("Pseudoneighbors (orange) and holes (marker+color = orbit, label = iterate)")
 
-# Frame the tangle (the unstable manifold escapes to infinity).
-points = np.array(
-    [ix.coords for _, ix in trellis.registry] + [h.coords for h in trellis.holes]
-)
-pad = 0.25 * np.ptp(points, axis=0).max() + 1.0
-plt.xlim(points[:, 0].min() - pad, points[:, 0].max() + pad)
-plt.ylim(points[:, 1].min() - pad, points[:, 1].max() + pad)
+# # Frame the tangle (the unstable manifold escapes to infinity).
+# points = np.array(
+#     [ix.coords for _, ix in trellis.registry] + [h.coords for h in trellis.holes]
+# )
+# pad = 0.25 * np.ptp(points, axis=0).max() + 1.0
+# plt.xlim(points[:, 0].min() - pad, points[:, 0].max() + pad)
+# plt.ylim(points[:, 1].min() - pad, points[:, 1].max() + pad)
 
-# Figure 2: the stable-manifold partition as a number line.
-fig, ax = plt.subplots(figsize=(9, 3))
-trellis.plot_stable_partition(ax=ax)
-fig.tight_layout()
+# # Figure 2: the stable-manifold partition as a number line.
+# fig, ax = plt.subplots(figsize=(9, 3))
+# trellis.plot_stable_partition(ax=ax)
+# fig.tight_layout()
 
 plt.show()
