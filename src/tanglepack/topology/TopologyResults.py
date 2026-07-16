@@ -18,9 +18,9 @@ algorithms produce.
 Intersections are referenced by their integer registry ID rather than by object
 so that a result survives a registry rebuild and is cheap to serialise.
 
-Open question: a Hole is currently a single phase-space coordinate. When the
-region-punching / resonance-zone bookkeeping is implemented we may want a Hole
-to also reference the bounding bridge(s) or the enclosed region.
+Open question: a Hole is currently a single phase-space coordinate. We may
+eventually want a Hole to also reference the bounding bridge(s) or the
+enclosed region directly, rather than just via ``bounding_ids``.
 """
 
 
@@ -37,13 +37,14 @@ class Hole:
         coords: Phase-space (x, y) where the hole is placed.
         near_intersection_id: Registry ID of the pseudoneighbor the hole hugs.
         pair: The pseudoneighbor pair this hole belongs to (back-reference).
-        side: Which side of the oriented stable manifold (standing on the
-            manifold looking toward the anchor point; standard orientation,
-            positive cross = left) the hole's bridge approaches its defining
-            intersections from. None until classified.
-        interior: True if the hole lies inside the resonance zone (its stable
-            position is below the zone's cut on that branch), False if outside.
-            None when no resonance-zone cut is known.
+        bridge_side: Which side of the hole's own bridge the hole sits on,
+            with the bridge oriented by the unstable dynamical direction —
+            forward flow away from the fixed point, i.e. increasing unstable
+            canonical distance. Standing on the bridge looking along that
+            direction, positive cross(tangent, displacement) = left. Classified
+            once at punch time: a direct hole from its own coordinates, a
+            propagated hole from the backward-carried point. None when the
+            geometry is degenerate (unorientable bridge or a point on the arc).
         bounding_ids: Registry IDs of the two intersections defining the bridge
             the hole belongs to — the pair's own bridge for a directly punched
             hole, the containing bridge for a propagated one. These are the
@@ -51,11 +52,10 @@ class Hole:
         openings: The partition intervals this hole opens, one record per
             defining intersection: ``(intersection_id, which, row)`` where
             ``which`` is ``"anchorward"``/``"outward"`` (which side of that
-            intersection along the stable manifold the hole abuts — decided by
-            the hole's side of the bridge arc) and ``row`` is the left/right
-            partition the opening acts on. None means the legacy inward
-            default (outward of the near bound, anchorward of the far bound,
-            on ``side``).
+            intersection along the stable manifold the hole abuts — derived
+            from ``bridge_side``) and ``row`` is the left/right partition the
+            opening acts on. A hole with no openings does not participate in
+            the partition.
         iterate: Position of this hole along its reference orbit — 0 for the
             reference hole itself, negative for backward iterates, positive
             for forward ones. None when unknown.
@@ -67,8 +67,7 @@ class Hole:
     coords: tuple[float, float]
     near_intersection_id: int
     pair: Optional["PseudoneighborPair"] = None
-    side: Optional[Literal["left", "right"]] = None
-    interior: Optional[bool] = None
+    bridge_side: Optional[Literal["left", "right"]] = None
     bounding_ids: Optional[tuple[int, int]] = None
     openings: Optional[list[tuple[int, str, str]]] = None
     iterate: Optional[int] = None
@@ -170,31 +169,19 @@ class StablePartitionResult:
     """
     The partition of one stable branch induced by the holes on one side.
 
-    The stable manifold is oriented looking toward the anchor point; holes
-    punched between pseudoneighbor pairs fall on its left or right side, and
-    each side induces its own partition (see
-    Stable_Manifold_Partition_Algorithm.pdf). The branch splits at the
-    resonance-zone cut into an interior part (inside the zone) and an exterior
-    part, each partitioned separately.
+    The stable manifold is oriented by its dynamical direction — forward flow
+    toward the fixed point, i.e. looking toward the anchor — and each of its
+    two sides (left/right, positive cross = left) induces its own partition
+    (see Stable_Manifold_Partition_Algorithm.pdf). An opening acts on the row
+    named in the hole's ``openings`` records; which endpoints are open is
+    derived from the hole's side of its bridge.
 
     Attributes:
         branch_key: Manifold key of the partitioned stable branch.
         side: Which side's holes this partition is built from.
-        interior_intervals: Intervals below the resonance-zone cut, ordered
-            from the anchor outward.
-        exterior_intervals: Intervals above the cut, ordered outward.
-        cut_cdist: Stable canonical distance of the resonance-zone cut on this
-            branch (the strong pip or its iterate), or None if no cut is known
-            (then every interval is reported as interior).
+        intervals: The partition intervals, ordered from the anchor outward.
     """
 
     branch_key: "ManifoldKey"
     side: Literal["left", "right"]
-    interior_intervals: list[PartitionInterval] = field(default_factory=list)
-    exterior_intervals: list[PartitionInterval] = field(default_factory=list)
-    cut_cdist: Optional[float] = None
-
-    @property
-    def intervals(self) -> list[PartitionInterval]:
-        """All intervals, interior then exterior, ordered from the anchor outward."""
-        return self.interior_intervals + self.exterior_intervals
+    intervals: list[PartitionInterval] = field(default_factory=list)

@@ -604,7 +604,6 @@ class Trellis:
         *,
         epsilon: float = 0.05,
         propagate: bool = True,
-        in_zone=None,
         verbose: bool = False,
     ) -> list[Hole]:
         """
@@ -620,10 +619,6 @@ class Trellis:
             pairs: Pairs to punch holes for; defaults to every recorded pair.
             epsilon: Inward nudge of the hole off the manifold it hugs.
             propagate: Also punch the backward-propagated holes.
-            in_zone: Optional resonance-zone membership test (e.g.
-                ``ResonanceZone.contains_point``) deciding each hole's
-                descriptive ``interior`` flag from its position. Purely
-                informational — the partition treats every hole equally.
             verbose: Print :meth:`describe_holes` when done.
 
         Returns:
@@ -636,25 +631,23 @@ class Trellis:
 
         self._warn_missing_pseudoneighbors()
         self.holes.clear()
-        holes = _punch(self, pairs, epsilon=epsilon, in_zone=in_zone)
+        holes = _punch(self, pairs, epsilon=epsilon)
         if propagate:
-            holes += _propagate(self, in_zone=in_zone)
+            holes += _propagate(self)
         self.holes.extend(holes)
         if verbose:
             print(self.describe_holes())
         return holes
 
     def describe_holes(self) -> str:
-        """Human-readable report of the punched holes, by side and zone."""
+        """Human-readable report of the punched holes, by bridge side."""
         lines = []
         for side in ("left", "right"):
-            count = sum(1 for h in self.holes if h.side == side)
-            lines.append(f"{count} hole(s) on the {side} side")
-        outside = [h for h in self.holes if h.interior is False]
-        if outside:
-            lines.append(
-                f"{len(outside)} hole(s) lie outside the resonance zone"
-            )
+            count = sum(1 for h in self.holes if h.bridge_side == side)
+            lines.append(f"{count} hole(s) on the {side} side of their bridge")
+        unclassified = sum(1 for h in self.holes if h.bridge_side is None)
+        if unclassified:
+            lines.append(f"{unclassified} hole(s) with no classified side")
         return "\n".join(lines)
 
     def partition_stable_manifold(

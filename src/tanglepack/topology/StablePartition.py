@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Iterable, Literal, Optional, TYPE_CHECKING, Union
+from typing import Iterable, Literal, Optional, TYPE_CHECKING, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -42,19 +42,27 @@ fixed in conversation with the author (July 2026):
   negative backward, positive forward — the plot label).
   ``near_intersection_id`` is fixed by convention to the toward-anchor member
   (smaller stable cdist) — the choice is arbitrary but must be consistent.
-* Side (REDONE per the author, 2026-07-09 — supersedes every earlier side
-  test, including the k=10 sign calibration and the local-midpoint lobe
-  test): left/right is defined by the dynamical direction — standing ON the
-  stable manifold looking toward the anchor point, with the STANDARD
-  orientation (positive cross(toward-anchor tangent, displacement) = left).
-  A hole's side is found by following its bridge to a defining intersection
-  and asking which side of the stable manifold the arc approaches that
-  intersection from. This is well-defined because a bridge's endpoints are
-  consecutive crossings: the arc between them never crosses the (trimmed)
-  stable manifold, so the approach side is the side the whole arc — and the
-  lobe it bounds — locally hugs. The row is computed per defining
-  intersection (each end against its own local stable tangent; on multi-
-  branch tangles the two ends may legitimately sit on different branches).
+* Side (REDONE per the author, 2026-07-16 — supersedes the 2026-07-09
+  stable-approach rule and every earlier side test): a hole's side is
+  left/right of its own BRIDGE, i.e. of the unstable manifold, in the
+  bridge's dynamical orientation — the unstable forward flow points AWAY
+  from the fixed point, so the bridge is oriented by increasing unstable
+  cdist (storage order root→tail need not match; `_oriented_bridge_polyline`
+  normalizes it once, from the endpoints' unstable cdists). Standing on the
+  bridge looking along that direction, positive cross(tangent, displacement)
+  = left, matching `_side_of`. The side is classified ONCE at punch time and
+  stored as ``Hole.bridge_side``: a direct hole from its own coordinates
+  (which lie between the pair's stable arc and the bridge), a propagated
+  hole from the backward-carried point. Holes know nothing of the stable
+  manifold's sides or of resonance zones. The stable partition keeps its own
+  independent left/right, defined by the STABLE dynamical direction — the
+  flow toward the fixed point, i.e. looking toward the anchor (unchanged
+  convention). The per-intersection opening ROW is still the side of the
+  stable manifold the bridge arc approaches that intersection from (each end
+  against its own local stable tangent; on multi-branch tangles the two ends
+  may legitimately sit on different branches) — well-defined because a
+  bridge's endpoints are consecutive crossings, so the arc between them
+  never crosses the (trimmed) stable manifold.
 * Hole generation: each reference bridge is mapped backward step by step;
   every backward image lies within some existing bridge, and a hole is punched
   in that containing bridge's region. Termination is the author's "the bridge
@@ -70,19 +78,23 @@ fixed in conversation with the author (July 2026):
   by beta = lambda_u^(1/k) and steps the branch cycle back by one). The
   reference hole's coordinates are carried backward
   with the real inverse map: the carried point lies inside the true image
-  region, so it decides which side of the unstable arc the hole plots on and
-  which side of the stable manifold it counts toward — two orbits landing in
-  the same bridge differ exactly there, and BOTH are punched (per the author:
-  no cross-orbit deduplication, even on the same bridge and side; only a
-  same-orbit same-iterate duplicate of a recorded pair's hole is skipped).
-* Interior/exterior: Hole.interior records whether the hole's position lies
-  inside the resonance zone (via the in_zone test, else the cdist-vs-cut
-  fallback). It is DESCRIPTIVE ONLY — the partition treats every hole on a
-  side equally, with no exceptions by iterate, endpoint identity, or zone
-  membership ("all holes on manifolds should be treated equal" — author.
-  A zone-membership gate was tried and rejected: the deep backward sub-arcs
-  hug the zone's own boundary bridge, so the point-in-polygon test split
-  otherwise identical holes by the luck of a nudge direction).
+  region, so it classifies the hole's ``bridge_side`` (which side of the
+  containing bridge the hole plots on and which intervals it opens) — two
+  orbits landing in the same bridge differ exactly there, and BOTH are
+  punched (per the author: no cross-orbit deduplication, even on the same
+  bridge and side; only a same-orbit same-iterate duplicate of a recorded
+  pair's hole is skipped).
+* Superseded: resonance-zone association (removed 2026-07-16). Holes used
+  to carry an ``interior`` flag (in_zone point-in-polygon test, else a
+  cdist-vs-strong-pip-cut fallback) and the partition split its intervals at
+  the zone cut for interior/exterior reporting. Both are gone: which region
+  a hole belongs to is a dynamical-direction question (its side of the
+  bridge), not a zone-membership one — the descriptive flag invited
+  zone-gated filtering, which the author had already rejected ("all holes on
+  manifolds should be treated equal"), and the deep backward sub-arcs hug
+  the zone's own boundary bridge, so the point-in-polygon test split
+  otherwise identical holes by the luck of a nudge direction. Resonance
+  zones remain in the loom layer for blasting only.
 * Partition intervals (semantics fixed with the author, July 2026 — this
   SUPERSEDES the earlier "only the outermost beyond-cut hole" rule and the
   piece-containment openness test): EVERY punched hole participates.
@@ -90,27 +102,31 @@ fixed in conversation with the author (July 2026):
   (Hole.bounding_ids — the pair's own bridge for a direct hole, the
   containing bridge for a propagated one) plus the anchor and the branch's
   outermost intersection. The openness rule is LOCAL to each defining
-  intersection and keyed to the hole's side of the BRIDGE ARC: at each
-  defining intersection the arc crosses the stable manifold, so each side
-  of the arc contains exactly one of the two stable half-intervals there —
-  the hole opens the interval on ITS side (Hole.openings). A direct hole
-  sits on the side facing the pair's own stable segment, which reduces to
-  the inward pair (outward of the near bound, anchorward of the far
-  bound). A propagated hole whose region hangs off the removed tail can
-  instead open the OUTWARD side of a defining intersection — two holes
-  flanking one bridge (the author's "singleton bridge with a hole on
-  either side") thereby open complementary sides of BOTH defining
-  intersections and pinch each into a closed singleton. In general a
-  boundary point excluded by both neighbouring intervals owns itself as a
-  degenerate closed singleton [x, x]; a hole marked outward of the
-  branch's outermost intersection or anchorward at the anchor-artifact
-  contributes its opening to that pinch test even though no interval lies
-  there. No point is special — the fixed point and the strong pip pinch
-  into singletons by exactly the same rule. Each point belongs to exactly
-  one piece ("](" and ")[" occur, "][" cannot). A closed interval
-  straddling the resonance-zone cut is split there, with the cut point
-  assigned to the interior side; interior/exterior is a REPORTING split
-  only and never drops a hole.
+  intersection and keyed to ``Hole.bridge_side``: at each defining
+  intersection the arc crosses the stable manifold, so each side of the
+  bridge contains exactly one of the two stable half-intervals there — the
+  hole opens the interval on ITS side (Hole.openings). A direct hole sits
+  on the side facing the pair's own stable segment, so it opens the inward
+  pair (outward of the near bound, anchorward of the far bound) BY
+  CONSTRUCTION — no geometric side test is run for it, because on sliver
+  lobes whose crossings are closer than the stable node spacing no local
+  estimator can decide the halves (observed on the blasted k=10 tangle). A
+  propagated hole's openings ARE derived geometrically from its stored
+  bridge_side, signing the nearest stable node of each half against the
+  dynamically-oriented arc (finite nodes, not end tangents — an end-tangent
+  cross is cancellation noise near a tangency). A propagated hole whose
+  region hangs off the removed tail can instead open
+  the OUTWARD side of a defining intersection — two holes flanking one
+  bridge (the author's "singleton bridge with a hole on either side")
+  thereby open complementary sides of BOTH defining intersections and
+  pinch each into a closed singleton. In general a boundary point excluded
+  by both neighbouring intervals owns itself as a degenerate closed
+  singleton [x, x]; a hole marked outward of the branch's outermost
+  intersection or anchorward at the anchor-artifact contributes its
+  opening to that pinch test even though no interval lies there. No point
+  is special — the fixed point and the strong pip pinch into singletons by
+  exactly the same rule. Each point belongs to exactly one piece ("](" and
+  ")[" occur, "][" cannot).
 * Propagation start: a reference whose pair has no spanning Bridge object
   (after a blast there is no bridge between a parent-manifold crossing and
   a blast-child crossing) punches no direct hole, but its orbit still
@@ -125,7 +141,11 @@ whose endpoints lack a manifold_a_key (iterated-bridge children) are accepted
 on cdist evidence alone. A pseudoneighbor pair with no spanning Bridge object
 (after blasting there is no bridge between a parent-manifold crossing and a
 blast-child crossing) punches no hole and therefore contributes nothing to the
-partition — an open gap in the punching layer, see punch_holes' warning.
+partition — an open gap in the punching layer, see punch_holes' warning. A
+bridge whose endpoints have equal unstable cdists (impossible for a real
+bridge — its endpoints are consecutive distinct crossings — but reachable via
+numerical collapse) cannot be dynamically oriented: its holes get
+bridge_side=None and inward-default openings, with a warning.
 """
 
 
@@ -156,7 +176,6 @@ def punch_holes(
     pairs: Optional[Iterable[PseudoneighborPair]] = None,
     *,
     epsilon: float = 0.05,
-    in_zone: Optional[Callable[[tuple[float, float]], bool]] = None,
 ) -> list[Hole]:
     """
     Punch a hole in the region bounded by each pseudoneighbor pair.
@@ -165,23 +184,18 @@ def punch_holes(
     REFERENCE pair's hole hugs the stable manifold (the pair's chord midpoint,
     nudged ``epsilon`` toward the bridge), while an iterated pair's hole sits
     between the two neighbors on the unstable manifold (the bridge midpoint,
-    nudged ``epsilon`` toward the chord). Each hole is classified by side
-    (left/right of the oriented stable manifold) and as inside or outside the
-    resonance zone, and carries its orbit identity (``origin``/``iterate``).
-    The hole is attached to its pair (``pair.hole``).
+    nudged ``epsilon`` toward the chord). Each hole is classified by its side
+    of the pair's bridge in the bridge's dynamical orientation
+    (``Hole.bridge_side``, see :func:`_bridge_side_of`) and carries its orbit
+    identity (``origin``/``iterate``). The hole is attached to its pair
+    (``pair.hole``).
 
     Args:
-        trellis: The Trellis carrying the pairs, bridges, and cut points.
+        trellis: The Trellis carrying the pairs and bridges.
         pairs: Pairs to punch holes for. Defaults to every pair recorded on the
             trellis (``trellis.pseudoneighbors``).
         epsilon: Inward step off the manifold, as a fraction of the pair's
             chord length.
-        in_zone: Optional membership test for the resonance zone (e.g.
-            ``ResonanceZone.contains_point``). When given it decides
-            ``Hole.interior`` from the hole's actual position — required to
-            recognise a hole belonging to a different zone even though its
-            stable interval is inside the cut. Without it, the cdist-vs-cut
-            fallback is used.
 
     Returns:
         The punched holes. Pairs with no spanning bridge are skipped with a
@@ -191,7 +205,6 @@ def punch_holes(
         pairs = trellis.pseudoneighbors
     pairs = list(pairs)
 
-    cut_map = _cut_cdist_by_branch(trellis)
     holes: list[Hole] = []
     skipped = 0
     for pair in pairs:
@@ -203,14 +216,14 @@ def punch_holes(
         near_id, far_id = _near_far(trellis, pair.intersection_a, pair.intersection_b)
         near = trellis.intersection(near_id)
         far = trellis.intersection(far_id)
-        # Placement anchors on the boundary-arc midpoints; side and openings
-        # come from the bridge-approach rule (see _hole_openings).
+        # Placement anchors on the boundary-arc midpoints; the hole sits
+        # strictly between the pair's stable arc and the bridge arc, so its
+        # coordinates classify its side of the bridge.
         stable_mid, _stable_tangent = _stable_arc_midpoint(trellis, near, far)
         arc_point = _nearest_arc_point(bridge, stable_mid)
         if arc_point is None:
             skipped += 1
             continue
-        openings, side = _hole_openings(trellis, bridge)
 
         chord_len = float(np.linalg.norm(far.get_point() - near.get_point()))
         if pair.is_reference:
@@ -219,18 +232,17 @@ def punch_holes(
             coords = _step_into(arc_point, stable_mid, epsilon, chord_len)
         coords = (float(coords[0]), float(coords[1]))
 
+        # A direct hole opens the inward pair by construction (it sits in
+        # the region bounded by the pair's own stable segment and the
+        # bridge); the estimated side is stored for tracking and plotting.
+        bridge_side = _bridge_side_of(trellis, bridge, np.asarray(coords))
+        openings = _hole_openings(trellis, bridge, bridge_side, inward=True)
+
         hole = Hole(
             coords=coords,
             near_intersection_id=near_id,
             pair=pair,
-            side=side,
-            interior=(
-                bool(in_zone(coords))
-                if in_zone is not None
-                else _is_interior(
-                    far.stable_cdist, cut_map.get(near.manifold_b_key), trellis
-                )
-            ),
+            bridge_side=bridge_side,
             bounding_ids=(near_id, far_id),
             openings=openings,
             iterate=pair.iterate,
@@ -250,7 +262,6 @@ def propagate_reference_holes(
     references: Optional[Iterable[PseudoneighborPair]] = None,
     *,
     max_steps: int = 50,
-    in_zone: Optional[Callable[[tuple[float, float]], bool]] = None,
 ) -> list[Hole]:
     """
     Punch the holes generated by mapping each reference bridge backward.
@@ -286,7 +297,6 @@ def propagate_reference_holes(
         references = [p for p in trellis.pseudoneighbors if p.is_reference]
     references = list(references)
 
-    cut_map = _cut_cdist_by_branch(trellis)
     new_holes: list[Hole] = []
     seen: set[tuple[Optional[tuple[int, int]], Optional[int]]] = {
         (pair.origin, pair.iterate)
@@ -395,9 +405,8 @@ def propagate_reference_holes(
             key = (origin, iterate)
             if key not in seen:
                 hole = _punch_in_bridge(
-                    trellis, containing, cut_map,
+                    trellis, containing,
                     iterate=iterate, origin=origin, carried=carried, span=span,
-                    in_zone=in_zone,
                 )
                 if hole is not None:
                     region = (origin, tuple(sorted(hole.bounding_ids)))
@@ -425,9 +434,7 @@ def partition_stable_manifold(
     end), every other end is closed, and a boundary point excluded by both
     neighbouring intervals — hole regions on both of its sides, or a hole
     abutting the branch end or the anchor — becomes a degenerate closed
-    singleton (see the module Dev Notes). The branch splits into interior and
-    exterior parts at the resonance-zone cut for reporting; the split never
-    drops a hole.
+    singleton (see the module Dev Notes).
 
     Args:
         trellis: The Trellis carrying the holes to partition by.
@@ -444,24 +451,11 @@ def partition_stable_manifold(
     if branch is None or branch.stability != "stable":
         raise ValueError(f"{branch_key} is not a stable branch of this trellis")
 
-    cut_id, cut_cdist = _cuts_by_branch(trellis).get(branch_key, (None, None))
     marks = _hole_marks_on_branch(trellis, branch_key, side)
-    intervals = _build_intervals(trellis, branch, marks, cut_cdist, cut_id)
-    if cut_cdist is None:
-        return StablePartitionResult(
-            branch_key=branch_key, side=side,
-            interior_intervals=intervals, cut_cdist=None,
-        )
-
-    # Same "at or below the cut" slack as _is_interior, so a hole and the
-    # partition never disagree about which side of the zone it is on.
-    threshold = cut_cdist + trellis.registry.cdist_tol
     return StablePartitionResult(
         branch_key=branch_key,
         side=side,
-        interior_intervals=[iv for iv in intervals if iv.hi_cdist <= threshold],
-        exterior_intervals=[iv for iv in intervals if iv.hi_cdist > threshold],
-        cut_cdist=cut_cdist,
+        intervals=_build_intervals(trellis, branch, marks),
     )
 
 
@@ -608,18 +602,28 @@ def _cross_sign(a: NDArray[np.float64], b: NDArray[np.float64]) -> Optional[floa
 
 def _stable_frame(
     trellis: "Trellis", ix: "Intersection"
-) -> tuple[Optional[NDArray[np.float64]], Optional[NDArray[np.float64]]]:
-    """(anchorward, outward) unit directions of the stable branch at ``ix``.
+) -> tuple[
+    Optional[NDArray[np.float64]],
+    Optional[NDArray[np.float64]],
+    Optional[NDArray[np.float64]],
+    Optional[NDArray[np.float64]],
+]:
+    """(anchorward, outward, below, above) of the stable branch at ``ix``.
 
-    Walked from the live manifold nodes around the intersection's stable
-    cdist. Either may be None: anchorward at the anchor artifact (no nodes
-    below), outward at the trimmed branch end (no nodes above), both when
+    ``anchorward``/``outward`` are unit directions, ``below``/``above`` the
+    actual nearest manifold node positions they are derived from — the finite
+    points matter to callers who need a sign that stays well-conditioned near
+    a tangency (a unit tangent crossed with a near-parallel arc tangent is
+    cancellation noise; a real node's side of the arc is not). Walked from
+    the live manifold nodes around the intersection's stable cdist. Any entry
+    may be None: below/anchorward at the anchor artifact (no nodes below),
+    above/outward at the trimmed branch end (no nodes above), all four when
     the manifold nodes are unavailable.
     """
     key = ix.manifold_b_key
     manifold = trellis.manifolds.get(key) if key is not None else None
     if manifold is None:
-        return None, None
+        return None, None, None, None
     tol = trellis.registry.cdist_tol
     here = np.asarray(ix.get_point(), dtype=np.float64)
     below = above = None
@@ -634,7 +638,7 @@ def _stable_frame(
             above, above_c = point, node.cdist
     anchorward = (below - here) / np.linalg.norm(below - here) if below is not None else None
     outward = (above - here) / np.linalg.norm(above - here) if above is not None else None
-    return anchorward, outward
+    return anchorward, outward, below, above
 
 
 def _bridge_end_geometry(
@@ -642,11 +646,10 @@ def _bridge_end_geometry(
 ) -> Optional[tuple[NDArray[np.float64], NDArray[np.float64]]]:
     """Approach displacement and local tangent at the arc end nearest ``q``.
 
-    The displacement points from the intersection INTO the bridge (the root
-    and tail nodes sit just past the crossings, so the walk starts one node
-    in and takes the second clearly-distinct node when one exists); the
-    tangent is the local arc direction in root→tail order, matching the
-    orientation `_arc_side_of` signs against.
+    The displacement points from the intersection INTO the bridge (the end
+    nodes sit just past the crossings, so the walk starts one node in and
+    takes the second clearly-distinct node when one exists); the tangent is
+    the local arc direction in the order of the polyline passed in.
     """
     if len(poly) < 2:
         return None
@@ -676,7 +679,7 @@ def _bridge_end_geometry(
 def _arc_side_of(
     poly: NDArray[np.float64], point: NDArray[np.float64]
 ) -> Optional[float]:
-    """Sign of ``point``'s side of the arc polyline (root→tail orientation)."""
+    """Sign of ``point``'s side of the arc polyline (in the polyline's order)."""
     if len(poly) < 3:
         return None
     i = int(np.argmin(np.linalg.norm(poly - point, axis=1)))
@@ -684,62 +687,161 @@ def _arc_side_of(
     return _cross_sign(poly[i + 1] - poly[i - 1], point - poly[i])
 
 
+def _oriented_bridge_polyline(
+    trellis: "Trellis", bridge: "Bridge"
+) -> Optional[NDArray[np.float64]]:
+    """The bridge polyline oriented by the unstable dynamical direction.
+
+    A bridge is unstable manifold, so its dynamical direction — the direction
+    of forward flow — points away from the fixed point, i.e. along increasing
+    unstable canonical distance. Storage order (root→tail) need not match;
+    this is the single place that mismatch is normalized: the polyline is
+    reversed when the first endpoint's unstable cdist exceeds the second's.
+    Endpoint cdists always exist, even for keyless iterated-bridge children,
+    so no manifold key is consulted.
+
+    Args:
+        trellis: The Trellis resolving the bridge's endpoint intersections.
+        bridge: The bridge whose polyline to orient.
+
+    Returns:
+        The (N, 2) polyline in dynamical orientation, or None when the bridge
+        has fewer than two points, an unresolved endpoint, or endpoints of
+        equal unstable cdist (orientation undecidable — logged as a warning).
+    """
+    points = bridge.get_point_array()
+    if points is None or len(points) < 2:
+        return None
+    if bridge.first_intersection is None or bridge.second_intersection is None:
+        return None
+    poly = np.asarray(points, dtype=np.float64)
+    u_first = trellis.intersection(bridge.first_intersection).unstable_cdist
+    u_second = trellis.intersection(bridge.second_intersection).unstable_cdist
+    if abs(u_first - u_second) <= trellis.registry.cdist_tol:
+        logger.warning(
+            "Bridge (%s, %s) has endpoints of equal unstable cdist; "
+            "dynamical orientation is undecidable",
+            bridge.first_intersection,
+            bridge.second_intersection,
+        )
+        return None
+    return poly if u_first < u_second else poly[::-1]
+
+
+def _bridge_side_of(
+    trellis: "Trellis", bridge: "Bridge", point: NDArray[np.float64]
+) -> Optional[Side]:
+    """Which side of ``bridge`` the point sits on, in dynamical orientation.
+
+    Standing on the bridge looking along the unstable dynamical direction
+    (away from the fixed point, increasing unstable cdist), positive
+    cross(tangent, displacement) = left — the same convention as
+    :func:`_side_of` on the stable manifold.
+
+    Args:
+        trellis: The Trellis resolving the bridge's endpoint intersections.
+        bridge: The bridge to classify against.
+        point: Phase-space point to classify.
+
+    Returns:
+        ``"left"`` or ``"right"``, or None when the bridge cannot be oriented
+        or the point sits on the arc (degenerate geometry).
+    """
+    poly = _oriented_bridge_polyline(trellis, bridge)
+    if poly is None:
+        return None
+    sign = _arc_side_of(poly, np.asarray(point, dtype=np.float64))
+    if sign is None:
+        logger.debug(
+            "Point %s sits on the bridge arc; side is undecidable", point
+        )
+        return None
+    return "left" if sign > 0.0 else "right"
+
+
 def _hole_openings(
     trellis: "Trellis",
     bridge: "Bridge",
-    carried: Optional[NDArray[np.float64]] = None,
-) -> tuple[list[tuple[int, str, Side]], Optional[Side]]:
-    """The openings and display side of a hole attached to ``bridge``.
+    bridge_side: Optional[Side],
+    *,
+    inward: bool = False,
+) -> list[tuple[int, str, Side]]:
+    """The opening records of a hole on ``bridge_side`` of ``bridge``.
 
-    Implements the author's rule (2026-07-09): follow the bridge arc to each
+    Implements the author's rule (2026-07-16): follow the bridge arc to each
     of its two defining intersections. The ROW (left/right) is the side of
     the stable manifold the arc approaches that intersection from — standing
-    on the manifold looking toward the anchor, standard orientation. The
-    interval opened there (anchorward or outward of the intersection) is the
-    stable half-interval lying on the HOLE'S side of the arc: the arc crosses
-    the stable manifold at the intersection, so each side of the arc contains
-    exactly one of the two halves. Without ``carried`` (a direct hole, which
-    sits on the side of the arc facing the pair's own stable segment) the
-    openings reduce to the inward pair — outward of the near bound,
-    anchorward of the far bound.
+    on the manifold looking toward the anchor (the stable dynamical
+    direction), standard orientation. The interval opened there (anchorward
+    or outward of the intersection) is the stable half-interval lying on the
+    HOLE'S side of the bridge: the arc crosses the stable manifold at the
+    intersection, so each side of the arc contains exactly one of the two
+    halves. ``bridge_side`` is the hole's stored side in the bridge's
+    dynamical orientation (see :func:`_bridge_side_of`), and each half's side
+    is signed the same way — the ACTUAL nearest stable node in that half
+    against the same oriented polyline. Using the finite node rather than a
+    tangent cross product keeps the sign well-conditioned near a tangency,
+    where the arc leaves the intersection almost parallel to the stable
+    manifold and an end-tangent cross is cancellation noise (author-reported
+    sliver lobes on the nested period-3 tangle).
 
     At a trimmed branch end whose outward half is removed, a hole facing that
     half still records an ``"outward"`` opening (it participates in the
     singleton pinch test); at the anchor artifact a hole facing the far half
     faces the OTHER stable branch and opens nothing here.
 
+    A direct hole needs no side test at all: it sits in the region bounded
+    by its pair's own stable segment and the bridge, so it opens the inward
+    pair (outward of the near bound, anchorward of the far bound) BY
+    CONSTRUCTION — pass ``inward=True`` to encode that consequence directly.
+    This matters on sliver lobes whose two crossings are closer than the
+    stable manifold's node spacing: no local geometric estimator can decide
+    the halves there, but the construction already has.
+
+    Args:
+        trellis: The Trellis carrying the intersections and manifolds.
+        bridge: The hole's bridge.
+        bridge_side: The hole's side of the bridge in dynamical orientation.
+            None (degenerate geometry) falls back to the inward default with
+            a warning.
+        inward: Force the inward openings without a side test (direct holes,
+            where they hold by construction). No warning.
+
     Returns:
-        (openings, side): the ``Hole.openings`` records and the row at the
-        far (outermost) defining intersection — a genuine transversal
-        crossing even when the near one is the anchor artifact.
+        The ``Hole.openings`` records, one per defining intersection.
     """
     near_id, far_id = _near_far(
         trellis, bridge.first_intersection, bridge.second_intersection
     )
-    points = bridge.get_point_array()
-    if points is None or len(points) < 2:
-        return [], None
-    poly = np.asarray(points, dtype=np.float64)
-
-    arc_side = None
-    if carried is not None:
-        arc_side = _arc_side_of(poly, np.asarray(carried, dtype=np.float64))
-        if arc_side is None:
-            logger.warning(
-                "Carried point of a propagated hole sits on the bridge arc; "
-                "falling back to inward openings"
-            )
+    poly = _oriented_bridge_polyline(trellis, bridge)
+    side_sign: Optional[float] = None
+    if poly is None:
+        # Orientation undecidable — rows still work in storage order (they
+        # depend only on the approach displacement), but the hole's side
+        # cannot be signed against the arc.
+        points = bridge.get_point_array()
+        if points is None or len(points) < 2:
+            return []
+        poly = np.asarray(points, dtype=np.float64)
+    elif not inward and bridge_side is not None:
+        side_sign = 1.0 if bridge_side == "left" else -1.0
+    if side_sign is None and not inward:
+        logger.warning(
+            "Hole on bridge (%s, %s) has no usable side; "
+            "falling back to inward openings",
+            bridge.first_intersection,
+            bridge.second_intersection,
+        )
 
     openings: list[tuple[int, str, Side]] = []
-    display_side: Optional[Side] = None
     for iid in (near_id, far_id):
         ix = trellis.intersection(iid)
         q = np.asarray(ix.get_point(), dtype=np.float64)
         end = _bridge_end_geometry(poly, q)
         if end is None:
             continue
-        disp, t_end = end
-        anchorward, outward = _stable_frame(trellis, ix)
+        disp, _t_end = end
+        anchorward, outward, below, above = _stable_frame(trellis, ix)
         look = anchorward if anchorward is not None else (
             -outward if outward is not None else None
         )
@@ -748,18 +850,18 @@ def _hole_openings(
         row = _side_of(look, disp)
         if row is None:
             continue
-        if arc_side is None:
+        if side_sign is None:
             which = "outward" if iid == near_id else "anchorward"
         else:
             side_anchorward = (
-                _cross_sign(t_end, anchorward) if anchorward is not None else None
+                _arc_side_of(poly, below) if below is not None else None
             )
             side_outward = (
-                _cross_sign(t_end, outward) if outward is not None else None
+                _arc_side_of(poly, above) if above is not None else None
             )
-            if side_anchorward == arc_side:
+            if side_anchorward == side_sign:
                 which = "anchorward"
-            elif side_outward == arc_side:
+            elif side_outward == side_sign:
                 which = "outward"
             elif side_outward is None and side_anchorward is not None:
                 # Trimmed branch end: the hole's side holds the removed tail.
@@ -772,9 +874,7 @@ def _hole_openings(
                 )
                 continue
         openings.append((iid, which, row))
-        if iid == far_id or display_side is None:
-            display_side = row
-    return openings, display_side
+    return openings
 
 
 def _step_into(
@@ -875,28 +975,6 @@ def _nearest_arc_point(
     return points[int(np.argmin(distances))]
 
 
-def _cut_cdist_by_branch(trellis: "Trellis") -> dict["ManifoldKey", float]:
-    """Map each stable branch key to its resonance-zone cut stable cdist."""
-    return {key: cdist for key, (_iid, cdist) in _cuts_by_branch(trellis).items()}
-
-
-def _cuts_by_branch(trellis: "Trellis") -> dict["ManifoldKey", tuple[int, float]]:
-    """Map each stable branch key to its cut point's (intersection id, cdist)."""
-    cuts: dict["ManifoldKey", tuple[int, float]] = {}
-    for iid in trellis.strong_pip_cut_points():
-        ix = trellis.intersection(iid)
-        if ix.manifold_b_key is not None:
-            cuts[ix.manifold_b_key] = (iid, ix.stable_cdist)
-    return cuts
-
-
-def _is_interior(outer_cdist: float, cut_cdist: Optional[float], trellis: "Trellis") -> Optional[bool]:
-    """Interior iff the region's outer stable cdist is at or below the zone cut."""
-    if cut_cdist is None:
-        return None
-    return outer_cdist <= cut_cdist + trellis.registry.cdist_tol
-
-
 def _pair_fixed_point(trellis: "Trellis", pair: PseudoneighborPair) -> "FixedPoint":
     """The fixed point owning the pair's stable branch."""
     key = pair.branch_key or trellis.intersection(pair.intersection_a).manifold_b_key
@@ -965,13 +1043,11 @@ def _map_backward(
 def _punch_in_bridge(
     trellis: "Trellis",
     bridge: "Bridge",
-    cut_map: dict["ManifoldKey", float],
     *,
     iterate: Optional[int] = None,
     origin: Optional[tuple[int, int]] = None,
     carried: Optional[NDArray[np.float64]] = None,
     span: Optional[tuple[float, float]] = None,
-    in_zone: Optional[Callable[[tuple[float, float]], bool]] = None,
 ) -> Optional[Hole]:
     """Punch a propagated hole between the two backward-imaged neighbors.
 
@@ -980,11 +1056,11 @@ def _punch_in_bridge(
     hole plots at the middle of that sub-arc (two orbits landing in the same
     bridge occupy different sub-arcs). ``carried`` is the reference hole's
     coordinates mapped backward alongside — a point inside the true image
-    region — and decides which side of the unstable arc the hole sits on,
-    which in turn decides the intervals it opens at the containing bridge's
-    defining intersections (see :func:`_hole_openings`). Without it the
-    containing bridge's own midpoint and chord are the fallback and the
-    openings default to the inward pair.
+    region — and classifies the hole's side of the containing bridge
+    (``Hole.bridge_side``), which in turn decides the intervals it opens at
+    the bridge's defining intersections (see :func:`_hole_openings`). Without
+    it the containing bridge's own midpoint and chord are the fallback and
+    the openings default to the inward pair.
     """
     near_id, far_id = _near_far(
         trellis, bridge.first_intersection, bridge.second_intersection
@@ -1017,19 +1093,15 @@ def _punch_in_bridge(
     else:
         coords = _step_into(midpoint, stable_mid, 0.05, arc_chord)
 
-    openings, side = _hole_openings(trellis, bridge, carried=carried)
+    bridge_side = (
+        _bridge_side_of(trellis, bridge, carried) if carried is not None else None
+    )
+    openings = _hole_openings(trellis, bridge, bridge_side)
     coords = (float(coords[0]), float(coords[1]))
     return Hole(
         coords=coords,
         near_intersection_id=near_id,
-        side=side,
-        interior=(
-            bool(in_zone(coords))
-            if in_zone is not None
-            else _is_interior(
-                far.stable_cdist, cut_map.get(near.manifold_b_key), trellis
-            )
-        ),
+        bridge_side=bridge_side,
         bounding_ids=(near_id, far_id),
         openings=openings,
         iterate=iterate,
@@ -1073,23 +1145,6 @@ def _image_arc_midpoint(
     return midpoint, tangent, arc_chord
 
 
-def _openings_of(
-    trellis: "Trellis", hole: Hole
-) -> list[tuple[int, str, Side]]:
-    """A hole's opening records, deriving the inward default when absent.
-
-    Fabricated holes (tests, external callers) may carry only ``bounding_ids``
-    and ``side``; they open the region between their bounds on that side —
-    outward of the near bound, anchorward of the far bound.
-    """
-    if hole.openings is not None:
-        return hole.openings
-    if hole.bounding_ids is None or hole.side is None:
-        return []
-    near, far = _near_far(trellis, *hole.bounding_ids)
-    return [(near, "outward", hole.side), (far, "anchorward", hole.side)]
-
-
 def _hole_marks_on_branch(
     trellis: "Trellis",
     branch_key: "ManifoldKey",
@@ -1099,10 +1154,10 @@ def _hole_marks_on_branch(
     Boundary intersections and open-interval marks on one branch and row.
 
     Every punched hole participates — a hole is a hole, with no exceptions by
-    iterate, endpoint identity, or zone membership (``Hole.interior`` is
-    descriptive only). Each opening record lands on the stable branch of its
-    own intersection, so a bridge whose two defining intersections sit on
-    different branches of a periodic orbit contributes to each one.
+    iterate or endpoint identity. Each opening record lands on the stable
+    branch of its own intersection, so a bridge whose two defining
+    intersections sit on different branches of a periodic orbit contributes
+    to each one. A hole without openings does not participate.
 
     Returns:
         (boundaries, open_outward, open_anchorward): boundary intersection
@@ -1113,7 +1168,12 @@ def _hole_marks_on_branch(
     open_outward: set[int] = set()
     open_anchorward: set[int] = set()
     for hole in trellis.holes:
-        for iid, which, row in _openings_of(trellis, hole):
+        if not hole.openings:
+            logger.debug(
+                "Hole at %s has no openings; it does not partition", hole.coords
+            )
+            continue
+        for iid, which, row in hole.openings:
             if row != side:
                 continue
             ix = trellis.intersection(iid)
@@ -1128,8 +1188,6 @@ def _build_intervals(
     trellis: "Trellis",
     branch: "TrellisBranch",
     marks: tuple[dict[int, float], set[int], set[int]],
-    cut_cdist: Optional[float],
-    cut_id: Optional[int] = None,
 ) -> list[PartitionInterval]:
     """Assemble the ordered partition intervals from the hole marks.
 
@@ -1173,7 +1231,10 @@ def _build_intervals(
     # anchor-artifact intersection when a hole abuts it from outside. Each
     # point thereby belongs to exactly one piece; an interior boundary always
     # bounds a hole, so at least one of its intervals is open there and "]["
-    # cannot occur.
+    # cannot occur. Two holes flanking one bridge (one on each side) emit
+    # complementary openings at both defining intersections, so this same
+    # rule pinches each of them into a singleton with open intervals on both
+    # sides — the "singleton bridge" case needs no extra code.
     with_singletons: list[PartitionInterval] = []
     for position, (bid, cdist) in enumerate(ordered):
         before = intervals[position - 1] if position > 0 else None
@@ -1187,33 +1248,4 @@ def _build_intervals(
             )
         if after is not None:
             with_singletons.append(after)
-    intervals = with_singletons
-
-    if cut_cdist is not None:
-        intervals = _split_at_cut(intervals, cut_cdist, cut_id)
-    return intervals
-
-
-def _split_at_cut(
-    intervals: list[PartitionInterval],
-    cut_cdist: float,
-    cut_id: Optional[int] = None,
-) -> list[PartitionInterval]:
-    """Split a non-hole interval straddling the zone cut; the cut point is interior.
-
-    ``cut_id`` is the cut intersection's registry id (the strong pip or its
-    iterate on this branch), labelling the new shared boundary.
-    """
-    out: list[PartitionInterval] = []
-    for iv in intervals:
-        is_closed = iv.closed_lo and iv.closed_hi
-        if is_closed and iv.lo_cdist < cut_cdist < iv.hi_cdist:
-            out.append(
-                PartitionInterval(iv.lo_id, cut_id, iv.lo_cdist, cut_cdist, iv.closed_lo, True)
-            )
-            out.append(
-                PartitionInterval(cut_id, iv.hi_id, cut_cdist, iv.hi_cdist, False, iv.closed_hi)
-            )
-        else:
-            out.append(iv)
-    return out
+    return with_singletons

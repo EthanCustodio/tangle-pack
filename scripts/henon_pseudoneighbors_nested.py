@@ -3,7 +3,7 @@
 The nested (period-1 outer + period-3 inner) Hénon setup of
 ``henon_strong_pip_nested.py``, taken through the full pseudoneighbor
 pipeline for BOTH tangles: strong pips → resonance zones (one batched
-recompute) → reference pseudoneighbors → holes (zone-classified) →
+recompute) → reference pseudoneighbors → holes (classified by bridge side) →
 left/right partitions of every stable branch.
 
 Each fixed point runs on its own per-fixed-point trellis (the session fans
@@ -91,10 +91,9 @@ for fp, name in ((fp3, "period-3"), (fp1, "period-1")):
     trellis = session.trellis(fp)
     trellis.classify_strong_pips(choose_default=False)
     trellis.set_strong_pip(pips[fp])
-    zone = session.resonance_zones[(fp, 0)]
 
     trellis.compute_pseudoneighbors(verbose=True)
-    trellis.punch_holes(in_zone=zone.contains_point, verbose=True)
+    trellis.punch_holes(verbose=True)
     partitions[name] = trellis.partition_stable_manifold(verbose=True)
 
 # Figure 1: both tangles with pseudoneighbors and holes.

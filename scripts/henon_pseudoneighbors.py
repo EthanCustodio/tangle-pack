@@ -6,9 +6,9 @@ algorithms on the single-saddle binary-horseshoe Hénon tangle:
 1. compute the reference pseudoneighbor pairs on W^S(r_n, r_{n+p}) and extend
    them into full trajectories through the iterate table;
 2. punch a hole in each pair's bounded region and backward-propagate the
-   reference bridges until they map onto themselves;
-3. partition the stable manifold left/right (and interior/exterior at the
-   strong-pip resonance-zone cut) by those holes.
+   reference bridges until they map onto themselves — each hole classified
+   by its side of its bridge in the dynamical orientation;
+3. partition the stable manifold left/right by those holes.
 
 Figure 1 shows the tangle with pseudoneighbors (orange) and holes (one
 marker+color per orbit, labelled by iterate); figure 2 is the number-line
@@ -91,10 +91,10 @@ trellis.set_strong_pip(5)
 # 1. Reference pseudoneighbors + full trajectories.
 reference_pseudoneighbors = session.compute_pseudoneighbors(fp, verbose=True)
 
-# 2. Holes: one per pair, plus the backward-propagated ones. The zone's
-# containment test flags holes that belong to a different resonance zone
-# (interior=False) so the partition can ignore them.
-holes = trellis.punch_holes(in_zone=zone.contains_point, verbose=True)
+# 2. Holes: one per pair, plus the backward-propagated ones. Each hole is
+# classified by its side of its bridge in the dynamical orientation
+# (Hole.bridge_side); the zone plays no role here — it exists for blasting.
+holes = trellis.punch_holes(verbose=True)
 
 # 3. The partition of each stable branch, both sides.
 stable_partition = trellis.partition_stable_manifold(verbose=True)
