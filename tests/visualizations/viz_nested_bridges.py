@@ -96,11 +96,20 @@ def build_and_blast():
     return session, (fp3, fp1)
 
 
+def _bridge_span(workbench, bridge):
+    """The bridge's ``(low, high)`` bounding-crossing unstable cdists, or None."""
+    if bridge.id is None:
+        return None
+    registry = workbench.intersection_registry
+    lo, hi = (float(registry[i].unstable_cdist) for i in bridge.id)
+    return (min(lo, hi), max(lo, hi))
+
+
 def find_nested_pairs(workbench):
     """Pairs of same-manifold bridges whose cdist spans substantially overlap."""
     by_manifold = defaultdict(list)
     for bridge in workbench.bridges:
-        sig = workbench._bridge_signature(bridge)
+        sig = _bridge_span(workbench, bridge)
         if sig is not None:
             by_manifold[bridge.manifold_key].append((sig, bridge))
 

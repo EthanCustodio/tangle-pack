@@ -110,6 +110,8 @@ Phase 3, deleted here so Blast is rewritten once).
 
 ## Phase 3 — Bridge identity and derived genealogy
 
+✅ DONE 2026-09-02. Deviations: `_existing_image_bridges` requires the existing bridges to tile the image exactly (first starts at f(a), last ends at f(b), consecutive share endpoints) rather than mere presence; `image_manifold` is not stored (iterate_bridge never kept it), so `iterated` is the only metadata carried by `rebuild_bridges`; a period-1 anchor at cdist (0,0) registers itself as its own forward image (`_register_anchor_self_iterate`) because the heuristic's "image is not its source" guard can never find it — to be absorbed by the deliberate anchor registration in 6.3; the k=10 graph gains one self-loop iterate edge; Blast needed no genealogy rewrite (it never read parent/children), only a BridgeId-keyed cycle guard; `Tangle.release_manifold` added for `clear_bridges`; `ResonanceZone.restore` now recomputes with `preserve_ids=True` (it renumbered the registry under every held id).
+
 - `BridgeId = tuple[int, int]` ordered by unstable cdist. `Bridge.id` property.
 - `TangleWorkbench._bridges: dict[BridgeId, Bridge]`; `bridges` still returns a list;
   new `bridge(bid)`, `bridges_at(intersection_id) -> list[BridgeId]` reverse index
@@ -278,7 +280,7 @@ is mechanical and can be interleaved once the interfaces have settled.
 
 ## Deferred (found during implementation, not in the plan)
 
-- Phase 1: `clear_bridges`/`rebuild_bridges` leave discarded bridges as segment owners in `Tangle._manifold_segs`/`_seg_manifolds` (bridges own segments since 1.3); masked by `clear_all()` on recompute; fix in Phase 3 `clear_bridges`.
+- ~~Phase 1: `clear_bridges`/`rebuild_bridges` leave discarded bridges as segment owners~~ fixed in Phase 3.
 - Phase 1: `_insert_crossing_separator` leaves the parent's pre-split edge registered with stale bounds (pre-existing).
 - Phase 1: `_validate_saddle` may reject a near-parabolic period-k saddle (complex pair from rounding) and `ier != 1` rejects `ier=5` at machine-precision residuals; gate on the residual if it ever bites.
 - Phase 1: style items for Phase 8 — `TangleWorkbench.py` lacks `from __future__ import annotations` (PEP 604 return annotation in `_endpoint_candidates`), `Tangle` logger has no `NullHandler`, unannotated params in `Tangle._orientation` / `ManifoldMachine._branch_view`, `Tangle._segments_touching` and `StablePartition._bridge_midpoint` are caller-less, `FixedPoint.get_iterable_array(shift=)` has no production caller.
@@ -295,3 +297,7 @@ is mechanical and can be interleaved once the interfaces have settled.
 - Phase 2: `grow_n_times` defaults `branch_index=0` so every call on an inversion point logs the ignored-branch warning; growing the second eigendirection of a simple saddle is untested; `Trellis.scale_cdist` has no production caller; `registry.by_*_cdist`/`*_rank` are still global-order views (Phase 6 wants per-branch).
 - Phase 2: `tests/visualizations/viz_nested_bridges.py` and `viz_unstable_artifacts.py` crash with `KeyError: None` (strong pip None on their shorter growth) — pre-existing, Phase 8.
 - Phase 2: the `_insert_crossing_separator`-related reused-edge crossings are registered but cut only on their own curve (Dev Note in TangleWorkbench).
+- Phase 3: `rebuild_bridges(fp)` calls the global `clear_bridges()`, dropping every other fixed point's bridges (pre-existing); partial bridges still accumulate one object per re-blast of the same arc (no identity for arcs with one crossing).
+- Phase 3: INVERSION (found by the new `henon_inversion_initialized` bridge test, both pre-existing and both for 6.3/the inversion work, not Phase 3): the periodic point registers FOUR crossings at cdist (0, 0) — one per (unstable branch, stable branch) pair — so each unstable branch carries two distinct anchor crossings and `Tangle.create_bridges` cuts a degenerate zero-length bridge between them; and `iterate_bridge` on such an anchor-rooted bridge raises `TypeError: list indices must be integers or slices, not NoneType` in `ManifoldMachine._insert_after` (`branch_index=None` on a BranchPoint). Every non-degenerate inversion bridge iterates and derives its image correctly.
+- Phase 3: id validity is tracked by `TangleWorkbench._registry_id_epoch` (bumped by a `compute_intersections` that renumbers) and `_bridge_id_epoch` (its value when the bridges were cut); `rebuild_bridges` refuses to carry metadata across a mismatch. Phase 4's generation counter should absorb both.
+- Phase 3: on the inversion fixture the periodic point registers four cdist-(0,0) crossings (one per (unstable branch, stable branch) pair), so each unstable branch carries two anchors and `create_bridges` cuts a degenerate zero-length bridge between them; iterating such an anchor-rooted bridge raises in `ManifoldMachine._insert_after` (branch_index None on a BranchPoint). Both belong to 6.3's deliberate anchor registration.

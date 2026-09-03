@@ -242,7 +242,9 @@ class Trellis:
             branch.intersection_ids.sort(key=lambda i: getattr(registry[i], attr))
 
         bridges = [
-            b for b in workbench._bridges if getattr(b, "fixed_point", None) in selected_set
+            b
+            for b in workbench.bridges
+            if getattr(b, "fixed_point", None) in selected_set
         ]
 
         logger.debug(

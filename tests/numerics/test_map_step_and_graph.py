@@ -215,13 +215,17 @@ def test_k10_intersection_graph_is_unchanged(henon_tangle_with_bridges):
     graph = workbench.build_intersection_graph()
 
     assert graph.number_of_nodes() == 8
-    assert graph.number_of_edges() == 17
+    assert graph.number_of_edges() == 18
     assert len(_adjacency(graph, "stable")) == 7
     assert len(_adjacency(graph, "unstable")) == 7
-    assert (
-        sum(1 for _u, _v, d in graph.edges(data=True) if d.get("type") == "iterate")
-        == 3
-    )
+    # Three ordinary iterate edges plus the anchor's self-loop: the periodic point
+    # is registered as a crossing at cdist (0, 0) and, on a period-1 orbit, is its
+    # own forward image.
+    iterate_edges = [
+        (u, v) for u, v, d in graph.edges(data=True) if d.get("type") == "iterate"
+    ]
+    assert len(iterate_edges) == 4
+    assert sum(1 for u, v in iterate_edges if u == v) == 1
 
 
 def test_stable_edges_join_consecutive_crossings_on_one_branch(henon_p3_session):

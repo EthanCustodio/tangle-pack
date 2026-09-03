@@ -42,22 +42,41 @@ def test_workbench_keeps_single_copy_per_bridge(henon_p3_session):
     workbench = session.workbench
     session.blast_zone(zone, num_iterations=3, fixed_point=fp1)
 
-    # No two registered bridges on the same manifold share a signature (the two
-    # bounding-intersection cdists) -- i.e. there is exactly one copy of each
-    # computed bridge. (cdist is per-manifold, so compare within a fixed point.)
+    # A bridge IS its BridgeId (the two crossings it connects), so there is exactly
+    # one registered object per id and no two registered bridges share one. Partial
+    # pieces have no id and are deliberately exempt (see the workbench Dev Notes).
+    seen: dict[tuple[int, int], object] = {}
+    for bridge in workbench.bridges:
+        bid = bridge.id
+        if bid is None:
+            assert bridge.partial
+            continue
+        assert bid not in seen, f"two registered bridges share the id {bid}"
+        seen[bid] = bridge
+        assert workbench.bridge(bid) is bridge
+
+    # Two bridges on one unstable branch may not overlap either: consecutive
+    # bridges meet at a shared crossing, so their cdist spans only ever touch.
     from collections import defaultdict
 
+    registry = workbench.intersection_registry
+
+    def span(bid):
+        return (
+            registry[bid[0]].unstable_cdist,
+            registry[bid[1]].unstable_cdist,
+        )
+
     by_manifold = defaultdict(list)
-    for bridge in workbench.bridges:
-        sig = workbench._bridge_signature(bridge)
-        if sig is None:
-            continue
-        key = bridge.manifold_key
-        for other in by_manifold[key]:
-            assert not workbench._signatures_match(sig, other), (
-                f"two registered bridges on one manifold share signature {sig}"
+    for bid, bridge in seen.items():
+        by_manifold[bridge.manifold_key].append(span(bid))
+
+    for key, spans in by_manifold.items():
+        spans.sort()
+        for (lo_a, hi_a), (lo_b, hi_b) in zip(spans, spans[1:]):
+            assert lo_b >= hi_a - 1e-9, (
+                f"overlapping bridges on {key[1:]}: {(lo_a, hi_a)} and {(lo_b, hi_b)}"
             )
-        by_manifold[key].append(sig)
 
 
 @pytest.mark.slow

@@ -626,6 +626,32 @@ class Tangle:
 
         return sid
 
+    def release_manifold(self, manifold: BaseManifold) -> None:
+        """
+        Drop every claim ``manifold`` has on the index.
+
+        A manifold that is discarded (most often a bridge dropped by
+        :meth:`TangleWorkbench.clear_bridges`) must not stay an owner of its
+        segments: it would keep them alive in ``_seg_lookup`` for the lifetime of
+        the Tangle and keep the dead object reachable from ``_seg_manifolds``.
+        Segments it shares with a still-live owner -- a bridge's segments belong
+        to the unstable manifold it was cut out of as well -- are kept indexed for
+        that owner; only segments whose last owner this was are dropped.
+
+        Args:
+            manifold: The manifold giving up its claims. Unknown manifolds are a
+                no-op.
+
+        Note:
+            A manifold whose owner ran :meth:`clear_all` first (the usual case --
+            every production ``rebuild_bridges`` follows a recompute, which clears
+            the whole index) is already unknown here, so this is then a no-op. It
+            does the real work on the direct ``clear_bridges`` path.
+        """
+        for sid in list(self._manifold_segs.get(manifold, ())):
+            self._remove_segment(sid, manifold)
+        self._manifold_segs.pop(manifold, None)
+
     def _remove_segment(self, sid: int, manifold: BaseManifold):
         """
         Drop one owner's claim on a segment, and the segment itself once the
@@ -794,8 +820,11 @@ class Tangle:
                 calls.
 
         Returns:
-            List of Bridge objects, doubly linked via next_bridge / prev_bridge,
-            each carrying the registry ids of the two crossings it was cut at.
+            List of Bridge objects in unstable canonical-distance order per parent
+            manifold, each carrying the registry ids of the two crossings it was
+            cut at (its :data:`~.Bridge.BridgeId`). Adjacency is not stored on the
+            bridges: consecutive bridges share an endpoint id, so the caller reads
+            it off the ids (see ``TangleWorkbench.bridges_at``).
         """
         # --- 1. Collect crossings grouped by their parent unstable manifold ---
         # entry: (unstable cdist, Intersection, orig_p0, orig_p1)
@@ -882,11 +911,6 @@ class Tangle:
         # re-queried: every crossing on them was found on the parent already.
         for bridge in all_bridges:
             self.add_manifold(bridge, index_segments=False, detect_crossings=False)
-
-        # --- 4. Wire next_bridge / prev_bridge doubly-linked list ---
-        for i in range(len(all_bridges) - 1):
-            all_bridges[i].next_bridge = all_bridges[i + 1]
-            all_bridges[i + 1].prev_bridge = all_bridges[i]
 
         return all_bridges
 

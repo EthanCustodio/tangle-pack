@@ -309,7 +309,8 @@ class ResonanceZone:
         crossing set changes and the existing bridges — cut against the *trimmed*
         manifolds — are stale. The recompute is therefore followed by
         :meth:`TangleWorkbench.rebuild_bridges`, which returns the bridge set to
-        exactly what it was before the trim.
+        exactly what it was before the trim. Like the trim, the recompute preserves
+        registry ids, so ids held across the round trip keep their meaning.
 
         Args:
             workbench: The workbench the zone was defined on.
@@ -330,7 +331,12 @@ class ResonanceZone:
         for key, tail in self.previous_tails.items():
             workbench.manifolds[key].tail = tail
         if recompute:
-            workbench.compute_intersections(list(workbench.fixed_points))
+            # preserve_ids mirrors define_resonance_zone: ids held across the trim
+            # (a strong pip, a BridgeId) must still name the same crossings after the
+            # restore, and rebuild_bridges carries its per-bridge metadata by id.
+            workbench.compute_intersections(
+                list(workbench.fixed_points), preserve_ids=True
+            )
             workbench.rebuild_bridges()
 
 

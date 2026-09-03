@@ -35,13 +35,26 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..numerics.Bridge import Bridge
+    from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
     from .ResonanceZone import ResonanceZone
     from .TangleSession import TangleSession
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+
+def _seen_key(bridge: "Bridge") -> "BridgeId | int":
+    """The cycle-guard key of a bridge in one blast.
+
+    A bridge IS the two crossings it connects, so its ``BridgeId`` is the right
+    identity: the workbench keeps exactly one object per id, and a child that
+    re-traces an existing bridge comes back as that object. A partial piece
+    (bounded by fewer than two crossings) has no id, so it falls back to object
+    identity -- two partials over the same arc are not recognised as one, which is
+    by definition, not an oversight.
+    """
+    return bridge.id if bridge.id is not None else id(bridge)
 
 
 def _interior_points(bridge: "Bridge") -> np.ndarray:
@@ -241,7 +254,7 @@ def blast_zone(
     # whole point. We only refuse to enqueue a bridge we have already enqueued in
     # THIS blast, so the forward orbit cannot loop forever. (The single-copy
     # invariant lives in iterate_bridge, not here.)
-    seen: set[int] = {id(b) for b in frontier}
+    seen: set["BridgeId | int"] = {_seen_key(b) for b in frontier}
 
     # Accumulated point cloud of every bridge interior already in the tangle, used by
     # the proximity guard. A blasted bridge folds back through the same turnarounds at
@@ -307,12 +320,12 @@ def blast_zone(
                 # A bridge already in the trellis (the fixed-point bridge's self-image
                 # and any image piece that re-traces grown curve resolve to the
                 # existing persistent copy): keep the single copy, do not re-iterate.
-                if id(child) in seen:
+                if _seen_key(child) in seen:
                     already_known.append(child)
                     continue
 
                 if not (not child.iterated and fp_ok(child) and in_zone(child)):
-                    seen.add(id(child))
+                    seen.add(_seen_key(child))
                     discarded.append(child)
                     continue
 
@@ -329,11 +342,11 @@ def blast_zone(
                         < min_separation
                     )
                     if too_near_existing or too_near_sibling:
-                        seen.add(id(child))
+                        seen.add(_seen_key(child))
                         too_close.append(child)
                         continue
 
-                seen.add(id(child))
+                seen.add(_seen_key(child))
                 kept.append(child)
                 if min_separation is not None:
                     interior = _interior_points(child)

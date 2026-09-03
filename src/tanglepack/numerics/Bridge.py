@@ -6,6 +6,13 @@ from .BaseManifold import BaseManifold
 from .Intersection import ManifoldKey
 from .Point import Point
 
+#: Topological identity of a bridge: the registry ids of the two crossings it
+#: connects, ordered by increasing unstable canonical distance (i.e. in the
+#: unstable dynamical direction). A bridge IS the piece of unstable manifold
+#: between two consecutive crossings, so this pair identifies it completely --
+#: there is exactly one bridge per pair, on exactly one unstable branch.
+BridgeId = tuple[int, int]
+
 
 class Bridge(BaseManifold):
     """
@@ -92,12 +99,22 @@ class Bridge(BaseManifold):
         )
 
         self.iterated: bool = False
-        self.parent: Optional[Bridge] = None
-        self.children: list[Bridge] = []
-        self.next_bridge: Optional[Bridge] = None
-        self.prev_bridge: Optional[Bridge] = None
         self.first_intersection: Optional[int] = first_intersection
         self.second_intersection: Optional[int] = second_intersection
+
+    @property
+    def id(self) -> Optional[BridgeId]:
+        """
+        This bridge's :data:`BridgeId`, or ``None`` when it is :attr:`partial`.
+
+        Derived from the endpoint ids set by the cut, never stored separately, so
+        it can never disagree with them. Genealogy is derived from this id (see
+        :meth:`TangleWorkbench.image_bridges`) rather than stored as object
+        links, which is why a bridge carries no parent/children of its own.
+        """
+        if self.first_intersection is None or self.second_intersection is None:
+            return None
+        return (self.first_intersection, self.second_intersection)
 
     @property
     def partial(self) -> bool:

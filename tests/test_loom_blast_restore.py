@@ -98,7 +98,7 @@ def _interior_frontier(session, zone, fp):
     ]
 
 
-def _bridge_signatures(workbench):
+def _bridge_endpoint_cdists(workbench):
     """Each bridge as its ``(first, second)`` unstable canonical distances.
 
     Registry ids are renumbered by a recompute, but the canonical distances of the
@@ -179,20 +179,51 @@ def test_restore_rebuilds_bridges(k10_session):
     session, fp = k10_session
     workbench = session.workbench
 
-    before = _bridge_signatures(workbench)
+    before = _bridge_endpoint_cdists(workbench)
     assert before, "the fixture must produce bridges"
 
     zone = _define_zone(session, fp)
-    trimmed = _bridge_signatures(workbench)
+    trimmed = _bridge_endpoint_cdists(workbench)
     assert trimmed != before, "the trim must actually change the bridge set"
 
     zone.restore(workbench)
-    after = _bridge_signatures(workbench)
+    after = _bridge_endpoint_cdists(workbench)
 
     assert len(after) == len(before)
     for got, want in zip(after, before):
         assert got[0] == pytest.approx(want[0], abs=1e-6)
         assert got[1] == pytest.approx(want[1], abs=1e-6)
+
+
+def test_restore_preserves_intersection_ids(k10_session):
+    """``restore`` must not renumber the registry underneath the ids callers hold.
+
+    ``BridgeId`` is a pair of registry ids and ``rebuild_bridges`` carries per-bridge
+    metadata across by that pair, so a restore that renumbered from zero would hand
+    every held id to an unrelated crossing.
+    """
+    session, fp = k10_session
+    workbench = session.workbench
+
+    zone = _define_zone(session, fp)
+    before = {
+        iid: (
+            round(ix.unstable_cdist, 9),
+            round(ix.stable_cdist, 9),
+        )
+        for iid, ix in workbench.intersection_registry
+    }
+    assert before
+
+    zone.restore(workbench)
+
+    registry = workbench.intersection_registry
+    for iid, cdists in before.items():
+        assert iid in registry, f"id {iid} was renumbered away by restore"
+        ix = registry[iid]
+        assert (round(ix.unstable_cdist, 9), round(ix.stable_cdist, 9)) == cdists, (
+            f"id {iid} now names a different crossing"
+        )
 
 
 def test_restore_keeps_bridges_within_restored_manifolds(k10_session):
