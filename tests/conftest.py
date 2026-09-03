@@ -132,6 +132,58 @@ def henon_tangle_with_bridges(grown_both):
 
 
 # --------------------------------------------------------------------------- #
+# Inversion saddle (k_value == 2 * period) -- same k=10, b=1 map
+# --------------------------------------------------------------------------- #
+# The map's OTHER fixed point, at (-2.3166, 2.3166), has BOTH eigenvalues
+# negative (-4.406 and -0.227, product 1): an orientation-preserving saddle with
+# inversion, so k_value = 2 * period and the two manifold branches are one chain.
+#
+# It is deliberately not a b < 0 Hénon map: there det J = b < 0, so exactly ONE
+# eigenvalue is negative at every fixed point and the unstable and stable
+# manifolds have different inversion status -- something a single k_value cannot
+# represent (``FixedPoint.set_k_value`` rejects it).
+#
+# Eigenvector orientation is not applicable here: ``orient_eigenvectors`` is a
+# documented no-op on an inversion point, because the second branch is the image
+# of the first and so its direction is fixed by the map, not by the caller.
+_INVERSION_GUESS = [-2.3166, 2.3166]
+
+
+def _build_inversion_workbench() -> tuple[TangleWorkbench, object]:
+    """A workbench with the inversion saddle constructed and both manifolds seeded."""
+    workbench = TangleWorkbench(_henon_map, _henon_map_inverse, _henon_jacobian)
+    fp = workbench.construct_fixed_point(_INVERSION_GUESS)
+    assert fp.check_inversion(), "the inversion fixture must have inversion"
+    assert fp.k_value == 2 * fp.period
+    workbench.initialize_both_manifolds(fp)
+    return workbench, fp
+
+
+@pytest.fixture
+def henon_inversion_initialized():
+    """``(workbench, fp)`` with the inversion saddle's fundamental segments only."""
+    return _build_inversion_workbench()
+
+
+@pytest.fixture(scope="module")
+def henon_inversion():
+    """``(workbench, fp)`` with the inversion saddle grown on both branches and
+    its crossings computed.
+
+    Module-scoped and read-only: growing the second branch of this saddle is the
+    expensive part (its pieces refine hard), and the tests that use it only
+    inspect the result. Anything that mutates the workbench must build its own.
+    Computing the crossings leaves the manifold geometry untouched, so the growth
+    invariants are still the growth invariants.
+    """
+    workbench, fp = _build_inversion_workbench()
+    workbench.grow_n_times(fp, "unstable", num_iterations=6)
+    workbench.grow_n_times(fp, "stable", num_iterations=5)
+    workbench.compute_intersections([fp])
+    return workbench, fp
+
+
+# --------------------------------------------------------------------------- #
 # Heavy nested period-3 session (for the blast regression test)
 # --------------------------------------------------------------------------- #
 def _p3_map(point):

@@ -7,7 +7,7 @@ from rtree.core import RTreeError
 from collections import defaultdict
 from itertools import count
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 from .Intersection import Intersection, ManifoldKey
 from .BaseManifold import BaseManifold
@@ -31,6 +31,22 @@ Dev Notes:
 
 WARNING: this code must identify fixed points as intersection points. Consider 
     the complications of that 
+
+The Tangle holds no resolved crossings (plan row 2.1): every crossing lives in the
+workbench's IntersectionRegistry. What used to make that impossible was geometry --
+cutting a bridge needs the two real manifold nodes bracketing the crossing, which
+only the segment index knew. Each Intersection now carries that itself, as
+``unstable_manifold`` (the curve it was detected on) and ``unstable_segment`` (the
+crossing's two bracketing points, captured at resolve time and never re-read off
+the mutable segment afterwards). So a registered crossing is self-sufficient: it
+pins its own geometry, and ``create_bridges`` takes the crossings to cut at as an
+argument rather than reaching back into the index.
+
+``create_bridges`` groups by the unstable manifold OBJECT, not by manifold_key: a
+bridge and the manifold it was cut out of legitimately share a key while being
+distinct polylines, so key-grouping would let one cut span two curves. Phase 3's
+BridgeId may make a key-plus-generation grouping viable; until then the object is
+the only unambiguous grouping.
 """
 
 
@@ -87,7 +103,14 @@ class Tangle:
             all segment ids for that manifold.
         _intersecting_segments: Set of frozenset pairs of segment ids that
             cross.
-        _intersections: List of resolved Intersection objects.
+
+    Note:
+        The Tangle owns INDEX state only. A resolved crossing lives in the
+        workbench's :class:`IntersectionRegistry` and nowhere else:
+        :meth:`_resolve_crossing_pair` returns the :class:`Intersection` and the
+        caller registers it. Each crossing carries the unstable manifold and the
+        two bracketing points it was found on, which is everything
+        :meth:`create_bridges` needs to cut at it.
     """
 
     _ids = count(0)  # global generator -> every segment is given a unique int key
@@ -115,10 +138,8 @@ class Tangle:
 
             _intersecting_segments: set of frozensets containing pairs of
                 segment ids that intersect
-            _intersecting_coords: dictionary mapping segment ids to their
-                intersection coordinates
-            _intersecting_points: dictionary mapping segment ids to their
-                corresponding BranchPoint objects
+            _processed_pairs: pairs already handed to _resolve_crossing_pair, so a
+                crossing is resolved (and registered) exactly once
         """
 
         p = index.Property()
@@ -130,20 +151,18 @@ class Tangle:
         self._seg_manifolds: defaultdict[int, set[BaseManifold]] = defaultdict(set)
 
         self._intersecting_segments: set[frozenset[int]] = set()
-        # keyed by the crossing's segment pair, so one segment can host many crossings
-        self._intersecting_coords: dict[frozenset[int], tuple[float, float]] = {}
-        self._intersecting_points: dict[frozenset[int], BranchPoint] = {}
-
-        self._intersections: list[Intersection] = []
-        self._intersection_by_seg: defaultdict[int, list[Intersection]] = defaultdict(
-            list
-        )
         self._processed_pairs: set[frozenset[int]] = set()
 
     @staticmethod
     def _key_of(seg: _Segment) -> Optional[ManifoldKey]:
-        """Read the ManifoldKey stored on the segment's manifold, if set."""
-        return getattr(seg.manifold, "manifold_key", None)
+        """The ManifoldKey of the segment's manifold (required on unstable ones)."""
+        key = seg.manifold.manifold_key
+        assert key is not None or seg.manifold.stability != "unstable", (
+            "every unstable curve indexed in a Tangle -- manifold or bridge -- "
+            "must carry its manifold_key, so the crossings found on it record "
+            "which unstable branch they sit on"
+        )
+        return key
 
     def clear_all(self):
         """
@@ -160,44 +179,47 @@ class Tangle:
         self._manifold_segs.clear()
         self._seg_manifolds.clear()
         self._intersecting_segments.clear()
-        self._intersecting_coords.clear()
-        self._intersecting_points.clear()
-
-        self._intersections.clear()
-        self._intersection_by_seg.clear()
         self._processed_pairs.clear()
 
-    def populate_intersection_dict(self):
+    def resolve_crossings(self) -> list[Intersection]:
         """
-        Takes all intersection pairs in _intersection_segments and
-        finds the true intersections and adds those to a list
-
         Resolve every detected crossing pair into an Intersection.
 
-        Each crossing is keyed by its segment PAIR (frozenset of the two segment
+        Each crossing is found from its segment PAIR (frozenset of the two segment
         ids), so a single segment may participate in many crossings without any
         being overwritten. Only unstable x stable pairs are kept. A same-stability
         pair (u x u or s x s) is geometrically impossible (see CLAUDE.md's
         fundamental invariant) -- if one appears it is a polygonal/numerical
         artifact of two near-parallel manifolds straddling, so it is logged and
         discarded, never turned into an Intersection.
-        """
-        for seg_id_pair in list(self._intersecting_segments):
-            self._resolve_crossing_pair(seg_id_pair)
 
-    def _resolve_crossing_pair(self, seg_id_pair: frozenset[int]):
+        Returns:
+            The freshly resolved crossings, for the caller to register. The Tangle
+            keeps no copy: the registry is the single source of truth.
+        """
+        resolved: list[Intersection] = []
+        for seg_id_pair in list(self._intersecting_segments):
+            intersection = self._resolve_crossing_pair(seg_id_pair)
+            if intersection is not None:
+                resolved.append(intersection)
+        return resolved
+
+    def _resolve_crossing_pair(
+        self, seg_id_pair: frozenset[int]
+    ) -> Optional[Intersection]:
         """
         Resolve one detected crossing pair into an Intersection.
 
         Handles all the shared bookkeeping: the true crossing point, the cdists
-        interpolated at that point (not the segment midpoint), the BranchPoint,
-        and the intersection/coord/point registries.
+        interpolated at that point (not the segment midpoint), the two branch
+        keys, and the unstable manifold and bracketing points a later cut needs.
+        The result is returned, not stored -- the caller adds it to the registry.
 
         Returns:
             The new Intersection, or None when the pair was already processed,
             references a removed segment (dropped as stale), is a
             same-stability near-tangency (discarded per the fundamental
-            invariant -- see populate_intersection_dict), or is near-parallel
+            invariant -- see resolve_crossings), or is near-parallel
             and so has no well-conditioned crossing point.
         """
         if seg_id_pair in self._processed_pairs:
@@ -225,44 +247,25 @@ class Tangle:
             self._processed_pairs.add(seg_id_pair)
             return None
 
+        u_seg, s_seg = (
+            (seg_1, seg_2) if seg_1.manifold.stability == "unstable" else (seg_2, seg_1)
+        )
+
         # cdist interpolated at the true crossing (not the segment midpoint)
-        seg_1_cdist = self._cdist_at_point(seg_1, point)
-        seg_2_cdist = self._cdist_at_point(seg_2, point)
-
-        unstable_cdist = (
-            seg_1_cdist if seg_1.manifold.stability == "unstable" else seg_2_cdist
-        )
-        stable_cdist = (
-            seg_1_cdist if seg_1.manifold.stability == "stable" else seg_2_cdist
-        )
-
-        branch_point = BranchPoint(
-            2, (unstable_cdist, stable_cdist), point[0], point[1]
-        )
-
-        if seg_1.manifold.stability == "unstable":
-            manifold_a_key, cdist_a = Tangle._key_of(seg_1), seg_1_cdist
-            manifold_b_key, cdist_b = Tangle._key_of(seg_2), seg_2_cdist
-        else:
-            manifold_a_key, cdist_a = Tangle._key_of(seg_2), seg_2_cdist
-            manifold_b_key, cdist_b = Tangle._key_of(seg_1), seg_1_cdist
-
         intersection = Intersection.from_segments(
             coords=tuple(point),
-            unstable_cdist=cdist_a,
-            stable_cdist=cdist_b,
+            unstable_cdist=self._cdist_at_point(u_seg, point),
+            stable_cdist=self._cdist_at_point(s_seg, point),
             seg1_id=seg1_id,
             seg2_id=seg2_id,
-            manifold_a_key=manifold_a_key,
-            manifold_b_key=manifold_b_key,
+            manifold_a_key=Tangle._key_of(u_seg),
+            manifold_b_key=Tangle._key_of(s_seg),
+            unstable_manifold=u_seg.manifold,
+            # The ORIGINAL endpoints, captured now: a cut at this crossing brackets
+            # it with these two real nodes, and they must not be re-read off the
+            # segment later, after a separator point has been spliced in.
+            unstable_segment=(u_seg.p0, u_seg.p0_seg1),
         )
-
-        self._intersections.append(intersection)
-        self._intersection_by_seg[seg1_id].append(intersection)
-        self._intersection_by_seg[seg2_id].append(intersection)
-
-        self._intersecting_coords[seg_id_pair] = tuple(point)
-        self._intersecting_points[seg_id_pair] = branch_point
 
         self._processed_pairs.add(seg_id_pair)
 
@@ -535,18 +538,15 @@ class Tangle:
         return kept
 
     def _purge_crossing(self, intersection: Intersection) -> None:
-        """Remove one resolved crossing from every tangle structure."""
-        pair = intersection.seg_ids
-        if intersection in self._intersections:
-            self._intersections.remove(intersection)
-        if pair:
-            for seg_id in pair:
-                by_seg = self._intersection_by_seg.get(seg_id)
-                if by_seg and intersection in by_seg:
-                    by_seg.remove(intersection)
-            self._intersecting_segments.discard(pair)
-            self._intersecting_coords.pop(pair, None)
-            self._intersecting_points.pop(pair, None)
+        """
+        Forget the segment pair a discarded crossing came from.
+
+        The crossing itself is simply dropped from the list the caller is about to
+        register, so nothing else has to be unwound; only the index must stop
+        reporting the pair, or the next resolve pass would recreate it.
+        """
+        if intersection.seg_ids:
+            self._intersecting_segments.discard(intersection.seg_ids)
 
     # ------------- internal helpers -----------------
     def _claim_segment(self, sid: int, manifold: BaseManifold) -> None:
@@ -759,19 +759,34 @@ class Tangle:
 
         return False  # no intersection if collinear or not straddling
 
-    def create_bridges(self, for_manifold=None, fixed_point=None):
+    def create_bridges(
+        self,
+        crossings: Iterable[Intersection],
+        for_manifold: Optional[BaseManifold] = None,
+        fixed_point=None,
+    ) -> list[Bridge]:
         """
-        Cut every indexed unstable manifold into bridges at its crossings with the
-        stable manifold(s).
+        Cut unstable manifolds into bridges at the given crossings.
 
-        Crossings are grouped by their parent unstable manifold and sorted by the
-        true crossing cdist, so bridges never span two manifolds and a single
+        The crossings to cut at are an INPUT: the Tangle holds no resolved
+        crossings of its own (see the class docstring), so the caller passes the
+        registry -- or, when only one image is being cut, just the crossings born
+        on it. Each crossing carries the unstable manifold it was found on and the
+        two points bracketing it, which is everything a cut needs.
+
+        Crossings are grouped by their parent unstable manifold OBJECT and sorted by
+        unstable canonical distance, so bridges never span two curves and a single
         segment that hosts several crossings is handled correctly (each crossing is
-        a distinct cut, not deduped by segment id).
+        a distinct cut, not deduped by segment id). The grouping is by object rather
+        than by ``manifold_key`` because a bridge and the manifold it was cut out of
+        legitimately share a key while being distinct polylines.
 
         Args:
-            for_manifold: If given, only build bridges for crossings that involve a
-                segment of this specific manifold.
+            crossings: The resolved crossings to cut at, each with an assigned
+                registry ``id``. Synthetic crossings (no unstable segment) are
+                skipped.
+            for_manifold: If given, only cut crossings detected on this specific
+                curve.
             fixed_point: If given, only build bridges on unstable manifolds that
                 emanate from this fixed point. Each Bridge still records its own
                 fixed_point, so a global call (fixed_point=None) followed by
@@ -779,55 +794,36 @@ class Tangle:
                 calls.
 
         Returns:
-            List of Bridge objects, doubly linked via next_bridge / prev_bridge.
+            List of Bridge objects, doubly linked via next_bridge / prev_bridge,
+            each carrying the registry ids of the two crossings it was cut at.
         """
-        from collections import defaultdict
-
-        for_manifold_segs = (
-            self._manifold_segs.get(for_manifold, set())
-            if for_manifold is not None
-            else None
-        )
-
         # --- 1. Collect crossings grouped by their parent unstable manifold ---
-        # Each crossing captures the ORIGINAL segment endpoints (p0, p1) now,
-        # before any boundary point is spliced in. Nothing downstream reads
-        # seg.p0 / seg.p0_seg1 again, so a segment that hosts several crossings is
-        # never corrupted by a previous crossing's insertion (the line-696 bug).
-        # entry: (cdist, crossing_coords, orig_p0, orig_p1)
+        # entry: (unstable cdist, Intersection, orig_p0, orig_p1)
         manifold_crossings: dict[
             BaseManifold,
-            list[tuple[float, tuple[float, float], Point, Point]],
+            list[tuple[float, Intersection, Point, Point]],
         ] = defaultdict(list)
 
-        for sid_pair in self._intersecting_segments:
-            if for_manifold_segs is not None and not (sid_pair & for_manifold_segs):
-                continue
-            if sid_pair not in self._intersecting_coords:
-                continue  # not a resolved unstable x stable crossing
+        for intersection in crossings:
+            manifold = intersection.unstable_manifold
+            if manifold is None or intersection.unstable_segment is None:
+                continue  # synthetic crossing: nothing to cut
 
-            sid1, sid2 = tuple(sid_pair)
-            seg_1, seg_2 = self._seg_lookup[sid1], self._seg_lookup[sid2]
-
-            if seg_1.manifold.stability == "unstable":
-                u_seg = seg_1
-            elif seg_2.manifold.stability == "unstable":
-                u_seg = seg_2
-            else:
-                continue  # no unstable segment (shouldn't happen post-filter)
-
-            if (
-                fixed_point is not None
-                and u_seg.manifold.fixed_point is not fixed_point
-            ):
+            if for_manifold is not None and manifold is not for_manifold:
                 continue
 
-            coords = self._intersecting_coords[sid_pair]
-            p0, p1 = u_seg.p0, u_seg.p0_seg1  # ORIGINAL endpoints
-            cdist = self._cdist_between(
-                p0, p1, u_seg.manifold.stability, np.asarray(coords)
+            if fixed_point is not None and manifold.fixed_point is not fixed_point:
+                continue
+
+            assert intersection.id is not None, (
+                "a crossing must be registered (and so carry its id) before a "
+                "bridge is cut at it -- the cut is what sets the bridge endpoints"
             )
-            manifold_crossings[u_seg.manifold].append((cdist, coords, p0, p1))
+
+            p0, p1 = intersection.unstable_segment
+            manifold_crossings[manifold].append(
+                (float(intersection.unstable_cdist), intersection, p0, p1)
+            )
 
         # --- 2. Build bridges as two points picked from the single manifold ---
         # A bridge is defined by a head and a tail point taken from its parent
@@ -841,12 +837,12 @@ class Tangle:
         # each crossing got two distinct offset points that mapped to near-coincident
         # images -- tripped the unstable x unstable detector all along the tangle.
         all_bridges: list[Bridge] = []
-        for manifold, crossings in manifold_crossings.items():
-            crossings.sort(key=lambda c: c[0])
+        for manifold, manifold_group in manifold_crossings.items():
+            manifold_group.sort(key=lambda entry: entry[0])
 
-            for i in range(len(crossings) - 1):
-                _, coords1, p0_a, p1_a = crossings[i]
-                _, coords2, p0_b, p1_b = crossings[i + 1]
+            for i in range(len(manifold_group) - 1):
+                _, first, p0_a, p1_a = manifold_group[i]
+                _, second, p0_b, p1_b = manifold_group[i + 1]
 
                 head = p0_a  # real point just below crossing i
                 tail = p1_b  # real point just above crossing i+1
@@ -857,10 +853,15 @@ class Tangle:
                 # crossings rather than spanning both.
                 if p0_a is p0_b and p1_a is p1_b:
                     mid = self._insert_crossing_separator(
-                        p0_a, p1_a, coords1, coords2, manifold
+                        p0_a, p1_a, first.coords, second.coords, manifold
                     )
                     tail = mid
 
+                # A bridge is a segment of its parent unstable manifold, so it lives
+                # on the same branch: it inherits the parent's manifold_key, and every
+                # intersection later detected on this bridge (or on its forward image)
+                # records that branch. Its two endpoints are the crossings the cut was
+                # made at -- no after-the-fact nearest-cdist lookup.
                 bridge = Bridge(
                     root=head,
                     stability=manifold.stability,
@@ -868,12 +869,10 @@ class Tangle:
                     fixed_point=manifold.fixed_point,
                     tail=tail,
                     branch_index=manifold.branch_index,
+                    manifold_key=manifold.manifold_key,
+                    first_intersection=first.id,
+                    second_intersection=second.id,
                 )
-                # A bridge is a segment of its parent unstable manifold, so it lives
-                # on the same branch. Carrying the parent's manifold_key means every
-                # intersection later detected on this bridge (or on its forward
-                # image) records which unstable branch it belongs to.
-                bridge.manifold_key = manifold.manifold_key
                 all_bridges.append(bridge)
 
         # --- 3. Register each bridge's segments under the bridge itself ---
@@ -927,10 +926,6 @@ class Tangle:
         else:
             p0.insert_point_forward(separator)
         return separator
-
-    def iter_intersection_coords(self) -> list[tuple[float, float]]:
-        """Return the (x, y) of every detected crossing, exactly one per crossing."""
-        return list(self._intersecting_coords.values())
 
     def _cdist_at_point(self, seg: _Segment, point: np.ndarray) -> float:
         """

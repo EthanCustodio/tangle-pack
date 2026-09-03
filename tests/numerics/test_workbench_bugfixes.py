@@ -1,7 +1,8 @@
 """Regression tests for the Phase 1 TangleWorkbench bug fixes.
 
 Covers plan rows 1.2 (bridge endpoint assignment must stay on the bridge's own
-unstable branch), 1.11 (``trim_stable_manifolds`` on a branch with no crossings)
+unstable branch -- since plan row 2.2 this holds by construction, because the cut
+itself records the two crossings it was made at), 1.11 (``trim_stable_manifolds`` on a branch with no crossings)
 and 1.12 (growth-loop iteration caps and the ``grow_until_intersection`` rename).
 """
 
@@ -11,7 +12,7 @@ import pytest
 
 
 # --------------------------------------------------------------------------- #
-# 1.2 -- _assign_bridge_intersections must not steal endpoints from another branch
+# 1.2 -- a bridge's endpoints must be crossings on its own unstable branch
 # --------------------------------------------------------------------------- #
 def test_bridge_endpoints_stay_on_the_bridges_own_branch(henon_p3_session):
     """On a period-3 tangle every unstable branch has its own crossing at
@@ -77,34 +78,6 @@ def test_trim_stable_manifolds_without_crossings(fixed_point):
     workbench.trim_stable_manifolds(fp)
 
     assert [m.tail for m in manifolds] == tails_before
-
-
-def test_trim_stable_manifolds_reads_the_stable_cdist(small_tangle):
-    """``BranchPoint.get_cdist`` has no default stability, so a crossing segment
-    anchored at the branch point used to raise ``TypeError``."""
-    workbench, fp = small_tangle
-
-    crossing_seg_ids = {
-        n for pair in workbench.Tangle._intersecting_segments for n in pair
-    }
-    manifold = workbench.manifolds[(fp, "stable", 0, 0)]
-    on_this = sorted(crossing_seg_ids & workbench.Tangle._manifold_segs[manifold])
-    assert len(on_this) >= 2
-
-    innermost = min(
-        on_this, key=lambda i: workbench.Tangle._seg_lookup[i].p0_seg1.cdist
-    )
-    expected = max(
-        (workbench.Tangle._seg_lookup[i] for i in on_this if i != innermost),
-        key=lambda s: s.p0_seg1.get_cdist("stable"),
-    ).p0_seg1
-
-    # anchor the innermost crossing segment at the fixed point's BranchPoint
-    workbench.Tangle._seg_lookup[innermost].p0_seg1 = manifold.root
-
-    workbench.trim_stable_manifolds(fp)
-
-    assert manifold.tail is expected
 
 
 def test_trim_stable_manifolds_cuts_just_past_the_outermost_crossing(small_tangle):
@@ -190,29 +163,34 @@ def test_grown_until_intersection_is_gone(initialized):
 
 
 # --------------------------------------------------------------------------- #
-# 1.7 -- the workbench key advance delegates to FixedPoint.advance_key
+# 1.7 / 2.5 -- FixedPoint.advance_key is the one key-advance rule
 # --------------------------------------------------------------------------- #
-def test_advance_key_forward_returns_the_next_orbit_point(henon_p3_session):
+def test_advance_key_returns_the_next_orbit_point(henon_p3_session):
     """One map step advances the orbit index and leaves the branch alone (the
-    period-3 orbit has no inversion, so ``k_value == period``)."""
+    period-3 orbit has no inversion, so ``k_value == period``).
+
+    The workbench's ``_advance_key_forward`` delegate was deleted in plan 2.5;
+    every caller now asks the fixed point directly.
+    """
     session, fp3, fp1, _zone = henon_p3_session
     workbench = session.workbench
 
     assert fp3.period == 3 and fp3.k_value == 3
+    assert not hasattr(workbench, "_advance_key_forward")
 
-    assert workbench._advance_key_forward((fp3, "unstable", 2, 0), fp3) == (
+    assert fp3.advance_key((fp3, "unstable", 2, 0), 1) == (
         fp3,
         "unstable",
         0,
         0,
     )
-    assert workbench._advance_key_forward((fp3, "stable", 0, 0), fp3) == (
+    assert fp3.advance_key((fp3, "stable", 0, 0), 1) == (
         fp3,
         "stable",
         1,
         0,
     )
-    assert workbench._advance_key_forward((fp1, "unstable", 0, 0), fp1) == (
+    assert fp1.advance_key((fp1, "unstable", 0, 0), 1) == (
         fp1,
         "unstable",
         0,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Iterator, Optional
 import numpy as np
 from numpy.typing import NDArray
 
@@ -48,6 +48,26 @@ class IterateTable:
 
     def __contains__(self, key: tuple[int, int]) -> bool:
         return self[key] is not None
+
+    def items(self) -> Iterator[tuple[int, int, int]]:
+        """
+        Yield every recorded relation once, as ``(source_id, n, target_id)``.
+
+        ``n`` is always positive: a backward entry ``table[a, -n] = b`` is the
+        same relation as the forward entry ``table[b, n] = a``, which
+        ``__setitem__`` records at the same time, so iterating the forward
+        direction alone is complete and duplicate-free.
+
+        Yields:
+            tuple[int, int, int]: ``(source_id, n, target_id)`` with ``n > 0``.
+
+        Note:
+            This is the public read path for the table's contents; nothing
+            outside this class should touch ``_forward`` / ``_backward``.
+        """
+        for source_id, by_n in self._forward.items():
+            for n, target_id in by_n.items():
+                yield source_id, n, target_id
 
     def forward_depth(self, source_id: int) -> int:
         """Maximum forward iterate depth recorded for this intersection."""

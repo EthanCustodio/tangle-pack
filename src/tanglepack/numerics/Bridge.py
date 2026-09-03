@@ -1,19 +1,9 @@
 from __future__ import annotations
 from typing import Optional, Literal
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .Intersection import Intersection
-
-from numpy.typing import NDArray
-
-import numpy as np
-
 from .FixedPoint import FixedPoint
-from .BranchPoint import BranchPoint
-from .DynamicalSystem import DynamicalSystem
 from .BaseManifold import BaseManifold
+from .Intersection import ManifoldKey
 from .Point import Point
 
 
@@ -22,12 +12,28 @@ class Bridge(BaseManifold):
     A bridge is defined as a segment of manifold that connects two intersection points
     together.
 
+    A bridge is cut out of one unstable manifold between two consecutive crossings,
+    so it carries its identity from the cut itself -- never inferred afterwards:
+
+    * ``manifold_key`` -- the unstable branch it lives on, inherited from the curve
+      it was cut out of. Every crossing later detected on the bridge (or on its
+      forward image) records this key, so canonical distances are always compared
+      within one branch.
+    * ``first_intersection`` / ``second_intersection`` -- the registry ids of the two
+      crossings the cut was made at, ordered by unstable canonical distance (i.e. in
+      the unstable dynamical direction).
+
     Note:
         The root and tail points will not be intersection points so that when a bridge
-        is mapped forward it is easy to compute where it intersects
+        is mapped forward it is easy to compute where it intersects.
 
-    Args:
-        BaseManifold (_type_): _description_
+    Note:
+        A leading or trailing piece of an iterated bridge can be bounded by fewer
+        than two crossings -- it starts or ends mid-arc, before the first (or after
+        the last) crossing on the image. Such a piece is not a bridge by definition,
+        but it is still a real stretch of unstable manifold whose dynamics the blast
+        frontier must carry forward, so it is kept with ``None`` for the missing
+        endpoint(s) and reports :attr:`partial` as True.
     """
 
     def __init__(
@@ -39,6 +45,10 @@ class Bridge(BaseManifold):
         tail: Point,
         name="unnamed",
         branch_index: Optional[int] = None,
+        *,
+        manifold_key: Optional[ManifoldKey],
+        first_intersection: Optional[int] = None,
+        second_intersection: Optional[int] = None,
     ):
         """
 
@@ -52,8 +62,18 @@ class Bridge(BaseManifold):
 
         Args:
             root (Point): The root of the bridge.
+            stability (Literal["stable", "unstable"]): Stability of the parent curve.
+            stretch_param (float): The parent's stretch parameter.
+            fixed_point (FixedPoint): The fixed point the parent emanates from.
             tail (Point): The tail of the bridge.
-            name (str, optional): Name of the bridge. Defaults to 'None'.
+            name (str, optional): Name of the bridge. Defaults to 'unnamed'.
+            branch_index (Optional[int]): Branch of an inversion fixed point.
+            manifold_key (Optional[ManifoldKey]): Keyword-only and REQUIRED -- the
+                unstable branch this bridge lives on (see the class docstring).
+            first_intersection (Optional[int]): Registry id of the crossing at the
+                bridge's low-cdist end. ``None`` only for a partial piece.
+            second_intersection (Optional[int]): Registry id of the crossing at the
+                bridge's high-cdist end. ``None`` only for a partial piece.
 
         Raises:
             ValueError: A tail must be specified to construct a bridge.
@@ -61,7 +81,14 @@ class Bridge(BaseManifold):
         self._check_input_types(root, tail)
 
         super().__init__(
-            root, stability, stretch_param, fixed_point, name, tail, branch_index
+            root,
+            stability,
+            stretch_param,
+            fixed_point,
+            name,
+            tail,
+            branch_index,
+            manifold_key=manifold_key,
         )
 
         self.iterated: bool = False
@@ -69,16 +96,20 @@ class Bridge(BaseManifold):
         self.children: list[Bridge] = []
         self.next_bridge: Optional[Bridge] = None
         self.prev_bridge: Optional[Bridge] = None
-        self.first_intersection: Optional[Intersection] = None
-        self.second_intersection: Optional[Intersection] = None
+        self.first_intersection: Optional[int] = first_intersection
+        self.second_intersection: Optional[int] = second_intersection
 
-        # we likely in here want to have these bridges have a quick reference
-        # to the two intersection points that define it.
-        # bridges are uniquely defined based on the two intersection points
-        # that it connects.
-        # A dictionary that has tuples as a key where the tuple is the two intersection
-        # points that the bridge connects.
-        # I think that storage mechanism should exist inside of the Tangle object
+    @property
+    def partial(self) -> bool:
+        """
+        Whether an endpoint of this piece is not a crossing.
+
+        Derived from the endpoint ids rather than stored, so it can never disagree
+        with them. True for the leading/trailing piece of an iterated bridge that
+        starts or ends mid-arc (see the class docstring); False for every bridge in
+        the topological sense.
+        """
+        return self.first_intersection is None or self.second_intersection is None
 
     def _check_input_types(self, root: Point, tail: Point):
         """

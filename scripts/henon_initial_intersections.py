@@ -44,7 +44,7 @@ tangle = tanglepack.Tangle()
 
 initial_guess = [4, -4]
 
-fixed_point = fp_solver.construct_fixed_point(initial_guess, 2)
+fixed_point = fp_solver.construct_fixed_point(initial_guess)
 
 print(f"The fixed point is: {fixed_point.coordinates[0]}")
 
@@ -77,15 +77,16 @@ def intersections():
     """Index both manifolds and resolve every crossing between them.
 
     ``add_manifolds`` bulk-loads the whole segment set into the rtree in one pass
-    and records the candidate crossing pairs; ``populate_intersection_dict`` then
-    resolves each pair into an ``Intersection``.
+    and records the candidate crossing pairs; ``resolve_crossings`` then resolves
+    each pair into an ``Intersection`` and hands them back -- the Tangle keeps only
+    the segment index, never the crossings themselves.
     """
     tangle.add_manifolds([unstable_manifold, stable_manifold])
-    tangle.populate_intersection_dict()
+    return tangle.resolve_crossings()
 
 
-intersections()
-print(f"Intersections: {tangle._intersecting_coords.values()}")
+crossings = intersections()
+print(f"Intersections: {[ix.coords for ix in crossings]}")
 
 fig = plt.figure()
 
@@ -94,8 +95,8 @@ unstable_manifold.plot("blue", show_points=show_points)
 stable_manifold.plot("red", show_points=show_points)
 plt.scatter(*fixed_point.coordinates[0], c="k", s=7)
 
-for point in tangle._intersecting_coords.values():
-    plt.scatter(*point, c="k", s=7, zorder=10)
+for crossing in crossings:
+    plt.scatter(*crossing.coords, c="k", s=7, zorder=10)
 
 plt.xlim([-15, 15])
 plt.ylim([-15, 15])

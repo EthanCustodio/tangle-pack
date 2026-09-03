@@ -59,8 +59,8 @@ initial_guess = [[0, 1], [-1, 0], [-1, 1]]
 initial_guess_zero = [4, -4]
 # initial_guess = [6.104, 0]
 
-fixed_point = fp_solver.construct_fixed_point(initial_guess, 2)
-fixed_point_zero = fp_solver.construct_fixed_point(initial_guess_zero, 2)
+fixed_point = fp_solver.construct_fixed_point(initial_guess)
+fixed_point_zero = fp_solver.construct_fixed_point(initial_guess_zero)
 
 
 print(f"fixed point: {fixed_point.coordinates}")
@@ -156,13 +156,6 @@ for i in range(fixed_point.period):
     unstable_manifold.plot(color="blue")
     stable_manifold.plot(color="red")
     plt.scatter(*fixed_point.coordinates[i], c="k", s=12)
-
-# unstable_manifold.plot(show_points=True, color="blue")
-# stable_manifold.plot(show_points=True, color="red")
-# plt.scatter(*fixed_point.coordinates[0], c="k", s=7)
-
-# for point in tangle._intersecting_coords.values():
-#     plt.scatter(*point, c="k", s=7, zorder=10)
 
 
 plt.xlim([-6, 6])

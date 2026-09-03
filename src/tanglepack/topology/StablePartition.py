@@ -148,7 +148,8 @@ fixed in conversation with the author (July 2026):
   unstable branch from its ENDPOINT intersections instead of from
   ``Bridge.manifold_key``: every branch's anchor artifact sits at unstable
   cdist 0, so one branch's anchor was handed to another branch's first bridge
-  and the backward chain stepped onto the wrong branch.
+  and the backward chain stepped onto the wrong branch. Since plan row 2.3 the
+  key is required at construction and the endpoint-derived fallback is gone.
 * Propagation start: a reference whose pair has no spanning Bridge object
   (after a blast there is no bridge between a parent-manifold crossing and
   a blast-child crossing) punches no direct hole, but its orbit still
@@ -159,9 +160,9 @@ fixed in conversation with the author (July 2026):
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
 StrongPip/Pseudoneighbor but is unvalidated. Containing-bridge lookup compares
 unstable cdists, which are only comparable on the same unstable branch, so it
-is filtered by ``Bridge.manifold_key``; a bridge with no key at all
-(iterated-bridge children) is still accepted on cdist evidence alone, a path
-Phase 2.3 deletes. A pseudoneighbor pair with no spanning Bridge object
+is filtered by ``Bridge.manifold_key``, which every bridge carries. A
+``partial`` piece (an image arc bounded by fewer than two crossings) has no
+span to contain anything and is skipped. A pseudoneighbor pair with no spanning Bridge object
 (after blasting there is no bridge between a parent-manifold crossing and a
 blast-child crossing) punches no hole and therefore contributes nothing to the
 partition — an open gap in the punching layer, see punch_holes' warning. A
@@ -391,7 +392,7 @@ def propagate_reference_holes(
             continue
         cycle = forward_unstable_branch_cycle(fixed_point)
         k = len(cycle)
-        beta = lambda_u ** (1.0 / k)
+        beta = fixed_point.per_step_beta("unstable")
 
         span, pos = _bridge_unstable_span(trellis, bridge, cycle)
         if pos is None and k > 1:
@@ -1089,8 +1090,12 @@ def _hole_openings(
             where they hold by construction). No warning.
 
     Returns:
-        The ``Hole.openings`` records, one per defining intersection.
+        The ``Hole.openings`` records, one per defining intersection. Empty for a
+        ``partial`` piece: it is bounded by fewer than two crossings, so it has no
+        defining intersections to open intervals at.
     """
+    if bridge.partial:
+        return []
     near_id, far_id = _near_far(
         trellis, bridge.first_intersection, bridge.second_intersection
     )
@@ -1286,30 +1291,15 @@ def _bridge_unstable_span(
     """A bridge's (lo, hi) unstable-cdist span and its branch-cycle position.
 
     The branch identity comes from ``Bridge.manifold_key`` — the key the bridge
-    inherited from the parent unstable manifold it was cut out of. The endpoint
-    intersections' ``manifold_a_key`` is only a fallback for a keyless bridge
-    (an iterated-bridge child): every branch's anchor artifact sits at unstable
-    cdist 0, so the after-the-fact endpoint assignment can hand one branch's
-    anchor to another branch's first bridge and the endpoint keys then name the
-    wrong branch (plan row 1.1; Phase 2.3 deletes the fallback).
+    inherited from the parent unstable manifold it was cut out of, required at
+    construction (plan row 2.3). The endpoint intersections' ``manifold_a_key``
+    is never consulted: every branch's anchor sits at unstable cdist 0, so an
+    endpoint-derived branch could name the wrong one.
     """
     a = trellis.intersection(bridge.first_intersection)
     b = trellis.intersection(bridge.second_intersection)
     lo, hi = sorted((a.unstable_cdist, b.unstable_cdist))
-    if bridge.manifold_key is not None:
-        pos = cycle.index(bridge.manifold_key) if bridge.manifold_key in cycle else None
-        return (lo, hi), pos
-    logger.debug(
-        "Bridge (%s, %s) has no manifold_key; inferring its unstable branch "
-        "from its endpoint intersections",
-        bridge.first_intersection,
-        bridge.second_intersection,
-    )
-    pos = None
-    for ix in (a, b):
-        if ix.manifold_a_key is not None and ix.manifold_a_key in cycle:
-            pos = cycle.index(ix.manifold_a_key)
-            break
+    pos = cycle.index(bridge.manifold_key) if bridge.manifold_key in cycle else None
     return (lo, hi), pos
 
 
@@ -1322,31 +1312,24 @@ def _containing_bridge(
     """
     The bridge whose unstable-cdist span contains ``span``.
 
-    A bridge carrying a ``manifold_key`` is kept only when that key IS
-    ``branch_key``: the key is the bridge's own branch identity, inherited from
-    the parent unstable manifold, whereas its endpoint intersections' keys are
-    unreliable until Phase 2 (every branch's anchor artifact sits at unstable
-    cdist 0, so one branch's anchor can be assigned to another branch's first
-    bridge, and that bridge would then be accepted as a container on a branch
-    it does not live on). A keyless bridge (an iterated-bridge child) is still
-    accepted on cdist evidence alone, as the Dev Notes describe. Among multiple
-    containers the tightest (smallest) span wins.
+    A bridge is kept only when its own ``manifold_key`` IS ``branch_key``: the
+    key is the bridge's branch identity, inherited from the parent unstable
+    manifold at cut time (plan row 2.3). Its endpoint intersections' keys are
+    never used instead — every branch's anchor sits at unstable cdist 0, so a
+    bridge could be accepted as a container on a branch it does not live on.
+    Among multiple containers the tightest (smallest) span wins.
     """
     lo, hi = span
     slack = rtol * (hi - lo)
     best = None
     best_width = np.inf
     for bridge in trellis.bridges:
-        if bridge.first_intersection is None or bridge.second_intersection is None:
+        if bridge.partial:
+            continue
+        if branch_key is not None and bridge.manifold_key != branch_key:
             continue
         a = trellis.intersection(bridge.first_intersection)
         b = trellis.intersection(bridge.second_intersection)
-        if branch_key is not None and bridge.manifold_key != branch_key:
-            if bridge.manifold_key is not None:
-                continue
-            keys = {a.manifold_a_key, b.manifold_a_key} - {None}
-            if keys and branch_key not in keys:
-                continue
         b_lo, b_hi = sorted((a.unstable_cdist, b.unstable_cdist))
         if b_lo - slack <= lo and hi <= b_hi + slack:
             if (b_hi - b_lo) < best_width:
@@ -1386,7 +1369,12 @@ def _punch_in_bridge(
     the bridge's defining intersections (see :func:`_hole_openings`). Without
     it the containing bridge's own midpoint and chord are the fallback and
     the openings default to the inward pair.
+
+    Returns None for a ``partial`` piece: a hole is punched between a bridge's two
+    defining crossings, and a partial piece has fewer than two.
     """
+    if bridge.partial:
+        return None
     near_id, far_id = _near_far(
         trellis, bridge.first_intersection, bridge.second_intersection
     )

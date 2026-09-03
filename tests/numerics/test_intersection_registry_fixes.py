@@ -21,7 +21,7 @@ from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 
 def _stub_fixed_point(lambda_u: float) -> FixedPoint:
     """A minimal period-1 FixedPoint carrying one unstable eigenvalue."""
-    fp = FixedPoint(1, 1)
+    fp = FixedPoint(1)
     fp.unstable_eigenvalues = [np.array([lambda_u])]
     fp.stable_eigenvalues = [np.array([1.0 / lambda_u])]
     return fp

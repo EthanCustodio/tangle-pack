@@ -33,6 +33,8 @@ class BaseManifold:
         name (string, optional): Name of the manifold
         branch_index (int): If the manifold is attached to a fixed point with inversion
             this attribute specifies which branch the manifold eminates from.
+        manifold_key (ManifoldKey): ``(fixed_point, stability, orbit_index,
+            branch_index)`` -- the branch this manifold is. Required at construction.
     """
 
     def __init__(
@@ -44,7 +46,8 @@ class BaseManifold:
         name="unnamed",
         tail: Optional[Point | BranchPoint] = None,
         branch_index: Optional[int] = None,
-        manifold_key: Optional[ManifoldKey] = None,
+        *,
+        manifold_key: Optional[ManifoldKey],
     ):
         """
         Initializes the manifold.
@@ -61,6 +64,14 @@ class BaseManifold:
             branch_index (Optional[int], optional): If the manifold is attached to a
                 fixed point with inversion this attribute specifies which branch the
                 manifold eminates from. Defaults to None.
+            manifold_key (Optional[ManifoldKey]): Keyword-only and REQUIRED --
+                ``(fixed_point, stability, orbit_index, branch_index)``, the single
+                source of truth for which branch this manifold is. It is the key
+                :attr:`TangleWorkbench.manifolds` stores the manifold under and the
+                key every crossing detected on it records. Pass ``None`` only for a
+                transient forward image whose branch the caller has yet to advance
+                (``ManifoldMachine.iterate_manifold``); the caller must set it before
+                the object is indexed or registered.
         """
 
         self.root = root

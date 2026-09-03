@@ -52,7 +52,7 @@ def test_workbench_keeps_single_copy_per_bridge(henon_p3_session):
         sig = workbench._bridge_signature(bridge)
         if sig is None:
             continue
-        key = workbench._manifold_identity(bridge)
+        key = bridge.manifold_key
         for other in by_manifold[key]:
             assert not workbench._signatures_match(sig, other), (
                 f"two registered bridges on one manifold share signature {sig}"

@@ -99,7 +99,9 @@ class _StubManifold:
 
     def __init__(self, stability: str) -> None:
         self.stability = stability
-        self.manifold_key = None
+        # Every indexed unstable curve carries its branch key (plan 2.3/2.6); the
+        # stub uses a placeholder fixed point since nothing here reads it.
+        self.manifold_key = (None, stability, 0, 0)
 
 
 def _shallow_pair(length: float, angle: float):
@@ -175,5 +177,6 @@ def test_parallel_offset_pair_yields_no_crossing_and_no_exception():
 def test_small_tangle_crossing_count_is_unchanged(small_tangle):
     """The relative epsilons must not change the k=10 fixture's crossing count."""
     workbench, _fp = small_tangle
-    assert len(workbench.Tangle.iter_intersection_coords()) == 2
+    coords = {ix.coords for _iid, ix in workbench.intersection_registry}
+    assert len(coords) == 2
     assert len(workbench.intersection_registry) == 2

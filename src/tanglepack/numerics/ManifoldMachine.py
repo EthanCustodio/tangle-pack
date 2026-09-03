@@ -74,6 +74,7 @@ class ManifoldMachine:
             stretch_param=stretch_param,
             fixed_point=fixed_point,
             branch_index=key[3],
+            manifold_key=key,
         )
 
         if isinstance(view.root, BranchPoint):
@@ -133,11 +134,10 @@ class ManifoldMachine:
             # a single chain of k_value pieces already visits both branches
             start_branches = [0]
         else:
-            start_branches = (
-                list(range(fixed_point.num_branches))
-                if branch_index is None
-                else [branch_index]
-            )
+            # Without inversion each eigendirection is its own chain, so growing
+            # "every branch" means every direction that was initialized; the
+            # view lookup below skips the ones that were not.
+            start_branches = [0, 1] if branch_index is None else [branch_index]
 
         for b in start_branches:
             key = fixed_point.advance_key((fixed_point, stability, 0, b), -step)
@@ -201,14 +201,17 @@ class ManifoldMachine:
                 else:
                     point.insert_prev_iterate(new_points[i])
 
+            # The image of a piece lives on the branch one map step forward, which
+            # only the caller can name (see iterate_bridge); the machine leaves the
+            # key unset rather than copying the un-advanced one.
             new_iterated_points = initalizer.construct_manifold_from_point_list(
                 new_points,
                 manifold.stability,
                 manifold.stretch_param,
                 manifold.fixed_point,
                 manifold.branch_index,
+                manifold_key=None,
             )
-            new_iterated_points.manifold_key = manifold.manifold_key
 
         # if there were points that needed to be mapped
         if not len(non_iterated_coords) == 0:
@@ -222,6 +225,7 @@ class ManifoldMachine:
                     manifold.fixed_point,
                     tail=old_points[-1],
                     branch_index=manifold.branch_index,
+                    manifold_key=None,
                 )
 
                 mapped_manifold = self.merge_manifolds(
@@ -279,6 +283,7 @@ class ManifoldMachine:
                     tail=last_iterate,
                     name=manifold.name,
                     branch_index=manifold.branch_index,
+                    manifold_key=None,
                 )
                 return iterated_bridge
             else:
@@ -290,6 +295,7 @@ class ManifoldMachine:
                     fixed_point=manifold.fixed_point,
                     tail=last_iterate,
                     branch_index=manifold.branch_index,
+                    manifold_key=None,
                 )
 
                 return iterated_manifold
@@ -299,14 +305,18 @@ class ManifoldMachine:
         Iterates a bridge forward and returns another bridge.
 
         Args:
-            manifold (Bridge): Bridge to titerate forward.
+            manifold (Bridge): Bridge to iterate forward.
+
+        Returns:
+            The forward image, with ``manifold_key`` left unset. The image lies on
+            the branch one map step forward of the parent's, so writing the
+            parent's (un-advanced) key here would mislabel it; the caller
+            (:meth:`TangleWorkbench.iterate_bridge`) advances the key and sets it
+            before the image is indexed.
         """
 
         # TODO consider how this method is handling bridge classes
         iterated_manifold = self.iterate_manifold(manifold)
-        iterated_manifold.manifold_key = (
-            manifold.manifold_key
-        )  # propagate for Tangle lookup
 
         # we want to check if the resulting manifold conforms to our bridge standards
         # That could happen in Bridge if we want it to

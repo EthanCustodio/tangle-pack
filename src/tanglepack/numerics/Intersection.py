@@ -6,7 +6,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 if TYPE_CHECKING:
+    from .BaseManifold import BaseManifold
     from .FixedPoint import FixedPoint
+    from .Point import Point
 
 # ManifoldKey = (fixed_point, stability, orbit_index, branch_index)
 # Identical to the key type used in TangleWorkbench.manifolds.
@@ -27,6 +29,15 @@ class Intersection:
         seg_ids: The pair of R-tree segment IDs that produced this crossing.
             None for synthetic intersections.
         label: Optional human-readable name.
+        unstable_manifold: The unstable curve the crossing was detected on --
+            an indexed manifold or an iterated bridge. ``Tangle.create_bridges``
+            groups crossings by it, because a bridge and the manifold it was cut
+            out of share a ``manifold_key`` but are distinct polylines.
+        unstable_segment: The two adjacent points of ``unstable_manifold`` that
+            bracket the crossing, captured at resolve time. These are the head
+            and tail candidates a cut at this crossing uses; capturing them here
+            keeps them stable even after a separator point is spliced into the
+            same segment. None for a synthetic crossing.
     """
 
     def __init__(
@@ -39,6 +50,8 @@ class Intersection:
         label: Optional[str] = None,
         manifold_a_key: Optional[ManifoldKey] = None,
         manifold_b_key: Optional[ManifoldKey] = None,
+        unstable_manifold: Optional["BaseManifold"] = None,
+        unstable_segment: Optional[tuple["Point", "Point"]] = None,
     ):
         self.coords = coords
         self.unstable_cdist = unstable_cdist
@@ -48,6 +61,8 @@ class Intersection:
         self.label = label
         self.manifold_a_key = manifold_a_key
         self.manifold_b_key = manifold_b_key
+        self.unstable_manifold = unstable_manifold
+        self.unstable_segment = unstable_segment
 
     @classmethod
     def from_segments(
@@ -60,6 +75,8 @@ class Intersection:
         manifold_a_key: Optional[ManifoldKey] = None,
         manifold_b_key: Optional[ManifoldKey] = None,
         label: Optional[str] = None,
+        unstable_manifold: Optional["BaseManifold"] = None,
+        unstable_segment: Optional[tuple["Point", "Point"]] = None,
     ) -> Intersection:
         """Create an Intersection backed by two R-tree segment IDs."""
         return cls(
@@ -70,6 +87,8 @@ class Intersection:
             label=label,
             manifold_a_key=manifold_a_key,
             manifold_b_key=manifold_b_key,
+            unstable_manifold=unstable_manifold,
+            unstable_segment=unstable_segment,
         )
 
     @property

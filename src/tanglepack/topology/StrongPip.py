@@ -28,19 +28,22 @@ Mapping back (the map-free shortcut):
     r onto B we map it back i_r steps, where i_r = minimal backward steps in the
     forward branch cycle that carry r's stable branch onto B.
   * Canonical distance scales geometrically under the map, so we never need the real
-    inverse map: one forward step of M scales the unstable cdist by lambda_u^(1/k_value)
-    and the stable cdist by lambda_u^(-1/k_value) (k_value forward steps = one full
-    return to the same branch, scaling by lambda_u^(±1), the full-cycle eigenvalue).
+    inverse map: one forward step of M multiplies the unstable cdist by
+    beta = FixedPoint.per_step_beta("unstable") and divides the stable cdist by it.
+    beta is |lambda_u|^(1/period) -- the period-th root, because the stored
+    eigenvalue is that of the full-cycle Jacobian DM^period. Without inversion
+    (k_value == period) a branch return is one orbit and costs lambda_u; with
+    inversion it takes k_value = 2*period steps and costs lambda_u squared.
     The PDF writes this for the stable cdist purely as an *example* of the map-free
     scaling — the same holds for the unstable cdist independently; both are used.
     The per-step factor was confirmed empirically against the period-3 Henon trellis.
   * "Get it onto W^S(z'_0, q0)" (algorithm step 2) is a membership test: r counts
-    only if its mapped STABLE cdist s_r·lambda_u^(i_r/k) lands on the open arc, i.e.
+    only if its mapped STABLE cdist s_r·beta^(i_r) lands on the open arc, i.e.
     is < s0. This is also what fixes the number of backward maps (the lift): mapping
     the minimal i_r steps always shrinks the unstable cdist, so without the stable
     arc test every candidate is trivially disqualified and nothing is a strong pip
     (verified empirically). For the survivors, the mapped UNSTABLE cdist
-    u_r·lambda_u^(-i_r/k) is compared against q0's u0 (algorithm step 3).
+    u_r·beta^(-i_r) is compared against q0's u0 (algorithm step 3).
 
 A disqualifier must land strictly inside the open box (0, s0) x (0, u0). q0's own
 orbit maps back onto q0 itself (a collision on BOTH canonical distances), so without
@@ -84,15 +87,13 @@ def forward_stable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey]:
     """
     Return the fixed point's stable branches in forward-iteration (M) order.
 
-    Element j maps to element j+1 (mod len) under one application of M. The cycle
-    has length ``fixed_point.k_value`` — one entry per stable branch (period
-    branches without inversion, 2*period with inversion).
-
-    The orbit cycling under M is taken from ``get_iterable_array("unstable")``
-    (the M-forward orbit order, along which the unstable manifold grows); the
-    stable manifold of z_i maps under M to the stable manifold of M(z_i), so the
-    stable branches cycle in the same orbit order. With inversion, the branch
-    index flips after each full pass around the orbit.
+    Thin wrapper around :meth:`FixedPoint.branch_cycle`, which is the single
+    source of truth for the chain of manifold pieces one map step walks. Element
+    j maps to element j+1 (mod len) under one application of M; the cycle has
+    length ``fixed_point.k_value``. The stable manifold of z_i maps under M to
+    the stable manifold of M(z_i), so the stable branches cycle in the same
+    (forward) orbit order the unstable ones do -- growing the stable manifold
+    backwards is a different question and does not enter here.
 
     Args:
         fixed_point: The fixed point whose stable branches to order.
@@ -101,20 +102,14 @@ def forward_stable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey]:
         List of manifold keys (fixed_point, "stable", orbit_index, branch_index)
         in forward-iteration order.
     """
-    orbit_order = fixed_point.get_iterable_array("unstable")
-    branch_indices = fixed_point.get_branch_array()
-    cycle: list[ManifoldKey] = []
-    for branch_index in branch_indices:
-        for orbit_index in orbit_order:
-            cycle.append((fixed_point, "stable", orbit_index, branch_index))
-    return cycle
+    return fixed_point.branch_cycle("stable")
 
 
 def _branch_position_map(
     fixed_point: "FixedPoint",
 ) -> tuple[dict[ManifoldKey, int], int]:
     """Return (position-of-each-stable-branch, cycle length k_value)."""
-    cycle = forward_stable_branch_cycle(fixed_point)
+    cycle = fixed_point.branch_cycle("stable")
     return {key: i for i, key in enumerate(cycle)}, len(cycle)
 
 
@@ -130,9 +125,10 @@ def is_strong_pip(
     Classify whether a single intersection is a strong pip.
 
     Implements Is-Strong-Pip(q0, T): every trellis intersection is mapped back onto
-    q0's stable branch using the canonical-distance scaling law, and q0 is a strong
-    pip iff none of them lands strictly inside the open box (0, s0) x (0, u0) — on
-    the stable arc W^S(z'_0, q0) and inside the unstable arc.
+    q0's stable branch using the canonical-distance scaling law (one map step is
+    :meth:`FixedPoint.per_step_beta`), and q0 is a strong pip iff none of them lands
+    strictly inside the open box (0, s0) x (0, u0) — on the stable arc
+    W^S(z'_0, q0) and inside the unstable arc.
 
     q0's own orbit maps back onto q0 itself (a collision on both canonical
     distances), so without guarding against it q0's iterates falsely disqualify q0 —
@@ -179,12 +175,12 @@ def is_strong_pip(
     fixed_point = branch_key[0]
     s0 = q0.stable_cdist
     u0 = q0.unstable_cdist
-    lambda_u = trellis.lambda_u(fixed_point)
-    if lambda_u is None:
+    if trellis.lambda_u(fixed_point) is None:
         raise ValueError(
             f"Fixed point of intersection {intersection_id} has no unstable "
             "eigenvalue; cannot scale canonical distances."
         )
+    beta = fixed_point.per_step_beta("unstable")
 
     if _cache is not None and fixed_point in _cache:
         pos_map, k = _cache[fixed_point]
@@ -204,8 +200,8 @@ def is_strong_pip(
         tol = trellis.registry.cdist_tol
 
     # Map every intersection back onto q0's stable branch by the minimal i_r
-    # backward steps in the branch cycle, scaling stable cdist by lambda_u^(i_r/k)
-    # and unstable cdist by lambda_u^(-i_r/k) (both map-free). A disqualifier is one
+    # backward steps in the branch cycle, scaling stable cdist by beta^(i_r) and
+    # unstable cdist by beta^(-i_r) (both map-free). A disqualifier is one
     # that lands strictly inside the open box (0, s0) x (0, u0): on the stable arc
     # W^S(z'_0, q0) (stable_rep < s0) and inside the unstable arc (unstable_rep < u0).
     # Among those, the innermost (smallest mapped unstable cdist) is reported.
@@ -236,8 +232,11 @@ def is_strong_pip(
             # Stable branch of a different fixed point — cannot map onto B.
             continue
         backward_steps = (pos_r - pos_B) % k
-        stable_rep = r.stable_cdist * (lambda_u ** (backward_steps / k))
-        unstable_rep = r.unstable_cdist * (lambda_u ** (-backward_steps / k))
+        # backward_steps applications of M^-1: the stable cdist grows by beta per
+        # step, the unstable one shrinks by it (beta is the ONE map step factor,
+        # FixedPoint.per_step_beta -- never a hand-rolled root of lambda_u).
+        stable_rep = r.stable_cdist * (beta ** backward_steps)
+        unstable_rep = r.unstable_cdist * (beta ** -backward_steps)
 
         # q0's own orbit maps back onto q0 itself — a collision on BOTH cdists. That
         # is the same point, not a disqualifier, so skip it. Requiring a collision on

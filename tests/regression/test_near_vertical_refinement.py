@@ -33,7 +33,9 @@ def _curved_manifold(coords):
     pa.forward, p0.backward = p0, pa
     p0.forward, p1.backward = p1, p0
     p1.forward, pb.backward = pb, p1
-    manifold = BaseManifold(pa, "unstable", 1.0, fixed_point=None, tail=pb)
+    manifold = BaseManifold(
+        pa, "unstable", 1.0, fixed_point=None, tail=pb, manifold_key=None
+    )
     return manifold, (p0, p1)
 
 

@@ -42,7 +42,7 @@ man_machine = tanglepack.ManifoldMachine(henon)
 
 initial_guess = [4, -4]
 
-fixed_point = fp_solver.construct_fixed_point(initial_guess, 1)
+fixed_point = fp_solver.construct_fixed_point(initial_guess)
 
 print(f"The fixed point is: {fixed_point.coordinates[0]}")
 

@@ -30,7 +30,7 @@ from tanglepack.topology.TrellisBranch import TrellisBranch
 
 def _fixed_point(period: int, lambda_u: float) -> FixedPoint:
     """A minimal no-inversion fixed point with a positive unstable eigenvalue."""
-    fp = FixedPoint(period, 1)
+    fp = FixedPoint(period)
     fp.unstable_eigenvalues = [lambda_u] * period
     fp.set_k_value()
     return fp
@@ -112,6 +112,10 @@ class _StubBridge:
         self.second_intersection = second
         self.manifold_key = manifold_key
         self._points = np.asarray(points, dtype=np.float64)
+
+    @property
+    def partial(self) -> bool:
+        return self.first_intersection is None or self.second_intersection is None
 
     def get_point_array(self, return_nodes: bool = False):
         return self._points
@@ -852,18 +856,6 @@ def test_bridge_span_reads_the_branch_from_the_bridges_own_key(two_branch_bridge
     assert pos == 0  # the shared anchor's own key would say 1
 
 
-def test_bridge_span_falls_back_to_endpoints_for_a_keyless_bridge(two_branch_bridges):
-    """A bridge with no key of its own (an iterated-bridge child) is still
-    placed from its endpoints — the path Phase 2.3 removes."""
-    from tanglepack.topology.StablePartition import _bridge_unstable_span
-
-    trellis, cycle, bridges = two_branch_bridges
-    bridges[0].manifold_key = None
-    _span, pos = _bridge_unstable_span(trellis, bridges[0], cycle)
-
-    assert pos == 1
-
-
 def test_containing_bridge_filters_on_the_bridges_own_key(two_branch_bridges):
     """The container of a backward image is looked up on the image's branch.
 
@@ -878,15 +870,3 @@ def test_containing_bridge_filters_on_the_bridges_own_key(two_branch_bridges):
     assert _containing_bridge(trellis, (0.1, 0.5), cycle[0]) is bridges[0]
     assert _containing_bridge(trellis, (0.1, 0.5), cycle[2]) is None
 
-
-def test_containing_bridge_accepts_a_keyless_bridge_on_cdist_evidence(
-    two_branch_bridges,
-):
-    """A keyless bridge whose endpoints do not contradict the branch is still
-    accepted, and being tighter it wins."""
-    from tanglepack.topology.StablePartition import _containing_bridge
-
-    trellis, cycle, bridges = two_branch_bridges
-    bridges[0].manifold_key = None
-
-    assert _containing_bridge(trellis, (0.1, 0.5), cycle[1]) is bridges[0]

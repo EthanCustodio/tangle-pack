@@ -36,7 +36,7 @@ def test_initialization_unstable():
 
     fp_solver = FixedPointSolver(henon)
 
-    fixed_point = fp_solver.construct_fixed_point(initial_guess, 1)
+    fixed_point = fp_solver.construct_fixed_point(initial_guess)
 
     man_maker = ManifoldInitializer(henon)
 
@@ -56,7 +56,7 @@ def test_initialization_stable():
 
     fp_solver = FixedPointSolver(henon)
 
-    fixed_point = fp_solver.construct_fixed_point(initial_guess, 1)
+    fixed_point = fp_solver.construct_fixed_point(initial_guess)
 
     man_maker = ManifoldInitializer(henon)
 
@@ -77,7 +77,7 @@ def _k10_fixed_point():
     """The k=10 binary-horseshoe saddle at [4, -4], oriented, with k_value set."""
     henon = DynamicalSystem(henon_map, henon_map_inverse)
     fp_solver = FixedPointSolver(henon)
-    fixed_point = fp_solver.construct_fixed_point([4, -4], 2)
+    fixed_point = fp_solver.construct_fixed_point([4, -4])
     man_maker = ManifoldInitializer(henon)
     man_maker.orient_manifolds(
         fixed_point,
@@ -131,7 +131,7 @@ def _p3_jacobian(point):
 def _p3_fixed_point():
     system = DynamicalSystem(_p3_map, _p3_map_inverse, _p3_jacobian)
     fp_solver = FixedPointSolver(system)
-    fixed_point = fp_solver.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]], 2)
+    fixed_point = fp_solver.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
     man_maker = ManifoldInitializer(system)
     man_maker.orient_manifolds(
         fixed_point,

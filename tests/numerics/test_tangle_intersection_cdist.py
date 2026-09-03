@@ -3,6 +3,9 @@
 Every legitimate crossing is exactly one unstable + one stable segment (CLAUDE.md).
 Each crossing's cdist along a manifold is interpolated between the two endpoint
 cdists of the segment that produced it, so it must lie between them.
+
+The resolved crossings are read from the ``IntersectionRegistry``, which owns them;
+the Tangle keeps only the segment index (plan row 2.1).
 """
 
 from __future__ import annotations
@@ -12,10 +15,10 @@ import numpy as np
 
 def test_intersections_have_both_cdists(small_tangle):
     workbench, fp = small_tangle
-    tangle = workbench.Tangle
-    assert len(tangle._intersections) > 0, "fixture produced no intersections"
+    registry = workbench.intersection_registry
+    assert len(registry) > 0, "fixture produced no intersections"
 
-    for ix in tangle._intersections:
+    for _iid, ix in registry:
         # both cdists must be populated; the fixed point, if detected as a
         # crossing, legitimately sits at cdist 0, so only require non-negative.
         assert ix.unstable_cdist is not None and ix.unstable_cdist >= 0
@@ -41,7 +44,7 @@ def test_crossing_cdist_lies_between_segment_endpoints(small_tangle):
     workbench, _ = small_tangle
     tangle = workbench.Tangle
 
-    for ix in tangle._intersections:
+    for _iid, ix in workbench.intersection_registry:
         if ix.seg_ids is None:
             continue
         for seg_id in ix.seg_ids:

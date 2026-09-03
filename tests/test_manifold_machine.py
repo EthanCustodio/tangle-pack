@@ -60,6 +60,7 @@ def _old_new_grow_manifold(self, fixed_point, stability, branch_index=None):
             stretch_param=1,
             fixed_point=fixed_point,
             branch_index=b,
+            manifold_key=(fixed_point, stability, orbit_indices[0], b),
         )
 
         temp_root = current_manifold.root
@@ -90,6 +91,7 @@ def _old_new_grow_manifold(self, fixed_point, stability, branch_index=None):
                     stretch_param=current_manifold.stretch_param,
                     fixed_point=fixed_point,
                     branch_index=bi,
+                    manifold_key=(fixed_point, stability, next_orbit_idx, bi),
                 )
 
                 temp_root = next_manifold.root

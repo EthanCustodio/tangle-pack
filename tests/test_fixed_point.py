@@ -7,11 +7,12 @@ from tanglepack import FixedPoint
 def test_create_fixed_point():
 
     period = 3
-    num_branches = 2
-    p = FixedPoint(period, num_branches)
+    p = FixedPoint(period)
 
     assert len(p.coordinates) == period
-    assert p.branch_points[0].num_branches == num_branches
+    # Both eigendirection slots are allocated regardless of inversion; how many
+    # of them the k-chain visits is FixedPoint.num_branches (plan 2.8).
+    assert p.branch_points[0].num_branches == 2
     assert len(p.stable_eigenvalues) == period
     assert len(p.stable_eigenvectors) == period
     assert len(p.unstable_eigenvalues) == period
@@ -31,11 +32,10 @@ def test_create_fixed_point():
 # --------------------------------------------------------------------------- #
 def _bare_fixed_point(period: int, *, inversion: bool = False) -> FixedPoint:
     """A FixedPoint carrying only the data ``advance_key`` needs (period, k_value)."""
-    fp = FixedPoint(period, 2)
-    if inversion:
-        fp.unstable_eigenvalues = [-2.0] * period
-    else:
-        fp.unstable_eigenvalues = [2.0] * period
+    fp = FixedPoint(period)
+    sign = -1.0 if inversion else 1.0
+    fp.unstable_eigenvalues = [sign * 2.0] * period
+    fp.stable_eigenvalues = [sign * 0.5] * period
     fp.set_k_value()
     return fp
 
@@ -124,18 +124,83 @@ def test_advance_key_rejects_a_foreign_fixed_point():
 def test_advance_key_rejects_an_out_of_range_branch(inversion):
     """Both paths reject a branch index the fixed point does not have."""
     fp = _bare_fixed_point(2, inversion=inversion)
-    assert fp.num_branches == 2
 
     for bad_branch in (-1, 2):
         with pytest.raises(ValueError, match="branch_index"):
             fp.advance_key((fp, "unstable", 0, bad_branch), 1)
 
 
-def test_advance_key_rejects_a_branch_beyond_a_single_branch_point():
-    fp = FixedPoint(3, 1)
-    fp.unstable_eigenvalues = [2.0] * 3
-    fp.set_k_value()
+def test_advance_key_carries_the_second_eigendirection_of_a_simple_saddle():
+    """A saddle without inversion has one branch per eigendirection, each its own
+    invariant chain: the branch index is carried, never flipped, and both are
+    valid keys even though ``num_branches`` (the chain length in branches) is 1."""
+    fp = _bare_fixed_point(3)
+    assert fp.num_branches == 1
 
     assert fp.advance_key((fp, "unstable", 0, 0), 1) == (fp, "unstable", 1, 0)
-    with pytest.raises(ValueError, match="branch_index"):
-        fp.advance_key((fp, "unstable", 0, 1), 1)
+    assert fp.advance_key((fp, "unstable", 0, 1), 1) == (fp, "unstable", 1, 1)
+
+
+# --------------------------------------------------------------------------- #
+# Plan 2.8 -- num_branches is DERIVED from inversion, never passed in
+# --------------------------------------------------------------------------- #
+def test_num_branches_is_derived_from_inversion():
+    assert _bare_fixed_point(3).num_branches == 1
+    assert _bare_fixed_point(3, inversion=True).num_branches == 2
+    assert _bare_fixed_point(1).num_branches == 1
+    assert _bare_fixed_point(1, inversion=True).num_branches == 2
+
+
+def test_num_branches_needs_the_k_value():
+    fp = FixedPoint(3)
+    with pytest.raises(ValueError, match="k_value"):
+        fp.num_branches
+
+
+def test_num_branches_agrees_with_get_branch_array():
+    for fp in (
+        _bare_fixed_point(1),
+        _bare_fixed_point(3),
+        _bare_fixed_point(2, inversion=True),
+    ):
+        assert fp.get_branch_array() == list(range(fp.num_branches))
+
+
+def test_fixed_point_takes_no_branch_count():
+    """The constructor derives everything from the period."""
+    with pytest.raises(TypeError):
+        FixedPoint(3, 2)
+
+
+def test_both_eigendirection_slots_are_always_allocated():
+    """A planar saddle has two eigendirections whether or not the chain uses both.
+
+    ``num_branches`` counts the branches the k-chain visits; the BranchPoint still
+    carries a slot for each eigendirection, so a simple saddle can be initialized
+    on both sides of its fixed point.
+    """
+    fp = FixedPoint(3)
+    for branch_point in fp.branch_points:
+        assert branch_point.num_branches == 2
+        assert len(branch_point.forward_branches) == 2
+        assert len(branch_point.backward_branches) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Plan 2.5 -- set_k_value guards the eigenvalue signs
+# --------------------------------------------------------------------------- #
+def test_set_k_value_rejects_disagreeing_eigenvalue_signs():
+    """An orientation-reversing map (det J < 0) cannot be modelled by one k_value."""
+    fp = FixedPoint(1)
+    fp.unstable_eigenvalues = [6.48]
+    fp.stable_eigenvalues = [-0.154]
+    with pytest.raises(ValueError, match="sign"):
+        fp.set_k_value()
+
+
+def test_set_k_value_tolerates_unset_stable_eigenvalues():
+    """Eigenvalues left at their 0.0 placeholder carry no sign to disagree with."""
+    fp = FixedPoint(2)
+    fp.unstable_eigenvalues = [-2.0, -2.0]
+    fp.set_k_value()
+    assert fp.k_value == 4

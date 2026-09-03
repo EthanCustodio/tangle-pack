@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import bisect
 import logging
-from typing import Callable, Literal, Optional, TYPE_CHECKING
+from typing import Callable, Iterable, Literal, Optional, TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
@@ -40,7 +40,7 @@ class IntersectionRegistry:
         registry.iterate_table[id, n]            → int or None
         registry.by_unstable_cdist               → list[int]  (sorted by u-cdist)
         registry.by_stable_cdist                 → list[int]  (sorted by s-cdist)
-        registry.graph                           → nx.MultiDiGraph (live)
+        registry.graph(bridges=None)             → nx.MultiDiGraph (live)
 
     Query interface (all return list[Intersection]):
         registry.on_interval(lo, hi)             → pre-images that map into [lo, hi]
@@ -59,6 +59,7 @@ class IntersectionRegistry:
         _cdist_index: dict[tuple[float, float], int]  — secondary collision index
         _graph: nx.MultiDiGraph
         _graph_adjacency_dirty: bool
+        _graph_bridges: Optional[list[tuple[int, int]]]
     """
 
     def __init__(self, cdist_tol: float = 1e-6):
@@ -73,6 +74,9 @@ class IntersectionRegistry:
 
         self._graph: nx.MultiDiGraph = nx.MultiDiGraph()
         self._graph_adjacency_dirty: bool = False
+        # The bridge endpoint pairs the current unstable adjacency was built
+        # from (None = the per-branch cdist fallback).
+        self._graph_bridges: Optional[list[tuple[int, int]]] = None
 
     # ── core insert / lookup ───────────────────────────────────────────────
 
@@ -82,7 +86,7 @@ class IntersectionRegistry:
 
         If a collision is detected (another intersection with cdists within
         self.cdist_tol), the existing ID is returned and no duplicate is stored.
-        On a new insertion, the node is added to self.graph immediately.
+        On a new insertion, the node is added to the live graph immediately.
 
         Args:
             intersection: The Intersection to register.
@@ -219,6 +223,7 @@ class IntersectionRegistry:
             )
             remap[fid] = old._find_collision(ix)
         self._graph_adjacency_dirty = True
+        self._graph_bridges = None
 
         return remap
 
@@ -262,27 +267,62 @@ class IntersectionRegistry:
 
     # ── live graph ─────────────────────────────────────────────────────────
 
-    @property
-    def graph(self) -> nx.MultiDiGraph:
+    def graph(
+        self, bridges: Optional[Iterable[tuple[int, int]]] = None
+    ) -> nx.MultiDiGraph:
         """
         The live intersection graph.
 
         Nodes are intersection IDs. Two edge types are maintained:
           - type="adjacency", stability="unstable"/"stable":
-              connects consecutive intersections in the respective sorted ordering.
-              These are rebuilt lazily whenever the sorted order changes.
+              connects crossings that are NEIGHBOURS ON ONE BRANCH -- see
+              :meth:`_rebuild_adjacency_edges`. Rebuilt lazily.
           - type="iterate", n=<int>:
               directed edge (p → f^n(p)) added by register_iterate().
 
         The graph is always up to date w.r.t. nodes and iterate edges.
-        Adjacency edges are rebuilt on first access after any add().
+
+        Args:
+            bridges: Optional ``(first_id, second_id)`` endpoint pairs of the
+                bridges cut out of the unstable manifold. When given, these ARE
+                the unstable adjacency: a bridge is by definition the piece of
+                unstable manifold between two consecutive crossings, and the
+                registry has no other way to know where the manifold was cut
+                (an iterated bridge lays new curve the per-branch cdist order
+                cannot see). Without them the unstable side falls back to the
+                per-branch canonical-distance order.
+
+        Returns:
+            nx.MultiDiGraph: The live graph. Callers that decorate it must work
+            on a copy.
+
+        Note:
+            The returned object is owned by the registry and is rebuilt in
+            place; a different ``bridges`` argument rebuilds the adjacency. In
+            particular a later call WITHOUT ``bridges`` reverts the live unstable
+            adjacency to the per-branch cdist fallback, so a caller that wants
+            the bridge adjacency must pass it every time (or hold a copy).
         """
-        if self._graph_adjacency_dirty:
-            self._rebuild_adjacency_edges()
+        bridge_pairs = None if bridges is None else [tuple(b) for b in bridges]
+        if self._graph_adjacency_dirty or bridge_pairs != self._graph_bridges:
+            self._rebuild_adjacency_edges(bridge_pairs)
         return self._graph
 
-    def _rebuild_adjacency_edges(self):
-        """Remove and rebuild all adjacency-type edges from the current sorted lists."""
+    def _rebuild_adjacency_edges(
+        self, bridges: Optional[list[tuple[int, int]]] = None
+    ) -> None:
+        """
+        Rebuild every adjacency edge from the PER-BRANCH orderings.
+
+        Canonical distance is measured from each branch's own anchor, so a global
+        cdist sort is meaningless across branches: on a period-p orbit it
+        interleaves the p stable branches and joins crossings that are not
+        neighbours on any curve. Adjacency is therefore built one branch at a
+        time -- stable edges from the crossings sharing a ``manifold_b_key``, in
+        stable-cdist order; unstable edges from the given bridges, or from the
+        crossings sharing a ``manifold_a_key`` in unstable-cdist order when no
+        bridges are supplied.
+        """
         stale = [
             (u, v, k)
             for u, v, k, d in self._graph.edges(keys=True, data=True)
@@ -291,8 +331,20 @@ class IntersectionRegistry:
         for u, v, k in stale:
             self._graph.remove_edge(u, v, k)
 
-        for i in range(len(self._unstable_order) - 1):
-            u, v = self._unstable_order[i], self._unstable_order[i + 1]
+        if bridges is None:
+            unstable_pairs = self._consecutive_on_branch("unstable")
+        else:
+            unstable_pairs = [
+                (u, v)
+                for u, v in bridges
+                if u is not None
+                and v is not None
+                and u != v
+                and u in self._graph
+                and v in self._graph
+            ]
+
+        for i, (u, v) in enumerate(unstable_pairs):
             self._graph.add_edge(
                 u,
                 v,
@@ -301,8 +353,7 @@ class IntersectionRegistry:
                 stability="unstable",
             )
 
-        for i in range(len(self._stable_order) - 1):
-            u, v = self._stable_order[i], self._stable_order[i + 1]
+        for i, (u, v) in enumerate(self._consecutive_on_branch("stable")):
             self._graph.add_edge(
                 u,
                 v,
@@ -311,7 +362,29 @@ class IntersectionRegistry:
                 stability="stable",
             )
 
+        self._graph_bridges = bridges
         self._graph_adjacency_dirty = False
+
+    def _consecutive_on_branch(
+        self, stability: Literal["unstable", "stable"]
+    ) -> list[tuple[int, int]]:
+        """Neighbouring id pairs within each branch, in that branch's cdist order."""
+        order = (
+            self._unstable_order if stability == "unstable" else self._stable_order
+        )
+        per_branch: dict[ManifoldKey, list[int]] = {}
+        for ix_id in order:  # already sorted by cdist, so each group inherits it
+            ix = self._store[ix_id]
+            key = ix.manifold_a_key if stability == "unstable" else ix.manifold_b_key
+            if key is None:
+                continue  # no branch identity: it belongs to no arc
+            per_branch.setdefault(key, []).append(ix_id)
+
+        return [
+            (ids[i], ids[i + 1])
+            for ids in per_branch.values()
+            for i in range(len(ids) - 1)
+        ]
 
     # ── iterate table ──────────────────────────────────────────────────────
 
@@ -328,6 +401,7 @@ class IntersectionRegistry:
                 target_id,
                 key=f"iter_{source_id}_{n}",
                 type="iterate",
+                stability="unstable",
                 n=n,
             )
 

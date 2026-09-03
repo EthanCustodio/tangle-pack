@@ -23,7 +23,7 @@ from tanglepack.topology.TrellisBranch import TrellisBranch
 
 def _fixed_point(period: int, lambda_u: float) -> FixedPoint:
     """A minimal no-inversion fixed point with a positive unstable eigenvalue."""
-    fp = FixedPoint(period, 1)
+    fp = FixedPoint(period)
     fp.unstable_eigenvalues = [lambda_u] * period
     fp.set_k_value()
     return fp

@@ -5,6 +5,7 @@ from .BranchPoint import BranchPoint
 from .DynamicalSystem import DynamicalSystem
 from .ManifoldMachine import ManifoldMachine
 from .BaseManifold import BaseManifold
+from .Intersection import ManifoldKey
 from .Point import Point
 import numpy as np
 
@@ -240,10 +241,10 @@ class ManifoldInitializer:
             first_back - fixed_point.coordinates[orbit_index]
         )
 
-        alpha = distance_first / distance_prev
-        # I injected this sqrt(2) in here to try and break the rational latice
-        # that I think is formed without its
-        alpha = alpha ** (1 / fixed_point.k_value)
+        # distance_first / distance_prev is the growth over one full return to
+        # this branch (k_value map steps); the fixed point converts it to the
+        # per-map-step factor the points carry as their stretch parameter.
+        alpha = fixed_point.per_step_factor(distance_first / distance_prev)
 
         first_point.stretch_param = alpha
 
@@ -310,6 +311,7 @@ class ManifoldInitializer:
             fixed_point,
             tail=first_point,
             branch_index=branch_index,
+            manifold_key=(fixed_point, stability, orbit_index, branch_index),
         )
 
     def construct_manifold_from_point_list(
@@ -319,6 +321,8 @@ class ManifoldInitializer:
         stretch_param: float,
         fixed_point: FixedPoint,
         branch_index=None,
+        *,
+        manifold_key: Optional[ManifoldKey],
     ) -> BaseManifold:
         """
         Constructs a manifold from a list of Point objects.
@@ -334,12 +338,21 @@ class ManifoldInitializer:
             fixed_point (FixedPoint): The fixed point the new manifold emanates from.
             branch_index (int, optional): The branch index of the fixed point this
                 manifold emanates from.
+            manifold_key (Optional[ManifoldKey]): Keyword-only and required -- the
+                branch the new manifold is (``None`` only for a transient forward
+                image whose branch the caller has yet to advance).
 
         Returns:
             BaseManifold: The resulting manifold made from the list.
         """
 
-        manifold = BaseManifold(points[0], stability, stretch_param, fixed_point)
+        manifold = BaseManifold(
+            points[0],
+            stability,
+            stretch_param,
+            fixed_point,
+            manifold_key=manifold_key,
+        )
 
         current_point = manifold.root
 
@@ -458,16 +471,19 @@ class ManifoldInitializer:
         Args:
             fixed_point (FixedPoint): Fixed point to grow the manifolds from.
             stability (Literal["unstable", "stable"]): Stability of the manifold.
-            num_branches (int): Number of branches to initialize. Must be 1 or 2.
-                Ignored for inversion points, which always initialize both branches.
+            num_branches (int): Number of EIGENDIRECTIONS to seed. Must be 1 or 2.
+                Ignored for inversion points, whose single chain always covers
+                both branches. For a point without inversion the two directions
+                are two independent chains, so 2 is a legitimate request even
+                though ``fixed_point.num_branches`` is 1 (that property counts
+                the branches of ONE chain -- plan 2.8).
 
         Returns:
             Dict[Tuple[int, int], BaseManifold]: All initial fundamental segments.
                 The tuple structure is (orbit_index, branch_index).
 
         Raises:
-            ValueError: If ``num_branches`` is not 1 or 2, or exceeds the number of
-                branches the fixed point was allocated.
+            ValueError: If ``num_branches`` is not 1 or 2.
 
         Note:
             The chain is walked with :meth:`FixedPoint.advance_key`: ``+1`` for the
@@ -487,15 +503,17 @@ class ManifoldInitializer:
             there.
         """
 
+        if num_branches not in (1, 2):
+            raise ValueError(f"num_branches must be 1 or 2, got {num_branches}")
+
         orbit_indices = fixed_point.get_iterable_array(stability)
         step = 1 if stability == "unstable" else -1
 
         if fixed_point.check_inversion():
-            if num_branches > 1:
-                logger.debug(
-                    "num_branches is ignored for inversion points; "
-                    "both branches are always initialized."
-                )
+            # num_branches is not consulted here: the single chain of k_value
+            # pieces visits both branches whatever the caller asked for, and the
+            # only value that differs from that outcome is the default 1 -- so
+            # warning about it would fire on every ordinary call.
             branch_indices = fixed_point.get_branch_array()  # always [0, 1]
 
             initial_segments = {
@@ -513,6 +531,10 @@ class ManifoldInitializer:
                 key = fixed_point.advance_key(key, step)
                 orbit_index, branch_index = key[2], key[3]
                 segment = self.machine.iterate_manifold(segment)
+                # iterate_manifold builds the image without a branch identity (it
+                # cannot advance the key itself); the chain walk knows it exactly.
+                segment.manifold_key = key
+                segment.branch_index = branch_index
                 initial_segments[(orbit_index, branch_index)] = segment
                 self.machine._insert_point_geometrically(
                     fixed_point.branch_points[orbit_index],
@@ -522,14 +544,6 @@ class ManifoldInitializer:
                 )
 
         else:
-            if num_branches not in (1, 2):
-                raise ValueError(f"num_branches must be 1 or 2, got {num_branches}")
-            if num_branches > fixed_point.num_branches:
-                raise ValueError(
-                    f"num_branches={num_branches} exceeds the fixed point's "
-                    f"allocated num_branches={fixed_point.num_branches}"
-                )
-
             branch_indices = list(range(num_branches))
 
             initial_segments = {
@@ -550,6 +564,8 @@ class ManifoldInitializer:
                     key = fixed_point.advance_key(key, step)
                     orbit_index, branch_index = key[2], key[3]
                     segment = self.machine.iterate_manifold(segment)
+                    segment.manifold_key = key
+                    segment.branch_index = branch_index
                     initial_segments[(orbit_index, branch_index)] = segment
                     self.machine._insert_point_geometrically(
                         fixed_point.branch_points[orbit_index],

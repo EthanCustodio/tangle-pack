@@ -23,7 +23,7 @@ def henon_map_inverse(point):
 def test_located_fixed_point_is_actually_fixed():
     system = DynamicalSystem(henon_map, henon_map_inverse)
     solver = FixedPointSolver(system)
-    fp = solver.construct_fixed_point([4, -4], 1)
+    fp = solver.construct_fixed_point([4, -4])
 
     coord = np.asarray(fp.coordinates[0], dtype=float).ravel()[:2]
     image = np.asarray(henon_map(coord), dtype=float).ravel()[:2]
@@ -36,7 +36,7 @@ def test_eigenvalues_are_saddle_like():
     """An area-preserving saddle has eigenvalues lambda and 1/lambda."""
     system = DynamicalSystem(henon_map, henon_map_inverse)
     solver = FixedPointSolver(system)
-    fp = solver.construct_fixed_point([4, -4], 1)
+    fp = solver.construct_fixed_point([4, -4])
 
     u = float(np.abs(np.asarray(fp.unstable_eigenvalues, dtype=float).ravel()[0]))
     s = float(np.abs(np.asarray(fp.stable_eigenvalues, dtype=float).ravel()[0]))
@@ -102,13 +102,13 @@ def test_non_saddle_fixed_point_raises():
     solver = FixedPointSolver(system)
 
     with pytest.raises(ValueError, match="saddle"):
-        solver.construct_fixed_point([1.1, 0.9], 1)
+        solver.construct_fixed_point([1.1, 0.9])
 
 
 def test_orient_hook_is_honoured():
     """The optional orient hook may re-sign the eigenvectors it is handed."""
     system = DynamicalSystem(henon_map, henon_map_inverse)
-    baseline = FixedPointSolver(system).construct_fixed_point([4, -4], 1)
+    baseline = FixedPointSolver(system).construct_fixed_point([4, -4])
 
     seen: list[int] = []
 
@@ -117,7 +117,7 @@ def test_orient_hook_is_honoured():
         return -unstable, stable
 
     oriented = FixedPointSolver(system, orient=flip_unstable).construct_fixed_point(
-        [4, -4], 1
+        [4, -4]
     )
 
     assert seen == [0]
@@ -139,7 +139,7 @@ def test_period_three_orbit_at_k_two_is_accepted():
         return np.array([-y, x + 2 - y**2])
 
     solver = FixedPointSolver(DynamicalSystem(henon_k2, henon_k2_inverse))
-    fp = solver.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]], 2)
+    fp = solver.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
 
     for i in range(3):
         u = float(np.abs(np.asarray(fp.unstable_eigenvalues[i], dtype=float).ravel()[0]))

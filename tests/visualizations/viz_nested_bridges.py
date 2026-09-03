@@ -102,7 +102,7 @@ def find_nested_pairs(workbench):
     for bridge in workbench.bridges:
         sig = workbench._bridge_signature(bridge)
         if sig is not None:
-            by_manifold[workbench._manifold_identity(bridge)].append((sig, bridge))
+            by_manifold[bridge.manifold_key].append((sig, bridge))
 
     pairs = []
     for items in by_manifold.values():

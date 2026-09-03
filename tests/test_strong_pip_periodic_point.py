@@ -21,7 +21,7 @@ def _fixed_point(period: int, lambda_u: float) -> FixedPoint:
     """A minimal period-`period` (no-inversion) fixed point with a positive
     unstable eigenvalue, enough for the strong-pip math (k_value, lambda_u,
     branch cycle)."""
-    fp = FixedPoint(period, 1)
+    fp = FixedPoint(period)
     fp.unstable_eigenvalues = [lambda_u] * period
     fp.set_k_value()
     return fp

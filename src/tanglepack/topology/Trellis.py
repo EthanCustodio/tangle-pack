@@ -423,29 +423,41 @@ class Trellis:
         fixed_point: "FixedPoint",
     ) -> Optional[float]:
         """
-        Scale a canonical distance under n forward iterations of the map.
+        Scale a canonical distance under n applications of the MAP.
 
-        Uses the eigenvalue relation rather than the dynamical map:
-            unstable: c_dist(M^n) = c_dist · lambda_u^n
-            stable:   c_dist(M^n) = c_dist / lambda_u^n
-        Pass a negative n for backward iterates (the Strong Pip Algorithm maps
-        intersections back onto a stable branch this way).
+        Uses the eigenvalue relation rather than the dynamical map itself:
+            unstable: c_dist(M^n) = c_dist · beta^n
+            stable:   c_dist(M^n) = c_dist / beta^n
+        where ``beta = fixed_point.per_step_beta("unstable")`` is the factor of
+        ONE map step. Pass a negative n for backward iterates (the Strong Pip
+        Algorithm maps intersections back onto a stable branch this way).
 
         Args:
             cdist: The starting canonical distance.
-            n: Number of forward iterations (negative for backward).
+            n: Number of MAP STEPS (negative for backward). One full return to
+                the same branch is ``k_value`` steps, so a caller counting branch
+                returns passes ``returns * fixed_point.k_value`` -- which scales
+                by ``|lambda| ** num_branches`` per return, i.e. by the
+                eigenvalue itself only when the point has no inversion.
             stability: Which manifold's cdist is being scaled.
-            fixed_point: Fixed point supplying lambda_u.
+            fixed_point: Fixed point supplying the per-step factor.
 
         Returns:
-            The scaled canonical distance, or None if lambda_u is unavailable.
+            The scaled canonical distance, or None if the eigenvalue is
+            unavailable.
+
+        Note:
+            The unit is map steps, not branch returns: ``advance_key``,
+            ``per_step_beta`` and this method all count the same thing, so a
+            crossing's image after ``n`` steps is on ``advance_key(key, n)`` at
+            ``scale_cdist(c, n, ...)``.
         """
-        lam = self.lambda_u(fixed_point)
-        if lam is None:
+        if self.lambda_u(fixed_point) is None:
             return None
+        beta = fixed_point.per_step_beta("unstable")
         if stability == "unstable":
-            return cdist * (lam ** n)
-        return cdist / (lam ** n)
+            return cdist * (beta ** n)
+        return cdist / (beta ** n)
 
     # ── result storage ──────────────────────────────────────────────────────
 

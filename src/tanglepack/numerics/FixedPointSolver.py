@@ -17,11 +17,21 @@ logger.addHandler(logging.NullHandler())
 """
 Dev Notes:
 
-num_branches. There should be a way to remove this entirely from the 
-contruction method. That information is contained within the k_value
-Though we may want to keep it if someone wants to compute both sides. 
-We would need to think through that case more explicitly, it might
-be detrimental to have it in like this actually.
+The branch count is no longer an input to construct_fixed_point (plan 2.8): it
+is derived from the eigenvalues by FixedPoint.num_branches (2 with inversion, 1
+without). Growing a NON-inversion saddle on both of its eigendirections is still
+supported, but it is a request made per manifold at initialization time
+(ManifoldInitializer.construct_kevin_way / TangleWorkbench.initialize_manifold),
+not a property of the fixed point -- the two directions are two independent
+one-branch chains there, not the two halves of one chain.
+
+FixedPoint.set_k_value rejects a point whose unstable and stable eigenvalues
+disagree in sign. det DM^period = (det DM)^period, so on an orientation-reversing
+map (det J < 0) that product is negative for every ODD-period orbit: the guard
+therefore closes the door on odd-period orbits of det < 0 maps entirely, not just
+on the occasional awkward one. Even-period orbits of such a map are fine (the
+product is positive). Supporting the odd case needs a per-stability inversion
+flag rather than one k_value, which is a data-model change, not a solver one.
 """
 
 
@@ -84,7 +94,7 @@ class FixedPointSolver:
         self.orient = orient
 
     def construct_fixed_point(
-        self, initial_guess: NDArray[np.float64], num_branches: int
+        self, initial_guess: NDArray[np.float64]
     ) -> FixedPoint:
         """
         Computes the fixed point from an initial guess using a multipoint
@@ -94,11 +104,15 @@ class FixedPointSolver:
         Args:
             initial_guess (np.ndarray): A (period, 2) array.
                 Each row is an initial guess for one iterate.
-            num_branches (int): Number of branches the fixed point has.
-                Based on inversion.
 
         Returns:
-            FixedPoint: The fully constructed fixed point.
+            FixedPoint: The fully constructed fixed point. Its branch count is
+                derived from the eigenvalues by ``FixedPoint.num_branches``.
+
+        Raises:
+            ValueError: If the orbit does not converge, if the eigenvalues are
+                not a real saddle pair, or if the unstable and stable
+                eigenvalues disagree in sign (``FixedPoint.set_k_value``).
         """
 
         period, _ = np.shape(np.atleast_2d(initial_guess))
@@ -113,7 +127,7 @@ class FixedPointSolver:
 
         eigenvalues, eigenvectors = self.compute_eigenvectors(fixed_point, jacobians)
 
-        point = FixedPoint(period, num_branches)
+        point = FixedPoint(period)
 
         point.coordinates = fixed_point
         point.accuracy = accuracy

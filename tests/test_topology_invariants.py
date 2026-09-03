@@ -165,7 +165,7 @@ def _row_trellis(*, split_branches: bool = False):
     outward crossing is attributed to a second stable branch, which is what
     makes a bridge exempt from the row invariant.
     """
-    fp = FixedPoint(1, 1)
+    fp = FixedPoint(1)
     fp.unstable_eigenvalues = [4.0]
     fp.set_k_value()
     reg = IntersectionRegistry()

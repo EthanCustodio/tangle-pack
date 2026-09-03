@@ -57,10 +57,19 @@ Implementation notes:
   unstable curves (different orbit points, or the two inversion half-branches,
   which join only through the anchor — itself a trellis point) cannot be
   connected by an open unstable arc, so such a pair is rejected outright.
-* One map step scales an unstable canonical distance by beta = lambda_u^(1/k)
-  (per TangleWorkbench._register_forward_iterate). Trellis.scale_cdist scales
-  by lambda_u^n where n counts *full branch returns*, not map steps, so beta is
-  computed locally here.
+* One map step scales an unstable canonical distance by
+  FixedPoint.per_step_beta("unstable") = |lambda_u|^(1/period); Trellis.scale_cdist
+  applies the same factor n times. Both count MAP STEPS, never branch returns.
+* OPEN (inversion only): two places here still use the bare eigenvalue as the
+  factor of a full BRANCH RETURN -- _resolve_reference_end's cdist fallback
+  (stable / lambda_u, unstable * lambda_u after `period` steps) and the m-loop in
+  _unstable_interval_is_clear (`lambda_u ** m` per k-step cycle, and log_lambda in
+  the m-range). That identity holds only without inversion, where k == period and
+  a return is one orbit. With inversion a branch return is k_value = 2 * period
+  steps and multiplies the cdist by beta ** k_value == lambda_u ** num_branches,
+  i.e. lambda_u squared. Both should read beta ** steps (or
+  Trellis.scale_cdist in map steps) before the pseudoneighbor algorithm is run on
+  an inversion trellis; today no fixture reaches them with one.
 * The all-iterates membership test is closed-form, not a loop over n: a
   candidate r on unstable branch at cycle position pos_r lands on the target
   branch only for step counts n = d + m*k, d = (pos_target - pos_r) mod k,
@@ -90,11 +99,8 @@ def forward_unstable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey
     """
     Return the fixed point's unstable branches in forward-iteration (M) order.
 
-    Element j maps to element j+1 (mod len) under one application of M — the
-    unstable mirror of :func:`~tanglepack.topology.StrongPip.forward_stable_branch_cycle`,
-    cycling through the same orbit order (the unstable manifold of z_i maps
-    under M to the unstable manifold of M(z_i)). With inversion the branch
-    index flips after each full pass around the orbit.
+    Thin wrapper around :meth:`FixedPoint.branch_cycle`, which is the single
+    source of truth for the chain of manifold pieces one map step walks.
 
     Args:
         fixed_point: The fixed point whose unstable branches to order.
@@ -103,13 +109,7 @@ def forward_unstable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey
         List of manifold keys (fixed_point, "unstable", orbit_index,
         branch_index) in forward-iteration order, of length ``k_value``.
     """
-    orbit_order = fixed_point.get_iterable_array("unstable")
-    branch_indices = fixed_point.get_branch_array()
-    cycle: list[ManifoldKey] = []
-    for branch_index in branch_indices:
-        for orbit_index in orbit_order:
-            cycle.append((fixed_point, "unstable", orbit_index, branch_index))
-    return cycle
+    return fixed_point.branch_cycle("unstable")
 
 
 def compute_pseudoneighbors(
@@ -188,7 +188,7 @@ def compute_pseudoneighbors(
             )
         cycle = forward_unstable_branch_cycle(fixed_point)
         pos_map, k = {key: i for i, key in enumerate(cycle)}, len(cycle)
-        beta = lambda_u ** (1.0 / k)
+        beta = fixed_point.per_step_beta("unstable")
 
         r_end = _resolve_reference_end(trellis, branch, r_n, lambda_u, match_rtol)
         if r_end is None:
@@ -270,7 +270,7 @@ def extend_pseudoneighbor_trajectories(
             cycle_cache[fixed_point] = (
                 {key: i for i, key in enumerate(cycle)},
                 cycle,
-                None if lambda_u is None else lambda_u ** (1.0 / len(cycle)),
+                None if lambda_u is None else fixed_point.per_step_beta("unstable"),
             )
         pos_map, cycle, beta = cycle_cache[fixed_point]
         if beta is None:
