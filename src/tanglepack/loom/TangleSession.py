@@ -35,6 +35,13 @@ class TangleSession:
     ``session.compute_intersections(...)`` all work, while the session adds
     :meth:`trellis` and :meth:`resonance_zone` on top.
 
+    The predicate-driven growth drivers
+    (:meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.grow_until` and
+    its ``grow_until_iterates_closed`` / ``grow_until_faces_closed`` wrappers) are
+    delegated to the workbench like any other growth call, and need no help from
+    the session: every round they run moves the workbench generation, so the next
+    :meth:`trellis` or :meth:`arrangement` call rebuilds itself.
+
     Attributes:
         workbench: The underlying TangleWorkbench.
 

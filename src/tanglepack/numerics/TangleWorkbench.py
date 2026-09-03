@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated, Callable, Literal, Iterable, Optional
+from typing import Annotated, Callable, Literal, Iterable, Optional, Sequence, Union
 import numpy.typing as npt
 from numpy.typing import NDArray
 
@@ -516,6 +516,378 @@ class TangleWorkbench:
                 return None
 
         raise ValueError("Max iterations reached, no intersection found")
+
+    # ── predicate-driven growth ──────────────────────────────────────────────
+
+    def grow_until(
+        self,
+        fixed_point: FixedPoint,
+        predicate: Callable[["TangleWorkbench"], bool],
+        *,
+        grow: Sequence[Stability] = ("unstable", "stable"),
+        max_iterations: int = 10,
+        branch_index: int = 0,
+    ) -> int:
+        """
+        Grow a tangle one iteration at a time until the caller's predicate holds.
+
+        Each round grows ONE iteration on every stability named in ``grow``, then
+        recomputes the crossings of every fixed point that has manifolds --
+        together, in one :class:`~.Tangle.Tangle`, so heteroclinic crossings are
+        seen -- with ``preserve_ids=True``, and re-infers the iterate table. The
+        predicate is then asked whether the tangle is big enough.
+
+        ``preserve_ids=True`` is what makes the loop usable at all: a predicate is
+        written in terms of crossing ids the caller held BEFORE the loop started,
+        and a renumbering recompute would hand those ids to unrelated crossings
+        halfway through.
+
+        The predicate is checked BEFORE the first growth, so a request that is
+        already satisfied costs nothing.
+
+        Args:
+            fixed_point: The fixed point whose manifolds are grown. (Every fixed
+                point's crossings are recomputed; only this one's manifolds move.)
+            predicate: Called with this workbench after each recompute (and once
+                before any growth). Return True to stop.
+            grow: Which stabilities to advance each round. Defaults to both.
+            max_iterations: Growth rounds to attempt before giving up. Defaults
+                to 10, matching :meth:`grow_until_turnaround`.
+            branch_index: Which eigenvector branch to grow. Defaults to 0. On an
+                INVERSION point it is ignored (one chain covers both branches) and
+                ``None`` is forwarded to :meth:`grow_n_times` so the per-round
+                "branch_index is ignored" warning is not emitted ten times.
+
+        Returns:
+            The number of growth rounds performed: 0 when the predicate was
+            already true.
+
+        Raises:
+            ValueError: If ``grow`` is empty, if a named manifold has not been
+                initialized, or if the cap is reached with the predicate still
+                false.
+
+        Note:
+            Only ONE branch grows. On a simple saddle whose two eigendirections
+            were both seeded (``num_branches=2``) the other branch stays where it
+            is, so a predicate about the whole tangle can sit false forever; drive
+            the branches in separate calls, or grow the other one by hand first.
+
+        Note:
+            If the workbench already carries bridges they are recut each round
+            (:meth:`rebuild_bridges`): growth inserts new crossings between the
+            endpoints of existing bridges, so the old cut stops describing the
+            curve. That recut DROPS the image bridges and partial pieces produced
+            by :meth:`iterate_bridge`, so a blast frontier does not survive a
+            growth round -- see :meth:`_recut_bridges_after_growth`, which warns
+            about what it cost and clears the ``iterated`` flag of every bridge
+            whose image can no longer be derived.
+        """
+        stabilities = tuple(grow)
+        if not stabilities:
+            raise ValueError("grow must name at least one stability to advance.")
+
+        for stability in stabilities:
+            if self.manifolds.get((fixed_point, stability, 0, branch_index)) is None:
+                raise ValueError(
+                    f"Manifold for fixed point {fixed_point} with stability "
+                    f"{stability} and branch_index {branch_index} has not been "
+                    "initialized. Please run initialize_manifold first."
+                )
+
+        # An inversion point's two branches are one chain; passing a branch index
+        # would only earn a warning from ManifoldMachine on every single round.
+        growth_branch = None if fixed_point.check_inversion() else branch_index
+
+        if predicate(self):
+            return 0
+
+        for round_index in range(1, max_iterations + 1):
+
+            for stability in stabilities:
+                self.grow_n_times(
+                    fixed_point, stability, num_iterations=1, branch_index=growth_branch
+                )
+
+            self.compute_intersections(
+                self._fixed_points_with_manifolds(),
+                infer_iterates=True,
+                preserve_ids=True,
+            )
+            if self._bridges or self._partial_bridges:
+                self._recut_bridges_after_growth()
+
+            if predicate(self):
+                return round_index
+
+        raise ValueError(
+            f"Max iterations ({max_iterations}) reached without the growth "
+            "predicate becoming true; choose a higher cap or a different "
+            "stopping condition."
+        )
+
+    def _recut_bridges_after_growth(self) -> None:
+        """
+        Recut the bridge set against the grown curves, and repair the blast state.
+
+        Two things go wrong if a growth round leaves the bridges alone or recuts
+        them naively:
+
+        * an uncut bridge is no longer a pair of CONSECUTIVE crossings on its
+          branch (growing the stable manifold drops new crossings inside it), and
+          the arrangement asserts exactly that;
+        * :meth:`rebuild_bridges` carries the ``iterated`` flag across by id, but
+          the recut DROPS the image bridges and partial pieces that flag was
+          recording. A bridge left marked ``iterated`` whose
+          :meth:`image_bridges` is ``None`` is invisible to
+          :meth:`uniiterated_bridges` and can never be re-derived, so a later
+          blast silently skips it.
+
+        The flag is therefore cleared wherever the image is gone, and the whole
+        repair is logged at WARNING: losing a frontier is a real cost to whoever
+        was mid-blast, not an implementation detail.
+
+        Note:
+            Only a ``None`` image clears the flag. An EMPTY image list is a
+            different statement -- the image span is known and simply carries no
+            cut bridges yet -- and re-iterating that bridge would duplicate work
+            rather than recover anything.
+        """
+        before_ids = set(self._bridges)
+        partials_before = len(self._partial_bridges)
+
+        self.rebuild_bridges()
+
+        dropped = sorted(before_ids - set(self._bridges))
+        cleared: list[BridgeId] = []
+        for bid, bridge in self._bridges.items():
+            if bridge.iterated and self.image_bridges(bid) is None:
+                bridge.iterated = False
+                cleared.append(bid)
+
+        if dropped or partials_before or cleared:
+            logger.warning(
+                "growth round recut the bridge set: dropped %d identified bridge(s) "
+                "%s and %d partial piece(s); cleared the 'iterated' flag on %d "
+                "bridge(s) %s whose forward image can no longer be derived. A blast "
+                "frontier does not survive a growth round.",
+                len(dropped),
+                dropped,
+                partials_before,
+                len(cleared),
+                sorted(cleared),
+            )
+
+    def _fixed_points_with_manifolds(self) -> list[FixedPoint]:
+        """The fixed points that own at least one registered manifold, in insertion order."""
+        selected: list[FixedPoint] = []
+        seen: set[FixedPoint] = set()
+        for fp, _stability, _orbit_index, _branch_index in self._manifolds:
+            if fp not in seen:
+                seen.add(fp)
+                selected.append(fp)
+        return selected
+
+    def _frozen_ids(
+        self,
+        ids: "Union[str, Iterable[int]]",
+        *,
+        fixed_point: Optional[FixedPoint] = None,
+        allow_all: bool = False,
+    ) -> list[int]:
+        """Resolve an id selector against the registry as it stands right now.
+
+        The list is deliberately materialised here rather than re-read inside a
+        predicate: the crossings born during a growth loop must not move the
+        goalposts. ``"all"`` means every non-anchor crossing OF ``fixed_point`` --
+        scoping it to the whole registry would put another tangle's crossings in a
+        set that only this fixed point's growth can ever close.
+        """
+        registry = self._intersection_registry
+        if isinstance(ids, str):
+            if not allow_all or ids != "all":
+                raise ValueError(
+                    f"Unknown id selector {ids!r}; pass an iterable of registry ids"
+                    + (' or "all".' if allow_all else ".")
+                )
+            assert fixed_point is not None, '"all" needs a fixed point to scope to'
+            id_of = {id(ix): iid for iid, ix in registry}
+            selected = sorted(
+                id_of[id(ix)]
+                for ix in registry.from_fixed_point(fixed_point)
+                if not ix.is_synthetic
+            )
+        else:
+            selected = [int(iid) for iid in ids]
+            missing = [iid for iid in selected if iid not in registry]
+            if missing:
+                raise ValueError(f"Crossing ids {missing} are not in the registry.")
+
+        if not selected:
+            raise ValueError(
+                "A growth driver needs at least one crossing id: an empty set is "
+                "satisfied vacuously and the call would do nothing. Compute the "
+                "intersections first, or name the crossings explicitly."
+            )
+        return selected
+
+    def grow_until_iterates_closed(
+        self,
+        fixed_point: FixedPoint,
+        ids: "Union[str, Iterable[int]]" = "all",
+        direction: Literal["forward", "backward"] = "forward",
+        *,
+        max_iterations: int = 10,
+        branch_index: int = 0,
+    ) -> int:
+        """
+        Grow until every crossing in a set has its next iterate detected.
+
+        The image of a crossing one map step forward sits at a LARGER unstable
+        canonical distance (stretched by the unstable eigenvalue) and a smaller
+        stable one, so detecting it needs the unstable manifold grown; a backward
+        image is the mirror image of that statement and needs the stable manifold.
+        The wrapper picks the stability from ``direction`` -- growing the other one
+        would only cost time.
+
+        The id set is frozen at call time. Growth manufactures new crossings every
+        round, and re-reading "all" inside the predicate would add a fresh unclosed
+        crossing for every one just closed, so the loop would run to the cap on
+        every tangle.
+
+        Args:
+            fixed_point: The fixed point whose manifold is grown.
+            ids: Registry ids to close, or ``"all"`` (the default) for every
+                non-anchor crossing OF ``fixed_point`` in the registry at call
+                time. Only this fixed point's manifolds grow, so a set scoped to
+                the whole registry would hold another tangle's crossings hostage
+                and run to the cap in any multi-saddle session. Anchors are left
+                out because their iterates are declared, not detected (an anchor's
+                forward image is the anchor of the NEXT point of the periodic
+                orbit -- itself only when the period is 1).
+            direction: ``"forward"`` for the ``n=+1`` entry, ``"backward"`` for
+                ``n=-1``.
+            max_iterations: Growth rounds to attempt. Defaults to 10.
+            branch_index: Which eigenvector branch to grow. Defaults to 0.
+
+        Returns:
+            The number of growth rounds performed (0 if already closed).
+
+        Raises:
+            ValueError: If ``direction`` is not one of the two directions, if an
+                id is not in the registry, if the id set is empty, or if the cap is
+                reached with some iterate still undetected.
+        """
+        if direction not in ("forward", "backward"):
+            raise ValueError(
+                f"direction must be 'forward' or 'backward', not {direction!r}."
+            )
+
+        step = 1 if direction == "forward" else -1
+        stability: Stability = "unstable" if direction == "forward" else "stable"
+        targets = self._frozen_ids(ids, fixed_point=fixed_point, allow_all=True)
+
+        def closed(workbench: "TangleWorkbench") -> bool:
+            table = workbench.intersection_registry.iterate_table
+            return all((iid, step) in table for iid in targets)
+
+        return self.grow_until(
+            fixed_point,
+            closed,
+            grow=(stability,),
+            max_iterations=max_iterations,
+            branch_index=branch_index,
+        )
+
+    def grow_until_faces_closed(
+        self,
+        fixed_point: FixedPoint,
+        ids: "Iterable[int]",
+        *,
+        grow: Sequence[Stability] = ("unstable", "stable"),
+        max_iterations: int = 10,
+        branch_index: int = 0,
+    ) -> int:
+        """
+        Grow until every face touching a set of crossings is closed.
+
+        A face of the arrangement is open when its boundary runs off the end of a
+        computed manifold, which means the region there is not yet determined: the
+        answer to "what lies on this side of that crossing" is still "grow more".
+        This driver grows until that answer exists for every crossing in ``ids``.
+
+        The arrangement is rebuilt each round over the same fixed points the
+        recompute used, rather than taken from a session cache -- every round moves
+        the workbench generation, so a cache would miss every time anyway. It is
+        deliberately not a single-fixed-point snapshot: that would cut a
+        heteroclinic partner's arcs off and turn real faces into open ones.
+
+        Args:
+            fixed_point: The fixed point whose manifolds are grown.
+            ids: Registry ids whose incident faces must all close. Required and
+                non-empty: an empty set closes vacuously and would make the call a
+                silent no-op.
+            grow: Which stabilities to advance. Defaults to both, because a face
+                is bounded by arcs of both.
+            max_iterations: Growth rounds to attempt. Defaults to 10.
+            branch_index: Which eigenvector branch to grow. Defaults to 0.
+
+        Returns:
+            The number of growth rounds performed (0 if already closed).
+
+        Raises:
+            ValueError: If ``ids`` is empty, if an id is not in the registry, or
+                if the cap is reached with some incident face still open.
+
+        Note:
+            In practice this is a predicate CHECK with a cap rather than a driver
+            that converges. No growth-driven open-to-closed transition has been
+            observed on the k=10 fixture: the real corners of the unbounded face
+            stay on it however far the branches are grown (growing a branch pushes
+            its tip past them but they remain on the outer envelope), and the
+            crossings born by a round are born already interior. Expect either an
+            immediate 0 or the cap.
+
+        Note:
+            An ANCHOR never closes, but that is a limitation of the arrangement's
+            anchor model rather than a fact about periodic points. A periodic point
+            is one degree-four node whose ``u-`` and ``s-`` rays are the OTHER
+            branch's ``u+`` and ``s+``;
+            :meth:`_register_anchors` instead registers one anchor per (unstable
+            branch, stable branch) pair, and the arrangement has no notion of a
+            branch continuing THROUGH a node, so those two slots are filled with
+            virtual stubs and every face through one of them is open. That is the
+            deferred item recorded in the "Inversion caveat" Dev Note of
+            :mod:`tanglepack.topology.Arrangement`; until it is closed, asking for
+            an anchor's faces runs to the cap.
+        """
+        from ..topology.Trellis import Trellis
+
+        targets = self._frozen_ids(ids, fixed_point=fixed_point, allow_all=False)
+
+        def closed(workbench: "TangleWorkbench") -> bool:
+            selection = workbench._fixed_points_with_manifolds()
+            arrangement = Trellis.from_workbench(workbench, selection).arrangement
+            corners: set[int] = set()
+            open_corners: set[int] = set()
+            for face in arrangement.faces:
+                # Virtual tail nodes carry negative ids and are not crossings; a
+                # target is always a real registry id, so they only add noise.
+                for corner in (c for c in face.corners if c >= 0):
+                    corners.add(corner)
+                    if not face.is_closed:
+                        open_corners.add(corner)
+            # A crossing that is not a node of the arrangement at all has no
+            # determined surroundings either, so it does not count as closed.
+            return all(iid in corners and iid not in open_corners for iid in targets)
+
+        return self.grow_until(
+            fixed_point,
+            closed,
+            grow=grow,
+            max_iterations=max_iterations,
+            branch_index=branch_index,
+        )
 
     def compute_intersections(
         self,
