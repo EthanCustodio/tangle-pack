@@ -140,14 +140,15 @@ fixed in conversation with the author (July 2026):
   encodes; and (I2) a bridge whose two crossings lie on the same stable
   branch yields the same ``row`` at both ends, because its endpoints are
   consecutive crossings so the arc between them never crosses the stable
-  manifold again. The public ``check_*`` functions are strict assertions;
-  the production call sites (``_hole_openings`` and ``Trellis.punch_holes``)
-  only LOG the corresponding ``*_violation(s)`` messages, because the nested
-  period-3 tangle currently breaks both — one orbit flips side at a single
-  backward iterate, and one bridge reads opposite rows at its two ends. That
-  is the known period > 1 partition bug whose root cause (``_containing_bridge``
-  filtering on endpoint keys rather than ``Bridge.manifold_key``) plan row
-  1.1 fixes; the wiring is promoted to a hard assertion there.
+  manifold again. Both are hard assertions, checked in ``Trellis.punch_holes``
+  once per orbit and once per bridge (plan row 1.1, 2026-09). The nested
+  period-3 tangle used to break both — one orbit flipped side at a single
+  backward iterate and one bridge read opposite rows at its two ends — because
+  ``_containing_bridge`` and ``_bridge_unstable_span`` inferred a bridge's
+  unstable branch from its ENDPOINT intersections instead of from
+  ``Bridge.manifold_key``: every branch's anchor artifact sits at unstable
+  cdist 0, so one branch's anchor was handed to another branch's first bridge
+  and the backward chain stepped onto the wrong branch.
 * Propagation start: a reference whose pair has no spanning Bridge object
   (after a blast there is no bridge between a parent-manifold crossing and
   a blast-child crossing) punches no direct hole, but its orbit still
@@ -157,9 +158,10 @@ fixed in conversation with the author (July 2026):
 
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
 StrongPip/Pseudoneighbor but is unvalidated. Containing-bridge lookup compares
-unstable cdists, which are only comparable on the same unstable branch; bridges
-whose endpoints lack a manifold_a_key (iterated-bridge children) are accepted
-on cdist evidence alone. A pseudoneighbor pair with no spanning Bridge object
+unstable cdists, which are only comparable on the same unstable branch, so it
+is filtered by ``Bridge.manifold_key``; a bridge with no key at all
+(iterated-bridge children) is still accepted on cdist evidence alone, a path
+Phase 2.3 deletes. A pseudoneighbor pair with no spanning Bridge object
 (after blasting there is no bridge between a parent-manifold crossing and a
 blast-child crossing) punches no hole and therefore contributes nothing to the
 partition — an open gap in the punching layer, see punch_holes' warning. A
@@ -225,6 +227,12 @@ def punch_holes(
     if pairs is None:
         pairs = trellis.pseudoneighbors
     pairs = list(pairs)
+
+    # Punching is idempotent per call: a pair that gets no hole this time must
+    # not keep the one an earlier call attached, because propagate_reference_holes
+    # reads pair.hole to seed the already-punched orbits and regions.
+    for pair in pairs:
+        pair.hole = None
 
     holes: list[Hole] = []
     skipped = 0
@@ -328,7 +336,7 @@ def propagate_reference_holes(
     # matched from more than one cycle residue (cdist evidence alone), so the
     # same region could otherwise be punched twice for one orbit.
     punched_regions: set[tuple] = {
-        (pair.origin, tuple(sorted(pair.hole.bounding_ids)))
+        _region_key(pair.origin, pair.hole)
         for pair in trellis.pseudoneighbors
         if pair.hole is not None and pair.hole.bounding_ids is not None
     }
@@ -430,7 +438,7 @@ def propagate_reference_holes(
                     iterate=iterate, origin=origin, carried=carried, span=span,
                 )
                 if hole is not None:
-                    region = (origin, tuple(sorted(hole.bounding_ids)))
+                    region = _region_key(origin, hole)
                     if region not in punched_regions:
                         punched_regions.add(region)
                         seen.add(key)
@@ -596,6 +604,20 @@ def plot_stable_partition(
 
 
 # ── geometric / bookkeeping helpers ─────────────────────────────────────────
+
+
+def _region_key(
+    origin: Optional[tuple[int, int]], hole: Hole
+) -> tuple[Optional[tuple[int, int]], tuple[int, ...], Optional[Side]]:
+    """Identity of the region one orbit punched, for propagation de-duplication.
+
+    The two defining crossings alone do not name a region: a bridge has a
+    region on EACH of its sides, and one orbit can legitimately land in both
+    (the author's "singleton bridge with a hole on either side"). The side is
+    therefore part of the key.
+    """
+    bounding = tuple(sorted(hole.bounding_ids)) if hole.bounding_ids else ()
+    return (origin, bounding, hole.bridge_side)
 
 
 def _side_of(tangent: NDArray[np.float64], displacement: NDArray[np.float64]) -> Optional[Side]:
@@ -800,7 +822,18 @@ def _row_polyline(
 
 
 def _row_at(
-    trellis: "Trellis", poly: NDArray[np.float64], intersection_id: int
+    trellis: "Trellis",
+    poly: NDArray[np.float64],
+    intersection_id: int,
+    *,
+    frame: Optional[
+        tuple[
+            Optional[NDArray[np.float64]],
+            Optional[NDArray[np.float64]],
+            Optional[NDArray[np.float64]],
+            Optional[NDArray[np.float64]],
+        ]
+    ] = None,
 ) -> Optional[Side]:
     """The row of a bridge end: the stable side the arc approaches it from.
 
@@ -813,6 +846,8 @@ def _row_at(
         trellis: The Trellis carrying the intersections and manifolds.
         poly: The bridge polyline (see :func:`_row_polyline`).
         intersection_id: Registry ID of the defining crossing to read at.
+        frame: A precomputed :func:`_stable_frame` for this intersection, to
+            spare a second walk of the branch's nodes. Computed here if absent.
 
     Returns:
         ``"left"`` or ``"right"``, or None when the arc end, the local stable
@@ -824,7 +859,9 @@ def _row_at(
     if end is None:
         return None
     disp, _t_end = end
-    anchorward, outward, _below, _above = _stable_frame(trellis, ix)
+    anchorward, outward, _below, _above = (
+        frame if frame is not None else _stable_frame(trellis, ix)
+    )
     look = anchorward if anchorward is not None else (
         -outward if outward is not None else None
     )
@@ -857,18 +894,6 @@ def _row_mismatch_message(
         f"endpoints are consecutive crossings, so the arc between them cannot "
         f"cross the stable manifold again."
     )
-
-
-def _warn_on_row_mismatch(
-    trellis: "Trellis",
-    bridge: "Bridge",
-    rows: dict[int, Optional[Side]],
-) -> None:
-    """Log a row mismatch found while building openings (see Dev Notes)."""
-    message = _row_mismatch_message(trellis, bridge, rows)
-    if message is not None:
-        # Phase 1.1 promotes this to an assertion.
-        logger.warning("%s", message)
 
 
 def bridge_row_violation(
@@ -1083,20 +1108,18 @@ def _hole_openings(
             bridge.second_intersection,
         )
 
-    rows = {iid: _row_at(trellis, poly, iid) for iid in (near_id, far_id)}
-    _warn_on_row_mismatch(trellis, bridge, rows)
-
     openings: list[tuple[int, str, Side]] = []
     for iid in (near_id, far_id):
-        row = rows[iid]
+        # One stable-frame walk per end: _row_at reads the tangent directions
+        # from it and the side test below reads the two flanking nodes.
+        frame = _stable_frame(trellis, trellis.intersection(iid))
+        row = _row_at(trellis, poly, iid, frame=frame)
         if row is None:
             continue
         if side_sign is None:
             which = "outward" if iid == near_id else "anchorward"
         else:
-            _anchorward, _outward, below, above = _stable_frame(
-                trellis, trellis.intersection(iid)
-            )
+            _anchorward, _outward, below, above = frame
             side_anchorward = (
                 _arc_side_of(poly, below) if below is not None else None
             )
@@ -1154,10 +1177,25 @@ def _stable_arc_midpoint(
     point lies ON the region's stable boundary even when the arc curves far
     from the pair's chord; the tangent is the local curve direction there,
     oriented toward the anchor (decreasing cdist). Falls back to the chord
-    midpoint and chord direction when the manifold nodes are unavailable.
+    midpoint and chord direction when the manifold nodes are unavailable, and
+    when the two bounds sit on DIFFERENT stable branches (heteroclinic, or a
+    bridge of a period > 1 orbit): there is then no single arc between them,
+    and walking one branch's nodes between two cdists measured on different
+    branches would return an unrelated piece of curve.
     """
     key = near.manifold_b_key
-    manifold = trellis.manifolds.get(key) if key is not None else None
+    if key is None or key != far.manifold_b_key:
+        logger.debug(
+            "Stable bounds sit on different branches (%s, %s); using the chord "
+            "midpoint",
+            key,
+            far.manifold_b_key,
+        )
+        return (
+            (near.get_point() + far.get_point()) / 2.0,
+            near.get_point() - far.get_point(),
+        )
+    manifold = trellis.manifolds.get(key)
     if manifold is not None:
         lo, hi = sorted((near.stable_cdist, far.stable_cdist))
         inside = [
@@ -1186,10 +1224,27 @@ def _stable_arc_midpoint(
 
 
 def _near_far(trellis: "Trellis", id_a: int, id_b: int) -> tuple[int, int]:
-    """Order two intersection ids as (toward-anchor, outward) by stable cdist."""
-    if trellis.intersection(id_a).stable_cdist <= trellis.intersection(id_b).stable_cdist:
-        return id_a, id_b
-    return id_b, id_a
+    """Order two intersection ids as (toward-anchor, outward).
+
+    Stable canonical distances are only comparable along ONE stable branch, so
+    the usual stable ordering applies only when both crossings sit on the same
+    branch. When they sit on different branches (heteroclinic, or a bridge of a
+    period > 1 orbit) the ordering falls back to unstable canonical distance —
+    the unstable dynamical direction, which also runs away from the anchor and
+    is comparable along the single unstable branch both crossings share, since
+    the two are the defining crossings of one bridge.
+    """
+    a = trellis.intersection(id_a)
+    b = trellis.intersection(id_b)
+    if a.manifold_b_key is not None and a.manifold_b_key == b.manifold_b_key:
+        return (id_a, id_b) if a.stable_cdist <= b.stable_cdist else (id_b, id_a)
+    logger.debug(
+        "Crossings %d and %d sit on different stable branches; ordering them "
+        "by unstable cdist (the dynamical direction)",
+        id_a,
+        id_b,
+    )
+    return (id_a, id_b) if a.unstable_cdist <= b.unstable_cdist else (id_b, id_a)
 
 
 def _bridge_midpoint(bridge: "Bridge") -> Optional[NDArray[np.float64]]:
@@ -1228,10 +1283,28 @@ def _pair_fixed_point(trellis: "Trellis", pair: PseudoneighborPair) -> "FixedPoi
 def _bridge_unstable_span(
     trellis: "Trellis", bridge: "Bridge", cycle: list["ManifoldKey"]
 ) -> tuple[tuple[float, float], Optional[int]]:
-    """A bridge's (lo, hi) unstable-cdist span and its branch-cycle position."""
+    """A bridge's (lo, hi) unstable-cdist span and its branch-cycle position.
+
+    The branch identity comes from ``Bridge.manifold_key`` — the key the bridge
+    inherited from the parent unstable manifold it was cut out of. The endpoint
+    intersections' ``manifold_a_key`` is only a fallback for a keyless bridge
+    (an iterated-bridge child): every branch's anchor artifact sits at unstable
+    cdist 0, so the after-the-fact endpoint assignment can hand one branch's
+    anchor to another branch's first bridge and the endpoint keys then name the
+    wrong branch (plan row 1.1; Phase 2.3 deletes the fallback).
+    """
     a = trellis.intersection(bridge.first_intersection)
     b = trellis.intersection(bridge.second_intersection)
     lo, hi = sorted((a.unstable_cdist, b.unstable_cdist))
+    if bridge.manifold_key is not None:
+        pos = cycle.index(bridge.manifold_key) if bridge.manifold_key in cycle else None
+        return (lo, hi), pos
+    logger.debug(
+        "Bridge (%s, %s) has no manifold_key; inferring its unstable branch "
+        "from its endpoint intersections",
+        bridge.first_intersection,
+        bridge.second_intersection,
+    )
     pos = None
     for ix in (a, b):
         if ix.manifold_a_key is not None and ix.manifold_a_key in cycle:
@@ -1249,10 +1322,15 @@ def _containing_bridge(
     """
     The bridge whose unstable-cdist span contains ``span``.
 
-    Prefers bridges whose endpoints are known to lie on ``branch_key``; a
-    bridge with unknown endpoint branches (iterated children) is accepted on
-    cdist evidence alone (see Dev Notes). Among multiple containers the
-    tightest (smallest) span wins.
+    A bridge carrying a ``manifold_key`` is kept only when that key IS
+    ``branch_key``: the key is the bridge's own branch identity, inherited from
+    the parent unstable manifold, whereas its endpoint intersections' keys are
+    unreliable until Phase 2 (every branch's anchor artifact sits at unstable
+    cdist 0, so one branch's anchor can be assigned to another branch's first
+    bridge, and that bridge would then be accepted as a container on a branch
+    it does not live on). A keyless bridge (an iterated-bridge child) is still
+    accepted on cdist evidence alone, as the Dev Notes describe. Among multiple
+    containers the tightest (smallest) span wins.
     """
     lo, hi = span
     slack = rtol * (hi - lo)
@@ -1263,9 +1341,12 @@ def _containing_bridge(
             continue
         a = trellis.intersection(bridge.first_intersection)
         b = trellis.intersection(bridge.second_intersection)
-        keys = {a.manifold_a_key, b.manifold_a_key} - {None}
-        if branch_key is not None and keys and branch_key not in keys:
-            continue
+        if branch_key is not None and bridge.manifold_key != branch_key:
+            if bridge.manifold_key is not None:
+                continue
+            keys = {a.manifold_a_key, b.manifold_a_key} - {None}
+            if keys and branch_key not in keys:
+                continue
         b_lo, b_hi = sorted((a.unstable_cdist, b.unstable_cdist))
         if b_lo - slack <= lo and hi <= b_hi + slack:
             if (b_hi - b_lo) < best_width:

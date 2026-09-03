@@ -304,10 +304,23 @@ class ResonanceZone:
         """
         Undo the trim: put every trimmed stable branch's tail back where it was.
 
+        The mirror image of :func:`define_resonance_zone`, which trims, recomputes and
+        recuts the bridges: restoring the tails lengthens the stable arcs again, so the
+        crossing set changes and the existing bridges — cut against the *trimmed*
+        manifolds — are stale. The recompute is therefore followed by
+        :meth:`TangleWorkbench.rebuild_bridges`, which returns the bridge set to
+        exactly what it was before the trim.
+
         Args:
             workbench: The workbench the zone was defined on.
             recompute: If True (default), recompute intersections over all fixed
-                points so the registry reflects the restored manifolds.
+                points and rebuild the bridges so both reflect the restored manifolds.
+
+        Note:
+            ``recompute=False`` deliberately leaves the registry *and* the bridges
+            stale: it is the batched path, where several zones are restored in turn
+            and the caller runs one ``compute_intersections`` + ``rebuild_bridges``
+            at the end (mirroring :meth:`TangleSession.add_resonance_zones`).
 
         Raises:
             ValueError: If this zone captured no tails to restore.
@@ -318,6 +331,7 @@ class ResonanceZone:
             workbench.manifolds[key].tail = tail
         if recompute:
             workbench.compute_intersections(list(workbench.fixed_points))
+            workbench.rebuild_bridges()
 
 
 def _trim_stable_at(workbench: "TangleWorkbench", ix: Intersection) -> "BaseManifold":

@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import fsolve
 from scipy.differentiate import jacobian as jacob
-from .FixedPoint import FixedPoint
+
 from .DynamicalSystem import DynamicalSystem
+from .FixedPoint import FixedPoint
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -22,6 +25,18 @@ be detrimental to have it in like this actually.
 """
 
 
+# Hook signature: (orbit_index, unstable_eigenvector, stable_eigenvector) ->
+# (unstable_eigenvector, stable_eigenvector), each a (2, 1) array.
+OrientHook = Callable[
+    [int, NDArray[np.float64], NDArray[np.float64]],
+    tuple[NDArray[np.float64], NDArray[np.float64]],
+]
+
+# Relative tolerance on the imaginary part of an eigenvalue before the pair is
+# considered complex rather than a real pair with round-off.
+_IMAG_TOL = 1e-9
+
+
 class FixedPointSolver:
     """
     Toolbox for computing fixed points of any period and initializing
@@ -33,19 +48,40 @@ class FixedPointSolver:
         jacobian_function (func, optional): Function to compute the Jacobian at
             any point in the system. Without an explicit Jacobian function finite
             difference will be used to compute the Jacobians.
+        orient (OrientHook, optional): Per-orbit-index eigenvector orientation
+            hook. See :meth:`__init__`.
     """
 
-    def __init__(self, system: DynamicalSystem) -> None:
+    def __init__(
+        self, system: DynamicalSystem, orient: Optional[OrientHook] = None
+    ) -> None:
         """
         Initializes the functions associated with the dynamical system.
 
         Args:
             system (DynamicalSystem): Object storing all the system maps.
+            orient (OrientHook, optional): Called once per orbit index with
+                ``(orbit_index, unstable_eigenvector, stable_eigenvector)`` right
+                after the eigen-decomposition, returning the (possibly re-signed)
+                pair. Defaults to None, meaning the eigenvectors are used exactly
+                as ``np.linalg.eig`` returns them.
+
+        Note:
+            ``np.linalg.eig`` fixes each eigenvector only up to sign, so which of
+            the two branches of a manifold gets grown is otherwise arbitrary. The
+            intended, supported way to choose directions is
+            :meth:`TangleWorkbench.orient_eigenvectors`, which re-signs the
+            eigenvectors post hoc, per fixed point, against directions the caller
+            names. ``orient`` exists only for the narrow case of a map where a
+            fixed sign rule is known ahead of time (it replaces a hardcoded
+            Hénon-specific flip that used to live in
+            :meth:`compute_eigenvectors`).
         """
 
         self.dynamical_map = system.map
         self.dynamical_map_inverse = system.map_inv
         self.jacobian_function = system.jacobian
+        self.orient = orient
 
     def construct_fixed_point(
         self, initial_guess: NDArray[np.float64], num_branches: int
@@ -120,6 +156,12 @@ class FixedPointSolver:
         Returns:
             np.ndarray: A (period, 2) array representing the converged fixed point
                 coordinates.
+
+        Raises:
+            ValueError: If MINPACK reports anything other than convergence
+                (``ier != 1``); the message carries MINPACK's own diagnosis. The
+                old behaviour was to return the non-converged vector silently,
+                which produced a "fixed point" that is not on any orbit.
         """
 
         initial_guess_flattened = self.flatten_trajectory(initial_guess)
@@ -133,14 +175,23 @@ class FixedPointSolver:
         # hybrd) solves the coupled system properly and, staying near the guess,
         # also keeps the orbit labelling consistent with ``initial_guess``.
         shape = np.shape(initial_guess_flattened)
-        fixed_point_flattened = fsolve(
+        solution, _info, ier, message = fsolve(
             lambda x: np.ravel(
                 self.multipoint_shoot_flattened_difference(np.reshape(x, shape))
             ),
             np.ravel(initial_guess_flattened),
             xtol=1e-13,
             maxfev=10000,
-        ).reshape(shape)
+            full_output=True,
+        )
+        if ier != 1:
+            raise ValueError(
+                "fsolve did not converge to a fixed point from the initial guess "
+                f"{np.ravel(initial_guess).tolist()} (MINPACK ier={ier}): "
+                f"{' '.join(str(message).split())}"
+            )
+
+        fixed_point_flattened = solution.reshape(shape)
 
         fixed_point_full = self.unflatten_trajectory(fixed_point_flattened)
 
@@ -165,6 +216,18 @@ class FixedPointSolver:
                     [unstable, stable] for each iterate.
                 eigenvectors: A list of two (2, 1) arrays;
                     [unstable, stable] for each iterate.
+
+        Raises:
+            ValueError: If any iterate is not a saddle (see
+                :meth:`_validate_saddle`).
+
+        Note:
+            ``np.linalg.eig`` fixes the eigenvectors only up to sign. If the
+            solver was built with an ``orient`` hook it is called here, once per
+            orbit index, to re-sign the pair; otherwise the eigenvectors are
+            returned exactly as the decomposition produced them and directions
+            are chosen post hoc by
+            :meth:`TangleWorkbench.orient_eigenvectors`.
         """
 
         if jacobians is None:
@@ -181,18 +244,70 @@ class FixedPointSolver:
 
             eigenvalues, eigenvectors = np.linalg.eig(jacobian)
 
-            unstable_index = np.argmax(np.abs(eigenvalues))
+            self._validate_saddle(i, eigenvalues)
+            eigenvalues = np.real(eigenvalues)
+            eigenvectors = np.real(eigenvectors)
 
-            # WARNING POORLY UNDERSTOOD why we multiply by -1. This is henon specific
-            # TODO find a way to automatically choose the proper directions
-            eigenvector_list[i][0] = eigenvectors[:, unstable_index].reshape(2, 1)
-            eigenvector_list[i][1] = eigenvectors[:, 1 - unstable_index].reshape(2, 1)
+            unstable_index = int(np.argmax(np.abs(eigenvalues)))
+
+            unstable_vector = eigenvectors[:, unstable_index].reshape(2, 1)
+            stable_vector = eigenvectors[:, 1 - unstable_index].reshape(2, 1)
+
+            if self.orient is not None:
+                unstable_vector, stable_vector = self.orient(
+                    i, unstable_vector, stable_vector
+                )
+
+            eigenvector_list[i][0] = unstable_vector
+            eigenvector_list[i][1] = stable_vector
 
             logger.debug("eigenvalues at orbit index %d: %s", i, eigenvalues)
             eigenvalue_list[i][0] = eigenvalues[unstable_index]
             eigenvalue_list[i][1] = eigenvalues[1 - unstable_index]
 
         return eigenvalue_list, eigenvector_list
+
+    @staticmethod
+    def _validate_saddle(
+        orbit_index: int, eigenvalues: NDArray[np.complex128]
+    ) -> None:
+        """
+        Check that one full-cycle Jacobian belongs to a saddle.
+
+        A saddle of an area-preserving map has two real eigenvalues, one of
+        modulus above 1 and one below. Anything else (a complex pair at an
+        elliptic point, or a degenerate pair at a parabolic one) means the guess
+        converged onto a periodic orbit that has no manifolds to grow.
+
+        Args:
+            orbit_index (int): Which iterate of the orbit these eigenvalues
+                belong to; used in the error message.
+            eigenvalues (np.ndarray): The two eigenvalues of the full-cycle
+                Jacobian at that iterate.
+
+        Raises:
+            ValueError: If the eigenvalues are not those of a saddle. This is a
+                ValueError rather than an assertion because it is an input
+                error — the caller's initial guess converged to a non-saddle —
+                not a broken internal invariant.
+        """
+        values = np.ravel(np.asarray(eigenvalues))
+
+        scale = np.maximum(np.abs(values), 1.0)
+        if np.any(np.abs(np.imag(values)) > _IMAG_TOL * scale):
+            raise ValueError(
+                f"fixed point iterate {orbit_index} is not a saddle: eigenvalues "
+                f"{values.tolist()} are complex, so the orbit is elliptic and has "
+                "no stable/unstable manifolds"
+            )
+
+        moduli = np.abs(np.real(values))
+        if not (np.max(moduli) > 1.0 and np.min(moduli) < 1.0):
+            raise ValueError(
+                f"fixed point iterate {orbit_index} is not a saddle: eigenvalues "
+                f"{np.real(values).tolist()} do not have exactly one modulus above "
+                "1 and one below"
+            )
 
     def compute_partial_jacobians(
         self, fixed_point: NDArray[np.float64]

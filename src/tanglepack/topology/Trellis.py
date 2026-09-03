@@ -114,6 +114,67 @@ class Trellis:
         self.strong_pip_candidates: list[int] = []
         self.strong_pip: Optional[int] = None
 
+        # Cache for the orientation_preserving property (see below).
+        self._orientation_preserving: Optional[bool] = None
+
+    # ── map properties ──────────────────────────────────────────────────────
+
+    @property
+    def orientation_preserving(self) -> bool:
+        """
+        True when the underlying map preserves orientation (det J > 0).
+
+        Area-preserving maps have a constant Jacobian determinant sign, so one
+        evaluation settles it: the determinant is read at the first fixed
+        point's first orbit coordinate when the dynamical system carries a
+        jacobian. Without one, an odd-period fixed point still decides it —
+        the product of its two eigenvalues is the determinant of the p-fold
+        Jacobian, whose sign equals the single-step sign for odd p. Failing
+        both, the answer defaults to True with a debug log.
+
+        Orientation decides how the hole-side invariant reads a backward chain:
+        an orientation-preserving map carries a bridge's dynamical orientation
+        to its image's unchanged, while a reversing one flips the side at
+        every step (see
+        :func:`topology.StablePartition.bridge_side_violations`).
+
+        Returns:
+            True if the map preserves orientation, False if it reverses it.
+        """
+        if self._orientation_preserving is None:
+            self._orientation_preserving = self._compute_orientation_preserving()
+        return self._orientation_preserving
+
+    def _compute_orientation_preserving(self) -> bool:
+        """Sign of det J from the map, else from an odd-period eigenvalue pair."""
+        jacobian = getattr(self.dynamical_system, "jacobian", None)
+        coords = self.fixed_points[0].coordinates[0] if self.fixed_points else None
+        if jacobian is not None and coords is not None:
+            point = np.asarray(coords, dtype=np.float64).ravel()[:2]
+            if np.isfinite(point).all():
+                determinant = float(np.linalg.det(np.asarray(jacobian(point))))
+                if np.isfinite(determinant) and determinant != 0.0:
+                    return determinant > 0.0
+
+        for fixed_point in self.fixed_points:
+            if fixed_point.period % 2 == 0:
+                continue  # even p squares away the single-step sign
+            lam_u = getattr(fixed_point, "unstable_eigenvalues", None)
+            lam_s = getattr(fixed_point, "stable_eigenvalues", None)
+            if not lam_u or not lam_s:
+                continue
+            product = float(np.asarray(lam_u[0]).ravel()[0]) * float(
+                np.asarray(lam_s[0]).ravel()[0]
+            )
+            if product != 0.0:
+                return product > 0.0
+
+        logger.debug(
+            "No jacobian and no odd-period eigenvalue pair on this trellis; "
+            "assuming the map preserves orientation"
+        )
+        return True
+
     # ── construction ────────────────────────────────────────────────────────
 
     @classmethod
@@ -624,30 +685,52 @@ class Trellis:
         Returns:
             The punched holes.
 
+        Raises:
+            AssertionError: If two holes of one ``origin`` disagree on their
+                side of the bridge (I1), or if a bridge carrying a hole
+                approaches its two defining crossings from opposite sides of
+                their shared stable branch (I2).
+
         Note:
-            Holes only exist after punching, so this is where the orbit-side
-            invariant is checked: all holes of one ``origin`` must share
-            ``bridge_side`` (see
-            :func:`topology.StablePartition.bridge_side_violations`). A
-            violation is logged as a warning rather than raised, because the
-            nested period-3 tangle still breaks it — plan row 1.1 fixes the
-            root cause and promotes this to an assertion.
+            Holes only exist after punching, so this is where the two
+            topological invariants are checked — once per orbit and once per
+            bridge, not once per hole. Only the bridges that actually carry a
+            hole are checked; the rest are not part of this result.
         """
         from .StablePartition import (
-            bridge_side_violations as _side_violations,
+            check_bridge_rows_consistent as _check_rows,
+            check_holes_share_bridge_side as _check_sides,
             punch_holes as _punch,
             propagate_reference_holes as _propagate,
         )
 
         self._warn_missing_pseudoneighbors()
         self.holes.clear()
+        # holes is cleared wholesale, so every pair's back-reference goes with
+        # it: a pair outside this call's scope must not keep pointing at a hole
+        # the trellis no longer carries (propagate_reference_holes seeds its
+        # already-punched orbits and regions from pair.hole).
+        for pair in self.pseudoneighbors:
+            pair.hole = None
         holes = _punch(self, pairs, epsilon=epsilon)
         if propagate:
             holes += _propagate(self)
         self.holes.extend(holes)
-        for message in _side_violations(self.holes):
-            # Phase 1.1 promotes this to an assertion.
-            logger.warning("%s", message)
+
+        punched = {
+            frozenset(hole.bounding_ids)
+            for hole in self.holes
+            if hole.bounding_ids is not None
+        }
+        for bridge in self.bridges:
+            ends = frozenset((bridge.first_intersection, bridge.second_intersection))
+            if ends not in punched:
+                continue
+            _check_rows(self, bridge)
+        _check_sides(
+            self.holes, orientation_preserving=self.orientation_preserving
+        )
+
         if verbose:
             print(self.describe_holes())
         return holes

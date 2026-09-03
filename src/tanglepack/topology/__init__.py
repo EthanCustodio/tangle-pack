@@ -31,6 +31,10 @@ from .Pseudoneighbor import (
 )
 from .StablePartition import (
     bridge_for_pair,
+    bridge_row_violation,
+    bridge_side_violations,
+    check_bridge_rows_consistent,
+    check_holes_share_bridge_side,
     partition_stable_manifold,
     plot_stable_partition,
     propagate_reference_holes,
@@ -52,6 +56,10 @@ __all__ = [
     "extend_pseudoneighbor_trajectories",
     "forward_unstable_branch_cycle",
     "bridge_for_pair",
+    "bridge_row_violation",
+    "bridge_side_violations",
+    "check_bridge_rows_consistent",
+    "check_holes_share_bridge_side",
     "partition_stable_manifold",
     "plot_stable_partition",
     "propagate_reference_holes",

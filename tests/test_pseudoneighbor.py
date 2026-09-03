@@ -498,3 +498,52 @@ def test_henon_reference_pairs_are_structurally_valid(henon_tangle_with_bridges)
             s = trellis.intersection(iid).stable_cdist
             assert s >= s_max / lambda_u * (1 - 1e-6)
             assert s <= s_max * (1 + 1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# Strong-pip cut coverage (plan row 1.18)
+# --------------------------------------------------------------------------- #
+def _pip_trellis(period: int) -> tuple[Trellis, int]:
+    """``(trellis, pip_id)``: one crossing on one stable branch, chosen as the
+    strong pip, with no iterate table — so only the pip itself cuts."""
+    fp = _fixed_point(period, 4.0)
+    reg = IntersectionRegistry()
+    pip = reg.add_synthetic(
+        (1.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0,
+        manifold_a_key=(fp, "unstable", 0, 0),
+        manifold_b_key=(fp, "stable", 0, 0),
+    )
+    trellis = _trellis(reg, fp)
+    trellis.strong_pip = pip
+    return trellis, pip
+
+
+def test_strong_pip_cuts_warn_when_branches_are_left_uncut(caplog):
+    """A period-3 anchor needs one cut per stable branch; with no iterate table
+    only the pip itself cuts, and the other two branches are silently left
+    running to the manifold end — which must be reported."""
+    from tanglepack.topology.Pseudoneighbor import _strong_pip_cuts
+
+    trellis, pip = _pip_trellis(3)
+    assert trellis.fixed_points[0].k_value == 3
+
+    with caplog.at_level("WARNING", logger="tanglepack.topology.Pseudoneighbor"):
+        cut_ids, cut_cdists = _strong_pip_cuts(trellis)
+
+    assert set(cut_ids) == {(trellis.fixed_points[0], "stable", 0, 0)}
+    assert cut_cdists[(trellis.fixed_points[0], "stable", 0, 0)] == 1.0
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(str(pip) in m and "k_value 3" in m for m in messages)
+
+
+def test_strong_pip_cuts_are_silent_when_every_branch_is_cut(caplog):
+    """A period-1 anchor has one stable branch, which the pip alone cuts."""
+    from tanglepack.topology.Pseudoneighbor import _strong_pip_cuts
+
+    trellis, _pip = _pip_trellis(1)
+    assert trellis.fixed_points[0].k_value == 1
+
+    with caplog.at_level("WARNING", logger="tanglepack.topology.Pseudoneighbor"):
+        _strong_pip_cuts(trellis)
+
+    assert not [r for r in caplog.records if "k_value" in r.getMessage()]

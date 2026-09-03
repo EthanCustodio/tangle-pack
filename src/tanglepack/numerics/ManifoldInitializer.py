@@ -129,7 +129,7 @@ class ManifoldInitializer:
         direction_from_fixed_point = np.asarray(direction_from_fixed_point).flatten()
         direction_from_fixed_point /= np.linalg.norm(direction_from_fixed_point)
 
-        if branch_index == 1 and not fixed_point.has_inversion():
+        if branch_index == 1 and not fixed_point.check_inversion():
             direction_from_fixed_point = -direction_from_fixed_point
 
         first_point = (
@@ -464,9 +464,31 @@ class ManifoldInitializer:
         Returns:
             Dict[Tuple[int, int], BaseManifold]: All initial fundamental segments.
                 The tuple structure is (orbit_index, branch_index).
+
+        Raises:
+            ValueError: If ``num_branches`` is not 1 or 2, or exceeds the number of
+                branches the fixed point was allocated.
+
+        Note:
+            The chain is walked with :meth:`FixedPoint.advance_key`: ``+1`` for the
+            unstable manifold and ``-1`` for the stable one. The stable fundamental
+            segment is grown by the INVERSE map, which is why the orbit indices it
+            visits run ``0, p-1, ..., 1`` (the same order ``get_iterable_array
+            ("stable")`` produces).
+
+        Note:
+            For an inversion point the chain is now
+            ``(0, 0), (1, 0), ..., (p-1, 0), (0, 1), ..., (p-1, 1)``. The previous
+            implementation nested ``for orbit_index: for branch_index:`` and so
+            visited ``(0, 1)`` immediately after ``(0, 0)``, which is physically
+            wrong: the piece one map step after ``(0, 0)`` is ``(1, 0)``, and
+            ``(0, 1)`` only comes a full orbit later, after ``(p-1, 0)``.
+            Non-inversion points are unaffected -- the branch index never changes
+            there.
         """
 
         orbit_indices = fixed_point.get_iterable_array(stability)
+        step = 1 if stability == "unstable" else -1
 
         if fixed_point.check_inversion():
             if num_branches > 1:
@@ -486,18 +508,18 @@ class ManifoldInitializer:
             initial_segments[(0, 0)] = segment
             segment.root = segment.walk_fwd(None, segment.root)
 
-            for orbit_index in orbit_indices:
-                for branch_index in branch_indices:
-                    if branch_index == 0 and orbit_index == 0:
-                        continue
-                    segment = self.machine.iterate_manifold(segment)
-                    initial_segments[(orbit_index, branch_index)] = segment
-                    self.machine._insert_point_geometrically(
-                        fixed_point.branch_points[orbit_index],
-                        segment.root,
-                        segment,
-                        branch_index,
-                    )
+            key = (fixed_point, stability, 0, 0)
+            for _ in range(fixed_point.k_value - 1):
+                key = fixed_point.advance_key(key, step)
+                orbit_index, branch_index = key[2], key[3]
+                segment = self.machine.iterate_manifold(segment)
+                initial_segments[(orbit_index, branch_index)] = segment
+                self.machine._insert_point_geometrically(
+                    fixed_point.branch_points[orbit_index],
+                    segment.root,
+                    segment,
+                    branch_index,
+                )
 
         else:
             if num_branches not in (1, 2):
@@ -523,16 +545,17 @@ class ManifoldInitializer:
                 initial_segments[(0, b)] = segment
                 segment.root = segment.walk_fwd(None, segment.root)
 
-                for orbit_index in orbit_indices:
-                    if orbit_index == 0:
-                        continue
+                key = (fixed_point, stability, 0, b)
+                for _ in range(fixed_point.period - 1):
+                    key = fixed_point.advance_key(key, step)
+                    orbit_index, branch_index = key[2], key[3]
                     segment = self.machine.iterate_manifold(segment)
-                    initial_segments[(orbit_index, b)] = segment
+                    initial_segments[(orbit_index, branch_index)] = segment
                     self.machine._insert_point_geometrically(
                         fixed_point.branch_points[orbit_index],
                         segment.root,
                         segment,
-                        b,
+                        branch_index,
                     )
 
         for dict_index in initial_segments:

@@ -107,9 +107,10 @@ def test_side_of_cross_product():
 class _StubBridge:
     """A minimal bridge stand-in: endpoint registry ids and a fixed polyline."""
 
-    def __init__(self, first: int, second: int, points) -> None:
+    def __init__(self, first: int, second: int, points, manifold_key=None) -> None:
         self.first_intersection = first
         self.second_intersection = second
+        self.manifold_key = manifold_key
         self._points = np.asarray(points, dtype=np.float64)
 
     def get_point_array(self, return_nodes: bool = False):
@@ -526,3 +527,366 @@ def test_henon_plot_helpers_smoke(henon_with_holes):
         assert handles
     finally:
         plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# Openings at the two ends of a branch (plan row 1.14)
+# --------------------------------------------------------------------------- #
+def _end_hole(iid: int, which: str, row: str) -> Hole:
+    """A hole recording a single opening, at one end of the branch."""
+    return Hole(
+        coords=(0.0, 0.0), near_intersection_id=iid,
+        bridge_side="left", bounding_ids=(iid, iid),
+        openings=[(iid, which, row)],
+    )
+
+
+def test_outward_opening_at_the_last_boundary_is_inert(stable_line):
+    """A hole hanging off the removed tail leaves the branch end closed.
+
+    Dev Notes: "a hole marked outward of the branch's outermost intersection
+    or anchorward at the anchor-artifact contributes its opening to that pinch
+    test even though no interval lies there." A boundary is owned by an
+    interval only when that interval is closed at it, and the outward side of
+    the outermost intersection holds no interval at all — so an opening there
+    excludes nothing that exists, and the point stays inside the one interval
+    it does have. The pinch at this end is driven by the ANCHORWARD opening
+    (see test_hole_at_branch_end_pinches_endpoint_singleton); this pins that
+    the outward one cannot pinch it on its own.
+    """
+    trellis, ids = stable_line
+    branch_key = (trellis.fixed_points[0], "stable", 0, 0)
+    trellis.holes.append(_end_hole(ids[5], "outward", "left"))
+
+    result = partition_stable_manifold(trellis, branch_key, "left")
+
+    assert _spans(result.intervals) == [(0.0, 6.0, True, True)]
+
+
+def test_anchorward_opening_at_the_first_boundary_is_inert(stable_line):
+    """A hole abutting the anchor artifact from below leaves it closed.
+
+    The mirror of the branch-end case: nothing lies anchorward of the anchor
+    artifact, so an opening there excludes nothing that exists and the point
+    stays inside the first real interval. The anchor pinches into a singleton
+    only when a hole opens OUTWARD of it.
+    """
+    trellis, ids = stable_line
+    fp = trellis.fixed_points[0]
+    branch_key = (fp, "stable", 0, 0)
+    # The anchor artifact: the crossing the manifolds make at the fixed point.
+    anchor = trellis.registry.add_synthetic(
+        (0.0, 0.0), unstable_cdist=0.0, stable_cdist=0.0,
+        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=branch_key,
+    )
+    trellis.branch(branch_key).intersection_ids.insert(0, anchor)
+    trellis.holes.append(_end_hole(anchor, "anchorward", "left"))
+
+    result = partition_stable_manifold(trellis, branch_key, "left")
+
+    assert _spans(result.intervals) == [(0.0, 6.0, True, True)]
+
+    # ...whereas an outward opening at the same point does pinch it.
+    trellis.holes[:] = [_end_hole(anchor, "outward", "left")]
+    pinched = partition_stable_manifold(trellis, branch_key, "left")
+    assert _spans(pinched.intervals) == [
+        (0.0, 0.0, True, True),
+        (0.0, 6.0, False, True),
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# Propagation region identity (plan row 1.15)
+# --------------------------------------------------------------------------- #
+def test_region_key_separates_the_two_sides_of_one_bridge():
+    """Two holes of one orbit flanking the same bridge are distinct regions.
+
+    A bridge bounds a region on each of its sides, so the pair of defining
+    crossings alone does not name a region; without the side in the key the
+    second of the two ("singleton bridge with a hole on either side") is
+    dropped as a duplicate.
+    """
+    from tanglepack.topology.StablePartition import _region_key
+
+    def hole(side):
+        return Hole(
+            coords=(0.0, 0.0), near_intersection_id=1,
+            bridge_side=side, bounding_ids=(2, 1), openings=[],
+        )
+
+    origin = (3, 4)
+    assert _region_key(origin, hole("left")) != _region_key(origin, hole("right"))
+    # The bounding ids are order-insensitive and the key is stable per side.
+    assert _region_key(origin, hole("left")) == _region_key(origin, hole("left"))
+    assert _region_key(origin, hole("left")) != _region_key((9, 9), hole("left"))
+
+
+# --------------------------------------------------------------------------- #
+# Cross-branch bounds (plan row 1.20)
+# --------------------------------------------------------------------------- #
+class _StubNode:
+    """A manifold node: a phase-space point at a canonical distance."""
+
+    def __init__(self, point, cdist: float) -> None:
+        self._point = np.asarray(point, dtype=np.float64)
+        self.cdist = float(cdist)
+
+    def get_point(self):
+        return self._point
+
+
+class _StubManifold:
+    """A stable branch running far from the chord of its own crossings."""
+
+    def __init__(self, nodes) -> None:
+        self._nodes = list(nodes)
+
+    def get_point_array(self, return_nodes: bool = False):
+        if return_nodes:
+            return self._nodes
+        return np.array([n.get_point() for n in self._nodes])
+
+
+@pytest.fixture
+def stable_line_with_manifold(stable_line):
+    """``(trellis, ids, foreign_id)``: ``stable_line`` plus a real stable curve
+    that bows far off the crossings' chord, and one crossing attributed to a
+    SECOND stable branch (stable cdist 5, unstable cdist 0.5 — so the stable
+    and unstable orderings against ``ids[0]`` disagree)."""
+    trellis, ids = stable_line
+    fp = trellis.fixed_points[0]
+    branch_key = (fp, "stable", 0, 0)
+    bowed = _StubManifold(
+        [_StubNode((float(x), 100.0), float(x)) for x in range(1, 7)]
+    )
+    trellis.manifolds[branch_key] = bowed
+    trellis.manifolds[(fp, "stable", 1, 0)] = bowed  # both branches have nodes
+    foreign = trellis.registry.add_synthetic(
+        (10.0, -10.0), unstable_cdist=0.5, stable_cdist=5.0,
+        manifold_a_key=(fp, "unstable", 0, 0),
+        manifold_b_key=(fp, "stable", 1, 0),
+    )
+    return trellis, ids, foreign
+
+
+def test_near_far_orders_same_branch_bounds_by_stable_cdist(stable_line_with_manifold):
+    """On one branch the toward-anchor member is the smaller stable cdist."""
+    from tanglepack.topology.StablePartition import _near_far
+
+    trellis, ids, _foreign = stable_line_with_manifold
+    assert _near_far(trellis, ids[3], ids[1]) == (ids[1], ids[3])
+
+
+def test_near_far_falls_back_to_unstable_order_across_branches(
+    stable_line_with_manifold,
+):
+    """Stable cdists on two different branches are not comparable, so the
+    ordering falls back to the unstable dynamical direction — which here
+    reverses the (meaningless) stable answer."""
+    from tanglepack.topology.StablePartition import _near_far
+
+    trellis, ids, foreign = stable_line_with_manifold
+    # Stable cdists say ids[0] (1.0) < foreign (5.0); unstable cdists say
+    # foreign (0.5) < ids[0] (6.0). The unstable order is the one used.
+    assert _near_far(trellis, ids[0], foreign) == (foreign, ids[0])
+    assert _near_far(trellis, foreign, ids[0]) == (foreign, ids[0])
+
+
+def test_stable_arc_midpoint_walks_the_branch_between_same_branch_bounds(
+    stable_line_with_manifold,
+):
+    """Two bounds on one branch give the midpoint of the real curve between
+    them, not of their chord (the curve here bows to y = 100)."""
+    from tanglepack.topology.StablePartition import _stable_arc_midpoint
+
+    trellis, ids, _foreign = stable_line_with_manifold
+    mid, _tangent = _stable_arc_midpoint(
+        trellis, trellis.intersection(ids[0]), trellis.intersection(ids[4])
+    )
+    assert mid[1] == pytest.approx(100.0)
+
+
+def test_stable_arc_midpoint_falls_back_to_the_chord_across_branches(
+    stable_line_with_manifold,
+):
+    """There is no single stable arc between bounds on two different branches,
+    so the chord midpoint and chord direction are used instead of a walk along
+    one branch's nodes between cdists measured on the other."""
+    from tanglepack.topology.StablePartition import _stable_arc_midpoint
+
+    trellis, ids, foreign = stable_line_with_manifold
+    # ``near`` is on the branch that DOES carry nodes, so only the branch
+    # mismatch can send this to the chord.
+    near = trellis.intersection(ids[0])
+    far = trellis.intersection(foreign)
+    mid, tangent = _stable_arc_midpoint(trellis, near, far)
+
+    assert mid == pytest.approx((near.get_point() + far.get_point()) / 2.0)
+    assert tangent == pytest.approx(near.get_point() - far.get_point())
+
+
+# --------------------------------------------------------------------------- #
+# Map orientation (plan row 0.3 review finding)
+# --------------------------------------------------------------------------- #
+class _StubSystem:
+    """A dynamical system stand-in carrying only a constant jacobian."""
+
+    def __init__(self, jacobian) -> None:
+        self._jacobian = np.asarray(jacobian, dtype=np.float64)
+        self.jacobian = lambda point: self._jacobian
+
+
+def test_orientation_preserved_for_a_positive_determinant(stable_line):
+    """det J > 0 preserves orientation (the Hénon fixtures' b = 1 case)."""
+    trellis, _ids = stable_line
+    trellis.fixed_points[0].coordinates[0] = np.zeros((2, 1))
+    trellis.dynamical_system = _StubSystem([[2.0, 1.0], [-1.0, 0.0]])  # det +1
+
+    assert trellis.orientation_preserving is True
+
+
+def test_orientation_reversed_for_a_negative_determinant(stable_line):
+    """det J < 0 reverses orientation, so a hole's side flips every step."""
+    trellis, _ids = stable_line
+    trellis.fixed_points[0].coordinates[0] = np.zeros((2, 1))
+    trellis.dynamical_system = _StubSystem([[0.0, 1.0], [1.0, 0.0]])  # det -1
+
+    assert trellis.orientation_preserving is False
+
+
+def test_orientation_from_eigenvalues_without_a_jacobian(stable_line):
+    """Without a jacobian an odd-period saddle still decides it: the product of
+    its eigenvalues is the determinant of the p-fold Jacobian, whose sign is
+    the single-step sign when p is odd."""
+    trellis, _ids = stable_line
+    fp = trellis.fixed_points[0]
+    assert fp.period == 1
+    fp.stable_eigenvalues = [-0.25]
+    assert trellis.orientation_preserving is False
+
+
+def test_orientation_defaults_to_preserving_without_evidence(stable_line):
+    """No jacobian and no usable eigenvalue pair defaults to preserving."""
+    trellis, _ids = stable_line
+    assert trellis.orientation_preserving is True
+
+
+# --------------------------------------------------------------------------- #
+# Re-punching (plan row 1.16)
+# --------------------------------------------------------------------------- #
+def test_repunching_a_narrower_scope_clears_the_other_pairs_holes(henon_with_holes):
+    """Punching again drops every hole outside the new scope.
+
+    ``Trellis.punch_holes`` clears ``trellis.holes`` wholesale, so a pair
+    outside the new scope must not keep pointing at a hole the trellis no
+    longer carries: ``propagate_reference_holes`` seeds its already-punched
+    orbits and regions from ``pair.hole``, and a stale one makes it propagate
+    an orbit that was never punched. This tangle has a single pseudoneighbor
+    pair, so the empty scope is its only narrower one.
+    """
+    trellis, _references = henon_with_holes
+    punched = [p for p in trellis.pseudoneighbors if p.hole is not None]
+    assert punched and trellis.holes
+
+    trellis.punch_holes(pairs=[])
+
+    assert all(pair.hole is None for pair in trellis.pseudoneighbors)
+    assert trellis.holes == []
+
+    # ...and the full scope punches them again.
+    trellis.punch_holes()
+    assert [p for p in trellis.pseudoneighbors if p.hole is not None] == punched
+    assert trellis.holes
+
+
+# --------------------------------------------------------------------------- #
+# A bridge's unstable branch comes from its own key (plan row 1.1)
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def two_branch_bridges():
+    """``(trellis, cycle, bridges)``: two bridges on two unstable branches of a
+    period-3 orbit, sharing an anchor artifact at unstable cdist 0.
+
+    The shared anchor's ``manifold_a_key`` names branch 1, so the branch-1
+    bridge is correctly labelled by its endpoints but the branch-0 bridge is
+    NOT — exactly the situation the after-the-fact endpoint assignment creates
+    (all three anchors sit at unstable cdist 0). The branch-0 bridge is also
+    the tighter of the two, so an endpoint-key filter picks it as the branch-1
+    container.
+    """
+    fp = _fixed_point(3, 4.0)
+    cycle = [(fp, "unstable", i, 0) for i in range(3)]
+    reg = IntersectionRegistry()
+    stable = (fp, "stable", 0, 0)
+    anchor = reg.add_synthetic(
+        (0.0, 0.0), unstable_cdist=0.0, stable_cdist=0.0,
+        manifold_a_key=cycle[1], manifold_b_key=stable,
+    )
+    end_0 = reg.add_synthetic(
+        (1.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0,
+        manifold_a_key=cycle[0], manifold_b_key=stable,
+    )
+    end_1 = reg.add_synthetic(
+        (2.0, 0.0), unstable_cdist=2.0, stable_cdist=2.0,
+        manifold_a_key=cycle[1], manifold_b_key=stable,
+    )
+    bridges = {
+        0: _StubBridge(anchor, end_0, [(0.0, 0.0), (1.0, 0.0)], manifold_key=cycle[0]),
+        1: _StubBridge(anchor, end_1, [(0.0, 0.0), (2.0, 0.0)], manifold_key=cycle[1]),
+    }
+    trellis = Trellis(
+        fixed_points=[fp], registry=reg, branches={}, bridges=list(bridges.values())
+    )
+    return trellis, cycle, bridges
+
+
+def test_bridge_span_reads_the_branch_from_the_bridges_own_key(two_branch_bridges):
+    """A bridge's cycle position comes from ``Bridge.manifold_key``, not from
+    whichever endpoint happens to carry an unstable key."""
+    from tanglepack.topology.StablePartition import _bridge_unstable_span
+
+    trellis, cycle, bridges = two_branch_bridges
+    span, pos = _bridge_unstable_span(trellis, bridges[0], cycle)
+
+    assert span == (0.0, 1.0)
+    assert pos == 0  # the shared anchor's own key would say 1
+
+
+def test_bridge_span_falls_back_to_endpoints_for_a_keyless_bridge(two_branch_bridges):
+    """A bridge with no key of its own (an iterated-bridge child) is still
+    placed from its endpoints — the path Phase 2.3 removes."""
+    from tanglepack.topology.StablePartition import _bridge_unstable_span
+
+    trellis, cycle, bridges = two_branch_bridges
+    bridges[0].manifold_key = None
+    _span, pos = _bridge_unstable_span(trellis, bridges[0], cycle)
+
+    assert pos == 1
+
+
+def test_containing_bridge_filters_on_the_bridges_own_key(two_branch_bridges):
+    """The container of a backward image is looked up on the image's branch.
+
+    The branch-0 bridge spans the query too and is tighter, so it wins on cdist
+    evidence; only its own ``manifold_key`` rules it out of a branch-1 lookup.
+    """
+    from tanglepack.topology.StablePartition import _containing_bridge
+
+    trellis, cycle, bridges = two_branch_bridges
+
+    assert _containing_bridge(trellis, (0.1, 0.5), cycle[1]) is bridges[1]
+    assert _containing_bridge(trellis, (0.1, 0.5), cycle[0]) is bridges[0]
+    assert _containing_bridge(trellis, (0.1, 0.5), cycle[2]) is None
+
+
+def test_containing_bridge_accepts_a_keyless_bridge_on_cdist_evidence(
+    two_branch_bridges,
+):
+    """A keyless bridge whose endpoints do not contradict the branch is still
+    accepted, and being tighter it wins."""
+    from tanglepack.topology.StablePartition import _containing_bridge
+
+    trellis, cycle, bridges = two_branch_bridges
+    bridges[0].manifold_key = None
+
+    assert _containing_bridge(trellis, (0.1, 0.5), cycle[1]) is bridges[0]

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Optional, Literal, TYPE_CHECKING
+
+import numpy as np
+from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from .FixedPoint import FixedPoint
@@ -9,9 +11,6 @@ if TYPE_CHECKING:
 # ManifoldKey = (fixed_point, stability, orbit_index, branch_index)
 # Identical to the key type used in TangleWorkbench.manifolds.
 ManifoldKey = tuple["FixedPoint", Literal["unstable", "stable"], int, int]
-
-import numpy as np
-from numpy.typing import NDArray
 
 
 class Intersection:
@@ -32,9 +31,9 @@ class Intersection:
 
     def __init__(
         self,
-        coords: tuple[float, float] = None,
-        unstable_cdist: float = None,
-        stable_cdist: float = None,
+        coords: Optional[tuple[float, float]] = None,
+        unstable_cdist: Optional[float] = None,
+        stable_cdist: Optional[float] = None,
         seg_ids: Optional[frozenset[int]] = None,
         id: Optional[int] = None,
         label: Optional[str] = None,
@@ -74,13 +73,25 @@ class Intersection:
         )
 
     @property
-    def fixed_points(self) -> tuple:
-        """Return the distinct FixedPoint objects involved in this intersection."""
-        fps = []
-        if self.manifold_a_key is not None:
-            fps.append(self.manifold_a_key[0])
-        if self.manifold_b_key is not None and self.manifold_b_key[0] is not fps[0]:
-            fps.append(self.manifold_b_key[0])
+    def fixed_points(self) -> tuple["FixedPoint", ...]:
+        """
+        Return the distinct FixedPoint objects involved in this intersection.
+
+        Either key may be absent: a crossing born on an iterated bridge carries
+        only ``manifold_b_key`` until the bridge's unstable key is propagated,
+        and a synthetic crossing may carry neither.
+
+        Returns:
+            The distinct fixed points in (a, b) order: one element for a
+            homoclinic crossing, two for a heteroclinic one, and the empty
+            tuple when no manifold key is set.
+        """
+        fps: list["FixedPoint"] = []
+        for key in (self.manifold_a_key, self.manifold_b_key):
+            if key is None:
+                continue
+            if not any(key[0] is seen for seen in fps):
+                fps.append(key[0])
         return tuple(fps)
 
     @classmethod
@@ -90,16 +101,43 @@ class Intersection:
         unstable_cdist: float,
         stable_cdist: float,
         label: Optional[str] = None,
+        manifold_a_key: Optional[ManifoldKey] = None,
+        manifold_b_key: Optional[ManifoldKey] = None,
     ) -> Intersection:
         """
         Create an Intersection not backed by a detected segment crossing.
 
         Use this for:
-        - The fixed point itself
+        - The periodic point itself (the anchor at cdist (0, 0) of a branch pair)
         - Manually specified turning points
         - Any crossing you want to declare programmatically
+
+        Args:
+            coords: Geometric (x, y) of the crossing.
+            unstable_cdist: Position along the unstable manifold.
+            stable_cdist: Position along the stable manifold.
+            label: Optional human-readable name.
+            manifold_a_key: Key of the unstable branch this crossing sits on.
+            manifold_b_key: Key of the stable branch this crossing sits on.
+
+        Returns:
+            An Intersection with ``seg_ids`` and ``id`` both None; the id is
+            assigned by :meth:`IntersectionRegistry.add`.
+
+        Note:
+            The keys matter for anchors: every branch anchor shares cdist
+            (0, 0), so the branch keys are what keeps them apart in the
+            registry's collision test.
         """
-        return cls(coords, unstable_cdist, stable_cdist, None, label)
+        return cls(
+            coords=coords,
+            unstable_cdist=unstable_cdist,
+            stable_cdist=stable_cdist,
+            seg_ids=None,
+            label=label,
+            manifold_a_key=manifold_a_key,
+            manifold_b_key=manifold_b_key,
+        )
 
     # --- helpers ---
     @property

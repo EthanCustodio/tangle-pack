@@ -238,38 +238,74 @@ class TangleWorkbench:
         fixed_point: FixedPoint,
         stability: Stability,
         length: float,
+        max_iterations: int = 10,
         branch_index: int = 0,
-    ):
+    ) -> None:
+        """
+        Grow the manifold until its tail passes the requested canonical distance.
+
+        Args:
+            fixed_point (FixedPoint): The fixed point whose manifold is grown.
+            stability (Stability): Which manifold to grow.
+            length (float): Target canonical distance of the tail.
+            max_iterations (int): Growth iterations to attempt before giving up.
+                Defaults to 10, matching :meth:`grow_until_turnaround`.
+            branch_index (int): Which eigenvector branch to grow. Defaults to 0.
+
+        Raises:
+            ValueError: If the manifold has not been initialized, or if the cap is
+                reached before the tail passes ``length``.
+        """
 
         if self.manifolds.get((fixed_point, stability, 0, branch_index)) is None:
-            raise ValueError(f"""Manifold for fixed point {fixed_point} 
+            raise ValueError(f"""Manifold for fixed point {fixed_point}
                     with stability {stability} has not been initialized.
                     Please run initialize_manifold first.""")
 
         # TODO change this so it uses the actual arclength
-        current_distance = self.manifolds.get(
-            (fixed_point, stability, 0, branch_index)
-        ).tail.cdist
+        def tail_distance() -> float:
+            return self.manifolds[(fixed_point, stability, 0, branch_index)].tail.cdist
 
-        while current_distance < length:
+        for _ in range(max_iterations):
+
+            if tail_distance() >= length:
+                return None
 
             self.grow_n_times(
                 fixed_point, stability, num_iterations=1, branch_index=branch_index
             )
 
-            current_distance = self.manifolds.get(
-                (fixed_point, stability, 0, branch_index)
-            ).tail.cdist
-
-        else:
+        if tail_distance() >= length:
             return None
 
-    def grown_until_intersection(
-        self, fixed_point: FixedPoint, stability: Stability, max_iterations: int = 10
-    ):
+        raise ValueError(
+            "Max iterations reached, choose a higher cap or a shorter length."
+        )
 
-        if self.manifolds.get((fixed_point, stability, 0, 0)) is None:
-            raise ValueError(f"""Manifold for fixed point {fixed_point} 
+    def grow_until_intersection(
+        self,
+        fixed_point: FixedPoint,
+        stability: Stability,
+        max_iterations: int = 10,
+        branch_index: int = 0,
+    ) -> None:
+        """
+        Grow the manifold until a new crossing appears.
+
+        Args:
+            fixed_point (FixedPoint): The fixed point whose manifold is grown.
+            stability (Stability): Which manifold to grow.
+            max_iterations (int): Growth iterations to attempt before giving up.
+                Defaults to 10.
+            branch_index (int): Which eigenvector branch to grow. Defaults to 0.
+
+        Raises:
+            ValueError: If the manifold has not been initialized, or if the cap is
+                reached without a new crossing.
+        """
+
+        if self.manifolds.get((fixed_point, stability, 0, branch_index)) is None:
+            raise ValueError(f"""Manifold for fixed point {fixed_point}
                     with stability {stability} has not been initialized.
                     Please run initialize_manifold first.""")
 
@@ -280,7 +316,9 @@ class TangleWorkbench:
 
         for _ in range(max_iterations):
 
-            self.grow_n_times(fixed_point, stability, num_iterations=1)
+            self.grow_n_times(
+                fixed_point, stability, num_iterations=1, branch_index=branch_index
+            )
 
             self.compute_intersections(fixed_point, infer_iterates=False)
             num_current_intersections = len(self.Tangle._intersecting_segments)
@@ -288,8 +326,7 @@ class TangleWorkbench:
             if num_current_intersections > num_initial_intersections:
                 return None
 
-        else:
-            raise ValueError("Max iterations reached, no intersection found")
+        raise ValueError("Max iterations reached, no intersection found")
 
     def compute_intersections(
         self,
@@ -697,8 +734,10 @@ class TangleWorkbench:
         beta = lambda_u ** (1.0 / fp.k_value)  # per single-map-step cdist factor
 
         b_key = self._advance_key_forward(src.manifold_b_key, fp)
+        # On a heteroclinic crossing the unstable branch belongs to a DIFFERENT
+        # fixed point than the stable one, and advances by that point's own period.
         a_key = (
-            self._advance_key_forward(src.manifold_a_key, fp)
+            self._advance_key_forward(src.manifold_a_key, src.manifold_a_key[0])
             if src.manifold_a_key is not None
             else None
         )
@@ -734,28 +773,17 @@ class TangleWorkbench:
         """
         Return the manifold key one forward application of the map advances `key` to.
 
-        Under one application of M the orbit index advances by one (M cycles the
-        periodic orbit). For a fixed point with inversion the branch index flips each
-        time the orbit index wraps past the last orbit point (a full orbit returns to
-        the same point on the opposite eigenvector branch; two full orbits = k_value
-        steps return to the start).
+        Thin delegate to :meth:`FixedPoint.advance_key`, which is the single source
+        of truth for the (orbit, branch) advance rule.
 
-        Note:
-            The non-inversion path is exercised by the period-1 and period-3 tests;
-            the inversion branch-flip is implemented from first principles but has not
-            yet been validated against a computed inversion trellis.
+        Args:
+            key: The manifold key to advance.
+            fixed_point: The fixed point the key belongs to.
+
+        Returns:
+            The manifold key one forward map step along the chain.
         """
-        fp, stability, orbit_index, branch_index = key
-        period = fixed_point.period
-        if orbit_index == period - 1:
-            new_orbit_index = 0
-            new_branch_index = (
-                1 - branch_index if fixed_point.check_inversion() else branch_index
-            )
-        else:
-            new_orbit_index = orbit_index + 1
-            new_branch_index = branch_index
-        return (fp, stability, new_orbit_index, new_branch_index)
+        return fixed_point.advance_key(key, 1)
 
     def _bridge_signature(self, bridge: Bridge) -> Optional[tuple[float, float]]:
         """
@@ -932,24 +960,121 @@ class TangleWorkbench:
             canonical.append(existing if existing is not None else child)
         return canonical
 
+    def _endpoint_candidates(
+        self,
+    ) -> dict[tuple[FixedPoint, Stability, int, int] | None, list[tuple[float, int]]]:
+        """Group registry ids by the unstable branch that detected them."""
+        by_key: dict[
+            tuple[FixedPoint, Stability, int, int] | None, list[tuple[float, int]]
+        ] = {}
+        for ix_id, ix in self._intersection_registry:
+            by_key.setdefault(ix.manifold_a_key, []).append(
+                (float(ix.unstable_cdist), ix_id)
+            )
+        return by_key
+
     def _assign_bridge_intersections(self, bridges: list[Bridge]) -> None:
         """
         Populate first_intersection / second_intersection on each bridge by
         matching its root and tail cdists against the registry.
 
-        Bridge root and tail points are created at the same cdist as the
-        intersection they flank (both computed as the midpoint of the crossing
-        segment), so a nearest-unstable-cdist lookup is exact up to float precision.
+        Bridge root and tail points are the real manifold nodes flanking the
+        crossings the bridge was cut at, so the endpoint the bridge is looking for
+        is the crossing nearest each of them in unstable canonical distance -- but
+        only among the crossings on the bridge's OWN unstable branch. Unstable
+        cdist restarts at 0 on every branch of a period > 1 orbit (and on every
+        fixed point of a heteroclinic tangle), so a registry-wide nearest lookup
+        collides all of those first bridges onto whichever anchor crossing happened
+        to be registered first. Crossings with no unstable key (``manifold_a_key is
+        None``, born on an iterated bridge) remain eligible for every bridge --
+        their branch identity is simply not recorded yet -- but only as a fallback;
+        see the note below.
 
         Args:
             bridges: Freshly created Bridge objects whose endpoint fields are unset.
+
+        Note:
+            The match is validated by bracketing, not by a tight canonical-distance
+            tolerance. The root and tail nodes sit one manifold node below and above
+            their crossing, a gap set by the local node spacing (median 0.15, max
+            3.1 on the period-3 fixture -- five orders of magnitude above
+            ``cdist_tol``), so no relative tolerance on
+            ``|ix.unstable_cdist - root_u|`` is meaningful.
+            What must hold is that the two crossings lie inside the span the bridge
+            covers, and they are then the lowest and highest such crossing.
+
+        Note:
+            Keyless crossings are a last resort, not a peer of the bridge's own
+            branch. They carry another branch's canonical-distance scale, so one of
+            them landing inside a span can outrank -- or tie with -- the real
+            endpoint. They are therefore consulted only when the bridge's own
+            branch does not supply two crossings inside the span.
+
+        Note:
+            A freshly iterated bridge can still end up with fewer than two usable
+            crossings inside its span -- the leading piece of an image that starts
+            mid-arc, before the first crossing on it. Such a piece is not bounded by
+            two crossings at all; it falls back to a nearest-cdist match (the
+            pre-fix behaviour, now at least preferring its own branch) and logs a
+            warning rather than aborting the cut. Phase 2.2 removes the guesswork
+            entirely by having the cut record its own endpoints.
         """
         registry = self._intersection_registry
+        by_key = self._endpoint_candidates()
+        keyless = by_key.get(None, [])
+
         for bridge in bridges:
+            if bridge.manifold_key is None:
+                own = [c for group in by_key.values() for c in group]
+                fallback_pool = own
+            else:
+                own = by_key.get(bridge.manifold_key, [])
+                fallback_pool = own + keyless
+
+            if not fallback_pool:
+                logger.debug(
+                    "no candidate crossings on branch %s for a freshly cut bridge",
+                    bridge.manifold_key,
+                )
+                continue
+
             root_u = bridge.root.get_cdist("unstable")
             tail_u = bridge.tail.get_cdist("unstable")
-            bridge.first_intersection = registry.nearest_by_unstable_cdist(root_u)
-            bridge.second_intersection = registry.nearest_by_unstable_cdist(tail_u)
+            # the crossings sit strictly between the flanking nodes; the slack only
+            # absorbs the float noise of the midpoint that produced both cdists
+            slack = 1e-9 * max(abs(root_u), abs(tail_u)) + registry.cdist_tol
+
+            def in_span(candidate: tuple[float, int]) -> bool:
+                return root_u - slack <= candidate[0] <= tail_u + slack
+
+            inside = sorted(c for c in own if in_span(c))
+            if len(inside) < 2:
+                inside = sorted(c for c in fallback_pool if in_span(c))
+
+            chosen = (inside[0], inside[-1]) if len(inside) >= 2 else None
+
+            if chosen is not None and chosen[0][1] != chosen[1][1]:
+                (first_cdist, first_id), (second_cdist, second_id) = chosen
+            else:
+                first_cdist, first_id = min(
+                    fallback_pool, key=lambda c: abs(c[0] - root_u)
+                )
+                second_cdist, second_id = min(
+                    fallback_pool, key=lambda c: abs(c[0] - tail_u)
+                )
+                logger.warning(
+                    "bridge on %s spans [%r, %r] but holds %d usable crossing(s); "
+                    "falling back to a nearest-cdist match (%r, %r)",
+                    bridge.manifold_key,
+                    root_u,
+                    tail_u,
+                    len(inside),
+                    first_cdist,
+                    second_cdist,
+                )
+
+            bridge.first_intersection = first_id
+            bridge.second_intersection = second_id
 
     def build_intersection_graph(self) -> nx.MultiDiGraph:
         """
@@ -1355,27 +1480,37 @@ class TangleWorkbench:
         Args:
             fixed_point (FixedPoint): fixed point manifolds will be
                 trimmed from
+
+        Note:
+            A stable branch that nothing crosses yet -- a branch of a period > 1
+            orbit whose crossings have not developed, or a second fixed point whose
+            tangle has not reached this one -- is left untouched rather than
+            trimmed. There is no outermost crossing to trim to.
         """
 
-        intersecting_seg_ids = self.Tangle._intersecting_segments
-        # get a list of all the intersecting segment ids
-        intersecting_seg_ids = [n for pair in intersecting_seg_ids for n in pair]
+        intersecting_seg_ids = {
+            n for pair in self.Tangle._intersecting_segments for n in pair
+        }
 
         for manifold in self._iter_manifolds(fixed_point, "stable"):
 
-            all_segs = list(self.Tangle._manifold_segs[manifold])
-
             # find all the intersecting segment ids that are on this manifold
-            candidate_segs = list(set(all_segs) & set(intersecting_seg_ids))
+            candidate_segs = self.Tangle._manifold_segs[manifold] & intersecting_seg_ids
+
+            if not candidate_segs:
+                logger.debug(
+                    "trim_stable_manifolds: no crossings on %s, leaving it untrimmed",
+                    getattr(manifold, "manifold_key", manifold),
+                )
+                continue
 
             # get the segments
-            segs = [
-                self.Tangle._seg_lookup[candidate_segs[k]]
-                for k in range(len(candidate_segs))
-            ]
+            segs = [self.Tangle._seg_lookup[seg_id] for seg_id in candidate_segs]
 
-            # find the segment with the largest cdist
-            max_seg = max(segs, key=lambda s: s.p0_seg1.get_cdist())
+            # find the segment with the largest stable cdist. p0_seg1 may be the
+            # fixed point's BranchPoint, which carries one cdist per stability and
+            # so requires the argument.
+            max_seg = max(segs, key=lambda s: s.p0_seg1.get_cdist("stable"))
 
             # set the new truncated tail
             new_tail = max_seg.p0_seg1

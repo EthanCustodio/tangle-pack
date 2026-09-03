@@ -1,8 +1,12 @@
-from typing import Literal, Optional
+from __future__ import annotations
+
+from typing import Literal, Optional, Tuple
 from collections import deque
 
 import numpy as np
 from .BranchPoint import BranchPoint
+
+ManifoldKey = Tuple["FixedPoint", Literal["unstable", "stable"], int, int]
 
 """
 Dev Notes:
@@ -123,6 +127,84 @@ class FixedPoint:
         multiplier = 2 if any(x < 0 for x in self.unstable_eigenvalues) else 1
 
         self.k_value = self.period * multiplier
+
+    def advance_key(self, key: ManifoldKey, n: int = 1) -> ManifoldKey:
+        """
+        Advance a manifold key by ``n`` applications of the map.
+
+        This is the single source of truth for "which manifold piece does one map
+        step send this one to". One application of M sends the manifold piece
+        attached to orbit point ``i`` onto the piece at orbit point ``(i + 1) mod
+        period``, for BOTH stabilities: M maps W^s(x_i) onto W^s(x_{i+1}) exactly
+        as it maps W^u(x_i) onto W^u(x_{i+1}). ``stability`` is therefore carried
+        through untouched -- it is the caller who decides whether it wants the
+        forward step (``n = +1``, how the unstable fundamental segment is grown)
+        or the backward one (``n = -1``, how the stable one is).
+
+        The branch index labels the eigenvector direction at orbit point 0; the
+        pieces at the other orbit points inherit it by propagation. Without
+        inversion the branch never changes. With inversion (negative eigenvalue,
+        ``k_value == 2 * period``) M^period returns to orbit point 0 on the
+        OPPOSITE branch, so the branch flips exactly when the orbit index wraps
+        (period-1 -> 0 going forward, 0 -> period-1 going backward) and two full
+        orbits -- ``k_value`` steps -- return to the start.
+
+        The map is a group action on the ``k_value`` pieces: ``advance_key`` is
+        additive in ``n`` and has period ``k_value``.
+
+        Args:
+            key: A manifold key ``(fixed_point, stability, orbit_index,
+                branch_index)``. Its fixed point must be this one.
+            n: Number of map steps. Negative means applications of M^-1.
+                Defaults to 1.
+
+        Returns:
+            ManifoldKey: The key ``n`` map steps along the chain.
+
+        Raises:
+            ValueError: If the key belongs to another fixed point, if
+                ``set_k_value()`` has not been called, or if the branch index is
+                outside the fixed point's branch range.
+
+        Note:
+            The ordering this induces on an inversion point is
+            ``(0, 0), (1, 0), ..., (p-1, 0), (0, 1), ..., (p-1, 1)``: the piece
+            after ``(p-1, 0)`` is ``(0, 1)``. The pre-2026-09 initializer instead
+            walked ``for orbit_index: for branch_index:``, visiting ``(0, 1)``
+            before ``(1, 0)``, which is not the physical chain.
+        """
+
+        fp, stability, orbit_index, branch_index = key
+
+        if fp is not self:
+            raise ValueError(
+                "advance_key was given a key belonging to a different fixed point."
+            )
+
+        if self.k_value is None:
+            raise ValueError(
+                "k_value has not been set yet; call set_k_value() after the "
+                "eigenvalues are computed."
+            )
+
+        if not 0 <= branch_index < self.num_branches:
+            raise ValueError(
+                f"branch_index {branch_index} is outside this fixed point's branch "
+                f"range (num_branches={self.num_branches})."
+            )
+
+        if self.check_inversion():
+            assert self.num_branches == 2, (
+                "an inversion point must have two branches for the chain of "
+                f"k_value pieces to close; got num_branches={self.num_branches}"
+            )
+            # The k_value pieces are laid out as orbit_index + period * branch_index,
+            # so one map step is +1 on that single cyclic index and the branch flip
+            # falls out of the wrap.
+            position = (orbit_index + self.period * branch_index + n) % self.k_value
+            return (fp, stability, position % self.period, position // self.period)
+
+        return (fp, stability, (orbit_index + n) % self.period, branch_index)
 
     def get_iterable_array(
         self, stability: Literal["unstable", "stable"], shift: int = 0

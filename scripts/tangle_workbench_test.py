@@ -52,7 +52,7 @@ workbench.grow_n_times(fixed_point, "unstable", num_iterations=8)
 # workbench.grow_until_arclength(fixed_point, "unstable", 60)
 # workbench.grow_n_times(fixed_point, "stable", num_iterations=4)
 workbench.grow_until_turnaround(fixed_point, "stable")
-# workbench.grown_until_intersection(fixed_point, "unstable")
+# workbench.grow_until_intersection(fixed_point, "unstable")
 
 intersections = workbench.compute_intersections(fixed_point)
 print(intersections)

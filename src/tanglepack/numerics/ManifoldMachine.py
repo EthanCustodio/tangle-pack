@@ -47,7 +47,7 @@ expected behaviour of these maps for arms that leave the trapped region (cf.
 by the fifth iterate"). There is nothing to fix in ``refine_manifold`` /
 ``_refine_layer``: a fully developed tangle needs only a handful of iterations, and
 arms are meant to be grown with a stop condition (``grow_until_turnaround`` /
-``grow_until_arclength`` / ``grown_until_intersection``), NOT a large fixed
+``grow_until_arclength`` / ``grow_until_intersection``), NOT a large fixed
 iteration count that walks an escaping arm out to infinity. The ``< 1e-8`` spatial
 guard in ``_refine_layer`` stays as-is; it is fine for the regime we actually use.
 See project memory ``solver-rootcause-and-seed-step``.
@@ -61,13 +61,68 @@ class ManifoldMachine:
         self.system = system
         self.area_cutoff = 1e-4
 
+    def _branch_view(
+        self,
+        fixed_point: FixedPoint,
+        key: tuple,
+        stretch_param: float,
+    ) -> BaseManifold:
+        """A transient BaseManifold over the piece a manifold key names."""
+        view = BaseManifold(
+            fixed_point.branch_points[key[2]],
+            key[1],
+            stretch_param=stretch_param,
+            fixed_point=fixed_point,
+            branch_index=key[3],
+        )
+
+        if isinstance(view.root, BranchPoint):
+            view.root = view.walk_fwd(None, view.root)
+
+        return view
+
     def new_grow_manifold(
         self,
         fixed_point: FixedPoint,
         stability: Literal["unstable", "stable"],
         branch_index: Optional[int] = None,
-    ):
-        orbit_indices = fixed_point.get_iterable_array(stability, shift=1)
+    ) -> None:
+        """
+        Grow every manifold of the given stability by one map iteration.
+
+        The manifold pieces attached to a periodic orbit form ONE chain under the
+        map: the piece at ``(orbit, branch)`` maps onto the piece one
+        :meth:`FixedPoint.advance_key` step along. Growing them all by one
+        iteration is therefore a single walk of that chain, iterating each piece
+        in turn -- ``k_value`` steps, which closes the chain (``k_value`` is the
+        period without inversion and twice the period with it).
+
+        Growth happens by side effect: :meth:`iterate_manifold` splices the images
+        into the next orbit point's linked list, so the manifold it returns is
+        never needed here -- the next step re-reads the spliced-in points through a
+        fresh view.
+
+        The walk starts one step BEHIND ``(0, b)`` so that the piece whose image
+        lands on orbit point 0 is iterated first; that is the order the previous
+        implementation produced via ``get_iterable_array(stability, shift=1)``, and
+        it keeps every piece growing by exactly one fundamental segment per call.
+
+        Args:
+            fixed_point (FixedPoint): The fixed point whose manifolds are grown.
+            stability (Literal["unstable", "stable"]): Stability to grow. Unstable
+                pieces advance along the chain (+1 map step), stable pieces are
+                grown by the inverse map and so walk it backwards (-1).
+            branch_index (int, optional): Which eigenvector branch to grow. None
+                grows every allocated branch. Ignored (with a warning) on an
+                inversion point, where a single chain already covers both branches.
+
+        Note:
+            On an inversion point the previous implementation iterated each piece
+            once per branch index, mapping the same piece forward twice per orbit
+            step and discarding the result. One chain walk of ``k_value`` steps
+            covers both branches exactly once.
+        """
+        step = 1 if stability == "unstable" else -1
 
         if fixed_point.check_inversion():
             if branch_index is not None:
@@ -75,58 +130,36 @@ class ManifoldMachine:
                     "branch_index is ignored for inversion points; "
                     "both branches are grown together."
                 )
-            branches_to_grow = fixed_point.get_branch_array()
+            # a single chain of k_value pieces already visits both branches
+            start_branches = [0]
         else:
-            branches_to_grow = (
+            start_branches = (
                 list(range(fixed_point.num_branches))
                 if branch_index is None
                 else [branch_index]
             )
 
-        for b in branches_to_grow:
-            current_manifold = BaseManifold(
-                fixed_point.branch_points[orbit_indices[0]],
-                stability,
-                stretch_param=1,
-                fixed_point=fixed_point,
-                branch_index=b,
-            )
+        for b in start_branches:
+            key = fixed_point.advance_key((fixed_point, stability, 0, b), -step)
 
-            temp_root = current_manifold.root
-            if isinstance(current_manifold.root, BranchPoint):
-                current_manifold.root = current_manifold.walk_fwd(None, temp_root)
-
-            if current_manifold.root is None:
+            view = self._branch_view(fixed_point, key, stretch_param=1)
+            if view.root is None:
                 continue  # branch not initialized
 
-            current_manifold.stretch_param = current_manifold.root.stretch_param
+            # the whole chain shares the stretch parameter of the piece it starts on
+            stretch_param = view.root.stretch_param
+            view.stretch_param = stretch_param
 
-            for i in range(fixed_point.period):
+            for _ in range(fixed_point.k_value):
 
-                for bi in (
-                    fixed_point.get_branch_array()
-                    if fixed_point.check_inversion()
-                    else [b]
-                ):
+                self.iterate_manifold(view)
 
-                    iterated_manifold = self.iterate_manifold(current_manifold)
-
-                    next_index = (i + 1) % fixed_point.period
-                    next_orbit_idx = orbit_indices[next_index]
-
-                    next_manifold = BaseManifold(
-                        root=fixed_point.branch_points[next_orbit_idx],
-                        stability=stability,
-                        stretch_param=current_manifold.stretch_param,
-                        fixed_point=fixed_point,
-                        branch_index=bi,
-                    )
-
-                    temp_root = next_manifold.root
-                    if isinstance(next_manifold.root, BranchPoint):
-                        next_manifold.root = next_manifold.walk_fwd(None, temp_root)
-
-                    current_manifold = next_manifold
+                key = fixed_point.advance_key(key, step)
+                view = self._branch_view(fixed_point, key, stretch_param)
+                assert view.root is not None, (
+                    f"manifold piece {key[2], key[3]} of a chain that started at "
+                    f"branch {b} is not initialized"
+                )
 
     def iterate_manifold(self, manifold: BaseManifold):
         """

@@ -14,10 +14,12 @@ iterate, so iterating an *exterior* bridge many times would blow up exponentiall
 zone interior is the only region where iterating many times stays bounded, and is the
 intended use of this feature.
 
-The orchestration is intentionally tolerant: a bridge whose forward map fails (a rare
-under-resolved iterate) is skipped and counted rather than aborting the whole blast, so
-a long run always returns a :class:`BlastResult`. Pass ``strict=True`` to surface such
-failures instead.
+The orchestration is intentionally tolerant: a bridge whose forward map fails with an
+``AttributeError`` or ``ValueError`` (a rare under-resolved iterate) is skipped and
+counted rather than aborting the whole blast, so a long run always returns a
+:class:`BlastResult`. Pass ``strict=True`` to surface such failures instead. An
+``AssertionError`` is never tolerated: assertions guard the invariants of the numerical
+layer (CLAUDE.md), so a violated invariant aborts the blast at either strictness.
 
 This is a loom-layer algorithm: it reads the topological notion of a zone and acts on
 the numerical layer (:meth:`TangleWorkbench.iterate_bridge`). It is exposed on the
@@ -64,13 +66,13 @@ def _min_interior_distance(child: "Bridge", reference: np.ndarray) -> float:
         return float("inf")
     try:
         from scipy.spatial import cKDTree
-
-        tree = cKDTree(reference)
-        dists, _ = tree.query(pts)
-        return float(np.min(dists))
-    except Exception:  # pragma: no cover - scipy always present, brute-force fallback
+    except ImportError:  # pragma: no cover - scipy always present, brute-force fallback
         diffs = pts[:, None, :] - reference[None, :, :]
         return float(np.sqrt((diffs**2).sum(-1)).min())
+
+    tree = cKDTree(reference)
+    dists, _ = tree.query(pts)
+    return float(np.min(dists))
 
 
 @dataclass
@@ -170,7 +172,9 @@ def blast_zone(
         fixed_point: If given, only bridges emanating from this fixed point (or, if a
             list/iterable of fixed points is passed, any of them) participate;
             otherwise (``None``) every fixed point's interior bridges do.
-        strict: If True, re-raise a bridge's forward-map failure instead of skipping it.
+        strict: If True, re-raise a bridge's tolerated forward-map failure
+            (``AttributeError``/``ValueError``) instead of skipping it. An
+            ``AssertionError`` always propagates, at either setting.
         min_separation: If given, a freshly produced interior bridge is dropped from
             the frontier when its interior runs within ``min_separation`` of an
             already-kept sibling. Unstable curves can never truly cross, so two
@@ -283,7 +287,11 @@ def blast_zone(
                 continue
             try:
                 children = workbench.iterate_bridge(parent)
-            except (AssertionError, AttributeError, ValueError) as exc:
+            except (AttributeError, ValueError) as exc:
+                # AssertionError is deliberately NOT caught: assertions are the
+                # correctness guard of this codebase (CLAUDE.md), so a violated
+                # cdist-monotonicity invariant in the forward map must abort the
+                # blast rather than be logged as a skipped bridge.
                 if strict:
                     raise
                 logger.warning(

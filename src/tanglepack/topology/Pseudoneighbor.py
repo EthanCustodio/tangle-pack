@@ -404,15 +404,37 @@ def _strong_pip_cuts(
 ) -> tuple[dict[ManifoldKey, int], dict[ManifoldKey, float]]:
     """Per stable branch: the strong-pip cut point's id and stable cdist.
 
-    Empty when no strong pip has been chosen.
+    Empty when no strong pip has been chosen. A period-k anchor is cut on all
+    ``k_value`` of its stable branches, by the pip and its k-1 forward
+    iterates; anything short of that (a gap in the iterate table, or two cut
+    points landing on one branch) leaves branches uncut and silently widens the
+    reference window there, so it is logged.
     """
     cut_ids: dict[ManifoldKey, int] = {}
     cut_cdists: dict[ManifoldKey, float] = {}
-    for iid in trellis.strong_pip_cut_points():
+    cut_points = trellis.strong_pip_cut_points()
+    for iid in cut_points:
         ix = trellis.intersection(iid)
         if ix.manifold_b_key is not None:
             cut_ids[ix.manifold_b_key] = iid
             cut_cdists[ix.manifold_b_key] = ix.stable_cdist
+
+    pip = trellis.strong_pip_intersection
+    if pip is not None and pip.manifold_b_key is not None:
+        k_value = getattr(pip.manifold_b_key[0], "k_value", None)
+        if k_value is not None and (
+            len(cut_points) < k_value or len(cut_ids) < k_value
+        ):
+            logger.warning(
+                "Strong pip %s cuts only %d point(s) on %d stable branch(es), "
+                "but its fixed point has k_value %d; the remaining branches are "
+                "uncut and their reference windows run to the manifold end "
+                "(is the iterate table inferred?)",
+                trellis.strong_pip,
+                len(cut_points),
+                len(cut_ids),
+                k_value,
+            )
     return cut_ids, cut_cdists
 
 

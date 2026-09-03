@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import bisect
+import logging
 from typing import Callable, Literal, Optional, TYPE_CHECKING
 
 import networkx as nx
@@ -12,6 +13,9 @@ from .IterateTable import IterateTable
 
 if TYPE_CHECKING:
     from .FixedPoint import FixedPoint
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class IntersectionRegistry:
@@ -132,7 +136,7 @@ class IntersectionRegistry:
         with on_interval() and related methods.
         """
         return self.add(
-            Intersection(
+            Intersection.synthetic(
                 coords=coords,
                 unstable_cdist=unstable_cdist,
                 stable_cdist=stable_cdist,
@@ -434,7 +438,7 @@ class IntersectionRegistry:
                 if branch_index is not None and key[3] != branch_index:
                     continue
 
-            lambda_u = self._get_lambda_u(ix)
+            lambda_u = self._get_lambda_u(ix, stability)
             if lambda_u is None:
                 continue
 
@@ -589,21 +593,58 @@ class IntersectionRegistry:
 
     # ── internal helpers ───────────────────────────────────────────────────
 
-    def _get_lambda_u(self, intersection: Intersection) -> Optional[float]:
+    def _get_lambda_u(
+        self,
+        intersection: Intersection,
+        stability: Literal["unstable", "stable"] = "unstable",
+    ) -> Optional[float]:
         """
         Read the unstable eigenvalue magnitude from the intersection's manifold keys.
 
-        For stability="unstable", uses manifold_a_key (the unstable manifold side).
-        For stability="stable", uses manifold_b_key.
-        If neither key is set, returns None and the intersection is skipped by callers.
+        A crossing can involve two different fixed points (a heteroclinic
+        crossing), whose eigenvalues differ, so the side matters: the image of a
+        crossing along the unstable manifold is governed by the unstable
+        branch's fixed point, and along the stable manifold by the stable
+        branch's fixed point.
+
+        Args:
+            intersection: The crossing whose eigenvalue is wanted.
+            stability: Which side to read: "unstable" uses ``manifold_a_key``,
+                "stable" uses ``manifold_b_key``. Falls back to the other key
+                (logging at debug) only when the requested one is None.
+
+        Returns:
+            The eigenvalue magnitude as a Python float, or None when no key is
+            set or the fixed point has no eigenvalues yet (callers skip the
+            intersection in that case).
         """
-        key = intersection.manifold_a_key or intersection.manifold_b_key
+        preferred = (
+            intersection.manifold_a_key
+            if stability == "unstable"
+            else intersection.manifold_b_key
+        )
+        key = preferred
+        if key is None:
+            key = (
+                intersection.manifold_b_key
+                if stability == "unstable"
+                else intersection.manifold_a_key
+            )
+            if key is not None:
+                logger.debug(
+                    "no %s-side manifold key on intersection %s; falling back to "
+                    "the other side's eigenvalue",
+                    stability,
+                    intersection.id,
+                )
         if key is None:
             return None
+
         fp = key[0]
-        if not hasattr(fp, "unstable_eigenvalues") or not fp.unstable_eigenvalues:
+        eigenvalues = getattr(fp, "unstable_eigenvalues", None)
+        if eigenvalues is None or len(eigenvalues) == 0:
             return None
-        return abs(fp.unstable_eigenvalues[0])
+        return float(abs(np.ravel(eigenvalues[0])[0]))
 
     def _find_collision(self, intersection: Intersection) -> Optional[int]:
         """

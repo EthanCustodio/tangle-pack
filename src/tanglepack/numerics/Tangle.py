@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import numpy as np
+from numpy.typing import NDArray
 from rtree import index
 from rtree.core import RTreeError
 from collections import defaultdict
@@ -15,6 +18,12 @@ from .Bridge import Bridge
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Relative threshold shared by the two geometric predicates below. Both compare an
+# area-like quantity (a cross product, a 2x2 determinant) that scales as the product
+# of the two lengths involved, so dividing that product out makes the threshold a
+# bound on sin(angle) between the two directions and the predicates scale invariant.
+_EPS_REL = 1e-12
 
 
 """
@@ -92,11 +101,17 @@ class Tangle:
 
         Attributes:
             _rtree: spatial rtree to store all segments based on their bounding boxes
-            _edge_seen:
+            _edge_to_sid: Maps an edge (the frozenset of its two point ids) to the
+                id of the segment already registered for it, so a manifold that
+                reuses another manifold's points (every bridge does) is given the
+                EXISTING segment rather than being silently dropped.
             _seg_lookup: Dictionary keyed by unique segment ids that
                 stores segments
             _manifold_segs Dictionary keyed by manifolds which stores
                 a set of all segments
+            _seg_manifolds: Reverse of _manifold_segs -- every manifold that
+                claims a given segment id. A segment stays indexed until its last
+                owner is removed.
 
             _intersecting_segments: set of frozensets containing pairs of
                 segment ids that intersect
@@ -109,9 +124,10 @@ class Tangle:
         p = index.Property()
         p.dimension = 2
         self._rtree = index.Index(properties=p)  # R-tree
-        self._edge_seen: set[frozenset[int]] = set()
+        self._edge_to_sid: dict[frozenset[int], int] = {}
         self._seg_lookup: dict[int, _Segment] = {}
         self._manifold_segs: defaultdict[BaseManifold, set[int]] = defaultdict(set)
+        self._seg_manifolds: defaultdict[int, set[BaseManifold]] = defaultdict(set)
 
         self._intersecting_segments: set[frozenset[int]] = set()
         # keyed by the crossing's segment pair, so one segment can host many crossings
@@ -139,9 +155,10 @@ class Tangle:
         self._rtree = index.Index(properties=p)
 
         # Clear all dictionaries and sets
-        self._edge_seen.clear()
+        self._edge_to_sid.clear()
         self._seg_lookup.clear()
         self._manifold_segs.clear()
+        self._seg_manifolds.clear()
         self._intersecting_segments.clear()
         self._intersecting_coords.clear()
         self._intersecting_points.clear()
@@ -178,9 +195,10 @@ class Tangle:
 
         Returns:
             The new Intersection, or None when the pair was already processed,
-            references a removed segment (dropped as stale), or is a
+            references a removed segment (dropped as stale), is a
             same-stability near-tangency (discarded per the fundamental
-            invariant -- see populate_intersection_dict).
+            invariant -- see populate_intersection_dict), or is near-parallel
+            and so has no well-conditioned crossing point.
         """
         if seg_id_pair in self._processed_pairs:
             return None
@@ -200,6 +218,12 @@ class Tangle:
             return None
 
         point = self._find_true_intersection(seg_1, seg_2)
+        if point is None:
+            # near-parallel pair (already logged): discard it rather than let it
+            # abort the whole intersection pass
+            self._intersecting_segments.discard(seg_id_pair)
+            self._processed_pairs.add(seg_id_pair)
+            return None
 
         # cdist interpolated at the true crossing (not the segment midpoint)
         seg_1_cdist = self._cdist_at_point(seg_1, point)
@@ -244,10 +268,24 @@ class Tangle:
 
         return intersection
 
-    def _find_true_intersection(self, seg1: _Segment, seg2: _Segment):
+    def _find_true_intersection(
+        self, seg1: _Segment, seg2: _Segment
+    ) -> Optional[NDArray[np.float64]]:
         """
-        Takes in two segments that are intersecting and returns
-        the true point of intersection between them
+        Solve two crossing segments for their true point of intersection.
+
+        The 2x2 determinant scales like ``|AB| * |CD|``, so the near-parallel
+        test divides that product out: with an absolute threshold a real
+        crossing of two 1e-7-long segments looked degenerate and aborted the
+        whole intersection pass with an exception.
+
+        Args:
+            seg1: One of the two segments.
+            seg2: The other segment.
+
+        Returns:
+            The crossing point, or None if the two directions are parallel to
+            within ``_EPS_REL`` (the caller discards such a pair).
         """
         p0_seg1, p1_seg1 = seg1.p0.get_point(), seg1.p0_seg1.get_point()
         p0_seg2, p1_seg2 = seg2.p0.get_point(), seg2.p0_seg1.get_point()
@@ -257,9 +295,19 @@ class Tangle:
         M = np.vstack((b - a, c - d)).T  # [[Bx-Ax, Cx-Dx], [By-Ay, Cy-Dy]]
         rhs = c - a
 
-        det = np.linalg.det(M)
-        if abs(det) < 1e-16:  # nearly parallel; shouldn't happen here
-            raise ValueError("Segments are parallel or degenerate")
+        det = float(np.linalg.det(M))
+        scale = float(np.linalg.norm(b - a) * np.linalg.norm(d - c))
+        if abs(det) <= _EPS_REL * scale:
+            logger.warning(
+                "Discarding near-parallel segment pair %s (%s) x %s (%s): "
+                "relative det %.3g",
+                seg1.id,
+                Tangle._key_of(seg1),
+                seg2.id,
+                Tangle._key_of(seg2),
+                det / scale if scale > 0.0 else float("inf"),
+            )
+            return None
 
         t, s = np.linalg.solve(M, rhs)  # t on AB, s on CD
         # (Optional sanity: assert 0<=t<=1 and 0<=s<=1 if you didn't already know)
@@ -288,7 +336,12 @@ class Tangle:
         )
         self._processed_pairs.add(seg_id_pair)
 
-    def add_manifold(self, manifold: BaseManifold, index_segments: bool = True):
+    def add_manifold(
+        self,
+        manifold: BaseManifold,
+        index_segments: bool = True,
+        detect_crossings: bool = True,
+    ) -> None:
         """
         Registers every segment of a manifold and detects its crossings.
 
@@ -304,21 +357,31 @@ class Tangle:
                 bridge-x-bridge (unstable x unstable) pairs, which are
                 numerical artifacts that get discarded anyway. Skipping the
                 inserts is what keeps repeated bridge iteration fast.
+            detect_crossings (bool): If False, genuinely new segments are
+                registered without being queried against the rtree. Used when
+                cutting bridges out of an already-indexed manifold: every
+                crossing on that stretch of curve was already found on the
+                parent's segments, so querying again would only duplicate it.
 
         Note:
-            Does not check if segments have already been inserted
+            An edge that is already registered (a bridge reuses its parent
+            manifold's points) is mapped to the existing segment id and that id
+            is recorded under ``manifold`` as well, so one segment may have
+            several owners.
         """
         # ---------- A. purge old entries (if any) ----------
         if manifold in self._manifold_segs:
             # copy, because _remove_segment mutates the same set
             for sid in list(self._manifold_segs[manifold]):
-                self._remove_segment(sid)
+                self._remove_segment(sid, manifold)
 
-        # _insert_segment records each new id in _manifold_segs itself; collecting
-        # its return values here would sweep the None it returns for already-seen
-        # edges into the id set and poison later lookups.
+        # _insert_segment records each id in _manifold_segs itself.
         for segment in self._segments_of(manifold):
-            self._insert_segment(segment, index_in_rtree=index_segments)
+            self._insert_segment(
+                segment,
+                index_in_rtree=index_segments,
+                detect_crossings=detect_crossings,
+            )
 
     def add_manifolds(self, manifolds: list[BaseManifold]):
         """
@@ -342,13 +405,17 @@ class Tangle:
         for manifold in manifolds:
             for segment in self._segments_of(manifold):
                 edge_key = frozenset((id(segment.p0), id(segment.p0_seg1)))
-                if edge_key in self._edge_seen:
+                existing_sid = self._edge_to_sid.get(edge_key)
+                if existing_sid is not None:
+                    # Same edge reached from a second manifold: claim the segment
+                    # that is already indexed rather than dropping it.
+                    self._claim_segment(existing_sid, manifold)
                     continue
 
                 segment.id = next(Tangle._ids)
-                self._edge_seen.add(edge_key)
+                self._edge_to_sid[edge_key] = segment.id
                 self._seg_lookup[segment.id] = segment
-                self._manifold_segs[segment.manifold].add(segment.id)
+                self._claim_segment(segment.id, segment.manifold)
                 new_segments.append(segment)
 
         if not new_segments:
@@ -482,12 +549,26 @@ class Tangle:
             self._intersecting_points.pop(pair, None)
 
     # ------------- internal helpers -----------------
+    def _claim_segment(self, sid: int, manifold: BaseManifold) -> None:
+        """Record ``manifold`` as an owner of segment ``sid`` (idempotent)."""
+        self._manifold_segs[manifold].add(sid)
+        self._seg_manifolds[sid].add(manifold)
+
     def _insert_segment(
-        self, seg: _Segment, index_in_rtree: bool = True
-    ) -> Optional[int]:
+        self,
+        seg: _Segment,
+        index_in_rtree: bool = True,
+        detect_crossings: bool = True,
+    ) -> int:
         """
         Registers a segment, detects its crossings, and (optionally) inserts
         it into the rtree.
+
+        An edge that is already registered is NOT duplicated: the existing
+        segment id is claimed by ``seg.manifold`` and returned. A bridge is cut
+        out of a live manifold and so reuses that manifold's points; dropping
+        those edges (the old behaviour) left ``_manifold_segs[bridge]`` empty and
+        made every ``for_manifold=`` filter and segment lookup blind to it.
 
         Parameters:
             seg (_Segment): segment to be inserted
@@ -495,14 +576,25 @@ class Tangle:
                 crossings against the indexed segments are detected, but it is
                 not itself made findable. See add_manifold for when this is
                 the right call.
+            detect_crossings (bool): If False the rtree is not queried for
+                crossings of this segment. See add_manifold.
 
         Returns:
-            The segment id, or None if this edge was already indexed.
+            The segment id -- freshly allocated, or the id already registered
+            for this edge.
         """
         # edge key defined by the id of two points
         edge_key = frozenset((id(seg.p0), id(seg.p0_seg1)))
-        if edge_key in self._edge_seen:
-            return None  # already indexed -> do NOT duplicate
+        existing_sid = self._edge_to_sid.get(edge_key)
+        if existing_sid is not None:
+            # already indexed -> do NOT duplicate, just add an owner
+            existing = self._seg_lookup[existing_sid]
+            assert existing.manifold.stability == seg.manifold.stability, (
+                "an edge is shared only between a manifold and a piece cut out of "
+                "it, which have the same stability"
+            )
+            self._claim_segment(existing_sid, seg.manifold)
+            return existing_sid
 
         # choose a new id there for a new segment
         sid = next(Tangle._ids) if seg.id is None else seg.id
@@ -513,9 +605,12 @@ class Tangle:
         if index_in_rtree:
             self._rtree.insert(sid, seg.bounds)
         seg.in_rtree = index_in_rtree
-        self._edge_seen.add(edge_key)
+        self._edge_to_sid[edge_key] = sid
         self._seg_lookup[sid] = seg
-        self._manifold_segs[seg.manifold].add(sid)
+        self._claim_segment(sid, seg.manifold)
+
+        if not detect_crossings:
+            return sid
 
         for cand_id in self._rtree.intersection(seg.bounds):
 
@@ -531,17 +626,30 @@ class Tangle:
 
         return sid
 
-    def _remove_segment(self, sid: int):
+    def _remove_segment(self, sid: int, manifold: BaseManifold):
         """
-        Remove all references to the segment
+        Drop one owner's claim on a segment, and the segment itself once the
+        last owner is gone.
+
+        A segment id may belong to several manifolds (a bridge shares its
+        parent's points), so dropping one owner must leave the segment indexed
+        for the others.
 
         Parameters:
             sid (int): segment id
+            manifold (BaseManifold): The owner giving up the segment.
         """
         # Check if segment exists before trying to remove it
         if sid not in self._seg_lookup:
             return
 
+        owners = self._seg_manifolds.get(sid, set())
+        owners.discard(manifold)
+        self._manifold_segs[manifold].discard(sid)
+        if owners:
+            return  # still referenced -> keep it indexed
+
+        self._seg_manifolds.pop(sid, None)
         seg = self._seg_lookup.pop(sid)
 
         # Safely remove from rtree (query-only segments were never in it)
@@ -555,11 +663,7 @@ class Tangle:
                     "rtree delete failed for segment %s", sid, exc_info=True
                 )
 
-        # Safely remove from manifold's segment set
-        if seg.manifold in self._manifold_segs:
-            self._manifold_segs[seg.manifold].discard(sid)
-
-        self._edge_seen.discard(frozenset((id(seg.p0), id(seg.p0_seg1))))
+        self._edge_to_sid.pop(frozenset((id(seg.p0), id(seg.p0_seg1))), None)
 
     def _segments_of(self, manifold: BaseManifold):
         """
@@ -602,15 +706,34 @@ class Tangle:
         }
 
     @staticmethod
-    def _orientation(a, b, c, eps=1e-15):
+    def _orientation(a, b, c, eps_rel: float = _EPS_REL) -> int:
         """
+        Orientation of the ordered triple (a, b, c).
+
+        ``val`` is the cross product of ``b - a`` and ``c - b``, i.e.
+        ``|b - a| * |c - b| * sin(angle)``. Comparing it against an ABSOLUTE
+        epsilon made the verdict depend on the size of the triangle: on a
+        refined manifold (leg lengths ~1e-7) a perfectly real shallow crossing
+        produces ``val ~ 1e-17`` and was reported collinear, so the crossing was
+        missed. Dividing out the two leg lengths turns the threshold into one on
+        ``sin(angle)``, which is scale invariant.
+
+        Args:
+            a: First point as an (x, y) pair.
+            b: Second point as an (x, y) pair.
+            c: Third point as an (x, y) pair.
+            eps_rel: Threshold on ``sin(angle)`` below which the triple counts
+                as collinear.
+
         Returns:
-        0 if a, b, c are collinear
-        1 if clockwise
-        2 if counterclockwise
+            0 if a, b, c are collinear, 1 if clockwise, 2 if counterclockwise.
         """
-        val = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
-        if abs(val) < eps:
+        ux, uy = b[0] - a[0], b[1] - a[1]
+        vx, vy = c[0] - b[0], c[1] - b[1]
+        val = uy * vx - ux * vy
+        scale = np.hypot(ux, uy) * np.hypot(vx, vy)
+        if abs(val) <= eps_rel * scale:
+            # covers the exact-zero case, including a degenerate (zero-length) leg
             return 0
         return 1 if val > 0 else 2
 
@@ -752,6 +875,14 @@ class Tangle:
                 # image) records which unstable branch it belongs to.
                 bridge.manifold_key = manifold.manifold_key
                 all_bridges.append(bridge)
+
+        # --- 3. Register each bridge's segments under the bridge itself ---
+        # Done only after every cut, because _insert_crossing_separator may still
+        # splice a point into a span an earlier bridge already covers. The segments
+        # are the parent's own, so they are neither re-inserted into the rtree nor
+        # re-queried: every crossing on them was found on the parent already.
+        for bridge in all_bridges:
+            self.add_manifold(bridge, index_segments=False, detect_crossings=False)
 
         # --- 4. Wire next_bridge / prev_bridge doubly-linked list ---
         for i in range(len(all_bridges) - 1):

@@ -67,6 +67,8 @@ Phase 3, deleted here so Blast is rewritten once).
 
 ## Phase 1 — Confirmed bug fixes (each with a regression test)
 
+✅ DONE 2026-09-02 (all 20 rows; suite 211 passed / 1 skipped). Deviations: 1.2 uses branch-filtered bracketing with a logged nearest-cdist fallback (a 1e-6 relative match is impossible because root/tail are real nodes; the fallback is deleted by 2.2); 1.13 raises `ValueError` (input error) instead of asserting, and the Hénon sign flip turned out never to have existed in the repo history (only its comment did) so the `orient` hook is a new documented extension point; 1.14 needed NO code change — the plan text had the two ends swapped, `_build_intervals` already consults the existing neighbour on each side and the missing side is vacuously excluded (two pin tests added); 1.16 resets `pair.hole` for all recorded pairs, not just those in scope, because `Trellis.punch_holes` clears `self.holes` wholesale; 1.7's `FixedPoint.advance_key` landed here (plan 2.5). The Phase 0 invariants are now hard assertions in `Trellis.punch_holes` with `orientation_preserving` derived from det J.
+
 | # | Location | Fix |
 |---|---|---|
 | 1.1 | `StablePartition._containing_bridge`, `_bridge_unstable_span` | Filter on `bridge.manifold_key`, never on endpoint keys. Root cause of the period>1 partition instability. Superseded again in Phase 2 when endpoint ids come from the cut itself, but fixed first so the topology suite is trustworthy. |
@@ -273,6 +275,15 @@ correctness checkpoint (suite green, topology tests trustworthy). Phases 3 throu
 is mechanical and can be interleaved once the interfaces have settled.
 
 ## Deferred (found during implementation, not in the plan)
+
+- Phase 1: `clear_bridges`/`rebuild_bridges` leave discarded bridges as segment owners in `Tangle._manifold_segs`/`_seg_manifolds` (bridges own segments since 1.3); masked by `clear_all()` on recompute; fix in Phase 3 `clear_bridges`.
+- Phase 1: `_insert_crossing_separator` leaves the parent's pre-split edge registered with stale bounds (pre-existing).
+- Phase 1: `_register_forward_iterate` takes `beta` from the stable side's fixed point for both cdists on heteroclinic crossings; fix with `per_step_beta` in 2.5.
+- Phase 1: `_validate_saddle` may reject a near-parabolic period-k saddle (complex pair from rounding) and `ier != 1` rejects `ier=5` at machine-precision residuals; gate on the residual if it ever bites.
+- Phase 1: style items for Phase 8 — `TangleWorkbench.py` lacks `from __future__ import annotations` (PEP 604 return annotation in `_endpoint_candidates`), `Tangle` logger has no `NullHandler`, unannotated params in `Tangle._orientation` / `ManifoldMachine._branch_view`, `Tangle._segments_touching` and `StablePartition._bridge_midpoint` are caller-less, `FixedPoint.get_iterable_array(shift=)` has no production caller.
+- Phase 1: p3 registry ids are not deterministic across two builds in one process (id()-ordered iteration somewhere in `Tangle.create_bridges`/`_intersecting_segments`); no test hard-codes ids, but worth pinning down in Phase 2/4.
+- Notebooks `scripts/tangle_workbench_test.ipynb` and `scripts/tangle_workbench_higher_period_test.ipynb` call the renamed `grown_until_intersection`; Phase 8 notebook pass.
+- `TangleSession.blast_zone`'s `strict` docstring should say AssertionError always propagates; a `TangleSession.restore_resonance_zone` wrapper invalidating trellises would close a staleness gap (moot after Phase 4).
 
 - Notebooks `scripts/tangle_workbench_test.ipynb` (`create_resonance_zone`), `scripts/manifold_cutting_test.ipynb` (`intersections_for_segment`) call names deleted in Phase 0; fix or archive with the Phase 8 notebook pass.
 - `docs/nested_tangle_bridge_cutting_fix_plan.md` and `docs/higher_period_bridge_bug_plan.md` describe `_boundary_point` / `index_manifolds` as current; annotate in the Phase 8 docs pass.
