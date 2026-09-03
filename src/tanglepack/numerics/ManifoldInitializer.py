@@ -312,41 +312,6 @@ class ManifoldInitializer:
             branch_index=branch_index,
         )
 
-    def get_all_initial_segments(
-        self,
-        fixed_point: FixedPoint,
-        stability: Literal["stable", "unstable"],
-    ):
-        """
-        Gets all the initial fundamenal segments for each point
-        in an orbit of a given stability. Returns a list with
-        the manifolds.
-
-        The so called: Ethan method.
-
-        Args:
-            fixed_point (FixedPoint): Fixed point to grow the manifolds from.
-            stability (Literal["unstable", "stable"]): Stability of desired manifolds.
-        """
-
-        # define the branch indices to loop over based on inversion
-        if fixed_point.check_inversion():
-            branch_indices = [0, 1]
-        else:
-            branch_indices = [0]
-
-        # construct the initial segments for each branch
-        all_manifolds = []
-        for branch_index in branch_indices:
-            for orbit_index in range(fixed_point.period):
-                all_manifolds.append(
-                    self.get_initial_fundamental_segment(
-                        fixed_point, orbit_index, branch_index, stability
-                    )
-                )
-
-        return all_manifolds
-
     def construct_manifold_from_point_list(
         self,
         points: list[Point],
@@ -479,76 +444,6 @@ class ManifoldInitializer:
 
             if not stable_test:
                 fixed_point.stable_eigenvectors[i + 1] *= -1
-
-    # def construct_kevin_way(
-    #     self, fixed_point: FixedPoint, stability: Literal["unstable", "stable"]
-    # ) -> Dict[Tuple[int, int], BaseManifold]:
-    #     """
-    #     Constructs the initial segments by taking creating a single fundamental
-    #     segment and mapping it all the way around the fixed point.
-
-    #     Args:
-    #         fixed_point (FixedPoint): Fixed point to grow the manifolds from.
-    #         stability (Literal["unstable", "stable"]): Stabililty of the manifold.
-
-    #     Returns:
-    #         Dict[Tuple[int, int], BaseManifold]: All initial fundamental segments.
-    #             The tuple structure is (orbit_index, branch_index)
-    #     """
-
-    #     branch_indices = fixed_point.get_branch_array()
-
-    #     # construct a list of orbit indices based off the stability
-    #     orbit_indices = fixed_point.get_iterable_array(stability)
-
-    #     # generate the output structure
-    #     initial_segments = {
-    #         (orbit_index, branch_index): None
-    #         for branch_index in branch_indices
-    #         for orbit_index in orbit_indices
-    #     }
-
-    #     # create the first initial segment
-    #     segment = self.get_initial_fundamental_segment(fixed_point, 0, 0, stability)
-    #     initial_segments[(0, 0)] = segment
-
-    #     # remove the fixed point as the root for simplicity
-    #     segment.root = segment.walk_fwd(None, segment.root)
-
-    #     # iterate over orbit indices
-    #     # for orbit_index in range(fixed_point.period):
-    #     for orbit_index in orbit_indices:
-
-    #         for branch_index in branch_indices:
-
-    #             # skip over the 0th branch which we already have
-    #             if branch_index == 0 and orbit_index == 0:
-    #                 continue
-
-    #             # iterate the segment
-    #             segment = self.machine.iterate_manifold(segment)
-
-    #             # add the segment to the output
-    #             initial_segments[(orbit_index, branch_index)] = segment
-
-    #             # attach the segment to the fixed point
-    #             self.machine._insert_point_geometrically(
-    #                 fixed_point.branch_points[orbit_index],
-    #                 segment.root,
-    #                 segment,
-    #                 branch_index,
-    #             )
-
-    #             # # make the fixed point the root of the manifold
-    #             # segment.root = fixed_point.branch_points[orbit_index]
-
-    #     # set the fixed point as the root of each manifold
-    #     for dict_index in initial_segments:
-
-    #         orbit_index = dict_index[0]
-    #         initial_segments[dict_index].root = fixed_point.branch_points[orbit_index]
-
-    #     return initial_segments
 
     def construct_kevin_way(
         self,

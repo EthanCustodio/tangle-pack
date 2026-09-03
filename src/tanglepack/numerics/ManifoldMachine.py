@@ -1,4 +1,3 @@
-from collections import deque
 from typing import Literal, Tuple, Optional
 import logging
 
@@ -280,105 +279,6 @@ class ManifoldMachine:
         # That could happen in Bridge if we want it to
 
         return iterated_manifold
-
-    def cut_manifold(self, manifold: BaseManifold) -> list[Bridge]:
-        """
-        Takes a manifold and cuts it into Bridges that connect the intersection points.
-
-        Args:
-            manifold (BaseManifold): Manifold to be cut up.
-        """
-
-        final_node = manifold.tail
-
-        previous_point = manifold.root
-        current_point = manifold.walk_fwd(None, previous_point)
-
-        bridges = []
-
-        left_intersection = None
-        right_intersection = None
-
-        if isinstance(previous_point, BranchPoint):
-            left_intersection = previous_point
-            forming_bridge = True
-        else:
-            forming_bridge = False
-
-        while current_point is not None:
-
-            if isinstance(current_point, BranchPoint):
-                if forming_bridge:
-                    right_intersection = current_point
-                else:
-                    left_intersection = current_point
-                    cached_previous_point = previous_point
-                    forming_bridge = True
-
-                if self._check_bridge_readiness(
-                    left_intersection, right_intersection, forming_bridge
-                ):
-
-                    new_root = cached_previous_point
-                    new_tail = manifold.walk_fwd(previous_point, right_intersection)
-
-                    new_bridge = Bridge(
-                        new_root,
-                        manifold.stability,
-                        manifold.stretch_param,
-                        manifold.fixed_point,
-                        manifold.name,
-                        new_tail,
-                        manifold.branch_index,
-                    )
-
-                    bridges.append(new_bridge)
-                    left_intersection = right_intersection
-                    cached_previous_point = previous_point
-                    right_intersection = None
-                    forming_bridge = True
-
-            if current_point is final_node:
-                break
-
-            next_point = manifold.walk_fwd(previous_point, current_point)
-
-            previous_point, current_point = current_point, next_point
-
-        return bridges
-
-    def _check_bridge_readiness(self, left, right, toggle) -> bool:
-        """
-        Helper function which returns True if a bridge is ready to be formed.
-
-        Args:
-            left (BranchPoint): First point which may form a bridge.
-            right (BranchPoint): Second point which may form a bridge.
-            toggle (bool): Flag telling if we are currently forming a bridge.
-
-        Returns:
-            bool: True if a bridge can be formed from left and right.
-        """
-
-        first_term = left is not None and right is not None
-
-        return first_term and toggle
-
-    def iterate_x_times(self, manifold: BaseManifold, num_times=1):
-        """
-        Iterates the manifold x times and returns a new manifold
-
-        Parameters:
-            manifold: manifold to iterate
-            num_times: number of times to iterate
-        """
-
-        current_iterate = manifold
-
-        for _ in range(num_times):
-            current_iterate = self.iterate_manifold(current_iterate)
-
-        return current_iterate
 
     def grow_x_times(
         self,
@@ -749,15 +649,6 @@ class ManifoldMachine:
     def _get_iterate(point: Point | BranchPoint, viewer: ManifoldView):
         """Map a point one step forward in the manifold's stability direction."""
         return viewer.map_fwd(point)
-
-    @staticmethod
-    def _shift_list(to_shift: list):
-        """Shifts the list to the left one"""
-
-        d = deque(to_shift)
-        d.rotate(1)
-        return list(d)
-
 
     @staticmethod
     def _get_preiterate(

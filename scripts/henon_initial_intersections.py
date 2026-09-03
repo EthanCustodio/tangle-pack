@@ -74,25 +74,17 @@ stable_manifold._find_tail()
 
 
 def intersections():
-    tangle.add_manifold(unstable_manifold)
-    tangle.add_manifold(stable_manifold)
+    """Index both manifolds and resolve every crossing between them.
 
-    unstable_ids = tangle._manifold_segs[unstable_manifold]
-    stable_ids = tangle._manifold_segs[stable_manifold]
-
-    hits = []  # (segA, segB) pairs
-
-    for sid in unstable_ids:
-        segA = tangle._seg_lookup[sid]
-        for segB in tangle.intersections_for_segment(segA):
-            hits.append((segA, segB))
-
-    # print(f"Found {len(hits)} intersections")
-    # print(f"Intersections: {tangle._intersecting_segments}")
+    ``add_manifolds`` bulk-loads the whole segment set into the rtree in one pass
+    and records the candidate crossing pairs; ``populate_intersection_dict`` then
+    resolves each pair into an ``Intersection``.
+    """
+    tangle.add_manifolds([unstable_manifold, stable_manifold])
+    tangle.populate_intersection_dict()
 
 
 intersections()
-tangle.populate_intersection_dict()
 print(f"Intersections: {tangle._intersecting_coords.values()}")
 
 fig = plt.figure()

@@ -22,6 +22,8 @@ logger.addHandler(logging.NullHandler())
 
 Side = Literal["left", "right"]
 
+_OPPOSITE: dict[Side, Side] = {"left": "right", "right": "left"}
+
 """
 Dev Notes — Stable Manifold Partition (Stable_Manifold_Partition_Algorithm.pdf)
 
@@ -127,6 +129,25 @@ fixed in conversation with the author (July 2026):
   is special — the fixed point and the strong pip pinch into singletons by
   exactly the same rule. Each point belongs to exactly one piece ("](" and
   ")[" occur, "][" cannot).
+* Invariants (added 2026-09, plan row 0.3). Two facts are physically exact
+  and are now checked: (I1) all holes of one ``origin`` share
+  ``bridge_side``, because a propagated hole is the backward image of the
+  reference hole and an orientation-PRESERVING map (det J > 0, both Hénon
+  fixtures have b = 1) carries the bridge's dynamical orientation to the
+  image bridge's unchanged — under an orientation-REVERSING map the side
+  alternates with the parity of ``Hole.iterate``, which
+  ``check_holes_share_bridge_side(..., orientation_preserving=False)``
+  encodes; and (I2) a bridge whose two crossings lie on the same stable
+  branch yields the same ``row`` at both ends, because its endpoints are
+  consecutive crossings so the arc between them never crosses the stable
+  manifold again. The public ``check_*`` functions are strict assertions;
+  the production call sites (``_hole_openings`` and ``Trellis.punch_holes``)
+  only LOG the corresponding ``*_violation(s)`` messages, because the nested
+  period-3 tangle currently breaks both — one orbit flips side at a single
+  backward iterate, and one bridge reads opposite rows at its two ends. That
+  is the known period > 1 partition bug whose root cause (``_containing_bridge``
+  filtering on endpoint keys rather than ``Bridge.manifold_key``) plan row
+  1.1 fixes; the wiring is promoted to a hard assertion there.
 * Propagation start: a reference whose pair has no spanning Bridge object
   (after a blast there is no bridge between a parent-manifold crossing and
   a blast-child crossing) punches no direct hole, but its orbit still
@@ -759,6 +780,241 @@ def _bridge_side_of(
     return "left" if sign > 0.0 else "right"
 
 
+def _row_polyline(
+    trellis: "Trellis", bridge: "Bridge"
+) -> tuple[Optional[NDArray[np.float64]], bool]:
+    """The polyline rows are read off, and whether it carries the orientation.
+
+    Rows depend only on the approach displacement at each end, so the storage
+    order is a usable fallback when the bridge cannot be given its dynamical
+    orientation; the flag tells the caller whether a side sign may be taken
+    against the polyline as well.
+    """
+    poly = _oriented_bridge_polyline(trellis, bridge)
+    if poly is not None:
+        return poly, True
+    points = bridge.get_point_array()
+    if points is None or len(points) < 2:
+        return None, False
+    return np.asarray(points, dtype=np.float64), False
+
+
+def _row_at(
+    trellis: "Trellis", poly: NDArray[np.float64], intersection_id: int
+) -> Optional[Side]:
+    """The row of a bridge end: the stable side the arc approaches it from.
+
+    Standing on the stable manifold looking toward the anchor (the stable
+    dynamical direction), standard orientation — positive cross = left. This
+    is the single implementation of the row computation, shared by
+    :func:`_hole_openings` and :func:`check_bridge_rows_consistent`.
+
+    Args:
+        trellis: The Trellis carrying the intersections and manifolds.
+        poly: The bridge polyline (see :func:`_row_polyline`).
+        intersection_id: Registry ID of the defining crossing to read at.
+
+    Returns:
+        ``"left"`` or ``"right"``, or None when the arc end, the local stable
+        frame, or the cross product is degenerate/unavailable.
+    """
+    ix = trellis.intersection(intersection_id)
+    q = np.asarray(ix.get_point(), dtype=np.float64)
+    end = _bridge_end_geometry(poly, q)
+    if end is None:
+        return None
+    disp, _t_end = end
+    anchorward, outward, _below, _above = _stable_frame(trellis, ix)
+    look = anchorward if anchorward is not None else (
+        -outward if outward is not None else None
+    )
+    if look is None:
+        return None  # no manifold data at this end
+    return _side_of(look, disp)
+
+
+def _row_mismatch_message(
+    trellis: "Trellis",
+    bridge: "Bridge",
+    rows: dict[int, Optional[Side]],
+) -> Optional[str]:
+    """Describe a bridge whose two ends disagree on their row, else None."""
+    first, second = bridge.first_intersection, bridge.second_intersection
+    if first is None or second is None:
+        return None
+    branch_first = trellis.branch_containing(first, "stable")
+    branch_second = trellis.branch_containing(second, "stable")
+    if branch_first is None or branch_first is not branch_second:
+        return None  # different stable branches (heteroclinic / period > 1)
+    row_first, row_second = rows.get(first), rows.get(second)
+    if row_first is None or row_second is None or row_first == row_second:
+        return None
+    return (
+        f"Bridge ({first}, {second}) on stable branch "
+        f"(orbit {branch_first.orbit_index}, branch {branch_first.branch_index}) "
+        f"approaches its two defining crossings from opposite sides of that "
+        f"branch: {first} -> {row_first}, {second} -> {row_second}. A bridge's "
+        f"endpoints are consecutive crossings, so the arc between them cannot "
+        f"cross the stable manifold again."
+    )
+
+
+def _warn_on_row_mismatch(
+    trellis: "Trellis",
+    bridge: "Bridge",
+    rows: dict[int, Optional[Side]],
+) -> None:
+    """Log a row mismatch found while building openings (see Dev Notes)."""
+    message = _row_mismatch_message(trellis, bridge, rows)
+    if message is not None:
+        # Phase 1.1 promotes this to an assertion.
+        logger.warning("%s", message)
+
+
+def bridge_row_violation(
+    trellis: "Trellis", bridge: "Bridge"
+) -> Optional[str]:
+    """
+    Describe how a bridge breaks the row invariant, or None if it holds.
+
+    A bridge whose two defining crossings lie on the SAME stable branch must
+    approach both of them from the same side of that branch: the lobe lies
+    entirely on one side of the stable manifold, because the endpoints are
+    consecutive crossings and the arc between them therefore never crosses it
+    again. Bridges whose crossings sit on different stable branches
+    (heteroclinic, or a period > 1 orbit) are exempt, as are ends whose row is
+    undecidable (no manifold nodes, degenerate arc end, collinear cross).
+
+    Args:
+        trellis: The Trellis carrying the intersections, branches and manifolds.
+        bridge: The bridge to check.
+
+    Returns:
+        A human-readable violation message, or None when the invariant holds
+        or the check does not apply.
+    """
+    poly, _oriented = _row_polyline(trellis, bridge)
+    if poly is None:
+        return None
+    ids = (bridge.first_intersection, bridge.second_intersection)
+    if ids[0] is None or ids[1] is None:
+        return None
+    rows = {iid: _row_at(trellis, poly, iid) for iid in ids}
+    return _row_mismatch_message(trellis, bridge, rows)
+
+
+def check_bridge_rows_consistent(trellis: "Trellis", bridge: "Bridge") -> None:
+    """
+    Assert that a bridge's two ends agree on their row.
+
+    See :func:`bridge_row_violation` for the invariant and the exemptions.
+
+    Args:
+        trellis: The Trellis carrying the intersections, branches and manifolds.
+        bridge: The bridge to check.
+
+    Raises:
+        AssertionError: If the bridge's two crossings share a stable branch but
+            the arc approaches them from opposite sides of it.
+    """
+    message = bridge_row_violation(trellis, bridge)
+    assert message is None, message
+
+
+def _orbit_side(hole: Hole, orientation_preserving: bool) -> Optional[Side]:
+    """A hole's bridge side normalized to iterate 0 of its orbit.
+
+    Under an orientation-preserving map the side is already invariant along
+    the orbit; under an orientation-reversing one it flips every step, so an
+    odd iterate is normalized by flipping it back.
+    """
+    if hole.bridge_side is None:
+        return None
+    if orientation_preserving:
+        return hole.bridge_side
+    if hole.iterate is None:
+        return None
+    return hole.bridge_side if hole.iterate % 2 == 0 else _OPPOSITE[hole.bridge_side]
+
+
+def bridge_side_violations(
+    holes: Iterable[Hole], *, orientation_preserving: bool = True
+) -> list[str]:
+    """
+    Describe every orbit whose holes disagree on their side of the bridge.
+
+    A propagated hole is the backward image of its orbit's reference hole, and
+    the map carries a bridge's dynamical orientation to the image bridge's, so
+    an orientation-PRESERVING map (det J > 0 — both Hénon fixtures have
+    b = 1) leaves the left/right classification fixed along the whole backward
+    chain. Under an orientation-REVERSING map the side alternates with the
+    parity of :attr:`Hole.iterate`, which ``orientation_preserving=False``
+    encodes.
+
+    Holes with no ``origin`` or no ``bridge_side`` carry no orbit identity to
+    compare and are skipped (counted and logged at debug level), as are holes
+    with no ``iterate`` when the parity rule is in force.
+
+    Args:
+        holes: The holes to check, typically ``trellis.holes``.
+        orientation_preserving: True when the map has det J > 0.
+
+    Returns:
+        One message per disagreeing hole, naming the origin and both holes'
+        iterates and sides. Empty when the invariant holds.
+    """
+    by_origin: dict[tuple[int, int], list[Hole]] = {}
+    skipped = 0
+    for hole in holes:
+        if hole.origin is None or _orbit_side(hole, orientation_preserving) is None:
+            skipped += 1
+            continue
+        by_origin.setdefault(hole.origin, []).append(hole)
+    if skipped:
+        logger.debug(
+            "Skipped %d hole(s) with no comparable orbit side", skipped
+        )
+
+    rule = "" if orientation_preserving else " (after the parity flip)"
+    messages: list[str] = []
+    for origin, group in sorted(by_origin.items()):
+        reference = group[0]
+        expected = _orbit_side(reference, orientation_preserving)
+        for hole in group[1:]:
+            if _orbit_side(hole, orientation_preserving) == expected:
+                continue
+            messages.append(
+                f"Holes of origin {origin} disagree on bridge_side{rule}: "
+                f"iterate {reference.iterate} is {reference.bridge_side}, "
+                f"iterate {hole.iterate} is {hole.bridge_side}"
+            )
+    return messages
+
+
+def check_holes_share_bridge_side(
+    holes: Iterable[Hole], *, orientation_preserving: bool = True
+) -> None:
+    """
+    Assert that all holes of one origin share their side of the bridge.
+
+    See :func:`bridge_side_violations` for the invariant, the parity rule for
+    orientation-reversing maps, and which holes are skipped.
+
+    Args:
+        holes: The holes to check, typically ``trellis.holes``.
+        orientation_preserving: True when the map has det J > 0.
+
+    Raises:
+        AssertionError: If two holes of the same origin sit on different sides
+            of their bridges (up to the parity flip when the map reverses
+            orientation).
+    """
+    messages = bridge_side_violations(
+        holes, orientation_preserving=orientation_preserving
+    )
+    assert not messages, "; ".join(messages)
+
+
 def _hole_openings(
     trellis: "Trellis",
     bridge: "Bridge",
@@ -813,17 +1069,11 @@ def _hole_openings(
     near_id, far_id = _near_far(
         trellis, bridge.first_intersection, bridge.second_intersection
     )
-    poly = _oriented_bridge_polyline(trellis, bridge)
-    side_sign: Optional[float] = None
+    poly, oriented = _row_polyline(trellis, bridge)
     if poly is None:
-        # Orientation undecidable — rows still work in storage order (they
-        # depend only on the approach displacement), but the hole's side
-        # cannot be signed against the arc.
-        points = bridge.get_point_array()
-        if points is None or len(points) < 2:
-            return []
-        poly = np.asarray(points, dtype=np.float64)
-    elif not inward and bridge_side is not None:
+        return []
+    side_sign: Optional[float] = None
+    if oriented and not inward and bridge_side is not None:
         side_sign = 1.0 if bridge_side == "left" else -1.0
     if side_sign is None and not inward:
         logger.warning(
@@ -833,26 +1083,20 @@ def _hole_openings(
             bridge.second_intersection,
         )
 
+    rows = {iid: _row_at(trellis, poly, iid) for iid in (near_id, far_id)}
+    _warn_on_row_mismatch(trellis, bridge, rows)
+
     openings: list[tuple[int, str, Side]] = []
     for iid in (near_id, far_id):
-        ix = trellis.intersection(iid)
-        q = np.asarray(ix.get_point(), dtype=np.float64)
-        end = _bridge_end_geometry(poly, q)
-        if end is None:
-            continue
-        disp, _t_end = end
-        anchorward, outward, below, above = _stable_frame(trellis, ix)
-        look = anchorward if anchorward is not None else (
-            -outward if outward is not None else None
-        )
-        if look is None:
-            continue  # no manifold data at this end
-        row = _side_of(look, disp)
+        row = rows[iid]
         if row is None:
             continue
         if side_sign is None:
             which = "outward" if iid == near_id else "anchorward"
         else:
+            _anchorward, _outward, below, above = _stable_frame(
+                trellis, trellis.intersection(iid)
+            )
             side_anchorward = (
                 _arc_side_of(poly, below) if below is not None else None
             )

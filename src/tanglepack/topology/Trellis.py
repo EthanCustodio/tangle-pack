@@ -623,8 +623,18 @@ class Trellis:
 
         Returns:
             The punched holes.
+
+        Note:
+            Holes only exist after punching, so this is where the orbit-side
+            invariant is checked: all holes of one ``origin`` must share
+            ``bridge_side`` (see
+            :func:`topology.StablePartition.bridge_side_violations`). A
+            violation is logged as a warning rather than raised, because the
+            nested period-3 tangle still breaks it — plan row 1.1 fixes the
+            root cause and promotes this to an assertion.
         """
         from .StablePartition import (
+            bridge_side_violations as _side_violations,
             punch_holes as _punch,
             propagate_reference_holes as _propagate,
         )
@@ -635,6 +645,9 @@ class Trellis:
         if propagate:
             holes += _propagate(self)
         self.holes.extend(holes)
+        for message in _side_violations(self.holes):
+            # Phase 1.1 promotes this to an assertion.
+            logger.warning("%s", message)
         if verbose:
             print(self.describe_holes())
         return holes

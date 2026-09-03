@@ -308,36 +308,6 @@ class BaseManifold:
         plt.title(f"Manifold Plot ({self.stability.capitalize()})")
         plt.axis("equal")
 
-    def plot_colormap(self):
-
-        pts = self.get_point_array()  # (N, 2) ndarray
-        if pts.size == 0:
-            raise ValueError("No points available to plot!")
-
-        idx = np.arange(len(pts))
-        norm = plt.Normalize(idx.min(), idx.max())
-        cmap = "coolwarm"
-
-        # grey polyline so the geometry is clear, then color-by-index scatter
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.plot(pts[:, 0], pts[:, 1], color="0.7", lw=1, zorder=1)
-
-        sc = ax.scatter(
-            pts[:, 0],
-            pts[:, 1],
-            c=idx,
-            cmap=cmap,
-            norm=norm,
-            s=40,
-            edgecolor="k",
-            zorder=3,
-        )
-
-        ax.set_aspect("equal")
-        ax.set_title(f"Manifold Plot ({self.stability.capitalize()})")
-        plt.tight_layout()
-        return ax
-
     # ---------- internal helpers ----------
     def _branch_forward(
         self, prev: Point, bp: BranchPoint, branch_index: Optional[int] = None
@@ -420,11 +390,6 @@ class BaseManifold:
             if point is nxt:
                 return branches_in[i]  # toggle branch
         raise ValueError("Prev node is not connected to this BranchPoint")
-
-    def _iter_attr(self) -> str:
-        """Return the Point attribute that stores the iterate for this stability."""
-
-        return "next_iterate" if self.stability == "unstable" else "prev_iterate"
 
     def _iter_method(self, prefix: str):
         """

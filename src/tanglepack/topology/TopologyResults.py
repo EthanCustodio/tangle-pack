@@ -45,6 +45,11 @@ class Hole:
             once at punch time: a direct hole from its own coordinates, a
             propagated hole from the backward-carried point. None when the
             geometry is degenerate (unorientable bridge or a point on the arc).
+            Invariant: all holes sharing an ``origin`` share this side, since
+            an orientation-preserving map carries a bridge's dynamical
+            orientation to its image's (it alternates with the parity of
+            ``iterate`` when the map reverses orientation). Checked by
+            :func:`topology.StablePartition.check_holes_share_bridge_side`.
         bounding_ids: Registry IDs of the two intersections defining the bridge
             the hole belongs to — the pair's own bridge for a directly punched
             hole, the containing bridge for a propagated one. These are the

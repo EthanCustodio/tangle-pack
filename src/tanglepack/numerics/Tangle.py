@@ -4,7 +4,7 @@ from rtree.core import RTreeError
 from collections import defaultdict
 from itertools import count
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Optional
 
 from .Intersection import Intersection, ManifoldKey
 from .BaseManifold import BaseManifold
@@ -265,25 +265,6 @@ class Tangle:
         # (Optional sanity: assert 0<=t<=1 and 0<=s<=1 if you didn't already know)
         return a + t * (b - a)
 
-    @staticmethod
-    def _same_unstable_branch(seg_1: _Segment, seg_2: _Segment) -> bool:
-        """
-        Whether two segments lie on the same manifold branch -- one physical curve.
-
-        A bridge and its forward images are all sections of the single unstable
-        manifold of a given (fixed point, orbit index, branch), even though they are
-        held as separate objects. Two segments of one curve can never cross (the
-        manifold is simple), so the Tangle must treat the whole branch as "self" --
-        the bare object-identity check is too narrow once a branch is split across
-        bridge/image objects. Falls back to object identity when a key is missing.
-        """
-        k1 = getattr(seg_1.manifold, "manifold_key", None)
-        k2 = getattr(seg_2.manifold, "manifold_key", None)
-        if k1 is None or k2 is None:
-            return seg_1.manifold is seg_2.manifold
-        # key = (fixed_point, stability, orbit_index, branch_index)
-        return k1[0] is k2[0] and k1[1] == k2[1] and k1[2] == k2[2] and k1[3] == k2[3]
-
     def _discard_same_stability(
         self, seg_id_pair: "frozenset[int]", seg_1: _Segment, seg_2: _Segment
     ) -> None:
@@ -396,19 +377,6 @@ class Tangle:
                     self._intersecting_segments.add(
                         frozenset((segment.id, candidate_id))
                     )
-
-    def intersections_for_segment(self, seg: _Segment):
-        """
-        Yield true intersections with segments already stores in the rtree.
-        """
-        for candidate_id in self._rtree.intersection(seg.bounds):
-
-            other_segment = self._seg_lookup[candidate_id]
-            if other_segment.manifold is seg.manifold:
-                continue  # same manifold - skip or apply rule
-
-            if seg.intersects(other_segment):
-                yield other_segment
 
     def populate_intersections_for_manifold(
         self, manifold: BaseManifold
@@ -829,114 +797,6 @@ class Tangle:
             p0.insert_point_forward(separator)
         return separator
 
-    def _boundary_point(
-        self,
-        p0: Point,
-        p1: Point,
-        stability: str,
-        intersection_coords: tuple[float, float],
-        side: Literal["root", "tail"],
-    ) -> tuple[Point, float]:
-        """
-        Create a bridge boundary Point just outside the segment [p0, p1], offset
-        10% from the crossing toward the endpoint on `side`, and return it together
-        with its fractional position `t` along [p0, p1].
-
-        The segment endpoints are passed in explicitly (not read from a live
-        `_Segment`) so the offset and cdist are always computed against the
-        ORIGINAL endpoints captured before any splicing. The returned `t` lets the
-        caller splice several boundary points into one segment in correct
-        geometric order.
-
-        Args:
-            p0: Lower-cdist endpoint of the original segment.
-            p1: Higher-cdist endpoint of the original segment.
-            stability: Manifold stability, for the cdist interpolation.
-            intersection_coords: True (x, y) of the crossing.
-            side: "root" offsets toward p0 (lower cdist); "tail" toward p1.
-
-        Returns:
-            (boundary_point, t) where t is the clamped fractional position of the
-            boundary point along [p0, p1].
-        """
-        if side == "root":
-            seg_point = p0
-        elif side == "tail":
-            seg_point = p1
-        else:
-            raise ValueError(f"Invalid side: {side}")
-
-        new_point = self._linear_interpolation(
-            intersection_coords, seg_point.get_point(), 0.1
-        )
-
-        # cdist evaluated at the boundary point's ACTUAL location (the 10% offset
-        # point), not at the crossing: a Point's cdist must reflect where the point
-        # physically sits, otherwise the error is baked in and scaled up every time
-        # the bridge is iterated. Evaluated against the original endpoints p0, p1 so
-        # it cannot be corrupted by earlier insertions.
-        new_cdist = self._cdist_between(p0, p1, stability, np.asarray(new_point))
-
-        boundary = Point(new_point[0], new_point[1], new_cdist)
-        t = self._fractional_position(p0, p1, np.asarray(new_point))
-        return boundary, t
-
-    def _linear_interpolation(self, p0, p1, alpha):
-        """
-        Does a linear interpolation between two points p0 and p1 to get a
-        point that is alpha away from the true intersection point.
-
-        Args:
-            p0 (Point): First Point
-            p1 (Point): Second Point
-            alpha (Float): percent distance to interpolate
-
-        Returns:
-            tuple(float, float): resulting point coordinates
-        """
-        x = (1 - alpha) * p0[0] + alpha * p1[0]
-        y = (1 - alpha) * p0[1] + alpha * p1[1]
-        return (x, y)
-
-    def _cache_boundary_preiterate(
-        self,
-        boundary_point: Point,
-        p0: Point,
-        p1: Point,
-        stability: str,
-    ) -> None:
-        """
-        Approximate and cache `prev_iterate` (unstable) or `next_iterate` (stable)
-        on a freshly created bridge boundary point.
-
-        Uses the same weighted interpolation as `_linear_interpolation`: the boundary
-        point sits alpha=0.1 away from the intersection toward seg_point, so the
-        preiterate is interpolated with the same weight. The endpoints p0, p1 are
-        passed explicitly (the ORIGINAL segment endpoints) so the cached preiterate
-        is never read off a mutated `_Segment`.
-        """
-        if stability == "unstable":
-            pre0 = p0.prev_iterate
-            pre1 = p1.prev_iterate
-        else:
-            pre0 = p0.next_iterate
-            pre1 = p1.next_iterate
-
-        if pre0 is None or pre1 is None:
-            return  # can't interpolate; leave None and rely on guard in refine
-
-        # 0.9 * intersection_preiterate + 0.1 * seg_point_preiterate
-        # (mirrors the 0.1 alpha used in _linear_interpolation for the point itself)
-        coords = (
-            0.9 * 0.5 * (pre0.get_point() + pre1.get_point()) + 0.1 * pre0.get_point()
-        )
-
-        cached = Point(coords[0], coords[1])
-        if stability == "unstable":
-            boundary_point.prev_iterate = cached
-        else:
-            boundary_point.next_iterate = cached
-
     def iter_intersection_coords(self) -> list[tuple[float, float]]:
         """Return the (x, y) of every detected crossing, exactly one per crossing."""
         return list(self._intersecting_coords.values())
@@ -979,13 +839,3 @@ class Tangle:
         ca = p0.get_cdist(stability)
         cb = p1.get_cdist(stability)
         return (1 - t) * ca + t * cb
-
-    @staticmethod
-    def _fractional_position(p0: Point, p1: Point, point: np.ndarray) -> float:
-        """Fractional projection t of `point` onto the segment [p0, p1], clamped to [0, 1]."""
-        a = p0.get_point()
-        b = p1.get_point()
-        ab = b - a
-        denom = float(ab @ ab)
-        t = 0.0 if denom == 0.0 else float((np.asarray(point) - a) @ ab) / denom
-        return min(1.0, max(0.0, t))

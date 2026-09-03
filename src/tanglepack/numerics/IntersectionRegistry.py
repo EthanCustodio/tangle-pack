@@ -558,33 +558,6 @@ class IntersectionRegistry:
             candidates.append(self._unstable_order[pos - 1])
         return min(candidates, key=lambda id_: abs(self._store[id_].unstable_cdist - cdist))
 
-    def find_by_cdist(
-        self,
-        unstable_cdist: float,
-        stable_cdist: float,
-        tol: Optional[float] = None,
-    ) -> Optional[int]:
-        """
-        Find the ID of an intersection whose cdists are within tol of the given values.
-
-        Args:
-            unstable_cdist: Target unstable cdist.
-            stable_cdist: Target stable cdist.
-            tol: Search tolerance. Defaults to self.cdist_tol.
-
-        Returns:
-            Matching ID, or None.
-        """
-        if tol is None:
-            tol = self.cdist_tol
-        for id, existing in self._store.items():
-            if (
-                abs(existing.unstable_cdist - unstable_cdist) < tol
-                and abs(existing.stable_cdist - stable_cdist) < tol
-            ):
-                return id
-        return None
-
     # ── array exports ──────────────────────────────────────────────────────
 
     def as_forward_array(self, max_depth: int = 5) -> NDArray[np.int64]:

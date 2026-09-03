@@ -1,18 +1,18 @@
-"""Regression: refinement curvature is not rotation-invariant (near-vertical fails).
+"""Regression: refinement curvature must be rotation invariant (near-vertical).
 
-``_curvature_area`` fits a parabola ``y = a x^2 + b x + c`` and a line ``y = m x + b``
-through manifold points. The curvature area of a curved segment is a geometric
-quantity and must not depend on the segment's orientation. But because the fit is
-expressed as ``y`` of ``x``, rotating a well-behaved curved segment toward vertical
-makes the x-values coincide: the Vandermonde matrix in ``_parabolic_fit`` goes
-singular (``LinAlgError``) and the line fit divides by ``~0``. ``refine_two_points``
-then catches the error and skips the pair, so near-vertical stretches lose
-resolution.
+``_curvature_area`` fits a parabola and a line through manifold points to decide
+whether a segment needs refining. The curvature area of a curved segment is a
+geometric quantity and must not depend on the segment's orientation. The bug was
+that the fit was expressed as ``y`` of ``x``: rotating a well-behaved curved
+segment toward vertical made the x-values coincide, the Vandermonde matrix in
+``_parabolic_fit`` went singular (``LinAlgError``) and the line fit divided by
+``~0``. ``refine_two_points`` caught the error and skipped the pair, so
+near-vertical stretches of a manifold silently lost resolution.
 
-This test computes the curvature area of a curved segment, then of the *same shape
-rotated 90 degrees*, and asserts they match. Today the rotated (vertical) case
-raises / disagrees, so it xfails. The fix (fit in rotated/arclength coordinates)
-makes the two equal.
+The fit now runs in the chord frame (``_chord_frame`` rotates the segment's chord
+onto the x-axis before fitting), so the answer no longer depends on orientation.
+This pins it: the curvature area of a curved segment equals that of the same
+shape rotated 90 degrees.
 """
 
 from __future__ import annotations

@@ -43,13 +43,13 @@ Explicitly out of scope: the dual graph construction rules, any GUI, README.
 
 ## Phase 0 — Guardrails and dead-code removal (do first, shrinks the refactor surface)
 
-**0.1 Regression-marker semantics.** `pyproject.toml` marker text becomes
+**0.1 Regression-marker semantics.** ✅ DONE (2026-09-02; `assert_area_preserved_along_chain` re-targeted to the registry iterate table because no BranchPoint iterate chains exist). `pyproject.toml` marker text becomes
 "pins a previously fixed bug"; strip the three "this xfails" docstrings in
 `tests/regression/`. Wire the two unused invariant helpers
 (`assert_no_cdist_collision`, `assert_area_preserved_along_chain`) into
 `tests/invariants.py` consumers.
 
-**0.2 Delete verified-dead code** (zero callers in src/tests/scripts):
+**0.2 Delete verified-dead code** ✅ DONE (2026-09-02; `intersections_for_segment` had one script caller, script migrated; `Bridge.parent/children/next_bridge/prev_bridge` deferred to Phase 3 by decision so the suite stays green; `_linear_interpolation`/`_fractional_position` also deleted as they became caller-less) (zero callers in src/tests/scripts):
 `ManifoldMachine.cut_manifold`, `_check_bridge_readiness`, `iterate_x_times`,
 `_shift_list`; `TangleWorkbench.create_resonance_zone`, `index_manifolds`,
 `populate_registry`; `IntersectionRegistry.find_by_cdist`;
@@ -61,7 +61,7 @@ the 58-line commented-out initializer body; `Bridge.next_bridge/prev_bridge`
 (never read, wired wrong); `Bridge.parent/children` (replaced by derived queries in
 Phase 3, deleted here so Blast is rewritten once).
 
-**0.3 Two new invariant assertions** added at trellis build time and used by tests:
+**0.3 Two new invariant assertions** ✅ DONE as `check_holes_share_bridge_side` / `check_bridge_rows_consistent` in StablePartition.py, asserted in `Trellis.punch_holes` / `_hole_openings`. DEVIATION: wired as warnings until Phase 1.1 because period-3 violates both at baseline (origin (20,33) flips at iterate -2; bridge (11,33) rows differ); I1 takes an `orientation_preserving` flag (side alternates with iterate parity under det J < 0).
 - All holes with the same `origin` share `bridge_side`.
 - A bridge whose two crossings share a stable branch yields the same `row` at both ends.
 
@@ -271,3 +271,10 @@ Both exposed on `TangleSession`.
 correctness checkpoint (suite green, topology tests trustworthy). Phases 3 through
 5 are the identity checkpoint. Phase 6 and 7 deliver the region machinery. Phase 8
 is mechanical and can be interleaved once the interfaces have settled.
+
+## Deferred (found during implementation, not in the plan)
+
+- Notebooks `scripts/tangle_workbench_test.ipynb` (`create_resonance_zone`), `scripts/manifold_cutting_test.ipynb` (`intersections_for_segment`) call names deleted in Phase 0; fix or archive with the Phase 8 notebook pass.
+- `docs/nested_tangle_bridge_cutting_fix_plan.md` and `docs/higher_period_bridge_bug_plan.md` describe `_boundary_point` / `index_manifolds` as current; annotate in the Phase 8 docs pass.
+- Pre-existing unused imports in TangleWorkbench.py (`Annotated`, `Callable`, `npt`) and ManifoldInitializer.py (`Optional`); Phase 8 style pass.
+- `Tangle._cdist_at_point` / `_cdist_between` near-duplicates; merge with Phase 6.1 geometry consolidation.

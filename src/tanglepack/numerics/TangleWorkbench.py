@@ -291,15 +291,6 @@ class TangleWorkbench:
         else:
             raise ValueError("Max iterations reached, no intersection found")
 
-    def index_manifolds(self, fixed_point: FixedPoint, stability: Stability | None):
-
-        count = 0
-        for M in self._iter_manifolds(fixed_point, stability):
-            self.Tangle.add_manifold(M)
-            count += 1
-
-        return self
-
     def compute_intersections(
         self,
         fixed_points,
@@ -464,27 +455,6 @@ class TangleWorkbench:
         """
         self.clear_bridges()
         return self.create_bridges(fixed_point)
-
-    def create_resonance_zone(self, fixed_point: FixedPoint):
-
-        # grow stable manifold until it turns around
-        self.grow_until_turnaround(fixed_point, "stable")
-
-        # grow unstable manifold until it intersects the stable
-        self.grown_until_intersection(fixed_point, "unstable")
-
-        # compute all intersections (possibly redundant)
-        intersections = self.compute_intersections(fixed_point)
-
-        # cut the unstable manifold into a bridge
-        bridges = self.create_bridges(fixed_point)
-
-        # trim stable manifold
-        # self.trim_stable_at_first_intersection(fixed_point)
-
-        self.plot_tangle(fixed_point, "stable", color="r")
-        self.plot_all_bridges(bridges)
-        self.plot_intersections(fixed_point)
 
     @property
     def bridges(self) -> list[Bridge]:
@@ -786,13 +756,6 @@ class TangleWorkbench:
             new_orbit_index = orbit_index + 1
             new_branch_index = branch_index
         return (fp, stability, new_orbit_index, new_branch_index)
-
-    def populate_registry(self) -> IntersectionRegistry:
-        """Rebuild the intersection registry from the current Tangle state."""
-        self._intersection_registry = IntersectionRegistry()
-        for intersection in self.Tangle._intersections:
-            self._intersection_registry.add(intersection)
-        return self._intersection_registry
 
     def _bridge_signature(self, bridge: Bridge) -> Optional[tuple[float, float]]:
         """

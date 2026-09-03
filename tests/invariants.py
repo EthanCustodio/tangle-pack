@@ -20,8 +20,10 @@ The fundamental invariants (see CLAUDE.md):
                     the growth direction (``assert_iterate_relation``).
 3. One-to-one     - the geometric and iterate linked lists are acyclic and
                     mutually consistent (``assert_one_to_one``).
-4. Area preserved - for an intersection chain ``unstable_cdist * stable_cdist`` is
-                    invariant (``assert_area_preserved_along_chain``).
+4. Area preserved - along one iterate chain of crossings in the registry,
+                    ``unstable_cdist * stable_cdist`` is invariant
+                    (``assert_area_preserved_along_chain``). Only *within* a chain:
+                    equal products never imply shared chain membership.
 
 Note:
     A ``Point`` stores a single scalar ``cdist``; a ``BranchPoint`` stores a
@@ -34,11 +36,14 @@ Note:
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 
-from tanglepack import BaseManifold, BranchPoint, Point
+from tanglepack import BaseManifold, BranchPoint
+
+if TYPE_CHECKING:
+    from tanglepack import IntersectionRegistry
 
 
 def walk_nodes(manifold: BaseManifold) -> list:
@@ -259,35 +264,61 @@ def assert_one_to_one(manifold: BaseManifold) -> None:
 
 
 def assert_area_preserved_along_chain(
-    branch_point: BranchPoint, *, rtol: float = 1e-4, max_steps: int = 64
+    registry: IntersectionRegistry,
+    start_id: int,
+    *,
+    rtol: float = 1e-3,
+    max_steps: int = 64,
 ) -> None:
     """Assert ``unstable_cdist * stable_cdist`` is invariant along an iterate chain.
 
-    Walks the ``next_iterate`` chain of intersection ``BranchPoint``s starting at
-    ``branch_point`` and checks the canonical-area product is constant. Per
-    CLAUDE.md this only validates invariance *within* a known chain; equal
-    products do NOT imply two points share a chain.
+    Walks the ``n=1`` links of ``registry.iterate_table`` from ``start_id`` and
+    checks that the canonical-area product is constant. One forward map step
+    stretches the unstable canonical distance and contracts the stable one by the
+    same per-step factor, so the product is preserved — this is the registry-level
+    expression of area preservation.
+
+    Args:
+        registry: The ``IntersectionRegistry`` holding the crossings and the
+            iterate table.
+        start_id: Registry id of the crossing to start the walk at.
+        rtol: Relative tolerance on the product. The default 1e-3 accommodates the
+            tolerance of the canonical-distance match that records the links.
+        max_steps: Stop after this many forward steps (guards a cyclic table).
+
+    Raises:
+        AssertionError: If ``start_id`` has no usable product, or on the first
+            step whose product disagrees.
+
+    Note:
+        Per CLAUDE.md this only validates invariance *within* a known chain. Two
+        different iterate chains generally carry different products, so equal
+        products do NOT imply two crossings share a chain — never use the product
+        for membership; compare the stable and unstable cdists individually.
     """
-    def product(bp: BranchPoint) -> Optional[float]:
-        if not isinstance(bp, BranchPoint) or bp.cdists is None:
-            return None
-        u = bp.get_cdist("unstable")
-        s = bp.get_cdist("stable")
+
+    def product(intersection_id: int) -> Optional[float]:
+        ix = registry[intersection_id]
+        u, s = ix.unstable_cdist, ix.stable_cdist
         if u is None or s is None:
             return None
         return float(u) * float(s)
 
-    p0 = product(branch_point)
-    assert p0 is not None, "starting branch point has no canonical-area product"
+    p0 = product(start_id)
+    assert p0 is not None, (
+        f"starting crossing {start_id} has no canonical-area product "
+        f"(a cdist is None)"
+    )
 
-    node = branch_point.next_iterate
+    node_id = registry.iterate_table[start_id, 1]
     steps = 0
-    while node is not None and steps < max_steps:
-        p = product(node)
+    while node_id is not None and steps < max_steps:
+        p = product(node_id)
         if p is not None:
             assert np.isclose(p, p0, rtol=rtol), (
-                f"canonical area not preserved along chain: {p!r} vs {p0!r} "
+                f"canonical area not preserved along chain from {start_id}: "
+                f"crossing {node_id} has product {p!r} vs {p0!r} "
                 f"(step {steps + 1}, rtol={rtol})"
             )
-        node = node.next_iterate
+        node_id = registry.iterate_table[node_id, 1]
         steps += 1

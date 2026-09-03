@@ -44,5 +44,5 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 markers = [
   "slow: long-running growth/blast integration tests",
-  "regression: pins a known bug (xfail until fixed)",
+  "regression: pins a previously fixed bug",
 ]

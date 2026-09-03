@@ -83,9 +83,6 @@ approx_dir = {"unstable": [-1, 0], "stable": [0, 1]}
 
 man_maker.orient_manifolds(fixed_point_zero, approx_dir)
 
-# initial_unstable_segments = man_maker.get_all_initial_segments(fixed_point, "unstable")
-# initial_stable_segments = man_maker.get_all_initial_segments(fixed_point, "stable")
-
 initial_unstable_segments = man_maker.construct_kevin_way(fixed_point, "unstable")
 initial_stable_segments = man_maker.construct_kevin_way(fixed_point, "stable")
 
