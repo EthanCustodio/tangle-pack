@@ -118,6 +118,83 @@ class TangleWorkbench:
         self._registry_id_epoch: int = 0
         self._bridge_id_epoch: int = 0
 
+        # Generation bookkeeping (see the `generation` property). `_mutations`
+        # counts the changes this object makes that nothing else can observe
+        # (the bridge set, the registry swap); `_generation_state` is the last
+        # composite state seen and `_generation` the monotone token handed out.
+        self._mutations: int = 0
+        self._generation_state: Optional[tuple] = None
+        self._generation: int = 0
+
+    # ── generation ───────────────────────────────────────────────────────────
+
+    @property
+    def generation(self) -> int:
+        """
+        Monotone token that changes whenever anything derived from this
+        workbench goes stale.
+
+        One integer comparison is all a cache needs: a :class:`Trellis`, an
+        arrangement, or any other snapshot records the generation it was built
+        at and is stale as soon as the two differ. The token advances on:
+
+        * any registry mutation -- a crossing added, a renumbering, an iterate
+          registered (:attr:`IntersectionRegistry.generation`);
+        * a registry swap, i.e. a resetting :meth:`compute_intersections`;
+        * any bridge-set mutation -- :meth:`create_bridges`,
+          :meth:`clear_bridges`, :meth:`rebuild_bridges`, :meth:`iterate_bridge`;
+        * any geometry change a REGISTERED manifold can see -- a ``root``/``tail``
+          reassignment on something in :attr:`manifolds` (growth ends in
+          ``_find_tail``, a trim and a resonance-zone restore both set tails),
+          or an explicit ``bump_version()`` on one of those manifolds. A bridge's
+          version is deliberately NOT summed here: bridges come and go with the
+          bridge-set mutations already listed, and each one's version is bumped
+          in the same breath (see :meth:`_bump_generation`);
+        * :meth:`register_manifold`.
+
+        NOT tracked: mutations made behind the library's back -- points spliced
+        into a linked list by code driving :class:`ManifoldMachine` directly
+        without calling ``bump_version``, an ``Intersection``'s fields edited in
+        place, or a ``FixedPoint``'s eigendata replaced. Reads never advance it,
+        including the lazy rebuilds of derived caches (the registry graph's
+        adjacency edges, the rank maps).
+
+        Returns:
+            int: The current generation. Compare for equality only; the value
+            counts observed changes, not mutations.
+
+        Note:
+            This is orthogonal to ``_registry_id_epoch`` / ``_bridge_id_epoch``
+            (Phase 3), which answer a different question: whether registry ids
+            still NAME the same crossings. Adding a crossing changes the
+            generation but preserves every existing id, so the epochs stay put;
+            a renumbering recompute moves both. Staleness reads the generation,
+            id validity reads the epochs.
+        """
+        state = (
+            self._mutations,
+            self._intersection_registry.generation,
+            tuple(manifold.version for manifold in self._manifolds.values()),
+        )
+        if state != self._generation_state:
+            self._generation_state = state
+            self._generation += 1
+        return self._generation
+
+    def _bump_generation(self, *, invalidate_walks: bool = False) -> None:
+        """Record a mutation only this object can see (see :attr:`generation`).
+
+        Args:
+            invalidate_walks: Also drop every registered bridge's memoised point
+                array. Pass True for the operations that can lay new points
+                INSIDE an already-cut arc -- growing a parent manifold, or
+                re-cutting one against fresh crossings.
+        """
+        self._mutations += 1
+        if invalidate_walks:
+            for bridge in self.bridges:
+                bridge.bump_version()
+
     @property
     def manifolds(self) -> dict[tuple[FixedPoint, Stability, int, int], BaseManifold]:
         """
@@ -150,6 +227,7 @@ class TangleWorkbench:
             f"under {key}; the manifold's own key is the source of truth"
         )
         self._manifolds[key] = manifold
+        self._bump_generation()
 
     def construct_fixed_point(self, initial_guess) -> FixedPoint:
         """
@@ -268,6 +346,10 @@ class TangleWorkbench:
             if fp is fixed_point and stab == stability:
 
                 manifold._find_tail()
+
+        # Growth refines the existing curve as well as extending it, so points
+        # can land inside an already-cut bridge: drop the memoised walks.
+        self._bump_generation(invalidate_walks=True)
 
     def plot_tangle(
         self,
@@ -478,6 +560,9 @@ class TangleWorkbench:
         if reset:
             self.Tangle.clear_all()
             self._intersection_registry = IntersectionRegistry()
+            # The registry object itself changed; its own generation restarts at
+            # zero, so the swap has to be recorded here or the two could cancel.
+            self._bump_generation()
 
         # gather every manifold first so a fresh Tangle can bulk-load the whole
         # segment set into the rtree in one pass
@@ -606,6 +691,9 @@ class TangleWorkbench:
         # rebuild_bridges refuse to carry metadata across that mixture.
         if not self._bridges and not self._partial_bridges:
             self._bridge_id_epoch = self._registry_id_epoch
+        # Cutting inserts a separator point at every crossing, which can land
+        # inside an arc an earlier cut already claimed: drop the memoised walks.
+        self._bump_generation(invalidate_walks=True)
         return [self._register_bridge(bridge) for bridge in bridges]
 
     def clear_bridges(self) -> None:
@@ -630,6 +718,7 @@ class TangleWorkbench:
         self._bridges.clear()
         self._partial_bridges.clear()
         self._bridges_at.clear()
+        self._bump_generation()
 
     def rebuild_bridges(
         self, fixed_point: Optional[FixedPoint] = None
@@ -888,6 +977,7 @@ class TangleWorkbench:
         existing_image = self._existing_image_bridges(bridge)
         if existing_image is not None:
             bridge.iterated = True
+            self._bump_generation()
             return existing_image
 
         # 1. map forward
@@ -961,6 +1051,11 @@ class TangleWorkbench:
         #    children all resolve to existing bridges and nothing is added.
         children = [self._register_bridge(child) for child in new_bridges]
         bridge.iterated = True
+        # Mapping forward can refine (and cut at) curve that already exists --
+        # the image of a bridge whose points all have iterates is laid over
+        # grown manifold -- so every memoised walk is dropped, not just the
+        # children's.
+        self._bump_generation(invalidate_walks=True)
 
         return children
 
@@ -1069,8 +1164,24 @@ class TangleWorkbench:
         if self._register_anchor_self_iterate(src_id, source, registry):
             return True
 
+        # The image's stable branch and stable canonical distance are both
+        # predicted, so the candidates are one bisected slice of that branch's
+        # own cdist order rather than the whole registry. A crossing outside the
+        # window fails the relative stable-cdist test by construction, so the
+        # match this narrows to is the same one the full scan would return.
+        prediction = self._image_prediction(source)
+        if prediction is None:
+            return False
+        _a_key, b_key, _u_pred, s_pred = prediction
+        # The same tolerance _match_image applies below, read once: the window
+        # is exactly the set of candidates whose relative stable-cdist error can
+        # still come in under cdist_rtol.
+        cdist_tol = self._intersection_registry.cdist_tol
+        window = cdist_rtol * (abs(s_pred) + cdist_tol)
+        candidates = registry.candidates_near_stable_cdist(b_key, s_pred, window)
+
         best_id, _best_err = self._match_image(
-            source, iter(registry), cdist_rtol, exclude={src_id}
+            source, candidates, cdist_rtol, exclude={src_id}
         )
         if best_id is None:
             return False

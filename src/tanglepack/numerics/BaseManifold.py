@@ -11,8 +11,21 @@ Dev Notes:
 
 Include return type hints including hints like Union[np.ndarray, list[Point]]
 
-Implement _traverse() or something similar to reduce the redundancy in 
+Implement _traverse() or something similar to reduce the redundancy in
 the array getting operations.
+
+Versioning and the point-array memo (Phase 4): every manifold carries a
+``_version`` bumped by :meth:`bump_version` and by the ``root``/``tail``
+setters, and :attr:`TangleWorkbench.generation` sums those versions, so a
+retrim or a regrow invalidates every derived cache. The point-array memo built
+on that version is enabled ONLY on :class:`Bridge` (``_memoise_walks``): points
+are inserted through ``Point.insert_point_forward/backward``, which the manifold
+cannot observe, so a growable manifold has no airtight invalidation and a stale
+array would be worse than no cache. A bridge is a fixed arc between two
+crossings and the workbench bumps every bridge's version on the two operations
+that can lay new points inside such an arc (growth and a re-cut). Code that
+drives ``ManifoldMachine`` directly, bypassing the workbench, must call
+``bump_version()`` itself.
 """
 
 
@@ -35,7 +48,16 @@ class BaseManifold:
             this attribute specifies which branch the manifold eminates from.
         manifold_key (ManifoldKey): ``(fixed_point, stability, orbit_index,
             branch_index)`` -- the branch this manifold is. Required at construction.
+        _version (int): Monotone counter bumped by :meth:`bump_version` and by
+            any reassignment of ``root`` / ``tail``. It is what
+            :attr:`TangleWorkbench.generation` reads to notice that manifold
+            geometry moved, and what invalidates the point-array memo.
     """
+
+    #: Whether :meth:`get_point_array` is served from a memo. False here (a
+    #: growable manifold gains points through ``Point`` without the manifold
+    #: seeing it), True on :class:`Bridge`. See the module Dev Notes.
+    _memoise_walks: bool = False
 
     def __init__(
         self,
@@ -74,6 +96,8 @@ class BaseManifold:
                 the object is indexed or registered.
         """
 
+        self._version: int = 0
+        self._walk_cache: dict = {}
         self.root = root
         self.tail = tail
         self.stability = stability
@@ -84,6 +108,49 @@ class BaseManifold:
         self.manifold_key = manifold_key
         if self.tail is None:
             self._find_tail()
+
+    # ── versioning ──────────────────────────────────────────────────────────
+
+    @property
+    def version(self) -> int:
+        """The manifold's mutation counter (see the module Dev Notes)."""
+        return self._version
+
+    def bump_version(self) -> None:
+        """
+        Record that this manifold's geometry changed and drop its memoised walks.
+
+        Called by the ``root`` / ``tail`` setters and by
+        :class:`TangleWorkbench` around anything that can insert points into an
+        existing curve (growth, a re-cut). Code that mutates a manifold's linked
+        list directly must call it too.
+        """
+        self._version += 1
+        self._walk_cache.clear()
+
+    @property
+    def root(self) -> Optional[Point | BranchPoint]:
+        """First point in the manifold. Reassigning it bumps the version."""
+        return self._root
+
+    @root.setter
+    def root(self, point: Optional[Point | BranchPoint]) -> None:
+        self._root = point
+        self.bump_version()
+
+    @property
+    def tail(self) -> Optional[Point | BranchPoint]:
+        """Final point in the manifold. Reassigning it bumps the version."""
+        return self._tail
+
+    @tail.setter
+    def tail(self, point: Optional[Point | BranchPoint]) -> None:
+        # Deliberately unconditional -- do NOT short-circuit on `point is
+        # self._tail`. `_find_tail()` is what every growth pass ends with, and a
+        # pass that only REFINED the curve re-assigns the same tail object; that
+        # assignment is the only signal the manifold gets that its points moved.
+        self._tail = point
+        self.bump_version()
 
     def _find_tail(self):
         """Walks until None is reached and set the tail"""
@@ -145,7 +212,30 @@ class BaseManifold:
 
         Returns:
             list[Point] or np.ndarray of shape (N, 2)
+
+        Note:
+            On a class that memoises walks (:class:`Bridge`) the array is
+            cached against the manifold's version and handed back READ-ONLY --
+            it is shared with every other caller, so it must not be written to;
+            take a copy to modify it. The node list is copied per call, so it is
+            safe to mutate. See the module Dev Notes for the invalidation rules.
         """
+        if not self._memoise_walks:
+            return self._walk_points(final_node, return_nodes)
+
+        # The node itself is the key (Points hash by identity), so the memo
+        # holds it alive and no recycled id can alias two different walks.
+        cache_key = (final_node, bool(return_nodes))
+        cached = self._walk_cache.get(cache_key)
+        if cached is None:
+            cached = self._walk_points(final_node, return_nodes)
+            if isinstance(cached, np.ndarray):
+                cached.flags.writeable = False
+            self._walk_cache[cache_key] = cached
+        return list(cached) if return_nodes else cached
+
+    def _walk_points(self, final_node, return_nodes):
+        """The un-memoised walk behind :meth:`get_point_array`."""
         points = [
             node if return_nodes else node.get_point()
             for node in self._walk_nodes(final_node)

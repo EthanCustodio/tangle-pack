@@ -40,8 +40,11 @@ Snapshot semantics: from_workbench() captures the *derived* topological
 structure (the per-branch ordering of intersections) at build time, but holds
 live references to the registry, bridges, and fixed points. Growing manifolds or
 recomputing intersections on the workbench afterward invalidates a Trellis —
-rebuild it. This mirrors how the registry itself is rebuilt on every
-compute_intersections() call.
+rebuild it. The snapshot records the workbench generation it was built at
+(``_built_generation``), which is what TangleSession.trellis() compares to
+decide that, so nothing has to be invalidated by hand. Everything a Trellis
+memoises on top of the snapshot (the endpoint-to-bridge index, the oriented
+bridge polylines) is a function of the snapshot alone and dies with it.
 
 This object deliberately contains NO algorithm logic. Compute-Pseudoneighbors,
 Is-Strong-Pip, and friends will live in their own modules and read from / write
@@ -86,6 +89,7 @@ class Trellis:
         bridges: list["Bridge"],
         dynamical_system: Optional["DynamicalSystem"] = None,
         manifolds: Optional[dict] = None,
+        generation: int = 0,
     ):
         self.fixed_points = fixed_points
         self.registry = registry
@@ -96,11 +100,18 @@ class Trellis:
         # Purely geometric consumers (hole placement inside narrow lobes) walk
         # the actual curve nodes through this; None degrades to chord fallbacks.
         self.manifolds = manifolds or {}
-        # Registry size when this snapshot bucketed its branches. In-place
-        # additions (e.g. blasting registers new crossings on the SAME
-        # registry) leave the object identity unchanged but stale the
-        # per-branch orderings; the session's staleness guard compares this.
-        self._built_registry_size = len(registry)
+        # The workbench generation this snapshot was built at. A Trellis is a
+        # snapshot -- the per-branch orderings and the bridge list are frozen at
+        # build time -- so it is valid exactly while the workbench still reports
+        # this generation; TangleSession.trellis compares the two.
+        self._built_generation = generation
+
+        # Memos, all functions of the snapshot alone (see the properties that
+        # build them). The bridge lookup is rebuilt when `bridges` is replaced
+        # or appended to; the polylines are keyed by bridge version.
+        self._bridge_by_endpoints: Optional[dict[frozenset, "Bridge"]] = None
+        self._bridge_lookup_len: int = -1
+        self._bridge_polylines: dict = {}
 
         # ── algorithm output slots (filled by topological algorithms) ────────
         self.pseudoneighbors: list[PseudoneighborPair] = []
@@ -262,7 +273,80 @@ class Trellis:
             bridges=bridges,
             dynamical_system=workbench.dynamical_system,
             manifolds=workbench.manifolds,
+            generation=workbench.generation,
         )
+
+    # ── snapshot memos ──────────────────────────────────────────────────────
+
+    def bridge_between(self, first_id: int, second_id: int) -> Optional["Bridge"]:
+        """
+        The bridge whose two endpoint crossings are exactly this pair.
+
+        A dict lookup on a per-trellis index built from :attr:`bridges`, so the
+        callers that resolve one bridge per pseudoneighbor pair (there is one
+        per pair, per iterate, per backward step) no longer rescan the bridge
+        list each time. The index is rebuilt when the bridge list changes
+        length -- a Trellis is a snapshot, so that is the only way its bridges
+        move without a rebuild of the whole object.
+
+        Args:
+            first_id: One endpoint's registry id.
+            second_id: The other endpoint's registry id.
+
+        Returns:
+            The matching Bridge, or None if no bridge spans the pair.
+        """
+        if (
+            self._bridge_by_endpoints is None
+            or self._bridge_lookup_len != len(self.bridges)
+        ):
+            index: dict[frozenset, "Bridge"] = {}
+            for bridge in self.bridges:
+                if bridge.first_intersection is None or bridge.second_intersection is None:
+                    continue  # a partial arc has no endpoint pair to be found by
+                index.setdefault(
+                    frozenset((bridge.first_intersection, bridge.second_intersection)),
+                    bridge,
+                )
+            self._bridge_by_endpoints = index
+            self._bridge_lookup_len = len(self.bridges)
+        return self._bridge_by_endpoints.get(frozenset((first_id, second_id)))
+
+    def cached_bridge_polyline(self, bridge: "Bridge", build):
+        """
+        Memoise one oriented polyline per bridge, keyed by the bridge's version.
+
+        The geometry callers (hole placement, row reading, side tests) ask for
+        the same bridge's oriented polyline many times per partition; building
+        it walks the bridge and orients it. The memo is keyed by the bridge's
+        own mutation counter (:attr:`BaseManifold.version`), so it follows the
+        same invalidation as the point array underneath it.
+
+        Args:
+            bridge: The bridge whose polyline is wanted.
+            build: Zero-argument callable that computes it on a miss. Its
+                result -- including ``None`` for an unorientable bridge -- is
+                what gets cached.
+
+        Returns:
+            Whatever ``build`` returned, from the memo when it is still valid.
+
+        Note:
+            An object with no ``version`` (a hand-built stand-in in a test) is
+            never cached: without the counter there is nothing to invalidate
+            against, and a stale polyline is worse than an extra walk.
+        """
+        version = getattr(bridge, "version", None)
+        if version is None:
+            return build()
+
+        key = id(bridge)
+        entry = self._bridge_polylines.get(key)
+        if entry is not None and entry[0] is bridge and entry[1] == version:
+            return entry[2]
+        value = build()
+        self._bridge_polylines[key] = (bridge, version, value)
+        return value
 
     # ── intersection access ─────────────────────────────────────────────────
 

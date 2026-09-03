@@ -108,9 +108,13 @@ def forward_stable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey]:
 def _branch_position_map(
     fixed_point: "FixedPoint",
 ) -> tuple[dict[ManifoldKey, int], int]:
-    """Return (position-of-each-stable-branch, cycle length k_value)."""
-    cycle = fixed_point.branch_cycle("stable")
-    return {key: i for i, key in enumerate(cycle)}, len(cycle)
+    """Return (position-of-each-stable-branch, cycle length k_value).
+
+    Thin wrapper around the memo on :meth:`FixedPoint.branch_position_map`,
+    which is the single source of truth for the chain; the returned mapping is
+    shared and must not be mutated.
+    """
+    return fixed_point.branch_position_map("stable")
 
 
 def is_strong_pip(
@@ -119,7 +123,6 @@ def is_strong_pip(
     *,
     tol: Optional[float] = None,
     collision_rtol: float = 1e-2,
-    _cache: Optional[dict] = None,
 ) -> StrongPipResult:
     """
     Classify whether a single intersection is a strong pip.
@@ -147,8 +150,6 @@ def is_strong_pip(
             stable AND unstable cdists are both within ``collision_rtol`` of q0's.
             Defaults to 1e-2, which absorbs canonical-distance scaling noise while
             still distinguishing distinct intersections.
-        _cache: Internal per-fixed-point cache used by classify_strong_pips to
-            avoid rebuilding the branch cycle for every candidate.
 
     Returns:
         A StrongPipResult. When not a strong pip, ``blocking_intersection_id`` is
@@ -182,12 +183,7 @@ def is_strong_pip(
         )
     beta = fixed_point.per_step_beta("unstable")
 
-    if _cache is not None and fixed_point in _cache:
-        pos_map, k = _cache[fixed_point]
-    else:
-        pos_map, k = _branch_position_map(fixed_point)
-        if _cache is not None:
-            _cache[fixed_point] = (pos_map, k)
+    pos_map, k = _branch_position_map(fixed_point)
 
     pos_B = pos_map.get(branch_key)
     if pos_B is None:
@@ -295,7 +291,6 @@ def classify_strong_pips(
 
     anchor_tol = tol if tol is not None else trellis.registry.cdist_tol
 
-    cache: dict = {}
     results: dict[int, StrongPipResult] = {}
     for iid in intersection_ids:
         ix = trellis.intersection(iid)
@@ -308,7 +303,7 @@ def classify_strong_pips(
             logger.debug("Skipping anchor/fixed-point intersection %s", iid)
             continue
         results[iid] = is_strong_pip(
-            trellis, iid, tol=tol, collision_rtol=collision_rtol, _cache=cache
+            trellis, iid, tol=tol, collision_rtol=collision_rtol
         )
 
     logger.debug(

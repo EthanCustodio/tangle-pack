@@ -127,6 +127,30 @@ Phase 3, deleted here so Blast is rewritten once).
 
 ## Phase 4 — Generation counter and caches
 
+✅ DONE 2026-09-02 (suite 322 passed / 1 skipped; three smoke scripts byte-identical;
+blast script 3.61s -> 3.59s). Deviations: `TangleWorkbench.generation` is a monotone
+token derived from a composite state (own mutation counter, registry generation, the
+tuple of manifold versions) rather than a plain sum, so a registry SWAP -- whose fresh
+registry restarts its own counter at zero -- can never cancel out; the point-array memo
+is enabled on `Bridge` ONLY (a growable manifold gains points through `Point`, which the
+manifold cannot observe, and `ManifoldMachine`/`Point` were outside this phase's file
+list), with every registered bridge's version bumped by the workbench on growth, a
+re-cut and an iterate; memoised arrays are handed out READ-ONLY; the registry keeps a
+second counter (`_orders_version`, bumped only by an insert or a renumbering) that the
+ordering-derived views key on, so one `infer_iterates` pass does not rebuild them per
+crossing; `bridge_for_pair` resolves through a trellis-local endpoint index
+(`Trellis.bridge_between`) rather than `workbench.bridge`, because a trellis's bridge
+list includes iterated children the workbench dict does not key the same way;
+`_registry_id_epoch`/`_bridge_id_epoch` are KEPT and documented as orthogonal (they
+answer "do ids still name the same crossings", not "is this snapshot stale");
+`invalidate_trellises()` warns `DeprecationWarning` on the way to being removed;
+`StrongPip`'s per-call `_cache` parameter is gone, folded into the `FixedPoint` memo.
+20k synthetic inserts: 17.78s -> 0.13s. On the available fixtures `iterate_bridge`
+never refines an already-cut arc (probed on k=10 including a 3-generation blast), so
+its walk invalidation is pinned on the contract (every registered bridge's version
+moves) rather than on a geometric side effect; growth does refine one (359 -> 360
+points), and that is pinned directly.
+
 - `IntersectionRegistry.generation`, bumped in `add`, `reindex_from`, `register_iterate`.
 - `TangleWorkbench.generation` = own counter (bumped by bridge mutation, manifold
   root/tail reassignment, `manifolds` insertion) combined with the registry's.

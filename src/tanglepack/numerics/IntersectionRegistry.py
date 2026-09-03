@@ -54,12 +54,23 @@ class IntersectionRegistry:
         _next_id: int
         cdist_tol: float
         iterate_table: IterateTable
+        _generation: int  — bumped by every mutation; read via :attr:`generation`
+        _orders_version: int  — bumped by the mutations that change the stored
+            crossings (insert, renumber); the ordering-derived views key on it
         _unstable_order: list[int]  — IDs sorted ascending by unstable_cdist
+        _unstable_keys: list[float] — those IDs' unstable cdists, same order
         _stable_order: list[int]    — IDs sorted ascending by stable_cdist
-        _cdist_index: dict[tuple[float, float], int]  — secondary collision index
+        _stable_keys: list[float]   — those IDs' stable cdists, same order
         _graph: nx.MultiDiGraph
         _graph_adjacency_dirty: bool
         _graph_bridges: Optional[list[tuple[int, int]]]
+
+    Note:
+        The two sorted key arrays are maintained on insertion (bisect), so no
+        query ever rebuilds them by scanning the store. Every derived view
+        (rank maps, the per-stable-branch candidate index) is memoised against
+        ``_orders_version`` and rebuilt lazily on the next read after an insert
+        or a renumbering.
     """
 
     def __init__(self, cdist_tol: float = 1e-6):
@@ -68,15 +79,58 @@ class IntersectionRegistry:
         self.cdist_tol = cdist_tol
         self.iterate_table = IterateTable()
 
+        # Monotone mutation counter. Anything derived from this registry (a
+        # Trellis snapshot, the workbench's generation) is valid only for the
+        # value it was built at.
+        self._generation: int = 0
+        # Bumped by the subset of mutations that change the STORED CROSSINGS --
+        # an insert or a renumbering, not an iterate relation. The views below
+        # are functions of those alone, so keying them on this rather than on
+        # the full generation keeps them alive across the thousands of
+        # register_iterate calls one infer_iterates pass makes.
+        self._orders_version: int = 0
+
         self._unstable_order: list[int] = []
+        self._unstable_keys: list[float] = []
         self._stable_order: list[int] = []
-        self._cdist_index: dict[tuple[float, float], int] = {}
+        self._stable_keys: list[float] = []
+
+        # Lazily rebuilt views, each stamped with the _orders_version it was
+        # built at.
+        self._rank_maps: Optional[tuple[dict[int, int], dict[int, int]]] = None
+        self._rank_version: int = -1
+        self._stable_branch_index: Optional[
+            dict[Optional[ManifoldKey], tuple[list[float], list[int]]]
+        ] = None
+        self._stable_branch_version: int = -1
 
         self._graph: nx.MultiDiGraph = nx.MultiDiGraph()
         self._graph_adjacency_dirty: bool = False
         # The bridge endpoint pairs the current unstable adjacency was built
         # from (None = the per-branch cdist fallback).
         self._graph_bridges: Optional[list[tuple[int, int]]] = None
+
+    # ── generation ─────────────────────────────────────────────────────────
+
+    @property
+    def generation(self) -> int:
+        """
+        Monotone counter bumped by every mutation of the registry's contents.
+
+        Mutations are: a new intersection stored (:meth:`add`, and therefore
+        :meth:`add_synthetic`), a renumbering (:meth:`reindex_from`), and a new
+        iterate relation (:meth:`register_iterate`). An :meth:`add` that
+        collides with a stored crossing stores nothing and is NOT a mutation --
+        it is a lookup that happens to be spelled like an insert.
+
+        Rebuilding a derived cache (the graph's adjacency edges, the rank maps)
+        is not a mutation either: those are functions of the contents, so they
+        never invalidate anything.
+
+        Returns:
+            int: The current generation.
+        """
+        return self._generation
 
     # ── core insert / lookup ───────────────────────────────────────────────
 
@@ -105,9 +159,8 @@ class IntersectionRegistry:
 
         self._insert_into_unstable_order(new_id, intersection.unstable_cdist)
         self._insert_into_stable_order(new_id, intersection.stable_cdist)
-
-        key = self._cdist_key(intersection)
-        self._cdist_index[key] = new_id
+        self._generation += 1
+        self._orders_version += 1
 
         # Add node to the live graph.
         self._graph.add_node(
@@ -198,11 +251,14 @@ class IntersectionRegistry:
         # Rebuild every id-keyed structure from scratch with the final ids.
         self._store = {}
         self._unstable_order = []
+        self._unstable_keys = []
         self._stable_order = []
-        self._cdist_index = {}
+        self._stable_keys = []
         self._graph = nx.MultiDiGraph()
         self.iterate_table = IterateTable()
         self._next_id = (max(used) + 1) if used else 0
+        self._generation += 1
+        self._orders_version += 1
 
         remap: dict[int, int] = {}
         for ix in intersections:
@@ -211,7 +267,6 @@ class IntersectionRegistry:
             self._store[fid] = ix
             self._insert_into_unstable_order(fid, ix.unstable_cdist)
             self._insert_into_stable_order(fid, ix.stable_cdist)
-            self._cdist_index[self._cdist_key(ix)] = fid
             self._graph.add_node(
                 fid,
                 coords=ix.coords,
@@ -254,12 +309,30 @@ class IntersectionRegistry:
         return list(self._stable_order)
 
     def unstable_rank(self, id: int) -> int:
-        """0-based position of intersection `id` in the W^u ordering."""
-        return self._unstable_order.index(id)
+        """0-based position of intersection `id` in the W^u ordering.
+
+        Raises:
+            KeyError: If ``id`` is not registered.
+        """
+        return self._ranks()[0][id]
 
     def stable_rank(self, id: int) -> int:
-        """0-based position of intersection `id` in the W^s ordering."""
-        return self._stable_order.index(id)
+        """0-based position of intersection `id` in the W^s ordering.
+
+        Raises:
+            KeyError: If ``id`` is not registered.
+        """
+        return self._ranks()[1][id]
+
+    def _ranks(self) -> tuple[dict[int, int], dict[int, int]]:
+        """The (unstable, stable) id-to-rank maps, rebuilt when the orders change."""
+        if self._rank_maps is None or self._rank_version != self._orders_version:
+            self._rank_maps = (
+                {iid: rank for rank, iid in enumerate(self._unstable_order)},
+                {iid: rank for rank, iid in enumerate(self._stable_order)},
+            )
+            self._rank_version = self._orders_version
+        return self._rank_maps
 
     def all_ids(self) -> list[int]:
         """All registered IDs in insertion order."""
@@ -395,6 +468,7 @@ class IntersectionRegistry:
         Delegates to iterate_table and wires the directed edge into the graph.
         """
         self.iterate_table.register_iterate(source_id, n, target_id)
+        self._generation += 1
         if source_id in self._graph and target_id in self._graph:
             self._graph.add_edge(
                 source_id,
@@ -627,8 +701,7 @@ class IntersectionRegistry:
         """
         if not self._unstable_order:
             return None
-        keys = [self._store[i].unstable_cdist for i in self._unstable_order]
-        pos = bisect.bisect_left(keys, cdist)
+        pos = bisect.bisect_left(self._unstable_keys, cdist)
         candidates = []
         if pos < len(self._unstable_order):
             candidates.append(self._unstable_order[pos])
@@ -722,7 +795,7 @@ class IntersectionRegistry:
 
     def _find_collision(self, intersection: Intersection) -> Optional[int]:
         """
-        Linear scan for an existing intersection that is the same crossing.
+        The id of the stored intersection that is the same crossing, if any.
 
         A duplicate must match on both canonical distances (within cdist_tol) and
         on the two branches it crosses (manifold_a_key = unstable branch,
@@ -731,32 +804,85 @@ class IntersectionRegistry:
         branches, so a cdist-only test would collapse them into one. Branch keys
         are exact discrete labels, so this needs no positional tolerance and does
         not rely on the (approximate, drift-prone) phase-space coordinates.
+
+        The unstable cdist is the prefilter: the sorted key array is bisected for
+        the window ``[u - tol, u + tol]`` and only those candidates are tested in
+        full, so an insert costs O(log N) plus the (normally empty) window rather
+        than a scan of the whole store. When several stored crossings fall inside
+        the window and match, the smallest id wins -- ids are handed out in
+        increasing order and preserved by :meth:`reindex_from`, so that is the
+        oldest of them and the deterministic choice.
         """
-        for id, existing in self._store.items():
+        tol = self.cdist_tol
+        u = intersection.unstable_cdist
+        lo = bisect.bisect_left(self._unstable_keys, u - tol)
+        hi = bisect.bisect_right(self._unstable_keys, u + tol)
+
+        best: Optional[int] = None
+        for pos in range(lo, hi):
+            candidate_id = self._unstable_order[pos]
+            existing = self._store[candidate_id]
             if (
-                abs(existing.unstable_cdist - intersection.unstable_cdist)
-                < self.cdist_tol
-                and abs(existing.stable_cdist - intersection.stable_cdist)
-                < self.cdist_tol
+                abs(existing.unstable_cdist - u) < tol
+                and abs(existing.stable_cdist - intersection.stable_cdist) < tol
                 and existing.manifold_a_key == intersection.manifold_a_key
                 and existing.manifold_b_key == intersection.manifold_b_key
             ):
-                return id
-        return None
+                if best is None or candidate_id < best:
+                    best = candidate_id
+        return best
 
-    def _cdist_key(self, intersection: Intersection) -> tuple[float, float]:
-        digits = max(0, -int(np.floor(np.log10(self.cdist_tol))) - 1)
-        return (
-            round(intersection.unstable_cdist, digits),
-            round(intersection.stable_cdist, digits),
-        )
+    def candidates_near_stable_cdist(
+        self, branch_key: Optional[ManifoldKey], cdist: float, window: float
+    ) -> list[tuple[int, Intersection]]:
+        """
+        The crossings on one stable branch whose stable cdist is within a window.
+
+        The bucketed lookup behind the iterate search: the image of a crossing
+        must sit on a KNOWN stable branch (the advanced key) at a KNOWN stable
+        canonical distance (the source's, scaled by the per-step factor), so the
+        candidate set is a bisected slice of that branch's own sorted cdists
+        rather than the whole registry.
+
+        Args:
+            branch_key: The stable branch (``manifold_b_key``) to search.
+            cdist: Centre of the stable-cdist window.
+            window: Half-width of the window (inclusive on both ends).
+
+        Returns:
+            ``(id, Intersection)`` pairs in increasing stable cdist.
+        """
+        keys, ids = self._stable_branch_buckets().get(branch_key, ([], []))
+        lo = bisect.bisect_left(keys, cdist - window)
+        hi = bisect.bisect_right(keys, cdist + window)
+        return [(ids[pos], self._store[ids[pos]]) for pos in range(lo, hi)]
+
+    def _stable_branch_buckets(
+        self,
+    ) -> dict[Optional[ManifoldKey], tuple[list[float], list[int]]]:
+        """Per-stable-branch ``(sorted cdists, ids)``, rebuilt when the orders change."""
+        if (
+            self._stable_branch_index is None
+            or self._stable_branch_version != self._orders_version
+        ):
+            buckets: dict[
+                Optional[ManifoldKey], tuple[list[float], list[int]]
+            ] = {}
+            for iid in self._stable_order:  # already in ascending stable cdist
+                ix = self._store[iid]
+                keys, ids = buckets.setdefault(ix.manifold_b_key, ([], []))
+                keys.append(ix.stable_cdist)
+                ids.append(iid)
+            self._stable_branch_index = buckets
+            self._stable_branch_version = self._orders_version
+        return self._stable_branch_index
 
     def _insert_into_unstable_order(self, id: int, unstable_cdist: float):
-        keys = [self._store[i].unstable_cdist for i in self._unstable_order]
-        pos = bisect.bisect_left(keys, unstable_cdist)
+        pos = bisect.bisect_left(self._unstable_keys, unstable_cdist)
         self._unstable_order.insert(pos, id)
+        self._unstable_keys.insert(pos, unstable_cdist)
 
     def _insert_into_stable_order(self, id: int, stable_cdist: float):
-        keys = [self._store[i].stable_cdist for i in self._stable_order]
-        pos = bisect.bisect_left(keys, stable_cdist)
+        pos = bisect.bisect_left(self._stable_keys, stable_cdist)
         self._stable_order.insert(pos, id)
+        self._stable_keys.insert(pos, stable_cdist)

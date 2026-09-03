@@ -187,12 +187,14 @@ def bridge_for_pair(trellis: "Trellis", pair: PseudoneighborPair) -> Optional["B
 
     Returns:
         The matching Bridge, or None if no bridge spans the pair.
+
+    Note:
+        The search itself is the trellis's own endpoint index
+        (:meth:`Trellis.bridge_between`), so repeated lookups over one snapshot
+        cost a dict probe each.
     """
-    wanted = set(pair.as_tuple())
-    for bridge in trellis.bridges:
-        if {bridge.first_intersection, bridge.second_intersection} == wanted:
-            return bridge
-    return None
+    first, second = pair.as_tuple()
+    return trellis.bridge_between(first, second)
 
 
 def punch_holes(
@@ -752,7 +754,21 @@ def _oriented_bridge_polyline(
         The (N, 2) polyline in dynamical orientation, or None when the bridge
         has fewer than two points, an unresolved endpoint, or endpoints of
         equal unstable cdist (orientation undecidable — logged as a warning).
+
+    Note:
+        Memoised per trellis and per bridge version
+        (:meth:`Trellis.cached_bridge_polyline`); the result is shared, so it
+        must not be written to.
     """
+    return trellis.cached_bridge_polyline(
+        bridge, lambda: _build_oriented_bridge_polyline(trellis, bridge)
+    )
+
+
+def _build_oriented_bridge_polyline(
+    trellis: "Trellis", bridge: "Bridge"
+) -> Optional[NDArray[np.float64]]:
+    """The uncached body of :func:`_oriented_bridge_polyline`."""
     points = bridge.get_point_array()
     if points is None or len(points) < 2:
         return None

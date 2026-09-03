@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Iterable, Optional, TYPE_CHECKING
 
 from ..numerics.TangleWorkbench import TangleWorkbench
@@ -97,17 +98,20 @@ class TangleSession:
         """
         Build (and cache) the Trellis for one or more fixed points.
 
-        Trellises are cached per fixed-point key so repeated calls are cheap. Because
-        a Trellis is a snapshot, rebuild it (``rebuild=True``) after anything that
-        changes the registry — growing manifolds, recomputing intersections, or
-        defining a resonance zone. :meth:`resonance_zone` clears the cache for you.
+        Trellises are cached per fixed-point key so repeated calls are cheap, and
+        a stale one is rebuilt automatically; ``rebuild=True`` forces a rebuild
+        even when the cached snapshot is still valid.
 
-        A cached Trellis whose registry is no longer the workbench's current one
-        (every :meth:`compute_intersections` builds a fresh registry — e.g. inside
-        a resonance-zone recompute) is transparently rebuilt, so a session never
-        hands back a snapshot bound to a stale registry. The candidate/strong-pip
-        slots of the rebuilt Trellis start empty; re-run classification (or use the
-        session-level :meth:`classify_strong_pips`, which does so for you).
+        Staleness is one comparison: a Trellis records the workbench
+        :attr:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.generation`
+        it was built at, and anything that changes the tangle — growth, a
+        recompute (which swaps in a fresh registry), a blast adding crossings to
+        the same registry, a re-cut, a trim, a resonance zone or its restore —
+        advances that counter, so the cached snapshot is dropped and rebuilt on
+        the next call. No caller has to invalidate by hand. The
+        candidate/strong-pip slots of the rebuilt Trellis start empty; re-run
+        classification (or use the session-level :meth:`classify_strong_pips`,
+        which does so for you).
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None for all
@@ -119,12 +123,9 @@ class TangleSession:
         """
         cache_key = self._cache_key(fixed_points)
         cached = self._trellises.get(cache_key)
-        registry = self.workbench.intersection_registry
-        stale = cached is not None and (
-            cached.registry is not registry
-            # Blasting (iterate_bridge) adds crossings to the SAME registry
-            # object; the snapshot's per-branch orderings miss them.
-            or getattr(cached, "_built_registry_size", None) != len(registry)
+        stale = (
+            cached is not None
+            and cached._built_generation != self.workbench.generation
         )
         if rebuild or cached is None or stale:
             self._trellises[cache_key] = Trellis.from_workbench(
@@ -133,8 +134,26 @@ class TangleSession:
         return self._trellises[cache_key]
 
     def invalidate_trellises(self) -> None:
-        """Drop all cached Trellises (they are snapshots of a now-stale registry)."""
-        self._trellises.clear()
+        """
+        No-op alias kept for one release.
+
+        Cached Trellises are invalidated by the workbench generation counter
+        (see :meth:`trellis`), so nothing has to be dropped by hand any more.
+        Calls are harmless; new code should simply take a fresh
+        :meth:`trellis`.
+
+        Warns:
+            DeprecationWarning: Always -- the behaviour changed from "drop every
+                cached Trellis" to "do nothing", which an out-of-repo caller has
+                to be told about while the alias still exists.
+        """
+        warnings.warn(
+            "TangleSession.invalidate_trellises() is a no-op and will be removed: "
+            "the Trellis cache is keyed by TangleWorkbench.generation, so a stale "
+            "snapshot is rebuilt by the next trellis() call.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     @staticmethod
     def _cache_key(fixed_points):
@@ -396,8 +415,8 @@ class TangleSession:
         inversion) and a later call for a different fixed point does not overwrite it.
         Trims are cumulative (each sets a manifold's tail), so building zones for
         several fixed points nests correctly — the inner zone ends up a subset of the
-        outer one. When recomputing, the Trellis cache is invalidated (the registry
-        was rebuilt).
+        outer one. A recompute advances the workbench generation, so any cached
+        Trellis is rebuilt on the next :meth:`trellis` call.
 
         Args:
             intersection_id: Registry id of the boundary pip (e.g. ``trellis.strong_pip``).
@@ -414,8 +433,6 @@ class TangleSession:
             self.workbench, intersection_id, fixed_points, recompute=recompute
         )
         self.resonance_zones[rz.key] = rz
-        if recompute:
-            self.invalidate_trellises()
         return rz
 
     def add_resonance_zones(
@@ -452,7 +469,6 @@ class TangleSession:
             self.workbench.compute_intersections(fps, preserve_ids=True)
             # Stable manifolds are now trimmed; recut bridges against the new crossings.
             self.workbench.rebuild_bridges()
-            self.invalidate_trellises()
             recomputed = self.workbench.intersection_registry.all_ids()
             for rz in self.resonance_zones.values():
                 rz.intersection_ids = recomputed
@@ -551,11 +567,11 @@ class TangleSession:
 
         Note:
             Blasting registers the children's new stable-manifold crossings, so
-            any cached Trellis is invalidated — take a fresh :meth:`trellis`
-            (and re-establish its strong pip) before continuing topological
-            work.
+            the workbench generation advances and any cached Trellis is rebuilt
+            on the next :meth:`trellis` call — take a fresh one (and
+            re-establish its strong pip) before continuing topological work.
         """
-        result = blast_zone(
+        return blast_zone(
             self,
             zone,
             num_iterations,
@@ -563,8 +579,6 @@ class TangleSession:
             strict=strict,
             min_separation=min_separation,
         )
-        self.invalidate_trellises()
-        return result
 
     def plot_resonance_zones(
         self,

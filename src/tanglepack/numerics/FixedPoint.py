@@ -111,6 +111,12 @@ class FixedPoint:
         # Filled in by set_k_value() once the eigenvalues are known.
         self.k_value: Optional[int] = None
 
+        # Memoised branch bookkeeping. Both are functions of (k_value, period)
+        # alone, and k_value only ever changes in set_k_value(), which clears
+        # them. Keyed by stability.
+        self._branch_cycle_cache: dict[str, list[ManifoldKey]] = {}
+        self._branch_position_cache: dict[str, tuple[dict[ManifoldKey, int], int]] = {}
+
     @property
     def num_branches(self) -> int:
         """
@@ -183,6 +189,11 @@ class FixedPoint:
         multiplier = 2 if any(x < 0 for x in self.unstable_eigenvalues) else 1
 
         self.k_value = self.period * multiplier
+
+        # k_value is the only input to the branch chain, so this is the one
+        # place the memos below can go stale.
+        self._branch_cycle_cache.clear()
+        self._branch_position_cache.clear()
 
     def per_step_beta(self, stability: Literal["unstable", "stable"]) -> float:
         """
@@ -303,7 +314,9 @@ class FixedPoint:
             stability: Which manifold's branches to list.
 
         Returns:
-            list[ManifoldKey]: The ``k_value`` keys in forward-map order.
+            list[ManifoldKey]: The ``k_value`` keys in forward-map order. A
+            fresh list each call; the chain itself is memoised and only
+            recomputed after :meth:`set_k_value`.
 
         Raises:
             ValueError: If ``stability`` is invalid or ``k_value`` is unset.
@@ -328,12 +341,46 @@ class FixedPoint:
                 "eigenvalues are computed."
             )
 
-        key: ManifoldKey = (self, stability, 0, 0)
-        cycle = [key]
-        for _ in range(self.k_value - 1):
-            key = self.advance_key(key, 1)
-            cycle.append(key)
-        return cycle
+        cached = self._branch_cycle_cache.get(stability)
+        if cached is None:
+            key: ManifoldKey = (self, stability, 0, 0)
+            cached = [key]
+            for _ in range(self.k_value - 1):
+                key = self.advance_key(key, 1)
+                cached.append(key)
+            self._branch_cycle_cache[stability] = cached
+        return list(cached)
+
+    def branch_position_map(
+        self, stability: Literal["unstable", "stable"]
+    ) -> tuple[dict[ManifoldKey, int], int]:
+        """
+        Where each branch of one stability sits in the forward map-step chain.
+
+        The lookup form of :meth:`branch_cycle`: ``position[key]`` is the number
+        of forward map steps from ``(self, stability, 0, 0)`` to ``key``, and
+        differences of positions modulo the returned length are counts of map
+        steps -- which is how the topological algorithms compare two branches.
+
+        Args:
+            stability: Which manifold's branches to map.
+
+        Returns:
+            ``(position-of-each-branch, k_value)``.
+
+        Raises:
+            ValueError: If ``stability`` is invalid or ``k_value`` is unset.
+
+        Note:
+            The mapping is the memo itself, shared by every caller and only
+            rebuilt after :meth:`set_k_value`. Treat it as read-only.
+        """
+        cached = self._branch_position_cache.get(stability)
+        if cached is None:
+            cycle = self.branch_cycle(stability)
+            cached = ({key: i for i, key in enumerate(cycle)}, len(cycle))
+            self._branch_position_cache[stability] = cached
+        return cached
 
     def advance_key(self, key: ManifoldKey, n: int = 1) -> ManifoldKey:
         """
