@@ -22,6 +22,7 @@ from invariants import (
     assert_one_to_one,
 )
 from tanglepack import TangleWorkbench
+from tanglepack.examples import henon_jacobian, henon_map, henon_map_inverse
 
 
 # --------------------------------------------------------------------------- #
@@ -226,22 +227,10 @@ def test_intersections_carry_keys_on_both_branches(henon_inversion):
 # --------------------------------------------------------------------------- #
 # (e) an orientation-REVERSING map is rejected, not silently mismodelled
 # --------------------------------------------------------------------------- #
-def _henon_b_negative(point):
-    k, b = 10, -1
-    x, y = point
-    return np.stack([y - k + x**2, -b * x], axis=0)
-
-
-def _henon_b_negative_inverse(point):
-    k, b = 10, -1
-    x, y = point
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
-
-
-def _henon_b_negative_jacobian(point):
-    k, b = 10, -1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
+_B_NEGATIVE = (10, -1)
+_henon_b_negative = henon_map(*_B_NEGATIVE)
+_henon_b_negative_inverse = henon_map_inverse(*_B_NEGATIVE)
+_henon_b_negative_jacobian = henon_jacobian(*_B_NEGATIVE)
 
 
 def test_mixed_eigenvalue_signs_are_rejected():

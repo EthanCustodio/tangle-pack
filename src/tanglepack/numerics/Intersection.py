@@ -1,3 +1,12 @@
+"""
+A single stable x unstable crossing, and the aliases that name a manifold.
+
+:class:`Intersection` records one crossing -- its coordinates, its canonical
+distance along each of the two curves, and the geometry needed to cut a bridge
+there. This module is also the single home of the :data:`Stability` and
+:data:`ManifoldKey` aliases used across the package.
+"""
+
 from __future__ import annotations
 
 from typing import Optional, Literal, TYPE_CHECKING
@@ -10,9 +19,14 @@ if TYPE_CHECKING:
     from .FixedPoint import FixedPoint
     from .Point import Point
 
+#: The single spelling of a manifold's stability. Every ``stability`` parameter
+#: in :mod:`tanglepack.numerics` is annotated with this alias; it lived
+#: open-coded as ``Literal["unstable", "stable"]`` in a dozen modules before.
+Stability = Literal["unstable", "stable"]
+
 # ManifoldKey = (fixed_point, stability, orbit_index, branch_index)
 # Identical to the key type used in TangleWorkbench.manifolds.
-ManifoldKey = tuple["FixedPoint", Literal["unstable", "stable"], int, int]
+ManifoldKey = tuple["FixedPoint", Stability, int, int]
 
 
 class Intersection:
@@ -65,7 +79,12 @@ class Intersection:
         unstable_manifold: Optional["BaseManifold"] = None,
         unstable_segment: Optional[tuple["Point", "Point"]] = None,
         crossing_sign: int = 0,
-    ):
+    ) -> None:
+        """
+        Build one crossing. Every field is optional so that a synthetic
+        intersection (a periodic-point anchor, a test fixture) can be made
+        without geometry; see the class docstring for what each one means.
+        """
         self.coords = coords
         self.unstable_cdist = unstable_cdist
         self.stable_cdist = stable_cdist

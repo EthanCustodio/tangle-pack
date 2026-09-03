@@ -1,38 +1,12 @@
-from __future__ import annotations
-
-import logging
-from typing import Iterable, Literal, Optional, Union, TYPE_CHECKING
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-from ..numerics.Intersection import Intersection, ManifoldKey
-from ..numerics.IntersectionRegistry import IntersectionRegistry
-from .TrellisBranch import TrellisBranch
-from .TopologyResults import (
-    Endpoint,
-    Hole,
-    OPPOSITE_SIDE,
-    PseudoneighborPair,
-    Side,
-    StablePartitionResult,
-    StrongPipResult,
-    endpoint_index,
-)
-
-if TYPE_CHECKING:
-    from .Arrangement import Arrangement
-    from ..numerics.FixedPoint import FixedPoint
-    from ..numerics.DynamicalSystem import DynamicalSystem
-    from ..numerics.Bridge import Bridge, BridgeId
-    from ..numerics.TangleWorkbench import TangleWorkbench
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
-
-Stability = Literal["unstable", "stable"]
-
 """
+The topological snapshot of a computed tangle.
+
+:class:`Trellis` is the entry point for the topological half of the library:
+built from a :class:`~..numerics.TangleWorkbench.TangleWorkbench` once the
+numerical phase is complete, it exposes the per-branch ordering of crossings
+and the algorithms (strong pip, pseudoneighbors, stable partition) that run on
+it, without reaching back into the linked-list manifold machinery.
+
 Dev Notes:
 
 Trellis is the entry point for the topological half of the library. It is built
@@ -78,6 +52,38 @@ to a Trellis instance. The accessors here (branch lookup, orderings, cdist
 scaling, next-intersection) are the shared primitives those algorithms compose.
 """
 
+from __future__ import annotations
+
+import logging
+from typing import Iterable, Optional, Union, TYPE_CHECKING
+
+import numpy as np
+
+from ..numerics.Intersection import Intersection, ManifoldKey, Stability
+from ..numerics.IntersectionRegistry import IntersectionRegistry
+from . import plotting
+from .TrellisBranch import TrellisBranch
+from .TopologyResults import (
+    Endpoint,
+    Hole,
+    OPPOSITE_SIDE,
+    PseudoneighborPair,
+    Side,
+    StablePartitionResult,
+    StrongPipResult,
+    endpoint_index,
+)
+
+if TYPE_CHECKING:
+    from .Arrangement import Arrangement
+    from ..numerics.FixedPoint import FixedPoint
+    from ..numerics.DynamicalSystem import DynamicalSystem
+    from ..numerics.Bridge import Bridge, BridgeId
+    from ..numerics.TangleWorkbench import TangleWorkbench
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
 
 class Trellis:
     """
@@ -116,7 +122,25 @@ class Trellis:
         dynamical_system: Optional["DynamicalSystem"] = None,
         manifolds: Optional[dict] = None,
         generation: int = 0,
-    ):
+    ) -> None:
+        """
+        Build a trellis from an already-computed tangle.
+
+        Prefer :meth:`from_workbench`, which derives every argument below.
+
+        Args:
+            fixed_points (list[FixedPoint]): The orbits this trellis covers.
+            registry (IntersectionRegistry): The crossings, and their iterates.
+            branches (dict[ManifoldKey, TrellisBranch]): The per-branch ordering
+                of those crossings.
+            bridges (list[Bridge]): The bridges cut out of the unstable branches.
+            dynamical_system (Optional[DynamicalSystem]): The map, when a
+                geometric predicate needs it.
+            manifolds (Optional[dict]): The workbench's manifold dict, for the
+                algorithms that walk a real curve.
+            generation (int): The workbench generation this snapshot was taken
+                at; a cache compares it to decide staleness.
+        """
         self.fixed_points = fixed_points
         self.registry = registry
         self.branches = branches
@@ -766,7 +790,10 @@ class Trellis:
             match_rtol: Relative tolerance of the r_{n+p} cdist fallback.
             tol: Absolute canonical-distance slack (defaults to the registry's
                 ``cdist_tol``).
-            verbose: Print :meth:`describe_pseudoneighbors` when done.
+            verbose: Report :meth:`describe_pseudoneighbors` when done —
+                logged at INFO (this module's logger is raised to INFO for the
+                call, so a higher application-level setting cannot swallow it),
+                or printed when logging is unconfigured.
 
         Returns:
             The reference pairs (also available as
@@ -788,7 +815,7 @@ class Trellis:
             for pair in _extend(self, references):
                 self.add_pseudoneighbor(pair)
         if verbose:
-            print(self.describe_pseudoneighbors())
+            _log_report(self.describe_pseudoneighbors())
         return references
 
     def describe_pseudoneighbors(self) -> str:
@@ -829,7 +856,10 @@ class Trellis:
             pairs: Pairs to punch holes for; defaults to every recorded pair.
             epsilon: Inward nudge of the hole off the manifold it hugs.
             propagate: Also punch the backward-propagated holes.
-            verbose: Print :meth:`describe_holes` when done.
+            verbose: Report :meth:`describe_holes` when done —
+                logged at INFO (this module's logger is raised to INFO for the
+                call, so a higher application-level setting cannot swallow it),
+                or printed when logging is unconfigured.
 
         Returns:
             The punched holes.
@@ -881,7 +911,7 @@ class Trellis:
         )
 
         if verbose:
-            print(self.describe_holes())
+            _log_report(self.describe_holes())
         return holes
 
     def describe_holes(self) -> str:
@@ -912,7 +942,10 @@ class Trellis:
         Args:
             branch_key: A single stable branch to partition, or None (default)
                 for every stable branch of the trellis.
-            verbose: Print :meth:`describe_stable_partitions` when done.
+            verbose: Report :meth:`describe_stable_partitions` when done —
+                logged at INFO (this module's logger is raised to INFO for the
+                call, so a higher application-level setting cannot swallow it),
+                or printed when logging is unconfigured.
 
         Returns:
             The partition results (two per branch: left and right).
@@ -932,7 +965,7 @@ class Trellis:
             p for p in self.stable_partitions if p.branch_key not in keys
         ] + results
         if verbose:
-            print(self.describe_stable_partitions())
+            _log_report(self.describe_stable_partitions())
         return results
 
     def _warn_missing_pseudoneighbors(self) -> None:
@@ -1153,41 +1186,6 @@ class Trellis:
         self.strong_pip_candidates.clear()
         self.strong_pip = None
 
-    # ── plotting ────────────────────────────────────────────────────────────
-
-    def plot_strong_pip_candidates(self, ax=None, **scatter_kwargs):
-        """
-        Scatter-plot the strong-pip candidates in magenta, on top of the tangle.
-
-        Draw this before plot_strong_pip() so the single chosen pip (green) sits on
-        top of the candidate set (magenta) it was chosen from.
-
-        Args:
-            ax: Optional matplotlib Axes to draw on. Defaults to the current axes
-                (plt).
-            **scatter_kwargs: Forwarded to scatter. Defaults are color="magenta",
-                s=7 (matching plot_intersections), zorder=11 (above the black
-                intersections, below the green strong pip); override any of them
-                (e.g. pass s=30 for larger markers).
-
-        Returns:
-            The matplotlib PathCollection, or None if there are no candidates.
-        """
-        if not self.strong_pip_candidates:
-            logger.info(
-                "No strong-pip candidates; call classify_strong_pips() first."
-            )
-            return None
-
-        coords = np.array(
-            [self.registry[iid].coords for iid in self.strong_pip_candidates]
-        )
-        scatter_kwargs.setdefault("color", "magenta")
-        scatter_kwargs.setdefault("s", 7)
-        scatter_kwargs.setdefault("zorder", 11)
-        target = ax if ax is not None else plt
-        return target.scatter(coords[:, 0], coords[:, 1], **scatter_kwargs)
-
     def strong_pip_cut_points(self) -> list[int]:
         """
         The strong pip together with its iterates — one cut point per stable branch.
@@ -1207,39 +1205,50 @@ class Trellis:
         max_len = getattr(key[0], "k_value", None) if key is not None else None
         return self.registry.iterate_orbit(self.strong_pip, max_len=max_len)
 
-    def plot_strong_pip(self, ax=None, **scatter_kwargs):
-        """
-        Scatter-plot the strong-pip cut points in green, on top of the tangle.
+    # ── plotting ────────────────────────────────────────────────────────────
+    #
+    # Every drawing routine lives in :mod:`topology.plotting`, which owns the
+    # shared marker/colour/z-order conventions; these methods are the trellis-
+    # bound aliases of those functions.
 
-        For a period-1 anchor this is the single chosen strong pip; for a period-k
-        anchor it is the k points (strong pip + iterates) that bound the resonance
-        zone — see :meth:`strong_pip_cut_points`. Call after plotting the tangle and
-        intersections to highlight them.
+    def plot_strong_pip_candidates(self, ax=None, **scatter_kwargs):
+        """
+        Scatter-plot the strong-pip candidates in magenta, on top of the tangle.
+
+        Delegates to :func:`topology.plotting.plot_strong_pip_candidates`; draw
+        this before :meth:`plot_strong_pip` so the single chosen pip (green)
+        sits on top of the candidate set (magenta) it was chosen from.
 
         Args:
             ax: Optional matplotlib Axes to draw on. Defaults to the current axes
                 (plt).
-            **scatter_kwargs: Forwarded to scatter. Defaults are color="green",
-                s=7 (matching plot_intersections), zorder=12 (above the black
-                intersections); override any of them (e.g. pass s=40 for a larger
-                marker).
+            **scatter_kwargs: Forwarded to scatter, overriding
+                :data:`~topology.plotting.STRONG_PIP_CANDIDATE_STYLE`.
+
+        Returns:
+            The matplotlib PathCollection, or None if there are no candidates.
+        """
+        return plotting.plot_strong_pip_candidates(self, ax=ax, **scatter_kwargs)
+
+    def plot_strong_pip(self, ax=None, **scatter_kwargs):
+        """
+        Scatter-plot the strong-pip cut points in green, on top of the tangle.
+
+        Delegates to :func:`topology.plotting.plot_strong_pip`. For a period-1
+        anchor this is the single chosen strong pip; for a period-k anchor it is
+        the k points (strong pip + iterates) that bound the resonance zone — see
+        :meth:`strong_pip_cut_points`.
+
+        Args:
+            ax: Optional matplotlib Axes to draw on. Defaults to the current axes
+                (plt).
+            **scatter_kwargs: Forwarded to scatter, overriding
+                :data:`~topology.plotting.STRONG_PIP_STYLE`.
 
         Returns:
             The matplotlib PathCollection, or None if no strong pip has been chosen.
         """
-        if self.strong_pip is None:
-            logger.info(
-                "No strong pip chosen; call classify_strong_pips() (or set_strong_pip()) first."
-            )
-            return None
-
-        ids = self.strong_pip_cut_points()
-        coords = np.array([self.registry[i].coords for i in ids])
-        scatter_kwargs.setdefault("color", "green")
-        scatter_kwargs.setdefault("s", 7)
-        scatter_kwargs.setdefault("zorder", 12)
-        target = ax if ax is not None else plt
-        return target.scatter(coords[:, 0], coords[:, 1], **scatter_kwargs)
+        return plotting.plot_strong_pip(self, ax=ax, **scatter_kwargs)
 
     def plot_pseudoneighbors(
         self, ax=None, *, include_trajectories: bool = True, **scatter_kwargs
@@ -1247,126 +1256,58 @@ class Trellis:
         """
         Scatter-plot the pseudoneighbor pair members, on top of the tangle.
 
-        Every branch has pseudoneighbors — only the reference computation is
-        restricted to the fundamental segment — so by default all recorded
-        pairs (references and their iterated appearances) are drawn.
+        Delegates to :func:`topology.plotting.plot_pseudoneighbors`. Every branch
+        has pseudoneighbors — only the reference computation is restricted to the
+        fundamental segment — so by default all recorded pairs (references and
+        their iterated appearances) are drawn.
 
         Args:
             ax: Optional matplotlib Axes to draw on. Defaults to the current
                 axes (plt).
             include_trajectories: If True (default) every recorded pair is
                 drawn; pass False for the reference pairs only.
-            **scatter_kwargs: Forwarded to scatter. Defaults are
-                color="darkorange", s=7 (matching plot_intersections),
-                zorder=13 (above the strong-pip markers); override any of them.
+            **scatter_kwargs: Forwarded to scatter, overriding
+                :data:`~topology.plotting.PSEUDONEIGHBOR_STYLE`.
 
         Returns:
             The matplotlib PathCollection, or None if there are no pairs.
         """
-        pairs = (
-            self.pseudoneighbors if include_trajectories
-            else self.reference_pseudoneighbors
+        return plotting.plot_pseudoneighbors(
+            self, ax=ax, include_trajectories=include_trajectories, **scatter_kwargs
         )
-        if not pairs:
-            logger.info(
-                "No pseudoneighbors to plot; call compute_pseudoneighbors() first."
-            )
-            return None
-
-        ids = sorted({i for p in pairs for i in p.as_tuple()})
-        coords = np.array([self.registry[i].coords for i in ids])
-        scatter_kwargs.setdefault("color", "darkorange")
-        scatter_kwargs.setdefault("s", 7)
-        scatter_kwargs.setdefault("zorder", 13)
-        target = ax if ax is not None else plt
-        return target.scatter(coords[:, 0], coords[:, 1], **scatter_kwargs)
-
-    # One marker per reference-pseudoneighbor orbit: every hole descending
-    # from the same reference (matching Hole.origin) shares the symbol.
-    _HOLE_MARKERS = ("x", "+", "*", "^", "s", "D", "v", "P")
-
-    # One color per reference-pseudoneighbor orbit, matching the markers, so
-    # an orbit reads as a single consistent shape+color across the figure.
-    _HOLE_COLORS = (
-        "purple", "teal", "darkgreen", "crimson",
-        "chocolate", "navy", "olive", "deeppink",
-    )
 
     def plot_holes(self, ax=None, *, show_iterates: bool = True, **scatter_kwargs):
         """
         Scatter-plot the punched holes, on top of the tangle.
 
-        Each reference pseudoneighbor's orbit gets its own marker symbol AND
-        color — the reference hole and every hole generated from it (forward,
-        backward, or propagated) share them — and each hole is labelled with
-        its iterate (0 = reference, negative = backward). Sides are reported
-        by the partition, not encoded here.
+        Delegates to :func:`topology.plotting.plot_holes`: each reference
+        pseudoneighbor's orbit gets its own marker symbol AND color, and each
+        hole is labelled with its iterate (0 = reference, negative = backward).
+        Sides are reported by the partition, not encoded here.
 
         Args:
             ax: Optional matplotlib Axes to draw on. Defaults to the current
                 axes (plt).
             show_iterates: Annotate each hole with its iterate number
                 (default True).
-            **scatter_kwargs: Forwarded to scatter. Defaults are s=40,
-                zorder=14; override any of them. A color= override disables
-                the by-orbit coloring, a marker= override the by-orbit markers.
+            **scatter_kwargs: Forwarded to scatter, overriding
+                :data:`~topology.plotting.HOLE_STYLE`.
 
         Returns:
             List of matplotlib PathCollections (one per orbit drawn), or None
             if there are no holes.
         """
-        if not self.holes:
-            logger.info("No holes to plot; call punch_holes() first.")
-            return None
-
-        scatter_kwargs.setdefault("s", 40)
-        scatter_kwargs.setdefault("zorder", 14)
-        origins = sorted({h.origin for h in self.holes if h.origin is not None})
-        style_of = {
-            origin: (
-                self._HOLE_MARKERS[i % len(self._HOLE_MARKERS)],
-                self._HOLE_COLORS[i % len(self._HOLE_COLORS)],
-            )
-            for i, origin in enumerate(origins)
-        }
-        target = ax if ax is not None else plt
-
-        handles = []
-        groups = sorted(
-            {h.origin for h in self.holes},
-            key=lambda origin: (origin is None, origin or ()),
+        return plotting.plot_holes(
+            self, ax=ax, show_iterates=show_iterates, **scatter_kwargs
         )
-        for origin in groups:
-            batch = [h for h in self.holes if h.origin == origin]
-            coords = np.array([h.coords for h in batch])
-            marker, color = style_of.get(origin, ("x", "gray"))
-            kwargs = dict(scatter_kwargs)
-            kwargs.setdefault("marker", marker)
-            kwargs.setdefault("color", color)
-            handles.append(target.scatter(coords[:, 0], coords[:, 1], **kwargs))
-            if show_iterates:
-                axes = target if ax is not None else plt.gca()
-                for hole in batch:
-                    if hole.iterate is None:
-                        continue
-                    axes.annotate(
-                        str(hole.iterate),
-                        hole.coords,
-                        textcoords="offset points",
-                        xytext=(4, 4),
-                        fontsize=8,
-                        color=color,
-                        zorder=15,
-                    )
-        return handles
 
     def plot_stable_partition(self, ax=None, **line_kwargs):
         """
         Draw the stored stable partitions as number lines (one row each).
 
-        See :func:`topology.StablePartition.plot_stable_partition` — the x-axis
-        is stable canonical distance, closed endpoints are filled markers and
-        open endpoints hollow ones.
+        Delegates to :func:`topology.plotting.plot_stable_partition`, passing
+        :attr:`stable_partitions` — the x-axis is stable canonical distance,
+        closed endpoints are filled markers and open endpoints hollow ones.
 
         Args:
             ax: Optional matplotlib Axes to draw on. Defaults to the current
@@ -1376,9 +1317,9 @@ class Trellis:
         Returns:
             The Axes drawn on, or None if no partitions are stored.
         """
-        from .StablePartition import plot_stable_partition as _plot
-
-        return _plot(self.stable_partitions, ax=ax, **line_kwargs)
+        return plotting.plot_stable_partition(
+            self.stable_partitions, ax=ax, **line_kwargs
+        )
 
     # ── misc ────────────────────────────────────────────────────────────────
 
@@ -1403,3 +1344,32 @@ def _is_single_fixed_point(obj) -> bool:
     from ..numerics.FixedPoint import FixedPoint
 
     return isinstance(obj, FixedPoint)
+
+
+def _log_report(report: str) -> None:
+    """
+    Emit a ``describe_*`` report for a ``verbose=True`` call.
+
+    ``verbose`` is an alias for "report this call", so the text has to reach the
+    user either way:
+
+    * With logging CONFIGURED (the root logger has a handler), the report goes to
+      the log stream at INFO — this module's logger is raised to INFO for the
+      duration and restored in a ``finally``, so an application level above INFO
+      does not swallow it.
+    * With logging UNCONFIGURED, ``logging.lastResort`` only emits at WARNING, so
+      an INFO record would vanish; the report is printed instead, which is what a
+      plain REPL or notebook caller of ``verbose=True`` expects.
+
+    Args:
+        report: The already-formatted report text.
+    """
+    if not logging.getLogger().hasHandlers():
+        print(report)
+        return
+    previous = logger.level
+    logger.setLevel(logging.INFO)
+    try:
+        logger.info(report)
+    finally:
+        logger.setLevel(previous)

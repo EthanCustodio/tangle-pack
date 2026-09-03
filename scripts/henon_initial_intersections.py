@@ -7,32 +7,17 @@ logging.basicConfig(
 )
 
 import tanglepack
+from tanglepack.examples import (
+    HENON_K10,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+)
 import numpy as np
 import matplotlib.pyplot as plt
 
 
-def henon_map(point):
-    """
-    Defines the henon map for binary horshoe parameters to test basic functionality
-    """
-
-    k, b = (10, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    """Defines the inverse henon map for"""
-
-    k, b = (10, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+henon_map = _henon_map_factory(*HENON_K10)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 henon = tanglepack.DynamicalSystem(henon_map, henon_map_inverse)
@@ -52,9 +37,6 @@ approx_dirs = {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
 
 man_maker.orient_manifolds(fixed_point, approx_dirs)
 
-# initial_unstable_segment = man_maker.get_initial_fundamental_segment(
-#     fixed_point, 0, 0, "unstable"
-# )
 initial_stable_segment = man_maker.construct_kevin_way(fixed_point, "stable")
 
 initial_unstable_segment = man_maker.construct_kevin_way(fixed_point, "unstable")
@@ -100,11 +82,5 @@ for crossing in crossings:
 
 plt.xlim([-15, 15])
 plt.ylim([-15, 15])
-
-# fig.savefig(
-#     "tangle_plot.png",  # pdf/svg/eps/etc. all work
-#     dpi=300,  # print-quality resolution
-#     bbox_inches="tight",
-# )  # trim extra whitespace
 
 plt.show()

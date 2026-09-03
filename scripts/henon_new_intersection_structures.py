@@ -1,17 +1,14 @@
 import tanglepack, numpy as np
+from tanglepack.examples import (
+    HENON_K10,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+)
 import matplotlib.pyplot as plt
 
 
-def henon_map(point):
-    k, b = 10, 1
-    x, y = point
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    k, b = 10, 1
-    x, y = point
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+henon_map = _henon_map_factory(*HENON_K10)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 # ── Numeric phase ──────────────────────────────────────────────────────────
@@ -26,10 +23,7 @@ wb.compute_intersections(fp)  # also populates registry
 wb.trim_stable_manifolds(fp)
 bridges = wb.create_bridges(fp)
 
-# for _ in range(3):
-#     wb.iterate_all_bridges()
 new_bridges = wb.iterate_bridge(bridges[2])
-# wb.iterate_bridge(new_bridges[0])
 
 
 new_links = wb.infer_iterate_table()
@@ -84,16 +78,6 @@ adj_u = [(u, v) for u, v, d in G.edges(data=True) if d.get("stability") == "unst
 iter_edges = [
     (u, v, d["n"]) for u, v, d in G.edges(data=True) if d.get("type") == "iterate"
 ]
-
-# ── Tangle plot ────────────────────────────────────────────────────────────
-# plt.figure(figsize=(8, 8))
-# wb.plot_tangle(fp, "unstable", color="b")
-# wb.plot_tangle(fp, "stable", color="r")
-# wb.plot_intersections(fp)
-# plt.title("Henon Tangle")
-# plt.axis("equal")
-# plt.tight_layout()
-# plt.show()
 
 plt.figure()
 wb.plot_tangle(fp, "stable", color="r")

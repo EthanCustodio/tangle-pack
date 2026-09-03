@@ -1,33 +1,11 @@
-from typing import Literal, Dict, Tuple, Optional
-from numpy.typing import NDArray
-from .FixedPoint import FixedPoint
-from .BranchPoint import BranchPoint
-from .DynamicalSystem import DynamicalSystem
-from .ManifoldMachine import ManifoldMachine
-from .BaseManifold import BaseManifold
-from .Intersection import ManifoldKey
-from .Point import Point
-import numpy as np
-
-import logging
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
-logger.setLevel(logging.INFO)
-
-# Floor for the seed-step length used to start a fundamental segment. The seed step
-# itself is dynamic -- the located orbit's residual^(1/3) (``fixed_point.accuracy``)
-# -- which scales the step with how well the orbit is pinned down and so keeps the
-# seed comfortably inside the linear regime around the fixed point. The only failure
-# mode is an exactly-located orbit (the rational period-3 orbit at Henon k=2), where
-# the residual is 0 and the step would collapse to 0 (a 0/0 nan downstream). This
-# floor is the "minimally small but numerically robust" length used in that case;
-# it sits at the same scale (~cbrt machine eps) that a machine-precision orbit
-# already produces, so k=2 stays continuous with its neighbours. See the seed-step
-# dev note below.
-_MIN_SEED_STEP = 5e-6
-
 """
+Seeding the initial fundamental segment of a manifold from eigendata.
+
+:class:`ManifoldInitializer` turns a solved :class:`~.FixedPoint.FixedPoint`
+into the short starting curve that :class:`~.ManifoldMachine.ManifoldMachine`
+then grows: it steps off the fixed point along the eigenvector, maps that seed
+around the orbit, and orients the eigenvectors consistently.
+
 Dev Notes:
 
 Fully commit to one way of doing the manifold creation. 
@@ -47,7 +25,10 @@ Decide if that is necessary and make its inclusion in these methods more clear.
 Potentially it is necessary to do things the Ethan way, in the Kevin way
 I don't think it matters.
 
-Look at the TODO in orient_manifold
+orient_manifolds only accepts approximate directions for the 0th iterate of
+the cycle, and it requires both a stable and an unstable direction. Allowing
+an arbitrary iterate, and allowing one of the two directions to be given on
+its own, are both open.
 
 Look at insert_point_geometrically. We have the same function in manifold machine.
 We only need to have that functionality in one place. If the function here 
@@ -66,10 +47,42 @@ solver (fsolve) locates an orbit exactly (the rational period-3 orbit at Henon k
 the residual is 0 and the bare step would be 0, giving a 0/0 nan. Note the side
 effect of an accurate solver: for a generic k the residual is ~machine eps so the
 seed is ~5e-6 and tangles develop more slowly per iteration than they used to (more
-iterations are needed for a full tangle). That interacts with the OPEN refinement
-explosion -- see ManifoldMachine and the project memory: at k=2.1 fp3 stable the
-point count is fine through iter 6 (~628) then blows up ~380x at iter 7 (~240k).
+iterations are needed for a full tangle). The point-count blow-up that used to be
+blamed on refinement (at k=2.1 fp3 stable: ~628 points at iter 6, ~240k at iter 7)
+is NOT an open refinement bug -- see the ManifoldMachine Dev Notes: the arm is
+escaping to infinity, and the answer is to grow with a stop condition rather than a
+large fixed iteration count.
 """
+
+from __future__ import annotations
+
+from typing import Dict, Tuple, Optional
+from numpy.typing import NDArray
+from .FixedPoint import FixedPoint
+from .BranchPoint import BranchPoint
+from .DynamicalSystem import DynamicalSystem
+from .ManifoldMachine import ManifoldMachine
+from .BaseManifold import BaseManifold
+from .Intersection import ManifoldKey, Stability
+from .Point import Point
+import numpy as np
+
+import logging
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+# Floor for the seed-step length used to start a fundamental segment. The seed step
+# itself is dynamic -- the located orbit's residual^(1/3) (``fixed_point.accuracy``)
+# -- which scales the step with how well the orbit is pinned down and so keeps the
+# seed comfortably inside the linear regime around the fixed point. The only failure
+# mode is an exactly-located orbit (the rational period-3 orbit at Henon k=2), where
+# the residual is 0 and the step would collapse to 0 (a 0/0 nan downstream). This
+# floor is the "minimally small but numerically robust" length used in that case;
+# it sits at the same scale (~cbrt machine eps) that a machine-precision orbit
+# already produces, so k=2 stays continuous with its neighbours. See the seed-step
+# dev note below.
+_MIN_SEED_STEP = 5e-6
 
 
 class ManifoldInitializer:
@@ -82,7 +95,7 @@ class ManifoldInitializer:
         machine (ManifoldMachine): Toolbox containing methods for manifold
     """
 
-    def __init__(self, system: DynamicalSystem):
+    def __init__(self, system: DynamicalSystem) -> None:
         """
         Initializes the toolbox with the dynamical system and machine machinery
 
@@ -98,7 +111,7 @@ class ManifoldInitializer:
         fixed_point: FixedPoint,
         orbit_index: int,
         branch_index: int,
-        stability: Literal["stable", "unstable"],
+        stability: Stability,
     ) -> NDArray[np.float64]:
         """
         Computes the first point from the fixed point based on a linear interpolation.
@@ -113,7 +126,7 @@ class ManifoldInitializer:
                 point to start from.
             branch_index (int): The index corresponding to which branch to grow out.
                 Currently not really being used.
-            stability (Literal["unstable", "stable]): Stability of the manifold
+            stability (Stability): Stability of the manifold
                 to get the first point of.
         """
 
@@ -144,7 +157,7 @@ class ManifoldInitializer:
         fixed_point: FixedPoint,
         orbit_index: int,
         branch_index: int,
-        stability: Literal["stable", "unstable"],
+        stability: Stability,
         first_point: Point,
     ) -> NDArray[np.float64]:
         """
@@ -154,7 +167,7 @@ class ManifoldInitializer:
             fixed_point (FixedPoint): The fixed point we are attached to.
             orbit_index (int): The index of the iterate of the fixed point we are at.
             branch_index (int): The index of the branch of the fixed point we are at.
-            stability (Literal["unstable", "stable"]): The stability of the manifold.
+            stability (Stability): The stability of the manifold.
             first_point (Point): The point generated by taking a small step from
                 the fixed_point.
 
@@ -163,9 +176,6 @@ class ManifoldInitializer:
         """
         num_iterations = fixed_point.k_value
 
-        # first_back = self.get_first_point(
-        #     fixed_point, orbit_index, branch_index, stability
-        # )
         first_back = first_point.get_point()
         curr_point = first_point
 
@@ -202,7 +212,7 @@ class ManifoldInitializer:
         fixed_point: FixedPoint,
         orbit_index: int,
         branch_index: int,
-        stability: Literal["stable", "unstable"],
+        stability: Stability,
     ) -> BaseManifold:
         """
         Computes the initial fundamental segment.
@@ -214,7 +224,7 @@ class ManifoldInitializer:
             fixed_point (FixedPoint): The fixed point the segment is attached to.
             orbit_index (int): The iterate of the fixed point to get the segment from.
             branch_index (int): The branch of the fixed point the segment is from.
-            stability (Literal["unstable", "stable"]): The stability of the manifold.
+            stability (Stability): The stability of the manifold.
 
         Returns:
             BaseManifold: The resulting fundamental segment.
@@ -317,10 +327,10 @@ class ManifoldInitializer:
     def construct_manifold_from_point_list(
         self,
         points: list[Point],
-        stability: Literal["stable", "unstable"],
+        stability: Stability,
         stretch_param: float,
         fixed_point: FixedPoint,
-        branch_index=None,
+        branch_index: Optional[int] = None,
         *,
         manifold_key: Optional[ManifoldKey],
     ) -> BaseManifold:
@@ -332,7 +342,7 @@ class ManifoldInitializer:
 
         Args:
             points (list[Point]): List of points to turn into a manifold.
-            stability (Literal["unstable", "stable"]): Stability of the resulting
+            stability (Stability): Stability of the resulting
                 manifold.
             stretch_param (float): The stretch parameter for the new manifold.
             fixed_point (FixedPoint): The fixed point the new manifold emanates from.
@@ -372,8 +382,12 @@ class ManifoldInitializer:
         return manifold
 
     def _insert_point_geometrically(
-        self, p0: Point, new_point: Point, manifold: BaseManifold, branch_index=None
-    ):
+        self,
+        p0: Point,
+        new_point: Point,
+        manifold: BaseManifold,
+        branch_index: Optional[int] = None,
+    ) -> None:
         """helper function to insert points smartly
         based on stability and brach_point'ness"""
 
@@ -392,16 +406,13 @@ class ManifoldInitializer:
     @staticmethod
     def orient_manifolds(
         fixed_point: FixedPoint,
-        approx_dirs: dict[str, np.ndarray] | None = None,
-    ):
+        approx_dirs: Optional[dict[str, np.ndarray]] = None,
+    ) -> None:
         """
         Allows the user to provide an approximate direction for the manifolds.
         This routine goes through the list of eigenvectors and checks if the
         approximate direction matches. Give the approximate direction for the
         0th iterate of the cycle and it will be mapped around.
-
-        TODO make it so you can provide the approx_dirs for an arbitrary iterate
-        TODO make it so you can pass in either stable or unstable dir
 
         Args:
             fixed_point (FixedPoint): Fixed point to orient the manifolds from.
@@ -461,7 +472,7 @@ class ManifoldInitializer:
     def construct_kevin_way(
         self,
         fixed_point: FixedPoint,
-        stability: Literal["unstable", "stable"],
+        stability: Stability,
         num_branches: int = 1,
     ) -> Dict[Tuple[int, int], BaseManifold]:
         """
@@ -470,7 +481,7 @@ class ManifoldInitializer:
 
         Args:
             fixed_point (FixedPoint): Fixed point to grow the manifolds from.
-            stability (Literal["unstable", "stable"]): Stability of the manifold.
+            stability (Stability): Stability of the manifold.
             num_branches (int): Number of EIGENDIRECTIONS to seed. Must be 1 or 2.
                 Ignored for inversion points, whose single chain always covers
                 both branches. For a point without inversion the two directions
@@ -524,7 +535,7 @@ class ManifoldInitializer:
 
             segment = self.get_initial_fundamental_segment(fixed_point, 0, 0, stability)
             initial_segments[(0, 0)] = segment
-            segment.root = segment.walk_fwd(None, segment.root)
+            segment.root = segment.first_node()
 
             key = (fixed_point, stability, 0, 0)
             for _ in range(fixed_point.k_value - 1):
@@ -557,7 +568,7 @@ class ManifoldInitializer:
                     fixed_point, 0, b, stability
                 )
                 initial_segments[(0, b)] = segment
-                segment.root = segment.walk_fwd(None, segment.root)
+                segment.root = segment.first_node()
 
                 key = (fixed_point, stability, 0, b)
                 for _ in range(fixed_point.period - 1):

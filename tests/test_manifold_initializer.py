@@ -4,35 +4,25 @@ import numpy as np
 from tanglepack import ManifoldInitializer
 from tanglepack import DynamicalSystem
 from tanglepack import FixedPointSolver
+from tanglepack.examples import (
+    HENON_K10,
+    HENON_P3,
+    henon_jacobian,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    saddle_guesses,
+)
 
-
-def henon_map(point):
-    """defines the henon map for binary horshoe parameters to test basic functionality"""
-
-    k, b = (10, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([y - k + x ** 2, -b * x])
-
-
-def henon_map_inverse(point):
-    """defines the inverse henon map for"""
-
-    k, b = (10, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([-y / b, x + k - (y ** 2) / (b ** 2)])
+# The binary-horseshoe Hénon map and its inverse.
+henon_map = _henon_map_factory(*HENON_K10)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 def test_initialization_unstable():
 
     henon = DynamicalSystem(henon_map, henon_map_inverse)
 
-    initial_guess = [4, -4]
+    initial_guess = saddle_guesses(*HENON_K10)["saddle"]
 
     fp_solver = FixedPointSolver(henon)
 
@@ -52,7 +42,7 @@ def test_initialization_stable():
 
     henon = DynamicalSystem(henon_map, henon_map_inverse)
 
-    initial_guess = [4, -4]
+    initial_guess = saddle_guesses(*HENON_K10)["saddle"]
 
     fp_solver = FixedPointSolver(henon)
 
@@ -77,7 +67,7 @@ def _k10_fixed_point():
     """The k=10 binary-horseshoe saddle at [4, -4], oriented, with k_value set."""
     henon = DynamicalSystem(henon_map, henon_map_inverse)
     fp_solver = FixedPointSolver(henon)
-    fixed_point = fp_solver.construct_fixed_point([4, -4])
+    fixed_point = fp_solver.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
     man_maker = ManifoldInitializer(henon)
     man_maker.orient_manifolds(
         fixed_point,
@@ -110,28 +100,15 @@ def test_two_branch_initialization_grows_opposite_directions():
 # Plan 1.7 -- construct_kevin_way walks the chain with FixedPoint.advance_key.
 # The dict it returns must be unchanged on period 1 and period 3.
 # --------------------------------------------------------------------------- #
-def _p3_map(point):
-    k, b = 2, 1
-    x, y = point
-    return np.stack([y - k + x**2, -b * x], axis=0)
-
-
-def _p3_map_inverse(point):
-    k, b = 2, 1
-    x, y = point
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
-
-
-def _p3_jacobian(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
+_p3_map = _henon_map_factory(*HENON_P3)
+_p3_map_inverse = _henon_map_inverse_factory(*HENON_P3)
+_p3_jacobian = henon_jacobian(*HENON_P3)
 
 
 def _p3_fixed_point():
     system = DynamicalSystem(_p3_map, _p3_map_inverse, _p3_jacobian)
     fp_solver = FixedPointSolver(system)
-    fixed_point = fp_solver.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
+    fixed_point = fp_solver.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
     man_maker = ManifoldInitializer(system)
     man_maker.orient_manifolds(
         fixed_point,

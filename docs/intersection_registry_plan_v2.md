@@ -1,5 +1,21 @@
 # Intersection Registry and Topological Layer — Implementation Plan (v2)
 
+> ## Status (2026-09-02)
+>
+> - **Implemented essentially as written:** `ManifoldKey`, `IterateTable`,
+>   `IntersectionRegistry` (with `on_interval` / `on_cdist_range` / `from_fixed_point` /
+>   `from_branch` / `filter` and the live `graph()`), `BaseManifold.manifold_key`, the generalised
+>   pair-based crossing detection in `Tangle`, and `TangleWorkbench.infer_iterate_table` /
+>   `build_intersection_graph`.
+> - **Never implemented:** `TangleWorkbench.populate_registry()` — the registry is filled inside
+>   `compute_intersections` and `iterate_bridge`, so there is no manual rebuild entry point.
+> - **Grown past the plan:** the registry now also owns crossing identity across recomputes —
+>   `cdist_tol` collision detection, `add_synthetic`, `reindex_from` (id-preserving renumbering used
+>   by the resonance-zone recompute), and a generation counter that invalidates cached `Trellis`
+>   snapshots. `BridgeId` is built on registry ids, so id stability is a correctness requirement
+>   rather than a convenience.
+
+
 > **What changed from v1:**  
 > This revision builds on the *existing* `Intersection` class (a plain class, not a dataclass).
 > It eliminates stored "fictitious" intersections in favour of live query methods.  

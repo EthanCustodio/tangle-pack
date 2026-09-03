@@ -1,5 +1,16 @@
 # Intersection Registry and Topological Layer — Implementation Plan
 
+> ## Status (2026-09-02)
+>
+> - **Historical: this is v1, superseded in full by `intersection_registry_plan_v2.md`.** Read v2
+>   for what was actually built; keep this only for the mathematical background (cdist scaling
+>   under iteration, the two orderings, the iterate table).
+> - **Implemented from here (via v2):** `IterateTable`, `IntersectionRegistry`,
+>   `Intersection.id`, and `TangleWorkbench.infer_iterate_table`.
+> - **Never implemented:** `TangleWorkbench.populate_registry()`. `compute_intersections` fills the
+>   registry itself as it resolves, so there is no manual rebuild path.
+
+
 ## Overview and Goals
 
 After generating enough intersections via bridge iteration, the workflow transitions from

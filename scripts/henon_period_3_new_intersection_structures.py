@@ -7,25 +7,18 @@ logging.basicConfig(
 )
 
 import tanglepack, numpy as np
+from tanglepack.examples import (
+    HENON_P3,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    henon_jacobian as _henon_jacobian_factory,
+)
 import matplotlib.pyplot as plt
 
 
-def henon_map(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
-
-
-def henon_jacobian(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
+henon_map = _henon_map_factory(*HENON_P3)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_P3)
+henon_jacobian = _henon_jacobian_factory(*HENON_P3)
 
 
 # ── Numeric phase ──────────────────────────────────────────────────────────
@@ -35,7 +28,6 @@ wb._man_machine.area_cutoff = 1e-8
 
 # Period-3 inner fixed point
 fp3 = wb.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
-# wb.orient_eigenvectors(fp3, {"unstable": np.array([0, 1]), "stable": np.array([1, 1])})
 wb.orient_eigenvectors(
     fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
 )
@@ -59,9 +51,6 @@ wb.trim_stable_manifolds(fp1)
 
 bridges = wb.create_bridges(fp3)
 bridges1 = wb.create_bridges(fp1)
-
-# new_bridges = wb.iterate_bridge(bridges[0])
-# wb.iterate_bridge(new_bridges[0])
 
 new_links = wb.infer_iterate_table()
 print(f"Recorded {new_links} iterate relationships")
@@ -126,18 +115,10 @@ wb.plot_intersections(fp3)
 wb.plot_intersections(fp1)
 wb.plot_all_bridges()
 
-# plt.xlim([-1.002, -0.997])
-# plt.ylim([0.028, 0.031])
 plt.xlim([-1, 1])
 plt.ylim([0.28, 3.1])
 plt.title("k=2, b=1 Period 3 Nested Tangle")
 plt.tight_layout()
-
-# ── Intersection graph ─────────────────────────────────────────────────────
-# wb.visualize_intersection_graph(G, layout="kamada-kawai")
-# wb.visualize_intersection_graph(
-#     G, display_mode="compact", node_color_by="unstable_cdist"
-# )
 
 # --- Dense array exports ---
 F = registry.as_forward_array(max_depth=5)  # shape (N, 5), -1 = unknown

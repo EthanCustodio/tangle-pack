@@ -30,28 +30,21 @@ import matplotlib.pyplot as plt
 
 import tanglepack
 from tanglepack import TangleSession
+from tanglepack.examples import (
+    HENON_P3,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    henon_jacobian as _henon_jacobian_factory,
+)
 
 # Declare up-front whether this run should use the GPU. Enabling it only changes
 # where the batched map is evaluated; the rest of the pipeline is untouched.
 USE_GPU = os.environ.get("TANGLEPACK_GPU", "0") == "1"
 
 
-def henon_map(point):
-    k, b = 2, 1
-    x, y = point
-    return np.stack([y - k + x**2, -b * x], axis=0)
-
-
-def henon_map_inverse(point):
-    k, b = 2, 1
-    x, y = point
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
-
-
-def henon_jacobian(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
+henon_map = _henon_map_factory(*HENON_P3)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_P3)
+henon_jacobian = _henon_jacobian_factory(*HENON_P3)
 
 
 # --- build the nested tangle (identical to henon_bridge_classification.py) -------

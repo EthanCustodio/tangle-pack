@@ -1,5 +1,21 @@
 # Refinement & Iteration Vectorization Plan
 
+> ## Status (2026-09-02)
+>
+> - **Implemented, Parts A–D:** the closed-form curvature area (no `np.linalg.inv` on the hot path),
+>   the batched map contract (`DynamicalSystem.map_batch` with the axis-0 coordinate convention and
+>   a one-shot batchability probe), the vectorized iteration sweep, and the breadth-first
+>   wave refinement in `ManifoldMachine._refine_layer`.
+> - **Reversed non-goal:** "No GPU" no longer holds. `numerics/gpu.py` + `tanglepack.enable_gpu`
+>   wrap the system's batched map in CuPy above a `min_batch_points` threshold, which is exactly the
+>   "trivial future port" this plan's closing note predicted — the batched contract is what made it
+>   a wrapper rather than a rewrite.
+> - **Abandoned follow-up:** a later attempt to make cdist strictly increasing during refinement
+>   (a `_strictify_increasing` pass plus a `representable` guard in `_refine_layer`) was reverted —
+>   it caused the period-3 geometric spikes it was meant to prevent. cdist is arc length, and ties
+>   are tolerated.
+
+
 ## Goal
 
 Speed up the two hot paths in `ManifoldMachine` — **manifold refinement** (profiled at

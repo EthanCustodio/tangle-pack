@@ -1,3 +1,11 @@
+"""
+``(intersection_id, n) -> intersection_id`` lookup.
+
+:class:`IterateTable` is the sparse two-dimensional table recording which
+registered crossing is the n-th forward (or backward) iterate of which; setting
+one direction automatically records the reverse.
+"""
+
 from __future__ import annotations
 
 from typing import Iterator, Optional
@@ -22,7 +30,8 @@ class IterateTable:
         _backward: dict[int, dict[int, int]] — _backward[id][n] = target_id (n > 0)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Build an empty table."""
         self._forward: dict[int, dict[int, int]] = {}
         self._backward: dict[int, dict[int, int]] = {}
 
@@ -35,7 +44,7 @@ class IterateTable:
         else:
             return self._backward.get(source_id, {}).get(-n)
 
-    def __setitem__(self, key: tuple[int, int], target_id: int):
+    def __setitem__(self, key: tuple[int, int], target_id: int) -> None:
         source_id, n = key
         if n == 0:
             return
@@ -133,6 +142,6 @@ class IterateTable:
                     arr[i, d - 1] = target
         return arr
 
-    def register_iterate(self, source_id: int, n: int, target_id: int):
+    def register_iterate(self, source_id: int, n: int, target_id: int) -> None:
         """Explicit named method — delegates to __setitem__."""
         self[source_id, n] = target_id

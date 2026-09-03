@@ -2,20 +2,18 @@ import numpy as np
 
 from tanglepack import ManifoldMachine
 from tanglepack import DynamicalSystem
+from tanglepack.examples import (
+    HENON_K10,
+    HENON_P3,
+    henon_jacobian,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    saddle_guesses,
+)
 
-
-def henon_map(point):
-    """Hénon map, binary-horseshoe parameters."""
-    k, b = (10, 1)
-    x, y = point[0], point[1]
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    """Inverse Hénon map."""
-    k, b = (10, 1)
-    x, y = point[0], point[1]
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+# Hénon map, binary-horseshoe parameters, and its inverse.
+henon_map = _henon_map_factory(*HENON_K10)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 def test_machine_initialization():
@@ -101,34 +99,14 @@ def _old_new_grow_manifold(self, fixed_point, stability, branch_index=None):
                 current_manifold = next_manifold
 
 
-def _p3_map(point):
-    k, b = 2, 1
-    x, y = point
-    return np.stack([y - k + x**2, -b * x], axis=0)
+_p3_map = _henon_map_factory(*HENON_P3)
+_p3_map_inverse = _henon_map_inverse_factory(*HENON_P3)
+_p3_jacobian = henon_jacobian(*HENON_P3)
+
+_batched_henon = _henon_map_factory(*HENON_K10)
 
 
-def _p3_map_inverse(point):
-    k, b = 2, 1
-    x, y = point
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
-
-
-def _p3_jacobian(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
-
-
-def _batched_henon(point):
-    k, b = 10, 1
-    x, y = point
-    return np.stack([y - k + x**2, -b * x], axis=0)
-
-
-def _batched_henon_inverse(point):
-    k, b = 10, 1
-    x, y = point
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
+_batched_henon_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 def _build_k10(use_old: bool):
@@ -137,7 +115,7 @@ def _build_k10(use_old: bool):
         wb._man_machine.new_grow_manifold = types.MethodType(
             _old_new_grow_manifold, wb._man_machine
         )
-    fp = wb.construct_fixed_point([4, -4])
+    fp = wb.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
     wb.orient_eigenvectors(
         fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
     )
@@ -153,7 +131,7 @@ def _build_p3(use_old: bool):
         wb._man_machine.new_grow_manifold = types.MethodType(
             _old_new_grow_manifold, wb._man_machine
         )
-    fp = wb.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
+    fp = wb.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
     wb.orient_eigenvectors(
         fp, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
     )

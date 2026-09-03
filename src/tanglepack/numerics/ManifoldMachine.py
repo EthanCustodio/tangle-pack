@@ -1,22 +1,23 @@
-from typing import Literal, Tuple, Optional
-import logging
-
-import numpy as np
-import scipy.integrate as spi
-
-from .Point import Point
-from .FixedPoint import FixedPoint
-from .DynamicalSystem import DynamicalSystem
-from .BaseManifold import BaseManifold
-from .ManifoldView import ManifoldView
-from .BranchPoint import BranchPoint
-from .Bridge import Bridge
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
-logger.setLevel(logging.INFO)
-
 """
+Growing manifolds one iteration of the map at a time.
+
+:class:`ManifoldMachine` is the numerical engine of the library. It maps a
+manifold's points forward (backward, for a stable manifold) one step, splices
+the images into the geometric linked list in canonical-distance order, merges
+the new arc with what was already there, and refines the result wherever the
+curvature area between adjacent points exceeds ``area_cutoff``.
+
+Invariants it maintains:
+
+* The geometric list is ordered by canonical distance. That order is
+  non-decreasing, not strictly increasing: at a high-stretch fold adjacent
+  cdists can collapse to within a float ULP, and a tie is harmless because
+  points are spliced geometrically and never re-sorted by cdist.
+* Every point it inserts keeps its iterate links, so a grown curve can always
+  be walked back to the seed segment.
+* Refinement is breadth-first and batched: one map evaluation per layer, not
+  one per inserted point.
+
 Dev Notes:
 
 NOT A BUG -- refinement "explosion" at high development is just exponential
@@ -51,12 +52,78 @@ arms are meant to be grown with a stop condition (``grow_until_turnaround`` /
 iteration count that walks an escaping arm out to infinity. The ``< 1e-8`` spatial
 guard in ``_refine_layer`` stays as-is; it is fine for the regime we actually use.
 See project memory ``solver-rootcause-and-seed-step``.
+
+Open questions:
+
+* ``iterate_manifold`` maps exactly one step and takes no ``num_iterations``
+  input. An old TODO asked for one; repeated iteration is the caller's loop
+  (``grow_x_times``), so the extra parameter is not wanted.
+* ``iterate_bridge`` hands back whatever ``iterate_manifold`` produced without
+  re-asserting the :class:`~.Bridge.Bridge` invariants on it (root and tail are
+  not crossings; the two endpoint ids are set by the caller). Whether the image
+  should be validated as a bridge here, or constructed as one by ``Bridge``
+  itself, is undecided.
 """
+
+from __future__ import annotations
+
+from typing import Tuple, Optional
+import logging
+
+import numpy as np
+
+from .Point import Point
+from .FixedPoint import FixedPoint
+from .DynamicalSystem import DynamicalSystem
+from .BaseManifold import BaseManifold
+from .ManifoldView import ManifoldView
+from .BranchPoint import BranchPoint
+from .Bridge import Bridge
+from .Intersection import ManifoldKey, Stability
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class ManifoldMachine:
+    """
+    Grows manifolds: one iteration of the map, spliced in and refined.
 
-    def __init__(self, system: DynamicalSystem):
+    A machine is stateless apart from the system it maps with and the refinement
+    threshold; every method takes the manifold it acts on. The three things it
+    does are:
+
+    * :meth:`iterate_manifold` -- map every point of a curve one step in its own
+      dynamical direction (forward for an unstable manifold, backward for a
+      stable one), splice the images into the geometric linked list, and merge
+      the result with the part of the curve that already existed.
+    * :meth:`refine_manifold` -- insert points wherever the curvature area
+      between two neighbours exceeds :attr:`area_cutoff`, breadth-first and one
+      batched map call per layer.
+    * :meth:`grow_x_times` -- drive the two above around a periodic orbit.
+
+    Invariants every method preserves:
+
+    * The geometric list stays ordered by canonical distance (non-decreasing --
+      see the module Dev Notes on ties at a high-stretch fold).
+    * Inserted points keep their iterate links, so a grown curve can always be
+      walked back to the seed segment.
+    * A refined point is spliced geometrically between its neighbours; the list
+      is never re-sorted.
+
+    Attributes:
+        system (DynamicalSystem): The map, its inverse and their batched forms.
+        area_cutoff (float): Curvature-area threshold above which a pair of
+            adjacent points gets a new point between them.
+    """
+
+    def __init__(self, system: DynamicalSystem) -> None:
+        """
+        Bind a machine to the system it will map with.
+
+        Args:
+            system (DynamicalSystem): The dynamical system to grow with.
+        """
 
         self.system = system
         self.area_cutoff = 1e-4
@@ -64,7 +131,7 @@ class ManifoldMachine:
     def _branch_view(
         self,
         fixed_point: FixedPoint,
-        key: tuple,
+        key: ManifoldKey,
         stretch_param: float,
     ) -> BaseManifold:
         """A transient BaseManifold over the piece a manifold key names."""
@@ -77,15 +144,14 @@ class ManifoldMachine:
             manifold_key=key,
         )
 
-        if isinstance(view.root, BranchPoint):
-            view.root = view.walk_fwd(None, view.root)
+        view.root = view.first_node()
 
         return view
 
     def new_grow_manifold(
         self,
         fixed_point: FixedPoint,
-        stability: Literal["unstable", "stable"],
+        stability: Stability,
         branch_index: Optional[int] = None,
     ) -> None:
         """
@@ -110,7 +176,7 @@ class ManifoldMachine:
 
         Args:
             fixed_point (FixedPoint): The fixed point whose manifolds are grown.
-            stability (Literal["unstable", "stable"]): Stability to grow. Unstable
+            stability (Stability): Stability to grow. Unstable
                 pieces advance along the chain (+1 map step), stable pieces are
                 grown by the inverse map and so walk it backwards (-1).
             branch_index (int, optional): Which eigenvector branch to grow. None
@@ -161,7 +227,7 @@ class ManifoldMachine:
                     f"branch {b} is not initialized"
                 )
 
-    def iterate_manifold(self, manifold: BaseManifold):
+    def iterate_manifold(self, manifold: BaseManifold) -> BaseManifold:
         """
         Iterates all uniterated points in a manifold
         Returns a new manifold pointing only to the iterate
@@ -174,8 +240,6 @@ class ManifoldMachine:
         initalizer = ManifoldInitializer(self.system)
         viewer = ManifoldView(manifold, self.system)
 
-        # TODO include input for num_iterations
-        # I don't think we need to do that anymore actually
         non_iterated_coords = manifold.get_non_iterated_point_array()
         non_iterated_cdists = manifold.get_non_iterated_cdist_array()
         non_iterated_points = manifold.get_non_iterated_point_array(return_nodes=True)
@@ -268,7 +332,7 @@ class ManifoldMachine:
 
             if first_iterate is None or last_iterate is None:
                 raise ValueError(
-                    f"Points claim to have iterates but next_iterate/prev_iterate is None"
+                    "Points claim to have iterates but next_iterate/prev_iterate is None"
                 )
 
             # Check if the input was a Bridge - if so, return a Bridge
@@ -300,7 +364,7 @@ class ManifoldMachine:
 
                 return iterated_manifold
 
-    def iterate_bridge(self, manifold: Bridge):
+    def iterate_bridge(self, manifold: Bridge) -> BaseManifold:
         """
         Iterates a bridge forward and returns another bridge.
 
@@ -315,21 +379,15 @@ class ManifoldMachine:
             before the image is indexed.
         """
 
-        # TODO consider how this method is handling bridge classes
-        iterated_manifold = self.iterate_manifold(manifold)
-
-        # we want to check if the resulting manifold conforms to our bridge standards
-        # That could happen in Bridge if we want it to
-
-        return iterated_manifold
+        return self.iterate_manifold(manifold)
 
     def grow_x_times(
         self,
         fixed_point: FixedPoint,
-        stability: Literal["unstable", "stable"],
-        num_times=1,
+        stability: Stability,
+        num_times: int = 1,
         branch_index: Optional[int] = None,
-    ):
+    ) -> None:
         """
         Grows all the manifolds of the given stability from the fixed point
         by iterating them num_times and merging them back together
@@ -343,7 +401,9 @@ class ManifoldMachine:
         for _ in range(num_times):
             self.new_grow_manifold(fixed_point, stability, branch_index)
 
-    def merge_manifolds(self, manifold_1: BaseManifold, manifold_2: BaseManifold):
+    def merge_manifolds(
+        self, manifold_1: BaseManifold, manifold_2: BaseManifold
+    ) -> BaseManifold:
         """
         O(n) inplace method for merging two linked lists (manifold_1 and manifold_2)
         Merges two manifolds based on their cdists.
@@ -442,39 +502,27 @@ class ManifoldMachine:
                         head_2 = next_head_2
                         head_1 = manifold_1.walk_fwd(None, head_1)
 
-        # manifold_2 emptied first
-        # WARNING: This may fail if we are merging manifold segments that
-        # continue on past the tail node. This scheme doesn't insert the
-        # rest of the remaining manifold, it only inserts the next node (head_1)
-        # the fix is to not use this the _insert_point_geometrically method
-        # probably just set
-        # current_point.forward = head_1 and head_1.backward = current_point
-        # but smartly based on stability of course
-        # it is a bit trickier than that actually because we need the tail of
-        # the non_exausted manifold to link to the over_one of the other manifold
-        # NOTE This should be fixed now :)
-        # manifold_2 emptied first
+        # One list ran out first: splice the exhausted list's last kept node onto
+        # the remaining head and take that manifold's tail as the merged tail, so
+        # the whole remainder (not just the next node) stays on the curve.
         if head_1 is not over_one_1:
             self._insert_point_geometrically(
                 current_point, head_1, manifold_1, only_forward=True
             )
             output_manifold.tail = manifold_1.tail
-            # self._insert_point_geometrically(
-            #     output_manifold.tail, over_one_2, output_manifold, only_forward=True
-            # )
         else:
             self._insert_point_geometrically(
                 current_point, head_2, manifold_2, only_forward=True
             )
             output_manifold.tail = manifold_2.tail
-            # self._insert_point_geometrically(
-            #     output_manifold.tail, over_one_1, output_manifold, only_forward=True
-            # )
 
         return output_manifold
 
     def refine_manifold(
-        self, manifold: BaseManifold, branch_index=None, final_node=None
+        self,
+        manifold: BaseManifold,
+        branch_index: Optional[int] = None,
+        final_node: Optional[Point] = None,
     ) -> set[Point]:
         """
         Adds additional points in areas of the manifold with high curvature.
@@ -661,7 +709,7 @@ class ManifoldMachine:
         p0: Point | BranchPoint,
         p1: Point | BranchPoint,
         viewer: ManifoldView,
-        stability: Literal["unstable", "stable"],
+        stability: Stability,
     ):
         """
         Reference single-pair refinement: the midpoint of the two preiterates
@@ -696,7 +744,7 @@ class ManifoldMachine:
     @staticmethod
     def _get_preiterate(
         point: Point | BranchPoint,
-        stability: Literal["unstable", "stable"],
+        stability: Stability,
         num_iterates: int = 1,
     ):
         """
@@ -716,7 +764,7 @@ class ManifoldMachine:
     def _cache_preiterate(
         point: Point | BranchPoint,
         preiterate_coords,
-        stability: Literal["unstable", "stable"],
+        stability: Stability,
     ):
         """
         Helper function to cache preiterate based on stability.

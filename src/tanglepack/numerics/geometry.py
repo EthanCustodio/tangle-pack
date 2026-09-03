@@ -30,10 +30,12 @@ repeated calls on an unchanged bridge cost one dict lookup.
 from __future__ import annotations
 
 import logging
-from typing import Literal, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
+
+from .Intersection import Stability
 
 if TYPE_CHECKING:
     from .BaseManifold import BaseManifold
@@ -48,7 +50,7 @@ def arc_polyline(
     lo_cdist: float,
     hi_cdist: float,
     *,
-    stability: Optional[Literal["unstable", "stable"]] = None,
+    stability: Optional[Stability] = None,
     reverse: bool = False,
     tol: float = 0.0,
 ) -> NDArray[np.float64]:

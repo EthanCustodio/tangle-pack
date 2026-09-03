@@ -15,6 +15,8 @@ Entry points:
     * :func:`define_resonance_zone` / :class:`ResonanceZone` — the first loom algorithm.
 """
 
+from __future__ import annotations
+
 from .ResonanceZone import (
     BoundaryArc,
     ResonanceZone,

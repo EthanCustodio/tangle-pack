@@ -17,3 +17,6 @@ dist/
 .venv/
 env/
 venv/
+
+# profiling output
+profile.out

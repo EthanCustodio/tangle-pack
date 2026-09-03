@@ -7,43 +7,18 @@ logging.basicConfig(
 )
 
 import tanglepack
-import numpy as np
+from tanglepack.examples import (
+    HENON_P3,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    henon_jacobian as _henon_jacobian_factory,
+)
 import matplotlib.pyplot as plt
 
 
-def henon_map(point):
-    """
-    Defines the henon map for binary horshoe parameters to test basic functionality
-    """
-
-    k, b = (2, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    """Defines the inverse henon map for"""
-
-    k, b = (2, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
-
-
-def henon_jacobian(point):
-    """defines the jacobian for the henon map"""
-
-    k, b = (2, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([[2 * x, 1], [-b, 0]])
+henon_map = _henon_map_factory(*HENON_P3)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_P3)
+henon_jacobian = _henon_jacobian_factory(*HENON_P3)
 
 
 henon = tanglepack.DynamicalSystem(henon_map, henon_map_inverse, henon_jacobian)
@@ -57,7 +32,6 @@ tangle = tanglepack.Tangle()
 
 initial_guess = [[0, 1], [-1, 0], [-1, 1]]
 initial_guess_zero = [4, -4]
-# initial_guess = [6.104, 0]
 
 fixed_point = fp_solver.construct_fixed_point(initial_guess)
 fixed_point_zero = fp_solver.construct_fixed_point(initial_guess_zero)
@@ -67,14 +41,6 @@ print(f"fixed point: {fixed_point.coordinates}")
 
 orbit_index = 0
 
-# initial_unstable_segment = man_maker.get_initial_fundamental_segment(
-#     fixed_point, orbit_index, 0, "unstable"
-# )
-# initial_stable_segment = man_maker.get_initial_fundamental_segment(
-#     fixed_point, orbit_index, 0, "stable"
-# )
-
-# approx_dir = {"unstable": [0, 1], "stable": [1, 1]}
 approx_dir = {"unstable": [0, -1], "stable": [-1, -1]}
 
 man_maker.orient_manifolds(fixed_point, approx_dir)
@@ -91,48 +57,17 @@ initial_zero_stable = man_maker.construct_kevin_way(fixed_point_zero, "stable")
 
 print(f"points! {initial_unstable_segments[(0, 0)].get_point_array()}")
 
-# unstable_manifold = initial_unstable_segments[(0, 0)]
-# stable_manifold = initial_stable_segments[(0, 0)]
-
 # grow unstable manifold
 num_iterations = 13
 man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
 man_machine.grow_x_times(fixed_point, "stable", num_iterations)
 
-# for manifold in initial_unstable_segments:
-#     manifold._find_tail()
-
-# unstable_manifold._find_tail()
 man_machine.area_cutoff = 1e-4
 
 # grow stable manifold
-# num_iterations = 7
 num_iterations = 7
 man_machine.grow_x_times(fixed_point_zero, "stable", num_iterations)
 man_machine.grow_x_times(fixed_point_zero, "unstable", num_iterations)
-
-
-# approx_dir = {"unstable": [0, -1], "stable": [-1, -1]}
-
-# man_maker.orient_manifolds(fixed_point, approx_dir)
-
-# initial_unstable_segments_new = man_maker.construct_kevin_way(fixed_point, "unstable")
-# initial_stable_segments_new = man_maker.construct_kevin_way(fixed_point, "stable")
-
-# num_iterations = 7
-# man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
-# man_machine.grow_x_times(fixed_point, "stable", num_iterations)
-
-# plt.figure()
-# initial_unstable_segment.plot(show_points=True)
-# plt.show()
-
-# unstable_manifold = initial_unstable_segments[(0, 0)]
-# unstable_manifold._find_tail()
-
-# stable_manifold = initial_stable_segments[(0, 0)]
-# stable_manifold._find_tail()
-
 
 fig = plt.figure()
 
@@ -162,11 +97,5 @@ plt.xlim([-6, 6])
 plt.ylim([-6, 6])
 
 plt.title("k=2, b=1 Period 3 Nested Tangle")
-
-# fig.savefig(
-#     "period_3_tangle_plot.png",  # pdf/svg/eps/etc. all work
-#     dpi=600,  # print-quality resolution
-#     bbox_inches="tight",
-# )  # trim extra whitespace
 
 plt.show()

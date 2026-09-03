@@ -1,13 +1,23 @@
-from __future__ import annotations
-
-from typing import Literal, Optional
-import numpy as np
-
 """
+Lowest-level point on a manifold: the iterate linked list.
+
+:class:`BasePoint` stores a point's coordinates, its canonical and arc-length
+distances from the anchoring periodic point, and the doubly linked list of
+iterates (``next_iterate`` / ``prev_iterate``) that records which point maps
+to which under the dynamical map.
+
 Dev Notes:
 
 Consider the data type of _coords more closely. Do I want (2,) or (2,1)?
 """
+
+from __future__ import annotations
+
+from typing import Optional
+
+import numpy as np
+
+from .Intersection import Stability
 
 
 class BasePoint:
@@ -29,8 +39,12 @@ class BasePoint:
     """
 
     def __init__(
-        self, x: float = None, y: float = None, cdist: float = None, edist: float = None
-    ):
+        self,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+        cdist: Optional[float] = None,
+        edist: Optional[float] = None,
+    ) -> None:
         """
         Initializes a point.
 
@@ -63,13 +77,13 @@ class BasePoint:
         return self._coords
 
     def get_cdist(
-        self, stability: Optional[Literal["unstable", "stable"]] = None
+        self, stability: Optional[Stability] = None
     ) -> float:
         """
         Gets the cdist of the point.
 
         Args:
-            stability (Literal["unstable", "stable"]): Included here because child class
+            stability (Stability): Included here because child class
                 BranchPoint uses this method to distinguish the cdist on from the
                 stable and unstable manifolds. Default to None.
 
@@ -79,7 +93,7 @@ class BasePoint:
 
         return self.cdist
 
-    def set_x(self, x: float):
+    def set_x(self, x: float) -> None:
         """
         Sets the x-coordinate of the point. Also resets the interal _coords.
 
@@ -90,7 +104,7 @@ class BasePoint:
         self.x = x
         self._set_coords()
 
-    def set_y(self, y: float):
+    def set_y(self, y: float) -> None:
         """
         Sets the y-coordinate of the point. Also resets the internal _coords.
 
@@ -101,7 +115,7 @@ class BasePoint:
         self.y = y
         self._set_coords()
 
-    def insert_next_iterate(self, node: BasePoint, num_iterates: int = 1):
+    def insert_next_iterate(self, node: BasePoint, num_iterates: int = 1) -> None:
         """
         Inserts 'node' after this object 'num_iterates' forward
         in the iterate linked list.
@@ -131,7 +145,7 @@ class BasePoint:
         current_node.next_iterate = node
         node.prev_iterate = current_node
 
-    def insert_prev_iterate(self, node: BasePoint, num_iterates: int = 1):
+    def insert_prev_iterate(self, node: BasePoint, num_iterates: int = 1) -> None:
         """
         Inserts node before this object 'num_iterates' backwards
         in the iterate linked list.
@@ -205,7 +219,7 @@ class BasePoint:
 
         return current_node
 
-    def exists_next_iterate(self, num_iterates: int = 1):
+    def exists_next_iterate(self, num_iterates: int = 1) -> bool:
         """
         Checks if the iterate 'num_iterates' forward exists.
 
@@ -218,7 +232,7 @@ class BasePoint:
         else:
             return True
 
-    def exists_prev_iterate(self, num_iterates: int = 1):
+    def exists_prev_iterate(self, num_iterates: int = 1) -> bool:
         """
         Checks if the pre-iterate 'num_iterates' backwards exists.
 
@@ -232,7 +246,7 @@ class BasePoint:
             return True
 
     # ---------- internal helpers ----------
-    def _set_coords(self):
+    def _set_coords(self) -> None:
         """
         Sets the coordinate array based on the x and y value of the point.
         """

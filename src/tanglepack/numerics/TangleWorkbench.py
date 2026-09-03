@@ -1,61 +1,102 @@
+"""The orchestrator of the numerical layer.
+
+:class:`TangleWorkbench` owns the objects a computed tangle is made of -- the
+dynamical system, the fixed points, the manifolds, the :class:`~.Tangle.Tangle`
+index, the :class:`~.IntersectionRegistry.IntersectionRegistry` and the bridge
+set -- and drives construction, growth, intersection detection, bridge cutting,
+trimming and manifold plotting.
+
+Three collaborators own the work that reads and extends that state without
+being part of the orchestration:
+
+* :mod:`~.BridgeIterator` -- mapping a bridge forward, and deriving the bridge
+  genealogy from the crossing iterate table;
+* :mod:`~.IterateInference` -- filling that iterate table;
+* :mod:`~.graphviz` -- the networkx/matplotlib view of the intersection graph.
+
+Each is reached through a same-named method on the workbench, so no caller has
+to know where the body lives. The Dev Notes for each of those areas live in the
+module that owns it.
+
+Dev Notes:
+
+``grow_until_arclength`` stops on the tail's CANONICAL distance, not on the true
+arc length along the curve. The two agree up to the per-branch scaling only while
+the curve is close to the linear regime, so the stop length is approximate; using
+the accumulated ``edist`` would make it exact.
+"""
+
+from __future__ import annotations
+
 import logging
-from typing import Annotated, Callable, Literal, Iterable, Optional, Sequence, Union
-import numpy.typing as npt
-from numpy.typing import NDArray
+from typing import Callable, Literal, Iterable, Optional, Sequence, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import networkx as nx
 
+from . import graphviz
+from .BridgeIterator import BridgeIterator
 from .DynamicalSystem import DynamicalSystem, MapFunc, JacFunc
 from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import ManifoldMachine
-from .BranchPoint import BranchPoint
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 from .Bridge import Bridge, BridgeId
-from .Intersection import Intersection, ManifoldKey
+from .Intersection import Intersection, ManifoldKey, Stability
 from .IntersectionRegistry import IntersectionRegistry
+from .IterateInference import IterateInference
 
-Stability = Literal["unstable", "stable"]
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-"""
-Dev Notes:
-
-Cutting an iterated bridge (plan row 2.2) only ever cuts at the crossings just
-born on that image -- the ones whose ``unstable_manifold`` IS the image. A crossing
-found on an edge the image SHARES with an already-indexed curve is registered but
-not cut at here, because its bracketing points lie on the other curve; the cut that
-uses it is the one made on that curve. Widening the cut set to every crossing whose
-cdist falls in the image's span would reintroduce the cross-curve bridges plan row
-1.1 removed, so it must not be done without a per-curve span test.
-
-Partial bridges (an image piece bounded by fewer than two crossings) have no
-endpoint pair, hence no ``BridgeId``, hence no identity to dedupe on. They are
-kept out of ``_bridges`` in a separate ``_partial_bridges`` list: they are real
-stretches of unstable manifold the blast frontier must carry forward, but they are
-not bridges in the topological sense and never appear in a genealogy answer. Two
-consequences to keep in mind:
-
-* repeated blasting of the same region can accumulate several Bridge objects over
-  the same partial arc (nothing identifies them as the same arc), which is why the
-  nested period-3 blast script registers 141 bridges where the pre-2.2 code
-  reported 140;
-* ``image_bridges`` can therefore lose a mid-arc leading/trailing piece of an
-  image, so the derived frontier is the bridges of the image, not the whole image.
-
-Both are by definition, not a gap to be papered over with a cdist-only signature --
-that guesswork is exactly what plan row 2.2 removed.
-"""
-
 
 class TangleWorkbench:
+    """
+    The entry point for programmatic use of the numerical layer.
+
+    A workbench holds one dynamical system and everything computed from it: the
+    fixed points found so far, the manifolds grown from them (keyed by
+    ``(fixed_point, stability, orbit_index, branch_index)``), the
+    :class:`~.Tangle.Tangle` that indexes those manifolds and resolves their
+    crossings, the :class:`~.IntersectionRegistry.IntersectionRegistry` that is
+    the single source of truth for the crossings themselves, and the bridge set
+    cut out of the unstable manifolds.
+
+    The scientific workflow it drives is: construct a fixed point, orient its
+    eigenvectors, initialize its manifolds, grow them, compute the
+    intersections, cut the bridges, and iterate those bridges forward::
+
+        wb = TangleWorkbench(my_map, my_map_inverse)
+        fp = wb.construct_fixed_point([4, -4])
+        wb.orient_eigenvectors(fp, {"unstable": [-1, 0], "stable": [0, 1]})
+        wb.initialize_both_manifolds(fp)
+        wb.grow_n_times(fp, "unstable", num_iterations=8)
+        wb.grow_until_turnaround(fp, "stable")
+        wb.compute_intersections(fp)
+        wb.create_bridges(fp)
+
+    Everything derived from a workbench -- a :class:`~.topology.Trellis.Trellis`,
+    an arrangement, a resonance zone -- is only valid at one
+    :attr:`generation`, and a cache checks staleness by comparing that one
+    integer.
+
+    Args:
+        dynamical_map: The area-preserving map.
+        dynamical_map_inverse: Its inverse.
+        jacobian_function: Optional analytic Jacobian; a finite-difference one is
+            used when it is omitted.
+
+    Note:
+        Bridge iteration, iterate-table inference and graph plotting are
+        delegated to :class:`~.BridgeIterator.BridgeIterator`,
+        :class:`~.IterateInference.IterateInference` and :mod:`~.graphviz`. The
+        methods here forward to them and their signatures are the contract; the
+        bodies (and their Dev Notes) live in those modules.
+    """
 
     # Fixed palette of cool hues (blues, cyans, teals, greens, purples) used to
     # color bridges. Deliberately excludes any warm hue near red so a bridge is
@@ -84,8 +125,17 @@ class TangleWorkbench:
         self,
         dynamical_map: MapFunc,
         dynamical_map_inverse: MapFunc,
-        jacobian_function: JacFunc | None = None,
-    ):
+        jacobian_function: Optional[JacFunc] = None,
+    ) -> None:
+        """
+        Build an empty workbench around one dynamical system.
+
+        Args:
+            dynamical_map (MapFunc): The area-preserving map.
+            dynamical_map_inverse (MapFunc): Its inverse.
+            jacobian_function (Optional[JacFunc]): Analytic Jacobian; a
+                finite-difference one is used when it is omitted.
+        """
 
         self.dynamical_system = DynamicalSystem(
             dynamical_map, dynamical_map_inverse, jacobian_function
@@ -125,6 +175,12 @@ class TangleWorkbench:
         self._mutations: int = 0
         self._generation_state: Optional[tuple] = None
         self._generation: int = 0
+
+        # The two collaborators that read and extend this state (see the module
+        # docstring). They are constructed here, hold no state of their own, and
+        # the workbench forwards its same-named methods to them.
+        self._bridge_iterator = BridgeIterator(self)
+        self._iterate_inference = IterateInference(self)
 
     # ── generation ───────────────────────────────────────────────────────────
 
@@ -229,7 +285,9 @@ class TangleWorkbench:
         self._manifolds[key] = manifold
         self._bump_generation()
 
-    def construct_fixed_point(self, initial_guess) -> FixedPoint:
+    def construct_fixed_point(
+        self, initial_guess: Sequence | np.ndarray
+    ) -> FixedPoint:
         """
         Constructs a fixed point for a given initial guess.
         Adds that fixed point to the class storage.
@@ -250,8 +308,10 @@ class TangleWorkbench:
         return fixed_point
 
     def orient_eigenvectors(
-        self, fixed_point: FixedPoint, approx_dirs: dict[str, np.ndarray] | None = None
-    ):
+        self,
+        fixed_point: FixedPoint,
+        approx_dirs: Optional[dict[str, np.ndarray]] = None,
+    ) -> None:
         """
         User supplies an approximate direction for the stable and unstable manifolds.
         If the eigenvectors align with that direction nothing happens, otherwise
@@ -265,7 +325,7 @@ class TangleWorkbench:
 
     def initialize_manifold(
         self, fixed_point: FixedPoint, stability: Stability, num_branches: int = 1
-    ):
+    ) -> dict[tuple[int, int], BaseManifold]:
         """
         Build and register the fundamental segments of one manifold.
 
@@ -297,7 +357,11 @@ class TangleWorkbench:
 
         return initial_segments
 
-    def initialize_both_manifolds(self, fixed_point: FixedPoint, num_branches: int = 1):
+    def initialize_both_manifolds(
+        self, fixed_point: FixedPoint, num_branches: int = 1
+    ) -> tuple[
+        dict[tuple[int, int], BaseManifold], dict[tuple[int, int], BaseManifold]
+    ]:
         """
         Initialize the unstable and stable manifolds of one fixed point.
 
@@ -324,18 +388,24 @@ class TangleWorkbench:
         num_iterations: int,
         branch_index: int = 0,
     ) -> None:
+        """
+        Grow one manifold a fixed number of iterations.
 
-        key = (
-            fixed_point,
-            stability,
-            0,
-            branch_index if branch_index is not None else 0,
-        )
-        if self.manifolds.get(key) is None:
-            raise ValueError(
-                f"Manifold for fixed point {fixed_point} with stability {stability} "
-                f"and branch_index {branch_index} has not been initialized."
-            )
+        Args:
+            fixed_point (FixedPoint): The fixed point whose manifold is grown.
+            stability (Stability): Which manifold to grow.
+            num_iterations (int): How many times to apply the map.
+            branch_index (int): Which eigenvector branch to grow. Defaults to 0.
+
+        Raises:
+            ValueError: If the manifold has not been initialized.
+
+        Note:
+            Growth refines the existing curve as well as extending it, so it
+            bumps the generation and drops every memoised point array.
+        """
+
+        self._require_manifold(fixed_point, stability, branch_index)
 
         self._man_machine.grow_x_times(
             fixed_point, stability, num_iterations, branch_index
@@ -357,6 +427,14 @@ class TangleWorkbench:
         stability: Stability,
         **kwargs,
     ) -> None:
+        """
+        Plot every branch of one manifold of one fixed point, and the orbit.
+
+        Args:
+            fixed_point (FixedPoint): The fixed point to plot around.
+            stability (Stability): Which manifold to plot.
+            **kwargs: Forwarded to :meth:`BaseManifold.plot`.
+        """
 
         for (fp, stab, _orbit_index, _branch_index), manifold in self.manifolds.items():
 
@@ -380,17 +458,20 @@ class TangleWorkbench:
         Args:
             fixed_point (FixedPoint): The fixed point whose manifold is to be grown.
             stability (Stability): The stability type of the manifold ('stable' or 'unstable').
-            max_iterations (int, optional): Maximum number of iterations to grow. Defaults to 50.
+            max_iterations (int, optional): Maximum number of growth iterations
+                to attempt before giving up. Defaults to 10.
+            branch_index (int, optional): Which eigenvector branch to grow.
+                Defaults to 0.
+
+        Raises:
+            ValueError: If the manifold has not been initialized, or if the cap
+                is reached before a turnaround is detected.
         """
 
-        if self.manifolds.get((fixed_point, stability, 0, branch_index)) is None:
-            raise ValueError(f"""Manifold for fixed point {fixed_point} 
-                    with stability {stability} has not been initialized.
-                    Please run initialize_manifold first.""")
+        manifold = self._require_manifold(fixed_point, stability, branch_index)
 
         root = fixed_point.branch_points[0]
-        first_point = self.manifolds.get((fixed_point, stability, 0, branch_index))
-        first_point = first_point.walk_fwd(None, root, branch_index)
+        first_point = manifold.first_node(branch_index)
 
         root_coord = root._coords
         first_point_coords = first_point._coords
@@ -446,12 +527,8 @@ class TangleWorkbench:
                 reached before the tail passes ``length``.
         """
 
-        if self.manifolds.get((fixed_point, stability, 0, branch_index)) is None:
-            raise ValueError(f"""Manifold for fixed point {fixed_point}
-                    with stability {stability} has not been initialized.
-                    Please run initialize_manifold first.""")
+        self._require_manifold(fixed_point, stability, branch_index)
 
-        # TODO change this so it uses the actual arclength
         def tail_distance() -> float:
             return self.manifolds[(fixed_point, stability, 0, branch_index)].tail.cdist
 
@@ -493,10 +570,7 @@ class TangleWorkbench:
                 reached without a new crossing.
         """
 
-        if self.manifolds.get((fixed_point, stability, 0, branch_index)) is None:
-            raise ValueError(f"""Manifold for fixed point {fixed_point}
-                    with stability {stability} has not been initialized.
-                    Please run initialize_manifold first.""")
+        self._require_manifold(fixed_point, stability, branch_index)
 
         self.compute_intersections(fixed_point, infer_iterates=False)
 
@@ -891,12 +965,12 @@ class TangleWorkbench:
 
     def compute_intersections(
         self,
-        fixed_points,
+        fixed_points: FixedPoint | Iterable[FixedPoint],
         *,
         reset: bool = True,
         infer_iterates: bool = True,
         preserve_ids: bool = False,
-    ):
+    ) -> list[tuple[float, float]]:
         """
         Compute intersections among the manifolds of one or more fixed points.
 
@@ -1081,8 +1155,13 @@ class TangleWorkbench:
         return int(np.sign(float(u_dir[0] * s_dir[1] - u_dir[1] * s_dir[0])))
 
     def plot_intersections(
-        self, fp=None, ax=None, show_ids=False, id_fontsize=8, **scatter_kwargs
-    ):
+        self,
+        fp: Optional[FixedPoint] = None,
+        ax: Optional[plt.Axes] = None,
+        show_ids: bool = False,
+        id_fontsize: int = 8,
+        **scatter_kwargs,
+    ) -> None:
         """
         Scatter-plot computed intersections, optionally restricted to one fixed point.
 
@@ -1324,38 +1403,18 @@ class TangleWorkbench:
         """
         return list(self._bridges_at.get(intersection_id, ()))
 
+    # ── bridge iteration and genealogy (see BridgeIterator) ─────────────────
+
     def image_bridges(
         self, bridge_id: BridgeId, n: int = 1
     ) -> Optional[list[BridgeId]]:
         """
         The bridges tiling the ``n``-th forward image of one bridge.
 
-        Genealogy is DERIVED, not stored: a bridge spans the arc between crossings
-        ``a`` and ``b``, so its image spans the arc between ``f^n(a)`` and
-        ``f^n(b)`` on the branch ``n`` map steps forward
-        (:meth:`FixedPoint.advance_key`). The bridges of that image are exactly the
-        registered bridges of the image branch whose two endpoints both lie inside
-        that span. Both iterates are read from the registry's iterate table -- no
-        cdist guesswork -- so the answer is only as complete as the table.
-
-        Args:
-            bridge_id: The bridge whose image is wanted.
-            n: Number of map steps; negative walks backward.
-
-        Returns:
-            The image bridges' ids in increasing unstable canonical distance, or
-            ``None`` when either endpoint has no registered ``n``-iterate. The list
-            can be empty when the image arc is grown but not yet cut.
-
-        Raises:
-            KeyError: If ``bridge_id`` is not registered.
-
-        Note:
-            Partial pieces have no id and are never returned, so an image whose
-            leading (or trailing) stretch runs past its last crossing loses that
-            stretch here. That is by definition: a partial arc is not a bridge.
+        Delegates to :meth:`~.BridgeIterator.BridgeIterator.image_bridges`, which
+        documents the derivation and the ``None`` case.
         """
-        return self._image_bridge_ids(self.bridge(bridge_id), n)
+        return self._bridge_iterator.image_bridges(bridge_id, n)
 
     def preimage_bridges(
         self, bridge_id: BridgeId, n: int = 1
@@ -1363,708 +1422,64 @@ class TangleWorkbench:
         """
         The bridges tiling the ``n``-th BACKWARD image of one bridge.
 
-        Exactly :meth:`image_bridges` with the sign of ``n`` flipped; see there for
-        the semantics and the ``None`` case.
-
-        Args:
-            bridge_id: The bridge whose preimage is wanted.
-            n: Number of backward map steps (positive means ``f^-n``).
-
-        Returns:
-            The preimage bridges' ids in increasing unstable canonical distance, or
-            ``None`` when either endpoint has no registered ``-n``-iterate.
-
-        Raises:
-            KeyError: If ``bridge_id`` is not registered.
+        Delegates to :meth:`~.BridgeIterator.BridgeIterator.preimage_bridges`.
         """
-        return self._image_bridge_ids(self.bridge(bridge_id), -n)
-
-    def _image_span(
-        self, bridge: Bridge, n: int
-    ) -> Optional[tuple[tuple[int, int], tuple[float, float], ManifoldKey]]:
-        """The ``n``-iterates of a bridge's endpoints, their cdists, and the image key.
-
-        The two ids come back ORDERED BY UNSTABLE CDIST (low, high), matching the
-        cdists returned alongside them. Which of ``f^n(a)``, ``f^n(b)`` is the lower
-        is not assumed: an inversion branch or a bookkeeping slip could swap them,
-        and a caller comparing an ordered chain against them must not silently invert.
-        """
-        if bridge.id is None:
-            return None
-        table = self._intersection_registry.iterate_table
-        images = [table[endpoint, n] for endpoint in bridge.id]
-        if any(image is None for image in images):
-            return None
-
-        registry = self._intersection_registry
-        images.sort(key=lambda image: float(registry[image].unstable_cdist))
-        lo, hi = (float(registry[image].unstable_cdist) for image in images)
-        image_key = bridge.fixed_point.advance_key(bridge.manifold_key, n)
-        return (images[0], images[1]), (lo, hi), image_key
-
-    def _image_bridge_ids(self, bridge: Bridge, n: int) -> Optional[list[BridgeId]]:
-        """The ids of the registered bridges inside a bridge's n-th image span."""
-        if n == 0:
-            return [bridge.id] if bridge.id is not None else None
-
-        span = self._image_span(bridge, n)
-        if span is None:
-            return None
-        _images, (lo, hi), image_key = span
-
-        registry = self._intersection_registry
-        tol = registry.cdist_tol
-        inside: list[tuple[float, BridgeId]] = []
-        for bid, other in self._bridges.items():
-            if other.manifold_key != image_key:
-                continue
-            first = float(registry[bid[0]].unstable_cdist)
-            second = float(registry[bid[1]].unstable_cdist)
-            if first >= lo - tol and second <= hi + tol:
-                inside.append((first, bid))
-
-        return [bid for _cdist, bid in sorted(inside)]
+        return self._bridge_iterator.preimage_bridges(bridge_id, n)
 
     @property
     def intersection_registry(self) -> IntersectionRegistry:
+        """The single source of truth for this workbench's crossings."""
         return self._intersection_registry
 
     def iterate_bridge(self, bridge: Bridge) -> list[Bridge]:
         """
-        Map a bridge forward one iterate, add the result to the tangle, detect new
-        intersections with the stable manifold, cut the result into new bridges,
-        and return those bridges.
+        Map a bridge forward one iterate and cut the image into bridges.
 
-        Marks the original bridge as iterated. The genealogy is not stored on the
-        bridge: ``workbench.image_bridges(bridge.id)`` derives it from the crossing
-        iterate table afterwards.
-
-        Args:
-            bridge: A bridge created by create_bridges() or a previous iterate_bridge().
-
-        Returns:
-            List of new Bridge objects from cutting the iterated result. If the
-            image crosses the stable manifold fewer than twice, returns a
-            single-element list holding the unsplit image, marked
-            :attr:`Bridge.partial` (it is bounded by fewer than two crossings, so
-            it is not a bridge in the topological sense).
-
-        Raises:
-            ValueError: If bridge has already been iterated.
-            ValueError: If create_bridges() has not been called yet.
+        Delegates to :meth:`~.BridgeIterator.BridgeIterator.iterate_bridge`, which
+        documents the reuse path, the partial-bridge case and what is raised.
         """
-        if bridge.iterated:
-            raise ValueError(
-                "This bridge has already been iterated. Its image is "
-                "workbench.image_bridges(bridge.id)."
-            )
-        if not self._bridges and not self._partial_bridges:
-            raise ValueError(
-                "No bridges registered. Call create_bridges() before iterate_bridge()."
-            )
+        return self._bridge_iterator.iterate_bridge(bridge)
 
-        # 0. If this bridge's forward image is a stretch of manifold that has already
-        #    been grown, that section is already cut into bridges -- reuse those
-        #    existing objects instead of mapping the points forward again. Re-mapping
-        #    would lay a second, slightly-different polyline over curve that already
-        #    exists (the "zig-zag"), spawn overlapping duplicate bridges, and trip the
-        #    same-stability (unstable x unstable) detector along the near-coincident
-        #    pair. Only when the image runs past the grown extent is there genuinely
-        #    new curve to compute (handled below).
-        existing_image = self._existing_image_bridges(bridge)
-        if existing_image is not None:
-            bridge.iterated = True
-            self._bump_generation()
-            return existing_image
+    def iterate_all_bridges(self) -> list[Bridge]:
+        """
+        Iterate every bridge that has not yet been mapped forward.
 
-        # 1. map forward
-        iterated = self._man_machine.iterate_bridge(bridge)
+        Delegates to :meth:`~.BridgeIterator.BridgeIterator.iterate_all_bridges`.
+        """
+        return self._bridge_iterator.iterate_all_bridges()
 
-        # The iterated bridge is M(bridge): a segment of the unstable manifold one
-        # orbit step forward of the parent's branch. Recording that key -- before the
-        # image is indexed -- is what lets every crossing detected on it carry its
-        # unstable branch identity (and lets its children advance the key again).
-        image_key = bridge.fixed_point.advance_key(bridge.manifold_key, 1)
-        iterated.manifold_key = image_key
-
-        # 2. register with the tangle. The bridge is unstable manifold, so every
-        #    curve it can legitimately cross is stable and already in the rtree
-        #    from compute_intersections -- querying finds all its crossings, and
-        #    skipping the rtree inserts keeps repeated blasting fast.
-        self.Tangle.add_manifold(iterated, index_segments=False)
-
-        # 3. resolve only new crossings involving the iterated bridge
-        new_intersections = self.Tangle.populate_intersections_for_manifold(iterated)
-
-        for ix in new_intersections:
-            # A crossing that collides with one already registered IS that crossing;
-            # take the registry's id for it so the cut below records the canonical id.
-            ix.id = self._intersection_registry.add(ix)
-
-        # 4. cut at crossings. Only the crossings just born on this image are cut at:
-        #    they alone carry bracketing points that lie on the image's own polyline.
-        new_bridges = (
-            self.Tangle.create_bridges(
-                new_intersections,
-                for_manifold=iterated,
-                cdist_tol=self._intersection_registry.cdist_tol,
-            )
-            if new_intersections
-            else []
-        )
-
-        # A bridge is bounded by two crossings, so create_bridges yields nothing when
-        # the image crosses the stable manifold fewer than twice -- either zero times
-        # (no crossing) or exactly once (a single new homoclinic point cannot bound a
-        # bridge on its own). Either way the forward image is still a real piece of
-        # unstable manifold whose dynamics must be carried forward, so keep it as one
-        # PARTIAL bridge (both endpoint ids stay None) rather than dropping it. (Any
-        # new crossing was already registered above; it is picked up as a bridge
-        # boundary on later iterates, once a second crossing appears alongside it.)
-        # ManifoldMachine.iterate_bridge may return a BaseManifold, so wrap it as a
-        # Bridge -- downstream consumers (uniiterated_bridges, genealogy) need the
-        # Bridge attributes.
-        if not new_bridges:
-            if isinstance(iterated, Bridge):
-                new_bridges = [iterated]
-            else:
-                new_bridges = [
-                    Bridge(
-                        root=iterated.root,
-                        stability=iterated.stability,
-                        stretch_param=iterated.stretch_param,
-                        fixed_point=iterated.fixed_point,
-                        tail=iterated.tail,
-                        branch_index=iterated.branch_index,
-                        manifold_key=image_key,
-                    )
-                ]
-
-        # 5. record the forward iterate of the parent's two endpoint crossings
-        self._register_endpoint_iterates(bridge, new_intersections)
-
-        # 6. Single-copy invariant: a bridge is uniquely defined by the two
-        #    intersections it connects, so a freshly cut child whose BridgeId is
-        #    already registered IS that bridge -- _register_bridge hands back the
-        #    stored object instead of a duplicate. The caller still sees every piece
-        #    of the image; it just points at the one stored copy. Iterating the
-        #    fixed-point bridge, for instance, re-traces curve already held, so its
-        #    children all resolve to existing bridges and nothing is added.
-        children = [self._register_bridge(child) for child in new_bridges]
-        bridge.iterated = True
-        # Mapping forward can refine (and cut at) curve that already exists --
-        # the image of a bridge whose points all have iterates is laid over
-        # grown manifold -- so every memoised walk is dropped, not just the
-        # children's.
-        self._bump_generation(invalidate_walks=True)
-
-        return children
+    # ── iterate table inference (see IterateInference) ───────────────────────
 
     def infer_iterate_table(self, cdist_rtol: float = 0.05) -> int:
         """
-        Scan all iterated bridges and record the n=1 forward iterate relationship for
-        each boundary intersection.
+        Record the n=1 forward iterate of every iterated bridge's endpoints.
 
-        Bridge topology identifies *which* intersections to process (only the two
-        endpoints of each iterated bridge). The image f(i_src) is then identified by
-        canonical distance and branch identity rather than phase-space coordinates,
-        which drift under the nonlinear map and are only approximate. Under one
-        application of M the image lies on the branches one orbit step forward of the
-        source (see FixedPoint.advance_key), with the unstable cdist stretched and
-        the stable cdist contracted by the per-map-step factor
-        FixedPoint.per_step_beta.
-
-        The stable branch (manifold_b_key) is the reliable discriminator: the stable
-        manifold is always indexed, so every intersection carries it. The unstable
-        branch (manifold_a_key) is missing on intersections born from an iterated
-        bridge (those bridges are not indexed manifolds), so it is used only as an
-        extra constraint when both source and candidate have it. Stable branch plus
-        canonical distance resolves the arc-length ambiguity that motivated the old
-        coordinate-based match.
-
-        Args:
-            cdist_rtol: Maximum relative canonical-distance error between the predicted
-                image and a candidate (on the correct stable branch) for the match to
-                be accepted. Defaults to 0.05, comfortably above per-step scaling noise.
-
-        Returns:
-            Number of new iterate relationships recorded.
+        Delegates to
+        :meth:`~.IterateInference.IterateInference.infer_iterate_table`.
         """
-        registry = self._intersection_registry
-        recorded = 0
-
-        for bridge in self._bridges.values():
-            if not bridge.iterated:
-                continue
-            for src_id in (bridge.first_intersection, bridge.second_intersection):
-                if src_id is None:
-                    continue
-                if self._register_forward_iterate(src_id, registry, cdist_rtol):
-                    recorded += 1
-
-        return recorded
+        return self._iterate_inference.infer_iterate_table(cdist_rtol)
 
     def infer_iterates(self, cdist_rtol: float = 0.05) -> int:
         """
-        Fill the iterate table for *every* intersection by canonical-distance mapping.
+        Fill the iterate table for *every* registered crossing.
 
-        For each registered intersection this records its n=1 forward image M(i) — the
-        intersection one orbit step forward, found by predicting the image's branches
-        (:meth:`FixedPoint.advance_key`) and canonical distances (each scaled by its
-        own branch's :meth:`FixedPoint.per_step_beta`) and matching against the
-        registry. This generalizes :meth:`infer_iterate_table`,
-        which records the same relationship but only for bridge-boundary intersections.
-
-        :meth:`compute_intersections` calls this automatically, so the table is dense
-        as soon as intersections are computed; iterating bridges then keeps it current
-        through the bridge machinery. Idempotent: it skips intersections that already
-        have an n=1 entry, so repeated calls are cheap.
-
-        Args:
-            cdist_rtol: Maximum relative canonical-distance error for a match (default
-                0.05, comfortably above per-step scaling noise).
-
-        Returns:
-            Number of new iterate relationships recorded.
+        Delegates to :meth:`~.IterateInference.IterateInference.infer_iterates`;
+        :meth:`compute_intersections` calls it automatically.
         """
-        registry = self._intersection_registry
-        recorded = 0
-        for src_id in registry.all_ids():
-            if self._register_forward_iterate(src_id, registry, cdist_rtol):
-                recorded += 1
-        return recorded
+        return self._iterate_inference.infer_iterates(cdist_rtol)
 
-    def _register_forward_iterate(
-        self, src_id: int, registry: IntersectionRegistry, cdist_rtol: float
-    ) -> bool:
-        """
-        Record the n=1 forward iterate of one intersection, if it can be identified.
-
-        The image f(src) lies on the branches one map step forward (see
-        :meth:`FixedPoint.advance_key`), with each canonical distance scaled by its
-        own side's per-map-step factor (:meth:`FixedPoint.per_step_beta`): the
-        unstable cdist stretched on the unstable branch's fixed point, the stable
-        cdist contracted on the stable branch's. The two coincide on a homoclinic
-        crossing; on a HETEROCLINIC one the two branches belong to different
-        periodic orbits with different k_values, and using one point's factor for
-        both cdists is simply wrong.
-
-        The image is matched by stable branch (always present) plus canonical
-        distance, with the unstable branch as an extra constraint when both source
-        and candidate carry it (intersections born from iterated bridges have no
-        unstable branch). Coordinates are deliberately not used — they drift under
-        the nonlinear map, whereas canonical distances and branch keys are exact.
-
-        Returns:
-            True if a new iterate edge was recorded, else False.
-        """
-        if (src_id, 1) in registry.iterate_table:
-            return False
-
-        source = registry[src_id]
-        if self._register_anchor_iterate(src_id, source, registry):
-            return True
-
-        # The image's stable branch and stable canonical distance are both
-        # predicted, so the candidates are one bisected slice of that branch's
-        # own cdist order rather than the whole registry. A crossing outside the
-        # window fails the relative stable-cdist test by construction, so the
-        # match this narrows to is the same one the full scan would return.
-        prediction = self._image_prediction(source)
-        if prediction is None:
-            return False
-        _a_key, b_key, _u_pred, s_pred = prediction
-        # The same tolerance _match_image applies below, read once: the window
-        # is exactly the set of candidates whose relative stable-cdist error can
-        # still come in under cdist_rtol.
-        cdist_tol = self._intersection_registry.cdist_tol
-        window = cdist_rtol * (abs(s_pred) + cdist_tol)
-        candidates = registry.candidates_near_stable_cdist(b_key, s_pred, window)
-
-        best_id, _best_err = self._match_image(
-            source, candidates, cdist_rtol, exclude={src_id}
-        )
-        if best_id is None:
-            return False
-
-        registry.register_iterate(src_id, 1, best_id)
-        return True
-
-    def _register_anchor_iterate(
-        self, src_id: int, source: Intersection, registry: IntersectionRegistry
-    ) -> bool:
-        """
-        Record the forward image of an ANCHOR -- a periodic point's own crossing.
-
-        A periodic point sits at canonical distance ``(0, 0)`` on the two branches
-        it anchors, and the map carries it to the next point of its orbit, whose
-        anchor sits at ``(0, 0)`` on the two ADVANCED branches. So an anchor's
-        image is not something to search for by canonical distance: it is fully
-        determined by the branch bookkeeping, and
-        :meth:`IntersectionRegistry.find` resolves it exactly.
-
-        Doing it here rather than in the generic matcher closes the one case that
-        matcher provably cannot handle. On a period-1 orbit the anchor is its own
-        image (the periodic point is a fixed point of the map), and the
-        "an image is not its source" guard in :meth:`_match_image` -- correct for
-        every crossing at cdist ``c > 0``, whose predicted image sits at
-        ``beta * c`` far from ``c`` -- excludes the only candidate that can match.
-        On a period > 1 orbit the generic search does find the next branch's
-        anchor, but by a cdist comparison of ``0`` against ``0``, which is a
-        coincidence of the prediction rather than a statement about the orbit.
-
-        Args:
-            src_id: Registry id of the crossing being iterated.
-            source: The crossing itself.
-            registry: The registry to read and write.
-
-        Returns:
-            True if the source is an anchor and its image was recorded, else
-            False (including for an anchor whose image branch has no anchor yet,
-            which happens while a period > 1 orbit is only partly initialized).
-        """
-        tol = registry.cdist_tol
-        if abs(source.unstable_cdist) > tol or abs(source.stable_cdist) > tol:
-            return False
-
-        prediction = self._image_prediction(source)
-        if prediction is None:
-            return False
-        a_key, b_key, _u_pred, _s_pred = prediction
-
-        probe = Intersection.synthetic(
-            coords=source.coords,
-            unstable_cdist=0.0,
-            stable_cdist=0.0,
-            manifold_a_key=a_key if a_key is not None else source.manifold_a_key,
-            manifold_b_key=b_key,
-        )
-        target = registry.find(probe)
-        if target is None:
-            logger.debug(
-                "Anchor %d has no image anchor on branches (%s, %s) yet",
-                src_id,
-                a_key,
-                b_key,
-            )
-            return False
-
-        registry.register_iterate(src_id, 1, target)
-        return True
-
-    @staticmethod
-    def _image_prediction(
-        source: Intersection,
-    ) -> Optional[tuple[Optional[tuple], tuple, float, float]]:
-        """
-        What the n=1 image of ``source`` must look like: its two branch keys and
-        its two canonical distances.
-
-        Each side advances on -- and is scaled by -- its OWN fixed point: on a
-        heteroclinic crossing the unstable branch belongs to a different periodic
-        orbit than the stable one, with a different ``k_value``, so using one
-        point's per-step factor for both cdists is simply wrong.
-
-        Returns:
-            ``(advanced unstable key or None, advanced stable key, predicted
-            unstable cdist, predicted stable cdist)``, or None when the crossing
-            has no stable branch or its fixed point carries no eigendata.
-        """
-        if source.manifold_b_key is None:
-            return None
-        stable_fp = source.manifold_b_key[0]
-        if (
-            not getattr(stable_fp, "unstable_eigenvalues", None)
-            or stable_fp.k_value is None
-        ):
-            return None
-
-        b_key = stable_fp.advance_key(source.manifold_b_key, 1)
-        a_key = (
-            source.manifold_a_key[0].advance_key(source.manifold_a_key, 1)
-            if source.manifold_a_key is not None
-            else None
-        )
-        unstable_fp = (
-            stable_fp if source.manifold_a_key is None else source.manifold_a_key[0]
-        )
-        u_pred = source.unstable_cdist * unstable_fp.per_step_beta("unstable")
-        s_pred = source.stable_cdist * stable_fp.per_step_beta("stable")
-        return a_key, b_key, u_pred, s_pred
-
-    def _match_image(
-        self,
-        source: Intersection,
-        candidates: Iterable[tuple[int, Intersection]],
-        cdist_rtol: float,
-        *,
-        exclude: "set[int] | frozenset[int]" = frozenset(),
-        accept: Optional[Callable[[Intersection], bool]] = None,
-    ) -> tuple[Optional[int], float]:
-        """
-        Pick the crossing among ``candidates`` that is the n=1 image of ``source``.
-
-        The single place the branch/beta prediction of an iterate is turned into a
-        match, shared by the registry-wide heuristic
-        (:meth:`_register_forward_iterate`) and the explicit bridge-endpoint
-        registration (:meth:`_register_endpoint_iterates`). A candidate must sit on
-        the advanced STABLE branch -- canonical distance restarts at 0 on every
-        branch, so on a period > 1 or heteroclinic tangle the cdist window alone
-        would happily pick a crossing on the wrong branch -- and, when both sides
-        carry one, on the advanced unstable branch too. The two canonical distances
-        are then compared INDIVIDUALLY; their product is never used, since two
-        different iterate chains share it (CLAUDE.md, area preservation).
-
-        Args:
-            source: The crossing whose forward image is wanted.
-            candidates: ``(id, Intersection)`` pairs to choose from.
-            cdist_rtol: Maximum relative canonical-distance error for a match.
-            exclude: Ids that may not be chosen (the source itself, and any image
-                already claimed by another source in the same call).
-            accept: Optional extra predicate a candidate must satisfy -- used to
-                gate on the real map's image coordinates.
-
-        Returns:
-            ``(matched id or None, best relative error seen)``.
-        """
-        prediction = self._image_prediction(source)
-        if prediction is None:
-            return None, float("inf")
-
-        a_key, b_key, u_pred, s_pred = prediction
-        cdist_tol = self._intersection_registry.cdist_tol
-
-        best_id, best_err = None, float("inf")
-        for tgt_id, tgt in candidates:
-            if tgt_id is None or tgt_id in exclude:
-                continue
-            if tgt.manifold_b_key != b_key:
-                continue
-            if (
-                a_key is not None
-                and tgt.manifold_a_key is not None
-                and tgt.manifold_a_key != a_key
-            ):
-                continue
-            if accept is not None and not accept(tgt):
-                continue
-            u_rel = abs(tgt.unstable_cdist - u_pred) / (abs(u_pred) + cdist_tol)
-            s_rel = abs(tgt.stable_cdist - s_pred) / (abs(s_pred) + cdist_tol)
-            err = max(u_rel, s_rel)
-            if err < best_err:
-                best_err, best_id = err, tgt_id
-
-        if best_id is not None and best_err <= cdist_rtol:
-            return best_id, best_err
-        return None, best_err
-
-    def _existing_image_bridges(self, bridge: Bridge) -> Optional[list[Bridge]]:
-        """
-        The already-computed bridges that tile this bridge's forward image, if the
-        image is entirely covered by them.
-
-        A bridge spanning crossings ``a -> b`` images onto the arc
-        ``f(a) -> f(b)`` of the branch one map step forward
-        (:meth:`FixedPoint.advance_key`). If that arc has already been grown and
-        cut, those bridges ARE the forward image -- there is no need (and it is
-        actively harmful) to re-map and re-cut it: re-mapping lays a second,
-        slightly different polyline over curve that already exists (the "zig-zag"),
-        spawns overlapping duplicate bridges, and trips the same-stability
-        (unstable x unstable) detector along the near-coincident pair.
-
-        The image is only reusable when the existing bridges TILE it exactly: the
-        first starts at ``f(a)``, the last ends at ``f(b)``, and each shares an
-        endpoint with the next. Anything less means part of the image is curve that
-        has not been computed, which is precisely the case that must fall through
-        to real iteration.
-
-        Args:
-            bridge: The bridge about to be iterated.
-
-        Returns:
-            The existing image bridges in unstable cdist order, or ``None`` to fall
-            through to real iteration.
-        """
-        span = self._image_span(bridge, 1)
-        if span is None:
-            logger.debug(
-                "bridge %s: no reusable image -- an endpoint has no registered n=1 "
-                "iterate, so the image will be recomputed by mapping it forward",
-                bridge.id,
-            )
-            return None
-        (lo_image, hi_image), _cdists, _key = span
-
-        image_ids = self._image_bridge_ids(bridge, 1)
-        if not image_ids:
-            logger.debug(
-                "bridge %s: image arc %s -> %s carries no registered bridge; "
-                "recomputing",
-                bridge.id,
-                lo_image,
-                hi_image,
-            )
-            return None
-
-        # The chain must run from f(a) to f(b) with no gap: the endpoint ids come
-        # from _image_span already ordered by cdist, as image_ids is.
-        if image_ids[0][0] != lo_image or image_ids[-1][1] != hi_image:
-            logger.debug(
-                "bridge %s: image arc %s -> %s is only partly cut (%s); recomputing",
-                bridge.id,
-                lo_image,
-                hi_image,
-                image_ids,
-            )
-            return None
-        if any(lhs[1] != rhs[0] for lhs, rhs in zip(image_ids, image_ids[1:])):
-            logger.debug(
-                "bridge %s: image bridges %s do not tile the arc; recomputing",
-                bridge.id,
-                image_ids,
-            )
-            return None
-
-        return [self._bridges[bid] for bid in image_ids]
-
-
-    def _register_endpoint_iterates(
-        self,
-        bridge: Bridge,
-        image_crossings: list[Intersection],
-        cdist_rtol: float = 0.05,
-    ) -> int:
-        """
-        Record the n=1 forward iterate of a bridge's two endpoint crossings.
-
-        The image of a bridge's endpoint crossing is a crossing of the image bridge,
-        so it is one of the crossings just born on that image -- no registry-wide
-        search and no heuristic is needed. The match is made by
-        :meth:`_match_image`: the advanced stable (and, when present, unstable)
-        branch key, then both canonical distances individually, each scaled by its
-        own branch's :meth:`FixedPoint.per_step_beta`.
-
-        Two further guards apply here, where the registry-wide heuristic cannot use
-        them:
-
-        * The REAL map is a sanity gate. ``f(source.coords)`` is where the image
-          must be, so a candidate further than ``1e-3 * max(1, |f|)`` from it is
-          rejected outright. That both catches a cdist coincidence and stops a false
-          registration when the true image lies beyond the computed manifold and so
-          is not among the crossings at all.
-        * The map is injective, so the two endpoints of one bridge cannot share an
-          image: a candidate claimed by the first endpoint is off limits to the
-          second.
-
-        Args:
-            bridge: The parent bridge that was just iterated.
-            image_crossings: The crossings born on its forward image, ids assigned.
-            cdist_rtol: Maximum relative canonical-distance error for a match.
-
-        Returns:
-            Number of new iterate relationships recorded.
-        """
-        if not image_crossings:
-            return 0
-
-        registry = self._intersection_registry
-        candidates = [(ix.id, ix) for ix in image_crossings if ix.id is not None]
-        claimed: set[int] = set()
-        recorded = 0
-
-        for src_id in (bridge.first_intersection, bridge.second_intersection):
-            if src_id is None or src_id not in registry:
-                continue
-            if (src_id, 1) in registry.iterate_table:
-                continue
-
-            source = registry[src_id]
-            if source.coords is None:
-                continue
-
-            image = np.asarray(
-                self.dynamical_system.map(np.asarray(source.coords, dtype=float)),
-                dtype=float,
-            ).ravel()
-            gate = 1e-3 * max(1.0, float(np.linalg.norm(image)))
-
-            # image/gate bound as defaults: the predicate is consumed inside this
-            # iteration, and binding makes that independent of the loop variable.
-            def near_the_true_image(
-                candidate: Intersection,
-                image: NDArray[np.float64] = image,
-                gate: float = gate,
-            ) -> bool:
-                if candidate.coords is None:
-                    return False
-                offset = np.asarray(candidate.coords, dtype=float) - image
-                return float(np.linalg.norm(offset)) <= gate
-
-            best_id, best_err = self._match_image(
-                source,
-                candidates,
-                cdist_rtol,
-                exclude=claimed | {src_id},
-                accept=near_the_true_image,
-            )
-
-            if best_id is None:
-                logger.debug(
-                    "no image of crossing %s among the %d crossings born on the "
-                    "image of its bridge (best relative cdist error %.3g, %d "
-                    "candidate(s) already claimed)",
-                    src_id,
-                    len(candidates),
-                    best_err,
-                    len(claimed),
-                )
-                continue
-
-            registry.register_iterate(src_id, 1, best_id)
-            claimed.add(best_id)
-            recorded += 1
-
-        return recorded
+    # ── graph view (see graphviz) ────────────────────────────────────────────
 
     def build_intersection_graph(self) -> nx.MultiDiGraph:
         """
-        The registry's intersection graph, decorated for this workbench.
+        The registry's intersection graph, decorated with this workbench's bridges.
 
-        The graph itself -- nodes, per-branch adjacency, iterate edges -- belongs
-        to the :class:`IntersectionRegistry` (plan 2.7); this method supplies the
-        one thing the registry cannot know, the bridges, and returns a COPY so
-        callers may decorate or lay out the result without touching the live one.
-
-        Unstable adjacency is exactly the registered bridges: a bridge IS the
-        piece of unstable manifold between two consecutive crossings, so
-        disconnected pieces of unstable manifold (an original bridge and its
-        iterated children) stay separate paths instead of merging into one chain.
-        Stable adjacency joins consecutive crossings ON EACH STABLE BRANCH;
-        canonical distances on different branches are measured from different
-        anchors and are not comparable.
+        Delegates to :func:`~.graphviz.build_intersection_graph`.
 
         Returns:
             nx.MultiDiGraph: A copy of the registry graph.
         """
-        bridges = list(self._bridges)
-        return self._intersection_registry.graph(bridges=bridges).copy()
-
-    def iterate_all_bridges(self) -> list[Bridge]:
-        """
-        Iterate all bridges that have not yet been mapped forward.
-
-        Returns:
-            All new bridges produced across all iterations.
-        """
-        pending = list(
-            self.uniiterated_bridges
-        )  # snapshot before loop mutates _bridges
-
-        all_new: list[Bridge] = []
-        for bridge in pending:
-            all_new.extend(self.iterate_bridge(bridge))
-
-        return all_new
+        return graphviz.build_intersection_graph(self)
 
     def visualize_intersection_graph(
         self,
@@ -2080,294 +1495,26 @@ class TangleWorkbench:
         save_path: Optional[str] = None,
     ) -> tuple:
         """
-        Visualize the intersection graph with edges colored by type and stability.
+        Draw an intersection graph.
 
-        Args:
-            G: The intersection graph from build_intersection_graph().
-            layout: Layout algorithm. ``"auto"`` (default) picks
-                ``"kamada_kawai"`` for ≤ 8 nodes and ``"stable_linear"``
-                otherwise. Explicit options:
-
-                * ``"stable_linear"`` — nodes sorted by stable arc-length on a
-                  horizontal line; bridges arch above and stable edges run flat.
-                  Usually the clearest layout for tangle graphs.
-                * ``"unstable_linear"`` — same but sorted by unstable arc-length.
-                * ``"cdist"`` — node position = (unstable_cdist, stable_cdist),
-                  revealing the full arc-length structure on labelled axes.
-                * ``"kamada_kawai"``, ``"spring"``, ``"circular"``, ``"spectral"``
-                  — standard networkx force/geometric layouts.
-            figsize: Figure size as (width, height).
-            display_mode: One of ``"auto"``, ``"full"``, or ``"compact"``.
-                ``"auto"`` switches to compact when the node count exceeds
-                *compact_threshold*. ``"full"`` uses large, labeled nodes.
-                ``"compact"`` uses small dots suitable for dense graphs.
-            compact_threshold: Node count above which ``"auto"`` picks compact.
-            node_size: Override the node area in points². Defaults to 800 in
-                full mode and 80 in compact mode.
-            label_mode: Content of node labels. One of:
-                ``"id"`` — intersection ID only (default);
-                ``"coords"`` — (x, y) phase-space coordinates;
-                ``"cdist"`` — unstable and stable arc-lengths;
-                ``"all"`` — ID, coordinates, and both cdists;
-                ``"none"`` — no labels.
-            node_color_by: How to color the nodes. One of:
-                ``"none"`` — white (default);
-                ``"unstable_cdist"`` — viridis colormap by unstable arc-length;
-                ``"stable_cdist"`` — plasma colormap by stable arc-length;
-                ``"fixed_point"`` — distinct color per originating fixed point.
-            show_iterate_edges: Whether to draw iterate-type edges (rendered
-                dashed in purple to distinguish them from adjacency edges).
-            save_path: Optional file path to save the figure.
+        Delegates to :func:`~.graphviz.visualize_intersection_graph`, which
+        documents every option.
 
         Returns:
             (fig, ax) matplotlib Figure and Axes.
         """
-        import matplotlib.colors as mcolors
-        from matplotlib.patches import FancyArrowPatch
-        from matplotlib.lines import Line2D
-
-        if G.number_of_nodes() == 0:
-            logger.warning("Graph has no nodes to visualize")
-            return None, None
-
-        n_nodes = G.number_of_nodes()
-
-        mode = (
-            ("compact" if n_nodes > compact_threshold else "full")
-            if display_mode == "auto"
-            else display_mode
-        )
-
-        if node_size is None:
-            node_size = 80 if mode == "compact" else 800
-
-        # ── Layout ────────────────────────────────────────────────────────────
-        if layout == "auto":
-            layout = "kamada_kawai" if n_nodes <= 8 else "stable_linear"
-
-        if layout == "stable_linear":
-            sorted_nodes = sorted(
-                G.nodes(), key=lambda nd: G.nodes[nd].get("stable_cdist") or 0.0
-            )
-            pos = {nd: (float(i), 0.0) for i, nd in enumerate(sorted_nodes)}
-        elif layout == "unstable_linear":
-            sorted_nodes = sorted(
-                G.nodes(), key=lambda nd: G.nodes[nd].get("unstable_cdist") or 0.0
-            )
-            pos = {nd: (float(i), 0.0) for i, nd in enumerate(sorted_nodes)}
-        elif layout == "cdist":
-            pos = {
-                node: (
-                    G.nodes[node].get("unstable_cdist") or 0.0,
-                    G.nodes[node].get("stable_cdist") or 0.0,
-                )
-                for node in G.nodes()
-            }
-        elif layout == "spring":
-            pos = nx.spring_layout(G, k=1, iterations=50, seed=42)
-        elif layout == "circular":
-            pos = nx.circular_layout(G)
-        elif layout == "kamada_kawai":
-            pos = nx.kamada_kawai_layout(G)
-        elif layout == "spectral":
-            pos = nx.spectral_layout(G)
-        else:
-            pos = nx.spring_layout(G, seed=42)
-
-        fig, ax = plt.subplots(figsize=figsize)
-
-        # ── Node colors ───────────────────────────────────────────────────────
-        cmap_obj = None
-        norm_obj = None
-        if node_color_by == "unstable_cdist":
-            values = [G.nodes[nd].get("unstable_cdist") or 0.0 for nd in G.nodes()]
-            cmap_obj = cm.viridis
-            norm_obj = mcolors.Normalize(vmin=min(values), vmax=max(values))
-            node_colors = [cmap_obj(norm_obj(v)) for v in values]
-        elif node_color_by == "stable_cdist":
-            values = [G.nodes[nd].get("stable_cdist") or 0.0 for nd in G.nodes()]
-            cmap_obj = cm.plasma
-            norm_obj = mcolors.Normalize(vmin=min(values), vmax=max(values))
-            node_colors = [cmap_obj(norm_obj(v)) for v in values]
-        elif node_color_by == "fixed_point":
-            fps = list(
-                dict.fromkeys(
-                    G.nodes[nd].get("manifold_a_key", (None,))[0] for nd in G.nodes()
-                )
-            )
-            fp_idx = {fp: i for i, fp in enumerate(fps)}
-            fp_cmap = cm.get_cmap("Set1", max(len(fps), 1))
-            node_colors = [
-                fp_cmap(fp_idx.get(G.nodes[nd].get("manifold_a_key", (None,))[0], 0))
-                for nd in G.nodes()
-            ]
-        else:
-            node_colors = ["white"] * n_nodes
-
-        # ── Draw nodes ────────────────────────────────────────────────────────
-        nx.draw_networkx_nodes(
+        return graphviz.visualize_intersection_graph(
             G,
-            pos,
-            node_color=node_colors,
-            edgecolors="black",
-            linewidths=1.5 if mode == "compact" else 2.0,
+            layout=layout,
+            figsize=figsize,
+            display_mode=display_mode,
+            compact_threshold=compact_threshold,
             node_size=node_size,
-            ax=ax,
+            label_mode=label_mode,
+            node_color_by=node_color_by,
+            show_iterate_edges=show_iterate_edges,
+            save_path=save_path,
         )
-
-        # ── Draw edges via FancyArrowPatch ────────────────────────────────────
-        # Shrink endpoints so arrows touch the node boundary, not the centre.
-        shrink = np.sqrt(node_size / np.pi)
-        alpha = 0.55 if mode == "compact" else 0.80
-        mutation = 10 if mode == "compact" else 18
-        lw_adj = 1.5 if mode == "compact" else 2.0
-        lw_iter = 1.2 if mode == "compact" else 1.8
-
-        _EDGE_STYLE: dict[tuple[str, str], dict] = {
-            ("adjacency", "unstable"): {
-                "color": "#3b82f6",
-                "lw": lw_adj,
-                "base_rad": 0.20,
-                "ls": "solid",
-            },
-            ("adjacency", "stable"): {
-                "color": "#ef4444",
-                "lw": lw_adj,
-                "base_rad": -0.20,
-                "ls": "solid",
-            },
-            ("iterate", "unstable"): {
-                "color": "#a855f7",
-                "lw": lw_iter,
-                "base_rad": 0.38,
-                "ls": "dashed",
-            },
-        }
-        _FALLBACK = _EDGE_STYLE[("adjacency", "unstable")]
-
-        # Track how many edges have been drawn for each (u, v) pair so that
-        # parallel edges get staggered curvature and don't overlap.
-        _pair_count: dict[tuple, int] = {}
-
-        for u, v, _key, data in G.edges(keys=True, data=True):
-            if u == v:
-                continue
-            edge_type = data.get("type", "adjacency")
-            stability = data.get("stability", "unstable")
-
-            if edge_type == "iterate" and not show_iterate_edges:
-                continue
-
-            style = _EDGE_STYLE.get((edge_type, stability), _FALLBACK)
-
-            pair = (u, v)
-            idx = _pair_count.get(pair, 0)
-            _pair_count[pair] = idx + 1
-            rad = style["base_rad"] + idx * 0.15 * np.sign(style["base_rad"] or 1)
-
-            patch = FancyArrowPatch(
-                posA=pos[u],
-                posB=pos[v],
-                connectionstyle=f"arc3,rad={rad}",
-                arrowstyle="-|>",
-                color=style["color"],
-                linewidth=style["lw"],
-                linestyle=style["ls"],
-                alpha=alpha,
-                mutation_scale=mutation,
-                shrinkA=shrink,
-                shrinkB=shrink,
-                transform=ax.transData,
-                zorder=2,
-            )
-            ax.add_patch(patch)
-
-        # ── Labels ────────────────────────────────────────────────────────────
-        if label_mode != "none":
-            labels: dict[int, str] = {}
-            for node in G.nodes():
-                data = G.nodes[node]
-                coords = data.get("coords")
-                u_cd = data.get("unstable_cdist")
-                s_cd = data.get("stable_cdist")
-                parts: list[str] = []
-
-                if label_mode in ("id", "all"):
-                    parts.append(str(node))
-                if label_mode in ("coords", "all") and coords is not None:
-                    parts.append(f"({coords[0]:.2f},{coords[1]:.2f})")
-                if label_mode in ("cdist", "all"):
-                    u_str = f"{u_cd:.2f}" if u_cd is not None else "?"
-                    s_str = f"{s_cd:.2f}" if s_cd is not None else "?"
-                    parts.append(f"u:{u_str}\ns:{s_str}")
-
-                labels[node] = "\n".join(parts) if parts else str(node)
-
-            font_size = 5 if mode == "compact" else 7
-            nx.draw_networkx_labels(
-                G, pos, labels, font_size=font_size, font_weight="bold", ax=ax
-            )
-
-        # ── Colorbar ──────────────────────────────────────────────────────────
-        if cmap_obj is not None and norm_obj is not None:
-            sm = cm.ScalarMappable(cmap=cmap_obj, norm=norm_obj)
-            sm.set_array([])
-            cbar = plt.colorbar(sm, ax=ax, shrink=0.6, pad=0.02)
-            cbar.set_label(
-                "Unstable arc-length"
-                if node_color_by == "unstable_cdist"
-                else "Stable arc-length",
-                fontsize=9,
-            )
-
-        # ── Axis appearance ───────────────────────────────────────────────────
-        _linear_layouts = {"cdist", "stable_linear", "unstable_linear"}
-        if layout in _linear_layouts:
-            ax.set_axis_on()
-            if layout == "stable_linear":
-                ax.set_xlabel("Stable arc-length order", fontsize=10)
-                ax.set_yticks([])
-            elif layout == "unstable_linear":
-                ax.set_xlabel("Unstable arc-length order", fontsize=10)
-                ax.set_yticks([])
-            else:
-                ax.set_xlabel("Unstable arc-length (cdist)", fontsize=10)
-                ax.set_ylabel("Stable arc-length (cdist)", fontsize=10)
-                ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
-            ax.margins(0.15)
-        else:
-            ax.axis("off")
-
-        # ── Legend ────────────────────────────────────────────────────────────
-        legend_handles = [
-            Line2D([0], [0], color="#3b82f6", linewidth=2, label="Unstable adjacency"),
-            Line2D([0], [0], color="#ef4444", linewidth=2, label="Stable adjacency"),
-        ]
-        if show_iterate_edges:
-            legend_handles.append(
-                Line2D(
-                    [0],
-                    [0],
-                    color="#a855f7",
-                    linewidth=1.5,
-                    linestyle="--",
-                    label="Iterate",
-                )
-            )
-        ax.legend(handles=legend_handles, loc="upper right", fontsize=9)
-
-        mode_label = f"{n_nodes} nodes · {mode} mode"
-        ax.set_title(
-            f"Intersection Graph  ({mode_label})", fontsize=12, fontweight="bold"
-        )
-
-        plt.tight_layout()
-
-        if save_path:
-            plt.savefig(save_path, dpi=150, bbox_inches="tight")
-
-        plt.show()
-        return fig, ax
 
     def plot_all_bridges(self, bridges: Optional[list[Bridge]] = None) -> None:
         """
@@ -2392,7 +1539,7 @@ class TangleWorkbench:
         for i, bridge in enumerate(bridges):
             bridge.plot(color=palette[i % len(palette)])
 
-    def trim_stable_manifolds(self, fixed_point: FixedPoint):
+    def trim_stable_manifolds(self, fixed_point: FixedPoint) -> None:
         """
         Trims the stable manifolds attached to the fixed point
         to just after the last intersection point.
@@ -2461,7 +1608,40 @@ class TangleWorkbench:
 
             manifold.tail = new_tail
 
-    def _iter_manifolds(self, fp, stability: Stability | None = None) -> Iterable:
+    def _require_manifold(
+        self,
+        fixed_point: FixedPoint,
+        stability: Stability,
+        branch_index: Optional[int] = 0,
+    ) -> BaseManifold:
+        """
+        The manifold a growth driver is about to grow, or a ValueError.
+
+        Args:
+            fixed_point (FixedPoint): The manifold's fixed point.
+            stability (Stability): Which manifold.
+            branch_index (Optional[int]): Which eigenvector branch; ``None`` is
+                read as branch 0.
+
+        Returns:
+            BaseManifold: The manifold registered under
+            ``(fixed_point, stability, 0, branch_index)``.
+
+        Raises:
+            ValueError: No such manifold has been initialized.
+        """
+        key = (fixed_point, stability, 0, branch_index if branch_index is not None else 0)
+        manifold = self.manifolds.get(key)
+        if manifold is None:
+            raise ValueError(
+                f"Manifold for fixed point {fixed_point} with stability {stability} "
+                f"and branch_index {branch_index} has not been initialized."
+            )
+        return manifold
+
+    def _iter_manifolds(
+        self, fp: FixedPoint, stability: Optional[Stability] = None
+    ) -> Iterable[BaseManifold]:
         """Yield all manifolds for a fixed point (optionally filter by stability)."""
         for (kfp, kstab, _oi, _bi), M in self.manifolds.items():
             if kfp is fp and (stability is None or kstab == stability):

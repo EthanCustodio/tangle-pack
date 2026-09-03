@@ -17,24 +17,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tanglepack import TangleSession
+from tanglepack.examples import (
+    HENON_P3,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    henon_jacobian as _henon_jacobian_factory,
+)
 
 
-def henon_map(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
-
-
-def henon_jacobian(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
+henon_map = _henon_map_factory(*HENON_P3)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_P3)
+henon_jacobian = _henon_jacobian_factory(*HENON_P3)
 
 
 # One session ties the numerical engine (workbench) and topology (trellises) together.

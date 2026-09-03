@@ -1,5 +1,20 @@
 # Nested-Tangle Bridge Rendering & Cutting — Diagnosis & Patch
 
+> ## Status (2026-09-02)
+>
+> - **Implemented and still current:** Patch 1 lives on as `TangleWorkbench._COOL_BRIDGE_PALETTE`,
+>   cycled by `index % len(palette)` in `plot_all_bridges` (cool hues only, so no bridge is
+>   confused with the red stable manifold). Patch 3 is `iterate_bridge` wrapping a
+>   crossing-free image as a `Bridge` flagged `Bridge.partial`.
+> - **Superseded:** Patch 2's endpoint capture was absorbed into a rewritten
+>   `Tangle.create_bridges(crossings, for_manifold=, fixed_point=, cdist_tol=)`, which takes the
+>   crossings as an *input* and groups them by parent unstable manifold OBJECT
+>   (`Intersection.unstable_manifold`); `cdist_tol` is what now rejects a degenerate pair.
+> - **Abandoned:** the `_boundary_point` synthetic bracketing helper is gone. A crossing carries
+>   the two real nodes that bracket it (`Intersection.unstable_segment`), captured at resolve time,
+>   so a cut splices a separator between existing points instead of manufacturing endpoints.
+
+
 Follow-up to `nested_tangle_intersection_fix_plan.md` (which fixed intersection *detection*).
 This addresses the report that bridges in the nested run looked wrong — **"one color crosses
 multiple intersections"** — while the single-tangle script looked fine.

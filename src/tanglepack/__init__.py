@@ -13,6 +13,8 @@ The most-used names from every layer are re-exported here, so ``tanglepack.X``
 keeps working regardless of which subpackage ``X`` now lives in.
 """
 
+from __future__ import annotations
+
 from . import numerics, topology, loom
 
 from .numerics import (
@@ -56,3 +58,46 @@ from .loom import (
     define_resonance_zone,
     trim_stable_at_intersection,
 )
+
+__all__ = [
+    # subpackages
+    "numerics",
+    "topology",
+    "loom",
+    # numerics
+    "DynamicalSystem",
+    "BasePoint",
+    "Point",
+    "BranchPoint",
+    "FixedPointSolver",
+    "FixedPoint",
+    "BaseManifold",
+    "ManifoldView",
+    "ManifoldMachine",
+    "ManifoldInitializer",
+    "Bridge",
+    "Tangle",
+    "TangleWorkbench",
+    "IterateTable",
+    "IntersectionRegistry",
+    "Intersection",
+    "ManifoldKey",
+    "enable_gpu",
+    "disable_gpu",
+    # topology
+    "Trellis",
+    "TrellisBranch",
+    "Arrangement",
+    "Arc",
+    "Region",
+    "Hole",
+    "PartitionInterval",
+    "PseudoneighborPair",
+    "StablePartitionResult",
+    "StrongPipResult",
+    # loom
+    "TangleSession",
+    "ResonanceZone",
+    "define_resonance_zone",
+    "trim_stable_at_intersection",
+]

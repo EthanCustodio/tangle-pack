@@ -10,6 +10,8 @@ grows manifolds or computes intersections; it only interprets what the numerical
 layer has already produced.
 """
 
+from __future__ import annotations
+
 from .Trellis import Trellis
 from .TrellisBranch import TrellisBranch
 from .Arrangement import Arrangement
@@ -33,6 +35,7 @@ from .Pseudoneighbor import (
     extend_pseudoneighbor_trajectories,
     forward_unstable_branch_cycle,
 )
+from .plotting import plot_stable_partition
 from .StablePartition import (
     bridge_for_pair,
     bridge_row_violation,
@@ -40,7 +43,6 @@ from .StablePartition import (
     check_bridge_rows_consistent,
     check_holes_share_bridge_side,
     partition_stable_manifold,
-    plot_stable_partition,
     propagate_reference_holes,
     punch_holes,
 )

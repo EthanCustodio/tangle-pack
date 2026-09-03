@@ -10,6 +10,8 @@ layer (:mod:`tanglepack.topology`) consumes its output; the cross-layer algorith
 The entry point for programmatic use is :class:`TangleWorkbench`.
 """
 
+from __future__ import annotations
+
 from .DynamicalSystem import DynamicalSystem
 
 from .BasePoint import BasePoint
@@ -26,11 +28,14 @@ from .ManifoldInitializer import ManifoldInitializer
 
 from .Bridge import Bridge
 from .Tangle import Tangle
+from .BridgeIterator import BridgeIterator
+from .IterateInference import IterateInference
 from .TangleWorkbench import TangleWorkbench
+from . import graphviz
 
 from .IterateTable import IterateTable
 from .IntersectionRegistry import IntersectionRegistry
-from .Intersection import Intersection, ManifoldKey
+from .Intersection import Intersection, ManifoldKey, Stability
 
 from .gpu import enable_gpu, disable_gpu
 
@@ -47,11 +52,15 @@ __all__ = [
     "ManifoldInitializer",
     "Bridge",
     "Tangle",
+    "BridgeIterator",
+    "IterateInference",
     "TangleWorkbench",
+    "graphviz",
     "IterateTable",
     "IntersectionRegistry",
     "Intersection",
     "ManifoldKey",
+    "Stability",
     "enable_gpu",
     "disable_gpu",
 ]

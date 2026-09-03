@@ -1,5 +1,22 @@
 # Nested-Tangle Intersection Bug — Root Cause & Fix Plan
 
+> ## Status (2026-09-02)
+>
+> - **Fix A implemented:** `TangleWorkbench.compute_intersections(fixed_points, *, reset=,
+>   infer_iterates=, preserve_ids=)` co-indexes every manifold of every supplied fixed point, so
+>   homoclinic and heteroclinic crossings are detected together. `index_manifolds` was deleted in
+>   favour of the single bulk `Tangle.add_manifolds` load.
+> - **Fix B implemented:** crossings are stored per PAIR
+>   (`_intersecting_segments: set[frozenset[int]]`) and resolved by `resolve_crossings()` /
+>   `_resolve_crossing_pair`, which interpolates the cdist at the true crossing point
+>   (`_cdist_at_point`) instead of using a per-segment midpoint. The per-segment lookup dicts are
+>   gone; same-stability pairs are discarded as artifacts per CLAUDE.md's fundamental invariant.
+> - **Fix C implemented:** `Tangle.create_bridges` cuts per crossing, takes the crossings as an
+>   input, and filters by `fixed_point` / `for_manifold`.
+> - **Beyond the plan:** the resolved crossings live only in `IntersectionRegistry`; the Tangle
+>   keeps no copy, which is what makes a recompute safe to run repeatedly.
+
+
 Debugging target: `scripts/henon_period_3_new_intersection_structures.py`
 (k=2, b=1 Hénon map; inner period-3 fixed point `fp3` nested inside outer period-1 `fp1`.)
 

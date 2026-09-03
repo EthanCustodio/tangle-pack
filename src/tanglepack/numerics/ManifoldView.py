@@ -1,3 +1,13 @@
+"""
+Binds a manifold to a dynamical system without either owning the other.
+
+:class:`ManifoldView` is a transient bundle of references that resolves
+"forward" and "backward" to the right map for the manifold's stability, so the
+numerical code can be written once for both stabilities.
+"""
+
+from __future__ import annotations
+
 from .BaseManifold import BaseManifold
 from .DynamicalSystem import DynamicalSystem
 
@@ -8,7 +18,14 @@ class ManifoldView:
     owning the other.  Pure references, no new state.
     """
 
-    def __init__(self, manifold: BaseManifold, system: DynamicalSystem):
+    def __init__(self, manifold: BaseManifold, system: DynamicalSystem) -> None:
+        """
+        Bind one manifold to one system.
+
+        Args:
+            manifold (BaseManifold): The curve being read or grown.
+            system (DynamicalSystem): The system whose map drives it.
+        """
 
         self.manifold = manifold
         self.system = system

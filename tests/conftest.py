@@ -12,42 +12,37 @@ import numpy as np
 import pytest
 
 from tanglepack import TangleWorkbench, TangleSession
+from tanglepack.examples import (
+    HENON_K10,
+    HENON_P3,
+    henon_jacobian as _henon_jacobian_factory,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    saddle_guesses,
+)
 
 
 # --------------------------------------------------------------------------- #
 # Maps
 # --------------------------------------------------------------------------- #
-def _henon_map(point):
-    # Batch-capable (coordinate on axis 0): a single (2,) point or a (2, N) batch.
-    k, b = 10, 1
-    x, y = point
-    return np.stack([y - k + x**2, -b * x], axis=0)
+# Batch-capable (coordinate on axis 0): a single (2,) point or a (2, N) batch.
+_henon_map = _henon_map_factory(*HENON_K10)
+_henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
+_henon_jacobian = _henon_jacobian_factory(*HENON_K10)
 
 
-def _henon_map_inverse(point):
-    k, b = 10, 1
-    x, y = point
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
-
-
-def _henon_jacobian(point):
-    k, b = 10, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
-
-
-@pytest.fixture
-def henon_map():
+@pytest.fixture(name="henon_map")
+def _k10_map_fixture():
     return _henon_map
 
 
-@pytest.fixture
-def henon_map_inverse():
+@pytest.fixture(name="henon_map_inverse")
+def _k10_map_inverse_fixture():
     return _henon_map_inverse
 
 
-@pytest.fixture
-def henon_jacobian():
+@pytest.fixture(name="henon_jacobian")
+def _k10_jacobian_fixture():
     return _henon_jacobian
 
 
@@ -63,7 +58,7 @@ def workbench(henon_map, henon_map_inverse):
 @pytest.fixture
 def fixed_point(workbench):
     """Return ``(workbench, fp)`` with the saddle constructed and oriented."""
-    fp = workbench.construct_fixed_point([4, -4])
+    fp = workbench.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
     workbench.orient_eigenvectors(
         fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
     )
@@ -146,7 +141,7 @@ def henon_tangle_with_bridges(grown_both):
 # Eigenvector orientation is not applicable here: ``orient_eigenvectors`` is a
 # documented no-op on an inversion point, because the second branch is the image
 # of the first and so its direction is fixed by the map, not by the caller.
-_INVERSION_GUESS = [-2.3166, 2.3166]
+_INVERSION_GUESS = saddle_guesses(*HENON_K10)["inversion"]
 
 
 def _build_inversion_workbench() -> tuple[TangleWorkbench, object]:
@@ -186,22 +181,9 @@ def henon_inversion():
 # --------------------------------------------------------------------------- #
 # Heavy nested period-3 session (for the blast regression test)
 # --------------------------------------------------------------------------- #
-def _p3_map(point):
-    k, b = 2, 1
-    x, y = point
-    return np.stack([y - k + x**2, -b * x], axis=0)
-
-
-def _p3_map_inverse(point):
-    k, b = 2, 1
-    x, y = point
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
-
-
-def _p3_jacobian(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
+_p3_map = _henon_map_factory(*HENON_P3)
+_p3_map_inverse = _henon_map_inverse_factory(*HENON_P3)
+_p3_jacobian = _henon_jacobian_factory(*HENON_P3)
 
 
 @pytest.fixture
@@ -215,7 +197,7 @@ def henon_p3_session():
     session = TangleSession(_p3_map, _p3_map_inverse, _p3_jacobian)
 
     session.workbench._man_machine.area_cutoff = 1e-7
-    fp3 = session.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
+    fp3 = session.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
     session.orient_eigenvectors(
         fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
     )
@@ -224,7 +206,7 @@ def henon_p3_session():
     session.grow_n_times(fp3, "stable", num_iterations=9)
 
     session.workbench._man_machine.area_cutoff = 1e-4
-    fp1 = session.construct_fixed_point([4, -4])
+    fp1 = session.construct_fixed_point(saddle_guesses(*HENON_P3)["saddle"])
     session.orient_eigenvectors(
         fp1, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
     )

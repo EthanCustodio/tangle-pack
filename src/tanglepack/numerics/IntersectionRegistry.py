@@ -1,14 +1,23 @@
+"""
+The master store of crossings and their iterate table.
+
+:class:`IntersectionRegistry` assigns every crossing a contiguous integer id,
+dedupes on (unstable cdist, stable cdist, unstable branch, stable branch), and
+keeps the ordered per-branch views plus the
+:class:`~.IterateTable.IterateTable` that maps an id to its iterates.
+"""
+
 from __future__ import annotations
 
 import bisect
 import logging
-from typing import Callable, Iterable, Literal, Optional, TYPE_CHECKING
+from typing import Callable, Iterable, Iterator, Optional, TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
-from .Intersection import Intersection, ManifoldKey
+from .Intersection import Intersection, ManifoldKey, Stability
 from .IterateTable import IterateTable
 
 if TYPE_CHECKING:
@@ -73,7 +82,14 @@ class IntersectionRegistry:
         or a renumbering.
     """
 
-    def __init__(self, cdist_tol: float = 1e-6):
+    def __init__(self, cdist_tol: float = 1e-6) -> None:
+        """
+        Build an empty registry.
+
+        Args:
+            cdist_tol (float): Canonical-distance tolerance used to decide that
+                an incoming crossing duplicates one already stored.
+        """
         self._store: dict[int, Intersection] = {}
         self._next_id: int = 0
         self.cdist_tol = cdist_tol
@@ -323,7 +339,7 @@ class IntersectionRegistry:
     def __contains__(self, id: int) -> bool:
         return id in self._store
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[tuple[int, Intersection]]:
         """Iterate over all (id, Intersection) pairs in insertion order."""
         return iter(self._store.items())
 
@@ -470,7 +486,7 @@ class IntersectionRegistry:
         self._graph_adjacency_dirty = False
 
     def _consecutive_on_branch(
-        self, stability: Literal["unstable", "stable"]
+        self, stability: Stability
     ) -> list[tuple[int, int]]:
         """Neighbouring id pairs within each branch, in that branch's cdist order."""
         order = (
@@ -492,7 +508,7 @@ class IntersectionRegistry:
 
     # ── iterate table ──────────────────────────────────────────────────────
 
-    def register_iterate(self, source_id: int, n: int, target_id: int):
+    def register_iterate(self, source_id: int, n: int, target_id: int) -> None:
         """
         Record f^n(source) = target.
 
@@ -578,7 +594,7 @@ class IntersectionRegistry:
         self,
         lo: float,
         hi: float,
-        stability: Literal["unstable", "stable"] = "unstable",
+        stability: Stability = "unstable",
         fixed_point: Optional[FixedPoint] = None,
         branch_index: Optional[int] = None,
     ) -> list[Intersection]:
@@ -635,7 +651,7 @@ class IntersectionRegistry:
         self,
         lo: float,
         hi: float,
-        stability: Literal["unstable", "stable"] = "unstable",
+        stability: Stability = "unstable",
     ) -> list[Intersection]:
         """
         Return all intersections whose CURRENT cdist on `stability` is in [lo, hi].
@@ -657,7 +673,7 @@ class IntersectionRegistry:
     def from_fixed_point(
         self,
         fp: FixedPoint,
-        stability: Optional[Literal["unstable", "stable"]] = None,
+        stability: Optional[Stability] = None,
     ) -> list[Intersection]:
         """
         Return all intersections that involve the given fixed point.
@@ -688,7 +704,7 @@ class IntersectionRegistry:
     def from_branch(
         self,
         branch_index: int,
-        stability: Optional[Literal["unstable", "stable"]] = None,
+        stability: Optional[Stability] = None,
     ) -> list[Intersection]:
         """
         Return all intersections on the given branch.
@@ -774,7 +790,7 @@ class IntersectionRegistry:
     def _get_lambda_u(
         self,
         intersection: Intersection,
-        stability: Literal["unstable", "stable"] = "unstable",
+        stability: Stability = "unstable",
     ) -> Optional[float]:
         """
         Read the unstable eigenvalue magnitude from the intersection's manifold keys.
@@ -908,12 +924,12 @@ class IntersectionRegistry:
             self._stable_branch_version = self._orders_version
         return self._stable_branch_index
 
-    def _insert_into_unstable_order(self, id: int, unstable_cdist: float):
+    def _insert_into_unstable_order(self, id: int, unstable_cdist: float) -> None:
         pos = bisect.bisect_left(self._unstable_keys, unstable_cdist)
         self._unstable_order.insert(pos, id)
         self._unstable_keys.insert(pos, unstable_cdist)
 
-    def _insert_into_stable_order(self, id: int, stable_cdist: float):
+    def _insert_into_stable_order(self, id: int, stable_cdist: float) -> None:
         pos = bisect.bisect_left(self._stable_keys, stable_cdist)
         self._stable_order.insert(pos, id)
         self._stable_keys.insert(pos, stable_cdist)

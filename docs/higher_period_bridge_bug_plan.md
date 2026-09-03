@@ -1,5 +1,21 @@
 # Higher-Period Bridge Iteration Bug — Root Cause & Fix Plan
 
+> ## Status (2026-09-02)
+>
+> - **Fixed, by a different mechanism than Fix 1:** bridges never span two orbit branches because
+>   `Tangle.create_bridges` groups crossings by their parent unstable manifold OBJECT
+>   (`Intersection.unstable_manifold`) before sorting by unstable cdist — orbit-awareness falls out
+>   of the grouping rather than being re-derived from segments.
+> - **Abandoned (Fix 2):** boundary points are no longer synthesised, so there is nothing to cache
+>   pre-iterates on; `Intersection.unstable_segment` holds the two real bracketing nodes.
+> - **Superseded (Fix 4):** `index_manifolds` was deleted. `TangleWorkbench.compute_intersections`
+>   takes one fixed point or many, gathers every manifold of each, and hands them to
+>   `Tangle.add_manifolds` as a single bulk rtree load — homoclinic and heteroclinic crossings are
+>   found in one pass.
+> - **Implemented:** Fixes 3, 5 and 6 (the missing-preiterate guard, manifold-key propagation
+>   through `iterate_bridge`, and the dangling-tail iterate in `ManifoldMachine.new_grow_manifold`).
+
+
 ## The crash
 
 ```

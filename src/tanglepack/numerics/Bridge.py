@@ -1,9 +1,18 @@
+"""
+The arc of unstable manifold between two consecutive crossings.
+
+A :class:`Bridge` is a :class:`~.BaseManifold.BaseManifold` cut out of one
+unstable branch, carrying the identity of the cut with it: the branch it lives
+on and the registry ids of the two crossings that bound it (its
+:data:`BridgeId`).
+"""
+
 from __future__ import annotations
-from typing import Optional, Literal
+from typing import Optional
 
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
-from .Intersection import ManifoldKey
+from .Intersection import ManifoldKey, Stability
 from .Point import Point
 
 #: Topological identity of a bridge: the registry ids of the two crossings it
@@ -56,17 +65,17 @@ class Bridge(BaseManifold):
     def __init__(
         self,
         root: Point,
-        stability: Literal["stable", "unstable"],
+        stability: Stability,
         stretch_param: float,
         fixed_point: FixedPoint,
         tail: Point,
-        name="unnamed",
+        name: str = "unnamed",
         branch_index: Optional[int] = None,
         *,
         manifold_key: Optional[ManifoldKey],
         first_intersection: Optional[int] = None,
         second_intersection: Optional[int] = None,
-    ):
+    ) -> None:
         """
 
         Note:
@@ -79,7 +88,7 @@ class Bridge(BaseManifold):
 
         Args:
             root (Point): The root of the bridge.
-            stability (Literal["stable", "unstable"]): Stability of the parent curve.
+            stability (Stability): Stability of the parent curve.
             stretch_param (float): The parent's stretch parameter.
             fixed_point (FixedPoint): The fixed point the parent emanates from.
             tail (Point): The tail of the bridge.
@@ -138,7 +147,7 @@ class Bridge(BaseManifold):
         """
         return self.first_intersection is None or self.second_intersection is None
 
-    def _check_input_types(self, root: Point, tail: Point):
+    def _check_input_types(self, root: Point, tail: Point) -> None:
         """
         Checks that the tail used to construct the bridge is a Point object
         rather than a BranchPoint.

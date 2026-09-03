@@ -1,3 +1,28 @@
+"""
+The result schema of the topological layer.
+
+Every dataclass the topological algorithms hand back --
+:class:`PseudoneighborPair`, :class:`Hole`, :class:`PartitionInterval`,
+:class:`Arc` and friends -- plus the :data:`Side` / :data:`Endpoint` labels
+they are annotated with, so that the algorithms, :class:`~.Trellis.Trellis`
+and the session facade all name the same things.
+
+Dev Notes:
+
+These dataclasses are pure *result containers*. They hold the output of the
+topological algorithms (Compute-Pseudoneighbors, Is-Strong-Pip, ...) so that a
+single Trellis object can carry both the input trellis and every derived
+classification. No algorithm logic lives here — only the schema of what the
+algorithms produce.
+
+Intersections are referenced by their integer registry ID rather than by object
+so that a result survives a registry rebuild and is cheap to serialise.
+
+Open question: a Hole is currently a single phase-space coordinate. We may
+eventually want a Hole to also reference the bounding bridge(s) or the
+enclosed region directly, rather than just via ``bounding_ids``.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -51,23 +76,6 @@ def endpoint_index(endpoint: Endpoint) -> int:
     if endpoint == "second":
         return 1
     raise ValueError(f"endpoint must be 'first' or 'second', got {endpoint!r}")
-
-"""
-Dev Notes:
-
-These dataclasses are pure *result containers*. They hold the output of the
-topological algorithms (Compute-Pseudoneighbors, Is-Strong-Pip, ...) so that a
-single Trellis object can carry both the input trellis and every derived
-classification. No algorithm logic lives here — only the schema of what the
-algorithms produce.
-
-Intersections are referenced by their integer registry ID rather than by object
-so that a result survives a registry rebuild and is cheap to serialise.
-
-Open question: a Hole is currently a single phase-space coordinate. We may
-eventually want a Hole to also reference the bounding bridge(s) or the
-enclosed region directly, rather than just via ``bounding_ids``.
-"""
 
 
 @dataclass

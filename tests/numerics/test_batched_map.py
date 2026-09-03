@@ -13,21 +13,17 @@ import numpy as np
 
 import tanglepack
 from tanglepack import DynamicalSystem, ManifoldView
+from tanglepack.examples import (
+    HENON_K10,
+    henon_jacobian,
+    henon_map,
+    henon_map_inverse,
+    saddle_guesses,
+)
 
-
-def _batch_map(point):
-    x, y = point
-    return np.stack([y - 10 + x**2, -x], axis=0)
-
-
-def _batch_imap(point):
-    x, y = point
-    return np.stack([-y, x + 10 - y**2], axis=0)
-
-
-def _jac(point):
-    x, y = point
-    return np.array([[2 * x, 1], [-1, 0]])
+_batch_map = henon_map(*HENON_K10)
+_batch_imap = henon_map_inverse(*HENON_K10)
+_jac = henon_jacobian(*HENON_K10)
 
 
 def _scalar_only(fn):
@@ -67,7 +63,7 @@ def test_scalar_only_map_falls_back():
 
 def _grow(m, im):
     wb = tanglepack.TangleWorkbench(m, im, _jac)
-    fp = wb.construct_fixed_point([4, -4])
+    fp = wb.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
     wb.orient_eigenvectors(
         fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
     )

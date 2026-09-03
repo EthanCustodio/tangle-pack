@@ -6,24 +6,22 @@ import numpy as np
 import pytest
 
 from tanglepack import DynamicalSystem, FixedPointSolver
+from tanglepack.examples import (
+    HENON_K10,
+    HENON_P3,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    saddle_guesses,
+)
 
-
-def henon_map(point):
-    k, b = 10, 1
-    x, y = point[0], point[1]
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    k, b = 10, 1
-    x, y = point[0], point[1]
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+henon_map = _henon_map_factory(*HENON_K10)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 def test_located_fixed_point_is_actually_fixed():
     system = DynamicalSystem(henon_map, henon_map_inverse)
     solver = FixedPointSolver(system)
-    fp = solver.construct_fixed_point([4, -4])
+    fp = solver.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
 
     coord = np.asarray(fp.coordinates[0], dtype=float).ravel()[:2]
     image = np.asarray(henon_map(coord), dtype=float).ravel()[:2]
@@ -36,7 +34,7 @@ def test_eigenvalues_are_saddle_like():
     """An area-preserving saddle has eigenvalues lambda and 1/lambda."""
     system = DynamicalSystem(henon_map, henon_map_inverse)
     solver = FixedPointSolver(system)
-    fp = solver.construct_fixed_point([4, -4])
+    fp = solver.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
 
     u = float(np.abs(np.asarray(fp.unstable_eigenvalues, dtype=float).ravel()[0]))
     s = float(np.abs(np.asarray(fp.stable_eigenvalues, dtype=float).ravel()[0]))
@@ -108,7 +106,8 @@ def test_non_saddle_fixed_point_raises():
 def test_orient_hook_is_honoured():
     """The optional orient hook may re-sign the eigenvectors it is handed."""
     system = DynamicalSystem(henon_map, henon_map_inverse)
-    baseline = FixedPointSolver(system).construct_fixed_point([4, -4])
+    guess = saddle_guesses(*HENON_K10)["saddle"]
+    baseline = FixedPointSolver(system).construct_fixed_point(guess)
 
     seen: list[int] = []
 
@@ -117,7 +116,7 @@ def test_orient_hook_is_honoured():
         return -unstable, stable
 
     oriented = FixedPointSolver(system, orient=flip_unstable).construct_fixed_point(
-        [4, -4]
+        guess
     )
 
     assert seen == [0]
@@ -130,16 +129,11 @@ def test_orient_hook_is_honoured():
 def test_period_three_orbit_at_k_two_is_accepted():
     """The exact k=2 period-3 orbit (residual 0) must converge and be a saddle."""
 
-    def henon_k2(point):
-        x, y = point[0], point[1]
-        return np.array([y - 2 + x**2, -x])
-
-    def henon_k2_inverse(point):
-        x, y = point[0], point[1]
-        return np.array([-y, x + 2 - y**2])
+    henon_k2 = _henon_map_factory(*HENON_P3)
+    henon_k2_inverse = _henon_map_inverse_factory(*HENON_P3)
 
     solver = FixedPointSolver(DynamicalSystem(henon_k2, henon_k2_inverse))
-    fp = solver.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
+    fp = solver.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
 
     for i in range(3):
         u = float(np.abs(np.asarray(fp.unstable_eigenvalues[i], dtype=float).ravel()[0]))

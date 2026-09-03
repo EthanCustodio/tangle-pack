@@ -1,21 +1,9 @@
-from __future__ import annotations
-
-import logging
-import math
-from typing import Iterable, Optional, TYPE_CHECKING
-
-from ..numerics.Intersection import ManifoldKey
-from .TopologyResults import PseudoneighborPair
-
-if TYPE_CHECKING:
-    from .Trellis import Trellis
-    from .TrellisBranch import TrellisBranch
-    from ..numerics.FixedPoint import FixedPoint
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
-
 """
+Compute-Pseudoneighbors: the pseudoneighbor pairs of a trellis.
+
+Finds the reference pseudoneighbor pairs on a fixed point's reference window
+and extends them to their full trajectories under the map.
+
 Dev Notes — Compute-Pseudoneighbors (Pseudoneighbor_Algorithm.pdf)
 
 Two intersections x, x' are a pseudoneighbor pair iff the open stable interval
@@ -93,6 +81,23 @@ Implementation notes:
   residues — this can reject a true pair; revisit if iterated-bridge points
   ever carry their unstable key.
 """
+
+from __future__ import annotations
+
+import logging
+import math
+from typing import Iterable, Optional, TYPE_CHECKING
+
+from ..numerics.Intersection import ManifoldKey
+from .TopologyResults import PseudoneighborPair
+
+if TYPE_CHECKING:
+    from .Trellis import Trellis
+    from .TrellisBranch import TrellisBranch
+    from ..numerics.FixedPoint import FixedPoint
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def forward_unstable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey]:

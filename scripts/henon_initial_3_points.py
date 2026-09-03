@@ -1,28 +1,14 @@
 import tanglepack
-import numpy as np
+from tanglepack.examples import (
+    HENON_K10,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+)
 import matplotlib.pyplot as plt
 
 
-def henon_map(point):
-    """defines the henon map for binary horshoe parameters to test basic functionality"""
-
-    k, b = (10, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([y - k + x ** 2, -b * x])
-
-
-def henon_map_inverse(point):
-    """defines the inverse henon map for"""
-
-    k, b = (10, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.array([-y / b, x + k - (y ** 2) / (b ** 2)])
+henon_map = _henon_map_factory(*HENON_K10)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 henon = tanglepack.DynamicalSystem(henon_map, henon_map_inverse)
@@ -44,10 +30,4 @@ print(f'Initial 3 Points: {initial_points}')
 
 
 initial_segment.plot(marker='o', ms=10)
-
-
-# plt.figure()
-# plt.scatter(*fixed_point.coordinates[0], c='k', s=1)
-# plt.scatter(initial_points[:, 0], initial_points[:, 1], c='g', s=1)
-# plt.show()
 

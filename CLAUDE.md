@@ -47,53 +47,63 @@ python scripts/tangle_workbench_test.py
 
 ## Core Library Architecture (`src/tanglepack/`)
 
-The entry point for all programmatic use is `TangleWorkbench`. It wires together the other components and exposes a high-level API:
+Three subpackages plus examples. **Dependency rule: `numerics` and `topology` never import `loom`** (loom sits on top and weaves the other two together).
+
+- `numerics/` — the numerical engine: maps, fixed points, manifold growth, crossing detection, bridges, the intersection registry.
+- `topology/` — combinatorial structures over the registry: the `Trellis` snapshot, strong pips, pseudoneighbors, holes, the stable partition, and the planar `Arrangement` of regions.
+- `loom/` — cross-layer algorithms that read topology and act on numerics: `TangleSession`, resonance zones, blasting.
+- `examples/henon.py` — the one Hénon map definition (`henon_map(k, b)`, `henon_map_inverse`, `henon_jacobian`, `saddle_guesses`) used by tests and scripts (the notebooks still carry their own copies; see the plan's Deferred list).
+
+The entry point for programmatic use is `TangleSession` (a facade over one `TangleWorkbench`, caching one `Trellis` per fixed-point selection and delegating unknown attributes to the workbench):
 
 ```python
-import tanglepack, numpy as np
+import numpy as np, tanglepack
+from tanglepack.examples.henon import henon_map, henon_map_inverse, henon_jacobian, saddle_guesses
 
-wb = tanglepack.TangleWorkbench(my_map, my_map_inverse)
-fp = wb.construct_fixed_point([4, -4])
-wb.orient_eigenvectors(fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])})
-wb.initialize_both_manifolds(fp)
-wb.grow_n_times(fp, "unstable", num_iterations=8)
-wb.grow_until_turnaround(fp, "stable")
-intersections = wb.compute_intersections(fp)
-bridges = wb.create_bridges(fp)
-graph = wb.build_intersection_graph(fp)
+session = tanglepack.TangleSession(henon_map(10), henon_map_inverse(10), henon_jacobian(10))
+fp = session.construct_fixed_point(saddle_guesses(10, 1)["saddle"])
+session.orient_eigenvectors(fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])})
+session.initialize_both_manifolds(fp)
+session.grow_n_times(fp, "unstable", num_iterations=8)
+session.grow_until_turnaround(fp, "stable")
+session.compute_intersections([fp])          # registers anchors + crossings, infers iterates
+session.trim_stable_manifolds(fp)
+session.create_bridges(fp)                   # bridges keyed by BridgeId
+T = session.trellis(fp)                      # cached by generation
+T.classify_strong_pips(); T.compute_pseudoneighbors(); T.punch_holes(); T.partition_stable_manifold()
+A = session.arrangement()                    # faces -> Region objects
 ```
 
-**Data model — how a manifold is stored:**
+**Data model — how a manifold is stored.** Points form two simultaneous doubly-linked lists inside `Point`: the *geometric* list (`forward`/`backward`, order along the curve) and the *iterate* list (`next_iterate`/`prev_iterate`, which point maps to which). `BranchPoint` is the root anchored at the periodic point. `BaseManifold` holds `root`/`tail` (setters bump `version`) and one `_collect` walker behind every getter; bridges memoise their point arrays (read-only).
 
-Points form two simultaneous doubly-linked lists inside `Point`:
-1. **Geometric list** (`forward`/`backward`): ordering along the manifold curve.
-2. **Iterate list** (`next_iterate`/`prev_iterate`): which point maps to which under the dynamical map.
+**Manifold key.** `ManifoldKey = (FixedPoint, Stability, orbit_index, branch_index)`. Every `BaseManifold` and `Bridge` carries its key (required at construction); `workbench.register_manifold(key, manifold)` asserts they agree. `FixedPoint.advance_key(key, n)` is the ONE rule for what n map steps do to a key (orbit index advances; the branch flips only when the orbit index wraps and the point has inversion). `FixedPoint.num_branches` is 2 iff inversion (`k_value == 2 * period`); `per_step_beta(stability)` is the per-map-step canonical-distance factor `|λ|^(1/period)` (a branch return is `k_value` steps and costs `λ^num_branches`); `branch_cycle(stability)` lists the `k_value` keys in forward-map order.
 
-`BranchPoint` is the root of a manifold (anchored to the fixed point). `BaseManifold` holds a `root` and `tail` pointer into the geometric list and exposes walk/plot helpers. `Bridge(BaseManifold)` is a truncated segment of the unstable manifold between two intersection points.
+**Key classes and modules**
 
-**Key classes and their roles:**
+| Layer | Name | File | Role |
+|---|---|---|---|
+| numerics | `DynamicalSystem` | `DynamicalSystem.py` | Wraps `map`, `map_inv`, optional `jacobian` (axis-0 batches) |
+| numerics | `FixedPoint`, `FixedPointSolver` | `FixedPoint.py`, `FixedPointSolver.py` | Periodic orbit, eigendata, `k_value`, `advance_key`, `per_step_beta`, `branch_cycle`; Newton/fsolve locator with saddle validation and an `orient` hook |
+| numerics | `ManifoldInitializer`, `ManifoldMachine` | same names | Fundamental segments ("Kevin way", chain-walked with `advance_key`); growth by one map step with refinement |
+| numerics | `BaseManifold`, `Bridge` | `BaseManifold.py`, `Bridge.py` | Linked-list manifold; `Bridge` = unstable arc between two consecutive crossings, `Bridge.id: BridgeId = (first_id, second_id)` ordered by unstable cdist, `None` when `partial` |
+| numerics | `Intersection`, `IntersectionRegistry`, `IterateTable` | same names | THE single store of crossings (ids, cdists, keys, `crossing_sign`, `unstable_segment`); `generation` counter; sorted cdist arrays; per-branch `graph(bridges=)`; `iterate_table[id, n]` |
+| numerics | `Tangle` | `Tangle.py` | R-tree index of segments (index state only); `resolve_crossings()`; `create_bridges(crossings)` cuts at the exact registry crossings |
+| numerics | `TangleWorkbench` | `TangleWorkbench.py` | Orchestrator: fixed points, manifolds, growth (`grow_n_times`, `grow_until_*`, `grow_until(predicate)`), `compute_intersections` (registers one synthetic **anchor** per (unstable branch, stable branch) pair at cdist (0,0)), bridges by id (`bridge`, `bridges_at`), `generation` |
+| numerics | `BridgeIterator`, `IterateInference`, `graphviz` | same names | Bridge forward images and derived genealogy (`image_bridges`/`preimage_bridges`); iterate inference (both cdists compared individually, never the product); networkx/matplotlib views |
+| numerics | `geometry` | `geometry.py` | `arc_polyline`, `oriented_bridge_polyline`, `signed_polygon_area`, `point_in_polygon`, `polyline_midpoint`, `polygon_interior_point` |
+| topology | `Trellis`, `TrellisBranch` | same names | Per-generation snapshot of registry + bridges + per-branch orderings; strong pips, pseudoneighbors, holes, partitions, `element_for`, `image_of_element`, lazy `arrangement` |
+| topology | `StrongPip`, `Pseudoneighbor`, `StablePartition` | same names | The three algorithms (see the PDFs in docs/); `StablePartition` also holds the invariants `check_holes_share_bridge_side` / `check_bridge_rows_consistent` |
+| topology | `Hole`, `PseudoneighborPair`, `PartitionInterval`, `StablePartitionResult`, `Arc`, `Region` | `TopologyResults.py` | Result dataclasses; partition elements carry `element_id`; `Region` = closed minimal face with lazy `area`, `representative_point`, `contains` |
+| topology | `Arrangement` | `Arrangement.py` | Half-edge planar arrangement of all arcs: rotation at each node from `crossing_sign` alone, virtual tails for dangling ends, faces by linear traversal; `regions`, `containing_faces`, `open_faces`, `image_of`/`preimage_of` (area-verified) |
+| topology | `plotting` | `plotting.py` | All topology drawing routines (Trellis `plot_*` delegate here) |
+| loom | `TangleSession` | `TangleSession.py` | Facade: trellis/arrangement caches keyed by `workbench.generation`, resonance zones, fan-outs over fixed points |
+| loom | `ResonanceZone`, `blast_zone` | `ResonanceZone.py`, `Blast.py` | Zone = stable manifold trimmed at a strong pip and its iterates; boundary is a list of `Arc`s; blasting iterates interior bridges |
 
-| Class | File | Role |
-|---|---|---|
-| `DynamicalSystem` | `DynamicalSystem.py` | Wraps `map`, `map_inv`, optional `jacobian` |
-| `FixedPoint` | `FixedPoint.py` | Stores period, eigenstuff, `BranchPoint` list, k-value (doubles for inversion) |
-| `FixedPointSolver` | `FixedPointSolver.py` | Newton's method to locate fixed points |
-| `ManifoldInitializer` | `ManifoldInitializer.py` | Builds the initial short manifold segment from eigendata ("Kevin way") |
-| `ManifoldMachine` | `ManifoldMachine.py` | Grows manifolds by one iteration of the map; inserts new `Point`s geometrically |
-| `BaseManifold` | `BaseManifold.py` | Linked-list manifold with walk/plot methods |
-| `Tangle` | `Tangle.py` | R-tree spatial index over manifold segments; computes intersections via `_Segment` pairs |
-| `Bridge` | `Bridge.py` | Subclass of `BaseManifold` representing one piece of unstable manifold between intersection points |
-| `TangleWorkbench` | `TangleWorkbench.py` | Orchestrates all of the above; manifolds keyed by `(FixedPoint, stability, orbit_index, branch_index)` |
+**Invariants the code asserts (keep them):** cdist non-decreasing along a manifold; every registered crossing is unstable × stable; every bridge is an arc between consecutive crossings on one unstable branch; holes of one origin share `bridge_side` (parity-flipped under an orientation-reversing map); a bridge whose crossings share a stable branch has the same row at both ends; exactly one partition element owns each crossing per side; `image_of(region)` preserves area.
 
-**Manifold key convention:**
+**Generation counter.** `IntersectionRegistry.generation` bumps on every registry mutation; `TangleWorkbench.generation` is a monotone token over its own mutations, the registry generation and every manifold's `version`. A `Trellis` records `_built_generation`; `TangleSession.trellis()` / `arrangement()` rebuild when it differs. There is no manual invalidation (`invalidate_trellises()` is a deprecated no-op).
 
-`TangleWorkbench.manifolds` is a dict keyed by `(FixedPoint, Stability, orbit_index, branch_index)`. `orbit_index` runs over the periodic orbit; `branch_index` is 0 or 1 for fixed points with inversion (negative eigenvalue, `k_value = 2 * period`).
-
-**Intersection detection (`Tangle`):**
-
-The `Tangle` class uses an `rtree` spatial index. Each adjacent pair of `Point`s on a manifold is registered as a `_Segment`. Candidate intersecting segments are found via bounding-box queries, then exact intersection is computed. Results stored in `_intersecting_segments` (set of `(seg_id1, seg_id2)` pairs), `_intersecting_coords`, and `_intersecting_points`. Always call `Tangle.clear_all()` before recomputing to avoid stale references. Per the fundamental invariant above, every legitimate crossing is exactly one unstable + one stable segment; any same-stability pair that slips into `_intersecting_segments` is a numerical artifact and must be filtered before building `Intersection`s.
-
-Indexing is two-tier for speed: `compute_intersections` bulk-loads every segment into the rtree in one stream (`Tangle.add_manifolds`), while `iterate_bridge` registers iterated bridges **query-only** (`add_manifold(..., index_segments=False)`) — a bridge is unstable manifold, so everything it can legitimately cross is stable and already indexed; inserting its segments would only enable detecting bridge×bridge artifacts that get discarded anyway.
+**Intersection detection.** `compute_intersections` bulk-loads all manifold segments into the rtree (`Tangle.add_manifolds`); `iterate_bridge` registers image bridges query-only (a bridge is unstable, so everything it can cross is stable and already indexed). Crossings are resolved once, registered in the registry, then bridges are cut at those exact crossings. Same-stability pairs are discarded as numerical artifacts; near-parallel pairs are logged and discarded. Registry ids survive `compute_intersections(preserve_ids=True)`.
 
 ## Coding Style
 

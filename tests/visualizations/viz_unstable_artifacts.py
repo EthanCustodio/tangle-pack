@@ -24,6 +24,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tanglepack import TangleSession
+from tanglepack.examples import (
+    HENON_P3,
+    henon_jacobian as _henon_jacobian_factory,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+    saddle_guesses,
+)
 
 OUT = "/tmp/viz_unstable_artifacts.png"
 
@@ -45,22 +52,9 @@ _tangle_logger.addHandler(_DiscardCapture())
 _tangle_logger.setLevel(logging.WARNING)
 
 
-def henon_map(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
-
-
-def henon_jacobian(point):
-    k, b = 2, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
+henon_map = _henon_map_factory(*HENON_P3)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_P3)
+henon_jacobian = _henon_jacobian_factory(*HENON_P3)
 
 
 def _segment_crossing(p1, p2, p3, p4):
@@ -102,7 +96,7 @@ def _artifact_points(tangle):
 def main():
     session = TangleSession(henon_map, henon_map_inverse, henon_jacobian)
     session.workbench._man_machine.area_cutoff = 1e-7
-    fp3 = session.construct_fixed_point([[0, 1], [-1, 0], [-1, 1]])
+    fp3 = session.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
     session.orient_eigenvectors(
         fp3, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
     )
@@ -111,7 +105,7 @@ def main():
     session.grow_n_times(fp3, "stable", num_iterations=6)
 
     session.workbench._man_machine.area_cutoff = 1e-4
-    fp1 = session.construct_fixed_point([4, -4])
+    fp1 = session.construct_fixed_point(saddle_guesses(*HENON_P3)["saddle"])
     session.orient_eigenvectors(
         fp1, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
     )

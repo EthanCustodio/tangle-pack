@@ -14,34 +14,28 @@ import numpy as np
 import pytest
 
 from tanglepack import TangleSession
+from tanglepack.examples import (
+    HENON_K10,
+    henon_jacobian,
+    henon_map,
+    henon_map_inverse,
+    saddle_guesses,
+)
 
 
 # --------------------------------------------------------------------------- #
 # fixture: the cheapest session with crossings, bridges and a zone
 # --------------------------------------------------------------------------- #
-def _k10_map(point):
-    k, b = 10, 1
-    x, y = point
-    return np.stack([y - k + x**2, -b * x], axis=0)
-
-
-def _k10_map_inverse(point):
-    k, b = 10, 1
-    x, y = point
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
-
-
-def _k10_jacobian(point):
-    k, b = 10, 1
-    x, y = point
-    return np.array([[2 * x, 1], [-b, 0]])
+_k10_map = henon_map(*HENON_K10)
+_k10_map_inverse = henon_map_inverse(*HENON_K10)
+_k10_jacobian = henon_jacobian(*HENON_K10)
 
 
 @pytest.fixture
 def k10_session():
     """``(session, fp)`` — the k=10 saddle with intersections and bridges built."""
     session = TangleSession(_k10_map, _k10_map_inverse, _k10_jacobian)
-    fp = session.construct_fixed_point([4, -4])
+    fp = session.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
     session.orient_eigenvectors(
         fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
     )

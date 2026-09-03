@@ -1,23 +1,12 @@
-from __future__ import annotations
-
-from typing import Literal, Optional, Tuple
-from collections import deque
-
-import numpy as np
-from .BranchPoint import BranchPoint
-
-ManifoldKey = Tuple["FixedPoint", Literal["unstable", "stable"], int, int]
-
-# A planar saddle has exactly two eigendirections per manifold, so a BranchPoint
-# always carries two branch slots. This is the number of DIRECTIONS available,
-# not the number of pieces the dynamical chain visits (FixedPoint.num_branches).
-_EIGENDIRECTIONS = 2
-
-# Relative slack on |lambda_u * lambda_s| == 1 before a map is treated as
-# something other than area preserving (see FixedPoint.per_step_beta).
-_DET_TOL = 1e-9
-
 """
+A fixed or periodic point: eigendata, branch points and the k-value.
+
+:class:`FixedPoint` is pure data -- the orbit coordinates, the per-orbit-point
+eigenvalues and eigenvectors, the :class:`~.BranchPoint.BranchPoint` anchoring
+each manifold, and the ``k_value`` (the number of iterations that carry a
+branch back onto itself, doubled under inversion). Locating a periodic orbit
+is :mod:`~.FixedPointSolver`'s job, not this module's.
+
 Dev Notes:
 
 Ensure that the shape of the coordinates array is consisntent everywhere
@@ -30,6 +19,26 @@ k times so we don't need to be able to walk in both eigendirections likely.
 
 Specify why we store the partial_jacobians. What are they used for?
 """
+
+from __future__ import annotations
+
+from typing import Optional, Tuple
+from collections import deque
+
+import numpy as np
+from .BranchPoint import BranchPoint
+from .Intersection import Stability
+
+ManifoldKey = Tuple["FixedPoint", Stability, int, int]
+
+# A planar saddle has exactly two eigendirections per manifold, so a BranchPoint
+# always carries two branch slots. This is the number of DIRECTIONS available,
+# not the number of pieces the dynamical chain visits (FixedPoint.num_branches).
+_EIGENDIRECTIONS = 2
+
+# Relative slack on |lambda_u * lambda_s| == 1 before a map is treated as
+# something other than area preserving (see FixedPoint.per_step_beta).
+_DET_TOL = 1e-9
 
 
 class FixedPoint:
@@ -195,7 +204,7 @@ class FixedPoint:
         self._branch_cycle_cache.clear()
         self._branch_position_cache.clear()
 
-    def per_step_beta(self, stability: Literal["unstable", "stable"]) -> float:
+    def per_step_beta(self, stability: Stability) -> float:
         """
         The canonical-distance factor of ONE application of the map.
 
@@ -298,7 +307,7 @@ class FixedPoint:
         return k_step_factor ** (1 / self.k_value)
 
     def branch_cycle(
-        self, stability: Literal["unstable", "stable"]
+        self, stability: Stability
     ) -> list[ManifoldKey]:
         """
         The ``k_value`` manifold pieces of one stability, in map-step order.
@@ -352,7 +361,7 @@ class FixedPoint:
         return list(cached)
 
     def branch_position_map(
-        self, stability: Literal["unstable", "stable"]
+        self, stability: Stability
     ) -> tuple[dict[ManifoldKey, int], int]:
         """
         Where each branch of one stability sits in the forward map-step chain.
@@ -465,7 +474,7 @@ class FixedPoint:
         return (fp, stability, (orbit_index + n) % self.period, branch_index)
 
     def get_iterable_array(
-        self, stability: Literal["unstable", "stable"], shift: int = 0
+        self, stability: Stability, shift: int = 0
     ) -> list[int]:
         """
         Construct a list of orbit indices based off the stability.

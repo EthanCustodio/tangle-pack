@@ -1,20 +1,10 @@
-from __future__ import annotations
-
-import logging
-from typing import Callable, Optional
-
-import numpy as np
-from numpy.typing import NDArray
-from scipy.optimize import fsolve
-from scipy.differentiate import jacobian as jacob
-
-from .DynamicalSystem import DynamicalSystem
-from .FixedPoint import FixedPoint
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
-
 """
+Locating periodic orbits and building :class:`~.FixedPoint.FixedPoint` objects.
+
+:class:`FixedPointSolver` runs the shooting solve for a period-p orbit, checks
+that what it found is a saddle, and fills in the eigendata, k-value and branch
+points of the resulting fixed point.
+
 Dev Notes:
 
 The branch count is no longer an input to construct_fixed_point (plan 2.8): it
@@ -34,6 +24,21 @@ product is positive). Supporting the odd case needs a per-stability inversion
 flag rather than one k_value, which is a data-model change, not a solver one.
 """
 
+from __future__ import annotations
+
+import logging
+from typing import Callable, Optional
+
+import numpy as np
+from numpy.typing import NDArray
+from scipy.optimize import fsolve
+from scipy.differentiate import jacobian as jacob
+
+from .DynamicalSystem import DynamicalSystem
+from .FixedPoint import FixedPoint
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 # Hook signature: (orbit_index, unstable_eigenvector, stable_eigenvector) ->
 # (unstable_eigenvector, stable_eigenvector), each a (2, 1) array.

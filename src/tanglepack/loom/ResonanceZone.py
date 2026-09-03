@@ -1,28 +1,11 @@
-from __future__ import annotations
-
-import logging
-from dataclasses import dataclass, field
-from typing import Iterable, Literal, Optional, TYPE_CHECKING
-
-import numpy as np
-from numpy.typing import NDArray
-
-from ..numerics.Intersection import Intersection, ManifoldKey
-from ..numerics.geometry import arc_polyline, point_in_polygon, signed_polygon_area
-from ..topology.TopologyResults import Arc
-
-if TYPE_CHECKING:
-    from ..numerics.BaseManifold import BaseManifold
-    from ..numerics.IntersectionRegistry import IntersectionRegistry
-    from ..numerics.BranchPoint import BranchPoint
-    from ..numerics.FixedPoint import FixedPoint
-    from ..numerics.Point import Point
-    from ..numerics.TangleWorkbench import TangleWorkbench
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
-
 """
+Resonance zones built from a chosen pip.
+
+A :class:`ResonanceZone` is the closed region bounded by the stable and
+unstable arcs running between a periodic orbit and a chosen primary
+intersection point. This module defines the zone, builds it by trimming each
+stable branch at its own cut point, and measures it.
+
 Dev Notes — Resonance zones from a chosen pip
 
 A resonance zone is bounded by arcs of the stable and unstable manifolds that run
@@ -56,6 +39,29 @@ the codebase) — the boundary traversal matches branches by orbit index, which 
 exact only for the non-inversion case. Mirrors the StrongPip inversion caveat.
 """
 
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from typing import Iterable, Literal, Optional, TYPE_CHECKING
+
+import numpy as np
+from numpy.typing import NDArray
+
+from ..numerics.Intersection import Intersection, ManifoldKey
+from ..numerics.geometry import arc_polyline, point_in_polygon, signed_polygon_area
+from ..topology.TopologyResults import Arc
+
+if TYPE_CHECKING:
+    from ..numerics.BaseManifold import BaseManifold
+    from ..numerics.IntersectionRegistry import IntersectionRegistry
+    from ..numerics.BranchPoint import BranchPoint
+    from ..numerics.FixedPoint import FixedPoint
+    from ..numerics.Point import Point
+    from ..numerics.TangleWorkbench import TangleWorkbench
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 #: A resonance-zone boundary piece is described with the region layer's own
 #: :class:`~tanglepack.topology.TopologyResults.Arc`, so a zone boundary and a

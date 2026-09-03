@@ -1,20 +1,10 @@
-from __future__ import annotations
-
-import logging
-import math
-from typing import Iterable, Optional, TYPE_CHECKING
-
-from ..numerics.Intersection import ManifoldKey
-from .TopologyResults import StrongPipResult
-
-if TYPE_CHECKING:
-    from .Trellis import Trellis
-    from ..numerics.FixedPoint import FixedPoint
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
-
 """
+Is-Strong-Pip: choosing the strong primary intersection point of a trellis.
+
+Tests a candidate crossing against the definition (no trellis intersection
+mapped back onto its stable arc undercuts it in unstable canonical distance)
+and picks the strong pip a fixed point's topological algorithms start from.
+
 Dev Notes — Is-Strong-Pip (Strong_Pip_Algorithm.pdf)
 
 q0 is a strong pip iff, once every trellis intersection is mapped back onto the
@@ -81,6 +71,22 @@ branch_index flips after each full orbit) is implemented from first principles b
 has not yet been validated against a computed inversion trellis — revisit when one
 is available.
 """
+
+from __future__ import annotations
+
+import logging
+import math
+from typing import Iterable, Optional, TYPE_CHECKING
+
+from ..numerics.Intersection import ManifoldKey
+from .TopologyResults import StrongPipResult
+
+if TYPE_CHECKING:
+    from .Trellis import Trellis
+    from ..numerics.FixedPoint import FixedPoint
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def forward_stable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey]:

@@ -17,11 +17,11 @@ import pytest
 
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
+from tanglepack.topology.plotting import plot_stable_partition
 from tanglepack.topology.StablePartition import (
     _bridge_side_of,
     _side_of,
     partition_stable_manifold,
-    plot_stable_partition,
 )
 from tanglepack.topology.TopologyResults import Hole
 from tanglepack.topology.Trellis import Trellis

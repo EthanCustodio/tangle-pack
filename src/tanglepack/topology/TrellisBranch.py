@@ -1,16 +1,10 @@
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from typing import Literal, Optional, TYPE_CHECKING
-
-import numpy as np
-from numpy.typing import NDArray
-
-if TYPE_CHECKING:
-    from ..numerics.FixedPoint import FixedPoint
-    from ..numerics.Intersection import ManifoldKey
-
 """
+One branch of one manifold of one orbit point, as an ordered list of ids.
+
+:class:`TrellisBranch` is the topological unit the algorithms walk: the
+crossings on a single branch, ordered by canonical distance outward from the
+anchoring periodic point, plus the eigen/orbit metadata they need.
+
 Dev Notes:
 
 A TrellisBranch is the topological view of one branch of one manifold of one
@@ -30,6 +24,18 @@ convenience, but the precise branch period p used by the Pseudoneighbor Algorith
 should be confirmed against the orbit/inversion bookkeeping when that algorithm
 is implemented.
 """
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Literal, Optional, TYPE_CHECKING
+
+import numpy as np
+from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    from ..numerics.FixedPoint import FixedPoint
+    from ..numerics.Intersection import ManifoldKey
 
 
 @dataclass

@@ -24,23 +24,13 @@ import numpy as np
 import pytest
 
 import tanglepack
+from tanglepack.examples import henon_jacobian, henon_map, henon_map_inverse
 from invariants import assert_cdist_monotonic, assert_no_geometric_spikes
 
 
 def _make(k: float):
-    def henon_map(point):
-        x, y = point
-        return np.stack([y - k + x**2, -x], axis=0)
-
-    def henon_map_inverse(point):
-        x, y = point
-        return np.stack([-y, x + k - y**2], axis=0)
-
-    def henon_jacobian(point):
-        x, y = point
-        return np.array([[2 * x, 1], [-1, 0]])
-
-    return henon_map, henon_map_inverse, henon_jacobian
+    """The b = 1 Hénon triple at this k."""
+    return henon_map(k), henon_map_inverse(k), henon_jacobian(k)
 
 
 @pytest.mark.regression

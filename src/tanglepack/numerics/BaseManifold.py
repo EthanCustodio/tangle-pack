@@ -1,18 +1,21 @@
-from typing import Literal, Optional
-from .FixedPoint import FixedPoint
-from .BranchPoint import BranchPoint
-from .Point import Point
-from .Intersection import ManifoldKey
-import numpy as np
-import matplotlib.pyplot as plt
-
 """
+The linked-list manifold: walking, collecting and plotting one curve.
+
+:class:`BaseManifold` owns a ``root`` and a ``tail`` into the geometric list
+of :class:`~.Point.Point` objects that make up one branch of one manifold, and
+exposes the walk / array / plot helpers every other layer reads a curve
+through. :class:`~.Bridge.Bridge` is the subclass for a truncated arc.
+
 Dev Notes:
 
 Include return type hints including hints like Union[np.ndarray, list[Point]]
 
-Implement _traverse() or something similar to reduce the redundancy in
-the array getting operations.
+The five array getters are one walk: :meth:`BaseManifold._collect` takes the
+node filter (all / iterated / non-iterated), what to read off each node (point
+or cdist), and whether to stop at the tail; every public getter is a thin
+wrapper over it. The old string-dispatched ``_iter_method`` /
+``getattr(node, "exists_next_iterate")`` trick is gone -- ``_has_iterate`` and
+``_iterate_of`` branch on the stability directly.
 
 Versioning and the point-array memo (Phase 4): every manifold carries a
 ``_version`` bumped by :meth:`bump_version` and by the ``root``/``tail``
@@ -28,6 +31,19 @@ drives ``ManifoldMachine`` directly, bypassing the workbench, must call
 ``bump_version()`` itself.
 """
 
+from __future__ import annotations
+
+from typing import Iterator, Literal, Optional
+
+import numpy as np
+from numpy.typing import NDArray
+import matplotlib.pyplot as plt
+
+from .FixedPoint import FixedPoint
+from .BranchPoint import BranchPoint
+from .Point import Point
+from .Intersection import ManifoldKey, Stability
+
 
 class BaseManifold:
     """
@@ -39,7 +55,7 @@ class BaseManifold:
         root (Point or BranchPoint): First point in the manifold.
         tail (Point or BranchPoint): Final point in the manifold. If not specified the
             tail will be set my walking from the root until None is reached.
-        stability (string ["unstable", "stable"]): Stability of the manifold.
+        stability (Stability): Stability of the manifold.
         stretch_param (float): Amount by which two points on the manifold separate by
             upon a single iteration of the map. Usually denoted 'alpha'.
         fixed_point (FixedPoint): Fixed point that the manifold originates from.
@@ -62,21 +78,21 @@ class BaseManifold:
     def __init__(
         self,
         root: Point | BranchPoint,
-        stability: Literal["stable", "unstable"],
+        stability: Stability,
         stretch_param: float,
         fixed_point: FixedPoint,
-        name="unnamed",
+        name: str = "unnamed",
         tail: Optional[Point | BranchPoint] = None,
         branch_index: Optional[int] = None,
         *,
         manifold_key: Optional[ManifoldKey],
-    ):
+    ) -> None:
         """
         Initializes the manifold.
 
         Args:
             root (Point or BranchPoint): First point in the manifold.
-            stability (Literal[stable, unstable]): Stability of the manifold.
+            stability (Stability): Stability of the manifold.
             stretch_param (float): Amount by which two points on the manifold separate by
             upon a single iteration of the map. Usually denoted 'alpha'.
             fixed_point (FixedPoint): Fixed point that the manifold originates from.
@@ -152,7 +168,7 @@ class BaseManifold:
         self._tail = point
         self.bump_version()
 
-    def _find_tail(self):
+    def _find_tail(self) -> None:
         """Walks until None is reached and set the tail"""
 
         previous_point = None
@@ -164,7 +180,9 @@ class BaseManifold:
 
         self.tail = previous_point
 
-    def _walk_nodes(self, final_node=None, stop_at_final=True):
+    def _walk_nodes(
+        self, final_node: Optional[Point] = None, stop_at_final: bool = True
+    ) -> Iterator[Point]:
         """
         Yield every node from the root along the stability direction.
 
@@ -194,13 +212,118 @@ class BaseManifold:
             )
 
     @staticmethod
-    def _stack_points(points, return_nodes):
+    def _stack_points(
+        points: list, return_nodes: bool
+    ) -> list[Point] | NDArray[np.float64]:
         """Return the collected nodes as-is, or stacked into an array."""
         if not points:
             return [] if return_nodes else np.array([])
         return points if return_nodes else np.vstack(points)
 
-    def get_point_array(self, final_node=None, return_nodes=False):
+    def first_node(
+        self, branch_index: Optional[int] = None
+    ) -> Optional[Point | BranchPoint]:
+        """
+        Return the first ordinary point of this manifold, stepping past the root
+        :class:`BranchPoint` when the manifold is anchored to one.
+
+        A manifold rooted at a fixed point (or at a crossing) starts on a
+        :class:`BranchPoint`, which carries up to two outgoing branches per
+        stability; the point the curve actually begins at is one ``walk_fwd``
+        step past it, on the branch this manifold belongs to. This is the single
+        implementation of that step -- ``ManifoldMachine._branch_view``,
+        ``ManifoldInitializer.construct_kevin_way`` and the growth drivers all go
+        through it.
+
+        Args:
+            branch_index (Optional[int]): Which branch of the root BranchPoint to
+                leave on. Defaults to :attr:`branch_index`.
+
+        Returns:
+            Optional[Point | BranchPoint]: The root itself when it is an ordinary
+            point, otherwise the first point on the requested branch. ``None`` if
+            the manifold has no root, or the branch was never initialized.
+
+        Raises:
+            ValueError: The root is a BranchPoint and neither ``branch_index``
+                nor :attr:`branch_index` says which branch to leave on.
+        """
+        root = self.root
+        if not isinstance(root, BranchPoint):
+            return root
+        return self.walk_fwd(None, root, branch_index)
+
+    def _has_iterate(self, node: Point, num_iterates: int) -> bool:
+        """Whether ``node`` has its ``num_iterates``-step image along this stability."""
+        if self.stability == "unstable":
+            return node.exists_next_iterate(num_iterates)
+        return node.exists_prev_iterate(num_iterates)
+
+    def _iterate_of(self, node: Point, num_iterates: int) -> Point:
+        """The ``num_iterates``-step image of ``node`` along this stability."""
+        if self.stability == "unstable":
+            return node.get_next_iterate(num_iterates)
+        return node.get_prev_iterate(num_iterates)
+
+    def _collect(
+        self,
+        kind: Literal["all", "iterated", "non_iterated"] = "all",
+        *,
+        value: Literal["point", "cdist"] = "point",
+        num_iterates: int = 1,
+        final_node: Optional[Point] = None,
+        return_nodes: bool = False,
+        stop_at_final: bool = True,
+    ) -> list[Point] | NDArray[np.float64]:
+        """
+        The single walk behind every array getter on this class.
+
+        Args:
+            kind (Literal["all", "iterated", "non_iterated"]): Which nodes to
+                keep. ``"iterated"`` keeps only nodes that already have a
+                ``num_iterates``-step image (and yields that IMAGE, not the node);
+                ``"non_iterated"`` keeps only the nodes that do not.
+            value (Literal["point", "cdist"]): What to read off each kept node
+                when ``return_nodes`` is False. Ignored when it is True.
+            num_iterates (int): Step count for the ``kind`` filter.
+            final_node (Optional[Point]): Last node to walk to (inclusive);
+                defaults to the manifold's tail.
+            return_nodes (bool): Return the nodes themselves instead of an array.
+            stop_at_final (bool): False walks the whole linked list, ignoring
+                ``final_node`` and the tail.
+
+        Returns:
+            list[Point] or np.ndarray: The nodes, or an ``(N, 2)`` coordinate
+            array / ``(N, 1)`` cdist array. An empty walk gives ``[]`` or an
+            empty array.
+
+        Raises:
+            ValueError: A node claims a ``num_iterates`` iterate that is None.
+        """
+        collected = []
+
+        for node in self._walk_nodes(final_node, stop_at_final=stop_at_final):
+            if kind != "all":
+                if self._has_iterate(node, num_iterates) != (kind == "iterated"):
+                    continue
+
+                if kind == "iterated":
+                    node = self._iterate_of(node, num_iterates)
+                    if node is None:
+                        raise ValueError("Iterate computed incorrectly, NoneType added")
+
+            if return_nodes:
+                collected.append(node)
+            elif value == "cdist":
+                collected.append(node.cdist)
+            else:
+                collected.append(node.get_point())
+
+        return self._stack_points(collected, return_nodes)
+
+    def get_point_array(
+        self, final_node: Optional[Point] = None, return_nodes: bool = False
+    ) -> list[Point] | NDArray[np.float64]:
         """
         Walks along the manifold in the stability direction and returns either
         a list of Point objects or an array of (x, y) coordinates.
@@ -221,28 +344,26 @@ class BaseManifold:
             safe to mutate. See the module Dev Notes for the invalidation rules.
         """
         if not self._memoise_walks:
-            return self._walk_points(final_node, return_nodes)
+            return self._collect(
+                "all", final_node=final_node, return_nodes=return_nodes
+            )
 
         # The node itself is the key (Points hash by identity), so the memo
         # holds it alive and no recycled id can alias two different walks.
         cache_key = (final_node, bool(return_nodes))
         cached = self._walk_cache.get(cache_key)
         if cached is None:
-            cached = self._walk_points(final_node, return_nodes)
+            cached = self._collect(
+                "all", final_node=final_node, return_nodes=return_nodes
+            )
             if isinstance(cached, np.ndarray):
                 cached.flags.writeable = False
             self._walk_cache[cache_key] = cached
         return list(cached) if return_nodes else cached
 
-    def _walk_points(self, final_node, return_nodes):
-        """The un-memoised walk behind :meth:`get_point_array`."""
-        points = [
-            node if return_nodes else node.get_point()
-            for node in self._walk_nodes(final_node)
-        ]
-        return self._stack_points(points, return_nodes)
-
-    def get_cdist_array(self, final_node=None, return_nodes=False):
+    def get_cdist_array(
+        self, final_node: Optional[Point] = None, return_nodes: bool = False
+    ) -> list[Point] | NDArray[np.float64]:
         """
         Walks along the manifold in the stability direction and returns either
         a list of Point objects or an array of their canonical distances.
@@ -255,15 +376,20 @@ class BaseManifold:
         Returns:
             list[Point] or np.ndarray of shape (N, 1)
         """
-        points = [
-            node if return_nodes else node.cdist
-            for node in self._walk_nodes(final_node, stop_at_final=False)
-        ]
-        return self._stack_points(points, return_nodes)
+        return self._collect(
+            "all",
+            value="cdist",
+            final_node=final_node,
+            return_nodes=return_nodes,
+            stop_at_final=False,
+        )
 
     def get_non_iterated_point_array(
-        self, num_iterates: int = 1, final_node=None, return_nodes=False
-    ):
+        self,
+        num_iterates: int = 1,
+        final_node: Optional[Point] = None,
+        return_nodes: bool = False,
+    ) -> list[Point] | NDArray[np.float64]:
         """
         Returns the points that do not have a num_iterates-step iterate yet.
 
@@ -276,15 +402,16 @@ class BaseManifold:
         Returns:
             list[Point] or np.ndarray of shape (N, 2)
         """
-        points = []
-        for node in self._walk_nodes(final_node):
-            has_iterate = getattr(node, self._iter_method("exists"))
-            if not has_iterate(num_iterates):
-                points.append(node if return_nodes else node.get_point().ravel())
+        return self._collect(
+            "non_iterated",
+            num_iterates=num_iterates,
+            final_node=final_node,
+            return_nodes=return_nodes,
+        )
 
-        return self._stack_points(points, return_nodes)
-
-    def get_non_iterated_cdist_array(self, num_iterates: int = 1, final_node=None):
+    def get_non_iterated_cdist_array(
+        self, num_iterates: int = 1, final_node: Optional[Point] = None
+    ) -> NDArray[np.float64]:
         """
         Returns the canonical distances of the points that do not have a
         num_iterates-step iterate yet.
@@ -296,17 +423,19 @@ class BaseManifold:
         Returns:
             np.ndarray of shape (N, 1)
         """
-        cdists = []
-        for node in self._walk_nodes(final_node):
-            has_iterate = getattr(node, self._iter_method("exists"))
-            if not has_iterate(num_iterates):
-                cdists.append(node.cdist)
-
-        return self._stack_points(cdists, return_nodes=False)
+        return self._collect(
+            "non_iterated",
+            value="cdist",
+            num_iterates=num_iterates,
+            final_node=final_node,
+        )
 
     def get_iterated_point_array(
-        self, num_iterates: int = 1, final_node=None, return_nodes=False
-    ):
+        self,
+        num_iterates: int = 1,
+        final_node: Optional[Point] = None,
+        return_nodes: bool = False,
+    ) -> list[Point] | NDArray[np.float64]:
         """
         Walks along the manifold in the stability direction and returns either
         a list of Point objects or an array of (x, y) coordinates corresponding to
@@ -323,19 +452,12 @@ class BaseManifold:
         Raises:
             ValueError: A point claims to have an iterate that is actually None.
         """
-        points = []
-        for node in self._walk_nodes(final_node):
-            has_iterate = getattr(node, self._iter_method("exists"))
-            if not has_iterate(num_iterates):
-                continue
-
-            iterate = getattr(node, self._iter_method("get"))(num_iterates)
-            if iterate is None:
-                raise ValueError("Iterate computed incorrectly, NoneType added")
-
-            points.append(iterate if return_nodes else iterate.get_point().ravel())
-
-        return self._stack_points(points, return_nodes)
+        return self._collect(
+            "iterated",
+            num_iterates=num_iterates,
+            final_node=final_node,
+            return_nodes=return_nodes,
+        )
 
     def walk_fwd(
         self, prev: Optional[Point], node: Point, branch_index: Optional[int] = None
@@ -386,7 +508,13 @@ class BaseManifold:
 
         return node.backward if self.stability == "unstable" else node.forward
 
-    def plot(self, color="blue", branch_index=None, show_points=False, **kwargs):
+    def plot(
+        self,
+        color: str = "blue",
+        branch_index: Optional[int] = None,
+        show_points: bool = False,
+        **kwargs,
+    ) -> None:
         """
         Plots the manifold points.
 
@@ -491,15 +619,3 @@ class BaseManifold:
             if point is nxt:
                 return branches_in[i]  # toggle branch
         raise ValueError("Prev node is not connected to this BranchPoint")
-
-    def _iter_method(self, prefix: str):
-        """
-        Returns the correct function name based on the manifold stablity
-
-        Example:
-            get_next_iterate
-            check_prev_iterate
-        """
-
-        stability = "next" if self.stability == "unstable" else "prev"
-        return f"{prefix}_{stability}_iterate"

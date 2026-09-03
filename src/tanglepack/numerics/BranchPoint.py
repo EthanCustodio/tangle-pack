@@ -1,16 +1,26 @@
-from typing import Literal
-
-import numpy as np
-from .Point import Point
-from .BasePoint import BasePoint
-
 """
+Branch points: the nodes where several manifold branches meet.
+
+A :class:`BranchPoint` is a fixed point or a crossing, so it can carry up to
+two incoming and two outgoing branches of each stability instead of the single
+``forward`` / ``backward`` pair a plain :class:`~.Point.Point` has.
+
 Dev Notes:
 
 Potentially clarify the parameter language in insert_point_backwards()
 so it is not only_forward, but only_backward. Or change them both to
 be consistent.
 """
+
+from __future__ import annotations
+
+from typing import Literal, Optional
+
+import numpy as np
+
+from .Point import Point
+from .BasePoint import BasePoint
+from .Intersection import Stability
 
 
 class BranchPoint(BasePoint):
@@ -52,10 +62,10 @@ class BranchPoint(BasePoint):
     def __init__(
         self,
         num_branches: Literal[1, 2],
-        cdists: tuple[float, float] = None,
-        x=None,
-        y=None,
-    ):
+        cdists: Optional[tuple[float, float]] = None,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+    ) -> None:
         """
         Initializes a BranchPoint.
 
@@ -85,12 +95,12 @@ class BranchPoint(BasePoint):
         self.backward_branches = [None] * num_branches
         self.backward_stretch_params = [None] * num_branches
 
-    def get_cdist(self, stability: Literal["unstable", "stable"]) -> float:
+    def get_cdist(self, stability: Stability) -> float:
         """
         Get the canonical distance for the manifold of your choice.
 
         Args:
-            stability (Literal["unstable", "stable"]): Stability of the manifold you
+            stability (Stability): Stability of the manifold you
                 want to access the cdist of. BranchPoints have both a unstable and
                 stable cdist.
 
@@ -104,7 +114,7 @@ class BranchPoint(BasePoint):
 
     def insert_point_forward(
         self, node: Point, branch_index: int, only_forward: bool = False
-    ):
+    ) -> None:
         """
         Inserts a point (node) after this point node in the linked list
         at the given branch index.
@@ -130,8 +140,8 @@ class BranchPoint(BasePoint):
             node.backward = self
 
     def insert_point_backward(
-        self, node: Point, branch_index, only_forward: bool = False
-    ):
+        self, node: Point, branch_index: int, only_forward: bool = False
+    ) -> None:
         """
         Inserts this object before another point node in the linked list
         at the given branch index.

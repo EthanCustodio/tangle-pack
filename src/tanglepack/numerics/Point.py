@@ -1,13 +1,21 @@
-from __future__ import annotations
-import numpy as np
-from .BasePoint import BasePoint
-
 """
+A manifold point: geometric ordering on top of the iterate list.
+
+:class:`Point` adds the second doubly linked list -- ``forward`` /
+``backward``, the ordering of points *along the curve* -- to the iterate list
+it inherits from :class:`~.BasePoint.BasePoint`.
+
 Dev Notes:
 
 This class is quite tight. Maybe descibe how the only_forward flag 
 work a bit more.
 """
+
+from __future__ import annotations
+
+from typing import Optional
+
+from .BasePoint import BasePoint
 
 
 class Point(BasePoint):
@@ -31,7 +39,14 @@ class Point(BasePoint):
         prev_iterate (Point or BasePoint):
     """
 
-    def __init__(self, x=None, y=None, cdist=None, edist=None, stretch_param=None):
+    def __init__(
+        self,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+        cdist: Optional[float] = None,
+        edist: Optional[float] = None,
+        stretch_param: Optional[float] = None,
+    ) -> None:
         """
         Basic functionality of a single point in a manifold.
         Contains the methods for two doubly linked lists.
@@ -55,7 +70,7 @@ class Point(BasePoint):
         self.forward = None
         self.backward = None
 
-    def insert_point_forward(self, node: Point, only_forward: bool = False):
+    def insert_point_forward(self, node: Point, only_forward: bool = False) -> None:
         """
         Inserts a point (node) object after this point in the geometric linked list.
 
@@ -81,7 +96,7 @@ class Point(BasePoint):
         self.forward = node
         node.backward = self
 
-    def insert_point_backward(self, node: Point, only_forward: bool = False):
+    def insert_point_backward(self, node: Point, only_forward: bool = False) -> None:
         """
         Inserts a point (node) object before this point in the geometric linked list.
 

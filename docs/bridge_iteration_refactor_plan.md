@@ -1,5 +1,19 @@
 # Bridge Iteration Pipeline — Implementation Plan
 
+> ## Status (2026-09-02)
+>
+> - **Implemented:** `Intersection`, the bridge metadata on `Bridge`, and the public
+>   `TangleWorkbench.iterate_bridge` / `iterate_all_bridges` / registry-aware `plot_all_bridges`.
+>   The target script in "What We Are Building" runs as written.
+> - **Superseded:** `Tangle.populate_intersection_dict`, `Tangle._intersections` and
+>   `_intersecting_coords` are gone. The Tangle detects segment PAIRS
+>   (`_intersecting_segments: set[frozenset[int]]`) and `resolve_crossings()` hands the resolved
+>   `Intersection`s back to the caller; `IntersectionRegistry` is the single source of truth.
+> - **Abandoned:** the parent/child genealogy on `Bridge`. A bridge is identified by
+>   `BridgeId = (int, int)` — the registry ids of its two bounding crossings — and its image is
+>   derived from the crossing iterate table via `workbench.image_bridges(bridge.id)`.
+
+
 ## What We Are Building
 
 The goal is to make the following script workflow natural and fully public:

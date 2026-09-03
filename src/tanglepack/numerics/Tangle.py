@@ -1,36 +1,19 @@
-from __future__ import annotations
-
-import numpy as np
-from numpy.typing import NDArray
-from rtree import index
-from rtree.core import RTreeError
-from collections import defaultdict
-from itertools import count
-from dataclasses import dataclass
-from typing import Iterable, Optional
-
-from .Intersection import Intersection, ManifoldKey
-from .BaseManifold import BaseManifold
-from .Point import Point
-from .BranchPoint import BranchPoint
-from .Bridge import Bridge
-
-import logging
-
-logger = logging.getLogger(__name__)
-
-# Relative threshold shared by the two geometric predicates below. Both compare an
-# area-like quantity (a cross product, a 2x2 determinant) that scales as the product
-# of the two lengths involved, so dividing that product out makes the threshold a
-# bound on sin(angle) between the two directions and the predicates scale invariant.
-_EPS_REL = 1e-12
-
-
 """
+The segment index: where two manifolds cross, and where a bridge is cut.
+
+:class:`Tangle` registers every adjacent pair of points on every manifold as a
+segment in an R-tree, finds candidate crossings by bounding-box query, resolves
+them exactly, and cuts :class:`~.Bridge.Bridge` objects at the crossings it is
+handed.
+
 Dev Notes:
 
-WARNING: this code must identify fixed points as intersection points. Consider 
-    the complications of that 
+A periodic point IS a crossing here: ``TangleWorkbench._register_anchors`` puts
+one at canonical distance ``(0, 0)`` on each (unstable branch, stable branch) pair
+it joins, and ``_both_anchors`` below is the one place that has to know it -- two
+anchors of the same point span no arc, so ``create_bridges`` skips that pair
+silently. An inversion point registers FOUR such anchors (one per branch pair),
+which is a known open case; see the plan's Deferred section.
 
 The Tangle holds no resolved crossings (plan row 2.1): every crossing lives in the
 workbench's IntersectionRegistry. What used to make that impossible was geometry --
@@ -48,6 +31,35 @@ distinct polylines, so key-grouping would let one cut span two curves. Phase 3's
 BridgeId may make a key-plus-generation grouping viable; until then the object is
 the only unambiguous grouping.
 """
+
+from __future__ import annotations
+
+import logging
+from collections import defaultdict
+from dataclasses import dataclass
+from itertools import count
+from typing import Iterable, Optional
+
+import numpy as np
+from numpy.typing import NDArray
+from rtree import index
+from rtree.core import RTreeError
+
+from .Intersection import Intersection, ManifoldKey
+from .FixedPoint import FixedPoint
+from .BaseManifold import BaseManifold
+from .Point import Point
+from .BranchPoint import BranchPoint
+from .Bridge import Bridge
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+# Relative threshold shared by the two geometric predicates below. Both compare an
+# area-like quantity (a cross product, a 2x2 determinant) that scales as the product
+# of the two lengths involved, so dividing that product out makes the threshold a
+# bound on sin(angle) between the two directions and the predicates scale invariant.
+_EPS_REL = 1e-12
 
 
 def _both_anchors(
@@ -98,7 +110,7 @@ class _Segment:
     in_rtree: bool = True
 
     @property
-    def bounds(self):
+    def bounds(self) -> tuple[float, float, float, float]:
         """
         Returns the boundaries of the bounding box
         made from self.p0 and self.p0_seg1
@@ -109,7 +121,8 @@ class _Segment:
 
         return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
 
-    def intersects(self, other) -> bool:
+    def intersects(self, other: "_Segment") -> bool:
+        """Whether this segment and ``other`` cross (endpoints included)."""
         p0 = tuple(self.p0.get_point())  # (x, y)
         p0_seg1 = tuple(self.p0_seg1.get_point())
         q0 = tuple(other.p0.get_point())
@@ -146,7 +159,7 @@ class Tangle:
 
     _ids = count(0)  # global generator -> every segment is given a unique int key
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
 
         Initializes the Tangle object with an R-tree for spatial indexing
@@ -195,7 +208,7 @@ class Tangle:
         )
         return key
 
-    def clear_all(self):
+    def clear_all(self) -> None:
         """
         Completely clear all Tangle state, useful when recomputing everything from scratch.
         """
@@ -453,7 +466,7 @@ class Tangle:
                 detect_crossings=detect_crossings,
             )
 
-    def add_manifolds(self, manifolds: list[BaseManifold]):
+    def add_manifolds(self, manifolds: list[BaseManifold]) -> None:
         """
         Index every segment of several manifolds at once.
 
@@ -787,19 +800,13 @@ class Tangle:
 
             prev_point, curr_point = curr_point, next_point
 
-    def _segments_touching(self, manifold, nodes):
-        """
-        Returns segment ids for all segments which contain a node
-        """
-        return {
-            sid
-            for sid in self._manifold_segs[manifold]
-            if self._seg_lookup[sid].p0 in nodes
-            or self._seg_lookup[sid].p0_seg1 in nodes
-        }
-
     @staticmethod
-    def _orientation(a, b, c, eps_rel: float = _EPS_REL) -> int:
+    def _orientation(
+        a: tuple[float, float],
+        b: tuple[float, float],
+        c: tuple[float, float],
+        eps_rel: float = _EPS_REL,
+    ) -> int:
         """
         Orientation of the ordered triple (a, b, c).
 
@@ -831,7 +838,10 @@ class Tangle:
         return 1 if val > 0 else 2
 
     @staticmethod
-    def _do_segments_intersect(segA, segB):
+    def _do_segments_intersect(
+        segA: tuple[tuple[float, float], tuple[float, float]],
+        segB: tuple[tuple[float, float], tuple[float, float]],
+    ) -> bool:
         """
         Using orientation tests to see if segA and segB intersect in a proper point.
         segA, segB = ((x1,y1), (x2,y2)), ((x3,y3), (x4,y4))
@@ -856,7 +866,7 @@ class Tangle:
         self,
         crossings: Iterable[Intersection],
         for_manifold: Optional[BaseManifold] = None,
-        fixed_point=None,
+        fixed_point: Optional[FixedPoint] = None,
         *,
         cdist_tol: float = 0.0,
     ) -> list[Bridge]:

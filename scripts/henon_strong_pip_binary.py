@@ -1,18 +1,15 @@
 import tanglepack, numpy as np
 import matplotlib.pyplot as plt
 from tanglepack import Trellis
+from tanglepack.examples import (
+    HENON_K10,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+)
 
 
-def henon_map(point):
-    k, b = 10, 1
-    x, y = point
-    return np.array([y - k + x**2, -b * x])
-
-
-def henon_map_inverse(point):
-    k, b = 10, 1
-    x, y = point
-    return np.array([-y / b, x + k - (y**2) / (b**2)])
+henon_map = _henon_map_factory(*HENON_K10)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 wb = tanglepack.TangleWorkbench(henon_map, henon_map_inverse)

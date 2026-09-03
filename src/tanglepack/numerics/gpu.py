@@ -43,7 +43,7 @@ Declare it once at the top of a script, before growing anything::
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-def _resolve_system(target) -> DynamicalSystem:
+def _resolve_system(target: Any) -> DynamicalSystem:
     """Return the DynamicalSystem held by ``target`` (system/workbench/session)."""
     if isinstance(target, DynamicalSystem):
         return target
@@ -99,7 +99,7 @@ def _wrap_for_gpu(fn: Callable, cp, min_batch_points: int) -> Callable:
     return gpu_fn
 
 
-def enable_gpu(target, min_batch_points: int = 64):
+def enable_gpu(target: Any, min_batch_points: int = 64) -> DynamicalSystem:
     """Route the system's batched map evaluations through the GPU.
 
     Wraps ``map`` and ``map_inv`` in place. Idempotent and reversible via
@@ -140,7 +140,7 @@ def enable_gpu(target, min_batch_points: int = 64):
     return system
 
 
-def disable_gpu(target):
+def disable_gpu(target: Any) -> DynamicalSystem:
     """Restore the original CPU map callables wrapped by :func:`enable_gpu`."""
     system = _resolve_system(target)
     if not getattr(system, "_gpu_enabled", False):

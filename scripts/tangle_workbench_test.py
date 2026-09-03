@@ -1,31 +1,16 @@
 import tanglepack
+from tanglepack.examples import (
+    HENON_K10,
+    henon_map as _henon_map_factory,
+    henon_map_inverse as _henon_map_inverse_factory,
+)
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
 
-def henon_map(point):
-    """
-    Defines the henon map for binary horshoe parameters to test basic functionality
-    """
-
-    k, b = (10, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.stack([y - k + x**2, -b * x], axis=0)
-
-
-def henon_map_inverse(point):
-    """Defines the inverse henon map for"""
-
-    k, b = (10, 1)
-
-    x = point[0]
-    y = point[1]
-
-    return np.stack([-y / b, x + k - (y**2) / (b**2)], axis=0)
+henon_map = _henon_map_factory(*HENON_K10)
+henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
 # initialize the workbench
@@ -49,10 +34,7 @@ unstable_segments, stable_segments = workbench.initialize_both_manifolds(fixed_p
 # (the fsolve fixed-point fix made manifolds develop more slowly per iteration,
 # so the old count of 6 no longer produced any crossings)
 workbench.grow_n_times(fixed_point, "unstable", num_iterations=8)
-# workbench.grow_until_arclength(fixed_point, "unstable", 60)
-# workbench.grow_n_times(fixed_point, "stable", num_iterations=4)
 workbench.grow_until_turnaround(fixed_point, "stable")
-# workbench.grow_until_intersection(fixed_point, "unstable")
 
 intersections = workbench.compute_intersections(fixed_point)
 print(intersections)
@@ -78,9 +60,6 @@ print(bridges)
 
 workbench.trim_stable_manifolds(fixed_point)
 
-# print(f"These are the new bridges: {bridges}")
-# new_bridges = workbench._man_machine.iterate_bridge(bridges[2])
-
 plt.figure()
 workbench.plot_tangle(fixed_point, "stable", color="r")
 workbench.plot_intersections(fixed_point)
@@ -100,21 +79,11 @@ plt.xlim([-15, 15])
 plt.ylim([-15, 15])
 
 workbench.iterate_bridge(new_bridges[0])
-# workbench.iterate_all_bridges()
-# graph = workbench.build_intersection_graph(fixed_point)
-
-# print(len(graph.nodes()))
-
-# workbench.visualize_intersection_graph(graph)
-
 # plot!
 plt.figure()
-# workbench.plot_tangle(fixed_point, "unstable", color="b")
 workbench.plot_tangle(fixed_point, "stable", color="r")
 workbench.plot_intersections(fixed_point)
 workbench.plot_all_bridges()
-# new_bridges.plot()
-# bridges.plot()
 
 plt.xlim([-15, 15])
 plt.ylim([-15, 15])

@@ -1,3 +1,12 @@
+"""
+The map, its inverse and (optionally) its Jacobian.
+
+:class:`DynamicalSystem` is the one place the library touches the user's map.
+It stores the forward and inverse maps, derives batched versions of both (a
+whole refinement layer is mapped in one call), and enforces the point/matrix
+shapes the numerical layer relies on.
+"""
+
 from __future__ import annotations
 
 from typing import Annotated, Callable
@@ -41,7 +50,7 @@ class DynamicalSystem:
         dynamical_map_inverse: MapFunc,
         jacobian_function: JacFunc | None = None,
         name: str = "unnamed",
-    ):
+    ) -> None:
         """
         Initalizes the system with the mapping functions.
 

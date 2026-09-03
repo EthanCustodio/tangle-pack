@@ -1,8 +1,21 @@
+"""
+The user-facing facade over the numerical and topological layers.
+
+:class:`TangleSession` owns one
+:class:`~..numerics.TangleWorkbench.TangleWorkbench` and a cache of
+:class:`~..topology.Trellis.Trellis` objects, delegates any unknown attribute
+to the workbench, and hosts the cross-layer ("loom") algorithms -- resonance
+zones and blasting -- that need both halves at once.
+"""
+
 from __future__ import annotations
 
 import logging
 import warnings
-from typing import Iterable, Optional, TYPE_CHECKING
+from typing import Callable, Iterable, Optional, TYPE_CHECKING
+
+import numpy as np
+from numpy.typing import NDArray
 
 from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import MapFunc, JacFunc
@@ -14,7 +27,7 @@ from .ResonanceZone import ResonanceZone, define_resonance_zone
 from .Blast import BlastResult, blast_zone
 
 if TYPE_CHECKING:
-    from ..numerics.Bridge import BridgeId
+    from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
     from ..topology.TopologyResults import Endpoint, Side
 
@@ -220,6 +233,80 @@ class TangleSession:
             return [fixed_point]
         return list(fixed_point)
 
+    def _fanout_call(
+        self,
+        name: str,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]",
+        **kwargs,
+    ):
+        """
+        Run one Trellis method across a fixed-point selection.
+
+        Every non-plot fan-out shares this shape: build (or reuse) each selected
+        fixed point's trellis via :meth:`trellis` — so a snapshot left stale by a
+        resonance-zone recompute is rebuilt rather than silently reused — call
+        ``name`` on it, and collect the results.
+
+        Args:
+            name: The :class:`Trellis` method to call.
+            fixed_point: A single FixedPoint, an iterable of them, or None for
+                every fixed point on the workbench.
+            **kwargs: Forwarded to the trellis method.
+
+        Returns:
+            The single fixed point's own result when one FixedPoint was passed,
+            otherwise a ``{fixed_point: result}`` dict.
+        """
+        results = {
+            fp: getattr(self.trellis(fp), name)(**kwargs)
+            for fp in self._resolve_fixed_points(fixed_point)
+        }
+        if _is_single_fixed_point(fixed_point):
+            return results[fixed_point]
+        return results
+
+    def _fanout_plot(
+        self,
+        name: str,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]",
+        ax,
+        *,
+        prepare: Optional[Callable[[Trellis], None]] = None,
+        flatten: bool = False,
+        **kwargs,
+    ) -> list:
+        """
+        Draw one Trellis plotter across a fixed-point selection.
+
+        Args:
+            name: The :class:`Trellis` ``plot_*`` method to call.
+            fixed_point: A single FixedPoint, an iterable of them, or None for
+                every fixed point on the workbench.
+            ax: Optional matplotlib Axes, forwarded to every plotter.
+            prepare: Optional callable run on each trellis before drawing, for
+                the plotters that compute their input on demand.
+            flatten: True when the plotter returns a LIST of handles (extend the
+                result) rather than a single handle (append it).
+            **kwargs: Forwarded to the trellis plotter.
+
+        Returns:
+            The matplotlib handles drawn, skipping every trellis whose plotter
+            returned None (nothing to draw).
+        """
+        handles: list = []
+        for fp in self._resolve_fixed_points(fixed_point):
+            trellis = self.trellis(fp)
+            if prepare is not None:
+                prepare(trellis)
+            handle = getattr(trellis, name)(ax=ax, **kwargs)
+            if handle is None:
+                continue
+            if flatten:
+                handles.extend(handle)
+            else:
+                handles.append(handle)
+        return handles
+
     # ── strong-pip convenience (per fixed point) ─────────────────────────────
     #
     # Each fixed point owns its own (single-fixed-point) Trellis, so a nested
@@ -254,13 +341,7 @@ class TangleSession:
             A candidate-id list for a single fixed point, or a dict mapping each
             fixed point to its candidate-id list.
         """
-        results = {
-            fp: self.trellis(fp).classify_strong_pips(**kwargs)
-            for fp in self._resolve_fixed_points(fixed_point)
-        }
-        if _is_single_fixed_point(fixed_point):
-            return results[fixed_point]
-        return results
+        return self._fanout_call("classify_strong_pips", fixed_point, **kwargs)
 
     def set_strong_pip(self, fixed_point: "FixedPoint", intersection_id: int) -> int:
         """Choose ``intersection_id`` as the strong pip for ``fixed_point``'s trellis."""
@@ -301,15 +382,18 @@ class TangleSession:
             List of the matplotlib handles drawn (one per fixed point that had
             candidates to plot).
         """
-        handles = []
-        for fp in self._resolve_fixed_points(fixed_point):
-            trellis = self.trellis(fp)
+
+        def prepare(trellis: Trellis) -> None:
             if classify and not trellis.strong_pip_candidates:
                 trellis.classify_strong_pips()
-            handle = trellis.plot_strong_pip_candidates(ax=ax, **scatter_kwargs)
-            if handle is not None:
-                handles.append(handle)
-        return handles
+
+        return self._fanout_plot(
+            "plot_strong_pip_candidates",
+            fixed_point,
+            ax,
+            prepare=prepare,
+            **scatter_kwargs,
+        )
 
     def plot_strong_pip(
         self,
@@ -338,15 +422,14 @@ class TangleSession:
             List of the matplotlib handles drawn (one per fixed point with a strong
             pip).
         """
-        handles = []
-        for fp in self._resolve_fixed_points(fixed_point):
-            trellis = self.trellis(fp)
+
+        def prepare(trellis: Trellis) -> None:
             if classify and trellis.strong_pip is None:
                 trellis.classify_strong_pips()
-            handle = trellis.plot_strong_pip(ax=ax, **scatter_kwargs)
-            if handle is not None:
-                handles.append(handle)
-        return handles
+
+        return self._fanout_plot(
+            "plot_strong_pip", fixed_point, ax, prepare=prepare, **scatter_kwargs
+        )
 
     # ── pseudoneighbor convenience (per fixed point) ─────────────────────────
 
@@ -374,13 +457,7 @@ class TangleSession:
             A reference-pair list for a single fixed point, or a dict mapping
             each fixed point to its list.
         """
-        results = {
-            fp: self.trellis(fp).compute_pseudoneighbors(**kwargs)
-            for fp in self._resolve_fixed_points(fixed_point)
-        }
-        if _is_single_fixed_point(fixed_point):
-            return results[fixed_point]
-        return results
+        return self._fanout_call("compute_pseudoneighbors", fixed_point, **kwargs)
 
     def plot_pseudoneighbors(
         self,
@@ -406,15 +483,14 @@ class TangleSession:
             List of the matplotlib handles drawn (one per fixed point with
             pairs to plot).
         """
-        handles = []
-        for fp in self._resolve_fixed_points(fixed_point):
-            trellis = self.trellis(fp)
+
+        def prepare(trellis: Trellis) -> None:
             if compute and not trellis.pseudoneighbors:
                 trellis.compute_pseudoneighbors()
-            handle = trellis.plot_pseudoneighbors(ax=ax, **scatter_kwargs)
-            if handle is not None:
-                handles.append(handle)
-        return handles
+
+        return self._fanout_plot(
+            "plot_pseudoneighbors", fixed_point, ax, prepare=prepare, **scatter_kwargs
+        )
 
     def plot_holes(
         self,
@@ -437,12 +513,9 @@ class TangleSession:
         Returns:
             List of the matplotlib handles drawn.
         """
-        handles = []
-        for fp in self._resolve_fixed_points(fixed_point):
-            handle = self.trellis(fp).plot_holes(ax=ax, **scatter_kwargs)
-            if handle is not None:
-                handles.extend(handle)
-        return handles
+        return self._fanout_plot(
+            "plot_holes", fixed_point, ax, flatten=True, **scatter_kwargs
+        )
 
     # ── hole / partition convenience (per fixed point) ───────────────────────
 
@@ -473,13 +546,7 @@ class TangleSession:
             AssertionError: Propagated from :meth:`Trellis.punch_holes` when one
                 of its two topological invariants fails.
         """
-        results = {
-            fp: self.trellis(fp).punch_holes(**kwargs)
-            for fp in self._resolve_fixed_points(fixed_point)
-        }
-        if _is_single_fixed_point(fixed_point):
-            return results[fixed_point]
-        return results
+        return self._fanout_call("punch_holes", fixed_point, **kwargs)
 
     def partition_stable_manifold(
         self,
@@ -504,13 +571,9 @@ class TangleSession:
             A StablePartitionResult list for a single fixed point, or a dict
             mapping each fixed point to its list.
         """
-        results = {
-            fp: self.trellis(fp).partition_stable_manifold(**kwargs)
-            for fp in self._resolve_fixed_points(fixed_point)
-        }
-        if _is_single_fixed_point(fixed_point):
-            return results[fixed_point]
-        return results
+        return self._fanout_call(
+            "partition_stable_manifold", fixed_point, **kwargs
+        )
 
     def partition_element_for(
         self,
@@ -587,12 +650,9 @@ class TangleSession:
         Returns:
             List of the Axes drawn on (one per fixed point with partitions).
         """
-        drawn = []
-        for fp in self._resolve_fixed_points(fixed_point):
-            axes = self.trellis(fp).plot_stable_partition(ax=ax, **line_kwargs)
-            if axes is not None:
-                drawn.append(axes)
-        return drawn
+        return self._fanout_plot(
+            "plot_stable_partition", fixed_point, ax, **line_kwargs
+        )
 
     def describe_holes(
         self,
@@ -715,7 +775,7 @@ class TangleSession:
     # ── bridge ↔ resonance-zone classification ───────────────────────────────
 
     @staticmethod
-    def _bridge_test_point(bridge) -> Optional["NDArray"]:
+    def _bridge_test_point(bridge: "Bridge") -> Optional[NDArray[np.float64]]:
         """The midpoint node of a bridge, used as its representative point.
 
         Returns the geometric middle node so a bridge that forms a zone's own unstable
@@ -726,7 +786,7 @@ class TangleSession:
         """
         return polyline_midpoint(bridge.get_point_array())
 
-    def classify_bridge(self, bridge) -> Optional[ResonanceZone]:
+    def classify_bridge(self, bridge: "Bridge") -> Optional[ResonanceZone]:
         """
         Determine which resonance zone a single bridge lies in.
 
