@@ -1,28 +1,31 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Literal, Optional, TYPE_CHECKING, Union
+from typing import Iterable, Optional, TYPE_CHECKING, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy.typing import NDArray
 
 from .Pseudoneighbor import forward_unstable_branch_cycle
-from .TopologyResults import Hole, PartitionInterval, PseudoneighborPair, StablePartitionResult
+from .TopologyResults import (
+    Hole,
+    OPPOSITE_SIDE,
+    PartitionInterval,
+    PseudoneighborPair,
+    Side,
+    StablePartitionResult,
+)
 
 if TYPE_CHECKING:
     from .Trellis import Trellis
     from .TrellisBranch import TrellisBranch
-    from ..numerics.Bridge import Bridge
+    from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Intersection import Intersection, ManifoldKey
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-Side = Literal["left", "right"]
-
-_OPPOSITE: dict[Side, Side] = {"left": "right", "right": "left"}
 
 """
 Dev Notes — Stable Manifold Partition (Stable_Manifold_Partition_Algorithm.pdf)
@@ -44,6 +47,15 @@ fixed in conversation with the author (July 2026):
   negative backward, positive forward — the plot label).
   ``near_intersection_id`` is fixed by convention to the toward-anchor member
   (smaller stable cdist) — the choice is arbitrary but must be consistent.
+* Partition elements (Phase 5): every interval is stamped with
+  ``(branch_key, side, element_id)`` and two lookup tables are built beside it,
+  ``element_of_intersection`` (crossing -> owning element, the ownership rule
+  being :func:`owns_cdist`) and ``elements_at_bridge``. The latter is only a
+  convenience index over the bridges the building trellis HELD: a trellis keeps a
+  bridge under its unstable fixed point, so a heteroclinic bridge never appears
+  in the trellis that owns its endpoints' stable branch. The authoritative
+  lookup is therefore :meth:`Trellis.element_for`, which falls back to the
+  endpoint ids carried by the BridgeId itself.
 * Side (REDONE per the author, 2026-07-16 — supersedes the 2026-07-09
   stable-approach rule and every earlier side test): a hole's side is
   left/right of its own BRIDGE, i.e. of the unstable manifold, in the
@@ -468,6 +480,13 @@ def partition_stable_manifold(
     abutting the branch end or the anchor — becomes a degenerate closed
     singleton (see the module Dev Notes).
 
+    Each interval is stamped with its element identity (``element_id``,
+    ``branch_key``, ``side``) and the two element lookup tables are built on top
+    of it: :attr:`StablePartitionResult.element_of_intersection` (which element
+    owns each crossing on the branch) and
+    :attr:`StablePartitionResult.elements_at_bridge` (which elements sit at each
+    bridge's two endpoints).
+
     Args:
         trellis: The Trellis carrying the holes to partition by.
         branch_key: Key of the stable branch to partition.
@@ -478,16 +497,29 @@ def partition_stable_manifold(
 
     Raises:
         ValueError: If branch_key does not name a stable branch of the trellis.
+        AssertionError: If a crossing on the branch is owned by anything other
+            than exactly one element (the partition would not be a partition).
     """
     branch = trellis.branch(branch_key)
     if branch is None or branch.stability != "stable":
         raise ValueError(f"{branch_key} is not a stable branch of this trellis")
 
     marks = _hole_marks_on_branch(trellis, branch_key, side)
+    intervals = _build_intervals(trellis, branch, marks)
+    for element_id, interval in enumerate(intervals):
+        interval.element_id = element_id
+        interval.branch_key = branch_key
+        interval.side = side
+
+    element_of_intersection = _element_of_intersection(trellis, branch, intervals)
     return StablePartitionResult(
         branch_key=branch_key,
         side=side,
-        intervals=_build_intervals(trellis, branch, marks),
+        intervals=intervals,
+        element_of_intersection=element_of_intersection,
+        elements_at_bridge=_elements_at_bridge(
+            trellis, branch_key, element_of_intersection
+        ),
     )
 
 
@@ -976,7 +1008,7 @@ def _orbit_side(hole: Hole, orientation_preserving: bool) -> Optional[Side]:
         return hole.bridge_side
     if hole.iterate is None:
         return None
-    return hole.bridge_side if hole.iterate % 2 == 0 else _OPPOSITE[hole.bridge_side]
+    return hole.bridge_side if hole.iterate % 2 == 0 else OPPOSITE_SIDE[hole.bridge_side]
 
 
 def bridge_side_violations(
@@ -1578,3 +1610,125 @@ def _build_intervals(
         if after is not None:
             with_singletons.append(after)
     return with_singletons
+
+
+def span_contains(
+    lo: float,
+    hi: float,
+    closed_lo: bool,
+    closed_hi: bool,
+    cdist: float,
+    tol: float,
+) -> bool:
+    """
+    Whether a (possibly half-open) canonical-distance span contains a point.
+
+    Args:
+        lo: Lower end of the span.
+        hi: Upper end of the span.
+        closed_lo: True if the lower end belongs to the span.
+        closed_hi: True if the upper end belongs to the span.
+        cdist: The canonical distance to test.
+        tol: Comparison tolerance (the registry's ``cdist_tol``).
+
+    Returns:
+        True if the span contains the point.
+    """
+    if cdist < lo - tol or cdist > hi + tol:
+        return False
+    if abs(cdist - lo) <= tol:
+        return closed_lo
+    if abs(cdist - hi) <= tol:
+        return closed_hi
+    return True
+
+
+def owns_cdist(interval: PartitionInterval, cdist: float, tol: float) -> bool:
+    """
+    Whether a partition element contains a point at this stable cdist.
+
+    A point strictly inside the span belongs to the element; a point sitting on
+    an end belongs to it only when that end is closed. Adjacent elements are
+    never both closed at their shared end (see :func:`_build_intervals`), so
+    exactly one element owns every point of the branch.
+
+    Args:
+        interval: The partition element (interval) to test.
+        cdist: Stable canonical distance of the point.
+        tol: Comparison tolerance (the registry's ``cdist_tol``).
+
+    Returns:
+        True if this element owns the point.
+    """
+    return span_contains(
+        interval.lo_cdist,
+        interval.hi_cdist,
+        interval.closed_lo,
+        interval.closed_hi,
+        cdist,
+        tol,
+    )
+
+
+def _element_of_intersection(
+    trellis: "Trellis",
+    branch: "TrellisBranch",
+    intervals: list[PartitionInterval],
+) -> dict[int, int]:
+    """Map every crossing on the branch to the one element that owns it.
+
+    The intervals tile the branch from the anchor to the outermost crossing, so
+    every crossing on it lands in exactly one — asserted here, since a crossing
+    owned twice (or not at all) means the openings did not alternate and the
+    result is not a partition.
+    """
+    tol = trellis.registry.cdist_tol
+    owners: dict[int, int] = {}
+    for intersection_id in branch.intersection_ids:
+        cdist = float(trellis.intersection(intersection_id).stable_cdist)
+        matches = [
+            interval.element_id
+            for interval in intervals
+            if owns_cdist(interval, cdist, tol)
+        ]
+        assert len(matches) == 1, (
+            f"crossing {intersection_id} at stable cdist {cdist} on "
+            f"{branch.key[1:]} is owned by {len(matches)} partition elements "
+            f"{matches}, expected exactly one"
+        )
+        owners[intersection_id] = matches[0]
+    return owners
+
+
+def _elements_at_bridge(
+    trellis: "Trellis",
+    branch_key: "ManifoldKey",
+    element_of_intersection: dict[int, int],
+) -> dict["BridgeId", tuple[Optional[int], Optional[int]]]:
+    """Map each bridge touching this branch to the elements at its two endpoints.
+
+    Only non-partial bridges have an id and appear here. An endpoint whose stable
+    side lies on a different branch is ``None``: this result cannot name it, and
+    the caller resolves it through the trellis (another branch of the same
+    trellis) or the session (another trellis's branch).
+    """
+    at_bridge: dict["BridgeId", tuple[Optional[int], Optional[int]]] = {}
+    for bridge in trellis.bridges:
+        bridge_id = bridge.id
+        if bridge_id is None:
+            continue  # a partial arc is not a bridge and has no identity
+        ends: list[Optional[int]] = []
+        for endpoint in bridge_id:
+            if trellis.intersection(endpoint).manifold_b_key != branch_key:
+                ends.append(None)
+                continue
+            element_id = element_of_intersection.get(endpoint)
+            assert element_id is not None, (
+                f"crossing {endpoint} of bridge {bridge_id} lies on "
+                f"{branch_key[1:]} but no partition element owns it"
+            )
+            ends.append(element_id)
+        if ends[0] is None and ends[1] is None:
+            continue  # neither end touches this branch
+        at_bridge[bridge_id] = (ends[0], ends[1])
+    return at_bridge

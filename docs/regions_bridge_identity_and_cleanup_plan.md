@@ -169,6 +169,8 @@ points), and that is pinned directly.
 
 ## Phase 5 — Partition elements
 
+✅ DONE 2026-09-02. Deviations: `image_of_element` lives on `Trellis` (needs the image branch's result and the iterate table) and returns the elements whose span INTERSECTS the image span honouring open/closed ends (a touching element only when both are closed) rather than "elements inside the image span" — the image partition is not a refinement of this partition's image (hole orbits propagate backward finitely) so strict containment returns [] on real cases; `reindex_from` returns {new_id: old_id_or_None} (not old->new) and nothing migrates partition maps across a reindex — a reindex moves the generation and the session drops the whole trellis (branch orderings and bridge lists are equally id-dependent); the singleton pin is on p3 (k=10 pinches nothing at affordable growth); the cross-trellis test uses a period-1 bridge against the period-3 trellis because the nested fixture has NO heteroclinic crossings at the computed extent.
+
 - `PartitionInterval` gains `element_id` (index within its result), `branch_key`, `side`.
 - `StablePartitionResult` gains `element_of_intersection: dict[int, int]` and
   `elements_at_bridge: dict[BridgeId, tuple[Optional[int], Optional[int]]]`, built
@@ -183,8 +185,11 @@ points), and that is pinned directly.
   through the iterate table to the arc on the image branch, then to the element(s)
   on that arc. Returns `None` if either iterate is missing.
 - Result maps are keyed by intersection ids, so they survive everything but a
-  reindex; `reindex_from` returns the remap needed to migrate them, applied in
-  `Trellis` on generation change.
+  reindex; ~~`reindex_from` returns the remap needed to migrate them, applied in
+  `Trellis` on generation change~~ — trellises are DROPPED, not migrated: a
+  reindex moves the workbench generation, so the whole snapshot (branch
+  orderings and bridge list included, not just the id-keyed result maps) is
+  rebuilt, and `reindex_from`'s remap (keyed new -> old) stays diagnostic.
 
 ## Phase 6 — Geometry module, arrangement, regions
 
@@ -325,3 +330,4 @@ is mechanical and can be interleaved once the interfaces have settled.
 - Phase 3: INVERSION (found by the new `henon_inversion_initialized` bridge test, both pre-existing and both for 6.3/the inversion work, not Phase 3): the periodic point registers FOUR crossings at cdist (0, 0) — one per (unstable branch, stable branch) pair — so each unstable branch carries two distinct anchor crossings and `Tangle.create_bridges` cuts a degenerate zero-length bridge between them; and `iterate_bridge` on such an anchor-rooted bridge raises `TypeError: list indices must be integers or slices, not NoneType` in `ManifoldMachine._insert_after` (`branch_index=None` on a BranchPoint). Every non-degenerate inversion bridge iterates and derives its image correctly.
 - Phase 3: id validity is tracked by `TangleWorkbench._registry_id_epoch` (bumped by a `compute_intersections` that renumbers) and `_bridge_id_epoch` (its value when the bridges were cut); `rebuild_bridges` refuses to carry metadata across a mismatch. Phase 4's generation counter should absorb both.
 - Phase 3: on the inversion fixture the periodic point registers four cdist-(0,0) crossings (one per (unstable branch, stable branch) pair), so each unstable branch carries two anchors and `create_bridges` cuts a degenerate zero-length bridge between them; iterating such an anchor-rooted bridge raises in `ManifoldMachine._insert_after` (branch_index None on a BranchPoint). Both belong to 6.3's deliberate anchor registration.
+- Phase 5: `topology/__init__.py` does not export `span_contains`/`owns_cdist`; the hole set is not forward-invariant at the computed extent (image of an element is not a union of image elements) — a topology decision if the region layer needs it.

@@ -228,14 +228,26 @@ class IntersectionRegistry:
 
         Returns:
             Mapping ``{final_id: matched_old_id_or_None}`` for every intersection
-            now stored — useful for logging/debugging the remap.
+            now stored — useful for logging/debugging the remap. Note the
+            direction: it is keyed by the NEW id, and a value of ``None`` marks a
+            crossing with no counterpart in ``old``.
+
+        Note:
+            Nothing migrates id-keyed derived state across this call. A Trellis
+            (and every result hanging off it, partition elements included) is a
+            snapshot dropped and rebuilt when the workbench generation moves,
+            which a renumbering does — remapping its partition maps while leaving
+            its branch orderings and bridge list stale would be worse than
+            rebuilding. The remap is therefore diagnostic only.
         """
         intersections = list(self._store.values())
 
         used: set[int] = set()
         final_id: dict[int, int] = {}  # id(intersection object) -> assigned id
+        matched: dict[int, Optional[int]] = {}  # id(intersection object) -> old id
         for ix in intersections:
             match = old._find_collision(ix)
+            matched[id(ix)] = match
             if match is not None and match not in used:
                 final_id[id(ix)] = match
                 used.add(match)
@@ -276,7 +288,7 @@ class IntersectionRegistry:
                 manifold_b_key=ix.manifold_b_key,
                 label=ix.label,
             )
-            remap[fid] = old._find_collision(ix)
+            remap[fid] = matched[id(ix)]
         self._graph_adjacency_dirty = True
         self._graph_bridges = None
 

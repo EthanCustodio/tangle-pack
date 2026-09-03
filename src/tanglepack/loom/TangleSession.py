@@ -6,12 +6,15 @@ from typing import Iterable, Optional, TYPE_CHECKING
 
 from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import MapFunc, JacFunc
+from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
 from .Blast import BlastResult, blast_zone
 
 if TYPE_CHECKING:
+    from ..numerics.Bridge import BridgeId
     from ..numerics.FixedPoint import FixedPoint
+    from ..topology.TopologyResults import Endpoint, Side
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -123,10 +126,7 @@ class TangleSession:
         """
         cache_key = self._cache_key(fixed_points)
         cached = self._trellises.get(cache_key)
-        stale = (
-            cached is not None
-            and cached._built_generation != self.workbench.generation
-        )
+        stale = cached is not None and self._is_stale(cached)
         if rebuild or cached is None or stale:
             self._trellises[cache_key] = Trellis.from_workbench(
                 self.workbench, fixed_points
@@ -154,6 +154,10 @@ class TangleSession:
             DeprecationWarning,
             stacklevel=2,
         )
+
+    def _is_stale(self, trellis: Trellis) -> bool:
+        """Whether a cached Trellis snapshot predates the workbench's current state."""
+        return trellis._built_generation != self.workbench.generation
 
     @staticmethod
     def _cache_key(fixed_points):
@@ -397,6 +401,198 @@ class TangleSession:
             if handle is not None:
                 handles.extend(handle)
         return handles
+
+    # ── hole / partition convenience (per fixed point) ───────────────────────
+
+    def punch_holes(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ):
+        """
+        Punch the holes of one, several, or every fixed point.
+
+        For each selected fixed point this builds (or reuses) its per-fixed-point
+        Trellis and runs :meth:`Trellis.punch_holes`, so each tangle of a nested
+        session is punched from its own pseudoneighbor pairs.
+
+        Args:
+            fixed_point: A single FixedPoint (→ returns that fixed point's hole
+                list), an iterable of them, or None for every fixed point (→
+                returns a ``{fixed_point: holes}`` dict).
+            **kwargs: Forwarded to :meth:`Trellis.punch_holes` (``pairs``,
+                ``epsilon``, ``propagate``, ``verbose``).
+
+        Returns:
+            A hole list for a single fixed point, or a dict mapping each fixed
+            point to its list.
+
+        Raises:
+            AssertionError: Propagated from :meth:`Trellis.punch_holes` when one
+                of its two topological invariants fails.
+        """
+        results = {
+            fp: self.trellis(fp).punch_holes(**kwargs)
+            for fp in self._resolve_fixed_points(fixed_point)
+        }
+        if _is_single_fixed_point(fixed_point):
+            return results[fixed_point]
+        return results
+
+    def partition_stable_manifold(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ):
+        """
+        Partition the stable branches of one, several, or every fixed point.
+
+        For each selected fixed point this builds (or reuses) its per-fixed-point
+        Trellis and runs :meth:`Trellis.partition_stable_manifold`, which by
+        default covers every stable branch of that trellis on both sides.
+
+        Args:
+            fixed_point: A single FixedPoint (→ returns that fixed point's
+                result list), an iterable of them, or None for every fixed point
+                (→ returns a ``{fixed_point: results}`` dict).
+            **kwargs: Forwarded to :meth:`Trellis.partition_stable_manifold`
+                (``branch_key``, ``verbose``).
+
+        Returns:
+            A StablePartitionResult list for a single fixed point, or a dict
+            mapping each fixed point to its list.
+        """
+        results = {
+            fp: self.trellis(fp).partition_stable_manifold(**kwargs)
+            for fp in self._resolve_fixed_points(fixed_point)
+        }
+        if _is_single_fixed_point(fixed_point):
+            return results[fixed_point]
+        return results
+
+    def partition_element_for(
+        self,
+        bridge_id: "BridgeId",
+        endpoint: "Endpoint",
+        side: "Side",
+    ) -> Optional[int]:
+        """
+        The partition element at one end of a bridge, searched across trellises.
+
+        A session keeps one trellis per tangle, and
+        :meth:`Trellis.element_for` only reads its own partitions, so no single
+        trellis can answer for an endpoint whose stable branch belongs to a
+        different one. This scans every cached (non-stale) trellis and returns
+        the first element found. Bridge ids and registry ids are session-wide
+        (one registry), so there is no ambiguity about which bridge is meant.
+
+        This is what resolves a HETEROCLINIC bridge. A bridge of W^u(fp1) cut at
+        crossings with W^s(fp3) belongs to fp1 (a bridge is a piece of unstable
+        manifold), so it appears only in fp1's trellis — whose partitions cover
+        fp1's stable branches, not the fp3 branches its endpoints actually sit
+        on. The element lives in fp3's trellis, which does not hold the bridge.
+        Both halves are covered because :meth:`Trellis.element_for` falls back to
+        the endpoint id carried by the BridgeId itself rather than requiring the
+        bridge object to be in the snapshot.
+
+        Args:
+            bridge_id: The bridge's :data:`~tanglepack.numerics.Bridge.BridgeId`.
+            endpoint: ``"first"`` or ``"second"`` — which end of the id.
+            side: Which side's partition to read.
+
+        Returns:
+            The element id in the trellis whose branch carries that endpoint, or
+            None when no cached trellis has partitioned it.
+
+        Raises:
+            ValueError: If ``endpoint`` is neither "first" nor "second" — checked
+                here, so an empty trellis cache cannot swallow a typo.
+
+        Note:
+            Only trellises already cached are searched, and only while they are
+            still valid for the current workbench generation: a stale snapshot's
+            partitions are keyed by ids the workbench may have renumbered, so
+            answering from one would be worse than answering None. Call
+            :meth:`partition_stable_manifold` first to populate the cache.
+        """
+        endpoint_index(endpoint)  # reject a bad name even with nothing cached
+        for trellis in self._trellises.values():
+            if self._is_stale(trellis):
+                continue
+            element_id = trellis.element_for(bridge_id, endpoint, side)
+            if element_id is not None:
+                return element_id
+        return None
+
+    def plot_stable_partition(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        ax=None,
+        **line_kwargs,
+    ) -> list:
+        """
+        Draw the stable partitions of one, several, or every fixed point.
+
+        Partitions must have been built already
+        (:meth:`partition_stable_manifold`); trellises without them are skipped.
+
+        Args:
+            fixed_point: Fixed point selector; None (default) plots every one.
+            ax: Optional matplotlib Axes (defaults to the current axes).
+            **line_kwargs: Forwarded to :meth:`Trellis.plot_stable_partition`.
+
+        Returns:
+            List of the Axes drawn on (one per fixed point with partitions).
+        """
+        drawn = []
+        for fp in self._resolve_fixed_points(fixed_point):
+            axes = self.trellis(fp).plot_stable_partition(ax=ax, **line_kwargs)
+            if axes is not None:
+                drawn.append(axes)
+        return drawn
+
+    def describe_holes(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+    ) -> str:
+        """
+        Human-readable hole report for one, several, or every fixed point.
+
+        Args:
+            fixed_point: Fixed point selector; None (default) reports on every one.
+
+        Returns:
+            The per-trellis reports, each under a header naming its fixed point.
+        """
+        return self._describe("describe_holes", fixed_point)
+
+    def describe_stable_partitions(
+        self,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+    ) -> str:
+        """
+        Human-readable partition report for one, several, or every fixed point.
+
+        Args:
+            fixed_point: Fixed point selector; None (default) reports on every one.
+
+        Returns:
+            The per-trellis reports, each under a header naming its fixed point.
+        """
+        return self._describe("describe_stable_partitions", fixed_point)
+
+    def _describe(
+        self,
+        method: str,
+        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]",
+    ) -> str:
+        """Concatenate one Trellis describe_* report per selected fixed point."""
+        sections = []
+        for fp in self._resolve_fixed_points(fixed_point):
+            sections.append(f"{fp!r}:")
+            sections.append(getattr(self.trellis(fp), method)())
+        return "\n".join(sections)
 
     # ── cross-layer ("loom") algorithms ──────────────────────────────────────
 

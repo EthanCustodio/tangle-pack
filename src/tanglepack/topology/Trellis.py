@@ -10,16 +10,20 @@ from ..numerics.Intersection import Intersection, ManifoldKey
 from ..numerics.IntersectionRegistry import IntersectionRegistry
 from .TrellisBranch import TrellisBranch
 from .TopologyResults import (
+    Endpoint,
     Hole,
+    OPPOSITE_SIDE,
     PseudoneighborPair,
+    Side,
     StablePartitionResult,
     StrongPipResult,
+    endpoint_index,
 )
 
 if TYPE_CHECKING:
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.DynamicalSystem import DynamicalSystem
-    from ..numerics.Bridge import Bridge
+    from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.TangleWorkbench import TangleWorkbench
 
 logger = logging.getLogger(__name__)
@@ -45,6 +49,27 @@ rebuild it. The snapshot records the workbench generation it was built at
 decide that, so nothing has to be invalidated by hand. Everything a Trellis
 memoises on top of the snapshot (the endpoint-to-bridge index, the oriented
 bridge polylines) is a function of the snapshot alone and dies with it.
+
+The algorithm results are id-keyed (partition elements included) and so are the
+snapshot's own branch orderings. A registry renumbering (``reindex_from``) moves
+the workbench generation, so the whole Trellis -- results and all -- is dropped
+and rebuilt rather than having its id-keyed tables remapped: remapping only the
+partition maps would leave the branch orderings and bridge list stale, which is
+the more dangerous half. Nothing therefore consumes ``reindex_from``'s remap.
+
+Open items on the partition-element lookups (Phase 5), both unexercised by any
+available fixture:
+
+* ``image_of_element`` flips the requested side once per map step when the map
+  reverses orientation (det J < 0). Every fixture in the repo is
+  orientation-PRESERVING (b = 1), so that branch has never run against real
+  data; the flip mirrors the rule ``bridge_side_violations`` applies to a hole's
+  backward chain, and should be validated together with it on a det J < 0 map.
+* An element bounded by the anchor (``lo_id is None``) or by the end of the
+  computed branch (``hi_id is None``) has no image at all -- there is no crossing
+  to look up in the iterate table -- so ``image_of_element`` answers None there
+  rather than mapping the arc geometrically. The deliberate anchor registration
+  of 6.3 would give the anchor-bounded case a real id and close half of it.
 
 This object deliberately contains NO algorithm logic. Compute-Pseudoneighbors,
 Is-Strong-Pip, and friends will live in their own modules and read from / write
@@ -927,6 +952,172 @@ class Trellis:
                     f"({lo_name} → {hi_name}){singleton}"
                 )
         return "\n".join(lines)
+
+    # ── partition elements ──────────────────────────────────────────────────
+
+    def element_for(
+        self,
+        bridge_id: "BridgeId",
+        endpoint: Endpoint,
+        side: Side,
+    ) -> Optional[int]:
+        """
+        The partition element at one end of a bridge, on one side.
+
+        Scans this trellis's :attr:`stable_partitions` for the result whose
+        branch carries that endpoint. A bridge's two endpoints need not lie on
+        the same stable branch (on a period-q orbit the bridge spanning an
+        anchor has one end on each of two branches of the cycle), which is why
+        this is a scan over results rather than a lookup in one of them.
+
+        A :data:`~tanglepack.numerics.Bridge.BridgeId` IS the ordered pair of its
+        endpoints' registry ids, so the answer never depends on this trellis
+        holding the bridge object: when
+        :attr:`StablePartitionResult.elements_at_bridge` has no entry for the id
+        — the bridge belongs to another fixed point, or was simply not in the
+        snapshot's bridge list — the endpoint id is looked up directly in
+        :attr:`StablePartitionResult.element_of_intersection`. That is what makes
+        a heteroclinic bridge resolvable: a bridge of W^u(fp1) crossing W^s(fp3)
+        is filtered out of fp3's snapshot (``from_workbench`` keeps bridges by
+        their UNSTABLE fixed point) while the element that owns its endpoint
+        lives precisely in fp3's partition.
+
+        Args:
+            bridge_id: The bridge's :data:`~tanglepack.numerics.Bridge.BridgeId`.
+            endpoint: ``"first"`` or ``"second"`` — which end of the id.
+            side: Which side's partition to read.
+
+        Returns:
+            The element id within the result for that endpoint's branch, or
+            ``None`` when no partition of this trellis covers that endpoint —
+            the branch was not partitioned, or belongs to another trellis, which
+            :meth:`~tanglepack.loom.TangleSession.TangleSession.partition_element_for`
+            searches.
+
+        Raises:
+            ValueError: If ``endpoint`` is neither "first" nor "second".
+
+        Note:
+            The element id alone only names an element within one result; pair
+            it with the branch key and side (or read
+            :attr:`~.TopologyResults.PartitionInterval.branch_key`) to identify
+            the element globally.
+        """
+        index = endpoint_index(endpoint)
+        for result in self.stable_partitions:
+            if result.side != side:
+                continue
+            ends = result.elements_at_bridge.get(bridge_id)
+            if ends is not None and ends[index] is not None:
+                return ends[index]
+            # No entry: the bridge object is not in this snapshot. Its id still
+            # names the two crossings, so ask the branch that owns one of them.
+            direct = result.element_of_intersection.get(bridge_id[index])
+            if direct is not None:
+                return direct
+        return None
+
+    def image_of_element(
+        self,
+        result: StablePartitionResult,
+        element_id: int,
+        n: int = 1,
+    ) -> Optional[list[int]]:
+        """
+        The elements covering the ``n``-th image of one partition element.
+
+        An element spans the stable arc between two crossings, so its image
+        spans the arc between their ``n``-iterates on the branch ``n`` map steps
+        forward (:meth:`FixedPoint.advance_key`). Both iterates are read from the
+        registry's iterate table — no cdist guesswork — and the answer is the
+        elements of the image branch's partition that meet that span. Side is
+        carried through unchanged by an orientation-preserving map and flips once
+        per step otherwise.
+
+        The image partition is not a refinement of the image of this partition:
+        the hole orbits are propagated backward for finitely many steps, so the
+        image branch can be missing an innermost boundary that this branch has.
+        The answer is therefore every element of the image branch that MEETS the
+        image arc as a set (open ends included: two pieces touching at a single
+        cdist meet only when both are closed there), not only the ones the arc
+        contains. Their combined span always covers both endpoint images.
+
+        Args:
+            result: The partition result the element belongs to.
+            element_id: The element's id within ``result``.
+            n: Number of map steps; negative walks backward. Defaults to 1.
+
+        Returns:
+            The image element ids in increasing stable canonical distance, or
+            ``None`` when an end of the element is unbounded (the anchor or the
+            branch end) or its iterate is not registered. An empty list means
+            the image arc lies outside the partitioned stretch of the image
+            branch (possible walking backward, which moves outward).
+
+        Raises:
+            IndexError: If ``element_id`` is not an element of ``result``.
+            ValueError: If the image branch's partition (same side, advanced
+                key) is not stored on this trellis — partition every stable
+                branch before asking for images.
+        """
+        from .StablePartition import owns_cdist, span_contains
+
+        interval = result.element(element_id)
+        if n == 0:
+            return [element_id]
+        if interval.lo_id is None or interval.hi_id is None:
+            return None
+
+        images = [self.iterate(interval.lo_id, n), self.iterate(interval.hi_id, n)]
+        if any(image is None for image in images):
+            return None
+
+        fixed_point = result.branch_key[0]
+        image_key = fixed_point.advance_key(result.branch_key, n)
+        side = result.side
+        if not self.orientation_preserving and n % 2:
+            side = OPPOSITE_SIDE[side]
+
+        image_result = next(
+            (
+                other
+                for other in self.stable_partitions
+                if other.branch_key == image_key and other.side == side
+            ),
+            None,
+        )
+        if image_result is None:
+            raise ValueError(
+                f"no {side} partition stored for the image branch "
+                f"{image_key[1:]}; partition it before asking for images"
+            )
+
+        tol = self.registry.cdist_tol
+        ends = sorted(
+            (
+                (float(self.intersection(images[0]).stable_cdist), interval.closed_lo),
+                (float(self.intersection(images[1]).stable_cdist), interval.closed_hi),
+            ),
+            key=lambda end: end[0],
+        )
+        (lo, closed_lo), (hi, closed_hi) = ends
+
+        covering: list[int] = []
+        for candidate in image_result.intervals:
+            overlap_lo = max(lo, candidate.lo_cdist)
+            overlap_hi = min(hi, candidate.hi_cdist)
+            if overlap_lo > overlap_hi + tol:
+                continue
+            if overlap_hi - overlap_lo > tol:
+                covering.append(candidate.element_id)
+                continue
+            # The two only touch: they meet iff both are closed at that point.
+            point = 0.5 * (overlap_lo + overlap_hi)
+            if span_contains(lo, hi, closed_lo, closed_hi, point, tol) and owns_cdist(
+                candidate, point, tol
+            ):
+                covering.append(candidate.element_id)
+        return covering
 
     def clear_results(self) -> None:
         """Empty all algorithm-output slots, leaving the input trellis intact."""

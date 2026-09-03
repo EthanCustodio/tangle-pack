@@ -4,7 +4,36 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ..numerics.Bridge import BridgeId
     from ..numerics.Intersection import ManifoldKey
+
+# The two orientation labels the topological layer uses, defined here (with the
+# result schema they annotate) so that StablePartition, Trellis, and the session
+# facade all name the same thing.
+Side = Literal["left", "right"]
+Endpoint = Literal["first", "second"]
+
+OPPOSITE_SIDE: dict[Side, Side] = {"left": "right", "right": "left"}
+
+
+def endpoint_index(endpoint: Endpoint) -> int:
+    """
+    Position of a named bridge endpoint within its BridgeId.
+
+    Args:
+        endpoint: ``"first"`` or ``"second"``.
+
+    Returns:
+        0 for ``"first"``, 1 for ``"second"``.
+
+    Raises:
+        ValueError: If ``endpoint`` names neither end.
+    """
+    if endpoint == "first":
+        return 0
+    if endpoint == "second":
+        return 1
+    raise ValueError(f"endpoint must be 'first' or 'second', got {endpoint!r}")
 
 """
 Dev Notes:
@@ -72,7 +101,7 @@ class Hole:
     coords: tuple[float, float]
     near_intersection_id: int
     pair: Optional["PseudoneighborPair"] = None
-    bridge_side: Optional[Literal["left", "right"]] = None
+    bridge_side: Optional[Side] = None
     bounding_ids: Optional[tuple[int, int]] = None
     openings: Optional[list[tuple[int, str, str]]] = None
     iterate: Optional[int] = None
@@ -150,6 +179,11 @@ class PartitionInterval:
     holes on both of its adjacent intervals appears as a degenerate closed
     singleton [x, x].
 
+    An interval is also a partition *element*: the identifiable piece of stable
+    branch the region layer will glue a face to. Its full identity is
+    ``(branch_key, side, element_id)`` — the id alone only names it within one
+    :class:`StablePartitionResult`.
+
     Attributes:
         lo_id: Registry ID of the lower (toward-anchor) boundary intersection,
             or None when the interval starts at the anchor point (cdist 0).
@@ -159,6 +193,13 @@ class PartitionInterval:
         hi_cdist: Stable canonical distance of the upper boundary.
         closed_lo: True if the lower boundary point belongs to the interval.
         closed_hi: True if the upper boundary point belongs to the interval.
+        element_id: Index of this element within its result's ``intervals``
+            (anchor outward). Stamped by
+            :func:`topology.StablePartition.partition_stable_manifold`; -1 on an
+            interval that has not been through it.
+        branch_key: Manifold key of the stable branch this element lies on.
+            None until stamped.
+        side: Which side's partition this element belongs to. None until stamped.
     """
 
     lo_id: Optional[int]
@@ -167,6 +208,9 @@ class PartitionInterval:
     hi_cdist: float
     closed_lo: bool
     closed_hi: bool
+    element_id: int = -1
+    branch_key: Optional["ManifoldKey"] = None
+    side: Optional[Side] = None
 
 
 @dataclass
@@ -181,12 +225,68 @@ class StablePartitionResult:
     named in the hole's ``openings`` records; which endpoints are open is
     derived from the hole's side of its bridge.
 
+    The intervals double as the branch's partition *elements*; the two lookup
+    tables built alongside them answer the two questions the region layer asks:
+    "which element owns this crossing" and "which elements sit at this bridge's
+    two ends".
+
     Attributes:
         branch_key: Manifold key of the partitioned stable branch.
         side: Which side's holes this partition is built from.
         intervals: The partition intervals, ordered from the anchor outward.
+        element_of_intersection: Every crossing on this branch mapped to the
+            single element that owns it — the element whose span contains it,
+            with a shared endpoint owned by whichever neighbour is closed there
+            (a pinched singleton owns its own point). Keyed by registry ID, so
+            the table survives everything but a renumbering of the registry.
+        elements_at_bridge: Convenience index over the bridges the building
+            trellis actually held: every non-partial one of them with at least
+            one endpoint on this branch, mapped to ``(element at first, element
+            at second)`` in :data:`~tanglepack.numerics.Bridge.BridgeId` order,
+            with ``None`` for an end that lies on a different stable branch.
+            It is NOT the authority on bridge-to-element: a trellis holds a
+            bridge under its UNSTABLE fixed point, so a heteroclinic bridge of
+            W^u(fp1) whose endpoints sit on W^s(fp3) is absent from fp3's
+            snapshot entirely and has no entry here even though fp3's partition
+            owns both its endpoints. Because a BridgeId IS the endpoint id pair,
+            :meth:`Trellis.element_for` falls back to
+            ``element_of_intersection`` and answers anyway — go through it, or
+            through
+            :meth:`~tanglepack.loom.TangleSession.TangleSession.partition_element_for`
+            for the cross-trellis case, rather than reading this table directly.
+
+    Note:
+        Both tables are keyed by registry ids and element indices of *this*
+        result, so they are only meaningful for the trellis snapshot that built
+        them. A trellis is dropped and rebuilt whenever the workbench generation
+        moves (which is what a registry renumbering does), and its results go
+        with it — nothing migrates ids across a reindex.
     """
 
     branch_key: "ManifoldKey"
-    side: Literal["left", "right"]
+    side: Side
     intervals: list[PartitionInterval] = field(default_factory=list)
+    element_of_intersection: dict[int, int] = field(default_factory=dict)
+    elements_at_bridge: dict["BridgeId", tuple[Optional[int], Optional[int]]] = field(
+        default_factory=dict
+    )
+
+    def element(self, element_id: int) -> PartitionInterval:
+        """
+        Return the element with this id.
+
+        Args:
+            element_id: Index of the element within :attr:`intervals`.
+
+        Returns:
+            The PartitionInterval carrying that id.
+
+        Raises:
+            IndexError: If ``element_id`` is not an element of this result.
+        """
+        if not 0 <= element_id < len(self.intervals):
+            raise IndexError(
+                f"element {element_id} is not one of this partition's "
+                f"{len(self.intervals)} elements"
+            )
+        return self.intervals[element_id]
