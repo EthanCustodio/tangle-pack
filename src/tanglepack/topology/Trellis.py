@@ -21,6 +21,7 @@ from .TopologyResults import (
 )
 
 if TYPE_CHECKING:
+    from .Arrangement import Arrangement
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.DynamicalSystem import DynamicalSystem
     from ..numerics.Bridge import Bridge, BridgeId
@@ -137,6 +138,7 @@ class Trellis:
         self._bridge_by_endpoints: Optional[dict[frozenset, "Bridge"]] = None
         self._bridge_lookup_len: int = -1
         self._bridge_polylines: dict = {}
+        self._arrangement = None
 
         # ── algorithm output slots (filled by topological algorithms) ────────
         self.pseudoneighbors: list[PseudoneighborPair] = []
@@ -336,6 +338,30 @@ class Trellis:
             self._bridge_by_endpoints = index
             self._bridge_lookup_len = len(self.bridges)
         return self._bridge_by_endpoints.get(frozenset((first_id, second_id)))
+
+    @property
+    def arrangement(self) -> "Arrangement":
+        """
+        The planar arrangement of this trellis: its arcs and the faces they bound.
+
+        Built on first access and kept for the life of the trellis. That IS caching
+        by generation: a Trellis is a snapshot valid only while the workbench still
+        reports :attr:`_built_generation`, so the session drops the whole object —
+        arrangement included — the moment anything moves. Nothing has to be
+        invalidated by hand.
+
+        Prefer the ALL-fixed-points trellis (``session.arrangement()``): a
+        heteroclinic crossing belongs to two tangles, and a single-fixed-point
+        snapshot cuts the other side's arcs off, turning real faces into open ones.
+
+        Returns:
+            The :class:`~tanglepack.topology.Arrangement.Arrangement`.
+        """
+        if self._arrangement is None:
+            from .Arrangement import Arrangement
+
+            self._arrangement = Arrangement.from_trellis(self)
+        return self._arrangement
 
     def cached_bridge_polyline(self, bridge: "Bridge", build):
         """

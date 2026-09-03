@@ -203,6 +203,25 @@ class IntersectionRegistry:
             )
         )
 
+    def find(self, intersection: Intersection) -> Optional[int]:
+        """
+        The id of the stored crossing that IS this one, if it is already here.
+
+        The public face of the collision test :meth:`add` applies: a match needs
+        both canonical distances within ``cdist_tol`` AND both branch keys equal.
+        Use it to resolve a crossing you can describe but do not hold -- the
+        image of an anchor, say, which is the anchor of the next orbit branch and
+        is fully specified by its ``(0, 0)`` cdists plus its two advanced keys.
+
+        Args:
+            intersection: A probe describing the crossing to find. It is not
+                stored and needs no id.
+
+        Returns:
+            The registry id of the matching crossing, or None.
+        """
+        return self._find_collision(intersection)
+
     def reindex_from(self, old: "IntersectionRegistry") -> dict[int, int]:
         """
         Re-number this registry so crossings carried over from ``old`` keep their id.

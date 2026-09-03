@@ -86,8 +86,16 @@ def test_area_preserved_helper_rejects_a_broken_chain(henon_tangle_with_bridges)
     workbench, _fp = henon_tangle_with_bridges
     registry = workbench.intersection_registry
 
+    # Skip the anchors: a periodic point's crossing sits at cdist (0, 0) and its
+    # image is the next orbit point's anchor, also at (0, 0), so its area product
+    # is 0 -> 0 and scaling a zero cdist corrupts nothing. Anchors are registered
+    # first (Phase 6.3) and so are the lowest ids, which is why the plain "first
+    # id with an n=1 link" used to land on a real crossing and now would not.
     start_id = next(
-        iid for iid in registry.all_ids() if registry.iterate_table[iid, 1] is not None
+        iid
+        for iid in registry.all_ids()
+        if registry.iterate_table[iid, 1] is not None
+        and registry[iid].unstable_cdist * registry[iid].stable_cdist != 0.0
     )
     image = registry[registry.iterate_table[start_id, 1]]
     original = image.unstable_cdist

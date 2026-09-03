@@ -572,6 +572,10 @@ class TangleWorkbench:
             manifolds_to_index.extend(self._iter_manifolds(fp, "stable"))
         self.Tangle.add_manifolds(manifolds_to_index)
 
+        # Anchors FIRST: every periodic point is a crossing of its own manifolds,
+        # and declaring it beats detecting it (see _register_anchors).
+        self._register_anchors(fixed_points)
+
         for intersection in self.Tangle.resolve_crossings():
             intersection.id = self._intersection_registry.add(intersection)
 
@@ -586,6 +590,123 @@ class TangleWorkbench:
             self.infer_iterates()
 
         return [ix.coords for _iid, ix in self._intersection_registry]
+
+    def _register_anchors(self, fixed_points: Iterable[FixedPoint]) -> list[int]:
+        """
+        Declare every periodic point as a crossing of its own two manifolds.
+
+        A periodic point sits at canonical distance 0 on every branch attached to
+        it, so it IS a crossing of each of its unstable branches with each of its
+        stable branches -- the ``(0, 0)`` anchor the topological layer treats as
+        the innermost node of a branch. Until now that crossing appeared only by
+        accident, when the two fundamental segments happened to be detected as an
+        rtree pair; declaring it makes it a fact of the model rather than a
+        by-product of the index.
+
+        Anchors are registered BEFORE :meth:`Tangle.resolve_crossings`, so:
+
+        * they take the lowest registry ids, deterministically ordered by the
+          manifold insertion order rather than by whatever order the rtree
+          returned its candidate pairs;
+        * the accidentally detected crossing at the same place collides with the
+          anchor in :meth:`IntersectionRegistry.add` (same ``(0, 0)`` cdists,
+          same two branch keys) and is dropped in its favour -- one crossing, not
+          two, and the id belongs to the declared one.
+
+        Purging the detected copy afterwards instead would work equally well
+        geometrically but would leave the anchor's id dependent on detection
+        order, which is exactly what ``preserve_ids`` has to be able to rely on.
+
+        The anchor carries the same cut geometry a detected crossing carries --
+        its unstable branch's root and the node after it -- so
+        :meth:`Tangle.create_bridges` cuts at it exactly as before and the bridge
+        set is unchanged.
+
+        Args:
+            fixed_points: The fixed points whose periodic points to anchor.
+
+        Returns:
+            The registry ids of the anchors, in registration order.
+
+        Note:
+            One anchor is registered per (unstable branch, stable branch) pair
+            meeting at each periodic point. For a point without inversion that is
+            the single pair (branch 0, branch 0). An inversion point has two
+            branches of each manifold and so gets FOUR anchors at one coordinate,
+            which keeps every branch anchored but is not the topologically right
+            model -- the four rays leaving an inversion point form ONE degree-4
+            node. See the Dev Notes in
+            :mod:`tanglepack.topology.Arrangement`.
+        """
+        registry = self._intersection_registry
+        anchor_ids: list[int] = []
+        for fp in fixed_points:
+            unstable = self._branch_items(fp, "unstable")
+            stable = self._branch_items(fp, "stable")
+            for u_key, u_manifold in unstable:
+                u_nodes = u_manifold.get_point_array(return_nodes=True)
+                if len(u_nodes) < 2:
+                    logger.debug(
+                        "No anchor on %s: the branch has fewer than two nodes",
+                        u_key,
+                    )
+                    continue
+                for s_key, s_manifold in stable:
+                    if s_key[2] != u_key[2]:
+                        continue  # a different point of the periodic orbit
+                    s_nodes = s_manifold.get_point_array(return_nodes=True)
+                    if len(s_nodes) < 2:
+                        continue
+                    coords = u_nodes[0].get_point()
+                    anchor = Intersection.synthetic(
+                        coords=(float(coords[0]), float(coords[1])),
+                        unstable_cdist=0.0,
+                        stable_cdist=0.0,
+                        label="anchor",
+                        manifold_a_key=u_key,
+                        manifold_b_key=s_key,
+                        unstable_manifold=u_manifold,
+                        unstable_segment=(u_nodes[0], u_nodes[1]),
+                        crossing_sign=self._anchor_crossing_sign(u_nodes, s_nodes),
+                    )
+                    anchor_ids.append(registry.add(anchor))
+        return anchor_ids
+
+    def _branch_items(
+        self, fp: FixedPoint, stability: Stability
+    ) -> list[tuple[ManifoldKey, BaseManifold]]:
+        """The ``(key, manifold)`` pairs of one fixed point's branches."""
+        return [
+            (key, manifold)
+            for key, manifold in self.manifolds.items()
+            if key[0] is fp and key[1] == stability
+        ]
+
+    @staticmethod
+    def _anchor_crossing_sign(u_nodes: list, s_nodes: list) -> int:
+        """
+        Handedness of an anchor, from the two oriented eigendirections.
+
+        The eigendirections are read off the fundamental segments rather than off
+        ``FixedPoint``: the initializer lays each fundamental segment along the
+        oriented eigenvector, so the first node-to-node step IS that eigenvector
+        -- and, unlike the stored eigenvector, it already carries the sign of the
+        branch it belongs to, which is what an inversion point's second branch
+        needs (there the two branches run along opposite eigendirections and one
+        stored vector cannot describe both).
+
+        Args:
+            u_nodes: The unstable branch's nodes, root first.
+            s_nodes: The stable branch's nodes, root first.
+
+        Returns:
+            The sign of ``cross(unstable eigendirection, stable eigendirection)``:
+            ``+1``, ``-1``, or ``0`` if the two are exactly parallel (impossible
+            for a real saddle, whose eigenvectors are independent).
+        """
+        u_dir = u_nodes[1].get_point() - u_nodes[0].get_point()
+        s_dir = s_nodes[1].get_point() - s_nodes[0].get_point()
+        return int(np.sign(float(u_dir[0] * s_dir[1] - u_dir[1] * s_dir[0])))
 
     def plot_intersections(
         self, fp=None, ax=None, show_ids=False, id_fontsize=8, **scatter_kwargs
@@ -684,7 +805,11 @@ class TangleWorkbench:
             :data:`~.Bridge.BridgeId`.
         """
         crossings = [ix for _iid, ix in self._intersection_registry]
-        bridges = self.Tangle.create_bridges(crossings, fixed_point=fixed_point)
+        bridges = self.Tangle.create_bridges(
+            crossings,
+            fixed_point=fixed_point,
+            cdist_tol=self._intersection_registry.cdist_tol,
+        )
         # Stamp the id epoch only when starting from nothing. Cutting ON TOP of an
         # existing set after a renumbering recompute leaves stale ids mixed in with
         # fresh ones, and keeping the older epoch is what makes the next
@@ -1007,7 +1132,11 @@ class TangleWorkbench:
         # 4. cut at crossings. Only the crossings just born on this image are cut at:
         #    they alone carry bracketing points that lie on the image's own polyline.
         new_bridges = (
-            self.Tangle.create_bridges(new_intersections, for_manifold=iterated)
+            self.Tangle.create_bridges(
+                new_intersections,
+                for_manifold=iterated,
+                cdist_tol=self._intersection_registry.cdist_tol,
+            )
             if new_intersections
             else []
         )
@@ -1161,7 +1290,7 @@ class TangleWorkbench:
             return False
 
         source = registry[src_id]
-        if self._register_anchor_self_iterate(src_id, source, registry):
+        if self._register_anchor_iterate(src_id, source, registry):
             return True
 
         # The image's stable branch and stable canonical distance are both
@@ -1189,26 +1318,38 @@ class TangleWorkbench:
         registry.register_iterate(src_id, 1, best_id)
         return True
 
-    def _register_anchor_self_iterate(
+    def _register_anchor_iterate(
         self, src_id: int, source: Intersection, registry: IntersectionRegistry
     ) -> bool:
         """
-        Record ``f(anchor) = anchor`` for a PERIOD-1 orbit's own periodic point.
+        Record the forward image of an ANCHOR -- a periodic point's own crossing.
 
-        The periodic point sits on both its manifolds at canonical distance
-        ``(0, 0)`` and is registered as a crossing there. It is a fixed point of
-        the map, so on a period-1 orbit -- and only there -- it is its own forward
-        image. That is the one crossing :meth:`_match_image` can never find: the
-        candidate it needs is the source, which the "an image is not its source"
-        guard rightly excludes for every other crossing (at cdist ``c > 0`` the
-        prediction is ``beta * c``, which is nowhere near ``c``).
+        A periodic point sits at canonical distance ``(0, 0)`` on the two branches
+        it anchors, and the map carries it to the next point of its orbit, whose
+        anchor sits at ``(0, 0)`` on the two ADVANCED branches. So an anchor's
+        image is not something to search for by canonical distance: it is fully
+        determined by the branch bookkeeping, and
+        :meth:`IntersectionRegistry.find` resolves it exactly.
 
-        On a period > 1 orbit the anchor's image is the anchor of the NEXT orbit
-        branch, a different crossing at its own ``(0, 0)``, which the normal match
-        finds; the advanced-key test below is what tells the two cases apart.
+        Doing it here rather than in the generic matcher closes the one case that
+        matcher provably cannot handle. On a period-1 orbit the anchor is its own
+        image (the periodic point is a fixed point of the map), and the
+        "an image is not its source" guard in :meth:`_match_image` -- correct for
+        every crossing at cdist ``c > 0``, whose predicted image sits at
+        ``beta * c`` far from ``c`` -- excludes the only candidate that can match.
+        On a period > 1 orbit the generic search does find the next branch's
+        anchor, but by a cdist comparison of ``0`` against ``0``, which is a
+        coincidence of the prediction rather than a statement about the orbit.
+
+        Args:
+            src_id: Registry id of the crossing being iterated.
+            source: The crossing itself.
+            registry: The registry to read and write.
 
         Returns:
-            True if the self-iterate was recorded, else False.
+            True if the source is an anchor and its image was recorded, else
+            False (including for an anchor whose image branch has no anchor yet,
+            which happens while a period > 1 orbit is only partly initialized).
         """
         tol = registry.cdist_tol
         if abs(source.unstable_cdist) > tol or abs(source.stable_cdist) > tol:
@@ -1217,14 +1358,26 @@ class TangleWorkbench:
         prediction = self._image_prediction(source)
         if prediction is None:
             return False
-
         a_key, b_key, _u_pred, _s_pred = prediction
-        if b_key != source.manifold_b_key:
-            return False
-        if a_key is not None and a_key != source.manifold_a_key:
+
+        probe = Intersection.synthetic(
+            coords=source.coords,
+            unstable_cdist=0.0,
+            stable_cdist=0.0,
+            manifold_a_key=a_key if a_key is not None else source.manifold_a_key,
+            manifold_b_key=b_key,
+        )
+        target = registry.find(probe)
+        if target is None:
+            logger.debug(
+                "Anchor %d has no image anchor on branches (%s, %s) yet",
+                src_id,
+                a_key,
+                b_key,
+            )
             return False
 
-        registry.register_iterate(src_id, 1, src_id)
+        registry.register_iterate(src_id, 1, target)
         return True
 
     @staticmethod

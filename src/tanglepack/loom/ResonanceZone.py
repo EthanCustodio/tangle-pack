@@ -8,9 +8,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..numerics.Intersection import Intersection, ManifoldKey
+from ..numerics.geometry import arc_polyline, point_in_polygon, signed_polygon_area
+from ..topology.TopologyResults import Arc
 
 if TYPE_CHECKING:
     from ..numerics.BaseManifold import BaseManifold
+    from ..numerics.IntersectionRegistry import IntersectionRegistry
     from ..numerics.BranchPoint import BranchPoint
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Point import Point
@@ -41,10 +44,12 @@ below the pip's stable cdist and its far endpoint (``p0_seg1``) above it, so set
 ``manifold.tail = p0_seg1`` keeps the curve up to just past the pip — the convention
 TangleWorkbench.trim_stable_manifolds uses, here generalized to chosen pips.
 
-Registry-id caveat: recompute rebuilds the registry, so ``boundary_intersection_id``
-is only valid against the registry that existed when the zone was defined. The cut
-crossings are preserved as Intersection objects (``cut_intersections``), which carry
-the canonical distances and branch keys and are stable across recomputes.
+Registry-id caveat: a recompute rebuilds the registry, so an id held across one is
+only meaningful when the recompute preserved ids. The zone therefore stores no id
+at all: the cut crossings are kept as Intersection objects (``cut_intersections``),
+which carry the canonical distances and branch keys and are stable across
+recomputes, and the primary pip's id is resolved against the live registry on
+demand by ``resolve_boundary_intersection_id``.
 
 Inversion (k_value == 2*period) is not yet validated here (no inversion example in
 the codebase) — the boundary traversal matches branches by orbit index, which is
@@ -52,29 +57,13 @@ exact only for the non-inversion case. Mirrors the StrongPip inversion caveat.
 """
 
 
-@dataclass(frozen=True)
-class BoundaryArc:
-    """
-    One arc of a resonance-zone boundary: a manifold trimmed at a pip.
-
-    A zone's closed boundary is a cyclic chain of these — alternating unstable arcs
-    (periodic point → pip) and stable arcs (pip → periodic point). Each arc names the
-    manifold it lives on and the canonical distance at which it is cut, so the boundary
-    keeps a reference back to the geometry that formed it even after the snapshot is
-    taken (see :class:`ResonanceZone`).
-
-    Attributes:
-        manifold_key: Key of the manifold this arc runs along.
-        stability: ``"unstable"`` or ``"stable"`` — which manifold family.
-        cdist_cutoff: Canonical distance of the pip; the arc spans the manifold from
-            its root (cdist 0) out to this value.
-        pip_coords: (x, y) of the pip at the far end of the arc.
-    """
-
-    manifold_key: ManifoldKey
-    stability: Literal["unstable", "stable"]
-    cdist_cutoff: float
-    pip_coords: tuple[float, float]
+#: A resonance-zone boundary piece is described with the region layer's own
+#: :class:`~tanglepack.topology.TopologyResults.Arc`, so a zone boundary and a
+#: region boundary are made of the same thing and measure the same way. The name
+#: is kept as an alias because the zone's arcs are a slightly wider notion: one
+#: runs from a periodic point all the way OUT to its pip, which may span several
+#: consecutive arcs of the arrangement rather than exactly one.
+BoundaryArc = Arc
 
 
 @dataclass
@@ -86,16 +75,17 @@ class ResonanceZone:
         fixed_point: The periodic point whose zone this is.
         stable_branch_key: Stable branch of the primary pip (the strong pip).
         boundary_intersection: The primary pip (strong pip) as an Intersection.
-        boundary_intersection_id: The primary pip's registry id at definition time.
-            Valid only against the pre-recompute registry (see Dev Notes).
         cut_intersections: The pip and its iterates — one per stable branch — that
             bound the zone. Length 1 for period 1, k for a period-k orbit. Exposed as
             :attr:`boundary_intersections` (the preferred name).
         intersection_ids: Registry ids present after the trim + recompute.
         previous_tails: Each trimmed stable branch's tail before trimming, keyed by
             manifold key, so the trim can be undone with :meth:`restore`.
-        boundary_arcs: The stable/unstable arcs forming the closed boundary, captured
-            by :meth:`capture_boundary`. Empty until captured.
+        boundary_arcs: The stable/unstable :class:`~tanglepack.topology.TopologyResults.Arc`
+            objects forming the closed boundary, captured by
+            :meth:`capture_boundary`. Each runs from a periodic point (canonical
+            distance 0, the anchor crossing) out to a cut point. Empty until
+            captured.
         boundary_vertices: Frozen (N, 2) snapshot of the closed boundary polygon taken
             at definition time, used for in/out-of-zone tests so classification is
             robust to later trims/recomputes. ``None`` until captured.
@@ -104,13 +94,12 @@ class ResonanceZone:
     fixed_point: "FixedPoint"
     stable_branch_key: ManifoldKey
     boundary_intersection: Intersection
-    boundary_intersection_id: int
     cut_intersections: list[Intersection] = field(default_factory=list)
     intersection_ids: list[int] = field(default_factory=list)
     previous_tails: dict[ManifoldKey, "Point | BranchPoint"] = field(
         default_factory=dict
     )
-    boundary_arcs: list[BoundaryArc] = field(default_factory=list)
+    boundary_arcs: list[Arc] = field(default_factory=list)
     boundary_vertices: Optional[NDArray[np.float64]] = None
 
     @property
@@ -163,39 +152,78 @@ class ResonanceZone:
 
     def _build_boundary(
         self, workbench: "TangleWorkbench", *, close: bool = True
-    ) -> tuple[NDArray[np.float64], list[BoundaryArc]]:
+    ) -> tuple[NDArray[np.float64], list[Arc]]:
         """Build the closed boundary polygon and the list of arcs that compose it.
 
         See :meth:`boundary_polygon` for the stitching order. Returns the (N, 2)
-        vertex array and the per-pip :class:`BoundaryArc` descriptors (one unstable
-        and one stable arc per cut point).
+        vertex array and the composing :class:`~tanglepack.topology.TopologyResults.Arc`
+        objects (one unstable and one stable arc per cut point), each running from a
+        periodic point's anchor crossing out to that cut point.
         """
         cuts = self.cut_intersections or [self.boundary_intersection]
-        tol = workbench.intersection_registry.cdist_tol
+        registry = workbench.intersection_registry
+        tol = registry.cdist_tol
 
-        arcs: list[BoundaryArc] = []
+        arcs: list[Arc] = []
 
-        def arc(key: ManifoldKey, stability: str, cutoff: float, pip) -> list[NDArray]:
-            """Manifold points from the root out to the pip (oriented root → pip)."""
+        def arc(
+            key: ManifoldKey,
+            stability: Literal["unstable", "stable"],
+            cutoff: float,
+            pip: "NDArray[np.float64] | tuple[float, float]",
+            pip_id: Optional[int],
+        ) -> list[NDArray[np.float64]]:
+            """Manifold points from the root out to the pip (oriented root → pip).
+
+            Also records the piece as an :class:`Arc` when both of its endpoint
+            crossings can be named: the anchor at the root of ``key`` and the pip
+            at the far end. A missing id means the arc cannot be described in the
+            shared vocabulary, so it is left out of ``arcs`` while its vertices
+            still go into the ring.
+
+            Args:
+                key: The branch this arc runs along.
+                stability: Which canonical distance ``cutoff`` is measured in.
+                cutoff: The pip's canonical distance; the arc spans ``[0, cutoff]``.
+                pip: The pip's coordinates, appended as the arc's far end.
+                pip_id: The pip's registry id in the CURRENT registry, or None.
+
+            Returns:
+                The arc's vertices, root first.
+            """
             manifold = workbench.manifolds[key]
-            nodes = manifold.get_point_array(return_nodes=True)
-            pts = [n.get_point() for n in nodes if n.get_cdist(stability) <= cutoff + tol]
+            pts = list(arc_polyline(manifold, 0.0, cutoff, stability=stability, tol=tol))
             pts.append(np.asarray(pip, dtype=float))
-            arcs.append(
-                BoundaryArc(
-                    manifold_key=key,
-                    stability=stability,
-                    cdist_cutoff=cutoff,
-                    pip_coords=(float(pip[0]), float(pip[1])),
+            anchor_id = _anchor_id(registry, key)
+            if anchor_id is None or pip_id is None:
+                logger.debug(
+                    "Not recording a boundary Arc on %s: anchor id %s, pip id %s",
+                    key,
+                    anchor_id,
+                    pip_id,
                 )
-            )
+            else:
+                arcs.append(
+                    Arc(
+                        kind=stability,
+                        lo_id=anchor_id,
+                        hi_id=pip_id,
+                        branch_key=key,
+                        bridge_id=None,
+                    )
+                )
             return pts
 
         unstable_arcs, stable_arcs, u_orbit, b_orbit = [], [], [], []
         for ix in cuts:
             pip = ix.coords
-            unstable_arcs.append(arc(ix.manifold_a_key, "unstable", ix.unstable_cdist, pip))
-            stable_arcs.append(arc(ix.manifold_b_key, "stable", ix.stable_cdist, pip))
+            pip_id = _live_id(registry, ix)
+            unstable_arcs.append(
+                arc(ix.manifold_a_key, "unstable", ix.unstable_cdist, pip, pip_id)
+            )
+            stable_arcs.append(
+                arc(ix.manifold_b_key, "stable", ix.stable_cdist, pip, pip_id)
+            )
             u_orbit.append(ix.manifold_a_key[2])
             b_orbit.append(ix.manifold_b_key[2])
 
@@ -230,7 +258,7 @@ class ResonanceZone:
         :attr:`boundary_arcs`. Call this once the zone's own stable branch(es) have
         been trimmed (as :func:`define_resonance_zone` does), so the snapshot reflects
         the trimmed boundary and stays valid for in/out tests even after later zones
-        trim or recompute the registry. Invalidates the cached shapely polygon.
+        trim or recompute the registry.
 
         Args:
             workbench: The workbench whose manifolds back this zone.
@@ -238,6 +266,27 @@ class ResonanceZone:
         self.boundary_vertices, self.boundary_arcs = self._build_boundary(
             workbench, close=True
         )
+
+    def resolve_boundary_intersection_id(
+        self, workbench: "TangleWorkbench"
+    ) -> Optional[int]:
+        """
+        This zone's primary pip, as an id in the workbench's CURRENT registry.
+
+        The id is resolved on demand rather than stored, because a recompute that
+        does not preserve ids would silently turn a stored one into a different
+        crossing. The pip itself is kept as an :class:`Intersection`, whose
+        canonical distances and branch keys survive any rebuild, and those are what
+        the registry is asked for.
+
+        Args:
+            workbench: The workbench whose registry to resolve against.
+
+        Returns:
+            The pip's current registry id, or None if the crossing is no longer in
+            the registry (it can be trimmed away by a later zone).
+        """
+        return _live_id(workbench.intersection_registry, self.boundary_intersection)
 
     @property
     def area(self) -> float:
@@ -247,11 +296,7 @@ class ResonanceZone:
         is the absolute area, so it is independent of vertex winding direction; the
         nested-zone classifier in :class:`TangleSession` orders zones by it.
         """
-        verts = self.boundary_vertices
-        if verts is None or len(verts) < 3:
-            return 0.0
-        x, y = verts[:, 0], verts[:, 1]
-        return float(0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+        return abs(signed_polygon_area(self.boundary_vertices))
 
     def contains_point(
         self,
@@ -264,8 +309,9 @@ class ResonanceZone:
 
         A point on the boundary (e.g. the midpoint node of a bridge that forms this
         zone's own unstable boundary arc) counts as inside — such bridges belong to the
-        innermost zone they bound. Inside-ness is decided by an even-odd ray cast; an
-        on-edge point is detected separately so it is always treated as contained.
+        innermost zone they bound. That inclusion is the shared policy of
+        :func:`~tanglepack.numerics.geometry.point_in_polygon`, which this delegates
+        to, so a zone and a region answer the same way.
 
         Args:
             point: An (x, y) coordinate.
@@ -276,29 +322,9 @@ class ResonanceZone:
             when the boundary has not been captured).
         """
         verts = self.boundary_vertices
-        if verts is None or len(verts) < 3:
+        if verts is None:
             return False
-        px, py = float(point[0]), float(point[1])
-
-        x, y = verts[:, 0], verts[:, 1]
-        x1, y1 = x[:-1], y[:-1]
-        x2, y2 = x[1:], y[1:]
-
-        # On any edge (within tol)? Boundary is inclusive.
-        dx, dy = x2 - x1, y2 - y1
-        seg_len2 = dx * dx + dy * dy
-        with np.errstate(invalid="ignore", divide="ignore"):
-            t = np.where(seg_len2 > 0, ((px - x1) * dx + (py - y1) * dy) / seg_len2, 0.0)
-        t = np.clip(t, 0.0, 1.0)
-        cx, cy = x1 + t * dx, y1 + t * dy
-        if np.any((cx - px) ** 2 + (cy - py) ** 2 <= tol * tol):
-            return True
-
-        # Even-odd ray cast to the right of the point.
-        crosses = ((y1 > py) != (y2 > py)) & (
-            px < (x2 - x1) * (py - y1) / np.where(y2 != y1, y2 - y1, 1.0) + x1
-        )
-        return bool(np.count_nonzero(crosses) % 2 == 1)
+        return point_in_polygon(point, verts, tol=tol)
 
     def restore(self, workbench: "TangleWorkbench", *, recompute: bool = True) -> None:
         """
@@ -338,6 +364,60 @@ class ResonanceZone:
                 list(workbench.fixed_points), preserve_ids=True
             )
             workbench.rebuild_bridges()
+
+
+def _anchor_id(
+    registry: "IntersectionRegistry", key: ManifoldKey
+) -> Optional[int]:
+    """The registry id of the anchor crossing at the root of one branch.
+
+    A branch is anchored at a periodic point, which is registered as a crossing of
+    that point's unstable and stable branches at canonical distance ``(0, 0)`` (see
+    ``TangleWorkbench._register_anchors``). The probe names the pair of branches
+    exactly, so the registry's own collision test resolves it without any
+    coordinate comparison.
+
+    Args:
+        registry: The registry to resolve against.
+        key: The branch whose anchor is wanted; its orbit index and branch index
+            pick out the partner branch of the other stability.
+
+    Returns:
+        The anchor's registry id, or None if that branch pair has no anchor.
+    """
+    fixed_point, stability, orbit_index, branch_index = key
+    unstable = (
+        key if stability == "unstable"
+        else (fixed_point, "unstable", orbit_index, branch_index)
+    )
+    stable = (
+        key if stability == "stable"
+        else (fixed_point, "stable", orbit_index, branch_index)
+    )
+    return registry.find(
+        Intersection.synthetic(
+            coords=(0.0, 0.0),
+            unstable_cdist=0.0,
+            stable_cdist=0.0,
+            manifold_a_key=unstable,
+            manifold_b_key=stable,
+        )
+    )
+
+
+def _live_id(
+    registry: "IntersectionRegistry", intersection: Intersection
+) -> Optional[int]:
+    """The id of ``intersection`` in the CURRENT registry, matched not assumed.
+
+    Args:
+        registry: The registry to resolve against.
+        intersection: The crossing to find, by canonical distances and branch keys.
+
+    Returns:
+        Its current registry id, or None if it is no longer registered.
+    """
+    return registry.find(intersection)
 
 
 def _trim_stable_at(workbench: "TangleWorkbench", ix: Intersection) -> "BaseManifold":
@@ -466,7 +546,6 @@ def define_resonance_zone(
         fixed_point=fixed_point,
         stable_branch_key=key,
         boundary_intersection=primary,
-        boundary_intersection_id=intersection_id,
         cut_intersections=cut_intersections,
         intersection_ids=intersection_ids,
         previous_tails=previous_tails,

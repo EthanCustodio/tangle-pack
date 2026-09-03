@@ -1,11 +1,28 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Literal, Optional, TYPE_CHECKING
+
+import numpy as np
+from numpy.typing import NDArray
+
+from ..numerics.geometry import (
+    arc_polyline,
+    point_in_polygon,
+    polygon_interior_point,
+    polyline_midpoint,
+    signed_polygon_area,
+)
 
 if TYPE_CHECKING:
     from ..numerics.Bridge import BridgeId
     from ..numerics.Intersection import ManifoldKey
+    from .Arrangement import Arrangement
+    from .Trellis import Trellis
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 # The two orientation labels the topological layer uses, defined here (with the
 # result schema they annotate) so that StablePartition, Trellis, and the session
@@ -290,3 +307,440 @@ class StablePartitionResult:
                 f"{len(self.intervals)} elements"
             )
         return self.intervals[element_id]
+
+
+# --------------------------------------------------------------------------- #
+# The region layer: the pieces of manifold a face is bounded by, and the face.
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class Arc:
+    """
+    One edge of the arrangement: a piece of manifold between two crossings.
+
+    An arc is the geometric edge; whatever labels the algorithms hang on it (the
+    partition elements on a stable arc, the :data:`BridgeId` of an unstable one)
+    are read off it, never stored twice. It is directed: ``reverse`` says whether
+    a face traverses it from ``hi_id`` down to ``lo_id`` instead of the natural
+    anchor-outward direction. Two arcs that differ only in ``reverse`` are the
+    two half-edges of one edge and share an :attr:`edge_key`.
+
+    Attributes:
+        kind: ``"stable"`` or ``"unstable"`` — which manifold family the arc runs
+            along. Per the fundamental invariant these are the only two kinds of
+            manifold piece a face boundary can be made of.
+        lo_id: Registry id of the crossing at the LOWER canonical distance.
+        hi_id: Registry id of the crossing at the higher canonical distance.
+        branch_key: Manifold key of the branch this arc lies on. Both crossings
+            lie on it, and canonical distances are only comparable within it.
+        bridge_id: For an unstable arc, the :data:`~tanglepack.numerics.Bridge.BridgeId`
+            of the bridge it IS — an unstable arc and a bridge are the same
+            object seen from the topological and the numerical side. ``None`` for
+            a stable arc.
+        reverse: True when the arc is traversed from ``hi_id`` to ``lo_id``.
+    """
+
+    kind: Literal["stable", "unstable"]
+    lo_id: int
+    hi_id: int
+    branch_key: "ManifoldKey"
+    bridge_id: Optional["BridgeId"] = None
+    reverse: bool = False
+
+    @property
+    def edge_key(self) -> tuple:
+        """The undirected identity of this edge: kind, endpoints, branch."""
+        return (self.kind, self.lo_id, self.hi_id, self.branch_key)
+
+    @property
+    def tail_id(self) -> int:
+        """The crossing this arc is traversed FROM."""
+        return self.hi_id if self.reverse else self.lo_id
+
+    @property
+    def head_id(self) -> int:
+        """The crossing this arc is traversed TO."""
+        return self.lo_id if self.reverse else self.hi_id
+
+    def reversed(self) -> "Arc":
+        """The same edge traversed the other way."""
+        return Arc(
+            kind=self.kind,
+            lo_id=self.lo_id,
+            hi_id=self.hi_id,
+            branch_key=self.branch_key,
+            bridge_id=self.bridge_id,
+            reverse=not self.reverse,
+        )
+
+    # ── geometry (lazy: nothing is built unless asked for) ──────────────────
+
+    def polyline(self, trellis: "Trellis") -> NDArray[np.float64]:
+        """
+        The arc as an ``(N, 2)`` polyline, closed at its two crossings.
+
+        The crossings themselves are not manifold nodes, so the real nodes strictly
+        between them are taken from the underlying curve and the two exact crossing
+        coordinates are put on the ends. That makes consecutive arcs of a face join
+        exactly, with no gap and no overshoot past a corner.
+
+        Args:
+            trellis: The trellis resolving this arc's crossings, branch manifold
+                and (for an unstable arc) bridge.
+
+        Returns:
+            The polyline in traversal order — ``lo`` to ``hi``, or the reverse when
+            :attr:`reverse`. At minimum the two endpoint coordinates.
+        """
+        lo = trellis.intersection(self.lo_id)
+        hi = trellis.intersection(self.hi_id)
+        interior = self._interior_polyline(trellis, lo, hi)
+        parts = [lo.get_point().reshape(1, 2)]
+        if len(interior):
+            parts.append(interior)
+        parts.append(hi.get_point().reshape(1, 2))
+        poly = np.vstack(parts)
+        return poly[::-1] if self.reverse else poly
+
+    def _interior_polyline(self, trellis, lo, hi) -> NDArray[np.float64]:
+        """The real manifold nodes strictly inside this arc, in lo-to-hi order."""
+        tol = trellis.registry.cdist_tol
+        if self.kind == "stable":
+            manifold = trellis.manifolds.get(self.branch_key)
+            if manifold is None:
+                return np.empty((0, 2))
+            return arc_polyline(
+                manifold,
+                lo.stable_cdist,
+                hi.stable_cdist,
+                stability="stable",
+                tol=-tol,
+            )
+        # A bridge's root and tail sit just PAST its crossings, so whichever curve
+        # is used the polyline is clipped back to the arc's span rather than taken
+        # whole -- and arc_polyline normalizes the storage direction, which is what
+        # oriented_bridge_polyline does for the partition's own callers.
+        curve = trellis.bridge_between(self.lo_id, self.hi_id)
+        if curve is None and abs(lo.unstable_cdist) <= tol:
+            # No bridge was cut here, but the arc starts AT the periodic point, so
+            # it runs along the parent branch from its root -- which is exactly a
+            # resonance-zone boundary arc (periodic point out to its pip, possibly
+            # spanning several bridges). Anchored-ness is what makes the fallback
+            # safe: an arc that starts at cdist 0 is on the parent curve by
+            # construction, whereas an arc between two crossings born on an
+            # ITERATED image is not, and reading the parent's nodes over its cdist
+            # span would return an unrelated piece of curve.
+            curve = trellis.manifolds.get(self.branch_key)
+        if curve is None:
+            # Nothing to walk: the polyline degrades to the chord between the two
+            # crossings, which is all the caller's endpoints already give it.
+            return np.empty((0, 2))
+        return arc_polyline(
+            curve,
+            lo.unstable_cdist,
+            hi.unstable_cdist,
+            stability="unstable",
+            tol=-tol,
+        )
+
+    def midpoint(self, trellis: "Trellis") -> Optional[NDArray[np.float64]]:
+        """The middle node of this arc's polyline (see
+        :func:`~tanglepack.numerics.geometry.polyline_midpoint`)."""
+        return polyline_midpoint(self.polyline(trellis))
+
+    # ── partition labels ────────────────────────────────────────────────────
+
+    def elements(self, trellis: "Trellis") -> list["PartitionInterval"]:
+        """
+        The stable-partition elements lying on this arc.
+
+        An arc runs between two CONSECUTIVE crossings of its branch, and partition
+        boundaries are crossings, so an element either covers the whole arc or is a
+        degenerate singleton pinched at one of its ends. Both are returned: every
+        element of every :class:`StablePartitionResult` on this arc's branch whose
+        canonical-distance span meets ``[lo, hi]``.
+
+        Args:
+            trellis: The trellis whose :attr:`~.Trellis.Trellis.stable_partitions`
+                to read. Run the partition first; before that this is empty.
+
+        Returns:
+            The matching elements, each carrying its own ``side`` and
+            ``element_id``. Always empty for an unstable arc — the partition is a
+            partition of the STABLE manifold.
+        """
+        if self.kind != "stable":
+            return []
+        tol = trellis.registry.cdist_tol
+        lo = trellis.intersection(self.lo_id).stable_cdist
+        hi = trellis.intersection(self.hi_id).stable_cdist
+        found: list["PartitionInterval"] = []
+        for result in trellis.stable_partitions:
+            if result.branch_key != self.branch_key:
+                continue
+            for interval in result.intervals:
+                if interval.lo_cdist > hi + tol or interval.hi_cdist < lo - tol:
+                    continue
+                found.append(interval)
+        return found
+
+
+class Region:
+    """
+    A face of the arrangement: a minimal cycle of manifold arcs.
+
+    A region is bounded strictly by pieces of manifold — stable arcs and bridges —
+    and contains no other manifold piece. It is the unit the dual graph will be
+    built over, so it is identified COMBINATORIALLY, by its corner crossings, and
+    carries no geometry until asked: :attr:`boundary_points`, :attr:`area` and
+    :attr:`representative_point` are each built once, on demand, and a caller that
+    only walks adjacency never pays for a polygon.
+
+    Attributes:
+        corners: The registry ids of the crossings at the corners of the face, in
+            traversal order, canonicalised to start at the smallest id (see
+            :func:`canonical_corners`). This tuple IS the region's identity.
+        arcs: The boundary arcs in traversal order, each directed
+            (:attr:`Arc.reverse`) the way the face runs along it. On a closed
+            region ``arcs[i]`` runs from ``corners[i]`` to ``corners[i + 1]``. On
+            an OPEN face the correspondence does not hold: its ``corners`` carry
+            negative placeholder ids where the boundary reflects off a dangling
+            end, and ``arcs`` lists only the real manifold pieces.
+        is_closed: True when the face is bounded entirely by computed manifold —
+            i.e. no dangling end. An open face (a manifold that simply stops
+            before the next crossing) is not a region of the tangle, only of what
+            has been computed so far, and is excluded from
+            :attr:`~.Arrangement.Arrangement.regions`.
+        is_minimal: True when the face encloses no other piece of manifold. It is
+            False only for a closed face that swallows a whole other connected
+            component of the trellis — two tangles with no computed heteroclinic
+            crossing between them are two drawings on one plane, and the face
+            traversal, which walks only along arcs, cannot see one from the other.
+            Such faces are collected on
+            :attr:`~.Arrangement.Arrangement.containing_faces`. A face is a REGION
+            iff it is both closed and minimal.
+        arrangement: The arrangement this face belongs to, used to resolve
+            neighbours and geometry.
+    """
+
+    def __init__(
+        self,
+        corners: tuple[int, ...],
+        arcs: list[Arc],
+        arrangement: "Arrangement",
+        is_closed: bool = True,
+        is_minimal: bool = True,
+    ):
+        """
+        Args:
+            corners: Corner ids in traversal order, already canonicalised.
+            arcs: Boundary arcs in the same traversal order.
+            arrangement: The owning arrangement.
+            is_closed: Whether the face has no dangling end.
+            is_minimal: Whether the face encloses no other manifold piece. Set by
+                :meth:`~.Arrangement.Arrangement._classify_minimality` after the
+                faces are built, since deciding it needs their geometry.
+        """
+        self.corners = corners
+        self.arcs = arcs
+        self.arrangement = arrangement
+        self.is_closed = is_closed
+        self.is_minimal = is_minimal
+        self._boundary_points: Optional[NDArray[np.float64]] = None
+        self._representative_point: Optional[NDArray[np.float64]] = None
+
+    # ── combinatorial views ─────────────────────────────────────────────────
+
+    @property
+    def stable_arcs(self) -> list[Arc]:
+        """The boundary arcs that run along a stable manifold."""
+        return [arc for arc in self.arcs if arc.kind == "stable"]
+
+    @property
+    def bridge_ids(self) -> list["BridgeId"]:
+        """The :data:`BridgeId` of every unstable arc on the boundary."""
+        return [
+            arc.bridge_id
+            for arc in self.arcs
+            if arc.kind == "unstable" and arc.bridge_id is not None
+        ]
+
+    def neighbor_across(self, arc: Arc) -> Optional["Region"]:
+        """
+        The region on the other side of one of this region's boundary arcs.
+
+        Args:
+            arc: A boundary arc of this region.
+
+        Returns:
+            The region sharing that arc, or None when the face across it is open
+            (or when ``arc`` does not bound this region).
+        """
+        for other in self.arrangement.regions_bounded_by(arc):
+            if other is not self:
+                return other
+        return None
+
+    # ── geometry (lazy) ─────────────────────────────────────────────────────
+
+    def _require_closed(self, what: str) -> None:
+        """Refuse a geometric question an open face has no answer to."""
+        if not self.is_closed:
+            raise ValueError(
+                f"an open face has no {what}: its boundary runs off the end of a "
+                "computed manifold, so it encloses nothing. Grow the manifolds "
+                f"until the face closes (see Arrangement.open_faces). Face: "
+                f"{self.corners}"
+            )
+
+    @property
+    def boundary_points(self) -> NDArray[np.float64]:
+        """
+        The closed boundary polygon as an ``(N, 2)`` array.
+
+        Built once, by concatenating each arc's polyline in traversal order and
+        dropping the duplicated corner shared by consecutive arcs. The ring is not
+        explicitly closed — :func:`~tanglepack.numerics.geometry.signed_polygon_area`
+        and :func:`~tanglepack.numerics.geometry.point_in_polygon` both close it
+        themselves.
+
+        Raises:
+            ValueError: If this face is open. Its boundary is not a closed curve —
+                part of it is "the manifold stops here" — so stitching its arcs
+                into a ring would silently invent an edge that is not manifold.
+        """
+        self._require_closed("boundary polygon")
+        if self._boundary_points is None:
+            trellis = self.arrangement.trellis
+            pieces: list[NDArray[np.float64]] = []
+            for index, arc in enumerate(self.arcs):
+                poly = arc.polyline(trellis)
+                pieces.append(poly if index == 0 else poly[1:])
+            ring = np.vstack(pieces) if pieces else np.empty((0, 2))
+            if len(ring) > 1 and np.allclose(ring[0], ring[-1]):
+                ring = ring[:-1]
+            self._boundary_points = ring
+        return self._boundary_points
+
+    @property
+    def area(self) -> float:
+        """
+        The signed area enclosed by :attr:`boundary_points`.
+
+        Negative for a bounded face: the arrangement traverses its bounded faces
+        clockwise (see the :class:`~.Arrangement.Arrangement` Dev Notes). Take
+        ``abs`` for a magnitude.
+
+        Raises:
+            ValueError: If this face is open (see :attr:`boundary_points`).
+        """
+        return signed_polygon_area(self.boundary_points)
+
+    @property
+    def representative_point(self) -> Optional[NDArray[np.float64]]:
+        """
+        A point standing in for the region, built once and cached.
+
+        The first candidate is the cheap one: the mean of the midpoints of the
+        boundary arcs, which lands inside for the lens- and lobe-shaped faces a
+        tangle mostly produces. It is only a heuristic, though -- a face bounded
+        by one short stable arc and one long meandering bridge is a crescent whose
+        arc-midpoint mean falls well outside it -- so the result is checked with
+        the ray cast and, when it fails, replaced by the scanline construction of
+        :func:`~tanglepack.numerics.geometry.polygon_interior_point`, which is
+        guaranteed interior for a simple polygon.
+
+        Returns:
+            The ``(2,)`` point, or None for a closed face whose boundary is too
+            degenerate to have an interior (both arcs collapsed to one chord).
+
+        Raises:
+            ValueError: If this face is open (see :attr:`boundary_points`).
+        """
+        self._require_closed("representative point")
+        if self._representative_point is None:
+            trellis = self.arrangement.trellis
+            mids = [arc.midpoint(trellis) for arc in self.arcs]
+            usable = [m for m in mids if m is not None]
+            candidate: Optional[NDArray[np.float64]] = None
+            if usable:
+                candidate = np.mean(np.vstack(usable), axis=0).astype(np.float64)
+                if not self.contains(candidate):
+                    logger.debug(
+                        "Region %s is not star-shaped about its arc-midpoint mean; "
+                        "falling back to the scanline interior point",
+                        self.corners,
+                    )
+                    candidate = None
+            if candidate is None:
+                candidate = polygon_interior_point(self.boundary_points)
+            self._representative_point = candidate
+        return self._representative_point
+
+    def verify_representative_point(self, *, tol: float = 1e-9) -> bool:
+        """
+        Whether :attr:`representative_point` really lies in this region.
+
+        Args:
+            tol: Boundary tolerance handed to the ray cast.
+
+        Returns:
+            True if the representative point exists and is contained.
+        """
+        point = self.representative_point
+        return point is not None and self.contains(point, tol=tol)
+
+    def contains(
+        self,
+        point: "NDArray[np.float64] | tuple[float, float]",
+        *,
+        tol: float = 1e-9,
+    ) -> bool:
+        """
+        Whether a point lies in this region, boundary included.
+
+        Args:
+            point: The ``(x, y)`` to test.
+            tol: Distance below which the point counts as on the boundary.
+
+        Returns:
+            True if inside or on the boundary.
+
+        Raises:
+            ValueError: If this face is open (see :attr:`boundary_points`).
+        """
+        return point_in_polygon(point, self.boundary_points, tol=tol)
+
+    def __len__(self) -> int:
+        return len(self.corners)
+
+    def __repr__(self) -> str:
+        if not self.is_closed:
+            state = "open"
+        elif not self.is_minimal:
+            state = "containing"
+        else:
+            state = "closed"
+        return f"Region({state}, corners={self.corners})"
+
+
+def canonical_corners(corners: "tuple[int, ...] | list[int]") -> tuple[int, ...]:
+    """
+    Rotate a face's corner cycle to a canonical starting point.
+
+    A face is a CYCLE, so the same face can be written starting at any of its
+    corners. Canonicalising to the rotation that starts at the smallest id (and,
+    when that id repeats, to the lexicographically smallest such rotation) makes
+    the tuple a usable dict key. The cyclic ORDER is preserved, never sorted: the
+    order is the traversal, and reversing it would name the face on the other side.
+
+    Args:
+        corners: The corner ids in traversal order.
+
+    Returns:
+        The canonical rotation, or the empty tuple for an empty input.
+    """
+    items = tuple(corners)
+    if not items:
+        return items
+    rotations = [items[i:] + items[:i] for i in range(len(items))]
+    return min(rotations)

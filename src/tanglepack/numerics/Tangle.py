@@ -50,6 +50,37 @@ the only unambiguous grouping.
 """
 
 
+def _both_anchors(
+    first: Intersection, second: Intersection, cdist_tol: float
+) -> bool:
+    """
+    Whether two crossings are both anchors of the same periodic point.
+
+    An anchor sits at canonical distance ``(0, 0)`` on the two branches it joins
+    (see ``TangleWorkbench._register_anchors``), so a periodic point with several
+    branches registers several distinct crossings at one coordinate and any two of
+    them span no arc at all. That is the ONLY case in which two crossings of one
+    unstable curve legitimately share an unstable canonical distance, so it is the
+    only case ``create_bridges`` is allowed to skip silently; anything else at the
+    same cdist is a real, if unresolvably short, piece of manifold.
+
+    Args:
+        first: One crossing.
+        second: The other.
+        cdist_tol: Canonical-distance tolerance for "at the anchor".
+
+    Returns:
+        True if both crossings sit at ``(0, 0)`` within tolerance.
+    """
+    for crossing in (first, second):
+        if (
+            abs(crossing.unstable_cdist) > cdist_tol
+            or abs(crossing.stable_cdist) > cdist_tol
+        ):
+            return False
+    return True
+
+
 @dataclass(slots=True)
 class _Segment:
     """
@@ -265,11 +296,47 @@ class Tangle:
             # it with these two real nodes, and they must not be re-read off the
             # segment later, after a separator point has been spliced in.
             unstable_segment=(u_seg.p0, u_seg.p0_seg1),
+            crossing_sign=self._crossing_sign(u_seg, s_seg),
         )
 
         self._processed_pairs.add(seg_id_pair)
 
         return intersection
+
+    @staticmethod
+    def _crossing_sign(u_seg: _Segment, s_seg: _Segment) -> int:
+        """
+        Handedness of one unstable x stable crossing.
+
+        The sign of ``cross(unstable_direction, stable_direction)`` with both
+        directions taken in INCREASING canonical distance -- i.e. pointing away
+        from their anchoring periodic point. That is exactly the datum the planar
+        arrangement needs: it fixes the counter-clockwise cyclic order of the four
+        manifold rays leaving the crossing without any angle sorting (see
+        :attr:`~.Intersection.Intersection.crossing_sign`).
+
+        Segment endpoints are stored root to tail, which is increasing cdist, but
+        the cdists are read rather than assumed so a reversed or hand-built
+        segment cannot silently flip the sign of a whole tangle.
+
+        Args:
+            u_seg: The unstable segment of the crossing pair.
+            s_seg: The stable segment.
+
+        Returns:
+            ``+1`` or ``-1``; ``0`` only for a degenerate (zero-length or exactly
+            parallel) pair, which ``_find_true_intersection`` has already
+            discarded by the time this is called.
+        """
+        def direction(seg: _Segment, stability: str) -> NDArray[np.float64]:
+            a, b = seg.p0, seg.p0_seg1
+            vec = b.get_point() - a.get_point()
+            return -vec if b.get_cdist(stability) < a.get_cdist(stability) else vec
+
+        u_dir = direction(u_seg, "unstable")
+        s_dir = direction(s_seg, "stable")
+        cross = float(u_dir[0] * s_dir[1] - u_dir[1] * s_dir[0])
+        return int(np.sign(cross))
 
     def _find_true_intersection(
         self, seg1: _Segment, seg2: _Segment
@@ -790,6 +857,8 @@ class Tangle:
         crossings: Iterable[Intersection],
         for_manifold: Optional[BaseManifold] = None,
         fixed_point=None,
+        *,
+        cdist_tol: float = 0.0,
     ) -> list[Bridge]:
         """
         Cut unstable manifolds into bridges at the given crossings.
@@ -818,6 +887,11 @@ class Tangle:
                 fixed_point, so a global call (fixed_point=None) followed by
                 filtering on bridge.fixed_point is equivalent to per-fixed-point
                 calls.
+            cdist_tol: Unstable canonical-distance span below which two
+                consecutive crossings are taken to sit at the SAME place on the
+                curve, so no bridge is cut between them (see the Note). Pass the
+                registry's ``cdist_tol``; zero (the default) only rejects an
+                exactly degenerate pair.
 
         Returns:
             List of Bridge objects in unstable canonical-distance order per parent
@@ -825,6 +899,22 @@ class Tangle:
             cut at (its :data:`~.Bridge.BridgeId`). Adjacency is not stored on the
             bridges: consecutive bridges share an endpoint id, so the caller reads
             it off the ids (see ``TangleWorkbench.bridges_at``).
+
+        Note:
+            A bridge IS the piece of unstable manifold between two crossings, so
+            two ANCHORS of one periodic point bound nothing and no bridge is cut
+            between them. That is not a hypothetical: an inversion periodic point
+            carries one anchor per (unstable branch, stable branch) pair, so each
+            of its unstable branches holds two distinct crossings at cdist 0, and
+            the pair used to be cut into a zero-length "bridge" whose forward
+            iterate then crashed in ``ManifoldMachine._insert_after``. The two
+            crossings are still consecutive on the branch -- the arc between them
+            is simply empty.
+
+            Two NON-anchor crossings closer together than ``cdist_tol`` are a
+            different matter: however short, the manifold between them is real, so
+            the bridge is still cut and the situation is logged at WARNING. A real
+            bridge must never disappear quietly (see :func:`_both_anchors`).
         """
         # --- 1. Collect crossings grouped by their parent unstable manifold ---
         # entry: (unstable cdist, Intersection, orig_p0, orig_p1)
@@ -870,8 +960,29 @@ class Tangle:
             manifold_group.sort(key=lambda entry: entry[0])
 
             for i in range(len(manifold_group) - 1):
-                _, first, p0_a, p1_a = manifold_group[i]
-                _, second, p0_b, p1_b = manifold_group[i + 1]
+                cdist_a, first, p0_a, p1_a = manifold_group[i]
+                cdist_b, second, p0_b, p1_b = manifold_group[i + 1]
+
+                if cdist_b - cdist_a <= cdist_tol:
+                    if _both_anchors(first, second, cdist_tol):
+                        logger.debug(
+                            "Not cutting a bridge between anchors %s and %s: two "
+                            "anchors of one periodic point span no arc",
+                            first.id,
+                            second.id,
+                        )
+                        continue
+                    logger.warning(
+                        "Crossings %s and %s are only %.3g apart in unstable cdist "
+                        "(below the %.3g tolerance) but are not both anchors; "
+                        "cutting the bridge between them anyway -- it is shorter "
+                        "than the canonical-distance resolution and its geometry "
+                        "should not be trusted",
+                        first.id,
+                        second.id,
+                        cdist_b - cdist_a,
+                        cdist_tol,
+                    )
 
                 head = p0_a  # real point just below crossing i
                 tail = p1_b  # real point just above crossing i+1

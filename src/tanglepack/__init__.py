@@ -40,6 +40,9 @@ from .numerics import (
 from .topology import (
     Trellis,
     TrellisBranch,
+    Arrangement,
+    Arc,
+    Region,
     Hole,
     PartitionInterval,
     PseudoneighborPair,

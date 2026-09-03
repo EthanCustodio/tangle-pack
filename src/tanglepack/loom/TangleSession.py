@@ -6,6 +6,8 @@ from typing import Iterable, Optional, TYPE_CHECKING
 
 from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import MapFunc, JacFunc
+from ..numerics.geometry import polyline_midpoint
+from ..topology.Arrangement import Arrangement
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
@@ -132,6 +134,39 @@ class TangleSession:
                 self.workbench, fixed_points
             )
         return self._trellises[cache_key]
+
+    def arrangement(
+        self,
+        fixed_points: Optional["FixedPoint | Iterable[FixedPoint]"] = None,
+        *,
+        rebuild: bool = False,
+    ) -> Arrangement:
+        """
+        Build (and cache) the planar :class:`Arrangement` of a trellis.
+
+        The default selection is EVERY fixed point, which is what the region layer
+        wants: a heteroclinic crossing belongs to two tangles at once, and a
+        single-fixed-point arrangement would cut the other side's arcs off and turn
+        real faces into open ones.
+
+        Cached ON the trellis, and so invalidated by exactly the same comparison:
+        a Trellis is a snapshot of one workbench
+        :attr:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.generation`, so
+        growth, a recompute, a re-cut, a trim, a blast or a resonance zone drops the
+        trellis and its arrangement together. There is no second cache to go stale.
+
+        Args:
+            fixed_points: A single FixedPoint, an iterable of them, or None (the
+                default) for all of them.
+            rebuild: Force a rebuild even if a valid arrangement is cached.
+
+        Returns:
+            The Arrangement for that selection.
+        """
+        trellis = self.trellis(fixed_points, rebuild=rebuild)
+        if rebuild:
+            trellis._arrangement = None
+        return trellis.arrangement
 
     def invalidate_trellises(self) -> None:
         """
@@ -678,12 +713,11 @@ class TangleSession:
 
         Returns the geometric middle node so a bridge that forms a zone's own unstable
         boundary arc lands exactly on that zone's boundary (and, with boundary-inclusive
-        containment, is attributed to it). ``None`` for an empty bridge.
+        containment, is attributed to it). ``None`` for an empty bridge. The walk
+        behind it is memoised on the bridge, so classifying every bridge of a tangle
+        costs one walk each, not one per zone.
         """
-        pts = bridge.get_point_array()
-        if pts is None or len(pts) == 0:
-            return None
-        return pts[len(pts) // 2]
+        return polyline_midpoint(bridge.get_point_array())
 
     def classify_bridge(self, bridge) -> Optional[ResonanceZone]:
         """

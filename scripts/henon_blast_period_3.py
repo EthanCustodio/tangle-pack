@@ -96,8 +96,11 @@ T3.classify_strong_pips()
 # Pin a specific candidate for the outer zone rather than the default (the
 # default, smallest unstable cdist, gives a different zone boundary). CAUTION:
 # intersection ids are not stable across growth/refinement changes -- if this
-# raises, pick again from the candidate list in the error message.
-T1.set_strong_pip(10)
+# raises, pick again from the candidate list in the error message. (It was 10
+# before the anchors became deliberate: the four periodic-point crossings are now
+# registered first and take the lowest ids, shifting every detected one up. Same
+# crossing, at unstable cdist 154.797.)
+T1.set_strong_pip(12)
 
 session.add_resonance_zones([T1.strong_pip, T3.strong_pip])
 

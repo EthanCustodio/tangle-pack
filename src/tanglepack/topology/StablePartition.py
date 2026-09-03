@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numpy.typing import NDArray
 
+from ..numerics.geometry import oriented_bridge_polyline, polyline_midpoint
 from .Pseudoneighbor import forward_unstable_branch_cycle
 from .TopologyResults import (
     Hole,
@@ -800,24 +801,21 @@ def _oriented_bridge_polyline(
 def _build_oriented_bridge_polyline(
     trellis: "Trellis", bridge: "Bridge"
 ) -> Optional[NDArray[np.float64]]:
-    """The uncached body of :func:`_oriented_bridge_polyline`."""
-    points = bridge.get_point_array()
-    if points is None or len(points) < 2:
-        return None
+    """The uncached body of :func:`_oriented_bridge_polyline`.
+
+    Resolves the bridge's two endpoint canonical distances against the trellis
+    and hands the orientation itself to
+    :func:`~tanglepack.numerics.geometry.oriented_bridge_polyline`, which is the
+    single implementation shared with the region layer.
+    """
     if bridge.first_intersection is None or bridge.second_intersection is None:
         return None
-    poly = np.asarray(points, dtype=np.float64)
-    u_first = trellis.intersection(bridge.first_intersection).unstable_cdist
-    u_second = trellis.intersection(bridge.second_intersection).unstable_cdist
-    if abs(u_first - u_second) <= trellis.registry.cdist_tol:
-        logger.warning(
-            "Bridge (%s, %s) has endpoints of equal unstable cdist; "
-            "dynamical orientation is undecidable",
-            bridge.first_intersection,
-            bridge.second_intersection,
-        )
-        return None
-    return poly if u_first < u_second else poly[::-1]
+    return oriented_bridge_polyline(
+        bridge,
+        trellis.intersection(bridge.first_intersection).unstable_cdist,
+        trellis.intersection(bridge.second_intersection).unstable_cdist,
+        tol=trellis.registry.cdist_tol,
+    )
 
 
 def _bridge_side_of(
@@ -1302,10 +1300,7 @@ def _near_far(trellis: "Trellis", id_a: int, id_b: int) -> tuple[int, int]:
 
 def _bridge_midpoint(bridge: "Bridge") -> Optional[NDArray[np.float64]]:
     """The bridge's geometric middle node, or None for an empty bridge."""
-    points = bridge.get_point_array()
-    if points is None or len(points) == 0:
-        return None
-    return np.asarray(points[len(points) // 2], dtype=np.float64)
+    return polyline_midpoint(bridge.get_point_array())
 
 
 def _nearest_arc_point(

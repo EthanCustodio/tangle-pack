@@ -14,6 +14,7 @@ module pins the three halves of that contract:
 
 from __future__ import annotations
 
+import gc
 import time
 
 import numpy as np
@@ -152,6 +153,16 @@ def test_registry_insert_is_near_linear():
                 stable_cdist=float(20000 - i),
             )
         return time.perf_counter() - t0
+
+    # Fix for a PRE-EXISTING flake (it failed roughly one full-suite run in three
+    # at Phase 5's HEAD, while always passing standalone; more tests in the suite
+    # made it worse, which is what surfaced it). The ratio below compares two
+    # wall-clock blocks, so it is only meaningful against a settled heap: run
+    # inside the full suite, with several hundred other tests' garbage still
+    # uncollected, the FIRST block is measured on a fragmented allocator and comes
+    # out artificially fast, and the ratio blows past any bound. Collecting first
+    # makes the two blocks comparable. The bound itself is unchanged.
+    gc.collect()
 
     total_start = time.perf_counter()
     first_block = add_block(0, 1000)

@@ -12,12 +12,16 @@ layer has already produced.
 
 from .Trellis import Trellis
 from .TrellisBranch import TrellisBranch
+from .Arrangement import Arrangement
 from .TopologyResults import (
+    Arc,
     Hole,
     PartitionInterval,
     PseudoneighborPair,
+    Region,
     StablePartitionResult,
     StrongPipResult,
+    canonical_corners,
 )
 from .StrongPip import (
     is_strong_pip,
@@ -44,6 +48,10 @@ from .StablePartition import (
 __all__ = [
     "Trellis",
     "TrellisBranch",
+    "Arrangement",
+    "Arc",
+    "Region",
+    "canonical_corners",
     "Hole",
     "PartitionInterval",
     "PseudoneighborPair",
