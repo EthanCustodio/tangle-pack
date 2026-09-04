@@ -214,6 +214,7 @@ class Arrangement:
         self._region_by_corners: dict[tuple[int, ...], Region] = {}
         self._regions_at: dict[int, list[Region]] = {}
         self._regions_by_edge: dict[tuple, list[Region]] = {}
+        self._face_of_half_edge: dict[int, Region] = {}
 
     # ── construction ────────────────────────────────────────────────────────
 
@@ -426,7 +427,7 @@ class Arrangement:
             self._record_face(cycle)
 
     def _record_face(self, cycle: list[int]) -> None:
-        """Turn one half-edge cycle into a Region."""
+        """Turn one half-edge cycle into a Region and index its half-edges."""
         edges = [self._half_edges[index] for index in cycle]
         is_closed = not any(edge.is_virtual for edge in edges)
 
@@ -444,14 +445,15 @@ class Arrangement:
         else:
             corners = tuple(raw_corners)
 
-        self.faces.append(
-            Region(
-                corners=corners,
-                arcs=[arc for arc in arcs if arc is not None],
-                arrangement=self,
-                is_closed=is_closed,
-            )
+        face = Region(
+            corners=corners,
+            arcs=[arc for arc in arcs if arc is not None],
+            arrangement=self,
+            is_closed=is_closed,
         )
+        self.faces.append(face)
+        for index in cycle:
+            self._face_of_half_edge[index] = face
 
     # ── components and minimality ───────────────────────────────────────────
 
@@ -600,6 +602,62 @@ class Arrangement:
             Up to two regions; fewer when the face on a side is open.
         """
         return list(self._regions_by_edge.get(arc.edge_key, []))
+
+    def face_at_stub(self, intersection_id: int, slot: Slot) -> Region:
+        """
+        The face a dangling manifold end sticks into.
+
+        A slot with no computed arc carries a VIRTUAL half-edge to a degree-one
+        node, and the traversal reflects off it: both the stub and its twin
+        belong to the same face cycle. That face is therefore the one piece of
+        plane the uncomputed continuation of the manifold starts in — which is
+        exactly what a walk needs when it has to leave the computed picture at
+        the outermost crossing of a branch.
+
+        Args:
+            intersection_id: Registry id of the crossing the ray leaves from.
+            slot: Which of the four rays (``"u+"``, ``"u-"``, ``"s+"``,
+                ``"s-"``) to follow.
+
+        Returns:
+            The (necessarily open) face containing that stub.
+
+        Raises:
+            ValueError: If the crossing is not a node of this arrangement, if
+                the slot is not one of the four rays, or if the slot carries a
+                real arc rather than a stub — a computed arc runs to another
+                crossing and bounds two faces, so "the face at the stub" has no
+                meaning there.
+        """
+        if slot not in _ALL_SLOTS:
+            raise ValueError(
+                f"slot must be one of {_ALL_SLOTS}, got {slot!r}"
+            )
+        node = self._nodes.get(intersection_id)
+        if node is None:
+            raise ValueError(
+                f"crossing {intersection_id} is not a node of this arrangement"
+            )
+        index = node.slots.get(slot)
+        if index is None:
+            raise ValueError(
+                f"node {intersection_id} has no {slot} ray at all; the "
+                "arrangement was not fully built"
+            )
+        half_edge = self._half_edges[index]
+        if not half_edge.is_virtual:
+            raise ValueError(
+                f"the {slot} ray of crossing {intersection_id} runs to crossing "
+                f"{half_edge.head} along a computed arc, so it is not a "
+                "dangling stub and bounds two faces rather than sticking into one"
+            )
+        face = self._face_of_half_edge.get(index)
+        if face is None:  # pragma: no cover - the traversal covers every edge
+            raise ValueError(
+                f"the {slot} stub of crossing {intersection_id} belongs to no "
+                "face; the face traversal did not visit every half-edge"
+            )
+        return face
 
     def image_of(
         self, region: Region, n: int = 1, *, rtol: float = 2e-2

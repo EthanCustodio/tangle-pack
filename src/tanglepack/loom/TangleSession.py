@@ -20,14 +20,22 @@ from numpy.typing import NDArray
 from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import MapFunc, JacFunc
 from ..numerics.geometry import polyline_midpoint
+from ..topology import plotting
 from ..topology.Arrangement import Arrangement
 from ..topology.BridgeClass import BridgeClass, bridge_classes as _bridge_classes
+from ..topology.DualGraph import DualGraph
+from ..topology.SymbolicDynamics import (
+    SymbolicDynamics,
+    symbolic_dynamics as _symbolic_dynamics,
+)
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
 from .Blast import BlastResult, blast_zone
 
 if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
     from ..topology.TopologyResults import Endpoint, Side, StablePartitionResult
@@ -90,9 +98,15 @@ class TangleSession:
             dynamical_map, dynamical_map_inverse, jacobian_function
         )
         self._trellises: dict = {}
-        # (workbench.generation, classes) per trellis-selection cache key; see
-        # bridge_classes().
+        # (workbench.generation, partition signature, classes) per
+        # trellis-selection cache key; see bridge_classes().
         self._bridge_classes: dict = {}
+        # (workbench.generation, partition signature, graph) per
+        # trellis-selection cache key; see dual_graph().
+        self._dual_graphs: dict = {}
+        # (workbench.generation, partition signature, dynamics) per
+        # trellis-selection cache key; see symbolic_dynamics().
+        self._symbolic_dynamics: dict = {}
         # One resonance zone per (fixed_point, branch_index): a non-inversion point
         # has a single branch (one zone); an inversion point has two. Insertion order
         # is preserved so plotting/shading is deterministic.
@@ -369,6 +383,233 @@ class TangleSession:
                 len(missing),
                 ", ".join(f"{key[1:]} missing {sides}" for key, sides in missing),
             )
+
+    def dual_graph(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        rebuild: bool = False,
+    ) -> DualGraph:
+        """
+        Build (and cache) the bipartite :class:`~tanglepack.topology.DualGraph.DualGraph`
+        of a trellis's arrangement.
+
+        Mirrors :meth:`arrangement` and :meth:`bridge_classes`: the arrangement
+        dualled is the selected trellis's own (all fixed points by default), and
+        the stable partitions the graph's arc-node elements are resolved against
+        are gathered from EVERY cached, non-stale per-fixed-point trellis (see
+        :meth:`_gathered_partitions`), exactly as :meth:`bridge_classes` does.
+        The strong pips passed to :class:`~tanglepack.topology.DualGraph.DualGraph`
+        (used only to log-check the derived fill against ``(f^k(q0), q0]``) are
+        gathered the same way, one per cached per-fixed-point trellis whose
+        fixed point falls inside the selection (see :meth:`_gathered_strong_pips`).
+
+        Cached on ``(workbench.generation, partition signature)``, exactly like
+        :meth:`bridge_classes` — the same :meth:`_partition_signature` catches a
+        re-partition that leaves the workbench generation untouched.
+
+        Args:
+            fixed_points: A single FixedPoint, an iterable of them, or None (the
+                default) for all of them — selects which trellis's arrangement
+                is dualled.
+            rebuild: Force a rebuild even if a cached graph exists for the
+                current generation and partition signature.
+
+        Returns:
+            The :class:`~tanglepack.topology.DualGraph.DualGraph`.
+
+        Raises:
+            ValueError: Propagated from
+                :class:`~tanglepack.topology.DualGraph.DualGraph` when a stable
+                arc's branch has no partition on a side, or when an arrangement
+                component fails the graph's own topological checks.
+
+        Note:
+            Like :meth:`bridge_classes`, this needs every fixed point of
+            interest already partitioned (:meth:`partition_stable_manifold`),
+            and only trellises still cached at call time contribute their
+            partitions and strong pips.
+
+            The cache key is ``(generation, partition signature)`` only — it
+            does NOT include the gathered strong pips. A strong pip only
+            drives the constructor's fill log line (see
+            :class:`~tanglepack.topology.DualGraph.DualGraph`'s
+            ``strong_pips`` parameter); it never changes ``arc_nodes``,
+            ``face_nodes`` or ``fill_segments`` themselves. So calling
+            :meth:`~tanglepack.topology.Trellis.Trellis.set_strong_pip` on a
+            trellis WITHOUT re-partitioning leaves both cache-key components
+            unchanged and a stale cached graph is served — pass
+            ``rebuild=True`` to force the new pip through the check.
+        """
+        cache_key = self._cache_key(fixed_points)
+        trellis = self.trellis(fixed_points)
+        partitions = self._gathered_partitions()
+        signature = self._partition_signature(partitions)
+
+        cached = self._dual_graphs.get(cache_key)
+        if (
+            not rebuild
+            and cached is not None
+            and cached[0] == self.workbench.generation
+            and cached[1] == signature
+        ):
+            return cached[2]
+
+        self._warn_unpartitioned_branches(trellis, partitions)
+        strong_pips = self._gathered_strong_pips(fixed_points)
+        dg = DualGraph(trellis.arrangement, partitions, strong_pips=strong_pips)
+
+        self._dual_graphs[cache_key] = (self.workbench.generation, signature, dg)
+        return dg
+
+    def _gathered_strong_pips(
+        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]"
+    ) -> list[int]:
+        """
+        The chosen strong pip of every cached, non-stale per-fixed-point trellis
+        whose fixed point falls inside ``fixed_points``.
+
+        Walks :attr:`_trellises` like :meth:`_gathered_partitions`, but keeps
+        only trellises built for exactly one fixed point (an all-fixed-points
+        trellis carries no strong pip of its own) and skips a trellis with no
+        strong pip chosen yet.
+        """
+        selected = {id(fp) for fp in self._resolve_fixed_points(fixed_points)}
+        pips: list[int] = []
+        for trellis in self._trellises.values():
+            if self._is_stale(trellis):
+                continue
+            if len(trellis.fixed_points) != 1:
+                continue
+            if id(trellis.fixed_points[0]) not in selected:
+                continue
+            if trellis.strong_pip is not None:
+                pips.append(trellis.strong_pip)
+        return pips
+
+    def symbolic_dynamics(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        rebuild: bool = False,
+    ) -> SymbolicDynamics:
+        """
+        Build (and cache) the :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`
+        a trellis's tangle induces on its bridge classes.
+
+        A thin composition of the two other D.6 wrappers:
+        :func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics` over
+        :meth:`dual_graph` and :meth:`bridge_classes` for the same
+        ``fixed_points`` selection. ``rebuild`` cascades to both — a forced
+        rebuild of the dynamics is only meaningful once its inputs are fresh
+        too.
+
+        Cached on ``(workbench.generation, partition signature)``, exactly like
+        :meth:`bridge_classes` and :meth:`dual_graph`.
+
+        Args:
+            fixed_points: A single FixedPoint, an iterable of them, or None (the
+                default) for all of them.
+            rebuild: Force a rebuild of the dynamics (and of the dual graph and
+                bridge classes it is built from) even if a cached result exists
+                for the current generation and partition signature.
+
+        Returns:
+            The :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`.
+
+        Raises:
+            ValueError: Propagated from
+                :func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics`
+                when two bridges of one class spell different words, or from
+                either input wrapper.
+            tanglepack.topology.DualGraph.AmbiguousWalkError: Propagated when a
+                bridge's image spells more than one word.
+
+        Note:
+            Needs the same prerequisites as :meth:`dual_graph` and
+            :meth:`bridge_classes`: every fixed point of interest partitioned
+            first.
+        """
+        cache_key = self._cache_key(fixed_points)
+        dg = self.dual_graph(fixed_points, rebuild=rebuild)
+        classes = self.bridge_classes(fixed_points, rebuild=rebuild)
+        partitions = self._gathered_partitions()
+        signature = self._partition_signature(partitions)
+
+        cached = self._symbolic_dynamics.get(cache_key)
+        if (
+            not rebuild
+            and cached is not None
+            and cached[0] == self.workbench.generation
+            and cached[1] == signature
+        ):
+            return cached[2]
+
+        sd = _symbolic_dynamics(dg, classes)
+
+        self._symbolic_dynamics[cache_key] = (self.workbench.generation, signature, sd)
+        return sd
+
+    def plot_dual_graph(
+        self,
+        dual_graph: Optional[DualGraph] = None,
+        ax: Optional["Axes"] = None,
+        **kwargs,
+    ) -> "Axes":
+        """
+        Draw a dual graph, defaulting to :meth:`dual_graph`'s own (all fixed
+        points, cached) result.
+
+        Thin delegate to
+        :func:`~tanglepack.topology.plotting.plot_dual_graph`; see its
+        docstring for the drawing itself.
+
+        Args:
+            dual_graph: The graph to draw. Defaults to ``self.dual_graph()``.
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            **kwargs: Forwarded to
+                :func:`~tanglepack.topology.plotting.plot_dual_graph` (e.g.
+                ``show_labels``, ``clip_to_arcs``).
+
+        Returns:
+            The Axes drawn on.
+        """
+        graph = dual_graph if dual_graph is not None else self.dual_graph()
+        return plotting.plot_dual_graph(graph, ax=ax, **kwargs)
+
+    def plot_transition_graph(
+        self,
+        sd: Optional[SymbolicDynamics] = None,
+        ax: Optional["Axes"] = None,
+        **kwargs,
+    ) -> "Axes":
+        """
+        Draw a symbolic dynamics' transition graph, defaulting to
+        :meth:`symbolic_dynamics`'s own (all fixed points, cached) result.
+
+        Thin delegate to
+        :func:`~tanglepack.topology.plotting.plot_transition_graph`; see its
+        docstring for the drawing itself.
+
+        Args:
+            sd: The :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`
+                whose transition graph is drawn. Defaults to
+                ``self.symbolic_dynamics()``.
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            **kwargs: Forwarded to
+                :func:`~tanglepack.topology.plotting.plot_transition_graph`,
+                overriding :data:`~tanglepack.topology.plotting.TRANSITION_GRAPH_STYLE`
+                for the 8 known style keys, or straight through to
+                ``nx.draw_networkx_nodes`` for anything else (see that
+                function's docstring).
+
+        Returns:
+            The Axes drawn on.
+        """
+        dynamics = sd if sd is not None else self.symbolic_dynamics()
+        return plotting.plot_transition_graph(dynamics, ax=ax, **kwargs)
 
     def invalidate_trellises(self) -> None:
         """

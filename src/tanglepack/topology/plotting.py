@@ -25,8 +25,9 @@ from partitions gathered across several trellises (see
 :func:`plot_dual_graph` takes a :class:`~.DualGraph.DualGraph` directly, for the
 same reason: a graph spans one arrangement but the partitions of several
 trellises, so there is no single owning trellis to hang a method off.
-``plot_transition_graph(symbolic_dynamics, ax=None, **kwargs)`` is NOT here yet
-— it lands with Phase D's ``SymbolicDynamics``.
+:func:`plot_transition_graph` is the same shape one level up: it takes a
+:class:`~.SymbolicDynamics.SymbolicDynamics` directly and draws its
+``networkx.DiGraph`` of symbols.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from .TopologyResults import StablePartitionResult
 
 if TYPE_CHECKING:
     from .DualGraph import ArcNode, DualGraph, FaceNode
+    from .SymbolicDynamics import SymbolicDynamics
     from .Trellis import Trellis
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,21 @@ DUAL_GRAPH_EDGE_STYLE = {"color": "lightgray", "linewidth": 0.5, "zorder": 1}
 #: node's point outside the arc-node bbox and to pad ``plot_dual_graph``'s
 #: ``clip_to_arcs`` axes limits.
 DUAL_GRAPH_PUSH_FRACTION = 0.1
+
+#: Style defaults for :func:`plot_transition_graph`'s nodes, labels and edges.
+#: ``node_color``/``node_size``/``edgecolors``/``font_size`` go to the node and
+#: label draws; ``edge_color``/``arrows``/``arrowsize``/``connectionstyle`` go
+#: to the edge draw.
+TRANSITION_GRAPH_STYLE = {
+    "node_color": "lightsteelblue",
+    "node_size": 600,
+    "edgecolors": "black",
+    "font_size": 9,
+    "edge_color": "gray",
+    "arrows": True,
+    "arrowsize": 12,
+    "connectionstyle": "arc3,rad=0.1",
+}
 
 #: ``**scatter_kwargs`` names :func:`plot_dual_graph` manages itself (they
 #: distinguish a hollow "wall" arc node from a filled "passable" one) and so
@@ -650,4 +667,86 @@ def plot_dual_graph(
     if clip_to_arcs:
         _clip_axes_to_arcs(target, dual_graph)
 
+    return target
+
+
+# ── the transition graph ────────────────────────────────────────────────────
+
+
+def plot_transition_graph(
+    symbolic_dynamics: "SymbolicDynamics",
+    ax=None,
+    **kwargs,
+):
+    """
+    Draw a symbolic dynamics' transition graph: symbols as nodes, weighted edges.
+
+    Nodes are laid out with ``networkx.spring_layout(seed=0)`` — deterministic
+    across calls, unlike an unseeded spring layout — and labelled with the
+    symbol itself. An edge ``u -> v`` is drawn whenever ``u``'s word contains
+    ``v``, with an arrowhead; it is additionally labelled with its ``weight``
+    (how many times ``v`` occurs in ``u``'s word) whenever that count exceeds 1,
+    so a single occurrence keeps the picture uncluttered.
+
+    Args:
+        symbolic_dynamics: The
+            :class:`~.SymbolicDynamics.SymbolicDynamics` whose
+            :attr:`~.SymbolicDynamics.SymbolicDynamics.transition_graph` is
+            drawn.
+        ax: Optional matplotlib Axes to draw on. Defaults to the current axes
+            (plt).
+        **kwargs: Any name from :data:`TRANSITION_GRAPH_STYLE` overrides that
+            style default. Anything else is forwarded straight through to
+            ``nx.draw_networkx_nodes`` (e.g. ``alpha``, ``node_shape``,
+            ``linewidths``) — so an unrecognized name raises the same
+            ``TypeError`` calling that function directly would, rather than
+            being silently dropped.
+
+    Returns:
+        The Axes drawn on.
+
+    Raises:
+        TypeError: If a keyword is neither a :data:`TRANSITION_GRAPH_STYLE`
+            name nor a parameter of ``nx.draw_networkx_nodes``.
+    """
+    import networkx as nx
+
+    target = ax if ax is not None else plt.gca()
+    graph = symbolic_dynamics.transition_graph
+
+    style = dict(TRANSITION_GRAPH_STYLE)
+    extra_node_kwargs = {}
+    for key, value in kwargs.items():
+        if key in style:
+            style[key] = value
+        else:
+            extra_node_kwargs[key] = value
+
+    positions = nx.spring_layout(graph, seed=0)
+
+    nx.draw_networkx_nodes(
+        graph, positions, ax=target,
+        node_color=style["node_color"], node_size=style["node_size"],
+        edgecolors=style["edgecolors"], **extra_node_kwargs,
+    )
+    nx.draw_networkx_labels(graph, positions, ax=target, font_size=style["font_size"])
+    nx.draw_networkx_edges(
+        graph, positions, ax=target,
+        edge_color=style["edge_color"], arrows=style["arrows"],
+        arrowsize=style["arrowsize"], node_size=style["node_size"],
+        connectionstyle=style["connectionstyle"],
+    )
+
+    edge_labels = {
+        (u, v): data["weight"]
+        for u, v, data in graph.edges(data=True)
+        if data.get("weight", 1) > 1
+    }
+    if edge_labels:
+        nx.draw_networkx_edge_labels(
+            graph, positions, edge_labels=edge_labels, ax=target,
+            font_size=style["font_size"],
+        )
+
+    target.set_axis_off()
     return target

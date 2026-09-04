@@ -38,7 +38,13 @@ from .Pseudoneighbor import (
 )
 from .plotting import plot_stable_partition
 from .BridgeClass import BridgeClass, bridge_classes
-from .DualGraph import ArcNode, DualGraph, FaceNode
+from .DualGraph import AmbiguousWalkError, ArcNode, DualGraph, FaceNode, Walk
+from .SymbolicDynamics import (
+    SymbolicDynamics,
+    Word,
+    symbolic_dynamics,
+    word_of_bridge,
+)
 from .StablePartition import (
     bridge_for_pair,
     bridge_row_violation,
@@ -57,11 +63,15 @@ __all__ = [
     "Trellis",
     "TrellisBranch",
     "Arrangement",
+    "AmbiguousWalkError",
     "Arc",
     "ArcNode",
     "BridgeClass",
     "DualGraph",
     "FaceNode",
+    "SymbolicDynamics",
+    "Walk",
+    "Word",
     "ElementRef",
     "Region",
     "canonical_corners",
@@ -89,4 +99,6 @@ __all__ = [
     "punch_holes",
     "row_of_end",
     "span_contains",
+    "symbolic_dynamics",
+    "word_of_bridge",
 ]
