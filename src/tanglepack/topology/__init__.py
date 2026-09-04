@@ -36,12 +36,30 @@ from .Pseudoneighbor import (
     extend_pseudoneighbor_trajectories,
     forward_unstable_branch_cycle,
 )
-from .plotting import plot_stable_partition
-from .BridgeClass import BridgeClass, bridge_classes
-from .DualGraph import AmbiguousWalkError, ArcNode, DualGraph, FaceNode, Walk
+from .plotting import (
+    face_point,
+    plot_dual_graph,
+    plot_stable_partition,
+    plot_transition_graph,
+)
+from .BridgeClass import (
+    BridgeClass,
+    bridge_classes,
+    class_sort_key,
+    element_sort_key,
+)
+from .DualGraph import (
+    AmbiguousWalkError,
+    ArcNode,
+    DualGraph,
+    FaceNode,
+    Walk,
+    WalkCase,
+)
 from .SymbolicDynamics import (
     SymbolicDynamics,
     Word,
+    symbol_label,
     symbolic_dynamics,
     word_of_bridge,
 )
@@ -56,6 +74,7 @@ from .StablePartition import (
     propagate_reference_holes,
     punch_holes,
     row_of_end,
+    rows_of_bridge,
     span_contains,
 )
 
@@ -71,6 +90,7 @@ __all__ = [
     "FaceNode",
     "SymbolicDynamics",
     "Walk",
+    "WalkCase",
     "Word",
     "ElementRef",
     "Region",
@@ -92,13 +112,20 @@ __all__ = [
     "bridge_side_violations",
     "check_bridge_rows_consistent",
     "check_holes_share_bridge_side",
+    "class_sort_key",
+    "element_sort_key",
+    "face_point",
     "owns_cdist",
     "partition_stable_manifold",
+    "plot_dual_graph",
     "plot_stable_partition",
+    "plot_transition_graph",
     "propagate_reference_holes",
     "punch_holes",
     "row_of_end",
+    "rows_of_bridge",
     "span_contains",
+    "symbol_label",
     "symbolic_dynamics",
     "word_of_bridge",
 ]

@@ -423,12 +423,6 @@ def symbolic_dynamics(
     ordered = _ordered_symbols(classes, words, fixed_points)
     known = set(classes)
     new_symbols = [item for item in ordered if item not in known]
-    for symbol in new_symbols:
-        logger.warning(
-            "new symbol %s: no computed bridge realises this class, so the "
-            "trellis is not closed under the map at this extent",
-            symbol.label,
-        )
 
     labels = {
         bridge_class: symbol_label(index)
@@ -465,6 +459,12 @@ def symbolic_dynamics(
         separator=separator,
         _label_of=labels,
     )
+    for symbol in new_symbols:
+        logger.warning(
+            "new symbol %s: no computed bridge realises this class, so the "
+            "trellis is not closed under the map at this extent",
+            result.display_label(symbol),
+        )
     logger.debug("%r", result)
     return result
 
