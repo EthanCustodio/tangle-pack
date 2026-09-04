@@ -53,7 +53,13 @@ fixed in conversation with the author (July 2026):
   against its own local stable tangent; on multi-branch tangles the two ends
   may legitimately sit on different branches) — well-defined because a
   bridge's endpoints are consecutive crossings, so the arc between them
-  never crosses the (trimmed) stable manifold.
+  never crosses the (trimmed) stable manifold. Since Phase A of the
+  dual-graph plan the row also has a purely COMBINATORIAL reading,
+  :func:`row_of_end`, straight off ``crossing_sign``; it needs no manifold
+  nodes, so it answers at a synthetic anchor and wherever the local geometry
+  is degenerate, and it is what the bridge-class layer uses. ``_row_at`` stays
+  the geometric ground truth the combinatorial rule is validated against
+  (tests/test_bridge_class.py).
 * Hole generation: each reference bridge is mapped backward step by step;
   every backward image lies within some existing bridge, and a hole is punched
   in that containing bridge's region. Termination is the author's "the bridge
@@ -172,6 +178,8 @@ from numpy.typing import NDArray
 from ..numerics.geometry import oriented_bridge_polyline
 from .Pseudoneighbor import forward_unstable_branch_cycle
 from .TopologyResults import (
+    Endpoint,
+    endpoint_index,
     Hole,
     OPPOSITE_SIDE,
     PartitionInterval,
@@ -805,6 +813,83 @@ def _row_at(
     if look is None:
         return None  # no manifold data at this end
     return _side_of(look, disp)
+
+
+def row_of_end(
+    trellis: "Trellis", bridge_id: "BridgeId", endpoint: Endpoint
+) -> Side:
+    """
+    The row of a bridge end, read off the crossing sign alone.
+
+    The *row* is the side of the stable branch, in the stable dynamical
+    orientation (looking toward the anchor), that the bridge approaches its
+    crossing from — the same quantity :func:`_row_at` measures geometrically,
+    computed here with no geometry at all.
+
+    Four manifold rays leave a crossing ``p``, and
+    :attr:`~tanglepack.numerics.Intersection.Intersection.crossing_sign` is
+    ``s = sign(cross(u+, s+))``. The stable look direction is ``s-``, so
+    ``cross(s-, u+) = cross(u+, s+) = s``: the outward-unstable ray ``u+`` lies
+    on the ``left`` of the stable dynamical direction exactly when ``s > 0``,
+    and ``u-`` on the opposite side. A
+    :data:`~tanglepack.numerics.Bridge.BridgeId` is ordered by unstable
+    canonical distance, so the bridge leaves its ``"first"`` end along ``u+``
+    and enters its ``"second"`` end along ``u-``. Hence
+    ``row(first) = left iff sign(first) > 0`` and
+    ``row(second) = left iff sign(second) < 0``.
+
+    Because it needs no manifold nodes, this answers at a synthetic anchor and
+    at an end whose local geometry is too degenerate for :func:`_row_at`, and it
+    never returns None. For a same-branch bridge it reproduces the row invariant
+    (:func:`bridge_row_violation`) exactly when the two crossing signs differ,
+    which is what an alternating sign along a stable branch guarantees.
+
+    Args:
+        trellis: The Trellis resolving the bridge's endpoint crossings.
+        bridge_id: The bridge's :data:`~tanglepack.numerics.Bridge.BridgeId`.
+        endpoint: ``"first"`` or ``"second"`` — which end of the id to read.
+
+    Returns:
+        ``"left"`` or ``"right"``.
+
+    Raises:
+        ValueError: If ``endpoint`` names neither end, or if the crossing's
+            ``crossing_sign`` is 0 (undetermined handedness — a tangency or a
+            crossing registered without one), in which case no side of the
+            stable branch is defined.
+    """
+    intersection_id = bridge_id[endpoint_index(endpoint)]
+    sign = trellis.intersection(intersection_id).crossing_sign
+    if sign == 0:
+        raise ValueError(
+            f"crossing {intersection_id} of bridge {bridge_id} has no crossing "
+            "sign, so the side of the stable branch its bridge approaches from "
+            "is undetermined"
+        )
+    outward = sign > 0 if endpoint == "first" else sign < 0
+    return "left" if outward else "right"
+
+
+def rows_of_bridge(
+    trellis: "Trellis", bridge_id: "BridgeId"
+) -> tuple[Side, Side]:
+    """
+    The rows at both ends of a bridge (see :func:`row_of_end`).
+
+    Args:
+        trellis: The Trellis resolving the bridge's endpoint crossings.
+        bridge_id: The bridge's :data:`~tanglepack.numerics.Bridge.BridgeId`.
+
+    Returns:
+        ``(row at "first", row at "second")``.
+
+    Raises:
+        ValueError: If either crossing has no crossing sign.
+    """
+    return (
+        row_of_end(trellis, bridge_id, "first"),
+        row_of_end(trellis, bridge_id, "second"),
+    )
 
 
 def _row_mismatch_message(

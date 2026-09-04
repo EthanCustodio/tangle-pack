@@ -31,22 +31,6 @@ from tanglepack.topology.Trellis import Trellis
 # fixtures
 # --------------------------------------------------------------------------- #
 @pytest.fixture
-def p3_partitioned(henon_p3_session):
-    """``(session, fp3, fp1)`` with every trellis classified, punched, partitioned.
-
-    Runs the whole flow through the session fan-outs, so both the period-3 and the
-    period-1 tangle of the nested fixture carry holes and partitions.
-    """
-    session, fp3, fp1, _zone = henon_p3_session
-    session.classify_strong_pips()
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-    assert session.trellis(fp3).stable_partitions
-    return session, fp3, fp1
-
-
-@pytest.fixture
 def henon_partitioned(henon_tangle_with_bridges):
     """``trellis`` for the single k=10 saddle, punched and partitioned."""
     workbench, fp = henon_tangle_with_bridges

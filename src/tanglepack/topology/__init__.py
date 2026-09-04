@@ -17,6 +17,7 @@ from .TrellisBranch import TrellisBranch
 from .Arrangement import Arrangement
 from .TopologyResults import (
     Arc,
+    ElementRef,
     Hole,
     PartitionInterval,
     PseudoneighborPair,
@@ -36,15 +37,19 @@ from .Pseudoneighbor import (
     forward_unstable_branch_cycle,
 )
 from .plotting import plot_stable_partition
+from .BridgeClass import BridgeClass, bridge_classes
 from .StablePartition import (
     bridge_for_pair,
     bridge_row_violation,
     bridge_side_violations,
     check_bridge_rows_consistent,
     check_holes_share_bridge_side,
+    owns_cdist,
     partition_stable_manifold,
     propagate_reference_holes,
     punch_holes,
+    row_of_end,
+    span_contains,
 )
 
 __all__ = [
@@ -52,6 +57,8 @@ __all__ = [
     "TrellisBranch",
     "Arrangement",
     "Arc",
+    "BridgeClass",
+    "ElementRef",
     "Region",
     "canonical_corners",
     "Hole",
@@ -65,13 +72,17 @@ __all__ = [
     "compute_pseudoneighbors",
     "extend_pseudoneighbor_trajectories",
     "forward_unstable_branch_cycle",
+    "bridge_classes",
     "bridge_for_pair",
     "bridge_row_violation",
     "bridge_side_violations",
     "check_bridge_rows_consistent",
     "check_holes_share_bridge_side",
+    "owns_cdist",
     "partition_stable_manifold",
     "plot_stable_partition",
     "propagate_reference_holes",
     "punch_holes",
+    "row_of_end",
+    "span_contains",
 ]

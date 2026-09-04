@@ -232,3 +232,56 @@ def henon_p3_session():
 
     inner_zone = max(session.resonance_zones.values(), key=lambda z: z.area)
     return session, fp3, fp1, inner_zone
+
+
+# --------------------------------------------------------------------------- #
+# Session-level fixtures shared by the region and bridge-class tests
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def k10_session(henon_map, henon_map_inverse):
+    """A k=10 session grown far enough to close several faces."""
+    session = TangleSession(henon_map, henon_map_inverse)
+    fp = session.construct_fixed_point([4, -4])
+    session.orient_eigenvectors(
+        fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
+    )
+    session.initialize_both_manifolds(fp)
+    session.grow_n_times(fp, "unstable", num_iterations=9)
+    session.grow_until_turnaround(fp, "stable")
+    session.compute_intersections([fp])
+    session.trim_stable_manifolds(fp)
+    session.create_bridges(fp)
+    session.infer_iterate_table()
+    return session, fp
+
+
+@pytest.fixture
+def k10_partitioned(k10_session):
+    """``(session, fp)`` with the k=10 trellis classified, punched and partitioned.
+
+    Runs the whole flow through the session fan-outs, so the single saddle's
+    stable branch carries holes and both of its sides' partitions.
+    """
+    session, fp = k10_session
+    session.classify_strong_pips()
+    session.compute_pseudoneighbors()
+    session.punch_holes()
+    session.partition_stable_manifold()
+    assert session.trellis(fp).stable_partitions
+    return session, fp
+
+
+@pytest.fixture
+def p3_partitioned(henon_p3_session):
+    """``(session, fp3, fp1)`` with every trellis classified, punched, partitioned.
+
+    Runs the whole flow through the session fan-outs, so both the period-3 and the
+    period-1 tangle of the nested fixture carry holes and partitions.
+    """
+    session, fp3, fp1, _zone = henon_p3_session
+    session.classify_strong_pips()
+    session.compute_pseudoneighbors()
+    session.punch_holes()
+    session.partition_stable_manifold()
+    assert session.trellis(fp3).stable_partitions
+    return session, fp3, fp1

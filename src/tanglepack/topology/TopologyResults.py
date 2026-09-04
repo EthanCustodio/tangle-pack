@@ -4,8 +4,9 @@ The result schema of the topological layer.
 Every dataclass the topological algorithms hand back --
 :class:`PseudoneighborPair`, :class:`Hole`, :class:`PartitionInterval`,
 :class:`Arc` and friends -- plus the :data:`Side` / :data:`Endpoint` labels
-they are annotated with, so that the algorithms, :class:`~.Trellis.Trellis`
-and the session facade all name the same things.
+they are annotated with and :class:`ElementRef`, the global name of a partition
+element, so that the algorithms, :class:`~.Trellis.Trellis` and the session
+facade all name the same things.
 
 Dev Notes:
 
@@ -42,6 +43,7 @@ from ..numerics.geometry import (
 
 if TYPE_CHECKING:
     from ..numerics.Bridge import BridgeId
+    from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Intersection import ManifoldKey
     from .Arrangement import Arrangement
     from .Trellis import Trellis
@@ -193,6 +195,70 @@ class StrongPipResult:
     blocking_intersection_id: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class ElementRef:
+    """
+    The global identity of one stable-partition element.
+
+    An ``element_id`` alone only names an element *within* one
+    :class:`StablePartitionResult`; the branch it lies on and the side whose
+    holes cut it are what make the name global. This triple is that name — and
+    being frozen it hashes, so it is usable as a dict key and as half of a
+    :class:`~tanglepack.topology.BridgeClass.BridgeClass`.
+
+    Equality and hashing are the dataclass defaults, which means the branch key
+    is compared componentwise and its
+    :class:`~tanglepack.numerics.FixedPoint.FixedPoint` by identity — two refs
+    are equal exactly when they name the same element of the same live orbit.
+
+    Attributes:
+        branch_key: Manifold key of the stable branch the element lies on.
+        side: Which side's partition the element belongs to.
+        element_id: Index of the element within its result's ``intervals``,
+            counted from the anchor outward.
+    """
+
+    branch_key: "ManifoldKey"
+    side: Side
+    element_id: int
+
+    @property
+    def fixed_point(self) -> "FixedPoint":
+        """The periodic point the element's branch is anchored at."""
+        return self.branch_key[0]
+
+    @property
+    def orbit_index(self) -> int:
+        """Index of the branch's anchor within its periodic orbit."""
+        return self.branch_key[2]
+
+    @property
+    def branch_index(self) -> int:
+        """Index of the branch at that anchor (0, or 1 on an inversion point)."""
+        return self.branch_key[3]
+
+    @property
+    def label(self) -> str:
+        """
+        A short, deterministic, address-free name for this element.
+
+        Formatted ``p{period}@{orbit}.{branch}/{L|R}#{element_id}``, e.g.
+        ``p3@1.0/L#2``. Two runs of the same trellis produce the same label, so
+        it is safe to put in a report, a plot legend or a test expectation —
+        unlike the default ``repr``, which prints the FixedPoint's address.
+
+        Returns:
+            The label string.
+        """
+        return (
+            f"p{self.fixed_point.period}@{self.orbit_index}.{self.branch_index}"
+            f"/{self.side[0].upper()}#{self.element_id}"
+        )
+
+    def __str__(self) -> str:
+        return self.label
+
+
 @dataclass
 class PartitionInterval:
     """
@@ -236,6 +302,28 @@ class PartitionInterval:
     element_id: int = -1
     branch_key: Optional["ManifoldKey"] = None
     side: Optional[Side] = None
+
+    @property
+    def ref(self) -> ElementRef:
+        """
+        This element's global identity.
+
+        Returns:
+            The :class:`ElementRef` naming this element.
+
+        Raises:
+            ValueError: If the interval has not been stamped by
+                :func:`topology.StablePartition.partition_stable_manifold` —
+                a raw interval carries no branch, no side and ``element_id``
+                -1, so it has no global name to give.
+        """
+        if self.element_id < 0 or self.branch_key is None or self.side is None:
+            raise ValueError(
+                "this PartitionInterval has not been stamped with its identity "
+                f"(element_id={self.element_id}, branch_key={self.branch_key}, "
+                f"side={self.side}); run partition_stable_manifold first"
+            )
+        return ElementRef(self.branch_key, self.side, self.element_id)
 
 
 @dataclass
@@ -315,6 +403,28 @@ class StablePartitionResult:
                 f"{len(self.intervals)} elements"
             )
         return self.intervals[element_id]
+
+    def ref(self, element_id: int) -> ElementRef:
+        """
+        The global identity of one of this result's elements.
+
+        Args:
+            element_id: Index of the element within :attr:`intervals`.
+
+        Returns:
+            An :class:`ElementRef` built from this result's own branch and side.
+
+        Raises:
+            IndexError: If ``element_id`` is not an element of this result.
+
+        Note:
+            Built from the result's ``branch_key``/``side`` rather than from the
+            interval's own stamp, so it answers even for a result whose
+            intervals were assembled by hand; the two agree on anything
+            :func:`topology.StablePartition.partition_stable_manifold` produced.
+        """
+        self.element(element_id)
+        return ElementRef(self.branch_key, self.side, element_id)
 
 
 # --------------------------------------------------------------------------- #

@@ -25,7 +25,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tanglepack import TangleSession
 from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
@@ -319,24 +318,6 @@ def test_arc_reverse_round_trips():
 # --------------------------------------------------------------------------- #
 # 6.4/6.5 -- the real fixtures
 # --------------------------------------------------------------------------- #
-@pytest.fixture
-def k10_session(henon_map, henon_map_inverse):
-    """A k=10 session grown far enough to close several faces."""
-    session = TangleSession(henon_map, henon_map_inverse)
-    fp = session.construct_fixed_point([4, -4])
-    session.orient_eigenvectors(
-        fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
-    )
-    session.initialize_both_manifolds(fp)
-    session.grow_n_times(fp, "unstable", num_iterations=9)
-    session.grow_until_turnaround(fp, "stable")
-    session.compute_intersections([fp])
-    session.trim_stable_manifolds(fp)
-    session.create_bridges(fp)
-    session.infer_iterate_table()
-    return session, fp
-
-
 def _check_arrangement(session):
     arrangement = session.arrangement()
     assert arrangement.faces, "an arrangement must have at least the outer face"

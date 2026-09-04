@@ -21,6 +21,7 @@ from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import MapFunc, JacFunc
 from ..numerics.geometry import polyline_midpoint
 from ..topology.Arrangement import Arrangement
+from ..topology.BridgeClass import BridgeClass, bridge_classes as _bridge_classes
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
@@ -29,7 +30,7 @@ from .Blast import BlastResult, blast_zone
 if TYPE_CHECKING:
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
-    from ..topology.TopologyResults import Endpoint, Side
+    from ..topology.TopologyResults import Endpoint, Side, StablePartitionResult
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -89,6 +90,9 @@ class TangleSession:
             dynamical_map, dynamical_map_inverse, jacobian_function
         )
         self._trellises: dict = {}
+        # (workbench.generation, classes) per trellis-selection cache key; see
+        # bridge_classes().
+        self._bridge_classes: dict = {}
         # One resonance zone per (fixed_point, branch_index): a non-inversion point
         # has a single branch (one zone); an inversion point has two. Insertion order
         # is preserved so plotting/shading is deterministic.
@@ -187,6 +191,184 @@ class TangleSession:
         if rebuild:
             trellis._arrangement = None
         return trellis.arrangement
+
+    def bridge_classes(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        rebuild: bool = False,
+    ) -> dict[BridgeClass, list["BridgeId"]]:
+        """
+        Group the bridges of a trellis by the pair of partition elements they connect.
+
+        The classes are computed on the trellis selected by ``fixed_points`` (all
+        fixed points by default, mirroring :meth:`arrangement`), but the stable
+        partitions used to resolve each bridge end's element are gathered from
+        EVERY cached, non-stale per-fixed-point trellis (see
+        :meth:`_gathered_partitions`) rather than from the selected trellis's own
+        (empty) :attr:`~tanglepack.topology.Trellis.Trellis.stable_partitions`. A
+        heteroclinic bridge is a piece of one fixed point's unstable manifold, so
+        it lives only in that fixed point's trellis, while the elements its ends
+        sit against belong to the partitions of whichever (possibly different)
+        fixed point owns the stable branch it crosses — the same split
+        :meth:`partition_element_for` exists to bridge for a single lookup, done
+        here for every bridge of the selection at once. See
+        :func:`tanglepack.topology.BridgeClass.bridge_classes` for the class
+        semantics themselves.
+
+        Cached by :attr:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.generation`,
+        exactly like :meth:`trellis`: any growth, recompute, re-cut, trim, blast
+        or resonance-zone change advances the generation, so the next call
+        recomputes rather than returning a stale grouping. The generation alone
+        cannot see re-partitioning, though — punching holes and partitioning are
+        Trellis-level mutations that do not touch the workbench — so the cache
+        is also keyed by a structural :meth:`_partition_signature` of the
+        gathered partitions; see the Note below.
+
+        Args:
+            fixed_points: A single FixedPoint, an iterable of them, or None (the
+                default) for all of them — selects which trellis's bridges are
+                classed.
+            rebuild: Force a recompute even if a cached grouping exists for the
+                current generation and partition signature.
+
+        Returns:
+            A dict from :class:`~tanglepack.topology.BridgeClass.BridgeClass` to
+            the sorted list of that class's
+            :data:`~tanglepack.numerics.Bridge.BridgeId` s (see
+            :func:`tanglepack.topology.BridgeClass.bridge_classes`).
+
+        Raises:
+            ValueError: Propagated from
+                :func:`tanglepack.topology.BridgeClass.bridge_classes` when a
+                bridge end needs a partition that no gathered
+                :class:`~tanglepack.topology.TopologyResults.StablePartitionResult`
+                covers.
+
+        Note:
+            Call :meth:`partition_stable_manifold` (directly or via the session
+            fan-out) on every fixed point of interest first — with nothing
+            partitioned yet, every bridge end fails to resolve and this raises.
+            A branch missing a partition on either side is logged as a WARNING,
+            naming which side(s), before that happens.
+
+            The cache hit test is ``(generation, signature)`` together: a
+            :class:`~tanglepack.topology.Trellis.Trellis` can be re-partitioned
+            (e.g. after :meth:`~tanglepack.topology.Trellis.Trellis.clear_results`
+            and a fresh :meth:`partition_stable_manifold`) without the workbench
+            generation moving at all, since the mutation happens on the Trellis,
+            not the workbench. :meth:`_partition_signature` reads off exactly
+            the interval boundaries :func:`tanglepack.topology.BridgeClass.bridge_classes`
+            depends on, so a different partition of the same branch is detected
+            even though the generation is unchanged.
+        """
+        cache_key = self._cache_key(fixed_points)
+        trellis = self.trellis(fixed_points)
+        partitions = self._gathered_partitions()
+        signature = self._partition_signature(partitions)
+
+        cached = self._bridge_classes.get(cache_key)
+        if (
+            not rebuild
+            and cached is not None
+            and cached[0] == self.workbench.generation
+            and cached[1] == signature
+        ):
+            return cached[2]
+
+        self._warn_unpartitioned_branches(trellis, partitions)
+        classes = _bridge_classes(trellis, partitions)
+
+        self._bridge_classes[cache_key] = (self.workbench.generation, signature, classes)
+        return classes
+
+    @staticmethod
+    def _partition_signature(partitions: list["StablePartitionResult"]) -> tuple:
+        """
+        A structural signature of a gathered partition list, for cache keying.
+
+        Two gathered-partition lists compare equal under this signature exactly
+        when they name the same ``(branch_key, side)`` pairs with the same
+        interval boundaries (endpoint ids and open/closed flags) in the same
+        order — the fields :func:`tanglepack.topology.BridgeClass.bridge_classes`
+        actually reads to resolve a bridge end to an element. Used by
+        :meth:`bridge_classes` to detect a re-partition that leaves the
+        workbench generation untouched (partitioning is a Trellis-level
+        mutation); Phase D.6's dual-graph and symbolic-dynamics caches reuse it
+        for the same reason, hence its generality (no dependence on anything
+        bridge-class-specific).
+
+        Args:
+            partitions: The gathered
+                :class:`~tanglepack.topology.TopologyResults.StablePartitionResult` s
+                (see :meth:`_gathered_partitions`).
+
+        Returns:
+            A hashable, order-sensitive tuple: one
+            ``(branch_key, side, (interval boundaries, ...))`` entry per result,
+            each interval boundary itself a ``(lo_id, hi_id, closed_lo,
+            closed_hi)`` tuple.
+        """
+        return tuple(
+            (
+                result.branch_key,
+                result.side,
+                tuple(
+                    (interval.lo_id, interval.hi_id, interval.closed_lo, interval.closed_hi)
+                    for interval in result.intervals
+                ),
+            )
+            for result in partitions
+        )
+
+    def _gathered_partitions(self) -> list["StablePartitionResult"]:
+        """
+        Every stable partition of every cached, still-valid per-fixed-point trellis.
+
+        Walks :attr:`_trellises` — the same scan :meth:`partition_element_for`
+        does — skipping any snapshot :meth:`_is_stale` has flagged (its
+        partitions are keyed by ids the workbench may have renumbered since),
+        and concatenates the survivors' :attr:`~tanglepack.topology.Trellis.Trellis.stable_partitions`.
+        Deduplicated by ``(branch_key, side)``, keeping the first result seen for
+        a given key — cache iteration order is insertion order, so this favors
+        whichever trellis was built (and cached) first.
+
+        Note:
+            General on purpose: Phase D.6's dual-graph gathering reuses this
+            helper rather than re-implementing the scan.
+
+        Returns:
+            The deduplicated list of :class:`~tanglepack.topology.TopologyResults.StablePartitionResult`.
+        """
+        gathered: dict[tuple, "StablePartitionResult"] = {}
+        for trellis in self._trellises.values():
+            if self._is_stale(trellis):
+                continue
+            for result in trellis.stable_partitions:
+                key = (result.branch_key, result.side)
+                gathered.setdefault(key, result)
+        return list(gathered.values())
+
+    @staticmethod
+    def _warn_unpartitioned_branches(
+        trellis: Trellis, partitions: list["StablePartitionResult"]
+    ) -> None:
+        """Log a WARNING naming every stable branch of ``trellis`` missing a
+        partition on either side, and which side(s) are missing."""
+        covered = {(result.branch_key, result.side) for result in partitions}
+        missing = []
+        for branch in trellis.stable_branches:
+            missing_sides = [
+                side for side in ("left", "right") if (branch.key, side) not in covered
+            ]
+            if missing_sides:
+                missing.append((branch.key, missing_sides))
+        if missing:
+            logger.warning(
+                "%d stable branch(es) missing a partition on at least one side: %s",
+                len(missing),
+                ", ".join(f"{key[1:]} missing {sides}" for key, sides in missing),
+            )
 
     def invalidate_trellises(self) -> None:
         """
