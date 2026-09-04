@@ -38,6 +38,7 @@ from .Pseudoneighbor import (
 )
 from .plotting import plot_stable_partition
 from .BridgeClass import BridgeClass, bridge_classes
+from .DualGraph import ArcNode, DualGraph, FaceNode
 from .StablePartition import (
     bridge_for_pair,
     bridge_row_violation,
@@ -57,7 +58,10 @@ __all__ = [
     "TrellisBranch",
     "Arrangement",
     "Arc",
+    "ArcNode",
     "BridgeClass",
+    "DualGraph",
+    "FaceNode",
     "ElementRef",
     "Region",
     "canonical_corners",
