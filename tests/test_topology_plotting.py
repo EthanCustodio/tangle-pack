@@ -231,9 +231,14 @@ def test_session_call_fanouts_go_through_fanout_call(henon_session, monkeypatch,
 # dual graph (B.4)
 # --------------------------------------------------------------------------- #
 def _k10_dual_graph(k10_partitioned) -> DualGraph:
-    """The dual graph of the k10_partitioned fixture, partitions only."""
+    """The dual graph of the k10_partitioned fixture, with its strong pip."""
     session, fp = k10_partitioned
-    return DualGraph(session.arrangement(), session.trellis(fp).stable_partitions)
+    trellis = session.trellis(fp)
+    return DualGraph(
+        session.arrangement(),
+        trellis.stable_partitions,
+        strong_pips=[trellis.strong_pip],
+    )
 
 
 def test_plot_dual_graph_scatters_exactly_the_arc_nodes(k10_partitioned):

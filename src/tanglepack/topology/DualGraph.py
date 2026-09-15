@@ -19,9 +19,11 @@ Three things happen on top of the raw arrangement:
   arc's midpoint canonical distance, so a singleton element pinched at a
   crossing is never mistaken for the arc's element.
 * **Fill.** An arc node is *filled* when an image bridge may cross the stable
-  manifold there at a crossing this trellis has not computed yet — the outward
-  stretch of each stable branch beyond the image of the previous branch's last
-  crossing. A hollow node is a wall.
+  manifold there at a crossing this trellis has not computed yet. The strong
+  pip ``q0`` DECLARES that stretch: on the pip's own stable branch, the arcs
+  meeting ``(cdist(f^k(q0)), cdist(q0)]`` with ``k = k_value`` (the map
+  steps that bring the branch back to itself) are filled, and every other
+  branch stays hollow. A hollow node is a wall.
 
 Dev Notes:
 
@@ -35,11 +37,17 @@ Dev Notes:
   direction the partition's ``left``/``right`` is defined against). So
   ``reverse`` alone gives the side, with no angles and no polylines. The tests
   pin that against :func:`~.StablePartition._side_of` on every closed region.
-* The fill rule reads the LAST crossing of each stable branch and the image of
-  the last crossing of the branch one map step back. With every branch trimmed
-  at the strong-pip orbit those two coincide on all but the pip's own branch,
-  which is why the derived fill is ``(f^k(q0), q0]`` there and empty elsewhere;
-  ``strong_pips=`` makes the constructor check exactly that and log it.
+* The fill is not derived from the trellis's outermost crossings; it is
+  declared by the strong pip. ``q0`` is the last primary crossing the
+  resonance zone keeps and ``f^k(q0)`` its return to the same branch, so the
+  arcs between them are exactly the stretch whose crossings by image bridges
+  the trellis has not computed. An earlier version derived the stretch from
+  the outermost crossing of each branch and only log-checked it against the
+  pip; that agreed with the pip rule whenever the manifold was trimmed at the
+  pip orbit and silently filled the wrong arcs otherwise. The lower boundary
+  comes from :meth:`~.Trellis.Trellis.image_cdist` (iterate table first,
+  scaled cdist otherwise, logged); an arc straddling either boundary is
+  filled and logged at INFO. No pip at all fills nothing and warns.
 """
 
 from __future__ import annotations
@@ -354,9 +362,9 @@ class DualGraph:
             :attr:`~.TopologyResults.Arc.edge_key`, in branch-then-cdist order.
         face_nodes: The merged faces; ``face_nodes[i].index == i``.
         unbounded: The one face node standing for the unbounded plane.
-        fill_segments: Per stable branch, the half-open canonical-distance span
-            ``(c_img, cdist(T_j)]`` whose arcs are filled. A span with equal
-            ends means nothing on that branch is filled.
+        fill_segments: Per strong-pip stable branch (only those), the
+            half-open canonical-distance span ``(cdist(f^k(q0)), cdist(q0)]``
+            whose arcs are filled. Empty when no pip was supplied.
     """
 
     def __init__(
@@ -374,17 +382,19 @@ class DualGraph:
             partitions: Every stable partition covering the arrangement's stable
                 branches, on BOTH sides — normally each per-fixed-point
                 trellis's ``stable_partitions``, concatenated.
-            strong_pips: Registry ids of the strong pips, one per fixed point,
-                used only to CHECK the derived fill against the expected
-                ``(f^k(q0), q0]`` and log the comparison. A mismatch is a
-                warning, never an error; None skips the check.
+            strong_pips: Registry ids of the strong pips, one per fixed point
+                (``None`` entries are skipped). Each DRIVES the fill of its own
+                stable branch: the arcs meeting ``(cdist(f^k(q0)), cdist(q0)]``
+                are filled and every other branch stays hollow. None or empty
+                fills nothing and logs a WARNING.
 
         Raises:
             ValueError: If two partitions cover the same ``(branch, side)``; if
                 a stable arc's branch has no partition on a side; if no element
-                (or more than one) owns an arc's midpoint; or if a connected
+                (or more than one) owns an arc's midpoint; if a connected
                 component of the arrangement does not have exactly one
-                positive-area face.
+                positive-area face; or if a strong pip carries no stable
+                branch key or two pips lie on one stable branch.
 
         Note:
             Nothing is cached and nothing is grown: the graph is a pure function
@@ -643,138 +653,93 @@ class DualGraph:
     # ── B.3: fill ───────────────────────────────────────────────────────────
 
     def _fill(self, strong_pips: Optional[Iterable[int]]) -> None:
-        """Mark the arcs beyond the image of the previous branch's last crossing."""
+        """Fill ``(f^k(q0), q0]`` on each strong pip's own branch; nothing elsewhere."""
+        pips = [pip for pip in (strong_pips or ()) if pip is not None]
+        if not pips:
+            logger.warning(
+                "no strong pip supplied to the dual graph; nothing is filled and "
+                "every arc node is a wall (TangleSession.dual_graph() gathers one "
+                "pip per classified per-fixed-point trellis)"
+            )
+            return
+
         tol = self.trellis.registry.cdist_tol
-        for branch in self.trellis.stable_branches:
-            c_img, c_last = self._fill_segment(branch)
-            self.fill_segments[branch.key] = (c_img, c_last)
-            for node in self.arc_nodes_on(branch.key):
-                if node.hi_cdist <= c_img + tol:
+        owner: dict["ManifoldKey", int] = {}
+        for pip_id in pips:
+            branch_key, c_lo, c_hi, from_table = self._pip_fill_segment(pip_id)
+            if branch_key in owner:
+                raise ValueError(
+                    f"strong pips {owner[branch_key]} and {pip_id} both lie on "
+                    f"stable branch {branch_key[1:]}; a branch has one fill segment"
+                )
+            owner[branch_key] = pip_id
+            self.fill_segments[branch_key] = (c_lo, c_hi)
+
+            nodes = self.arc_nodes_on(branch_key)
+            if not nodes:
+                logger.warning(
+                    "strong pip %d lies on stable branch %s, which carries no arc "
+                    "of this arrangement; nothing to fill there",
+                    pip_id,
+                    branch_key[1:],
+                )
+                continue
+            for node in nodes:
+                if node.hi_cdist <= c_lo + tol or node.lo_cdist >= c_hi - tol:
                     continue
                 node.filled = True
-                if node.lo_cdist < c_img - tol:
+                if node.lo_cdist < c_lo - tol or node.hi_cdist > c_hi + tol:
                     logger.info(
-                        "arc %s of branch %s straddles the fill boundary "
-                        "%.6g (span %.6g..%.6g); filling it",
+                        "arc %s of branch %s straddles the fill segment "
+                        "(%.6g, %.6g] (span %.6g..%.6g); filling it",
                         node.key[1:3],
-                        branch.key[1:],
-                        c_img,
+                        branch_key[1:],
+                        c_lo,
+                        c_hi,
                         node.lo_cdist,
                         node.hi_cdist,
                     )
-        self._check_fill_against_pips(strong_pips)
-
-    def _fill_segment(self, branch: "TrellisBranch") -> tuple[float, float]:
-        """The ``(c_img, cdist(T_j))`` fill span of one stable branch."""
-        ordered = branch.ordered_ids()
-        if len(ordered) <= 1:
-            c_last = (
-                float(self.trellis.intersection(ordered[-1]).stable_cdist)
-                if ordered
-                else 0.0
-            )
             logger.info(
-                "stable branch %s carries %d crossing(s); nothing to fill",
-                branch.key[1:],
-                len(ordered),
+                "fill of branch %s is (f^%d(q0), q0] = (%.6g, %.6g] from strong "
+                "pip %d (%s)",
+                branch_key[1:],
+                branch_key[0].k_value,
+                c_lo,
+                c_hi,
+                pip_id,
+                "iterate table" if from_table else "scaled cdist",
             )
-            return c_last, c_last
 
-        last_id = ordered[-1]
-        c_last = float(self.trellis.intersection(last_id).stable_cdist)
-        fixed_point = branch.key[0]
-        previous = self.trellis.branch(fixed_point.advance_key(branch.key, -1))
-        if previous is None or not previous.ordered_ids():
+    def _pip_fill_segment(
+        self, pip_id: int
+    ) -> tuple["ManifoldKey", float, float, bool]:
+        """``(branch, cdist(f^k(q0)), cdist(q0), from_table)`` for one strong pip."""
+        crossing = self.trellis.intersection(pip_id)
+        branch_key = crossing.manifold_b_key
+        if branch_key is None:
+            raise ValueError(
+                f"strong pip {pip_id} carries no stable branch key; it cannot "
+                "drive a fill"
+            )
+        fixed_point = branch_key[0]
+        image_key, c_lo, from_table = self.trellis.image_cdist(
+            pip_id, fixed_point.k_value, "stable"
+        )
+        # k_value map steps bring a branch back to itself by definition
+        # (FixedPoint.advance_key), so a different key means a corrupt table.
+        assert image_key == branch_key, (
+            f"the {fixed_point.k_value}-th image of strong pip {pip_id} landed on "
+            f"branch {image_key[1:]} instead of its own {branch_key[1:]}"
+        )
+        if not from_table:
             logger.info(
-                "stable branch %s has no computed predecessor branch; nothing "
-                "to fill",
-                branch.key[1:],
+                "strong pip %d has no registered %d-th iterate; its fill boundary "
+                "%.6g is the scaled canonical distance",
+                pip_id,
+                fixed_point.k_value,
+                c_lo,
             )
-            return c_last, c_last
-
-        previous_ordered = previous.ordered_ids()
-        if len(previous_ordered) <= 1:
-            logger.info(
-                "predecessor branch %s of %s has no crossing past its anchor, "
-                "so the fill boundary falls at the anchor and the whole branch "
-                "is conservatively filled",
-                previous.key[1:],
-                branch.key[1:],
-            )
-
-        previous_last = previous_ordered[-1]
-        image_id = self.trellis.iterate(previous_last, 1)
-        if image_id is not None:
-            c_img = float(self.trellis.intersection(image_id).stable_cdist)
-        else:
-            c_img = float(
-                self.trellis.intersection(previous_last).stable_cdist
-                * fixed_point.per_step_beta("stable")
-            )
-            logger.info(
-                "crossing %d (last of branch %s) has no registered image; "
-                "scaling its stable cdist to %.6g for the fill boundary of %s",
-                previous_last,
-                previous.key[1:],
-                c_img,
-                branch.key[1:],
-            )
-        return c_img, c_last
-
-    def _check_fill_against_pips(self, strong_pips: Optional[Iterable[int]]) -> None:
-        """Log whether the derived fill matches ``(f^k(q0), q0]`` at each pip."""
-        if strong_pips is None:
-            return
-        tol = self.trellis.registry.cdist_tol
-        for pip_id in strong_pips:
-            if pip_id is None:
-                continue
-            branch_key = self.trellis.intersection(pip_id).manifold_b_key
-            if branch_key is None:
-                logger.warning(
-                    "strong pip %d carries no stable branch key; cannot check "
-                    "the fill against it",
-                    pip_id,
-                )
-                continue
-            fixed_point = branch_key[0]
-            _key, expected_lo, _from_table = self.trellis.image_cdist(
-                pip_id, fixed_point.k_value, "stable"
-            )
-            expected = (
-                float(expected_lo),
-                float(self.trellis.intersection(pip_id).stable_cdist),
-            )
-            derived = self.fill_segments.get(branch_key)
-            if derived is None:
-                logger.warning(
-                    "strong pip %d lies on stable branch %s, which has no fill "
-                    "segment",
-                    pip_id,
-                    branch_key[1:],
-                )
-                continue
-            if abs(derived[0] - expected[0]) <= tol and abs(
-                derived[1] - expected[1]
-            ) <= tol:
-                logger.info(
-                    "fill of branch %s is (f^%d(q0), q0] = (%.6g, %.6g] as expected",
-                    branch_key[1:],
-                    fixed_point.k_value,
-                    *expected,
-                )
-            else:
-                logger.warning(
-                    "fill of branch %s is (%.6g, %.6g] but the strong pip %d "
-                    "expects (f^%d(q0), q0] = (%.6g, %.6g]",
-                    branch_key[1:],
-                    derived[0],
-                    derived[1],
-                    pip_id,
-                    fixed_point.k_value,
-                    expected[0],
-                    expected[1],
-                )
+        return branch_key, float(c_lo), float(crossing.stable_cdist), from_table
 
     # ── lookups ─────────────────────────────────────────────────────────────
 

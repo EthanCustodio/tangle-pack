@@ -97,7 +97,7 @@ class TangleSession:
         # (workbench.generation, partition signature, classes) per
         # trellis-selection cache key; see bridge_classes().
         self._bridge_classes: dict = {}
-        # (workbench.generation, partition signature, graph) per
+        # (workbench.generation, partition signature, strong pips, graph) per
         # trellis-selection cache key; see dual_graph().
         self._dual_graphs: dict = {}
         # One resonance zone per (fixed_point, branch_index): a non-inversion point
@@ -392,13 +392,15 @@ class TangleSession:
         are gathered from EVERY cached, non-stale per-fixed-point trellis (see
         :meth:`_gathered_partitions`), exactly as :meth:`bridge_classes` does.
         The strong pips passed to :class:`~tanglepack.topology.DualGraph.DualGraph`
-        (used only to log-check the derived fill against ``(f^k(q0), q0]``) are
-        gathered the same way, one per cached per-fixed-point trellis whose
+        — they drive its fill, ``(f^k(q0), q0]`` on each pip's own branch —
+        are gathered the same way, one per cached per-fixed-point trellis whose
         fixed point falls inside the selection (see :meth:`_gathered_strong_pips`).
 
-        Cached on ``(workbench.generation, partition signature)``, exactly like
-        :meth:`bridge_classes` — the same :meth:`_partition_signature` catches a
-        re-partition that leaves the workbench generation untouched.
+        Cached on ``(workbench.generation, partition signature, gathered strong
+        pips)``: the first two exactly as :meth:`bridge_classes` (the same
+        :meth:`_partition_signature` catches a re-partition that leaves the
+        workbench generation untouched), the third because a pip choice
+        changes the graph's ``filled`` flags and ``fill_segments``.
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None (the
@@ -422,21 +424,18 @@ class TangleSession:
             and only trellises still cached at call time contribute their
             partitions and strong pips.
 
-            The cache key is ``(generation, partition signature)`` only — it
-            does NOT include the gathered strong pips. A strong pip only
-            drives the constructor's fill log line (see
-            :class:`~tanglepack.topology.DualGraph.DualGraph`'s
-            ``strong_pips`` parameter); it never changes ``arc_nodes``,
-            ``face_nodes`` or ``fill_segments`` themselves. So calling
-            :meth:`~tanglepack.topology.Trellis.Trellis.set_strong_pip` on a
-            trellis WITHOUT re-partitioning leaves both cache-key components
-            unchanged and a stale cached graph is served — pass
-            ``rebuild=True`` to force the new pip through the check.
+            Calling :meth:`~tanglepack.topology.Trellis.Trellis.set_strong_pip`
+            on a cached per-fixed-point trellis, even without re-partitioning
+            or touching the workbench, changes the gathered pips and so the
+            next call rebuilds the graph with the new fill. A selection with
+            no classified pip builds a graph that fills nothing (the
+            constructor warns).
         """
         cache_key = self._cache_key(fixed_points)
         trellis = self.trellis(fixed_points)
         partitions = self._gathered_partitions()
         signature = self._partition_signature(partitions)
+        strong_pips = tuple(self._gathered_strong_pips(fixed_points))
 
         cached = self._dual_graphs.get(cache_key)
         if (
@@ -444,14 +443,19 @@ class TangleSession:
             and cached is not None
             and cached[0] == self.workbench.generation
             and cached[1] == signature
+            and cached[2] == strong_pips
         ):
-            return cached[2]
+            return cached[3]
 
         self._warn_unpartitioned_branches(trellis, partitions)
-        strong_pips = self._gathered_strong_pips(fixed_points)
         dg = DualGraph(trellis.arrangement, partitions, strong_pips=strong_pips)
 
-        self._dual_graphs[cache_key] = (self.workbench.generation, signature, dg)
+        self._dual_graphs[cache_key] = (
+            self.workbench.generation,
+            signature,
+            strong_pips,
+            dg,
+        )
         return dg
 
     def _gathered_strong_pips(

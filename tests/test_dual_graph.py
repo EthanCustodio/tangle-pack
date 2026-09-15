@@ -19,12 +19,14 @@ checked against :func:`~tanglepack.topology.StablePartition._side_of` applied to
 the real geometry — the region's representative point against the arc's local
 anchorward tangent.
 
-**The fill**: the arcs an unseen crossing could land on. With every stable branch
-trimmed at its tangle's strong-pip orbit the derived segment is ``(f^k(q0), q0]``
-on each pip's own branch and empty on every other branch of that orbit.
+**The fill**: the arcs an unseen crossing could land on. The strong pip drives
+it: ``(f^k(q0), q0]`` on each pip's own branch, nothing on any other branch, an
+empty fill (and a warning) without a pip, and a different pip moves it.
 """
 
 from __future__ import annotations
+
+import logging
 
 import numpy as np
 import pytest
@@ -120,24 +122,26 @@ def _pip_branch_key(trellis):
     return trellis.intersection(trellis.strong_pip).manifold_b_key
 
 
-def _expected_fill_ids(dual: DualGraph, trellis) -> set[tuple]:
+def _expected_fill_ids(dual: DualGraph, trellis, pip=None) -> set[tuple]:
     """The arc-node keys the pip rule says must be filled on the pip's branch.
 
-    ``(f^k(q0), q0]``: every arc of the pip's own branch lying at or above the
-    canonical distance of the pip's ``k``-th image.
+    ``(f^k(q0), q0]``: every arc of the pip's own branch meeting the span from
+    the canonical distance of the pip's ``k``-th image up to the pip's own.
     """
-    pip = trellis.strong_pip
-    fixed_point = _pip_branch_key(trellis)[0]
+    pip = trellis.strong_pip if pip is None else pip
+    branch_key = trellis.intersection(pip).manifold_b_key
+    fixed_point = branch_key[0]
     image = trellis.iterate(pip, fixed_point.k_value)
     assert image is not None, (
         "the fixture must have the pip's k-th iterate registered (link by link)"
     )
     boundary = float(dual.trellis.intersection(image).stable_cdist)
+    top = float(dual.trellis.intersection(pip).stable_cdist)
     tol = dual.trellis.registry.cdist_tol
     return {
         node.key
-        for node in dual.arc_nodes_on(_pip_branch_key(trellis))
-        if node.lo_cdist >= boundary - tol
+        for node in dual.arc_nodes_on(branch_key)
+        if node.hi_cdist > boundary + tol and node.lo_cdist < top - tol
     }
 
 
@@ -385,6 +389,7 @@ def test_k10_fill_is_the_arcs_between_the_pip_and_its_image(k10_partitioned):
         assert node.faces.keys() == {"left", "right"}
 
     image = trellis.iterate(trellis.strong_pip, fp.k_value)
+    assert set(dual.fill_segments) == {branch_key}
     low, high = dual.fill_segments[branch_key]
     tol = trellis.registry.cdist_tol
     assert abs(low - trellis.intersection(image).stable_cdist) <= tol
@@ -398,8 +403,7 @@ def test_p3_fill_is_the_pip_segment_on_each_pips_own_branch(p3_partitioned):
     The nested fixture has TWO strong pips — one per tangle — so two branches
     carry a fill: the period-3 pip's branch (a three-step segment) and the
     period-1 pip's branch (a one-step one). Every OTHER branch of the period-3
-    orbit is empty, because its last crossing is exactly the image of the last
-    crossing of the branch before it.
+    orbit carries no pip, so it has no fill segment and nothing filled.
     """
     session, fp3, fp1 = p3_partitioned
     dual = _p3_graph(session, fp3, fp1)
@@ -426,14 +430,62 @@ def test_p3_fill_is_the_pip_segment_on_each_pips_own_branch(p3_partitioned):
     assert filled == expected
     assert filled
 
+    assert set(dual.fill_segments) == pip_branches
     for branch in dual.trellis.stable_branches:
         if branch.key in pip_branches:
             continue
-        low, high = dual.fill_segments[branch.key]
-        assert abs(high - low) <= tol, (
-            f"branch {branch.key[1:]} carries no pip, so its fill must be empty"
+        assert branch.key not in dual.fill_segments, (
+            f"branch {branch.key[1:]} carries no pip, so it has no fill segment"
         )
         assert not any(node.filled for node in dual.arc_nodes_on(branch.key))
+
+
+@pytest.mark.parametrize("pips", [None, [], [None]], ids=["none", "empty", "[None]"])
+def test_no_pips_warns_and_fills_nothing(k10_partitioned, caplog, pips):
+    """Without a strong pip the graph is built, warns, and every node is a wall."""
+    session, fp = k10_partitioned
+    partitions = session.trellis(fp).stable_partitions
+
+    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.DualGraph"):
+        dual = DualGraph(session.arrangement(), partitions, strong_pips=pips)
+
+    assert "no strong pip" in caplog.text
+    assert dual.fill_segments == {}
+    assert dual.arc_nodes and not any(node.filled for node in dual.arc_nodes.values())
+
+
+def test_k10_a_different_pip_moves_the_fill(k10_partitioned):
+    """Choosing another candidate pip — with no trim and no re-partition —
+    moves the fill to ``(f^k(q), q]`` of that pip, leaving the arcs beyond it
+    hollow. On k=10 the default pip's forward image is itself a candidate."""
+    session, fp = k10_partitioned
+    trellis = session.trellis(fp)
+    default = trellis.strong_pip
+    alt = trellis.iterate(default, 1)
+    assert alt is not None and alt in trellis.strong_pip_candidates
+    trellis.set_strong_pip(alt)
+
+    dual = DualGraph(
+        session.arrangement(), trellis.stable_partitions, strong_pips=[alt]
+    )
+    branch_key = _pip_branch_key(trellis)
+    tol = trellis.registry.cdist_tol
+    top = float(trellis.intersection(alt).stable_cdist)
+    image = trellis.iterate(alt, fp.k_value)
+    assert image is not None
+
+    assert set(dual.fill_segments) == {branch_key}
+    low, high = dual.fill_segments[branch_key]
+    assert abs(low - trellis.intersection(image).stable_cdist) <= tol
+    assert abs(high - top) <= tol
+
+    filled = {node.key for node in dual.arc_nodes.values() if node.filled}
+    assert filled == _expected_fill_ids(dual, trellis, alt)
+    assert filled
+    assert filled != _expected_fill_ids(dual, trellis, default)
+    for node in dual.arc_nodes_on(branch_key):
+        if node.lo_cdist >= top - tol:
+            assert not node.filled, "arcs beyond the chosen pip stay hollow"
 
 
 # --------------------------------------------------------------------------- #

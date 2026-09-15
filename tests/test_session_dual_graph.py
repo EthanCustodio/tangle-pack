@@ -37,7 +37,8 @@ def _direct_partitions(session, fixed_point_list):
 def _direct_dual_graph(session, fixed_point_list):
     """The same computation session.dual_graph() should produce, done by hand."""
     partitions = _direct_partitions(session, fixed_point_list)
-    return DualGraph(session.arrangement(), partitions)
+    pips = [session.trellis(fp).strong_pip for fp in fixed_point_list]
+    return DualGraph(session.arrangement(), partitions, strong_pips=pips)
 
 
 # --------------------------------------------------------------------------- #
@@ -151,27 +152,49 @@ def test_session_plot_dual_graph_returns_axes(k10_partitioned):
 
 
 # --------------------------------------------------------------------------- #
-# (e) on p3, the strong pips are passed through to the dual graph
+# (e) the gathered strong pips drive the fill
 # --------------------------------------------------------------------------- #
 @pytest.mark.slow
-def test_p3_strong_pips_are_passed_through_to_the_dual_graph(p3_partitioned, caplog):
+def test_p3_strong_pips_drive_the_fill_on_both_pip_branches(p3_partitioned, caplog):
     session, fp3, fp1 = p3_partitioned
 
-    assert session.trellis(fp3).strong_pip is not None
-    assert session.trellis(fp1).strong_pip is not None
-
-    with caplog.at_level(
-        logging.INFO, logger="tanglepack.topology.DualGraph"
-    ):
-        dg = session.dual_graph(rebuild=True)
-
-    assert caplog.text.count("as expected") == 2, (
-        "both fixed points' strong pips must reach the DualGraph constructor's "
-        "fill check, one 'as expected' INFO line per pip branch"
-    )
-
+    pip_branches = set()
     for fp in (fp3, fp1):
         strong_pip = session.trellis(fp).strong_pip
-        branch_key = session.trellis(fp).intersection(strong_pip).manifold_b_key
-        lo, hi = dg.fill_segments[branch_key]
-        assert hi > lo, f"fixed point {fp!r}'s strong-pip branch has no fill span"
+        assert strong_pip is not None
+        pip_branches.add(session.trellis(fp).intersection(strong_pip).manifold_b_key)
+    assert len(pip_branches) == 2
+
+    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.DualGraph"):
+        dg = session.dual_graph(rebuild=True)
+
+    assert not caplog.records, "both pips must reach the constructor: no warning"
+    assert set(dg.fill_segments) == pip_branches
+    for low, high in dg.fill_segments.values():
+        assert high > low
+    filled_branches = {node.branch_key for node in dg.arc_nodes.values() if node.filled}
+    assert filled_branches == pip_branches
+
+
+def test_dual_graph_pip_change_at_the_same_generation_and_partition_invalidates_the_cache(
+    k10_partitioned,
+):
+    """A new strong pip changes the fill, so it must be part of the cache key
+    even when neither the workbench generation nor the partition moved."""
+    session, fp = k10_partitioned
+    first = session.dual_graph()
+    generation_before = session.workbench.generation
+    signature_before = session._partition_signature(session._gathered_partitions())
+
+    trellis = session.trellis(fp)
+    alt = trellis.iterate(trellis.strong_pip, 1)
+    assert alt in trellis.strong_pip_candidates
+    trellis.set_strong_pip(alt)
+
+    assert session.workbench.generation == generation_before
+    assert session._partition_signature(session._gathered_partitions()) == signature_before
+
+    second = session.dual_graph()
+    assert second is not first
+    assert second.fill_segments != first.fill_segments
+    assert session.dual_graph() is second
