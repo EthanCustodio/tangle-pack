@@ -511,34 +511,6 @@ class TangleSession:
         graph = dual_graph if dual_graph is not None else self.dual_graph()
         return plotting.plot_dual_graph(graph, ax=ax, **kwargs)
 
-    def plot_dual_graph_curved(
-        self,
-        dual_graph: Optional[DualGraph] = None,
-        ax: Optional["Axes"] = None,
-        **kwargs,
-    ) -> "Axes":
-        """
-        Draw a dual graph with its edges following the unstable manifold,
-        defaulting to :meth:`dual_graph`'s own (all fixed points, cached) result.
-
-        Thin delegate to
-        :func:`~tanglepack.topology.plotting.plot_dual_graph_curved`; see its
-        docstring for the drawing itself.
-
-        Args:
-            dual_graph: The graph to draw. Defaults to ``self.dual_graph()``.
-            ax: Optional matplotlib Axes to draw on. Defaults to the current
-                axes (plt).
-            **kwargs: Forwarded to
-                :func:`~tanglepack.topology.plotting.plot_dual_graph_curved`
-                (e.g. ``inset``, ``show_labels``, ``clip_to_arcs``).
-
-        Returns:
-            The Axes drawn on.
-        """
-        graph = dual_graph if dual_graph is not None else self.dual_graph()
-        return plotting.plot_dual_graph_curved(graph, ax=ax, **kwargs)
-
     def invalidate_trellises(self) -> None:
         """
         No-op alias kept for one release.

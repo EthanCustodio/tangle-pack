@@ -4,10 +4,9 @@ The whole pipeline on the single k=10 Hénon saddle, start to finish.
 One fixed point, one tangle, every stage in order: map -> saddle -> manifolds
 -> growth -> crossings -> bridges -> iterate table -> strong pip ->
 pseudoneighbors -> holes -> stable partition -> bridge classes -> dual graph.
-Logs the dual graph's summary and saves one 2x2 figure: the tangle with its
-strong pip, pseudoneighbors and holes; the stable partition; the tangle with
-the dual graph overlaid (straight edges); and the same with the edges
-following the unstable manifold inside each face.
+Logs the dual graph's summary and saves one 1x3 figure: the tangle with its
+strong pip, pseudoneighbors and holes; the stable partition; and the tangle
+with the dual graph overlaid.
 
 This is also the demonstration of the pip-driven fill: ``PIP`` picks which
 strong-pip candidate drives it, and the filled arc nodes move with it.
@@ -204,10 +203,9 @@ def main() -> None:
     print(dual_graph.summary())
 
     # 6. The figure.
-    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
-    (ax_tangle, ax_partition), (ax_dual, ax_curved) = axes
+    fig, (ax_tangle, ax_partition, ax_dual) = plt.subplots(1, 3, figsize=(21, 7))
 
-    for ax in (ax_tangle, ax_dual, ax_curved):
+    for ax in (ax_tangle, ax_dual):
         plt.sca(ax)
         session.plot_tangle(fp, "unstable", color="tab:blue", linewidth=0.6)
         session.plot_tangle(fp, "stable", color="tab:red", linewidth=0.6)
@@ -218,13 +216,7 @@ def main() -> None:
     ax_dual.legend(
         handles=dual_graph_legend_handles(), loc="best", fontsize=7, framealpha=0.8
     )
-    ax_dual.set_title(f"{title} -- dual graph, straight edges")
-    session.plot_dual_graph_curved(dual_graph, ax=ax_curved, clip_to_arcs=False)
-    ax_curved.legend(
-        handles=dual_graph_legend_handles(curved=True),
-        loc="best", fontsize=7, framealpha=0.8,
-    )
-    ax_curved.set_title(f"{title} -- dual graph, edges along the unstable manifold")
+    ax_dual.set_title(f"{title} -- dual graph")
 
     session.plot_pseudoneighbors(fp, ax=ax_tangle)
     session.plot_holes(fp, ax=ax_tangle)
@@ -234,7 +226,7 @@ def main() -> None:
     session.plot_strong_pip(
         fp, ax=ax_tangle, s=120, facecolors="none", linewidths=1.5, zorder=20
     )
-    for ax in (ax_tangle, ax_dual, ax_curved):
+    for ax in (ax_tangle, ax_dual):
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
     ax_tangle.set_title(f"{title} -- tangle, strong pip, pseudoneighbors, holes")

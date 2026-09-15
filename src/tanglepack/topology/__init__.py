@@ -40,7 +40,6 @@ from .plotting import (
     dual_graph_legend_handles,
     face_point,
     plot_dual_graph,
-    plot_dual_graph_curved,
     plot_stable_partition,
 )
 from .BridgeClass import (
@@ -105,7 +104,6 @@ __all__ = [
     "owns_cdist",
     "partition_stable_manifold",
     "plot_dual_graph",
-    "plot_dual_graph_curved",
     "plot_stable_partition",
     "propagate_reference_holes",
     "punch_holes",

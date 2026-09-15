@@ -139,33 +139,30 @@ def test_dual_graph_repartitioning_at_the_same_generation_invalidates_the_cache(
 # --------------------------------------------------------------------------- #
 # (d) plotting delegates run headless and return Axes
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("name", ["plot_dual_graph", "plot_dual_graph_curved"])
-def test_session_dual_graph_plotters_return_axes(k10_partitioned, name):
+def test_session_plot_dual_graph_returns_axes(k10_partitioned):
     session, _fp = k10_partitioned
 
     plt.figure()
     try:
         ax = plt.gca()
-        result = getattr(session, name)(ax=ax)
+        result = session.plot_dual_graph(ax=ax)
         assert result is ax
     finally:
         plt.close()
 
 
-@pytest.mark.parametrize("name", ["plot_dual_graph", "plot_dual_graph_curved"])
-def test_session_dual_graph_plotters_delegate_to_plotting(
-    k10_partitioned, monkeypatch, name
-):
-    """Each session plotter calls its plotting.py counterpart once, with the
+def test_session_plot_dual_graph_delegates_to_plotting(k10_partitioned, monkeypatch):
+    """The session plotter calls plotting.plot_dual_graph once, with the
     session's own cached dual graph."""
     from tanglepack.topology import plotting
 
     session, _fp = k10_partitioned
     calls = []
     monkeypatch.setattr(
-        plotting, name, lambda *a, **kw: calls.append((a, kw)) or "sentinel"
+        plotting, "plot_dual_graph",
+        lambda *a, **kw: calls.append((a, kw)) or "sentinel",
     )
-    assert getattr(session, name)(show_labels=True) == "sentinel"
+    assert session.plot_dual_graph(show_labels=True) == "sentinel"
     assert len(calls) == 1
     (graph,), kwargs = calls[0]
     assert graph is session.dual_graph()

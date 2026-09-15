@@ -8,10 +8,7 @@ tangle), partitions each fully, and builds its
 per stable arc, the arcs between the strong pip and its ``k``-th iterate
 filled -- without growing anything further. For each fixture this logs the
 graph's summary and fill segments and saves a figure with the tangle and its
-dual graph drawn twice: straight edges from each face point to its arc nodes
-(:func:`~tanglepack.topology.plotting.plot_dual_graph`) and edges following
-the unstable manifold inside each face
-(:func:`~tanglepack.topology.plotting.plot_dual_graph_curved`).
+dual graph overlaid (:func:`~tanglepack.topology.plotting.plot_dual_graph`).
 
 Run:  env/bin/python scripts/henon_dual_graph.py
 
@@ -207,21 +204,19 @@ def report_and_plot(
     :meth:`~tanglepack.topology.DualGraph.DualGraph.summary` and prints the
     fill segment of every strong pip's branch.
 
-    Without ``zoom_fixed_point`` the figure is a 1x2 layout: every fixed
-    point's manifolds with the dual graph overlaid, straight edges on the
-    left and curved edges on the right. With ``zoom_fixed_point`` (the nested
-    p3 fixture) it is 2x2: the top row is the full tangle, the bottom row is
-    zoomed on that fixed point's own manifolds (bounding box padded 15%, dual
-    graph unclipped) -- otherwise the inner period-3 tangle is an illegible
-    blob at the outer period-1 tangle's scale -- with straight edges on the
-    left and curved on the right.
+    Without ``zoom_fixed_point`` the figure is a single panel: every fixed
+    point's manifolds with the dual graph overlaid. With ``zoom_fixed_point``
+    (the nested p3 fixture) it is 1x2: the full tangle on the left and, on the
+    right, a panel zoomed on that fixed point's own manifolds (bounding box
+    padded 15%, dual graph unclipped) -- otherwise the inner period-3 tangle
+    is an illegible blob at the outer period-1 tangle's scale.
 
     Args:
         session: A fully partitioned session (see ``build_k10``/``build_p3``).
         fixed_points: The session's fixed points, for the manifold plot.
         title: Figure/report title.
         out_path: Where to save the PNG.
-        zoom_fixed_point: When given, adds the zoomed bottom row around this
+        zoom_fixed_point: When given, adds the zoomed right panel around this
             fixed point (matched by identity).
 
     Returns:
@@ -240,31 +235,23 @@ def report_and_plot(
         )
 
     if zoom_fixed_point is None:
-        fig, (ax_straight, ax_curved) = plt.subplots(1, 2, figsize=(16, 8))
-        panels = [(ax_straight, False, False), (ax_curved, True, False)]
+        fig, ax_full = plt.subplots(1, 1, figsize=(9, 8))
+        panels = [(ax_full, False)]
     else:
-        fig, ((ax_straight, ax_curved), (ax_zs, ax_zc)) = plt.subplots(
-            2, 2, figsize=(18, 16)
-        )
-        panels = [
-            (ax_straight, False, False), (ax_curved, True, False),
-            (ax_zs, False, True), (ax_zc, True, True),
-        ]
+        fig, (ax_full, ax_zoom) = plt.subplots(1, 2, figsize=(18, 8))
+        panels = [(ax_full, False), (ax_zoom, True)]
 
-    for ax, curved, zoomed in panels:
+    for ax, zoomed in panels:
         _draw_tangle(session, fixed_points, ax)
-        plotter = session.plot_dual_graph_curved if curved else session.plot_dual_graph
-        plotter(dual_graph, ax=ax, clip_to_arcs=not zoomed)
+        session.plot_dual_graph(dual_graph, ax=ax, clip_to_arcs=not zoomed)
         if zoomed:
             _zoom(ax, session, zoom_fixed_point)
-        what = "curved edges" if curved else "straight edges"
         where = (
             f"zoom on period-{zoom_fixed_point.period} tangle" if zoomed else "tangle"
         )
-        ax.set_title(f"{title} -- {where} + dual graph, {what}")
+        ax.set_title(f"{title} -- {where} + dual graph")
         ax.legend(
-            handles=dual_graph_legend_handles(curved=curved),
-            loc="best", fontsize=7, framealpha=0.8,
+            handles=dual_graph_legend_handles(), loc="best", fontsize=7, framealpha=0.8
         )
 
     fig.tight_layout()
