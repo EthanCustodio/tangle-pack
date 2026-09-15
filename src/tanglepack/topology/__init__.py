@@ -40,7 +40,6 @@ from .plotting import (
     face_point,
     plot_dual_graph,
     plot_stable_partition,
-    plot_transition_graph,
 )
 from .BridgeClass import (
     BridgeClass,
@@ -49,19 +48,9 @@ from .BridgeClass import (
     element_sort_key,
 )
 from .DualGraph import (
-    AmbiguousWalkError,
     ArcNode,
     DualGraph,
     FaceNode,
-    Walk,
-    WalkCase,
-)
-from .SymbolicDynamics import (
-    SymbolicDynamics,
-    Word,
-    symbol_label,
-    symbolic_dynamics,
-    word_of_bridge,
 )
 from .StablePartition import (
     bridge_for_pair,
@@ -82,16 +71,11 @@ __all__ = [
     "Trellis",
     "TrellisBranch",
     "Arrangement",
-    "AmbiguousWalkError",
     "Arc",
     "ArcNode",
     "BridgeClass",
     "DualGraph",
     "FaceNode",
-    "SymbolicDynamics",
-    "Walk",
-    "WalkCase",
-    "Word",
     "ElementRef",
     "Region",
     "canonical_corners",
@@ -119,13 +103,9 @@ __all__ = [
     "partition_stable_manifold",
     "plot_dual_graph",
     "plot_stable_partition",
-    "plot_transition_graph",
     "propagate_reference_holes",
     "punch_holes",
     "row_of_end",
     "rows_of_bridge",
     "span_contains",
-    "symbol_label",
-    "symbolic_dynamics",
-    "word_of_bridge",
 ]

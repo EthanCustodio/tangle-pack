@@ -5,9 +5,7 @@ The arrangement cuts the plane into faces; the stable arcs are the walls between
 them. This module turns that picture into a bipartite graph — one
 :class:`FaceNode` per face of the plane and one :class:`ArcNode` per stable arc,
 with an edge whenever an arc bounds a face — and labels every arc node with the
-partition element lying on each of its two sides. That labelling is what makes
-the graph symbolic: a walk from face to face through arcs spells a word in the
-tangle's bridge classes.
+partition element lying on each of its two sides.
 
 Three things happen on top of the raw arrangement:
 
@@ -23,18 +21,14 @@ Three things happen on top of the raw arrangement:
 * **Fill.** An arc node is *filled* when an image bridge may cross the stable
   manifold there at a crossing this trellis has not computed yet — the outward
   stretch of each stable branch beyond the image of the previous branch's last
-  crossing. A filled node is passable in a walk; a hollow one is a wall.
-* **Walks.** :meth:`DualGraph.walk_bridge` reads a bridge's forward image off
-  the graph as a WORD in the tangle's bridge classes, face by face. See its
-  docstring for the three cases and the Dev Note below for why the ends of a
-  walk are expected to be hollow.
+  crossing. A hollow node is a wall.
 
 Dev Notes:
 
-* The stored graph is deliberately bipartite. The natural object for a walk is
-  the "through-face edge" ``(arc_in, face, arc_out)``, but storing those is
-  quadratic in a face's boundary length; deriving them from the face hub is
-  linear and answers the same question.
+* The stored graph is deliberately bipartite. The natural object for
+  face-to-face adjacency is the "through-face edge" ``(arc_in, face,
+  arc_out)``, but storing those is quadratic in a face's boundary length;
+  deriving them from the face hub is linear and answers the same question.
 * A face node's side of an arc is combinatorial, not geometric: the arrangement
   traverses every face with the face on the RIGHT of each half-edge, and a
   stable arc traversed ``hi -> lo`` runs in the stable dynamical direction (the
@@ -46,47 +40,20 @@ Dev Notes:
   at the strong-pip orbit those two coincide on all but the pip's own branch,
   which is why the derived fill is ``(f^k(q0), q0]`` there and empty elsewhere;
   ``strong_pips=`` makes the constructor check exactly that and log it.
-* A walk's ENDS are expected to be hollow, and only its interior filled. The
-  fill spans the stretch of a stable branch whose crossings are images of
-  crossings BEYOND the trim, which the trellis has not seen; the two ends of an
-  image, by contrast, are the images of crossings the trellis HAS seen, so they
-  land at ``cdist * per_step_beta("stable")`` — at or below the image of the
-  outermost crossing, i.e. inside the unfilled stretch. Requiring a filled end
-  would therefore reject every walk on both fixtures; the endpoint arcs are
-  only logged (at DEBUG) when they come back filled, which would mean the
-  scaled image and the fill rule disagree.
-* The walk is over SIMPLE paths (no arc node twice) with a hard cap, and the
-  spelling — not the route — must be unique: several routes spelling one word
-  are accepted, two words are an :class:`AmbiguousWalkError`.
-* Two DIFFERENT ownership rules meet here and have to agree. A bridge CLASS
-  (:mod:`~tanglepack.topology.BridgeClass`) names the element owning a
-  CROSSING; a walk's letters name the element owning an ARC's midpoint. They
-  are the same element exactly when the crossing is interior to no element
-  boundary — which is why a scaled image landing ON a registered crossing is
-  rejected by :meth:`DualGraph._arc_owning` rather than assigned to one of the
-  two arcs meeting there. Between crossings the arc carries one element per
-  side (no partition boundary falls strictly inside an arc), so the two rules
-  cannot disagree anywhere the walk is allowed to run.
-
-Open question: a merged outer node is a single node even though the piece of
-plane it stands for is not simply connected (it wraps around the inner tangle).
-Walks through it are therefore permitted between any two of its walls, which is
-correct for the symbolic dynamics of one tangle but over-generous the moment two
-tangles are genuinely linked by heteroclinic crossings.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Iterable, Literal, Mapping, Optional, Sequence, TYPE_CHECKING
+from typing import Iterable, Literal, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
 
 from ..numerics.geometry import point_in_polygon, signed_polygon_area
-from .BridgeClass import BridgeClass, _index_partitions
-from .StablePartition import owns_cdist, rows_of_bridge
+from .BridgeClass import _index_partitions
+from .StablePartition import owns_cdist
 from .TopologyResults import (
     Arc,
     ElementRef,
@@ -105,29 +72,12 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..numerics.Intersection import ManifoldKey
     from .Arrangement import Arrangement
     from .Trellis import Trellis
-    from .TrellisBranch import TrellisBranch
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 #: The kinds of face a merged node can stand for.
 FaceKind = Literal["region", "open", "outer"]
-
-#: Which of the three shapes a bridge's image takes in the computed picture.
-#: ``"i"`` — both endpoint iterates registered, so the image is TILED by
-#: registered bridges and nothing is walked; ``"ii"`` — the first endpoint's
-#: iterate is registered and the second's is not, so a registered prefix runs
-#: out to the branch's last crossing and the rest is walked; ``"iii"`` — neither
-#: is registered, so the whole image is walked.
-WalkCase = Literal["i", "ii", "iii"]
-
-#: Default hard cap on the number of complete paths a walk may enumerate.
-DEFAULT_MAX_PATHS = 10_000
-
-#: Safety cap on DFS expansions, as a multiple of ``max_paths``. A walk that
-#: hits it has a graph whose simple paths explode without ever completing, which
-#: the path cap alone would not catch.
-_EXPANSION_FACTOR = 200
 
 
 def _position_of(
@@ -159,7 +109,7 @@ class ArcNode:
         left: The element on the left of the branch's dynamical direction.
         right: The element on its right.
         filled: True when an image bridge may cross the stable manifold here
-            (see :meth:`DualGraph._fill`); a filled node is passable in a walk.
+            (see :meth:`DualGraph._fill`); a hollow node is a wall.
         faces: The face node on each side, keyed by side. Both entries are
             filled once the graph is built; a cut arc whose two sides belong to
             one merged face node has the same node in both.
@@ -381,82 +331,6 @@ class _UnionFind:
         if root_a != root_b:
             self._parent[root_a] = root_b
 
-
-class AmbiguousWalkError(ValueError):
-    """
-    A bridge's image can be traced through the dual graph in more than one way.
-
-    The walk enumerates every simple path between the two image endpoints and
-    requires the SPELLING to be unique — several paths spelling one word are
-    fine, several words are not. When two words survive, the picture genuinely
-    does not determine the symbolic image, and the caller is handed all of them
-    rather than an arbitrary choice.
-
-    Attributes:
-        bridge_id: The bridge whose image was being walked.
-        words: Every distinct word, in first-found order.
-        example_paths: One path per word, aligned with :attr:`words`.
-    """
-
-    def __init__(
-        self,
-        bridge_id: "BridgeId",
-        words: Sequence[tuple[BridgeClass, ...]],
-        example_paths: Sequence[tuple["ArcNode | FaceNode", ...]],
-    ) -> None:
-        """
-        Args:
-            bridge_id: The bridge whose image was being walked.
-            words: The distinct words found.
-            example_paths: One example path per word.
-        """
-        self.bridge_id = bridge_id
-        self.words = list(words)
-        self.example_paths = list(example_paths)
-        spelled = "; ".join(
-            " ".join(letter.label for letter in word) or "<empty>"
-            for word in words
-        )
-        super().__init__(
-            f"the image of bridge {bridge_id} can be spelled {len(words)} "
-            f"different ways: {spelled}"
-        )
-
-
-@dataclass(frozen=True)
-class Walk:
-    """
-    One bridge's image, read off the computed picture as a word.
-
-    Attributes:
-        bridge_id: The bridge whose image this is.
-        word: The bridge classes the image traverses, in order.
-        prefix_len: How many of the leading letters came from REGISTERED image
-            bridges rather than from a walk (0 in case ``"iii"``, the whole
-            length in case ``"i"``).
-        path: The walked part of the route, alternating :class:`ArcNode` and
-            :class:`FaceNode` (empty in case ``"i"``; a case ``"ii"`` path
-            starts at the face the branch's last crossing sticks into).
-        case: Which of the three shapes the image took (see :data:`WalkCase`).
-    """
-
-    bridge_id: "BridgeId"
-    word: tuple[BridgeClass, ...]
-    prefix_len: int
-    path: tuple["ArcNode | FaceNode", ...]
-    case: WalkCase
-
-    @property
-    def is_walked(self) -> bool:
-        """True when any letter of the word came from a walk."""
-        return self.prefix_len < len(self.word)
-
-    def __repr__(self) -> str:
-        spelled = " ".join(letter.label for letter in self.word)
-        return (
-            f"Walk({self.bridge_id}, case {self.case}, "
-            f"{self.prefix_len}/{len(self.word)} registered: {spelled})"
-        )
 
 
 class DualGraph:
@@ -1081,514 +955,6 @@ class DualGraph:
                     for element_id in covering
                 ]
         return images
-
-    # ── D.1-D.3: walking a bridge's image ───────────────────────────────────
-
-    def walk_bridge(
-        self,
-        bridge_id: "BridgeId",
-        classes: Mapping[BridgeClass, Sequence["BridgeId"]],
-        *,
-        max_paths: int = DEFAULT_MAX_PATHS,
-        class_of_bridge: Optional[Mapping["BridgeId", BridgeClass]] = None,
-    ) -> Walk:
-        """
-        Read one bridge's forward image off the picture as a word.
-
-        The image of a bridge is an unstable arc one map step out, and how much
-        of it the trellis already holds decides how it is read. The unstable
-        manifold is ONE curve grown from the anchor, so the computed part of a
-        branch is an initial segment and exactly three things can happen:
-
-        * **case "i"** — both endpoints have registered iterates. The image is
-          then tiled by registered bridges and the word is simply their classes.
-          Nothing is walked and nothing is guessed.
-        * **case "ii"** — the first endpoint's iterate is registered and the
-          second's is not. The registered bridges from ``f(p)`` out to the
-          branch's last crossing ``L`` spell a PREFIX; past ``L`` the image
-          leaves the computed picture along ``L``'s outward unstable ray, which
-          is a dangling stub, and the rest is walked from the face that stub
-          sticks into (:meth:`~.Arrangement.Arrangement.face_at_stub`).
-        * **case "iii"** — neither iterate is registered. The whole image is
-          walked, from the arc owning the scaled image of ``p`` to the arc
-          owning the scaled image of ``q``.
-
-        A walk crosses only stable arcs, and only *filled* ones (an unfilled arc
-        is a wall: the image cannot cross the stable manifold there without the
-        trellis having seen the crossing). Every face it passes through
-        contributes one letter, the :class:`~.BridgeClass.BridgeClass` of the
-        piece of image inside that face: the element on the face's side of the
-        arc it came in through, and the element on the face's side of the arc it
-        leaves through.
-
-        Args:
-            bridge_id: The bridge whose image to read. Must be a non-partial
-                bridge of this graph's trellis.
-            classes: The trellis's bridge classes, as
-                :func:`~.BridgeClass.bridge_classes` returns them. Only used to
-                name the registered bridges of a prefix.
-            max_paths: Hard cap on the number of complete paths the walk may
-                enumerate before giving up.
-            class_of_bridge: The inverse of ``classes``, bridge id -> class,
-                when the caller already has it. Walking every bridge of a
-                trellis otherwise rebuilds it once per bridge; see
-                :func:`~.SymbolicDynamics.symbolic_dynamics`, which builds it
-                once.
-
-        Returns:
-            The :class:`Walk`: the word, how much of it was registered, the
-            walked route and which case applied.
-
-        Raises:
-            AmbiguousWalkError: If the walk spells more than one distinct word.
-            ValueError: If the bridge's endpoints do not share an unstable
-                branch; if the second endpoint's iterate is registered while the
-                first's is not (impossible for an initial segment); if a
-                registered image bridge is missing from ``classes``; if a scaled
-                image lands outside the computed stable stretch or exactly on a
-                registered crossing whose iterate is unrecorded; if no path at
-                all reaches the end; or if the path cap is hit.
-        """
-        trellis = self.trellis
-        first_id, second_id = bridge_id
-        rows = rows_of_bridge(trellis, bridge_id)
-        flip = not trellis.orientation_preserving
-        side_first: Side = OPPOSITE_SIDE[rows[0]] if flip else rows[0]
-        side_second: Side = OPPOSITE_SIDE[rows[1]] if flip else rows[1]
-
-        case, registered = self._registered_image_span(bridge_id)
-        lookup = (
-            self._class_of_bridge(classes)
-            if class_of_bridge is None
-            else class_of_bridge
-        )
-        prefix = self._prefix_word(bridge_id, registered, case, lookup)
-        if case == "i":
-            return Walk(
-                bridge_id=bridge_id,
-                word=prefix,
-                prefix_len=len(prefix),
-                path=(),
-                case=case,
-            )
-
-        end_key, end_cdist, _from_table = trellis.image_cdist(
-            second_id, 1, "stable"
-        )
-        end_arc = self._arc_owning(end_key, end_cdist, f"image of {second_id}")
-        self._log_fill_expectation(end_arc, "end")
-
-        used: set[tuple] = set()
-        if case == "ii":
-            last_id = registered[-1]
-            start_face = self.face_of(self.arrangement.face_at_stub(last_id, "u+"))
-            entry = self._element_at_crossing(last_id)
-            path_head: tuple["ArcNode | FaceNode", ...] = (start_face,)
-        else:
-            start_key, start_cdist, _flag = trellis.image_cdist(
-                first_id, 1, "stable"
-            )
-            start_arc = self._arc_owning(
-                start_key, start_cdist, f"image of {first_id}"
-            )
-            self._log_fill_expectation(start_arc, "start")
-            start_face = start_arc.face_on(side_first)
-            entry = start_arc.element_on(side_first)
-            used.add(start_arc.key)
-            path_head = (start_arc, start_face)
-
-        found: dict[tuple[BridgeClass, ...], tuple["ArcNode | FaceNode", ...]] = {}
-        self._walk(
-            face=start_face,
-            entry=entry,
-            end_arc=end_arc,
-            end_side=side_second,
-            used=used,
-            letters=(),
-            path=path_head,
-            found=found,
-            budget={
-                "paths": max_paths,
-                "expansions": max_paths * _EXPANSION_FACTOR,
-                "max_paths": max_paths,
-            },
-            bridge_id=bridge_id,
-        )
-        if not found:
-            raise ValueError(
-                f"no walk of the dual graph joins the image of bridge "
-                f"{bridge_id} to its end arc {end_arc.key[1:3]} on the "
-                f"{side_second!r} side; every intermediate arc must be filled "
-                f"(fill segments {self._fill_summary()})"
-            )
-        words = list(found)
-        if len(words) > 1:
-            raise AmbiguousWalkError(
-                bridge_id, words, [found[word] for word in words]
-            )
-        suffix, path = words[0], found[words[0]]
-        assert suffix, (
-            f"the walk of bridge {bridge_id} spelled an empty word; a walk "
-            "always crosses at least one face and so always has a letter"
-        )
-        return Walk(
-            bridge_id=bridge_id,
-            word=prefix + suffix,
-            prefix_len=len(prefix),
-            path=path,
-            case=case,
-        )
-
-    def _registered_image_span(
-        self, bridge_id: "BridgeId"
-    ) -> tuple[WalkCase, list[int]]:
-        """
-        The registered crossings the image spans, and which case that is.
-
-        The span is sliced BY INDEX out of the image branch's ordering, never
-        by a canonical-distance window. Both ends of the span are known by id
-        whenever they are known at all — they are exactly ``iterate(p, 1)`` and
-        ``iterate(q, 1)`` — and ``ordered_ids()`` is sorted, so the crossings
-        between them are a contiguous slice. A cdist window would have to be
-        wide enough for the scaling law's relative error and narrow enough to
-        exclude the neighbouring crossing, and at ten unstable steps on the
-        k=10 fixture no such width exists (crossings sit near ``u = 6000`` with
-        gaps of 20 to 40, i.e. well under 1%).
-        """
-        trellis = self.trellis
-        first_id, second_id = bridge_id
-        image_first = trellis.iterate(first_id, 1)
-        image_second = trellis.iterate(second_id, 1)
-        if image_second is not None and image_first is None:
-            raise ValueError(
-                f"bridge {bridge_id} has a registered image for its SECOND "
-                f"endpoint ({second_id} -> {image_second}) but not for its "
-                f"first; the computed part of an unstable branch is an initial "
-                "segment, so that cannot happen"
-            )
-        if image_first is None:
-            return "iii", []
-
-        unstable_key = trellis.intersection(first_id).manifold_a_key
-        other_key = trellis.intersection(second_id).manifold_a_key
-        if unstable_key is None or unstable_key != other_key:
-            raise ValueError(
-                f"the endpoints of bridge {bridge_id} lie on unstable branches "
-                f"{unstable_key} and {other_key}; a bridge is an arc of ONE "
-                "unstable branch"
-            )
-        image_key = unstable_key[0].advance_key(unstable_key, 1)
-        branch = trellis.branch(image_key)
-        if branch is None:
-            raise ValueError(
-                f"the image of bridge {bridge_id} lies on unstable branch "
-                f"{image_key[1:]}, which this trellis does not hold"
-            )
-        ordered = branch.ordered_ids()
-        lo_index = self._position_on(
-            ordered, image_first, bridge_id, first_id, image_key
-        )
-        if image_second is None:
-            return "ii", list(ordered[lo_index:])
-        hi_index = self._position_on(
-            ordered, image_second, bridge_id, second_id, image_key
-        )
-        if hi_index < lo_index:
-            raise ValueError(
-                f"the image of bridge {bridge_id} runs from crossing "
-                f"{image_first} (position {lo_index}) to {image_second} "
-                f"(position {hi_index}) on unstable branch {image_key[1:]}, "
-                "i.e. backward along the branch; a bridge id is ordered by "
-                "unstable canonical distance and the map preserves that order"
-            )
-        return "i", list(ordered[lo_index : hi_index + 1])
-
-    @staticmethod
-    def _position_on(
-        ordered: Sequence[int],
-        intersection_id: int,
-        bridge_id: "BridgeId",
-        source_id: int,
-        image_key: "ManifoldKey",
-    ) -> int:
-        """Where a registered image sits in its branch's ordering."""
-        try:
-            return list(ordered).index(intersection_id)
-        except ValueError:
-            raise ValueError(
-                f"the image {intersection_id} of crossing {source_id} (an "
-                f"endpoint of bridge {bridge_id}) is registered but does not "
-                f"lie on unstable branch {image_key[1:]}, which is where "
-                "advance_key puts it"
-            ) from None
-
-    def _prefix_word(
-        self,
-        bridge_id: "BridgeId",
-        registered: Sequence[int],
-        case: WalkCase,
-        lookup: Mapping["BridgeId", BridgeClass],
-    ) -> tuple[BridgeClass, ...]:
-        """The classes of the registered bridges tiling the head of an image."""
-        if case == "iii" or len(registered) < 2:
-            return ()
-        letters: list[BridgeClass] = []
-        for lo_id, hi_id in zip(registered, registered[1:]):
-            found = lookup.get((lo_id, hi_id))
-            if found is None:
-                raise ValueError(
-                    f"the image of bridge {bridge_id} is tiled by the "
-                    f"registered arc ({lo_id}, {hi_id}), which is not one of "
-                    "the classed bridges; class every bridge of the trellis "
-                    "(a blasted arc between iterated-image crossings has no "
-                    "bridge object and so no class)"
-                )
-            letters.append(found)
-        return tuple(letters)
-
-    @staticmethod
-    def _class_of_bridge(
-        classes: Mapping[BridgeClass, Sequence["BridgeId"]],
-    ) -> dict["BridgeId", BridgeClass]:
-        """
-        Invert a class -> members mapping into member -> class.
-
-        Args:
-            classes: The classes and their bridge ids.
-
-        Returns:
-            The inverse mapping. Build it ONCE when walking many bridges and
-            hand it to :meth:`walk_bridge` as ``class_of_bridge``.
-        """
-        lookup: dict["BridgeId", BridgeClass] = {}
-        for bridge_class, members in classes.items():
-            for member in members:
-                lookup[member] = bridge_class
-        return lookup
-
-    def _element_at_crossing(self, intersection_id: int) -> ElementRef:
-        """
-        The element a crossing's outgoing image sub-bridge sits against.
-
-        The image leaves the crossing along its ``u+`` ray, so the crossing is
-        the FIRST endpoint of the sub-bridge and its row is ``left`` exactly
-        when the crossing sign is positive (see
-        :func:`~.StablePartition.row_of_end`).
-        """
-        crossing = self.trellis.intersection(intersection_id)
-        sign = crossing.crossing_sign
-        if sign == 0:
-            raise ValueError(
-                f"crossing {intersection_id} has no crossing sign, so the side "
-                "of the stable branch its outgoing image leaves on is undefined"
-            )
-        row: Side = "left" if sign > 0 else "right"
-        branch_key = crossing.manifold_b_key
-        if branch_key is None:
-            raise ValueError(
-                f"crossing {intersection_id} carries no stable manifold key, "
-                "so no partition can name the element beside it"
-            )
-        result = self.partitions.get((branch_key, row))
-        if result is None:
-            raise ValueError(
-                f"no {row!r} partition covers stable branch {branch_key[1:]}, "
-                f"which carries crossing {intersection_id}"
-            )
-        element_id = result.element_of_intersection.get(intersection_id)
-        assert element_id is not None, (
-            f"crossing {intersection_id} lies on partitioned branch "
-            f"{branch_key[1:]} side {row!r} but no element owns it"
-        )
-        return result.ref(element_id)
-
-    def _arc_owning(
-        self, branch_key: "ManifoldKey", cdist: float, what: str
-    ) -> ArcNode:
-        """
-        The single arc node of a branch whose span contains a cdist.
-
-        An arc's two ends ARE registered crossings, so a scaled image landing on
-        one of them is not "inside this arc": it is a crossing the trellis has
-        already seen, whose iterate the table simply does not record. That is a
-        broken iterate table rather than a walk, and it is raised — whether the
-        coincidence falls between two arcs (both match) or at the very start or
-        end of the branch (only one does).
-        """
-        nodes = self.arc_nodes_on(branch_key)
-        if not nodes:
-            raise ValueError(
-                f"stable branch {branch_key[1:]} carries no arc, so the {what} "
-                f"at cdist {cdist:.6g} lands on nothing"
-            )
-        tol = self.trellis.registry.cdist_tol
-        matches = [
-            node
-            for node in nodes
-            if node.lo_cdist - tol <= cdist <= node.hi_cdist + tol
-        ]
-        if not matches:
-            raise ValueError(
-                f"the {what} lands at stable cdist {cdist:.6g} on branch "
-                f"{branch_key[1:]}, outside the computed stretch "
-                f"{nodes[0].lo_cdist:.6g}..{nodes[-1].hi_cdist:.6g}"
-            )
-        coincident = sorted(
-            {
-                node.arc.lo_id
-                for node in matches
-                if abs(cdist - node.lo_cdist) <= tol
-            }
-            | {
-                node.arc.hi_id
-                for node in matches
-                if abs(cdist - node.hi_cdist) <= tol
-            }
-        )
-        if coincident:
-            raise ValueError(
-                f"the {what} lands at stable cdist {cdist:.6g}, which coincides "
-                f"with registered crossing {coincident} on branch "
-                f"{branch_key[1:]}, but its iterate is not in the table; infer "
-                "the iterate table (or grow far enough to register the image) "
-                "before walking"
-            )
-        if len(matches) != 1:
-            raise ValueError(
-                f"{len(matches)} arcs of branch {branch_key[1:]} contain the "
-                f"{what} at stable cdist {cdist:.6g} without it sitting on any "
-                "of their endpoints; the arcs of a branch tile it"
-            )
-        return matches[0]
-
-    def _log_fill_expectation(self, node: ArcNode, role: str) -> None:
-        """Note an endpoint arc that is filled, which the fill rule does not expect."""
-        if node.filled:
-            logger.debug(
-                "the %s arc %s of a walk is FILLED; an endpoint of an image is "
-                "the image of a crossing the trellis HAS seen, so it is "
-                "expected to land inside the unfilled stretch (fill segment "
-                "%s)",
-                role,
-                node.key[1:3],
-                self.fill_segments.get(node.branch_key),
-            )
-
-    def _fill_summary(self) -> str:
-        """The fill spans, branch by branch, for an error message."""
-        return ", ".join(
-            f"{key[1:]}:({lo:.6g},{hi:.6g}]"
-            for key, (lo, hi) in self.fill_segments.items()
-        )
-
-    @staticmethod
-    def _exits(face: FaceNode) -> list[tuple[ArcNode, Side]]:
-        """The distinct ``(arc, side of the arc this face is on)`` slots of a face."""
-        seen: set[tuple] = set()
-        exits: list[tuple[ArcNode, Side]] = []
-        for node, side in face.arcs:
-            token = (node.key, side)
-            if token in seen:
-                continue
-            seen.add(token)
-            exits.append((node, side))
-        return exits
-
-    def _walk(
-        self,
-        *,
-        face: FaceNode,
-        entry: ElementRef,
-        end_arc: ArcNode,
-        end_side: Side,
-        used: set[tuple],
-        letters: tuple[BridgeClass, ...],
-        path: tuple["ArcNode | FaceNode", ...],
-        found: dict[tuple[BridgeClass, ...], tuple["ArcNode | FaceNode", ...]],
-        budget: dict[str, int],
-        bridge_id: "BridgeId",
-    ) -> None:
-        """Depth-first enumeration of the simple paths spelling an image."""
-        budget["expansions"] -= 1
-        if budget["expansions"] < 0:
-            raise ValueError(
-                f"walking the image of bridge {bridge_id} expanded more than "
-                f"{budget['max_paths'] * _EXPANSION_FACTOR} partial paths "
-                "without terminating; the filled sub-graph is too tangled to "
-                "enumerate"
-            )
-        for arc, side in self._exits(face):
-            letter = BridgeClass(entry, arc.element_on(side))
-            if arc is end_arc and side == end_side:
-                word = letters + (letter,)
-                if word not in found:
-                    found[word] = path + (arc,)
-                budget["paths"] -= 1
-                if budget["paths"] < 0:
-                    raise ValueError(
-                        f"walking the image of bridge {bridge_id} found more "
-                        f"than {budget['max_paths']} complete paths; refusing "
-                        "to enumerate further"
-                    )
-                continue
-            if arc.key in used or not arc.filled:
-                continue
-            far: Side = OPPOSITE_SIDE[side]
-            self._walk(
-                face=arc.face_on(far),
-                entry=arc.element_on(far),
-                end_arc=end_arc,
-                end_side=end_side,
-                used=used | {arc.key},
-                letters=letters + (letter,),
-                path=path + (arc, arc.face_on(far)),
-                found=found,
-                budget=budget,
-                bridge_id=bridge_id,
-            )
-
-    @classmethod
-    def _from_parts(
-        cls,
-        trellis: "Trellis",
-        arc_nodes: Iterable[ArcNode],
-        face_nodes: Iterable[FaceNode],
-        *,
-        unbounded: Optional[FaceNode] = None,
-    ) -> "DualGraph":
-        """
-        Assemble a graph from ready-made nodes, bypassing the arrangement.
-
-        There is no arrangement, no partition and no fill behind the result, so
-        only the walk machinery is usable on it — and only for a case ``"iii"``
-        bridge, since a case ``"ii"`` walk starts from the arrangement's stub
-        face and reads the partition at a crossing. It exists so tests can build
-        the small hand-made graphs (a face with two filled walls, say) that a
-        real fixture does not happen to contain.
-
-        Args:
-            trellis: The trellis the nodes' branch keys and crossings refer to.
-            arc_nodes: The arc nodes, already carrying their ``faces``.
-            face_nodes: The face nodes, already carrying their ``arcs``.
-            unbounded: Which node stands for the unbounded plane. Defaults to
-                the first face node, which is a PLACEHOLDER only — nothing here
-                checks it, and the walk never reads it.
-
-        Returns:
-            The assembled graph.
-        """
-        graph = cls.__new__(cls)
-        graph.trellis = trellis
-        graph.arrangement = None  # type: ignore[assignment]
-        graph.partitions = {}
-        graph.arc_nodes = {node.key: node for node in arc_nodes}
-        graph.face_nodes = list(face_nodes)
-        graph.fill_segments = {}
-        graph._face_node_of = {}
-        if unbounded is None:
-            unbounded = graph.face_nodes[0] if graph.face_nodes else None
-        graph.unbounded = unbounded  # type: ignore[assignment]
-        return graph
 
     # ── views ───────────────────────────────────────────────────────────────
 

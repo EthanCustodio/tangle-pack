@@ -24,10 +24,6 @@ from ..topology import plotting
 from ..topology.Arrangement import Arrangement
 from ..topology.BridgeClass import BridgeClass, bridge_classes as _bridge_classes
 from ..topology.DualGraph import DualGraph
-from ..topology.SymbolicDynamics import (
-    SymbolicDynamics,
-    symbolic_dynamics as _symbolic_dynamics,
-)
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
@@ -104,9 +100,6 @@ class TangleSession:
         # (workbench.generation, partition signature, graph) per
         # trellis-selection cache key; see dual_graph().
         self._dual_graphs: dict = {}
-        # (workbench.generation, partition signature, dynamics) per
-        # trellis-selection cache key; see symbolic_dynamics().
-        self._symbolic_dynamics: dict = {}
         # One resonance zone per (fixed_point, branch_index): a non-inversion point
         # has a single branch (one zone); an inversion point has two. Insertion order
         # is preserved so plotting/shading is deterministic.
@@ -308,9 +301,8 @@ class TangleSession:
         actually reads to resolve a bridge end to an element. Used by
         :meth:`bridge_classes` to detect a re-partition that leaves the
         workbench generation untouched (partitioning is a Trellis-level
-        mutation); Phase D.6's dual-graph and symbolic-dynamics caches reuse it
-        for the same reason, hence its generality (no dependence on anything
-        bridge-class-specific).
+        mutation); the dual-graph cache reuses it for the same reason, hence
+        its generality (no dependence on anything bridge-class-specific).
 
         Args:
             partitions: The gathered
@@ -348,8 +340,8 @@ class TangleSession:
         whichever trellis was built (and cached) first.
 
         Note:
-            General on purpose: Phase D.6's dual-graph gathering reuses this
-            helper rather than re-implementing the scan.
+            General on purpose: the dual-graph gathering reuses this helper
+            rather than re-implementing the scan.
 
         Returns:
             The deduplicated list of :class:`~tanglepack.topology.TopologyResults.StablePartitionResult`.
@@ -487,69 +479,6 @@ class TangleSession:
                 pips.append(trellis.strong_pip)
         return pips
 
-    def symbolic_dynamics(
-        self,
-        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        *,
-        rebuild: bool = False,
-    ) -> SymbolicDynamics:
-        """
-        Build (and cache) the :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`
-        a trellis's tangle induces on its bridge classes.
-
-        A thin composition of the two other D.6 wrappers:
-        :func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics` over
-        :meth:`dual_graph` and :meth:`bridge_classes` for the same
-        ``fixed_points`` selection. ``rebuild`` cascades to both — a forced
-        rebuild of the dynamics is only meaningful once its inputs are fresh
-        too.
-
-        Cached on ``(workbench.generation, partition signature)``, exactly like
-        :meth:`bridge_classes` and :meth:`dual_graph`.
-
-        Args:
-            fixed_points: A single FixedPoint, an iterable of them, or None (the
-                default) for all of them.
-            rebuild: Force a rebuild of the dynamics (and of the dual graph and
-                bridge classes it is built from) even if a cached result exists
-                for the current generation and partition signature.
-
-        Returns:
-            The :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`.
-
-        Raises:
-            ValueError: Propagated from
-                :func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics`
-                when two bridges of one class spell different words, or from
-                either input wrapper.
-            tanglepack.topology.DualGraph.AmbiguousWalkError: Propagated when a
-                bridge's image spells more than one word.
-
-        Note:
-            Needs the same prerequisites as :meth:`dual_graph` and
-            :meth:`bridge_classes`: every fixed point of interest partitioned
-            first.
-        """
-        cache_key = self._cache_key(fixed_points)
-        dg = self.dual_graph(fixed_points, rebuild=rebuild)
-        classes = self.bridge_classes(fixed_points, rebuild=rebuild)
-        partitions = self._gathered_partitions()
-        signature = self._partition_signature(partitions)
-
-        cached = self._symbolic_dynamics.get(cache_key)
-        if (
-            not rebuild
-            and cached is not None
-            and cached[0] == self.workbench.generation
-            and cached[1] == signature
-        ):
-            return cached[2]
-
-        sd = _symbolic_dynamics(dg, classes)
-
-        self._symbolic_dynamics[cache_key] = (self.workbench.generation, signature, sd)
-        return sd
-
     def plot_dual_graph(
         self,
         dual_graph: Optional[DualGraph] = None,
@@ -577,39 +506,6 @@ class TangleSession:
         """
         graph = dual_graph if dual_graph is not None else self.dual_graph()
         return plotting.plot_dual_graph(graph, ax=ax, **kwargs)
-
-    def plot_transition_graph(
-        self,
-        sd: Optional[SymbolicDynamics] = None,
-        ax: Optional["Axes"] = None,
-        **kwargs,
-    ) -> "Axes":
-        """
-        Draw a symbolic dynamics' transition graph, defaulting to
-        :meth:`symbolic_dynamics`'s own (all fixed points, cached) result.
-
-        Thin delegate to
-        :func:`~tanglepack.topology.plotting.plot_transition_graph`; see its
-        docstring for the drawing itself.
-
-        Args:
-            sd: The :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`
-                whose transition graph is drawn. Defaults to
-                ``self.symbolic_dynamics()``.
-            ax: Optional matplotlib Axes to draw on. Defaults to the current
-                axes (plt).
-            **kwargs: Forwarded to
-                :func:`~tanglepack.topology.plotting.plot_transition_graph`,
-                overriding :data:`~tanglepack.topology.plotting.TRANSITION_GRAPH_STYLE`
-                for the 8 known style keys, or straight through to
-                ``nx.draw_networkx_nodes`` for anything else (see that
-                function's docstring).
-
-        Returns:
-            The Axes drawn on.
-        """
-        dynamics = sd if sd is not None else self.symbolic_dynamics()
-        return plotting.plot_transition_graph(dynamics, ax=ax, **kwargs)
 
     def invalidate_trellises(self) -> None:
         """

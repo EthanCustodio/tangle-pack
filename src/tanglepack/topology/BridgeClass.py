@@ -6,8 +6,8 @@ of its two ends sits against a stable branch on a definite side (its *row*, see
 :func:`~.StablePartition.row_of_end`). The stable partition cuts that branch
 into elements, so each end names one element; the ordered pair of those two
 :class:`~.TopologyResults.ElementRef` s is the bridge's CLASS. Two bridges of
-the same class are the same symbol of the tangle's symbolic dynamics — which is
-what this module exists to hand to the dual graph.
+the same class connect the same two elements of the stable partition, which
+is the coarsest identity the dual graph can tell apart.
 
 Dev Notes:
 
@@ -29,11 +29,11 @@ Dev Notes:
 * Ordering is deliberate and total (:func:`class_sort_key`): the returned dict
   is built in sorted order and each class's members are sorted by
   :data:`~tanglepack.numerics.Bridge.BridgeId`, so two runs of the same trellis
-  enumerate the symbols identically. Phase D's symbol naming reuses these keys.
+  enumerate the classes identically.
 
-Open question: a class is currently the unordered dynamics' finest invariant we
-have — two bridges sharing a class are assumed to have the same forward word.
-Phase D turns a disagreement into a named error rather than assuming it away.
+Open question: a class is currently the finest invariant we have — two bridges
+sharing a class are assumed to behave alike under the map. Nothing checks
+that yet; a consumer that needs it must verify it.
 """
 
 from __future__ import annotations

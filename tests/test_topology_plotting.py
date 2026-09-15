@@ -10,13 +10,11 @@ all run through the single ``_fanout_plot`` helper.
 from __future__ import annotations
 
 import logging
-from types import SimpleNamespace
 
 import matplotlib
 
 matplotlib.use("Agg")  # headless: exercise the plot helpers without a display
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
 import pytest
 
@@ -383,76 +381,3 @@ def test_show_labels_annotates_every_arc_and_face_node(k10_partitioned):
     finally:
         plt.close()
 
-
-# --------------------------------------------------------------------------- #
-# transition graph (D.6)
-# --------------------------------------------------------------------------- #
-def _weighted_symbolic_dynamics() -> SimpleNamespace:
-    """A SymbolicDynamics-like stand-in: only ``.transition_graph`` is read.
-
-    One weight-2 edge (a -> b) and one weight-1 edge (b -> c), so the two
-    cases plot_transition_graph's edge-label rule distinguishes both appear.
-    """
-    graph = nx.DiGraph()
-    graph.add_node("a")
-    graph.add_node("b")
-    graph.add_node("c")
-    graph.add_edge("a", "b", weight=2)
-    graph.add_edge("b", "c", weight=1)
-    return SimpleNamespace(transition_graph=graph)
-
-
-def test_plot_transition_graph_labels_only_edges_with_weight_above_one():
-    """A weight-2 edge gets a "2" label; the weight-1 edge gets none."""
-    sd = _weighted_symbolic_dynamics()
-
-    plt.figure()
-    try:
-        ax = plt.gca()
-        result = plotting.plot_transition_graph(sd, ax=ax)
-        assert result is ax
-        texts = [t.get_text() for t in ax.texts]
-        assert texts.count("2") == 1
-        assert "1" not in texts
-    finally:
-        plt.close()
-
-
-def test_plot_transition_graph_rejects_an_unknown_kwarg():
-    """A kwarg that is neither a style key nor a draw_networkx_nodes param raises."""
-    sd = _weighted_symbolic_dynamics()
-
-    plt.figure()
-    try:
-        ax = plt.gca()
-        with pytest.raises(TypeError):
-            plotting.plot_transition_graph(sd, ax=ax, not_a_real_kwarg=123)
-    finally:
-        plt.close()
-
-
-def test_plot_transition_graph_style_kwarg_overrides_the_default():
-    """A known TRANSITION_GRAPH_STYLE name overrides the default (no raise)."""
-    sd = _weighted_symbolic_dynamics()
-
-    plt.figure()
-    try:
-        ax = plt.gca()
-        result = plotting.plot_transition_graph(sd, ax=ax, node_size=1200)
-        assert result is ax
-    finally:
-        plt.close()
-
-
-def test_session_plot_transition_graph_matches_plotting_module(henon_session):
-    """TangleSession.plot_transition_graph delegates to plotting.plot_transition_graph."""
-    session, _fp = henon_session
-    sd = _weighted_symbolic_dynamics()
-
-    plt.figure()
-    try:
-        ax = plt.gca()
-        result = session.plot_transition_graph(sd, ax=ax)
-        assert result is ax
-    finally:
-        plt.close()

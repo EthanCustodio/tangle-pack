@@ -1,15 +1,13 @@
-"""D.6 -- TangleSession.dual_graph / symbolic_dynamics wrappers.
+"""TangleSession.dual_graph wrapper.
 
-:class:`~tanglepack.topology.DualGraph.DualGraph` (Phase B) and
-:func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics` (Phase D) both
-need a trellis's arrangement/bridge classes and the stable partitions gathered
-across every cached per-fixed-point trellis. :meth:`TangleSession.dual_graph`
-and :meth:`TangleSession.symbolic_dynamics` are the session-level wrappers that
-supply those, mirroring the composition
+:class:`~tanglepack.topology.DualGraph.DualGraph` needs a trellis's
+arrangement, the stable partitions gathered across every cached
+per-fixed-point trellis, and those trellises' strong pips.
+:meth:`TangleSession.dual_graph` is the session-level wrapper that supplies
+them, mirroring the composition
 :meth:`~tanglepack.loom.TangleSession.TangleSession.bridge_classes` already
 pins in ``tests/test_session_bridge_classes.py``: this module pins the same
-shape one (and two) levels up, plus the two ``plot_*`` delegates that read from
-them.
+shape one level up, plus the ``plot_*`` delegates that read from it.
 """
 
 from __future__ import annotations
@@ -23,9 +21,6 @@ import matplotlib.pyplot as plt
 import pytest
 
 from tanglepack.topology.DualGraph import DualGraph
-from tanglepack.topology.SymbolicDynamics import (
-    symbolic_dynamics as compute_symbolic_dynamics,
-)
 
 
 # --------------------------------------------------------------------------- #
@@ -141,103 +136,6 @@ def test_dual_graph_repartitioning_at_the_same_generation_invalidates_the_cache(
 
 
 # --------------------------------------------------------------------------- #
-# (c) symbolic_dynamics: the session result matches a direct build
-# --------------------------------------------------------------------------- #
-def test_k10_symbolic_dynamics_matches_a_direct_build(k10_partitioned):
-    session, fp = k10_partitioned
-
-    dg = _direct_dual_graph(session, [fp])
-    classes = session.bridge_classes()
-    expected = compute_symbolic_dynamics(dg, classes)
-
-    actual = session.symbolic_dynamics()
-
-    assert actual.describe() == expected.describe()
-
-
-@pytest.mark.slow
-def test_p3_symbolic_dynamics_matches_a_direct_build(p3_partitioned):
-    session, fp3, fp1 = p3_partitioned
-
-    dg = _direct_dual_graph(session, [fp3, fp1])
-    classes = session.bridge_classes()
-    expected = compute_symbolic_dynamics(dg, classes)
-
-    actual = session.symbolic_dynamics()
-
-    assert actual.describe() == expected.describe()
-
-
-# --------------------------------------------------------------------------- #
-# (b) symbolic_dynamics: caching
-# --------------------------------------------------------------------------- #
-def test_symbolic_dynamics_cache_hit_returns_the_same_object(k10_partitioned):
-    session, _fp = k10_partitioned
-
-    first = session.symbolic_dynamics()
-
-    assert session.symbolic_dynamics() is first
-
-
-def test_symbolic_dynamics_rebuild_flag_forces_a_fresh_equivalent_result(
-    k10_partitioned,
-):
-    session, _fp = k10_partitioned
-
-    first = session.symbolic_dynamics()
-    second = session.symbolic_dynamics(rebuild=True)
-
-    assert second is not first
-    assert second.describe() == first.describe()
-
-
-def test_symbolic_dynamics_workbench_mutation_invalidates_the_cache(k10_partitioned):
-    session, fp = k10_partitioned
-    first = session.symbolic_dynamics()
-    generation_before = session.workbench.generation
-
-    # A no-op recompute at the SAME growth extent still bumps the workbench
-    # generation (a fresh registry swap-in): enough to invalidate the cache
-    # without disturbing the bridge structure a walk needs to succeed (see
-    # test_dual_graph_workbench_mutation_invalidates_the_cache for a mutation
-    # that actually grows the manifold; symbolic_dynamics additionally walks
-    # every bridge, which is pickier about mid-flight structural changes).
-    session.compute_intersections([fp], preserve_ids=True)
-    session.create_bridges(fp)
-    session.infer_iterate_table()
-    session.classify_strong_pips()
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-
-    assert session.workbench.generation != generation_before
-    assert session.symbolic_dynamics() is not first
-
-
-def test_symbolic_dynamics_repartitioning_at_the_same_generation_invalidates_the_cache(
-    k10_partitioned,
-):
-    session, fp = k10_partitioned
-    first = session.symbolic_dynamics()
-    generation_before = session.workbench.generation
-
-    trellis = session.trellis(fp)
-    trellis.clear_results()
-    trellis.classify_strong_pips()
-    alternates = [c for c in trellis.strong_pip_candidates if c != trellis.strong_pip]
-    assert alternates, "the k10 fixture must offer more than one strong-pip candidate"
-    trellis.set_strong_pip(alternates[0])
-    session.compute_pseudoneighbors(fp)
-    session.punch_holes(fp)
-    session.partition_stable_manifold(fp)
-
-    assert session.workbench.generation == generation_before
-
-    second = session.symbolic_dynamics()
-    assert second is not first
-
-
-# --------------------------------------------------------------------------- #
 # (d) plotting delegates run headless and return Axes
 # --------------------------------------------------------------------------- #
 def test_session_plot_dual_graph_returns_axes(k10_partitioned):
@@ -247,31 +145,6 @@ def test_session_plot_dual_graph_returns_axes(k10_partitioned):
     try:
         ax = plt.gca()
         result = session.plot_dual_graph(ax=ax)
-        assert result is ax
-    finally:
-        plt.close()
-
-
-def test_session_plot_transition_graph_returns_axes(k10_partitioned):
-    session, _fp = k10_partitioned
-
-    plt.figure()
-    try:
-        ax = plt.gca()
-        result = session.plot_transition_graph(ax=ax)
-        assert result is ax
-    finally:
-        plt.close()
-
-
-def test_session_plot_transition_graph_accepts_an_explicit_dynamics(k10_partitioned):
-    session, _fp = k10_partitioned
-    sd = session.symbolic_dynamics()
-
-    plt.figure()
-    try:
-        ax = plt.gca()
-        result = session.plot_transition_graph(sd, ax=ax)
         assert result is ax
     finally:
         plt.close()
