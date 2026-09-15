@@ -1,16 +1,19 @@
 """
-Symbolic dynamics of the Hénon tangle: k=10 and the nested period-3 map.
+The dual graph of the Hénon tangle: k=10 and the nested period-3 map.
 
 Builds the two reference sessions used throughout the topology test suite (the
 single k=10 saddle at ``[4, -4]``, and the nested period-3-inside-period-1
-tangle), partitions each fully, and reads off :class:`~tanglepack.topology.
-SymbolicDynamics.SymbolicDynamics` -- the alphabet of bridge classes, the
-substitution rules, and the transition graph -- without growing anything
-further. For each fixture this prints ``describe()`` (the symbol table, the
-rules, the transition matrix) and saves a figure with the tangle and its dual
-graph on the left, the transition graph on the right.
+tangle), partitions each fully, and builds its
+:class:`~tanglepack.topology.DualGraph.DualGraph` -- one node per face, one
+per stable arc, the arcs between the strong pip and its ``k``-th iterate
+filled -- without growing anything further. For each fixture this logs the
+graph's summary and fill segments and saves a figure with the tangle and its
+dual graph drawn twice: straight edges from each face point to its arc nodes
+(:func:`~tanglepack.topology.plotting.plot_dual_graph`) and edges following
+the unstable manifold inside each face
+(:func:`~tanglepack.topology.plotting.plot_dual_graph_curved`).
 
-Run:  env/bin/python scripts/henon_symbolic_dynamics.py
+Run:  env/bin/python scripts/henon_dual_graph.py
 
 Dev Notes:
     ``build_k10``/``build_p3`` mirror the ``k10_partitioned``/``p3_partitioned``
@@ -32,7 +35,6 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.lines import Line2D
 
 from tanglepack import TangleSession
 from tanglepack.examples import (
@@ -44,8 +46,8 @@ from tanglepack.examples import (
     saddle_guesses,
 )
 from tanglepack.numerics.FixedPoint import FixedPoint
-from tanglepack.topology.plotting import DUAL_GRAPH_ARC_STYLE, DUAL_GRAPH_FACE_STYLE
-from tanglepack.topology.SymbolicDynamics import SymbolicDynamics
+from tanglepack.topology.DualGraph import DualGraph
+from tanglepack.topology.plotting import dual_graph_legend_handles
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -172,26 +174,21 @@ def _manifold_bbox(
     return float(xmin), float(xmax), float(ymin), float(ymax)
 
 
-def _add_dual_graph_legend(ax) -> None:
-    """A small legend translating the dual graph's markers on one axes."""
-    arc_color = DUAL_GRAPH_ARC_STYLE["color"]
-    face_color = DUAL_GRAPH_FACE_STYLE["color"]
-    handles = [
-        Line2D(
-            [], [], marker="o", linestyle="none", markerfacecolor="none",
-            markeredgecolor=arc_color, markersize=6, label="arc node (wall)",
-        ),
-        Line2D(
-            [], [], marker="o", linestyle="none", markerfacecolor=arc_color,
-            markeredgecolor=arc_color, markersize=6,
-            label="arc node (passable)",
-        ),
-        Line2D(
-            [], [], marker="o", linestyle="none", markerfacecolor=face_color,
-            markeredgecolor=face_color, markersize=4, label="face node",
-        ),
-    ]
-    ax.legend(handles=handles, loc="best", fontsize=7, framealpha=0.8)
+def _draw_tangle(session: TangleSession, fixed_points: list[FixedPoint], ax) -> None:
+    """Every fixed point's manifolds on one axes: unstable blue, stable red."""
+    plt.sca(ax)
+    for fp in fixed_points:
+        session.plot_tangle(fp, "unstable", color="tab:blue", linewidth=0.6)
+        session.plot_tangle(fp, "stable", color="tab:red", linewidth=0.6)
+
+
+def _zoom(ax, session: TangleSession, fixed_point: FixedPoint) -> None:
+    """Limit ``ax`` to one fixed point's manifolds, padded 15%."""
+    xmin, xmax, ymin, ymax = _manifold_bbox(session, fixed_point)
+    pad_x = 0.15 * (xmax - xmin)
+    pad_y = 0.15 * (ymax - ymin)
+    ax.set_xlim(xmin - pad_x, xmax + pad_x)
+    ax.set_ylim(ymin - pad_y, ymax + pad_y)
 
 
 def report_and_plot(
@@ -201,101 +198,96 @@ def report_and_plot(
     out_path: Path,
     *,
     zoom_fixed_point: Optional[FixedPoint] = None,
-) -> SymbolicDynamics:
+) -> DualGraph:
     """
-    Print a fixture's symbolic dynamics and save its tangle/transition figure.
+    Log a fixture's dual graph and save its figure.
 
-    Reads ``session.symbolic_dynamics()`` and ``session.dual_graph()`` (both
-    cached over every fixed point of the session, which is what
-    ``fixed_points`` names), logs the dual graph's one-line
+    Reads ``session.dual_graph()`` (cached over every fixed point of the
+    session, which is what ``fixed_points`` names), logs its one-line
     :meth:`~tanglepack.topology.DualGraph.DualGraph.summary` and prints the
-    symbolic dynamics' :meth:`~tanglepack.topology.SymbolicDynamics.
-    SymbolicDynamics.describe` report -- the two lines of stdout this script
-    exists to produce.
+    fill segment of every strong pip's branch.
 
-    Without ``zoom_fixed_point`` the figure is a 1x2 layout: left is every
-    fixed point's stable and unstable manifolds with the dual graph (arc and
-    face nodes) overlaid, right is the transition graph. With
-    ``zoom_fixed_point`` (the nested p3 fixture) it is 1x3: the same full
-    tangle panel, a middle panel zoomed on that fixed point's own manifolds
-    (bounding box padded 15%, dual graph unclipped) -- otherwise the inner
-    period-3 tangle is an illegible blob at the outer period-1 tangle's scale
-    -- and the transition graph last.
+    Without ``zoom_fixed_point`` the figure is a 1x2 layout: every fixed
+    point's manifolds with the dual graph overlaid, straight edges on the
+    left and curved edges on the right. With ``zoom_fixed_point`` (the nested
+    p3 fixture) it is 2x2: the top row is the full tangle, the bottom row is
+    zoomed on that fixed point's own manifolds (bounding box padded 15%, dual
+    graph unclipped) -- otherwise the inner period-3 tangle is an illegible
+    blob at the outer period-1 tangle's scale -- with straight edges on the
+    left and curved on the right.
 
     Args:
         session: A fully partitioned session (see ``build_k10``/``build_p3``).
         fixed_points: The session's fixed points, for the manifold plot.
         title: Figure/report title.
         out_path: Where to save the PNG.
-        zoom_fixed_point: When given, adds the middle zoom panel around this
+        zoom_fixed_point: When given, adds the zoomed bottom row around this
             fixed point (matched by identity).
 
     Returns:
-        The :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`.
+        The :class:`~tanglepack.topology.DualGraph.DualGraph`.
     """
     dual_graph = session.dual_graph()
-    sd = session.symbolic_dynamics()
     logger.info("%s: %s", title, dual_graph.summary())
 
     print(f"{title}")
     print("=" * len(title))
-    print(sd.describe())
+    print(dual_graph.summary())
+    for branch_key, (low, high) in dual_graph.fill_segments.items():
+        print(
+            f"  fill on stable branch {branch_key[1:]} (period "
+            f"{branch_key[0].period}): ({low:.4g}, {high:.4g}]"
+        )
 
     if zoom_fixed_point is None:
-        fig, (ax_tangle, ax_transition) = plt.subplots(1, 2, figsize=(14, 7))
-        ax_zoom = None
+        fig, (ax_straight, ax_curved) = plt.subplots(1, 2, figsize=(16, 8))
+        panels = [(ax_straight, False, False), (ax_curved, True, False)]
     else:
-        fig, (ax_tangle, ax_zoom, ax_transition) = plt.subplots(
-            1, 3, figsize=(24, 8)
+        fig, ((ax_straight, ax_curved), (ax_zs, ax_zc)) = plt.subplots(
+            2, 2, figsize=(18, 16)
         )
+        panels = [
+            (ax_straight, False, False), (ax_curved, True, False),
+            (ax_zs, False, True), (ax_zc, True, True),
+        ]
 
-    plt.sca(ax_tangle)
-    for fp in fixed_points:
-        session.plot_tangle(fp, "unstable", color="tab:blue", linewidth=0.6)
-        session.plot_tangle(fp, "stable", color="tab:red", linewidth=0.6)
-    session.plot_dual_graph(dual_graph, ax=ax_tangle)
-    ax_tangle.set_title(f"{title} -- tangle + dual graph")
-    _add_dual_graph_legend(ax_tangle)
-
-    if ax_zoom is not None:
-        plt.sca(ax_zoom)
-        for fp in fixed_points:
-            session.plot_tangle(fp, "unstable", color="tab:blue", linewidth=0.6)
-            session.plot_tangle(fp, "stable", color="tab:red", linewidth=0.6)
-        session.plot_dual_graph(dual_graph, ax=ax_zoom, clip_to_arcs=False)
-        xmin, xmax, ymin, ymax = _manifold_bbox(session, zoom_fixed_point)
-        pad_x = 0.15 * (xmax - xmin)
-        pad_y = 0.15 * (ymax - ymin)
-        ax_zoom.set_xlim(xmin - pad_x, xmax + pad_x)
-        ax_zoom.set_ylim(ymin - pad_y, ymax + pad_y)
-        ax_zoom.set_title(
-            f"{title} -- zoom on period-{zoom_fixed_point.period} tangle"
+    for ax, curved, zoomed in panels:
+        _draw_tangle(session, fixed_points, ax)
+        plotter = session.plot_dual_graph_curved if curved else session.plot_dual_graph
+        plotter(dual_graph, ax=ax, clip_to_arcs=not zoomed)
+        if zoomed:
+            _zoom(ax, session, zoom_fixed_point)
+        what = "curved edges" if curved else "straight edges"
+        where = (
+            f"zoom on period-{zoom_fixed_point.period} tangle" if zoomed else "tangle"
         )
-
-    session.plot_transition_graph(sd, ax=ax_transition)
-    ax_transition.set_title(f"{title} -- transition graph")
+        ax.set_title(f"{title} -- {where} + dual graph, {what}")
+        ax.legend(
+            handles=dual_graph_legend_handles(curved=curved),
+            loc="best", fontsize=7, framealpha=0.8,
+        )
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     logger.info("saved %s", out_path)
 
-    return sd
+    return dual_graph
 
 
 def main() -> None:
-    """Build both fixtures, print their symbolic dynamics, save both figures."""
+    """Build both fixtures, report their dual graphs, save both figures."""
     session_k10, fps_k10 = build_k10()
     report_and_plot(
         session_k10, fps_k10, "Hénon k=10",
-        FIGURES_DIR / "henon_symbolic_dynamics_k10.png",
+        FIGURES_DIR / "henon_dual_graph_k10.png",
     )
 
     session_p3, fps_p3 = build_p3()
     fp3, _fp1 = fps_p3
     report_and_plot(
         session_p3, fps_p3, "Hénon nested period-3",
-        FIGURES_DIR / "henon_symbolic_dynamics_p3.png",
+        FIGURES_DIR / "henon_dual_graph_p3.png",
         zoom_fixed_point=fp3,
     )
 

@@ -808,44 +808,55 @@ def _arc_bbox_diagonal(dual_graph: "DualGraph") -> float:
     return float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
 
 
-def _face_node_insets(
+def _face_insets(
     dual_graph: "DualGraph", inset: Optional[float]
 ) -> dict[int, float]:
     """
-    The inset distance of every face node, keyed by its index.
+    The inset distance of every face of the arrangement, keyed by ``id(face)``.
 
-    An explicit ``inset`` applies to every node. Otherwise a node with at least
-    one closed member face gets :data:`DUAL_GRAPH_INSET_FRACTION` of the
-    smallest mean width among them (a thin lobe keeps its copy inside); a node
-    with none (an open face, the unbounded node) has no width of its own and
-    borrows the largest inset of any closed face, or, when there is no closed
-    face at all, :data:`DUAL_GRAPH_PUSH_FRACTION` of the arc-midpoint bbox
-    diagonal.
+    An explicit ``inset`` applies to every face. Otherwise a closed face gets
+    :data:`DUAL_GRAPH_INSET_FRACTION` of its own mean width (a thin lobe keeps
+    its copy inside), and an open face — which has no width of its own —
+    borrows the SMALLEST inset of the closed faces across its stable arcs, so
+    the copies of a small tangle's outer arcs stay at that tangle's scale even
+    when its outer face is merged into a much larger containing face. An open
+    face with no closed neighbour at all falls back to the largest closed
+    inset in the graph, or to :data:`DUAL_GRAPH_PUSH_FRACTION` of the
+    arc-midpoint bbox diagonal when there is no closed face anywhere.
     """
+    faces = [face for node in dual_graph.face_nodes for face in node.faces]
     if inset is not None:
-        return {node.index: float(inset) for node in dual_graph.face_nodes}
+        return {id(face): float(inset) for face in faces}
     trellis = dual_graph.trellis
     insets: dict[int, float] = {}
-    for node in dual_graph.face_nodes:
-        widths = [
-            width
-            for width in (_face_mean_width(face, trellis) for face in node.faces)
-            if width is not None and width > 0.0
-        ]
-        if widths:
-            insets[node.index] = DUAL_GRAPH_INSET_FRACTION * min(widths)
+    for face in faces:
+        width = _face_mean_width(face, trellis)
+        if width is not None and width > 0.0:
+            insets[id(face)] = DUAL_GRAPH_INSET_FRACTION * width
     fallback = (
         max(insets.values())
         if insets
         else DUAL_GRAPH_PUSH_FRACTION * _arc_bbox_diagonal(dual_graph)
     )
     for node in dual_graph.face_nodes:
-        insets.setdefault(node.index, fallback)
+        for face in node.faces:
+            if id(face) in insets:
+                continue
+            neighbours = [
+                insets[id(other)]
+                for arc in face.stable_arcs
+                if (arc_node := dual_graph.arc_nodes.get(arc.edge_key)) is not None
+                for other in arc_node.other_face(node).faces
+                if id(other) in insets
+            ]
+            insets[id(face)] = min(neighbours) if neighbours else fallback
     return insets
 
 
 def _inset_boundary(
-    dual_graph: "DualGraph", face_node: "FaceNode", inset: float
+    dual_graph: "DualGraph",
+    face_node: "FaceNode",
+    insets: Union[float, dict[int, float]],
 ) -> list[list[tuple[str, Optional["ArcNode"], Optional[NDArray[np.float64]]]]]:
     """
     The drawable boundary of a face node, one entry per boundary arc.
@@ -857,10 +868,17 @@ def _inset_boundary(
     :class:`~.DualGraph.ArcNode` and that node's midpoint (possibly None).
     Closed regions strictly alternate the two kinds; an open face lists only
     its real arcs, so two of one kind can be adjacent there.
+
+    Args:
+        dual_graph: The graph.
+        face_node: The node whose member faces are traversed.
+        insets: One inset for every face, or a per-face mapping keyed by
+            ``id(face)`` (see :func:`_face_insets`).
     """
     trellis = dual_graph.trellis
     boundary: list[list[tuple]] = []
     for region in face_node.faces:
+        inset = insets if isinstance(insets, float) else insets[id(region)]
         entries: list[tuple] = []
         for arc in region.arcs:
             if arc.kind == "unstable":
@@ -926,7 +944,7 @@ def plot_dual_graph_curved(
             (plt).
         inset: The offset distance of the inset copies, in data units, applied
             to every face. None (default) derives one per face from its mean
-            width (see :func:`_face_node_insets`).
+            width (see :func:`_face_insets`).
         show_labels: If True, annotate each arc node with
             ``f"{left.label}|{right.label}"`` and each face node with its
             index and kind.
@@ -958,10 +976,10 @@ def plot_dual_graph_curved(
         target, dual_graph, show_labels, scatter_kwargs, caller="plot_dual_graph_curved"
     )
 
-    insets = _face_node_insets(dual_graph, inset)
+    insets = _face_insets(dual_graph, inset)
     face_points: dict[int, NDArray[np.float64]] = {}
     for face_node in dual_graph.face_nodes:
-        boundary = _inset_boundary(dual_graph, face_node, insets[face_node.index])
+        boundary = _inset_boundary(dual_graph, face_node, insets)
         longest: Optional[NDArray[np.float64]] = None
         longest_length = -1.0
         for entries in boundary:

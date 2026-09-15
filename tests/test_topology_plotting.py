@@ -402,9 +402,9 @@ def test_show_labels_annotates_every_arc_and_face_node(k10_partitioned, plot):
 # --------------------------------------------------------------------------- #
 def _curved_geometry(dg: DualGraph):
     """Every face node's inset boundary at the default insets."""
-    insets = plotting._face_node_insets(dg, None)
+    insets = plotting._face_insets(dg, None)
     return [
-        (node, plotting._inset_boundary(dg, node, insets[node.index]))
+        (node, plotting._inset_boundary(dg, node, insets))
         for node in dg.face_nodes
     ]
 
