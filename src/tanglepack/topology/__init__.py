@@ -37,8 +37,10 @@ from .Pseudoneighbor import (
     forward_unstable_branch_cycle,
 )
 from .plotting import (
+    dual_graph_legend_handles,
     face_point,
     plot_dual_graph,
+    plot_dual_graph_curved,
     plot_stable_partition,
 )
 from .BridgeClass import (
@@ -97,11 +99,13 @@ __all__ = [
     "check_bridge_rows_consistent",
     "check_holes_share_bridge_side",
     "class_sort_key",
+    "dual_graph_legend_handles",
     "element_sort_key",
     "face_point",
     "owns_cdist",
     "partition_stable_manifold",
     "plot_dual_graph",
+    "plot_dual_graph_curved",
     "plot_stable_partition",
     "propagate_reference_holes",
     "punch_holes",

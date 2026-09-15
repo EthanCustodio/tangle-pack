@@ -25,18 +25,22 @@ from partitions gathered across several trellises (see
 :func:`plot_dual_graph` takes a :class:`~.DualGraph.DualGraph` directly, for the
 same reason: a graph spans one arrangement but the partitions of several
 trellises, so there is no single owning trellis to hang a method off.
+:func:`plot_dual_graph_curved` draws the same graph with its edges following
+the unstable manifold inside each face instead of cutting straight across
+the regions.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Iterable, TYPE_CHECKING, Union
+from typing import Iterable, Optional, TYPE_CHECKING, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy.typing import NDArray
 
-from .TopologyResults import StablePartitionResult
+from ..numerics.geometry import polyline_midpoint
+from .TopologyResults import Region, StablePartitionResult
 
 if TYPE_CHECKING:
     from .DualGraph import ArcNode, DualGraph, FaceNode
@@ -84,9 +88,19 @@ DUAL_GRAPH_EDGE_STYLE = {"color": "lightgray", "linewidth": 0.5, "zorder": 1}
 #: ``clip_to_arcs`` axes limits.
 DUAL_GRAPH_PUSH_FRACTION = 0.1
 
-#: ``**scatter_kwargs`` names :func:`plot_dual_graph` manages itself (they
+#: Style for the inset copies of a face's unstable boundary arcs drawn by
+#: :func:`plot_dual_graph_curved`.
+DUAL_GRAPH_CURVE_STYLE = {"color": "dimgray", "linewidth": 0.8, "zorder": 1}
+
+#: Fraction of a closed face's MEAN WIDTH (``|area| / (perimeter / 2)``) that
+#: :func:`plot_dual_graph_curved` insets that face's unstable arcs by. Mean
+#: width is the one scale that keeps the copy inside a thin lobe: a fraction of
+#: the lobe's bounding box would overshoot its far side.
+DUAL_GRAPH_INSET_FRACTION = 0.25
+
+#: ``**scatter_kwargs`` names the dual-graph plotters manage themselves (they
 #: distinguish a hollow "wall" arc node from a filled "passable" one) and so
-#: refuses to let a caller override.
+#: refuse to let a caller override.
 _RESERVED_ARC_KWARGS = frozenset({"facecolors", "c"})
 
 
@@ -530,6 +544,81 @@ def _clip_axes_to_arcs(ax, dual_graph: "DualGraph") -> None:
     ax.set_ylim(mins[1] - pad, maxs[1] + pad)
 
 
+def _scatter_arc_nodes(
+    target,
+    dual_graph: "DualGraph",
+    show_labels: bool,
+    scatter_kwargs: dict,
+    *,
+    caller: str,
+) -> tuple[list[tuple], list[tuple]]:
+    """
+    Scatter a dual graph's arc nodes: the hollow set, then the filled set.
+
+    Shared by :func:`plot_dual_graph` and :func:`plot_dual_graph_curved` so the
+    two keep one contract: the hollow collection is always drawn first and the
+    filled one second (each even when empty), so ``target.collections[0]`` /
+    ``[1]`` are hollow / filled regardless of the fill.
+
+    Args:
+        target: The Axes to draw on.
+        dual_graph: The graph whose arc nodes are scattered.
+        show_labels: Annotate each node with ``f"{left.label}|{right.label}"``.
+        scatter_kwargs: The caller's overrides of :data:`DUAL_GRAPH_ARC_STYLE`.
+        caller: The public function's name, for the error message.
+
+    Returns:
+        ``(hollow, filled)``: the ``(ArcNode, midpoint)`` pairs actually drawn
+        (nodes with a degenerate midpoint are skipped and DEBUG-logged).
+
+    Raises:
+        ValueError: If ``scatter_kwargs`` tries to override ``facecolors`` or
+            ``c``.
+    """
+    reserved = _RESERVED_ARC_KWARGS.intersection(scatter_kwargs)
+    if reserved:
+        raise ValueError(
+            f"{caller} manages {sorted(reserved)} itself (hollow vs. filled arc "
+            "nodes); pass 'color'/'edgecolors' instead"
+        )
+
+    style = dict(DUAL_GRAPH_ARC_STYLE)
+    style.update(scatter_kwargs)
+    color = style.pop("color")
+    edgecolors = style.pop("edgecolors", color)
+
+    hollow: list[tuple] = []
+    filled: list[tuple] = []
+    for node in dual_graph.arc_nodes.values():
+        mid = node.midpoint(dual_graph.trellis)
+        if mid is None:
+            logger.debug(
+                "arc node %s has a degenerate midpoint; skipping it", node.key
+            )
+            continue
+        (filled if node.filled else hollow).append((node, mid))
+
+    hollow_coords = (
+        np.vstack([mid for _node, mid in hollow]) if hollow else np.empty((0, 2))
+    )
+    filled_coords = (
+        np.vstack([mid for _node, mid in filled]) if filled else np.empty((0, 2))
+    )
+    target.scatter(
+        hollow_coords[:, 0], hollow_coords[:, 1],
+        facecolors="none", edgecolors=edgecolors, **style,
+    )
+    target.scatter(filled_coords[:, 0], filled_coords[:, 1], color=color, **style)
+
+    if show_labels:
+        for node, mid in hollow + filled:
+            target.annotate(
+                f"{node.left.label}|{node.right.label}", mid,
+                textcoords="offset points", xytext=(3, 3), fontsize=7,
+            )
+    return hollow, filled
+
+
 def plot_dual_graph(
     dual_graph: "DualGraph",
     ax=None,
@@ -576,52 +665,9 @@ def plot_dual_graph(
             ``c``.
     """
     target = ax if ax is not None else plt.gca()
-
-    reserved = _RESERVED_ARC_KWARGS.intersection(scatter_kwargs)
-    if reserved:
-        raise ValueError(
-            f"plot_dual_graph manages {sorted(reserved)} itself (hollow vs. "
-            "filled arc nodes); pass 'color'/'edgecolors' instead"
-        )
-
-    style = dict(DUAL_GRAPH_ARC_STYLE)
-    style.update(scatter_kwargs)
-    color = style.pop("color")
-    edgecolors = style.pop("edgecolors", color)
-
-    hollow: list[tuple] = []
-    filled: list[tuple] = []
-    for node in dual_graph.arc_nodes.values():
-        mid = node.midpoint(dual_graph.trellis)
-        if mid is None:
-            logger.debug(
-                "arc node %s has a degenerate midpoint; skipping it", node.key
-            )
-            continue
-        (filled if node.filled else hollow).append((node, mid))
-
-    # Always scattered, even with zero points, so the two arc-node collections
-    # land at fixed positions (0, 1) in ``target.collections`` regardless of
-    # whether either set is empty -- callers (tests included) can tell hollow
-    # from filled without inspecting facecolors.
-    hollow_coords = (
-        np.vstack([mid for _node, mid in hollow]) if hollow else np.empty((0, 2))
+    _scatter_arc_nodes(
+        target, dual_graph, show_labels, scatter_kwargs, caller="plot_dual_graph"
     )
-    filled_coords = (
-        np.vstack([mid for _node, mid in filled]) if filled else np.empty((0, 2))
-    )
-    target.scatter(
-        hollow_coords[:, 0], hollow_coords[:, 1],
-        facecolors="none", edgecolors=edgecolors, **style,
-    )
-    target.scatter(filled_coords[:, 0], filled_coords[:, 1], color=color, **style)
-
-    if show_labels:
-        for node, mid in hollow + filled:
-            target.annotate(
-                f"{node.left.label}|{node.right.label}", mid,
-                textcoords="offset points", xytext=(3, 3), fontsize=7,
-            )
 
     face_points: dict[int, NDArray[np.float64]] = {}
     for face_node in dual_graph.face_nodes:
@@ -650,3 +696,365 @@ def plot_dual_graph(
 
     return target
 
+
+# ── the curved dual graph ───────────────────────────────────────────────────
+
+
+def _polyline_length(points: NDArray[np.float64]) -> float:
+    """Total arclength of a polyline (0.0 for fewer than two vertices)."""
+    pts = np.asarray(points, dtype=np.float64)
+    if pts.ndim != 2 or len(pts) < 2:
+        return 0.0
+    return float(np.linalg.norm(np.diff(pts, axis=0), axis=1).sum())
+
+
+def _dedupe_polyline(points: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Drop every vertex that repeats its predecessor (zero-length segments)."""
+    pts = np.asarray(points, dtype=np.float64)
+    if pts.ndim != 2 or len(pts) < 2:
+        return pts
+    keep = np.ones(len(pts), dtype=bool)
+    keep[1:] = np.linalg.norm(np.diff(pts, axis=0), axis=1) > 0.0
+    return pts[keep]
+
+
+def _trim_polyline_ends(
+    points: NDArray[np.float64], cut: float
+) -> NDArray[np.float64]:
+    """
+    Cut ``cut`` of arclength off both ends of a polyline, interpolating.
+
+    Left untouched when the polyline is shorter than three cuts, so a short arc
+    keeps its shape rather than collapsing to a point.
+    """
+    pts = _dedupe_polyline(points)
+    if len(pts) < 2 or cut <= 0.0:
+        return pts
+    seg_len = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+    total = float(seg_len.sum())
+    if total <= 3.0 * cut:
+        return pts
+    cum = np.concatenate([[0.0], np.cumsum(seg_len)])
+
+    def point_at(s: float) -> tuple[NDArray[np.float64], int]:
+        index = int(np.searchsorted(cum, s, side="right") - 1)
+        index = min(max(index, 0), len(seg_len) - 1)
+        t = (s - cum[index]) / seg_len[index]
+        return pts[index] + t * (pts[index + 1] - pts[index]), index
+
+    head, head_index = point_at(cut)
+    tail, tail_index = point_at(total - cut)
+    middle = pts[head_index + 1 : tail_index + 1]
+    return _dedupe_polyline(np.vstack([head[None, :], middle, tail[None, :]]))
+
+
+def _offset_polyline(
+    points: NDArray[np.float64], inset: float
+) -> Optional[NDArray[np.float64]]:
+    """
+    A copy of a polyline shifted ``inset`` to the RIGHT of its direction.
+
+    The arrangement traverses every face with the face on the right of each
+    arc (bounded faces clockwise, the unbounded face counter-clockwise), so an
+    arc's polyline in traversal order offset to its right runs just inside the
+    face it bounds. Each vertex moves along the average of its two adjacent
+    segments' right-hand normals (a hairpin, where those cancel, falls back to
+    one of them); ``inset`` of arclength is first cut off both ends so the copy
+    starts inside the face even at an acute corner.
+
+    Args:
+        points: The ``(N, 2)`` polyline in traversal order.
+        inset: The offset distance; ``0.0`` returns the (deduplicated) input.
+
+    Returns:
+        The ``(M, 2)`` offset copy, or None when fewer than two distinct
+        vertices remain.
+    """
+    pts = _trim_polyline_ends(points, inset)
+    if len(pts) < 2:
+        return None
+    seg = np.diff(pts, axis=0)
+    seg_len = np.linalg.norm(seg, axis=1)
+    normals = np.column_stack([seg[:, 1], -seg[:, 0]]) / seg_len[:, None]
+    vertex_normals = np.empty_like(pts)
+    vertex_normals[0] = normals[0]
+    vertex_normals[-1] = normals[-1]
+    if len(pts) > 2:
+        summed = normals[:-1] + normals[1:]
+        norm = np.linalg.norm(summed, axis=1)
+        ok = norm > 1e-9
+        summed[ok] /= norm[ok, None]
+        summed[~ok] = normals[:-1][~ok]
+        vertex_normals[1:-1] = summed
+    return pts + inset * vertex_normals
+
+
+def _face_mean_width(region: Region, trellis: "Trellis") -> Optional[float]:
+    """``|area| / (perimeter / 2)`` of a closed face; None for an open one."""
+    if not region.is_closed:
+        return None
+    perimeter = sum(_polyline_length(arc.polyline(trellis)) for arc in region.arcs)
+    if perimeter <= 0.0:
+        return None
+    return abs(region.area) / (0.5 * perimeter)
+
+
+def _arc_bbox_diagonal(dual_graph: "DualGraph") -> float:
+    """Diagonal of the bounding box of every arc node's midpoint."""
+    mids = _arc_midpoints(dual_graph.trellis, dual_graph.arc_nodes.values())
+    if not mids:
+        return 1.0
+    points = np.vstack(mids)
+    return float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
+
+
+def _face_node_insets(
+    dual_graph: "DualGraph", inset: Optional[float]
+) -> dict[int, float]:
+    """
+    The inset distance of every face node, keyed by its index.
+
+    An explicit ``inset`` applies to every node. Otherwise a node with at least
+    one closed member face gets :data:`DUAL_GRAPH_INSET_FRACTION` of the
+    smallest mean width among them (a thin lobe keeps its copy inside); a node
+    with none (an open face, the unbounded node) has no width of its own and
+    borrows the largest inset of any closed face, or, when there is no closed
+    face at all, :data:`DUAL_GRAPH_PUSH_FRACTION` of the arc-midpoint bbox
+    diagonal.
+    """
+    if inset is not None:
+        return {node.index: float(inset) for node in dual_graph.face_nodes}
+    trellis = dual_graph.trellis
+    insets: dict[int, float] = {}
+    for node in dual_graph.face_nodes:
+        widths = [
+            width
+            for width in (_face_mean_width(face, trellis) for face in node.faces)
+            if width is not None and width > 0.0
+        ]
+        if widths:
+            insets[node.index] = DUAL_GRAPH_INSET_FRACTION * min(widths)
+    fallback = (
+        max(insets.values())
+        if insets
+        else DUAL_GRAPH_PUSH_FRACTION * _arc_bbox_diagonal(dual_graph)
+    )
+    for node in dual_graph.face_nodes:
+        insets.setdefault(node.index, fallback)
+    return insets
+
+
+def _inset_boundary(
+    dual_graph: "DualGraph", face_node: "FaceNode", inset: float
+) -> list[list[tuple[str, Optional["ArcNode"], Optional[NDArray[np.float64]]]]]:
+    """
+    The drawable boundary of a face node, one entry per boundary arc.
+
+    Per member :class:`~.TopologyResults.Region` of the node (a merged node has
+    several), the region's arcs in traversal order, each as
+    ``(kind, arc_node, geometry)``: an unstable arc carries ``None`` and its
+    inset polyline (:func:`_offset_polyline`, possibly None), a stable arc its
+    :class:`~.DualGraph.ArcNode` and that node's midpoint (possibly None).
+    Closed regions strictly alternate the two kinds; an open face lists only
+    its real arcs, so two of one kind can be adjacent there.
+    """
+    trellis = dual_graph.trellis
+    boundary: list[list[tuple]] = []
+    for region in face_node.faces:
+        entries: list[tuple] = []
+        for arc in region.arcs:
+            if arc.kind == "unstable":
+                entries.append(
+                    ("unstable", None, _offset_polyline(arc.polyline(trellis), inset))
+                )
+            else:
+                node = dual_graph.arc_nodes.get(arc.edge_key)
+                mid = node.midpoint(trellis) if node is not None else None
+                entries.append(("stable", node, mid))
+        boundary.append(entries)
+    return boundary
+
+
+def _curved_face_point(
+    dual_graph: "DualGraph",
+    face_node: "FaceNode",
+    longest: Optional[NDArray[np.float64]],
+) -> NDArray[np.float64]:
+    """The dot of a face node: on its longest inset curve, else :func:`face_point`."""
+    if longest is not None:
+        point = polyline_midpoint(longest)
+        if point is not None:
+            if face_node.kind != "region" or not face_node.faces:
+                return point
+            if face_node.faces[0].contains(point):
+                return point
+            logger.debug(
+                "face node %d: the midpoint of its longest inset curve lies "
+                "outside the region (a lobe thinner than the inset); using the "
+                "region's own point instead",
+                face_node.index,
+            )
+    return face_point(dual_graph, face_node)
+
+
+def plot_dual_graph_curved(
+    dual_graph: "DualGraph",
+    ax=None,
+    *,
+    inset: Optional[float] = None,
+    show_labels: bool = False,
+    clip_to_arcs: bool = True,
+    **scatter_kwargs,
+):
+    """
+    Draw a dual graph with its edges following the unstable manifold.
+
+    The arc nodes are scattered exactly as :func:`plot_dual_graph` does (hollow
+    = wall, filled = passable). The difference is how a face is joined to the
+    arc nodes on its boundary: instead of one straight line from a face point
+    to each arc midpoint, every UNSTABLE arc of the face's boundary is drawn as
+    an inset copy running just inside the face (:func:`_offset_polyline`), the
+    face's dot sits on the longest of those copies, and each stable arc node's
+    midpoint is joined by a short stub to the ends of the inset copies of the
+    unstable arcs adjacent to it in traversal order. The edge from a face node
+    to an arc node is therefore the path along the inset boundary, which makes
+    it visible which face each edge belongs to.
+
+    Args:
+        dual_graph: The graph to draw.
+        ax: Optional matplotlib Axes to draw on. Defaults to the current axes
+            (plt).
+        inset: The offset distance of the inset copies, in data units, applied
+            to every face. None (default) derives one per face from its mean
+            width (see :func:`_face_node_insets`).
+        show_labels: If True, annotate each arc node with
+            ``f"{left.label}|{right.label}"`` and each face node with its
+            index and kind.
+        clip_to_arcs: If True (default), set the axes limits as
+            :func:`plot_dual_graph` does (see :func:`_clip_axes_to_arcs`).
+        **scatter_kwargs: Forwarded to both arc-node scatters, overriding
+            :data:`DUAL_GRAPH_ARC_STYLE`; ``facecolors`` and ``c`` raise
+            ``ValueError`` (see :func:`plot_dual_graph`). The inset curves,
+            stubs and face dots keep their fixed styles
+            (:data:`DUAL_GRAPH_CURVE_STYLE`, :data:`DUAL_GRAPH_EDGE_STYLE`,
+            :data:`DUAL_GRAPH_FACE_STYLE`).
+
+    Returns:
+        The Axes drawn on.
+
+    Raises:
+        ValueError: If ``scatter_kwargs`` tries to override ``facecolors`` or
+            ``c``.
+
+    Note:
+        A stable arc whose neighbour in the face's traversal is not an unstable
+        arc (possible only on an open face, whose dangling ends are dropped from
+        the boundary list) gets no stub on that side; its node is still
+        scattered. An open face wraps around a dangling unstable end, so that
+        arc appears twice in its boundary and is inset on both sides.
+    """
+    target = ax if ax is not None else plt.gca()
+    _scatter_arc_nodes(
+        target, dual_graph, show_labels, scatter_kwargs, caller="plot_dual_graph_curved"
+    )
+
+    insets = _face_node_insets(dual_graph, inset)
+    face_points: dict[int, NDArray[np.float64]] = {}
+    for face_node in dual_graph.face_nodes:
+        boundary = _inset_boundary(dual_graph, face_node, insets[face_node.index])
+        longest: Optional[NDArray[np.float64]] = None
+        longest_length = -1.0
+        for entries in boundary:
+            count = len(entries)
+            for index, (kind, _node, geometry) in enumerate(entries):
+                if geometry is None:
+                    continue
+                if kind == "unstable":
+                    target.plot(
+                        geometry[:, 0], geometry[:, 1], **DUAL_GRAPH_CURVE_STYLE
+                    )
+                    length = _polyline_length(geometry)
+                    if length > longest_length:
+                        longest, longest_length = geometry, length
+                    continue
+                if count < 2:
+                    continue
+                neighbours = (
+                    (entries[(index - 1) % count], -1),
+                    (entries[(index + 1) % count], 0),
+                )
+                for (n_kind, _n_node, n_geometry), end in neighbours:
+                    if n_kind != "unstable" or n_geometry is None:
+                        continue
+                    stub = n_geometry[end]
+                    target.plot(
+                        [geometry[0], stub[0]], [geometry[1], stub[1]],
+                        **DUAL_GRAPH_EDGE_STYLE,
+                    )
+        point = _curved_face_point(dual_graph, face_node, longest)
+        face_points[face_node.index] = point
+        if show_labels:
+            target.annotate(
+                f"{face_node.index}:{face_node.kind}", point,
+                textcoords="offset points", xytext=(3, -3),
+                fontsize=7, color=DUAL_GRAPH_FACE_STYLE["color"],
+            )
+
+    if face_points:
+        coords = np.vstack(list(face_points.values()))
+        target.scatter(coords[:, 0], coords[:, 1], **DUAL_GRAPH_FACE_STYLE)
+
+    if clip_to_arcs:
+        _clip_axes_to_arcs(target, dual_graph)
+
+    return target
+
+
+def dual_graph_legend_handles(*, curved: bool = False) -> list:
+    """
+    Legend handles matching the dual-graph plotters' fixed styles.
+
+    Args:
+        curved: If True, describe :func:`plot_dual_graph_curved` (stubs and
+            inset curves); otherwise :func:`plot_dual_graph` (straight edges).
+
+    Returns:
+        A list of ``matplotlib.lines.Line2D`` proxies, for
+        ``ax.legend(handles=...)``: the hollow wall node, the filled passable
+        node, the face node, the edge/stub line, and (curved only) the inset
+        unstable boundary.
+    """
+    from matplotlib.lines import Line2D
+
+    arc = DUAL_GRAPH_ARC_STYLE
+    face = DUAL_GRAPH_FACE_STYLE
+    edge = DUAL_GRAPH_EDGE_STYLE
+    arc_size = float(np.sqrt(arc["s"]))
+    handles = [
+        Line2D(
+            [], [], marker="o", linestyle="none", markerfacecolor="none",
+            markeredgecolor=arc["color"], markersize=arc_size,
+            label="arc node (wall)",
+        ),
+        Line2D(
+            [], [], marker="o", linestyle="none", color=arc["color"],
+            markersize=arc_size, label="arc node (passable)",
+        ),
+        Line2D(
+            [], [], marker="o", linestyle="none", color=face["color"],
+            markersize=float(np.sqrt(face["s"])), label="face node",
+        ),
+        Line2D(
+            [], [], color=edge["color"], linewidth=edge["linewidth"],
+            label="stub to arc node" if curved else "face-arc edge",
+        ),
+    ]
+    if curved:
+        curve = DUAL_GRAPH_CURVE_STYLE
+        handles.append(
+            Line2D(
+                [], [], color=curve["color"], linewidth=curve["linewidth"],
+                label="inset unstable boundary",
+            )
+        )
+    return handles

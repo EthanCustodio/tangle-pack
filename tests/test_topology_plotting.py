@@ -230,6 +230,11 @@ def test_session_call_fanouts_go_through_fanout_call(henon_session, monkeypatch,
 # --------------------------------------------------------------------------- #
 # dual graph (B.4)
 # --------------------------------------------------------------------------- #
+#: The two dual-graph plotters share the arc-node scatter contract and kwargs.
+DUAL_GRAPH_PLOTTERS = [plotting.plot_dual_graph, plotting.plot_dual_graph_curved]
+DUAL_GRAPH_PLOTTER_IDS = ["straight", "curved"]
+
+
 def _k10_dual_graph(k10_partitioned) -> DualGraph:
     """The dual graph of the k10_partitioned fixture, with its strong pip."""
     session, fp = k10_partitioned
@@ -241,7 +246,8 @@ def _k10_dual_graph(k10_partitioned) -> DualGraph:
     )
 
 
-def test_plot_dual_graph_scatters_exactly_the_arc_nodes(k10_partitioned):
+@pytest.mark.parametrize("plot", DUAL_GRAPH_PLOTTERS, ids=DUAL_GRAPH_PLOTTER_IDS)
+def test_plot_dual_graph_scatters_exactly_the_arc_nodes(k10_partitioned, plot):
     """The two arc-node collections split hollow/filled and sum to arc_nodes.
 
     ``plot_dual_graph`` always scatters the hollow set first, the filled set
@@ -255,7 +261,7 @@ def test_plot_dual_graph_scatters_exactly_the_arc_nodes(k10_partitioned):
     plt.figure()
     try:
         ax = plt.gca()
-        result = plotting.plot_dual_graph(dg, ax=ax)
+        result = plot(dg, ax=ax)
         assert result is ax
         hollow_collection, filled_collection = ax.collections[0], ax.collections[1]
         hollow_count = len(hollow_collection.get_offsets())
@@ -303,16 +309,17 @@ def test_face_point_of_a_region_returns_a_copy_not_the_cached_array(k10_partitio
     assert np.allclose(region.representative_point, cached_before)
 
 
-def test_scatter_kwargs_reject_facecolors_and_c(k10_partitioned):
+@pytest.mark.parametrize("plot", DUAL_GRAPH_PLOTTERS, ids=DUAL_GRAPH_PLOTTER_IDS)
+def test_scatter_kwargs_reject_facecolors_and_c(k10_partitioned, plot):
     """facecolors/c are internally managed and raise a clear ValueError."""
     dg = _k10_dual_graph(k10_partitioned)
     plt.figure()
     try:
         ax = plt.gca()
         with pytest.raises(ValueError):
-            plotting.plot_dual_graph(dg, ax=ax, facecolors="red")
+            plot(dg, ax=ax, facecolors="red")
         with pytest.raises(ValueError):
-            plotting.plot_dual_graph(dg, ax=ax, c="blue")
+            plot(dg, ax=ax, c="blue")
     finally:
         plt.close()
 
@@ -328,7 +335,8 @@ def _clip_bbox(dg: DualGraph):
     return mins, maxs, pad
 
 
-def test_clip_to_arcs_true_keeps_the_axes_within_the_padded_arc_bbox(k10_partitioned):
+@pytest.mark.parametrize("plot", DUAL_GRAPH_PLOTTERS, ids=DUAL_GRAPH_PLOTTER_IDS)
+def test_clip_to_arcs_true_keeps_the_axes_within_the_padded_arc_bbox(k10_partitioned, plot):
     """clip_to_arcs=True limits the view to the padded arc/unbounded-point bbox."""
     dg = _k10_dual_graph(k10_partitioned)
     mins, maxs, pad = _clip_bbox(dg)
@@ -336,7 +344,7 @@ def test_clip_to_arcs_true_keeps_the_axes_within_the_padded_arc_bbox(k10_partiti
     plt.figure()
     try:
         ax = plt.gca()
-        plotting.plot_dual_graph(dg, ax=ax, clip_to_arcs=True)
+        plot(dg, ax=ax, clip_to_arcs=True)
         xlim, ylim = ax.get_xlim(), ax.get_ylim()
         assert xlim[0] == pytest.approx(mins[0] - pad)
         assert xlim[1] == pytest.approx(maxs[0] + pad)
@@ -346,7 +354,8 @@ def test_clip_to_arcs_true_keeps_the_axes_within_the_padded_arc_bbox(k10_partiti
         plt.close()
 
 
-def test_clip_to_arcs_false_lets_an_outlier_region_blow_out_the_axes(k10_partitioned):
+@pytest.mark.parametrize("plot", DUAL_GRAPH_PLOTTERS, ids=DUAL_GRAPH_PLOTTER_IDS)
+def test_clip_to_arcs_false_lets_an_outlier_region_blow_out_the_axes(k10_partitioned, plot):
     """clip_to_arcs=False leaves the axes autoscaled to everything drawn.
 
     On k=10 at least one bounded region's representative point sits well
@@ -359,7 +368,7 @@ def test_clip_to_arcs_false_lets_an_outlier_region_blow_out_the_axes(k10_partiti
     plt.figure()
     try:
         ax = plt.gca()
-        plotting.plot_dual_graph(dg, ax=ax, clip_to_arcs=False)
+        plot(dg, ax=ax, clip_to_arcs=False)
         xlim, ylim = ax.get_xlim(), ax.get_ylim()
         outside = (
             xlim[0] < mins[0] - pad or xlim[1] > maxs[0] + pad
@@ -370,7 +379,8 @@ def test_clip_to_arcs_false_lets_an_outlier_region_blow_out_the_axes(k10_partiti
         plt.close()
 
 
-def test_show_labels_annotates_every_arc_and_face_node(k10_partitioned):
+@pytest.mark.parametrize("plot", DUAL_GRAPH_PLOTTERS, ids=DUAL_GRAPH_PLOTTER_IDS)
+def test_show_labels_annotates_every_arc_and_face_node(k10_partitioned, plot):
     """show_labels=True adds one Text per plotted arc node and one per face node."""
     dg = _k10_dual_graph(k10_partitioned)
     expected_arc_labels = sum(
@@ -380,9 +390,134 @@ def test_show_labels_annotates_every_arc_and_face_node(k10_partitioned):
     plt.figure()
     try:
         ax = plt.gca()
-        result = plotting.plot_dual_graph(dg, ax=ax, show_labels=True)
+        result = plot(dg, ax=ax, show_labels=True)
         assert result is ax
         assert len(ax.texts) == expected_arc_labels + len(dg.face_nodes)
     finally:
         plt.close()
 
+
+# --------------------------------------------------------------------------- #
+# curved dual graph
+# --------------------------------------------------------------------------- #
+def _curved_geometry(dg: DualGraph):
+    """Every face node's inset boundary at the default insets."""
+    insets = plotting._face_node_insets(dg, None)
+    return [
+        (node, plotting._inset_boundary(dg, node, insets[node.index]))
+        for node in dg.face_nodes
+    ]
+
+
+def test_curved_inset_copies_lie_inside_their_region(k10_partitioned):
+    """The inset copy of each unstable arc runs inside the region it bounds.
+
+    The thin primary lobe of k=10 (mean width ~0.24) is narrower than the
+    inset at its fold tip, so a few of its vertices escape; every other
+    region keeps every vertex inside.
+    """
+    dg = _k10_dual_graph(k10_partitioned)
+    region_nodes = [node for node in dg.face_nodes if node.kind == "region"]
+    assert len(region_nodes) >= 2
+    fully_inside = 0
+    for node, boundary in _curved_geometry(dg):
+        if node.kind != "region":
+            continue
+        region = node.faces[0]
+        inside = total = 0
+        for entries in boundary:
+            for kind, _arc_node, geometry in entries:
+                if kind != "unstable" or geometry is None:
+                    continue
+                total += len(geometry)
+                inside += sum(region.contains(point) for point in geometry)
+        assert total > 0, f"region node {node.index} has no inset curve"
+        assert inside >= 0.85 * total, (
+            f"region node {node.index}: only {inside}/{total} inset vertices inside"
+        )
+        fully_inside += inside == total
+    assert fully_inside >= len(region_nodes) - 1
+
+
+def test_curved_face_dots_lie_inside_their_region(k10_partitioned):
+    """collections[2] holds one face dot per face node, in order, each inside
+    its own region for a region node."""
+    dg = _k10_dual_graph(k10_partitioned)
+    plt.figure()
+    try:
+        ax = plt.gca()
+        plotting.plot_dual_graph_curved(dg, ax=ax)
+        dots = ax.collections[2].get_offsets()
+        assert len(dots) == len(dg.face_nodes)
+        for node, dot in zip(dg.face_nodes, dots):
+            if node.kind == "region":
+                assert node.faces[0].contains(np.asarray(dot, dtype=float)), node
+    finally:
+        plt.close()
+
+
+def test_curved_draws_one_line_per_inset_arc_and_stub(k10_partitioned):
+    """Every inset unstable arc is one Line2D and every stable arc node gets
+    one stub per unstable neighbour in its face's traversal; nothing else is
+    drawn as a line."""
+    dg = _k10_dual_graph(k10_partitioned)
+    expected = 0
+    for _node, boundary in _curved_geometry(dg):
+        for entries in boundary:
+            count = len(entries)
+            for index, (kind, _arc_node, geometry) in enumerate(entries):
+                if geometry is None:
+                    continue
+                if kind == "unstable":
+                    expected += 1
+                elif count >= 2:
+                    for neighbour in (entries[(index - 1) % count], entries[(index + 1) % count]):
+                        if neighbour[0] == "unstable" and neighbour[2] is not None:
+                            expected += 1
+    assert expected > 0
+
+    plt.figure()
+    try:
+        ax = plt.gca()
+        plotting.plot_dual_graph_curved(dg, ax=ax)
+        assert len(ax.lines) == expected
+    finally:
+        plt.close()
+
+
+def test_curved_explicit_inset_zero_reproduces_the_arcs(k10_partitioned):
+    """inset=0.0 draws every unstable arc on its own polyline."""
+    dg = _k10_dual_graph(k10_partitioned)
+    for node in dg.face_nodes:
+        boundary = plotting._inset_boundary(dg, node, 0.0)
+        for region, entries in zip(node.faces, boundary):
+            for arc, (kind, _arc_node, geometry) in zip(region.arcs, entries):
+                if kind != "unstable":
+                    continue
+                expected = plotting._dedupe_polyline(arc.polyline(dg.trellis))
+                assert geometry is not None
+                assert np.allclose(geometry, expected)
+
+
+def test_offset_polyline_shifts_to_the_right_of_the_direction():
+    """A polyline heading east is shifted south by the inset."""
+    line = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [10.0, 0.0]])
+    shifted = plotting._offset_polyline(line, 0.5)
+    assert shifted is not None
+    assert np.allclose(shifted[:, 1], -0.5)
+    # the ends are trimmed by one inset of arclength
+    assert shifted[0, 0] == pytest.approx(0.5)
+    assert shifted[-1, 0] == pytest.approx(9.5)
+    assert plotting._offset_polyline(np.array([[0.0, 0.0], [0.0, 0.0]]), 0.5) is None
+
+
+def test_dual_graph_legend_handles_cover_both_plotters():
+    plain = plotting.dual_graph_legend_handles()
+    curved = plotting.dual_graph_legend_handles(curved=True)
+    assert [h.get_label() for h in plain] == [
+        "arc node (wall)", "arc node (passable)", "face node", "face-arc edge",
+    ]
+    assert [h.get_label() for h in curved] == [
+        "arc node (wall)", "arc node (passable)", "face node",
+        "stub to arc node", "inset unstable boundary",
+    ]
