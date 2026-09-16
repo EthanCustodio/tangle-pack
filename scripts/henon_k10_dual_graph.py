@@ -192,14 +192,14 @@ def main() -> None:
     logger.info("%s", session.describe_stable_partitions(fp))
 
     # 5. Bridge classes and the dual graph.
-    classes = session.bridge_classes()
     dual_graph = session.dual_graph()
-    logger.info("%d bridge classes; %s", len(classes), dual_graph.summary())
+    logger.info("%s", session.describe_bridge_classes())
+    logger.info("%s", dual_graph.summary())
 
     title = f"Hénon k={HENON_K10[0]}"
     print(title)
     print("=" * len(title))
-    print(f"{len(classes)} bridge classes")
+    print(session.describe_bridge_classes())
     print(dual_graph.summary())
 
     # 6. The figure.

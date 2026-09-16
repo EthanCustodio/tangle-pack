@@ -22,12 +22,18 @@ from ..numerics.DynamicalSystem import MapFunc, JacFunc
 from ..numerics.geometry import polyline_midpoint
 from ..topology import plotting
 from ..topology.Arrangement import Arrangement
-from ..topology.BridgeClass import BridgeClass, bridge_classes as _bridge_classes
+from ..topology.BridgeClass import (
+    BridgeClassEntry,
+    BridgeClassTable,
+    bridge_classes as _bridge_classes,
+    zone_label,
+)
 from ..topology.DualGraph import DualGraph
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
 from .Blast import BlastResult, blast_zone
+from .BridgeAlphabet import BridgeAlphabet
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -94,9 +100,13 @@ class TangleSession:
             dynamical_map, dynamical_map_inverse, jacobian_function
         )
         self._trellises: dict = {}
-        # (workbench.generation, partition signature, classes) per
+        # (workbench.generation, partition signature, table) per
         # trellis-selection cache key; see bridge_classes().
         self._bridge_classes: dict = {}
+        # The letters of the bridge classes seen so far. Outlives every cache
+        # entry so a class keeps its letter across growth, blasts and
+        # re-partitions and a new class takes the next unused one.
+        self.bridge_alphabet = BridgeAlphabet()
         # (workbench.generation, partition signature, strong pips, graph) per
         # trellis-selection cache key; see dual_graph().
         self._dual_graphs: dict = {}
@@ -204,9 +214,9 @@ class TangleSession:
         fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
         *,
         rebuild: bool = False,
-    ) -> dict[BridgeClass, list["BridgeId"]]:
+    ) -> BridgeClassTable:
         """
-        Group the bridges of a trellis by the pair of partition elements they connect.
+        The bridge classes of a trellis, lettered and placed in their resonance zones.
 
         The classes are computed on the trellis selected by ``fixed_points`` (all
         fixed points by default, mirroring :meth:`arrangement`), but the stable
@@ -221,7 +231,15 @@ class TangleSession:
         :meth:`partition_element_for` exists to bridge for a single lookup, done
         here for every bridge of the selection at once. See
         :func:`tanglepack.topology.BridgeClass.bridge_classes` for the class
-        semantics themselves.
+        semantics themselves (unordered element pairs oriented anchor outward,
+        loops folded into the class they iterated from, inert classes).
+
+        The session then annotates the table: every ACTIVE class gets its letter
+        from :attr:`bridge_alphabet` (a class seen before keeps its letter, a new
+        one takes the next unused; inert classes stay unlettered), and every
+        class records the resonance zone its member bridges lie in
+        (:meth:`classify_bridge`, unanimous over the members, else a WARNING and
+        no zone).
 
         Cached by :attr:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.generation`,
         exactly like :meth:`trellis`: any growth, recompute, re-cut, trim, blast
@@ -236,14 +254,15 @@ class TangleSession:
             fixed_points: A single FixedPoint, an iterable of them, or None (the
                 default) for all of them — selects which trellis's bridges are
                 classed.
-            rebuild: Force a recompute even if a cached grouping exists for the
-                current generation and partition signature.
+            rebuild: Force a recompute even if a cached table exists for the
+                current generation and partition signature. Letters are stable
+                across rebuilds (the alphabet persists).
 
         Returns:
-            A dict from :class:`~tanglepack.topology.BridgeClass.BridgeClass` to
-            the sorted list of that class's
-            :data:`~tanglepack.numerics.Bridge.BridgeId` s (see
-            :func:`tanglepack.topology.BridgeClass.bridge_classes`).
+            A :class:`~tanglepack.topology.BridgeClass.BridgeClassTable` in
+            :func:`~tanglepack.topology.BridgeClass.class_sort_key` order, each
+            entry carrying its members with directions, its ``letter`` and its
+            ``zone_key``.
 
         Raises:
             ValueError: Propagated from
@@ -268,6 +287,11 @@ class TangleSession:
             the interval boundaries :func:`tanglepack.topology.BridgeClass.bridge_classes`
             depends on, so a different partition of the same branch is detected
             even though the generation is unchanged.
+
+            A re-partition renumbers element ids, so a class whose element pair
+            changed is a NEW class to the alphabet and takes a new letter; the
+            old letter stays reserved. Carrying a class's identity across a
+            refinement is the refined-symbols work, not the alphabet's.
         """
         cache_key = self._cache_key(fixed_points)
         trellis = self.trellis(fixed_points)
@@ -284,10 +308,55 @@ class TangleSession:
             return cached[2]
 
         self._warn_unpartitioned_branches(trellis, partitions)
-        classes = _bridge_classes(trellis, partitions)
+        table = _bridge_classes(trellis, partitions)
+        self._annotate_bridge_classes(table)
 
-        self._bridge_classes[cache_key] = (self.workbench.generation, signature, classes)
-        return classes
+        self._bridge_classes[cache_key] = (self.workbench.generation, signature, table)
+        return table
+
+    def _annotate_bridge_classes(self, table: BridgeClassTable) -> None:
+        """Letter the active entries from the alphabet and record each entry's zone."""
+        for entry in table:
+            if entry.active:
+                entry.letter = self.bridge_alphabet.letter_for(entry.bridge_class)
+            entry.zone_key = self._zone_key_of_entry(entry)
+
+    def _zone_key_of_entry(self, entry: BridgeClassEntry) -> Optional[tuple]:
+        """
+        The zone key shared by every member bridge of an entry, or None.
+
+        Each member is placed by :meth:`classify_bridge`; the entry's zone is the
+        one they agree on. Members in different zones (or some in none) log a
+        WARNING and leave the entry without a zone.
+        """
+        keys = set()
+        for member in entry.members:
+            zone = self.classify_bridge(self.workbench.bridge(member.bridge_id))
+            keys.add(None if zone is None else zone.key)
+        if len(keys) > 1:
+            logger.warning(
+                "bridge class %s straddles resonance zones: members fall in %s",
+                entry.bridge_class.label,
+                sorted("none" if k is None else zone_label(k) for k in keys),
+            )
+            return None
+        return next(iter(keys), None)
+
+    def describe_bridge_classes(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+    ) -> str:
+        """
+        A multi-line report of :meth:`bridge_classes`, one line per class.
+
+        Args:
+            fixed_points: The trellis selection, as for :meth:`bridge_classes`.
+
+        Returns:
+            :meth:`~tanglepack.topology.BridgeClass.BridgeClassTable.describe`
+            of the (cached) table.
+        """
+        return self.bridge_classes(fixed_points).describe()
 
     @staticmethod
     def _partition_signature(partitions: list["StablePartitionResult"]) -> tuple:

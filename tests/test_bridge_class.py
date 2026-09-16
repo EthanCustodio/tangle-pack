@@ -16,14 +16,19 @@ independent check on handedness: the partition's ``left`` and the crossing
 sign's ``left`` must be the same orientation of the plane, and a flip in either
 shows up as a wholesale disagreement here.
 
-**Bridge classes** (A.3) are the symbols the dual graph will be built over. Every
-non-partial bridge must land in exactly one, the anchor bridge must be classed
-like any other (it is the one whose geometry ``_row_at`` cannot read), and on the
-nested fixture — which has no computed heteroclinic crossing — no class may mix
-the two tangles.
+**Bridge classes** (A.3) are the homotopy classes itineraries are written in:
+the UNORDERED pair of elements a bridge connects, oriented anchor outward so a
+member runs ``source -> target`` (``+1``) or back (``-1``). Every non-partial
+bridge must land in exactly one, the anchor bridge must be classed like any
+other (it is the one whose geometry ``_row_at`` cannot read), a loop (both ends
+in one element) must fold into the class of the bridge it iterated from and
+make that class inert, and on the nested fixture — which has no computed
+heteroclinic crossing — no class may mix the two tangles.
 """
 
 from __future__ import annotations
+
+import logging
 
 import matplotlib
 
@@ -32,9 +37,11 @@ import pytest
 
 from tanglepack.topology.BridgeClass import (
     BridgeClass,
+    BridgeClassTable,
     bridge_classes,
     class_sort_key,
     element_sort_key,
+    oriented_class,
 )
 from tanglepack.topology.StablePartition import (
     _row_at,
@@ -253,60 +260,162 @@ def test_row_of_end_rejects_an_unknown_endpoint_name(k10_partitioned):
 # --------------------------------------------------------------------------- #
 # A.3 -- bridge classes
 # --------------------------------------------------------------------------- #
+def _k10_table(session, fp):
+    trellis = session.trellis()
+    partitions = _all_partitions(session, [fp])
+    return trellis, partitions, bridge_classes(trellis, partitions)
+
+
+def _element_ends(trellis, partitions, bridge_id):
+    """The element at each end of a bridge, on that end's row."""
+    by_branch_side = {(r.branch_key, r.side): r for r in partitions}
+    refs = []
+    for endpoint, intersection_id in zip(("first", "second"), bridge_id):
+        row = row_of_end(trellis, bridge_id, endpoint)
+        branch_key = trellis.intersection(intersection_id).manifold_b_key
+        result = by_branch_side[(branch_key, row)]
+        refs.append(result.ref(result.element_of_intersection[intersection_id]))
+    return tuple(refs)
+
+
 def test_every_non_partial_bridge_lands_in_exactly_one_class(k10_partitioned):
     session, fp = k10_partitioned
-    trellis = session.trellis()
-    classes = bridge_classes(trellis, _all_partitions(session, [fp]))
+    trellis, _partitions, table = _k10_table(session, fp)
 
     expected = sorted(bridge.id for bridge in _classable_bridges(trellis))
-    placed = sorted(bid for members in classes.values() for bid in members)
-    assert placed == expected
+    placed = [bid for entry in table for bid in entry.bridge_ids]
+    assert sorted(placed) == expected
     assert len(placed) == len(set(placed)), "a bridge landed in two classes"
-    assert classes, "the fixture must produce at least one class"
+    assert table.bridge_ids == expected
+    assert isinstance(table, BridgeClassTable) and len(table) > 0
 
 
-def test_k10_anchor_bridge_is_classed_from_the_anchor_element(k10_partitioned):
-    """The anchor bridge is a class like any other, and its first element is the
-    one running from the periodic point (``lo_id is None``).
+def test_k10_has_one_active_and_one_inert_class(k10_partitioned):
+    """The k=10 fixture (one hole orbit, three elements per side) has exactly
+    two homotopy classes: the zone-side pair with four bridges, two each way,
+    and the exterior pair whose forward image is a loop pushed into the anchor
+    element — folded in, making that class inert."""
+    session, fp = k10_partitioned
+    _trellis, _partitions, table = _k10_table(session, fp)
 
-    The plan expected the anchor bridge to be a class of its own on this
-    fixture; it is not. The k=10 partition is coarse — one hole orbit, three
-    elements per side — so a second bridge whose ends land in the same two
-    elements shares the class. That is a statement about the partition's
-    fineness, not about the classing (it is exactly the D.4 diagnostic), so what
-    is pinned here is the definitional part plus the fact that the sharing stays
-    small.
-    """
+    assert len(table) == 2
+    assert len(table.active) == 1 and len(table.inert) == 1
+    active, inert = table.active[0], table.inert[0]
+
+    directions = sorted(m.direction for m in active.members)
+    assert directions == [-1, -1, 1, 1]
+    assert not active.loops
+
+    loops = inert.loops
+    assert len(loops) == 1
+    loop = loops[0]
+    assert loop.folded_from is not None
+    ancestor = inert.member(loop.folded_from)
+    assert ancestor.direction == -1, "the loop's ancestor runs outer -> anchor element"
+    assert loop.loop_element == inert.bridge_class.source, "the loop sits in the anchor element"
+    assert sorted(m.direction for m in inert.members) == [-1, 0, 1]
+
+    for entry in table:
+        assert not entry.bridge_class.is_loop
+        assert entry.bridge_class.source.side == entry.bridge_class.target.side
+    assert active.bridge_class.source.side != inert.bridge_class.source.side
+
+
+def test_k10_anchor_bridge_runs_source_to_target(k10_partitioned):
+    """The anchor bridge leaves the periodic point (element with ``lo_id is
+    None``) outward, so it is a ``+1`` member of the active class."""
+    session, fp = k10_partitioned
+    trellis, partitions, table = _k10_table(session, fp)
+
+    anchor_id = _anchor_bridge_id(trellis)
+    entry = table.entry_of(anchor_id)
+    assert entry.active
+    assert entry.member(anchor_id).direction == +1
+
+    by_branch_side = {(r.branch_key, r.side): r for r in partitions}
+    source = entry.bridge_class.source
+    interval = by_branch_side[(source.branch_key, source.side)].element(source.element_id)
+    assert interval.lo_id is None, "the class's source must start at the anchor"
+
+
+def test_direction_matches_the_element_order_at_the_ends(k10_partitioned):
+    session, fp = k10_partitioned
+    trellis, partitions, table = _k10_table(session, fp)
+
+    for entry in table:
+        cls = entry.bridge_class
+        assert element_sort_key(cls.source, trellis.fixed_points) <= element_sort_key(
+            cls.target, trellis.fixed_points
+        )
+        for member in entry.members:
+            x, y = _element_ends(trellis, partitions, member.bridge_id)
+            if member.is_loop:
+                assert x == y == member.loop_element
+                continue
+            assert {x, y} == {cls.source, cls.target}
+            assert member.direction == (+1 if x == cls.source else -1)
+
+
+def test_oriented_class_orders_anchor_outward(k10_partitioned):
+    session, fp = k10_partitioned
+    trellis, partitions, table = _k10_table(session, fp)
+    cls = table.active[0].bridge_class
+    fps = trellis.fixed_points
+
+    assert oriented_class(cls.source, cls.target, fps) == (cls, +1)
+    assert oriented_class(cls.target, cls.source, fps) == (cls, -1)
+    loop_class, direction = oriented_class(cls.source, cls.source, fps)
+    assert direction == 0 and loop_class.is_loop
+    assert cls.source.element_id < cls.target.element_id
+
+
+def test_loop_folds_into_its_preimage_class(k10_partitioned):
+    """The loop's ancestor along the registry preimage chain is a member of the
+    same class, and the chain really is the ``-1`` iterate of both ends."""
+    session, fp = k10_partitioned
+    trellis, _partitions, table = _k10_table(session, fp)
+
+    loop = table.inert[0].loops[0]
+    a, b = loop.bridge_id
+    ancestor = table.inert[0].member(loop.folded_from)
+    assert set(ancestor.bridge_id) == {trellis.iterate(a, -1), trellis.iterate(b, -1)}
+
+
+def test_unresolved_loop_stands_alone_and_warns(k10_partitioned, monkeypatch, caplog):
     session, fp = k10_partitioned
     trellis = session.trellis()
     partitions = _all_partitions(session, [fp])
-    classes = bridge_classes(trellis, partitions)
+    before = bridge_classes(trellis, partitions)
+    loop_id = before.inert[0].loops[0].bridge_id
 
-    anchor_id = _anchor_bridge_id(trellis)
-    owner = [cls for cls, members in classes.items() if anchor_id in members]
-    assert len(owner) == 1, "the anchor bridge must land in exactly one class"
-    assert len(classes[owner[0]]) <= 2
+    monkeypatch.setattr(trellis, "iterate", lambda intersection_id, n: None)
+    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.BridgeClass"):
+        table = bridge_classes(trellis, partitions)
 
-    by_branch_side = {(r.branch_key, r.side): r for r in partitions}
-    first = owner[0].first
-    interval = by_branch_side[(first.branch_key, first.side)].element(first.element_id)
-    assert interval.lo_id is None, "the anchor's element must start at the anchor"
+    assert len(table) == 3
+    entry = table.entry_of(loop_id)
+    assert entry.bridge_class.is_loop and entry.inert
+    assert entry.members[0].folded_from is None
+    assert "loop bridge" in caplog.text and str(loop_id) in caplog.text
+    # The class the loop used to fold into is now active: no loop evidence.
+    former = before.inert[0].bridge_class
+    assert table[former].active
 
 
 def test_classes_are_keyed_by_element_pairs(k10_partitioned):
     session, fp = k10_partitioned
-    trellis = session.trellis()
-    partitions = _all_partitions(session, [fp])
-    classes = bridge_classes(trellis, partitions)
+    trellis, partitions, table = _k10_table(session, fp)
     by_branch_side = {(r.branch_key, r.side): r for r in partitions}
 
-    for cls, members in classes.items():
+    for entry in table:
+        cls = entry.bridge_class
         assert isinstance(cls, BridgeClass)
-        for bridge_id in members:
-            rows = rows_of_bridge(trellis, bridge_id)
-            for ref, row, intersection_id in zip(
-                (cls.first, cls.second), rows, bridge_id
-            ):
+        for member in entry.members:
+            if member.is_loop:
+                continue
+            rows = rows_of_bridge(trellis, member.bridge_id)
+            ends = (cls.source, cls.target) if member.direction > 0 else (cls.target, cls.source)
+            for ref, row, intersection_id in zip(ends, rows, member.bridge_id):
                 assert ref.side == row
                 branch_key = trellis.intersection(intersection_id).manifold_b_key
                 assert ref.branch_key == branch_key
@@ -320,29 +429,56 @@ def test_bridge_ids_argument_restricts_the_classing(k10_partitioned):
     partitions = _all_partitions(session, [fp])
     chosen = sorted(bridge.id for bridge in _classable_bridges(trellis))[:3]
 
-    classes = bridge_classes(trellis, partitions, bridge_ids=chosen)
-    placed = sorted(bid for members in classes.values() for bid in members)
-    assert placed == chosen
+    table = bridge_classes(trellis, partitions, bridge_ids=chosen)
+    assert table.bridge_ids == chosen
 
 
 def test_classes_and_members_come_out_in_the_documented_order(k10_partitioned):
     session, fp = k10_partitioned
-    trellis = session.trellis()
-    classes = bridge_classes(trellis, _all_partitions(session, [fp]))
+    trellis, _partitions, table = _k10_table(session, fp)
 
-    keys = list(classes)
-    assert keys == sorted(
-        keys, key=lambda cls: class_sort_key(cls, trellis.fixed_points)
-    )
-    for members in classes.values():
-        assert members == sorted(members)
+    keys = table.classes
+    assert keys == sorted(keys, key=lambda cls: class_sort_key(cls, trellis.fixed_points))
+    for entry in table:
+        assert entry.bridge_ids == sorted(entry.bridge_ids)
 
     # The key really is (fixed point, orbit, branch, side, element) twice over.
     for cls in keys:
         assert class_sort_key(cls, trellis.fixed_points) == (
-            element_sort_key(cls.first, trellis.fixed_points)
-            + element_sort_key(cls.second, trellis.fixed_points)
+            element_sort_key(cls.source, trellis.fixed_points)
+            + element_sort_key(cls.target, trellis.fixed_points)
         )
+
+
+def test_table_lookups_symbols_and_report(k10_partitioned):
+    session, fp = k10_partitioned
+    _trellis, _partitions, table = _k10_table(session, fp)
+    active, inert = table.active[0], table.inert[0]
+
+    assert table.as_dict() == {e.bridge_class: e.bridge_ids for e in table}
+    assert active.bridge_class in table and table[active.bridge_class] is active
+    with pytest.raises(KeyError):
+        table.entry_of((-1, -2))
+    with pytest.raises(KeyError):
+        active.member((-1, -2))
+
+    # Unlettered: no symbol, but the report still prints.
+    with pytest.raises(ValueError, match="no letter"):
+        active.symbol(active.bridge_ids[0])
+    assert active.name == active.bridge_class.label
+
+    active.letter = "a"
+    forward = next(m for m in active.members if m.direction > 0)
+    backward = next(m for m in active.members if m.direction < 0)
+    assert active.symbol(forward.bridge_id) == "a"
+    assert table.symbol(backward.bridge_id) == "a^-1"
+    assert active.name == "a"
+
+    report = table.describe()
+    assert "2 bridge class(es): 1 active, 1 inert" in report
+    assert "a:" in report and "a^-1" in report
+    assert "inert" in report and "folded from" in report
+    assert inert.bridge_class.label in report
 
 
 def test_a_missing_partition_names_the_branch(k10_partitioned):
@@ -380,16 +516,14 @@ def test_p3_classes_cover_both_tangles_and_mix_neither(p3_partitioned):
     must live entirely inside one tangle — and both tangles must appear."""
     session, fp3, fp1 = p3_partitioned
     trellis = session.trellis()
-    classes = bridge_classes(trellis, _all_partitions(session, [fp3, fp1]))
+    table = bridge_classes(trellis, _all_partitions(session, [fp3, fp1]))
 
     expected = sorted(bridge.id for bridge in _classable_bridges(trellis))
-    placed = sorted(bid for members in classes.values() for bid in members)
-    assert placed == expected
-    assert len(placed) == len(set(placed))
+    assert table.bridge_ids == expected
 
     seen = set()
-    for cls in classes:
-        owners = {id(cls.first.fixed_point), id(cls.second.fixed_point)}
+    for cls in table.classes:
+        owners = {id(cls.source.fixed_point), id(cls.target.fixed_point)}
         assert len(owners) == 1, f"class {cls} mixes two fixed points"
         seen |= owners
     assert seen == {id(fp3), id(fp1)}, "both tangles must contribute classes"
@@ -401,12 +535,12 @@ def test_p3_period_three_classes_use_every_stable_branch(p3_partitioned):
     over all of them, so the classes must name all three orbit indices."""
     session, fp3, fp1 = p3_partitioned
     trellis = session.trellis()
-    classes = bridge_classes(trellis, _all_partitions(session, [fp3, fp1]))
+    table = bridge_classes(trellis, _all_partitions(session, [fp3, fp1]))
 
     orbits = {
         ref.orbit_index
-        for cls in classes
-        for ref in (cls.first, cls.second)
+        for cls in table.classes
+        for ref in (cls.source, cls.target)
         if ref.fixed_point is fp3
     }
-    assert orbits == set(range(fp3.period))
+    assert orbits == {0, 1, 2}

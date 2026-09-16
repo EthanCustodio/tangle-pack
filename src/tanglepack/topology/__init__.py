@@ -44,9 +44,14 @@ from .plotting import (
 )
 from .BridgeClass import (
     BridgeClass,
+    BridgeClassEntry,
+    BridgeClassTable,
+    BridgeMember,
     bridge_classes,
     class_sort_key,
     element_sort_key,
+    oriented_class,
+    zone_label,
 )
 from .DualGraph import (
     ArcNode,
@@ -75,6 +80,9 @@ __all__ = [
     "Arc",
     "ArcNode",
     "BridgeClass",
+    "BridgeClassEntry",
+    "BridgeClassTable",
+    "BridgeMember",
     "DualGraph",
     "FaceNode",
     "ElementRef",
@@ -100,6 +108,8 @@ __all__ = [
     "class_sort_key",
     "dual_graph_legend_handles",
     "element_sort_key",
+    "oriented_class",
+    "zone_label",
     "face_point",
     "owns_cdist",
     "partition_stable_manifold",
