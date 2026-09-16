@@ -870,3 +870,45 @@ def test_containing_bridge_filters_on_the_bridges_own_key(two_branch_bridges):
     assert _containing_bridge(trellis, (0.1, 0.5), cycle[0]) is bridges[0]
     assert _containing_bridge(trellis, (0.1, 0.5), cycle[2]) is None
 
+
+
+# --------------------------------------------------------------------------- #
+# Backward images of a bridge span: iterate-table lookup first, scaling after
+# --------------------------------------------------------------------------- #
+def test_backward_endpoint_prefers_the_table_then_scales():
+    """A bridge endpoint's preimage is read from the iterate table at its
+    REGISTERED unstable cdist (5% off the scaled estimate here, which a
+    scaled span would have carried); once the chain ends, scaling by 1/beta
+    takes over from the last registered value and the id is dropped."""
+    from tanglepack.topology.StablePartition import _backward_endpoint
+
+    fp = _fixed_point(1, 4.0)
+    beta = fp.per_step_beta("unstable")
+    reg = IntersectionRegistry()
+    unstable, stable = (fp, "unstable", 0, 0), (fp, "stable", 0, 0)
+    root = reg.add_synthetic(
+        (0.0, 0.0), unstable_cdist=2.1, stable_cdist=4.0,
+        manifold_a_key=unstable, manifold_b_key=stable,
+    )
+    end = reg.add_synthetic(
+        (0.0, 0.0), unstable_cdist=8.0, stable_cdist=1.0,
+        manifold_a_key=unstable, manifold_b_key=stable,
+    )
+    reg.register_iterate(root, 1, end)
+    trellis = Trellis(fixed_points=[fp], registry=reg, branches={}, bridges=[])
+
+    linked = _backward_endpoint(trellis, end, 8.0, beta)
+    assert linked == (root, 2.1)  # the registered value, not 8 / 4 = 2
+
+    beyond = _backward_endpoint(trellis, *linked, beta)
+    assert beyond == (None, 2.1 / beta)  # chain ended: scaled from 2.1
+
+    assert _backward_endpoint(trellis, *beyond, beta) == (None, 2.1 / beta**2)
+
+    reg2 = IntersectionRegistry()
+    unlinked = reg2.add_synthetic(
+        (0.0, 0.0), unstable_cdist=8.0, stable_cdist=1.0,
+        manifold_a_key=unstable, manifold_b_key=stable,
+    )
+    trellis2 = Trellis(fixed_points=[fp], registry=reg2, branches={}, bridges=[])
+    assert _backward_endpoint(trellis2, unlinked, 8.0, beta) == (None, 2.0)

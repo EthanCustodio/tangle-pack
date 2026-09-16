@@ -547,3 +547,86 @@ def test_strong_pip_cuts_are_silent_when_every_branch_is_cut(caplog):
         _strong_pip_cuts(trellis)
 
     assert not [r for r in caplog.records if "k_value" in r.getMessage()]
+
+
+def test_table_linked_deep_iterate_does_not_disqualify():
+    """A pair member's own deep iterate is recognised by iterate-table LOOKUP,
+    not by the cdist collision. Six forward links from x1 end at a crossing whose
+    registered stable cdist has drifted 2% (beyond collision_rtol) — the k=2.8
+    script at 8 blasts lost (10, 9) exactly this way — yet the pair survives
+    because the table maps the landing back onto x1 by id. Without the links
+    the collision fallback still rejects it (the unlinked behaviour is
+    unchanged)."""
+    fp = _fixed_point(1, 4.0)
+    stable = (fp, "stable", 0, 0)
+    unstable = (fp, "unstable", 0, 0)
+
+    def chain(reg, x1, link: bool):
+        prev = x1
+        for n in range(1, 7):
+            u = 2.0 * 4.0**n
+            s = 3.0 / 4.0**n
+            if n == 6:
+                u *= 1.001  # scaled landing 2.002: strictly inside (2, 4)
+                s *= 1.02  # scaled stable 3.06 vs x1's 3: outside collision_rtol
+            nxt = reg.add_synthetic(
+                (s, u), unstable_cdist=u, stable_cdist=s,
+                manifold_a_key=unstable, manifold_b_key=stable,
+            )
+            if link:
+                reg.register_iterate(prev, 1, nxt)
+            prev = nxt
+
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    chain(reg, x1, link=True)
+    pairs = compute_pseudoneighbors(_trellis(reg, fp))
+    assert [(p.intersection_a, p.intersection_b) for p in pairs] == [
+        (r_n, x1),
+        (x1, r_end),
+    ]
+
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    chain(reg, x1, link=False)
+    pairs = compute_pseudoneighbors(_trellis(reg, fp))
+    assert [(p.intersection_a, p.intersection_b) for p in pairs] == [(r_n, x1)]
+
+
+def test_table_linked_landing_uses_registered_cdist():
+    """When the table knows a candidate's landing, the landing's REGISTERED
+    unstable cdist decides, not the scaled estimate. Here the estimate (3.0)
+    sits inside (2, 4) but the linked landing is registered at 4.5, outside, so
+    the pair (x1, r_end) survives; unlinked, the same candidate punctures."""
+    fp = _fixed_point(1, 4.0)
+    stable = (fp, "stable", 0, 0)
+    unstable = (fp, "unstable", 0, 0)
+
+    def candidate(reg, link: bool):
+        z = reg.add_synthetic(
+            (0.5, 4.5), unstable_cdist=4.5, stable_cdist=0.5,
+            manifold_a_key=unstable, manifold_b_key=stable,
+        )
+        z1 = reg.add_synthetic(
+            (0.125, 18.0), unstable_cdist=18.0, stable_cdist=0.125,
+            manifold_a_key=unstable, manifold_b_key=stable,
+        )
+        r = reg.add_synthetic(
+            (0.03125, 48.0), unstable_cdist=48.0, stable_cdist=0.03125,
+            manifold_a_key=unstable, manifold_b_key=stable,
+        )
+        if link:
+            reg.register_iterate(z, 1, z1)
+            reg.register_iterate(z1, 1, r)
+
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    candidate(reg, link=True)
+    pairs = compute_pseudoneighbors(_trellis(reg, fp))
+    assert (x1, r_end) in [(p.intersection_a, p.intersection_b) for p in pairs]
+
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    candidate(reg, link=False)
+    pairs = compute_pseudoneighbors(_trellis(reg, fp))
+    assert (x1, r_end) not in [(p.intersection_a, p.intersection_b) for p in pairs]

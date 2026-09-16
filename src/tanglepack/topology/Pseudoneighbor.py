@@ -65,13 +65,24 @@ Implementation notes:
   lambda_u > 1, only finitely many m put that inside the open interval
   (lo, hi); the m-range comes from log ratios and each candidate m is then
   tested against the strict inequalities directly.
-* The open interval is STRICT; x0, x1 and their own iterates sit exactly at
-  the (scaled) endpoints up to canonical-distance noise and are recognised by
-  a 2D endpoint collision (both the landing's unstable AND stable positions
-  match an endpoint within collision_rtol — the StrongPip same-point test;
-  never the product). A blanket relative shrink of the interval was tried
-  first and swallowed GENUINE interior crossings on deep blast levels, where
-  interval widths are small relative to the cdist magnitude.
+* Lookup before scaling. A landing M^steps(r) is first resolved through the
+  iterate table (Trellis.iterate composes the +/-1 links); a linked landing
+  is a registered crossing, so "is it x0 or x1?" and its unstable cdist are
+  exact — no tolerance is involved. Only when the table has no chain is the
+  landing placed by scaling r's cdists with the per-step constant (the cdist
+  definition; never the map). Why the order matters: registered cdists carry
+  each crossing's own absolute positional noise, while a stable cdist shrinks
+  by beta per step, so ANY relative tolerance on a scaled value fails at
+  depth — the k=2.8 script at 8 blasts lost the pair (10, 9) to its own
+  M^6(9), linked in the table but 1.8% off on the scaled stable cdist.
+* For unlinked landings the open interval is STRICT; x0, x1 and their own
+  iterates sit exactly at the (scaled) endpoints up to canonical-distance
+  noise and are recognised by a 2D endpoint collision (both the landing's
+  unstable AND stable positions match an endpoint within collision_rtol —
+  the StrongPip same-point test; never the product). A blanket relative
+  shrink of the interval was tried first and swallowed GENUINE interior
+  crossings on deep blast levels, where interval widths are small relative
+  to the cdist magnitude.
 * Check set N = trellis.own_intersection_ids, mirroring StrongPip's
   same-fixed-point restriction: a candidate whose unstable side belongs to a
   different fixed point can never iterate onto this tangle's unstable manifold
@@ -508,10 +519,14 @@ def _unstable_interval_is_clear(
     Iterates over ALL n in Z (the definition's X uses the full orbit): a
     backward iterate counts even when it lands on the removed stable tail —
     e.g. the preimages of blasted crossings puncture the interval they land
-    on, per the author. The open interval is strict; a landing is skipped only
-    when it 2D-collides with an endpoint (both the landing's unstable and
-    stable positions match, within ``collision_rtol``) — that is x0/x1's own
-    orbit up to cdist noise, the same-point test StrongPip uses.
+    on, per the author. Each landing is resolved by iterate-table LOOKUP
+    first (``Trellis.iterate``): a linked landing is a registered crossing,
+    so its identity (is it x0 or x1?) and its unstable cdist are exact. Only
+    an unlinked landing is placed by scaling the candidate's cdists with the
+    per-step constant; there the open interval is strict and the landing is
+    skipped only when it 2D-collides with an endpoint (both the scaled
+    unstable and stable positions match within ``collision_rtol``) — x0/x1's
+    own orbit up to cdist noise, the same-point test StrongPip uses.
     """
     ix0 = trellis.intersection(x0)
     ix1 = trellis.intersection(x1)
@@ -562,6 +577,33 @@ def _unstable_interval_is_clear(
                 if not (lo < value < hi):
                     continue
                 steps = d + m * k
+
+                # Lookup first: when the iterate table knows M^steps(r), the
+                # landing is a registered crossing and its identity and cdists
+                # are exact. Only an unlinked landing is placed by scaling.
+                landing = trellis.iterate(r_id, steps)
+                if landing is not None:
+                    if landing == x0 or landing == x1:
+                        continue  # the endpoint itself, by the table
+                    z = trellis.intersection(landing)
+                    # A None unstable key is unknown, not foreign (Dev Notes):
+                    # keep it, as the scaled path does at every residue.
+                    if z.manifold_a_key is not None and z.manifold_a_key != u_key:
+                        logger.warning(
+                            "Iterate table maps %d by %d steps to %d on unstable "
+                            "branch %s, not the pair's branch %s; ignoring it",
+                            r_id, steps, landing, z.manifold_a_key, u_key,
+                        )
+                        continue
+                    if lo < z.unstable_cdist < hi:
+                        logger.debug(
+                            "Pair (%d, %d) punctured by %d = M^%d(%d) "
+                            "(registered cdist %.6g in (%.6g, %.6g))",
+                            x0, x1, landing, steps, r_id, z.unstable_cdist, lo, hi,
+                        )
+                        return False
+                    continue
+
                 s_value = r.stable_cdist / beta**steps
                 if any(
                     abs(value - u_e) <= collision_rtol * u_e + tol
@@ -571,7 +613,7 @@ def _unstable_interval_is_clear(
                     continue  # the endpoint's own orbit (2D collision), not a puncture
                 logger.debug(
                     "Pair (%d, %d) punctured by %d at residue %d, m=%d "
-                    "(cdist %.6g in (%.6g, %.6g))",
+                    "(scaled cdist %.6g in (%.6g, %.6g))",
                     x0, x1, r_id, d, m, value, lo, hi,
                 )
                 return False

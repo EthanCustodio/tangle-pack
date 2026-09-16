@@ -71,8 +71,9 @@ fixed in conversation with the author (July 2026):
   condition; comparing consecutive steps for k > 1 can never fire (the bridges
   live on different branches) and would run the backward orbit far past the
   topologically significant holes. The containing bridge is found by
-  canonical-distance bookkeeping (one backward step divides unstable cdists
-  by beta = lambda_u^(1/k) and steps the branch cycle back by one). The
+  canonical-distance bookkeeping: the image span's endpoints are looked up
+  in the iterate table (registered cdists), scaled by 1/beta only where the
+  table has no link, and the branch cycle steps back by one. The
   reference hole's coordinates are carried backward
   with the real inverse map: the carried point lies inside the true image
   region, so it classifies the hole's ``bridge_side`` (which side of the
@@ -92,6 +93,15 @@ fixed in conversation with the author (July 2026):
   the zone's own boundary bridge, so the point-in-polygon test split
   otherwise identical holes by the luck of a nudge direction. Resonance
   zones remain in the loom layer for blasting only.
+* Lookup before scaling (author's rule, 2026-09-15): the backward image's
+  span is tracked through the bridge's two endpoint CROSSINGS, each stepped
+  with ``Trellis.iterate(id, -1)`` and read at its preimage's registered
+  unstable cdist; an endpoint the table does not link falls back to
+  ``cdist / beta`` and stays scaled from then on (``_backward_endpoint``).
+  Registered cdists carry each crossing's own absolute positional noise, so
+  scaled spans drift with depth; the table is exact where it reaches. The
+  ``carried`` hole coordinate is the one remaining use of the inverse map
+  here (a phase-space point for the side classification, not a cdist).
 * Partition intervals (semantics fixed with the author, July 2026 — this
   SUPERSEDES the earlier "only the outermost beyond-cut hole" rule and the
   piece-containment openness test): EVERY punched hole participates.
@@ -433,6 +443,15 @@ def propagate_reference_holes(
                 fixed_point.period,
             )
             continue
+        # The image's span is tracked through its two endpoint CROSSINGS: each
+        # backward step looks the endpoint up in the iterate table and reads
+        # the preimage's registered cdist; only an endpoint the table no
+        # longer links is scaled by the cdist definition (see
+        # _backward_endpoint).
+        ends: list[tuple[Optional[int], float]] = [
+            (end_id, trellis.intersection(end_id).unstable_cdist)
+            for end_id in (bridge.first_intersection, bridge.second_intersection)
+        ]
         carried = np.asarray(start.hole.coords, dtype=np.float64)
         start_iterate = start.iterate or 0
 
@@ -445,7 +464,8 @@ def propagate_reference_holes(
 
         for step in range(1, max_steps + 1):
             iterate = start_iterate - step
-            span = (span[0] / beta, span[1] / beta)
+            ends = [_backward_endpoint(trellis, end_id, c, beta) for end_id, c in ends]
+            span = (min(c for _, c in ends), max(c for _, c in ends))
             pos = (pos - 1) % k if pos is not None else None
             carried = _map_backward(trellis, carried)
 
@@ -1314,6 +1334,33 @@ def _bridge_unstable_span(
     lo, hi = sorted((a.unstable_cdist, b.unstable_cdist))
     pos = cycle.index(bridge.manifold_key) if bridge.manifold_key in cycle else None
     return (lo, hi), pos
+
+
+def _backward_endpoint(
+    trellis: "Trellis", end_id: Optional[int], cdist: float, beta: float
+) -> tuple[Optional[int], float]:
+    """One backward map step of a bridge endpoint: table lookup, else scaling.
+
+    A linked endpoint returns its preimage's registry id and that crossing's
+    REGISTERED unstable cdist (exact). An endpoint the table does not link —
+    or one already lost to scaling on an earlier step (``end_id`` None) —
+    returns ``None`` and ``cdist / beta`` by the cdist definition, and stays
+    scaled from then on. Never the map.
+
+    Args:
+        trellis: The Trellis whose iterate table to consult.
+        end_id: Registry id of the endpoint crossing, or None once unlinked.
+        cdist: The endpoint's current unstable cdist.
+        beta: The per-map-step unstable factor, ``per_step_beta("unstable")``.
+
+    Returns:
+        ``(preimage_id_or_None, preimage_unstable_cdist)``.
+    """
+    if end_id is not None:
+        prev = trellis.iterate(end_id, -1)
+        if prev is not None:
+            return prev, trellis.intersection(prev).unstable_cdist
+    return None, cdist / beta
 
 
 def _containing_bridge(

@@ -110,3 +110,40 @@ def test_missing_unstable_key_disqualifier_is_kept():
 
     assert not result.is_strong_pip
     assert result.blocking_intersection_id == blocker
+
+
+def test_table_linked_own_iterate_does_not_disqualify_strong_pip():
+    """q0's own forward image on the next stable branch is recognised by
+    iterate-table lookup, not by the cdist collision: registered 2% short on
+    the stable side (beyond collision_rtol) and slightly short on the unstable
+    side, it maps back strictly inside q0's box by scaling and would block q0
+    — unless the table says it IS q0's image. Unlinked, the collision fallback
+    still blocks (unchanged behaviour)."""
+    fp3 = _fixed_point(3, 4.0)
+    beta = fp3.per_step_beta("unstable")
+
+    def build(link: bool):
+        reg = IntersectionRegistry()
+        q0 = reg.add_synthetic(
+            (0.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0,
+            manifold_a_key=(fp3, "unstable", 0, 0),
+            manifold_b_key=(fp3, "stable", 0, 0),
+        )
+        image = reg.add_synthetic(
+            (0.1, 0.1), unstable_cdist=0.995 * beta, stable_cdist=0.98 / beta,
+            manifold_a_key=(fp3, "unstable", 1, 0),
+            manifold_b_key=(fp3, "stable", 1, 0),
+        )
+        if link:
+            reg.register_iterate(q0, 1, image)
+        return reg, q0, image
+
+    reg, q0, _image = build(link=True)
+    result = is_strong_pip(_trellis(reg, fp3), q0)
+    assert result.is_strong_pip
+    assert result.blocking_intersection_id is None
+
+    reg, q0, image = build(link=False)
+    result = is_strong_pip(_trellis(reg, fp3), q0)
+    assert not result.is_strong_pip
+    assert result.blocking_intersection_id == image

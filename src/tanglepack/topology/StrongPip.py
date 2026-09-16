@@ -152,7 +152,9 @@ def is_strong_pip(
         tol: Absolute canonical-distance slack. Defaults to the registry's
             ``cdist_tol``.
         collision_rtol: Relative slack for the cdist collision test that identifies
-            q0's own orbit. A point is treated as q0 (and skipped) only if its mapped
+            q0's own orbit among crossings the iterate table does NOT link (a
+            linked crossing is mapped back by lookup and recognised by id). An
+            unlinked point is treated as q0 (and skipped) only if its scaled
             stable AND unstable cdists are both within ``collision_rtol`` of q0's.
             Defaults to 1e-2, which absorbs canonical-distance scaling noise while
             still distinguishing distinct intersections.
@@ -234,21 +236,34 @@ def is_strong_pip(
             # Stable branch of a different fixed point — cannot map onto B.
             continue
         backward_steps = (pos_r - pos_B) % k
-        # backward_steps applications of M^-1: the stable cdist grows by beta per
-        # step, the unstable one shrinks by it (beta is the ONE map step factor,
-        # FixedPoint.per_step_beta -- never a hand-rolled root of lambda_u).
-        stable_rep = r.stable_cdist * (beta ** backward_steps)
-        unstable_rep = r.unstable_cdist * (beta ** -backward_steps)
+        # Lookup first: when the iterate table knows M^-backward_steps(r), the
+        # representative is a registered crossing with exact identity and
+        # cdists. q0's own orbit then maps back onto q0 itself, by id.
+        back = trellis.iterate(r_id, -backward_steps)
+        if back is not None:
+            if back == intersection_id:
+                continue
+            rep = trellis.intersection(back)
+            stable_rep = rep.stable_cdist
+            unstable_rep = rep.unstable_cdist
+        else:
+            # Unlinked: backward_steps applications of M^-1 by the cdist
+            # definition — the stable cdist grows by beta per step, the unstable
+            # one shrinks by it (beta is the ONE map step factor,
+            # FixedPoint.per_step_beta -- never a hand-rolled root of lambda_u).
+            stable_rep = r.stable_cdist * (beta ** backward_steps)
+            unstable_rep = r.unstable_cdist * (beta ** -backward_steps)
 
-        # q0's own orbit maps back onto q0 itself — a collision on BOTH cdists. That
-        # is the same point, not a disqualifier, so skip it. Requiring a collision on
-        # both cdists (a 2D coincidence) means only q0's genuine iterates are skipped;
-        # a distinct chain that merely shares q0's stable OR unstable cdist — or an
-        # equal "action" product — is not mistaken for q0.
-        collides_s = abs(stable_rep - s0) <= collision_rtol * s0 + tol
-        collides_u = abs(unstable_rep - u0) <= collision_rtol * u0 + tol
-        if collides_s and collides_u:
-            continue
+            # q0's own orbit maps back onto q0 itself — a collision on BOTH
+            # cdists. That is the same point, not a disqualifier, so skip it.
+            # Requiring a collision on both cdists (a 2D coincidence) means only
+            # q0's genuine iterates are skipped; a distinct chain that merely
+            # shares q0's stable OR unstable cdist — or an equal "action"
+            # product — is not mistaken for q0.
+            collides_s = abs(stable_rep - s0) <= collision_rtol * s0 + tol
+            collides_u = abs(unstable_rep - u0) <= collision_rtol * u0 + tol
+            if collides_s and collides_u:
+                continue
 
         if stable_rep < s0 and unstable_rep < u0 and unstable_rep < best_rep:
             best_rep = unstable_rep

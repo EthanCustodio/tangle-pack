@@ -33,7 +33,6 @@ from tanglepack.examples import (
     henon_jacobian as _henon_jacobian_factory,
 )
 
-
 henon_map = _henon_map_factory(2.8, 1)
 henon_map_inverse = _henon_map_inverse_factory(2.8, 1)
 henon_jacobian = _henon_jacobian_factory(2.8, 1)
@@ -63,7 +62,7 @@ trellis = session.trellis(fp)
 # left and right of the stable manifold.
 trellis.classify_strong_pips()
 print(f"Strong-pip candidates: {trellis.strong_pip_candidates}")
-trellis.set_strong_pip(5)
+trellis.set_strong_pip(1)
 pip = trellis.strong_pip
 print(f"Chosen strong pip: {pip}")
 
@@ -71,14 +70,14 @@ session.add_resonance_zones([pip])  # trim at the pip + recompute (ids preserved
 zone = session.resonance_zones[(fp, 0)]
 trellis = session.trellis(fp)  # fresh snapshot of the truncated trellis
 trellis.classify_strong_pips(choose_default=False)
-trellis.set_strong_pip(5)
+trellis.set_strong_pip(1)
 
 # Blasting registers the children's new stable-manifold crossings, so the
 # trellis snapshot must be refreshed (and the pip re-established) afterward.
-session.blast_zone(zone, num_iterations=13, fixed_point=[fp], min_separation=1e-5)
+session.blast_zone(zone, num_iterations=1, fixed_point=[fp], min_separation=1e-5)
 trellis = session.trellis(fp)
 trellis.classify_strong_pips(choose_default=False)
-trellis.set_strong_pip(5)
+trellis.set_strong_pip(1)
 
 # 1. Reference pseudoneighbors + full trajectories.
 reference_pseudoneighbors = session.compute_pseudoneighbors(fp, verbose=True)
@@ -91,4 +90,12 @@ holes = trellis.punch_holes(verbose=True)
 # 3. The partition of each stable branch, both sides.
 stable_partition = trellis.partition_stable_manifold(verbose=True)
 
+plt.figure(figsize=(8, 8))
+
+session.plot_holes(fp, color="tab:purple", lw=0.8)
+session.plot_pseudoneighbors(fp, color="tab:orange", lw=0.8)
+session.plot_strong_pip(fp, color="tab:green", lw=0.8)
+session.workbench.plot_tangle(fp, "unstable", color="tab:blue", lw=0.8)
+session.workbench.plot_all_bridges()
+session.workbench.plot_tangle(fp, "stable", color="tab:red", lw=0.8)
 plt.show()
