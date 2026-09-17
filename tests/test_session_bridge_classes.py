@@ -351,3 +351,27 @@ def test_alphabet_reuses_assigns_and_resets():
     alphabet.reset()
     assert len(alphabet) == 0
     assert alphabet.letter_for(second) == "a"
+
+
+def test_describe_reports_the_image_evidence(k10_partitioned):
+    """Each line ends with the images the class maps to: the active class names
+    itself by letter, the inert one lists its loop and its unresolved member."""
+    session, _fp = k10_partitioned
+
+    report = session.describe_bridge_classes()
+    active_line = next(l for l in report.splitlines() if "[active" in l)
+    inert_line = next(l for l in report.splitlines() if "[inert" in l)
+
+    assert "; images: a" in active_line
+    assert "loop in" in inert_line and "no registered image" in inert_line
+
+
+def test_k28_letters_only_the_anchor_class(k28_partitioned):
+    session, _fp = k28_partitioned
+
+    table = session.bridge_classes()
+
+    assert "3 bridge class(es): 1 active, 2 inert" in table.describe()
+    assert [e.letter for e in table.active] == ["a"]
+    assert all(e.letter is None for e in table.inert)
+    assert all(e.zone_key is not None for e in table if e.bridge_class.source.side == "right")

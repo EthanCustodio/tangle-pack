@@ -25,8 +25,13 @@ Dev Notes:
     ``area_cutoff = 1e-7``, pip = f(q0), one blast of the zone). Registry ids
     are not reproducible between builds, so the pip is named by its relation to
     the default candidate (``"default"`` = q0, ``"image"`` = f(q0)), never by id.
-    With ``PIP = "default"`` and one blast the k=2.8 case shows a folded loop
-    (an inert class with three members) instead of four single-bridge classes.
+    Since holes propagate backward only (2026-09-16) the k=2.8 case has THREE
+    classes: the anchor bridge's (the only active one, lettered ``a``), the
+    exterior class inert through a virtual loop (its image pair is registered
+    by the blast but no bridge spans it), and the interior class inert through
+    the folded blast-child loop. Before that rule the +1 image of a reference
+    pair was punched in the blast child, splitting the partition into four
+    active single-bridge classes.
 """
 
 from __future__ import annotations

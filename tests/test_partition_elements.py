@@ -392,24 +392,29 @@ def test_image_of_element_falls_back_when_an_iterate_is_missing(p3_partitioned):
 
     This is the Phase C.2 fallback: ``image_cdist`` scales the endpoint's stable
     canonical distance onto ``advance_key`` when the iterate table has no entry,
-    so every element with two real endpoints has an image.
+    so every element with two real endpoints has an image. Both tangles of the
+    fixture are scanned: since holes propagate backward only (2026-09-16) the
+    period-3 partition is coarse enough that every one of its bounded elements
+    has registered endpoint iterates, and the unregistered ones live on the
+    period-1 saddle's outermost elements.
     """
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
+    session, fp3, fp1 = p3_partitioned
 
     fell_back = 0
-    for result in trellis.stable_partitions:
-        for interval in result.intervals:
-            if interval.lo_id is None or interval.hi_id is None:
-                continue
-            if (
-                trellis.iterate(interval.lo_id, 1) is not None
-                and trellis.iterate(interval.hi_id, 1) is not None
-            ):
-                continue
-            images = trellis.image_of_element(result, interval.element_id, 1)
-            assert images is not None, "a bounded element always has an image arc"
-            fell_back += 1
+    for fixed_point in (fp3, fp1):
+        trellis = session.trellis(fixed_point)
+        for result in trellis.stable_partitions:
+            for interval in result.intervals:
+                if interval.lo_id is None or interval.hi_id is None:
+                    continue
+                if (
+                    trellis.iterate(interval.lo_id, 1) is not None
+                    and trellis.iterate(interval.hi_id, 1) is not None
+                ):
+                    continue
+                images = trellis.image_of_element(result, interval.element_id, 1)
+                assert images is not None, "a bounded element always has an image arc"
+                fell_back += 1
     assert fell_back, "the outermost elements have no registered forward iterate"
 
 

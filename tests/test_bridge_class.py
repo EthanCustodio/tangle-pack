@@ -544,3 +544,121 @@ def test_p3_period_three_classes_use_every_stable_branch(p3_partitioned):
         if ref.fixed_point is fp3
     }
     assert orbits == {0, 1, 2}
+
+
+# --------------------------------------------------------------------------- #
+# A.4 -- inertness: a class is inert iff it maps to no active class
+# --------------------------------------------------------------------------- #
+from tanglepack.topology.BridgeClass import (  # noqa: E402  (section import)
+    BridgeClassEntry,
+    _resolve_inertness,
+)
+
+
+_INERT_FP = _FakeFixedPoint()  # one fixed point, so refs compare by identity
+
+
+def _ref(element_id: int, side: str = "left") -> ElementRef:
+    return ElementRef((_INERT_FP, "stable", 0, 0), side, element_id)
+
+
+def _class(a: int, b: int) -> BridgeClass:
+    return BridgeClass(_ref(a), _ref(b))
+
+
+def _entry(bridge_class, *, classes=(), loops=(), unresolved=()) -> BridgeClassEntry:
+    return BridgeClassEntry(
+        bridge_class,
+        image_classes=list(classes),
+        image_loops=[((0, 0), element) for element in loops],
+        unresolved=list(unresolved),
+    )
+
+
+def test_resolve_inertness_fixed_point():
+    """The rule on a hand-built table: a class whose only image is a loop is
+    inert; one whose images are all inert is inert (propagated); a class that
+    maps to itself stays active; mutual images stay active; a class with no
+    resolvable image stays active for lack of evidence; and a class mapping to
+    a virtual class with no entry (unknown activity) stays active."""
+    loop_only = _class(0, 1)
+    onto_inert = _class(1, 2)
+    self_map = _class(2, 3)
+    mutual_a, mutual_b = _class(3, 4), _class(4, 5)
+    no_evidence = _class(5, 6)
+    onto_unknown = _class(6, 7)
+    unknown = _class(7, 8)  # no entry of its own
+
+    entries = [
+        _entry(loop_only, loops=[_ref(0)]),
+        _entry(onto_inert, classes=[loop_only]),
+        _entry(self_map, classes=[self_map, loop_only]),
+        _entry(mutual_a, classes=[mutual_b]),
+        _entry(mutual_b, classes=[mutual_a]),
+        _entry(no_evidence, unresolved=[(1, 2)]),
+        _entry(onto_unknown, classes=[unknown]),
+    ]
+    _resolve_inertness(entries)
+
+    by_class = {entry.bridge_class: entry for entry in entries}
+    assert by_class[loop_only].inert
+    assert by_class[onto_inert].inert
+    assert by_class[self_map].active
+    assert by_class[mutual_a].active and by_class[mutual_b].active
+    assert by_class[no_evidence].active and not by_class[no_evidence].has_image_evidence
+    assert by_class[onto_unknown].active
+
+
+def test_an_unresolved_loop_class_is_inert_outright():
+    entry = _entry(BridgeClass(_ref(2), _ref(2)))
+    _resolve_inertness([entry])
+    assert entry.bridge_class.is_loop and entry.inert
+
+
+def test_k10_inert_class_rests_on_its_folded_loop_despite_an_unresolved_member(k10_partitioned):
+    """k=10: the exterior class has one member with no registered image and one
+    whose image is the folded loop; the loop is the evidence, the unresolved
+    member is no counter-evidence. The active class maps over itself."""
+    session, fp = k10_partitioned
+    _trellis, _partitions, table = _k10_table(session, fp)
+    active, inert = table.active[0], table.inert[0]
+
+    assert inert.image_loops and not inert.image_classes
+    assert inert.unresolved, "an exterior member's image is not grown yet"
+    assert {pair for pair, _element in inert.image_loops} == {m.bridge_id for m in inert.loops}
+    assert active.bridge_class in active.image_classes
+    assert active.has_image_evidence
+
+
+def test_k28_has_one_active_and_two_inert_classes(k28_partitioned):
+    """The blasted k=2.8 tangle (holes backward only): the anchor bridge's class
+    is the only active one; the exterior class is inert through a VIRTUAL loop
+    (its image pair is registered but no bridge spans it); the interior class is
+    inert through the folded blast-child loop."""
+    session, fp = k28_partitioned
+    trellis = session.trellis()
+    partitions = _all_partitions(session, [fp])
+    table = bridge_classes(trellis, partitions)
+
+    assert len(table) == 3
+    assert len(table.active) == 1 and len(table.inert) == 2
+    active = table.active[0]
+    anchor = next(iid for iid in trellis.own_intersection_ids
+                  if trellis.intersection(iid).unstable_cdist == 0.0)
+    assert [m.bridge_id[0] for m in active.members] == [anchor]
+    assert active.bridge_class in active.image_classes
+    assert {e.bridge_class for e in table.inert} <= set(active.image_classes)
+
+    virtual, folded = sorted(table.inert, key=lambda e: len(e.loops))
+    assert not virtual.loops and len(virtual.members) == 1
+    assert len(virtual.image_loops) == 1 and not virtual.image_classes
+    (pair, element), = virtual.image_loops
+    assert trellis.bridge_between(*pair) is None, "the virtual loop has no bridge object"
+    assert element.side == virtual.bridge_class.source.side
+
+    assert len(folded.loops) == 1 and len(folded.members) == 2
+    loop = folded.loops[0]
+    assert loop.folded_from == next(m.bridge_id for m in folded.members if not m.is_loop)
+    assert folded.image_loops == [(loop.bridge_id, loop.loop_element)]
+    for entry in table:
+        assert not entry.bridge_class.is_loop

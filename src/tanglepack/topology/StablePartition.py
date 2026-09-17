@@ -155,6 +155,24 @@ fixed in conversation with the author (July 2026):
   cdist 0, so one branch's anchor was handed to another branch's first bridge
   and the backward chain stepped onto the wrong branch. Since plan row 2.3 the
   key is required at construction and the endpoint-derived fallback is gone.
+* BACKWARD ONLY (author's rule, 2026-09-16). Once a hole lands on the stable
+  manifold its forward iterates get NO hole, even when the trellis has
+  registered the image crossings (a blast does exactly that) and a bridge
+  spans them: the image region is still attached to the stable manifold, and
+  only the (uncomputed) image of the bridge on the far side of it could
+  justify a boundary there. Before this rule ``punch_holes`` punched a direct
+  hole for EVERY recorded pair, and ``extend_pseudoneighbor_trajectories``
+  records forward pairs too, so the k=2.8 blasted tangle acquired a hole in
+  the blast-child bridge (the +1 image of a reference pair) that split the
+  partition and produced a fourth bridge class; k=10 escaped only because its
+  reference pair's forward images were never registered (the manifold was not
+  grown that far). PERIOD-k CHOICE, PROVISIONAL: forward iterates
+  ``1 .. k_value - 1`` are still punched — they are how the other branches of
+  the orbit get their fundamental-segment holes, since the reference window
+  lives on the strong pip's branch alone (Pseudoneighbor Dev Notes) — and only
+  ``iterate >= k_value`` is dropped. The author asked for this to be recorded
+  as a choice to revisit, not a settled rule (``_is_forward_beyond_fundamental``
+  is the one place it lives).
 * Propagation start: a reference whose pair has no spanning Bridge object
   (after a blast there is no bridge between a parent-manifold crossing and
   a blast-child crossing) punches no direct hole, but its orbit still
@@ -252,6 +270,13 @@ def punch_holes(
     identity (``origin``/``iterate``). The hole is attached to its pair
     (``pair.hole``).
 
+    Holes propagate BACKWARD only: a pair recorded at a forward iterate
+    ``>= k_value`` of its fixed point is the image of a region still attached
+    to the stable manifold and gets no direct hole (it is logged at DEBUG and
+    left with ``pair.hole = None``). Forward iterates ``1 .. k_value - 1`` are
+    the reference trajectory's appearances on the other branches' fundamental
+    segments and are punched like references. See the module Dev Notes.
+
     Args:
         trellis: The Trellis carrying the pairs and bridges.
         pairs: Pairs to punch holes for. Defaults to every pair recorded on the
@@ -261,7 +286,8 @@ def punch_holes(
 
     Returns:
         The punched holes. Pairs with no spanning bridge are skipped with a
-        warning.
+        warning; forward-iterate pairs beyond the fundamental segment are
+        skipped silently (DEBUG).
     """
     if pairs is None:
         pairs = trellis.pseudoneighbors
@@ -272,6 +298,23 @@ def punch_holes(
     # reads pair.hole to seed the already-punched orbits and regions.
     for pair in pairs:
         pair.hole = None
+
+    # Holes propagate BACKWARD only (author's rule, 2026-09-16): a forward
+    # iterate of a punched hole is the image of a region still attached to the
+    # stable manifold and gets no hole of its own. The forward iterates
+    # +1 .. +(k_value - 1) are exempt: they are the reference trajectory's
+    # appearances on the OTHER branches' fundamental segments (the reference
+    # window lives on the strong pip's branch only). See the module Dev Notes.
+    forward = [pair for pair in pairs if _is_forward_beyond_fundamental(trellis, pair)]
+    if forward:
+        logger.debug(
+            "Not punching %d forward-iterate pair(s) (iterate >= k_value): "
+            "holes propagate backward only; %s",
+            len(forward),
+            [(pair.as_tuple(), pair.iterate) for pair in forward],
+        )
+        dropped = {id(pair) for pair in forward}
+        pairs = [pair for pair in pairs if id(pair) not in dropped]
 
     holes: list[Hole] = []
     skipped = 0
@@ -1316,6 +1359,20 @@ def _pair_fixed_point(trellis: "Trellis", pair: PseudoneighborPair) -> "FixedPoi
     """The fixed point owning the pair's stable branch."""
     key = pair.branch_key or trellis.intersection(pair.intersection_a).manifold_b_key
     return key[0]
+
+
+def _is_forward_beyond_fundamental(trellis: "Trellis", pair: PseudoneighborPair) -> bool:
+    """True for a forward-iterated pair that has wrapped past the fundamental segment.
+
+    A pair at ``iterate >= k_value`` is the image of one already on a fundamental
+    segment (its own branch's, after a full branch return) and gets no direct
+    hole; ``1 .. k_value - 1`` are the trajectory's first appearances on the
+    other branches and do. References and backward iterates return False.
+    """
+    if pair.iterate is None or pair.iterate <= 0:
+        return False
+    k_value = getattr(_pair_fixed_point(trellis, pair), "k_value", 1)
+    return pair.iterate >= k_value
 
 
 def _bridge_unstable_span(

@@ -912,3 +912,82 @@ def test_backward_endpoint_prefers_the_table_then_scales():
     )
     trellis2 = Trellis(fixed_points=[fp], registry=reg2, branches={}, bridges=[])
     assert _backward_endpoint(trellis2, unlinked, 8.0, beta) == (None, 2.0)
+
+
+# --------------------------------------------------------------------------- #
+# Holes propagate backward only (author's rule, 2026-09-16)
+# --------------------------------------------------------------------------- #
+class _FakePair:
+    """The two attributes _is_forward_beyond_fundamental reads off a pair."""
+
+    def __init__(self, iterate, fixed_point):
+        self.iterate = iterate
+        self.branch_key = (fixed_point, "stable", 0, 0)
+        self.intersection_a = 0
+
+
+@pytest.mark.parametrize(
+    ("period", "iterate", "dropped"),
+    [
+        (1, 0, False),   # a reference
+        (1, -1, False),  # backward iterates always punch
+        (1, -7, False),
+        (1, 1, True),    # k_value = 1: no forward hole at all
+        (1, 2, True),
+        (3, 1, False),   # k_value = 3: +1, +2 are the other branches' segments
+        (3, 2, False),
+        (3, 3, True),    # a full branch return wraps past the fundamental segment
+        (3, 4, True),
+        (3, None, False),
+    ],
+)
+def test_forward_pairs_beyond_the_fundamental_segment_get_no_hole(period, iterate, dropped):
+    """The PROVISIONAL period-k rule: forward iterates ``>= k_value`` are the
+    images of holes still attached to the stable manifold and are not punched;
+    ``1 .. k_value - 1`` land on the other branches' fundamental segments and
+    are. The author wants to revisit this for period k > 1."""
+    from tanglepack.topology.StablePartition import _is_forward_beyond_fundamental
+
+    fp = _fixed_point(period, 4.0)
+    assert fp.k_value == period
+    pair = _FakePair(iterate, fp)
+
+    assert _is_forward_beyond_fundamental(None, pair) is dropped
+
+
+def test_k28_blast_child_gets_no_forward_hole(k28_partitioned):
+    """On the blasted k=2.8 tangle the +1 image of a reference pair is a
+    registered blast-child bridge. It gets NO hole: the trellis carries exactly
+    the two reference holes and their backward images in the anchor bridge, and
+    the +1 pair is recorded (a real pseudoneighbor pair) but unpunched."""
+    session, fp = k28_partitioned
+    trellis = session.trellis(fp)
+
+    assert all(hole.iterate is not None and hole.iterate <= 0 for hole in trellis.holes)
+    references = [p for p in trellis.pseudoneighbors if p.is_reference]
+    assert len(references) == 2 and all(p.hole is not None for p in references)
+    forward = [p for p in trellis.pseudoneighbors if p.iterate and p.iterate > 0]
+    assert forward, "the blast registers the forward pair"
+    assert all(p.hole is None for p in forward)
+
+    anchor = next(iid for iid in trellis.own_intersection_ids
+                  if trellis.intersection(iid).unstable_cdist == 0.0)
+    allowed = {frozenset(p.as_tuple()) for p in references}
+    for hole in trellis.holes:
+        bounding = frozenset(hole.bounding_ids)
+        assert bounding in allowed or anchor in bounding, (
+            f"hole {hole.bounding_ids} at iterate {hole.iterate} is neither a "
+            "reference hole nor a backward image in the anchor bridge"
+        )
+    assert len(trellis.holes) == 4
+
+
+def test_p3_forward_holes_stop_at_the_branch_return(p3_partitioned):
+    """Period 3: the +1 and +2 iterates of a reference pair (its appearances
+    on the other two branches) are punched, nothing at +3 or beyond is."""
+    session, fp3, _fp1 = p3_partitioned
+    trellis = session.trellis(fp3)
+
+    forward = sorted({h.iterate for h in trellis.holes if h.iterate and h.iterate > 0})
+    assert forward == [1, 2]
+    assert not [p for p in trellis.pseudoneighbors if p.iterate and p.iterate >= 3 and p.hole]

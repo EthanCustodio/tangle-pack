@@ -1084,7 +1084,9 @@ class Trellis:
         ``propagate=True`` (default) the reference bridges are also mapped
         backward and their generated holes punched (see
         :func:`topology.StablePartition.propagate_reference_holes`). All holes
-        are stored in :attr:`holes`.
+        are stored in :attr:`holes`. Holes propagate backward only: a recorded
+        pair at a forward iterate ``>= k_value`` gets no hole (its region is
+        the image of one still attached to the stable manifold).
 
         Args:
             pairs: Pairs to punch holes for; defaults to every recorded pair.
