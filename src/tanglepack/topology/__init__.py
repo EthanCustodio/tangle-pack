@@ -39,8 +39,11 @@ from .Pseudoneighbor import (
 from .plotting import (
     dual_graph_legend_handles,
     face_point,
+    minimal_trellis_legend_handles,
     plot_dual_graph,
+    plot_minimal_trellis,
     plot_stable_partition,
+    stable_node_point,
 )
 from .BridgeClass import (
     BridgeClass,
@@ -54,9 +57,20 @@ from .BridgeClass import (
     zone_label,
 )
 from .DualGraph import (
-    ArcNode,
     DualGraph,
     FaceNode,
+    StableNode,
+)
+from .MinimalTrellis import (
+    MinimalTrellis,
+    image_chain,
+    minimal_trellis,
+)
+from .PartitionFamily import (
+    Cut,
+    HomotopyPartition,
+    IteratedHomotopyPartition,
+    PartitionFamily,
 )
 from .StablePartition import (
     bridge_for_pair,
@@ -78,7 +92,14 @@ __all__ = [
     "TrellisBranch",
     "Arrangement",
     "Arc",
-    "ArcNode",
+    "StableNode",
+    "MinimalTrellis",
+    "image_chain",
+    "minimal_trellis",
+    "Cut",
+    "HomotopyPartition",
+    "IteratedHomotopyPartition",
+    "PartitionFamily",
     "BridgeClass",
     "BridgeClassEntry",
     "BridgeClassTable",
@@ -114,6 +135,9 @@ __all__ = [
     "owns_cdist",
     "partition_stable_manifold",
     "plot_dual_graph",
+    "plot_minimal_trellis",
+    "minimal_trellis_legend_handles",
+    "stable_node_point",
     "plot_stable_partition",
     "propagate_reference_holes",
     "punch_holes",

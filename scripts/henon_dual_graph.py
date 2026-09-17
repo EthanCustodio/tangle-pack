@@ -228,9 +228,9 @@ def report_and_plot(
     print(f"{title}")
     print("=" * len(title))
     print(dual_graph.summary())
-    for branch_key, (low, high) in dual_graph.fill_segments.items():
+    for branch_key, (low, high) in dual_graph.fundamental_segments.items():
         print(
-            f"  fill on stable branch {branch_key[1:]} (period "
+            f"  fundamental segment on stable branch {branch_key[1:]} (period "
             f"{branch_key[0].period}): ({low:.4g}, {high:.4g}]"
         )
 

@@ -10,7 +10,7 @@ Dev Notes — topological plotting.
 The z-orders are a stack, not arbitrary numbers: black intersections (drawn by
 the numerical layer) sit lowest, then the dual graph's own edges (z=1) and
 face points (z=2) — kept low so a dual graph drawn over a trellis plot never
-hides the numerics dots underneath it — then its arc nodes (z=10), then the
+hides the numerics dots underneath it — then its stable nodes (z=10), then the
 magenta strong-pip CANDIDATES (z=11), then the green chosen pip (z=12) on top
 of the set it was chosen from, then the orange pseudoneighbours (z=13), then
 the holes (z=14) and their labels (z=15). Changing one means checking the
@@ -30,7 +30,7 @@ trellises, so there is no single owning trellis to hang a method off.
 from __future__ import annotations
 
 import logging
-from typing import Iterable, TYPE_CHECKING, Union
+from typing import Iterable, Optional, Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -39,7 +39,8 @@ from numpy.typing import NDArray
 from .TopologyResults import StablePartitionResult
 
 if TYPE_CHECKING:
-    from .DualGraph import ArcNode, DualGraph, FaceNode
+    from .DualGraph import DualGraph, FaceNode, StableNode
+    from .MinimalTrellis import MinimalTrellis
     from .Trellis import Trellis
 
 logger = logging.getLogger(__name__)
@@ -295,6 +296,8 @@ def plot_holes(
 def plot_stable_partition(
     results: Union[StablePartitionResult, Iterable[StablePartitionResult]],
     ax=None,
+    *,
+    labels: Optional[Sequence[str]] = None,
     **line_kwargs,
 ):
     """
@@ -309,8 +312,16 @@ def plot_stable_partition(
     Args:
         results: One StablePartitionResult or an iterable of them.
         ax: Optional matplotlib Axes. Defaults to the current axes.
+        labels: Optional y-axis label per row (one per result, in order),
+            replacing the default ``"<side> (p<period>, orbit <n>)"`` — for
+            instance to tell a homotopy row from an iterated row of the same
+            branch and side on one axes.
         **line_kwargs: Forwarded to the interval ``plot`` calls (e.g.
             ``linewidth``, ``color``).
+
+    Raises:
+        ValueError: If ``labels`` is given with a different length than
+            ``results``.
 
     Returns:
         The Axes drawn on, or None if there was nothing to draw.
@@ -325,12 +336,18 @@ def plot_stable_partition(
     target = ax if ax is not None else plt.gca()
     line_kwargs.setdefault("linewidth", 2)
 
-    labels = []
+    if labels is not None and len(labels) != len(results):
+        raise ValueError(
+            f"{len(labels)} row labels were given for {len(results)} partition(s)"
+        )
+    row_labels: list[str] = []
     extent_lo, extent_hi = np.inf, -np.inf
     for row, result in enumerate(results):
         color = "tab:blue" if result.side == "left" else "tab:red"
-        labels.append(
-            f"{result.side} (p{result.branch_key[0].period}, "
+        row_labels.append(
+            labels[row]
+            if labels is not None
+            else f"{result.side} (p{result.branch_key[0].period}, "
             f"orbit {result.branch_key[2]})"
         )
         labelled: set[int] = set()
@@ -397,7 +414,7 @@ def plot_stable_partition(
         )
 
     target.set_yticks(range(len(results)))
-    target.set_yticklabels(labels)
+    target.set_yticklabels(row_labels)
     target.set_ylim(-0.6, len(results) - 0.4)
     target.set_xlabel("stable canonical distance")
     target.set_title(
@@ -407,42 +424,199 @@ def plot_stable_partition(
     return target
 
 
+# ── the minimal trellis ─────────────────────────────────────────────────────
+
+#: Line defaults for the bridges a minimal trellis DROPPED.
+MINIMAL_TRELLIS_DROPPED_STYLE = {"color": "lightgray", "linewidth": 0.6, "zorder": 3}
+#: Line defaults for the hole bridges (the ones the homotopy partition is cut by).
+MINIMAL_TRELLIS_HOLE_STYLE = {"color": "tab:purple", "linewidth": 1.8, "zorder": 5}
+#: Line defaults for the image bridges (the ones the iterated partition adds).
+MINIMAL_TRELLIS_IMAGE_STYLE = {
+    "color": "tab:orange",
+    "linewidth": 1.8,
+    "linestyle": "--",
+    "zorder": 4,
+}
+
+
+def plot_minimal_trellis(
+    minimal: "MinimalTrellis",
+    ax=None,
+    *,
+    show_dropped: bool = True,
+    **line_kwargs,
+):
+    """
+    Draw the bridges of a minimal trellis over the plane.
+
+    Hole bridges are drawn solid (:data:`MINIMAL_TRELLIS_HOLE_STYLE`), image
+    bridges dashed (:data:`MINIMAL_TRELLIS_IMAGE_STYLE`), and the bridges the
+    reduction dropped in light gray (:data:`MINIMAL_TRELLIS_DROPPED_STYLE`)
+    so the reader sees what was left out. The stable manifold is not drawn
+    here; draw the tangle underneath first.
+
+    Args:
+        minimal: The minimal trellis to draw.
+        ax: Optional matplotlib Axes. Defaults to the current axes.
+        show_dropped: Draw the dropped bridges too (default True).
+        **line_kwargs: Overrides applied to every bridge line (e.g.
+            ``linewidth``).
+
+    Returns:
+        The Axes drawn on.
+    """
+    target = ax if ax is not None else plt.gca()
+    groups = [
+        (minimal.hole_bridge_ids, MINIMAL_TRELLIS_HOLE_STYLE),
+        (minimal.image_bridge_ids, MINIMAL_TRELLIS_IMAGE_STYLE),
+    ]
+    if show_dropped:
+        groups.insert(0, (minimal.dropped_bridge_ids, MINIMAL_TRELLIS_DROPPED_STYLE))
+    for bridge_ids, base in groups:
+        style = dict(base)
+        style.update(line_kwargs)
+        for bridge_id in bridge_ids:
+            bridge = minimal.trellis.bridge_between(*bridge_id)
+            if bridge is None:
+                logger.debug("bridge %s has no object to draw; skipping it", bridge_id)
+                continue
+            points = bridge.get_point_array()
+            if len(points) < 2:
+                continue
+            target.plot(points[:, 0], points[:, 1], **style)
+    return target
+
+
+def minimal_trellis_legend_handles() -> list:
+    """
+    Legend proxies matching :func:`plot_minimal_trellis`'s three bridge kinds.
+
+    Returns:
+        ``Line2D`` handles labelled "hole bridge", "image bridge", "dropped
+        bridge", built from the same style tables the plotter uses.
+    """
+    from matplotlib.lines import Line2D
+
+    return [
+        Line2D([0], [0], label="hole bridge", **MINIMAL_TRELLIS_HOLE_STYLE),
+        Line2D([0], [0], label="image bridge", **MINIMAL_TRELLIS_IMAGE_STYLE),
+        Line2D([0], [0], label="dropped bridge", **MINIMAL_TRELLIS_DROPPED_STYLE),
+    ]
+
+
 # ── the dual graph ──────────────────────────────────────────────────────────
 
+#: How far off its edge a side node is drawn: this fraction of the diagonal of
+#: the bounding box of every edge midpoint in the graph.
+DUAL_GRAPH_SIDE_OFFSET_FRACTION = 0.015
 
-def _arc_midpoints(
-    trellis: "Trellis", nodes: Iterable["ArcNode"]
+
+def _edge_midpoints(
+    trellis: "Trellis", nodes: Iterable["StableNode"]
 ) -> list[NDArray[np.float64]]:
-    """The usable (non-degenerate) midpoints of a run of arc nodes."""
+    """The usable (non-degenerate) midpoints of a run of stable nodes."""
     mids: list[NDArray[np.float64]] = []
     for node in nodes:
         mid = node.midpoint(trellis)
         if mid is None:
             logger.debug(
-                "arc node %s has a degenerate midpoint; skipping it", node.key
+                "stable node %s has a degenerate midpoint; skipping it", node.key
             )
             continue
         mids.append(mid)
     return mids
 
 
+def _midpoint_bbox(dual_graph: "DualGraph"):
+    """``(mins, maxs, diagonal)`` of every edge midpoint, or None with none."""
+    all_mids = _edge_midpoints(
+        dual_graph.arrangement.trellis, dual_graph.stable_nodes.values()
+    )
+    if not all_mids:
+        return None
+    points = np.vstack(all_mids)
+    mins = points.min(axis=0)
+    maxs = points.max(axis=0)
+    return mins, maxs, float(np.linalg.norm(maxs - mins))
+
+
+def _anchorward_look(
+    node: "StableNode", trellis: "Trellis"
+) -> Optional[NDArray[np.float64]]:
+    """
+    The unit direction toward the anchor at the middle of a stable edge.
+
+    Read from the two polyline vertices flanking the half-length point of the
+    edge's natural (lo -> hi, anchor outward) polyline, negated; None for a
+    degenerate polyline.
+    """
+    polyline = np.asarray(node.arc.polyline(trellis), dtype=float)
+    if len(polyline) < 2:
+        return None
+    steps = np.linalg.norm(np.diff(polyline, axis=0), axis=1)
+    total = float(steps.sum())
+    if total <= 0.0:
+        return None
+    cumulative = np.concatenate([[0.0], np.cumsum(steps)])
+    index = int(np.searchsorted(cumulative, 0.5 * total, side="right") - 1)
+    index = min(max(index, 0), len(polyline) - 2)
+    outward = polyline[index + 1] - polyline[index]
+    norm = float(np.linalg.norm(outward))
+    if norm <= 0.0:
+        return None
+    return -outward / norm
+
+
+def stable_node_point(
+    dual_graph: "DualGraph", node: "StableNode"
+) -> Optional[NDArray[np.float64]]:
+    """
+    Where to draw one stable node.
+
+    A unified (solid) node sits ON the midpoint of its edge. A side node sits
+    just off it, on its side of the stable manifold: displaced along the
+    left normal of the anchorward look (positive cross = left, the
+    partition's own convention) by :data:`DUAL_GRAPH_SIDE_OFFSET_FRACTION` of
+    the graph's midpoint bounding-box diagonal — to the left for a
+    ``"left"`` node, to the right for a ``"right"`` one.
+
+    Args:
+        dual_graph: The graph ``node`` belongs to.
+        node: The stable node to place.
+
+    Returns:
+        The ``(2,)`` point, or None when the edge's polyline is degenerate.
+    """
+    trellis = dual_graph.arrangement.trellis
+    mid = node.midpoint(trellis)
+    if mid is None:
+        return None
+    mid = np.asarray(mid, dtype=float)
+    if node.is_unified:
+        return mid
+    look = _anchorward_look(node, trellis)
+    bbox = _midpoint_bbox(dual_graph)
+    if look is None or bbox is None:
+        return mid
+    normal = np.array([-look[1], look[0]])  # the left of the anchorward look
+    offset = DUAL_GRAPH_SIDE_OFFSET_FRACTION * bbox[2]
+    return mid + (normal if node.sides[0] == "left" else -normal) * offset
+
+
 def _push_outside_bbox(
     dual_graph: "DualGraph", point: NDArray[np.float64]
 ) -> NDArray[np.float64]:
-    """Push a point outside the bounding box of every arc node's midpoint.
+    """Push a point outside the bounding box of every edge midpoint.
 
     Lands on the bbox corner in ``point``'s own quadrant (relative to the bbox
     centre), then a further :data:`DUAL_GRAPH_PUSH_FRACTION` of the bbox
     diagonal outward.
     """
-    all_mids = _arc_midpoints(dual_graph.trellis, dual_graph.arc_nodes.values())
-    if not all_mids:
+    bbox = _midpoint_bbox(dual_graph)
+    if bbox is None:
         return point
-    points = np.vstack(all_mids)
-    mins = points.min(axis=0)
-    maxs = points.max(axis=0)
+    mins, maxs, diagonal = bbox
     center = 0.5 * (mins + maxs)
-    diagonal = float(np.linalg.norm(maxs - mins))
 
     direction = point - center
     sign = np.sign(direction)
@@ -466,19 +640,18 @@ def face_point(
         The ``(2,)`` point: a COPY of a region's own
         :attr:`~.TopologyResults.Region.representative_point` when the node
         stands for exactly one closed minimal face (never the region's own
-        cached array); otherwise the mean of the midpoints of its boundary arc
-        nodes. Only the ONE node with :attr:`~.DualGraph.FaceNode.is_unbounded`
-        set has that mean pushed outside the bounding box of every arc node's
-        midpoint in the graph (see :func:`_push_outside_bbox`) — a bounded
-        face's point is returned as computed, with no guarantee it falls
-        outside any other face (a region's representative point is itself only
-        a heuristic; see its docstring for the degenerate case where it lands
-        well outside a tight tangle).
+        cached array); otherwise the mean of the midpoints of its boundary
+        stable edges. Only the ONE node with
+        :attr:`~.DualGraph.FaceNode.is_unbounded` set has that mean pushed
+        outside the bounding box of every edge midpoint in the graph (see
+        :func:`_push_outside_bbox`) — a bounded face's point is returned as
+        computed, with no guarantee it falls outside any other face (a
+        region's representative point is itself only a heuristic).
 
     Note:
         A region's ``representative_point`` can itself be None (a boundary too
         degenerate to have an interior); that, like an "open"/"outer" node,
-        falls back to the arc-midpoint mean.
+        falls back to the edge-midpoint mean.
     """
     if face_node.kind == "region" and face_node.faces:
         point = face_node.faces[0].representative_point
@@ -486,17 +659,17 @@ def face_point(
             return point.copy()
         logger.debug(
             "face node %d (region) has no representative point; falling back "
-            "to the mean of its arc midpoints",
+            "to the mean of its edge midpoints",
             face_node.index,
         )
 
-    mids = _arc_midpoints(dual_graph.trellis, face_node.arc_nodes)
+    mids = _edge_midpoints(dual_graph.arrangement.trellis, face_node.stable_node_list)
     if mids:
         mean = np.mean(np.vstack(mids), axis=0).astype(np.float64)
     else:
         mean = np.zeros(2, dtype=np.float64)
         logger.debug(
-            "face node %d has no arc midpoints to average; defaulting to the "
+            "face node %d has no edge midpoints to average; defaulting to the "
             "origin before any outward push",
             face_node.index,
         )
@@ -508,17 +681,19 @@ def face_point(
 
 def _clip_axes_to_arcs(ax, dual_graph: "DualGraph") -> None:
     """
-    Limit an axes to the padded bbox of every arc midpoint and the unbounded
+    Limit an axes to the padded bbox of every edge midpoint and the unbounded
     face point.
 
     A bounded region's :attr:`~.TopologyResults.Region.representative_point`
     is only a heuristic and can, in a degenerate case, land far outside a
     tight tangle; left to matplotlib's autoscale that single outlier point
     blows the view out past anything useful, so :func:`plot_dual_graph`'s
-    default view is clipped to what the arcs (and the one unbounded point)
+    default view is clipped to what the edges (and the one unbounded point)
     actually span instead.
     """
-    points = _arc_midpoints(dual_graph.trellis, dual_graph.arc_nodes.values())
+    points = _edge_midpoints(
+        dual_graph.arrangement.trellis, dual_graph.stable_nodes.values()
+    )
     points = points + [face_point(dual_graph, dual_graph.unbounded)]
     if not points:
         return
@@ -539,149 +714,143 @@ def plot_dual_graph(
     **scatter_kwargs,
 ):
     """
-    Draw a dual graph: arc nodes, face points, and the edges between them.
+    Draw a dual graph over the plane.
 
-    Arc nodes are drawn at their midpoint — a hollow circle when the arc is a
-    wall, filled when it is passable (:attr:`~.DualGraph.ArcNode.filled`). Each
-    face node gets a small dot at its :func:`face_point`, joined by a thin grey
-    line to every arc node on its boundary.
+    Every stable node is a circle: an OPEN circle just off its edge on its own
+    side for a wall (a side node), a SOLID circle on the edge for a unified,
+    traversable node (:func:`stable_node_point` places both). Every face node
+    is a small point (:func:`face_point`) joined by a thin line to the stable
+    node on its side of each stable edge on its boundary. Bridges are not
+    drawn; draw the tangle underneath first.
 
     Args:
         dual_graph: The graph to draw.
-        ax: Optional matplotlib Axes to draw on. Defaults to the current axes
-            (plt).
-        show_labels: If True, annotate each arc node with
-            ``f"{left.label}|{right.label}"`` and each face node with its
-            index and kind.
-        clip_to_arcs: If True (default), set the axes limits to the bounding
-            box of every arc midpoint plus the unbounded face node's point,
-            padded by :data:`DUAL_GRAPH_PUSH_FRACTION` of that bbox's diagonal
-            (see :func:`_clip_axes_to_arcs`) — a bounded region's
-            representative point can otherwise sit far outside the tangle and
-            blow out matplotlib's autoscale. Pass False to let the axes
-            autoscale to everything drawn, outliers included.
-        **scatter_kwargs: Forwarded to both the hollow and the filled arc-node
-            scatter, overriding :data:`DUAL_GRAPH_ARC_STYLE`. ``facecolors``
-            and ``c`` are managed internally (they are how a wall is told from
-            a passable node) and raise ``ValueError`` if passed; use
-            ``color`` (fill/edge colour) and ``edgecolors`` instead. Face
-            points and the edges to them keep their own fixed style
-            (:data:`DUAL_GRAPH_FACE_STYLE`, :data:`DUAL_GRAPH_EDGE_STYLE`).
+        ax: Optional matplotlib Axes. Defaults to the current axes.
+        show_labels: Annotate each stable node with its element label(s) and
+            each face node with ``index:kind``.
+        clip_to_arcs: Limit the axes to the padded bounding box of the edge
+            midpoints and the unbounded face point (see
+            :func:`_clip_axes_to_arcs`). Pass False to keep matplotlib's
+            autoscale, e.g. when drawing over a tangle whose view is set
+            elsewhere.
+        **scatter_kwargs: Overrides for the stable-node scatters on top of
+            :data:`DUAL_GRAPH_ARC_STYLE` — ``color`` (the solid fill and,
+            unless ``edgecolors`` is given, the open ring), ``edgecolors``,
+            ``s``, ``zorder``, ...
 
     Returns:
         The Axes drawn on.
 
     Raises:
-        ValueError: If ``scatter_kwargs`` tries to override ``facecolors`` or
-            ``c``.
-    """
-    target = ax if ax is not None else plt.gca()
+        ValueError: If ``facecolors`` or ``c`` is passed — open versus solid
+            is what this plotter decides; use ``color`` / ``edgecolors``.
 
+    Note:
+        The two stable-node scatters are ALWAYS drawn, even when one set is
+        empty, so they land at fixed positions 0 (open) and 1 (solid) in
+        ``ax.collections`` — callers (tests included) can tell them apart
+        without inspecting facecolors.
+    """
     reserved = _RESERVED_ARC_KWARGS.intersection(scatter_kwargs)
     if reserved:
         raise ValueError(
-            f"plot_dual_graph manages {sorted(reserved)} itself (hollow vs. "
-            "filled arc nodes); pass 'color'/'edgecolors' instead"
+            f"plot_dual_graph manages {sorted(reserved)} itself (open vs. "
+            "solid stable nodes); pass 'color'/'edgecolors' instead"
         )
+    target = ax if ax is not None else plt.gca()
 
     style = dict(DUAL_GRAPH_ARC_STYLE)
     style.update(scatter_kwargs)
     color = style.pop("color")
     edgecolors = style.pop("edgecolors", color)
 
-    hollow: list[tuple] = []
-    filled: list[tuple] = []
-    for node in dual_graph.arc_nodes.values():
-        mid = node.midpoint(dual_graph.trellis)
-        if mid is None:
-            logger.debug(
-                "arc node %s has a degenerate midpoint; skipping it", node.key
-            )
+    placed: dict[tuple, NDArray[np.float64]] = {}
+    open_points: list[NDArray[np.float64]] = []
+    solid_points: list[NDArray[np.float64]] = []
+    for node in dual_graph.stable_nodes.values():
+        point = stable_node_point(dual_graph, node)
+        if point is None:
+            logger.debug("stable node %s has a degenerate midpoint; skipping it", node.key)
             continue
-        (filled if node.filled else hollow).append((node, mid))
+        placed[node.key] = point
+        (solid_points if node.is_unified else open_points).append(point)
 
-    # Always scattered, even with zero points, so the two arc-node collections
-    # land at fixed positions (0, 1) in ``target.collections`` regardless of
-    # whether either set is empty -- callers (tests included) can tell hollow
-    # from filled without inspecting facecolors.
-    hollow_coords = (
-        np.vstack([mid for _node, mid in hollow]) if hollow else np.empty((0, 2))
-    )
-    filled_coords = (
-        np.vstack([mid for _node, mid in filled]) if filled else np.empty((0, 2))
-    )
+    open_coords = np.vstack(open_points) if open_points else np.empty((0, 2))
+    solid_coords = np.vstack(solid_points) if solid_points else np.empty((0, 2))
     target.scatter(
-        hollow_coords[:, 0], hollow_coords[:, 1],
+        open_coords[:, 0], open_coords[:, 1],
         facecolors="none", edgecolors=edgecolors, **style,
     )
-    target.scatter(filled_coords[:, 0], filled_coords[:, 1], color=color, **style)
+    target.scatter(solid_coords[:, 0], solid_coords[:, 1], color=color, **style)
 
     if show_labels:
-        for node, mid in hollow + filled:
+        for node in dual_graph.stable_nodes.values():
+            point = placed.get(node.key)
+            if point is None:
+                continue
+            text = "|".join(node.elements[side].label for side in node.sides)
             target.annotate(
-                f"{node.left.label}|{node.right.label}", mid,
-                textcoords="offset points", xytext=(3, 3), fontsize=7,
+                text, point, textcoords="offset points", xytext=(3, 3), fontsize=7,
             )
 
-    face_points: dict[int, NDArray[np.float64]] = {}
+    face_points: list[NDArray[np.float64]] = []
     for face_node in dual_graph.face_nodes:
-        point = face_point(dual_graph, face_node)
-        face_points[face_node.index] = point
-        for arc_node in face_node.arc_nodes:
-            mid = arc_node.midpoint(dual_graph.trellis)
-            if mid is None:
+        hub = face_point(dual_graph, face_node)
+        face_points.append(hub)
+        for stable_node, _side in face_node.stable_nodes:
+            point = placed.get(stable_node.key)
+            if point is None:
                 continue
             target.plot(
-                [point[0], mid[0]], [point[1], mid[1]], **DUAL_GRAPH_EDGE_STYLE,
+                [hub[0], point[0]], [hub[1], point[1]], **DUAL_GRAPH_EDGE_STYLE,
             )
         if show_labels:
             target.annotate(
-                f"{face_node.index}:{face_node.kind}", point,
-                textcoords="offset points", xytext=(3, -3),
-                fontsize=7, color=DUAL_GRAPH_FACE_STYLE["color"],
+                f"{face_node.index}:{face_node.kind}", hub,
+                textcoords="offset points", xytext=(3, -3), fontsize=7,
+                color="dimgray",
             )
-
     if face_points:
-        coords = np.vstack(list(face_points.values()))
-        target.scatter(coords[:, 0], coords[:, 1], **DUAL_GRAPH_FACE_STYLE)
+        stacked = np.vstack(face_points)
+        target.scatter(stacked[:, 0], stacked[:, 1], **DUAL_GRAPH_FACE_STYLE)
 
     if clip_to_arcs:
         _clip_axes_to_arcs(target, dual_graph)
-
     return target
 
 
 def dual_graph_legend_handles() -> list:
     """
-    Legend handles matching :func:`plot_dual_graph`'s fixed styles.
+    Legend proxies matching :func:`plot_dual_graph`'s four marks.
 
     Returns:
-        A list of ``matplotlib.lines.Line2D`` proxies, for
-        ``ax.legend(handles=...)``: the hollow wall node, the filled passable
-        node, the face node, and the face-to-arc edge.
+        ``Line2D`` handles labelled "stable node (open, wall)", "stable node
+        (solid, traversable)", "face node" and "face-node edge", built from the
+        same style tables the plotter uses (marker sizes are
+        ``sqrt(style["s"])`` in points).
     """
     from matplotlib.lines import Line2D
 
-    arc = DUAL_GRAPH_ARC_STYLE
-    face = DUAL_GRAPH_FACE_STYLE
-    edge = DUAL_GRAPH_EDGE_STYLE
-    arc_size = float(np.sqrt(arc["s"]))
+    arc_size = float(np.sqrt(DUAL_GRAPH_ARC_STYLE["s"]))
+    face_size = float(np.sqrt(DUAL_GRAPH_FACE_STYLE["s"]))
+    color = DUAL_GRAPH_ARC_STYLE["color"]
     return [
         Line2D(
-            [], [], marker="o", linestyle="none", markerfacecolor="none",
-            markeredgecolor=arc["color"], markersize=arc_size,
-            label="arc node (wall)",
+            [0], [0], marker="o", linestyle="none", markersize=arc_size,
+            markerfacecolor="none", markeredgecolor=color,
+            label="stable node (open, wall)",
         ),
         Line2D(
-            [], [], marker="o", linestyle="none", color=arc["color"],
-            markersize=arc_size, label="arc node (passable)",
+            [0], [0], marker="o", linestyle="none", markersize=arc_size,
+            markerfacecolor=color, markeredgecolor=color,
+            label="stable node (solid, traversable)",
         ),
         Line2D(
-            [], [], marker="o", linestyle="none", color=face["color"],
-            markersize=float(np.sqrt(face["s"])), label="face node",
+            [0], [0], marker="o", linestyle="none", markersize=face_size,
+            color=DUAL_GRAPH_FACE_STYLE["color"], label="face node",
         ),
         Line2D(
-            [], [], color=edge["color"], linewidth=edge["linewidth"],
-            label="face-arc edge",
+            [0], [0], color=DUAL_GRAPH_EDGE_STYLE["color"],
+            linewidth=DUAL_GRAPH_EDGE_STYLE["linewidth"], label="face-node edge",
         ),
     ]

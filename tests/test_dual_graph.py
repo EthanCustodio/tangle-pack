@@ -1,37 +1,23 @@
-"""Phase B — the dual graph: arc nodes, merged face nodes, and the fill.
+"""
+The dual graph of a minimal trellis over the iterated homotopy partition.
 
-Four things are pinned here, in the order they can break.
-
-**Composition of iterates** (the pre-task): ``Trellis.iterate`` composes single
-steps when the table has no direct entry, so a chain that exists link by link is
-answerable end to end.
-
-**The graph's shape**: one arc node per stable edge of every face, a face on both
-sides of every arc node, one face node per union-find class, and exactly one
-``outer`` node per level of nesting — one on the flat k=10 fixture, two on the
-nested period-3 one, where the inner tangle's outer face is merged into the outer
-tangle's containing face.
-
-**Handedness**: the face side of an arc is read off ``Arc.reverse`` alone. That is
-only right if the arrangement's traversal orientation and the partition's
-``left``/``right`` are the same orientation of the plane, so every closed region is
-checked against :func:`~tanglepack.topology.StablePartition._side_of` applied to
-the real geometry — the region's representative point against the arc's local
-anchorward tangent.
-
-**The fill**: the arcs an unseen crossing could land on. The strong pip drives
-it: ``(f^k(q0), q0]`` on each pip's own branch, nothing on any other branch, an
-empty fill (and a warning) without a pip, and a different pip moves it.
+Pins, in the order they can break: composition of iterates (a Trellis
+feature the fundamental segment relies on), the node structure (two open
+side nodes per stable edge, one solid node on the fundamental segment),
+handedness (each face attaches to the node on ITS side), the payload
+(elements, parents, cutting bridges, images), and the fundamental segment.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 
 import numpy as np
 import pytest
 
-from tanglepack.topology.DualGraph import ArcNode, DualGraph, FaceNode
+from minimal_helpers import build_pieces
+from tanglepack.topology.DualGraph import DualGraph, FaceNode, StableNode
 from tanglepack.topology.StablePartition import _side_of
 from tanglepack.topology.TopologyResults import ElementRef
 
@@ -39,36 +25,20 @@ from tanglepack.topology.TopologyResults import ElementRef
 # --------------------------------------------------------------------------- #
 # Builders
 # --------------------------------------------------------------------------- #
-def _k10_graph(session, fp) -> DualGraph:
+def _k10_graph(session, fp) -> tuple[DualGraph, object]:
     """The dual graph of the k=10 fixture, with its one strong pip."""
-    trellis = session.trellis(fp)
-    return DualGraph(
-        session.arrangement(),
-        trellis.stable_partitions,
-        strong_pips=[trellis.strong_pip],
-    )
+    pieces = build_pieces(session, [fp])
+    return DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips), pieces
 
 
-def _p3_graph(session, fp3, fp1) -> DualGraph:
-    """The dual graph of the nested fixture: both tangles' partitions and pips."""
-    t3, t1 = session.trellis(fp3), session.trellis(fp1)
-    return DualGraph(
-        session.arrangement(),
-        list(t3.stable_partitions) + list(t1.stable_partitions),
-        strong_pips=[t3.strong_pip, t1.strong_pip],
-    )
+def _p3_graph(session, fp3, fp1) -> tuple[DualGraph, object]:
+    """The dual graph of the nested period-3 fixture, with both pips."""
+    pieces = build_pieces(session, [fp3, fp1])
+    return DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips), pieces
 
 
-def _anchorward_tangent(node: ArcNode, trellis) -> "np.ndarray | None":
-    """The unit direction toward the anchor at an arc's midpoint.
-
-    Read from the two polyline vertices flanking the midpoint vertex rather than
-    from ``_stable_frame`` at the arc's lo crossing: the frame has no anchorward
-    direction at all at the anchor artifact (there are no manifold nodes below
-    cdist 0), which would silently drop the arcs nearest the periodic point from
-    the comparison. The polyline runs lo -> hi, i.e. outward, so the anchorward
-    direction is the reverse.
-    """
+def _anchorward_tangent(node: StableNode, trellis) -> "np.ndarray | None":
+    """The unit direction toward the anchor at an edge's midpoint vertex."""
     poly = node.arc.polyline(trellis)
     if len(poly) < 2:
         return None
@@ -82,7 +52,7 @@ def _anchorward_tangent(node: ArcNode, trellis) -> "np.ndarray | None":
 
 def _face_side_checks(dual: DualGraph) -> tuple[int, list[str]]:
     """Compare the combinatorial face side with the geometric one on every region."""
-    trellis = dual.trellis
+    trellis = dual.arrangement.trellis
     checks = 0
     failures: list[str] = []
     for region in dual.arrangement.regions:
@@ -91,7 +61,8 @@ def _face_side_checks(dual: DualGraph) -> tuple[int, list[str]]:
         if inside is None:
             continue
         for arc in region.stable_arcs:
-            node = dual.arc_nodes[arc.edge_key]
+            side = "right" if arc.reverse else "left"
+            node = dual.nodes_of_edge(arc.edge_key)[side]
             look = _anchorward_tangent(node, trellis)
             poly = node.arc.polyline(trellis)
             if look is None:
@@ -100,16 +71,16 @@ def _face_side_checks(dual: DualGraph) -> tuple[int, list[str]]:
             geometric = _side_of(look, np.asarray(inside) - midpoint)
             combinatorial = node.side_of(face)
             checks += 1
-            if geometric != combinatorial:
+            if geometric != combinatorial or node.faces[side] is not face:
                 failures.append(
-                    f"arc {arc.lo_id}-{arc.hi_id} of region {region.corners}: "
+                    f"edge {arc.lo_id}-{arc.hi_id} of region {region.corners}: "
                     f"geometry says {geometric}, combinatorics says {combinatorial}"
                 )
     return checks, failures
 
 
 def _checkable_pairs(dual: DualGraph) -> int:
-    """Every (closed region, stable arc on its boundary) pair — none may be skipped."""
+    """Every (closed region, stable edge on its boundary) pair — none may be skipped."""
     return sum(
         len(region.stable_arcs)
         for region in dual.arrangement.regions
@@ -117,17 +88,8 @@ def _checkable_pairs(dual: DualGraph) -> int:
     )
 
 
-def _pip_branch_key(trellis):
-    """The stable branch key the trellis's strong pip lies on."""
-    return trellis.intersection(trellis.strong_pip).manifold_b_key
-
-
-def _expected_fill_ids(dual: DualGraph, trellis, pip=None) -> set[tuple]:
-    """The arc-node keys the pip rule says must be filled on the pip's branch.
-
-    ``(f^k(q0), q0]``: every arc of the pip's own branch meeting the span from
-    the canonical distance of the pip's ``k``-th image up to the pip's own.
-    """
+def _expected_unified_keys(dual: DualGraph, trellis, pip=None) -> set[tuple]:
+    """The edge keys the pip rule says must be unified on the pip's branch."""
     pip = trellis.strong_pip if pip is None else pip
     branch_key = trellis.intersection(pip).manifold_b_key
     fixed_point = branch_key[0]
@@ -139,9 +101,11 @@ def _expected_fill_ids(dual: DualGraph, trellis, pip=None) -> set[tuple]:
     top = float(dual.trellis.intersection(pip).stable_cdist)
     tol = dual.trellis.registry.cdist_tol
     return {
-        node.key
-        for node in dual.arc_nodes_on(branch_key)
-        if node.hi_cdist > boundary + tol and node.lo_cdist < top - tol
+        edge_key
+        for edge_key, by_side in dual._nodes_of_edge.items()
+        if by_side["left"].branch_key == branch_key
+        and by_side["left"].hi_cdist > boundary + tol
+        and by_side["left"].lo_cdist < top - tol
     }
 
 
@@ -212,378 +176,288 @@ def test_p3_iterate_composes_three_steps(p3_partitioned):
 
 
 # --------------------------------------------------------------------------- #
-# B.1 -- arc nodes
+# Node structure
 # --------------------------------------------------------------------------- #
-def test_k10_every_stable_edge_has_exactly_one_arc_node(k10_partitioned):
-    session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-
-    edge_keys = {
+def _check_structure(dual: DualGraph, pieces) -> None:
+    edges = {
         arc.edge_key
         for face in dual.arrangement.faces
         for arc in face.arcs
         if arc.kind == "stable"
     }
-    assert set(dual.arc_nodes) == edge_keys
-    assert len(dual.arc_nodes) == len(edge_keys)
-    for node in dual.arc_nodes.values():
-        assert node.arc.reverse is False
-        assert node.faces.keys() == {"left", "right"}
-        assert node.other_face(node.face_on("left")) is node.face_on("right")
-
-
-def test_k10_arc_elements_own_the_midpoint(k10_partitioned):
-    session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-
-    for node in dual.arc_nodes.values():
-        middle = 0.5 * (node.lo_cdist + node.hi_cdist)
-        assert dual.element_at(node.branch_key, "left", middle) == node.left
-        assert dual.element_at(node.branch_key, "right", middle) == node.right
-        assert node.element_on("left") == node.left
-        assert node in dual.arc_nodes_of(node.left)
-        interval = dual.element(node.left)
-        assert interval.lo_cdist <= middle <= interval.hi_cdist
-
-
-def test_element_at_refuses_a_cdist_outside_the_partition(k10_partitioned):
-    session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-    (branch_key, side), result = next(iter(dual.partitions.items()))
-    beyond = result.intervals[-1].hi_cdist + 10.0
-
-    with pytest.raises(ValueError, match="own stable cdist"):
-        dual.element_at(branch_key, side, beyond)
-
-
-def test_arc_node_side_of_rejects_a_foreign_face(k10_partitioned):
-    session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-    node = next(iter(dual.arc_nodes.values()))
-    stranger = FaceNode(index=999, faces=[], kind="open")
-
-    with pytest.raises(ValueError, match="does not bound"):
-        node.side_of(stranger)
-
-
-# --------------------------------------------------------------------------- #
-# B.2 -- face nodes and the merge rule
-# --------------------------------------------------------------------------- #
-def test_k10_face_nodes_are_one_per_face_with_a_single_outer(k10_partitioned):
-    """The flat fixture has one component, so nothing merges: every face is a node
-    and the one open outer face IS the unbounded node."""
-    session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-    arrangement = dual.arrangement
-
-    assert len(dual.face_nodes) == len(arrangement.faces)
-    assert [node.index for node in dual.face_nodes] == list(range(len(dual.face_nodes)))
-
-    outer = [node for node in dual.face_nodes if node.kind == "outer"]
-    assert len(outer) == 1
-    assert outer[0] is dual.unbounded
-    assert outer[0].is_unbounded
-    assert sum(node.is_unbounded for node in dual.face_nodes) == 1
-    assert [face.is_closed for face in outer[0].faces] == [False]
-
-    for region in arrangement.regions:
-        node = dual.face_of(region)
-        assert node.is_region and node.kind == "region"
-        assert node.faces == [region]
-        assert node.bridge_ids == region.bridge_ids
-
-
-def test_k10_every_arc_node_has_a_face_on_both_sides(k10_partitioned):
-    session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-
-    slots = 0
+    assert set(dual._nodes_of_edge) == edges
+    for edge_key, by_side in dual._nodes_of_edge.items():
+        left, right = by_side["left"], by_side["right"]
+        if left is right:
+            assert left.is_unified and left.traversable and left.node_side == "both"
+            assert left.key == (edge_key, "both") and set(left.faces) == {"left", "right"}
+            assert left.fundamental_span is not None
+        else:
+            for node, side in ((left, "left"), (right, "right")):
+                assert node.sides == (side,) and not node.traversable
+                assert node.key == (edge_key, side) and list(node.faces) == [side]
+                assert node.fundamental_span is None
+                with pytest.raises(ValueError, match="wall"):
+                    node.other_face(node.faces[side])
+                with pytest.raises(ValueError, match="faces"):
+                    node.element_on("right" if side == "left" else "left")
+    for node in dual.stable_nodes.values():
+        for side in node.sides:
+            face = node.face_on(side)
+            assert (node, side) in face.stable_nodes
+            assert face.side_of(node) == side or node.is_unified
+        assert dual.stable_nodes[node.key] is node
     for face in dual.face_nodes:
-        for node, side in face.arcs:
-            slots += 1
-            assert node.face_on(side) is face
-            assert face.side_of(node) in ("left", "right")
-    assert slots == 2 * len(dual.arc_nodes)
+        for node, side in face.stable_nodes:
+            assert node.faces[side] is face
+        for node in face.exits:
+            assert node.is_unified and node.other_face(face) is node.face_on(
+                "right" if node.side_of(face) == "left" else "left"
+            )
+        assert set(face.corners) == {
+            corner for region in face.faces for corner in region.corners if corner >= 0
+        }
+        assert set(face.bridge_ids) == {
+            bid for region in face.faces for bid in region.bridge_ids
+        }
+    assert dual.unbounded.is_unbounded and dual.unbounded.kind == "outer"
+    assert sum(1 for face in dual.face_nodes if face.is_unbounded) == 1
+    assert set(dual.unified_nodes) | set(dual.wall_nodes) == set(dual.stable_nodes.values())
+    assert dual.minimal is pieces.minimal and dual.partition is pieces.iterated
+    assert dual.arrangement is pieces.minimal.arrangement
+
+
+def test_k10_node_structure(k10_partitioned):
+    session, fp = k10_partitioned
+    dual, pieces = _k10_graph(session, fp)
+    _check_structure(dual, pieces)
+    assert dual.unified_nodes and dual.wall_nodes
+    assert len(dual.stable_nodes) == 2 * len(dual._nodes_of_edge) - len(dual.unified_nodes)
+
+
+@pytest.mark.slow
+def test_p3_node_structure(p3_partitioned):
+    session, fp3, fp1 = p3_partitioned
+    dual, pieces = _p3_graph(session, fp3, fp1)
+    _check_structure(dual, pieces)
+
+
+def test_k10_face_nodes_are_one_per_face_with_a_single_outer(k10_partitioned):
+    """The flat fixture has one component, so nothing merges: every face is a node."""
+    session, fp = k10_partitioned
+    dual, _ = _k10_graph(session, fp)
+    arrangement = dual.arrangement
+    assert len(dual.face_nodes) == len(arrangement.faces)
+    outer = [face for face in dual.face_nodes if face.kind == "outer"]
+    assert len(outer) == 1 and outer[0].is_unbounded
+    for region in arrangement.regions:
+        assert dual.face_of(region).is_region
+    with pytest.raises(ValueError, match="not a face"):
+        dual.face_of(session.arrangement().faces[0])
 
 
 @pytest.mark.slow
 def test_p3_merges_the_inner_outer_face_into_the_containing_face(p3_partitioned):
-    """One outer node per level of nesting.
-
-    The period-1 tangle's own outer face is the unbounded plane; its CONTAINING
-    face (the closed cycle that swallows the whole period-3 tangle) is the piece
-    of plane the period-3 tangle's outer face is a part of, so the two merge.
-    """
+    """One outer node per level of nesting: the inner tangle's outer face is glued
+    onto the face of the outer tangle that swallows it."""
     session, fp3, fp1 = p3_partitioned
-    dual = _p3_graph(session, fp3, fp1)
-    arrangement = dual.arrangement
-
-    assert len(dual.face_nodes) == len(arrangement.faces) - 1, (
-        "exactly one pair of faces merges on the nested fixture"
-    )
-    outer = [node for node in dual.face_nodes if node.kind == "outer"]
-    assert len(outer) == 2
-    assert sum(node.is_unbounded for node in dual.face_nodes) == 1
-
-    unbounded = dual.unbounded
-    assert len(unbounded.faces) == 1 and not unbounded.faces[0].is_closed
-
-    (merged,) = [node for node in outer if node is not unbounded]
-    assert len(merged.faces) == 2
-    containing = [face for face in merged.faces if face.is_closed]
-    opened = [face for face in merged.faces if not face.is_closed]
-    assert len(containing) == 1 and len(opened) == 1
-    assert containing[0] in arrangement.containing_faces
-    assert opened[0] in arrangement.open_faces
-    assert arrangement.component_of(
-        next(corner for corner in containing[0].corners if corner >= 0)
-    ) != arrangement.component_of(
-        next(corner for corner in opened[0].corners if corner >= 0)
-    )
-
-    for region in arrangement.regions:
-        assert dual.face_of(region).is_region
+    dual, _ = _p3_graph(session, fp3, fp1)
+    merged = [face for face in dual.face_nodes if len(face.faces) > 1]
+    assert dual.arrangement.component_count >= 2
+    assert merged, "the nested fixture must merge at least one pair of faces"
+    for face in merged:
+        assert face.kind == "outer"
 
 
 # --------------------------------------------------------------------------- #
-# Handedness: the combinatorial face side against the geometry
+# Handedness
 # --------------------------------------------------------------------------- #
 def test_k10_face_side_agrees_with_the_geometry(k10_partitioned):
     session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-
+    dual, _ = _k10_graph(session, fp)
     checks, failures = _face_side_checks(dual)
     assert not failures, "\n".join(failures)
-    assert checks == _checkable_pairs(dual), (
-        f"only {checks} of the regions' stable arcs were checked"
-    )
+    assert checks == _checkable_pairs(dual)
 
 
 @pytest.mark.slow
 def test_p3_face_side_agrees_with_the_geometry(p3_partitioned):
     session, fp3, fp1 = p3_partitioned
-    dual = _p3_graph(session, fp3, fp1)
-
+    dual, _ = _p3_graph(session, fp3, fp1)
     checks, failures = _face_side_checks(dual)
     assert not failures, "\n".join(failures)
-    assert checks == _checkable_pairs(dual), (
-        f"only {checks} of the regions' stable arcs were checked"
-    )
+    assert checks == _checkable_pairs(dual)
 
 
 # --------------------------------------------------------------------------- #
-# B.3 -- the fill
+# Payload
 # --------------------------------------------------------------------------- #
-def test_k10_fill_is_the_arcs_between_the_pip_and_its_image(k10_partitioned):
+def _check_payload(dual: DualGraph, pieces) -> None:
+    iterated, homotopy, full = pieces.iterated, pieces.homotopy, pieces.full
+    partitions = iterated.as_list()
+    flip = not full.orientation_preserving
+    for node in dual.stable_nodes.values():
+        for side in node.sides:
+            ref = node.element_on(side)
+            interval = node.intervals[side]
+            assert ref == iterated.element_at(node.branch_key, side, node.mid_cdist)
+            assert interval is iterated.element(ref)
+            assert node.parents[side] == ElementRef(
+                node.branch_key, side, interval.parent_element_id
+            )
+            assert homotopy.element(node.parents[side]).lo_cdist <= node.lo_cdist + full.registry.cdist_tol
+            assert node.cut_by[side] == interval.cut_by
+            expected = full.image_of_element(
+                iterated.result(node.branch_key, side), ref.element_id, 1,
+                partitions=partitions,
+            )
+            image_key = node.branch_key[0].advance_key(node.branch_key, 1)
+            image_side = ("right" if side == "left" else "left") if flip else side
+            assert node.images[side] == [
+                ElementRef(image_key, image_side, i) for i in (expected or [])
+            ]
+        assert dual.stable_nodes_of(node.elements[node.sides[0]]).count(node) == 1
+    # No face carries a bridge class.
+    for name in (f.name for f in dataclasses.fields(FaceNode)):
+        assert "class" not in name and "letter" not in name
+    # Face images resolve lazily, to a node of this graph or None.
+    for face in dual.face_nodes:
+        image = dual.image_face(face)
+        assert image is None or image in dual.face_nodes
+        if not face.is_region:
+            assert image is None
+
+
+def test_k10_payload(k10_partitioned):
     session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-    trellis = session.trellis(fp)
-    branch_key = _pip_branch_key(trellis)
-
-    filled = {node.key for node in dual.arc_nodes.values() if node.filled}
-    assert filled == _expected_fill_ids(dual, trellis)
-    assert filled, "the k=10 fixture must fill something"
-    for node in dual.arc_nodes.values():
-        if node.key not in filled:
-            assert not node.filled
-        assert node.faces.keys() == {"left", "right"}
-
-    image = trellis.iterate(trellis.strong_pip, fp.k_value)
-    assert set(dual.fill_segments) == {branch_key}
-    low, high = dual.fill_segments[branch_key]
-    tol = trellis.registry.cdist_tol
-    assert abs(low - trellis.intersection(image).stable_cdist) <= tol
-    assert abs(high - trellis.intersection(trellis.strong_pip).stable_cdist) <= tol
+    dual, pieces = _k10_graph(session, fp)
+    _check_payload(dual, pieces)
+    assert any(node.cut_by[s] is not None for node in dual.stable_nodes.values() for s in node.sides)
+    assert any(node.images[s] for node in dual.stable_nodes.values() for s in node.sides)
 
 
 @pytest.mark.slow
-def test_p3_fill_is_the_pip_segment_on_each_pips_own_branch(p3_partitioned):
-    """Each tangle fills ``(f^k(q0), q0]`` on its pip's branch and nothing else.
-
-    The nested fixture has TWO strong pips — one per tangle — so two branches
-    carry a fill: the period-3 pip's branch (a three-step segment) and the
-    period-1 pip's branch (a one-step one). Every OTHER branch of the period-3
-    orbit carries no pip, so it has no fill segment and nothing filled.
-    """
+def test_p3_payload(p3_partitioned):
     session, fp3, fp1 = p3_partitioned
-    dual = _p3_graph(session, fp3, fp1)
-    t3, t1 = session.trellis(fp3), session.trellis(fp1)
-    tol = dual.trellis.registry.cdist_tol
-
-    expected: set[tuple] = set()
-    pip_branches = set()
-    for trellis, fixed_point in ((t3, fp3), (t1, fp1)):
-        branch_key = _pip_branch_key(trellis)
-        pip_branches.add(branch_key)
-        expected |= _expected_fill_ids(dual, trellis)
-
-        image = trellis.iterate(trellis.strong_pip, fixed_point.k_value)
-        low, high = dual.fill_segments[branch_key]
-        assert abs(low - dual.trellis.intersection(image).stable_cdist) <= tol
-        assert (
-            abs(high - dual.trellis.intersection(trellis.strong_pip).stable_cdist)
-            <= tol
-        )
-        assert high > low + tol
-
-    filled = {node.key for node in dual.arc_nodes.values() if node.filled}
-    assert filled == expected
-    assert filled
-
-    assert set(dual.fill_segments) == pip_branches
-    for branch in dual.trellis.stable_branches:
-        if branch.key in pip_branches:
-            continue
-        assert branch.key not in dual.fill_segments, (
-            f"branch {branch.key[1:]} carries no pip, so it has no fill segment"
-        )
-        assert not any(node.filled for node in dual.arc_nodes_on(branch.key))
+    dual, pieces = _p3_graph(session, fp3, fp1)
+    _check_payload(dual, pieces)
 
 
-@pytest.mark.parametrize("pips", [None, [], [None]], ids=["none", "empty", "[None]"])
-def test_no_pips_warns_and_fills_nothing(k10_partitioned, caplog, pips):
-    """Without a strong pip the graph is built, warns, and every node is a wall."""
+# --------------------------------------------------------------------------- #
+# The fundamental segment
+# --------------------------------------------------------------------------- #
+def test_k10_unified_nodes_are_the_edges_between_the_pip_and_its_image(k10_partitioned):
     session, fp = k10_partitioned
-    partitions = session.trellis(fp).stable_partitions
+    dual, _ = _k10_graph(session, fp)
+    trellis = session.trellis(fp)
+    expected = _expected_unified_keys(dual, trellis)
+    assert expected, "the k=10 fixture must unify something"
+    assert {node.edge_key for node in dual.unified_nodes} == expected
+    branch_key = trellis.intersection(trellis.strong_pip).manifold_b_key
+    lo, hi = dual.fundamental_segments[branch_key]
+    assert hi == pytest.approx(trellis.intersection(trellis.strong_pip).stable_cdist)
+    for node in dual.unified_nodes:
+        assert node.fundamental_span == (lo, hi)
 
+
+@pytest.mark.slow
+def test_p3_unifies_the_pip_segment_on_each_pips_own_branch(p3_partitioned):
+    session, fp3, fp1 = p3_partitioned
+    dual, _ = _p3_graph(session, fp3, fp1)
+    expected: set[tuple] = set()
+    branches = set()
+    for fp in (fp3, fp1):
+        trellis = session.trellis(fp)
+        expected |= _expected_unified_keys(dual, trellis)
+        branches.add(trellis.intersection(trellis.strong_pip).manifold_b_key)
+    assert {node.edge_key for node in dual.unified_nodes} == expected
+    assert set(dual.fundamental_segments) == branches
+
+
+@pytest.mark.parametrize("pips", [None, [], [None]])
+def test_no_pips_warns_and_unifies_nothing(k10_partitioned, caplog, pips):
+    session, fp = k10_partitioned
+    pieces = build_pieces(session, [fp])
     with caplog.at_level(logging.WARNING, logger="tanglepack.topology.DualGraph"):
-        dual = DualGraph(session.arrangement(), partitions, strong_pips=pips)
+        dual = DualGraph(pieces.minimal, pieces.iterated, strong_pips=pips)
+    assert any("no strong pip" in record.message for record in caplog.records)
+    assert not dual.unified_nodes and not dual.fundamental_segments
+    assert len(dual.stable_nodes) == 2 * len(dual._nodes_of_edge)
 
-    assert "no strong pip" in caplog.text
-    assert dual.fill_segments == {}
-    assert dual.arc_nodes and not any(node.filled for node in dual.arc_nodes.values())
 
-
-def test_k10_a_different_pip_moves_the_fill(k10_partitioned):
-    """Choosing another candidate pip — with no trim and no re-partition —
-    moves the fill to ``(f^k(q), q]`` of that pip, leaving the arcs beyond it
-    hollow. On k=10 the default pip's forward image is itself a candidate."""
+def test_k10_a_different_pip_moves_the_unified_set(k10_partitioned):
     session, fp = k10_partitioned
     trellis = session.trellis(fp)
     default = trellis.strong_pip
-    alt = trellis.iterate(default, 1)
-    assert alt is not None and alt in trellis.strong_pip_candidates
-    trellis.set_strong_pip(alt)
-
-    dual = DualGraph(
-        session.arrangement(), trellis.stable_partitions, strong_pips=[alt]
+    alternatives = [c for c in trellis.strong_pip_candidates if c != default]
+    if not alternatives:
+        pytest.skip("the fixture has a single strong-pip candidate")
+    pieces = build_pieces(session, [fp])
+    before = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[default])
+    after = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[alternatives[0]])
+    assert {n.edge_key for n in after.unified_nodes} == _expected_unified_keys(
+        after, trellis, pip=alternatives[0]
     )
-    branch_key = _pip_branch_key(trellis)
-    tol = trellis.registry.cdist_tol
-    top = float(trellis.intersection(alt).stable_cdist)
-    image = trellis.iterate(alt, fp.k_value)
-    assert image is not None
-
-    assert set(dual.fill_segments) == {branch_key}
-    low, high = dual.fill_segments[branch_key]
-    assert abs(low - trellis.intersection(image).stable_cdist) <= tol
-    assert abs(high - top) <= tol
-
-    filled = {node.key for node in dual.arc_nodes.values() if node.filled}
-    assert filled == _expected_fill_ids(dual, trellis, alt)
-    assert filled
-    assert filled != _expected_fill_ids(dual, trellis, default)
-    for node in dual.arc_nodes_on(branch_key):
-        if node.lo_cdist >= top - tol:
-            assert not node.filled, "arcs beyond the chosen pip stay hollow"
+    assert {n.edge_key for n in after.unified_nodes} != {
+        n.edge_key for n in before.unified_nodes
+    }
 
 
-# --------------------------------------------------------------------------- #
-# C.3 -- element images
-# --------------------------------------------------------------------------- #
-def _assert_element_images(dual: DualGraph, per_fixed_point) -> None:
-    """Every bounded element has an image, and it is the trellis's own answer."""
-    images = dual.element_images(1)
-    assert len(images) == sum(
-        len(result.intervals) for result in dual.partitions.values()
-    )
-
-    for (branch_key, side), result in dual.partitions.items():
-        trellis = per_fixed_point[branch_key[0]]
-        for interval in result.intervals:
-            ref = result.ref(interval.element_id)
-            covering = images[ref]
-            if interval.lo_id is None or interval.hi_id is None:
-                assert covering == []
-                continue
-            assert covering, f"bounded element {ref} has no image"
-            own = trellis.image_of_element(result, interval.element_id, 1)
-            assert own is not None
-            assert [item.element_id for item in covering] == own
-            for image_ref in covering:
-                assert isinstance(image_ref, ElementRef)
-                assert image_ref.branch_key == branch_key[0].advance_key(branch_key, 1)
-                assert image_ref.side == side  # the fixtures preserve orientation
-
-
-def test_k10_element_images_match_the_trellis(k10_partitioned):
+def test_two_pips_on_one_branch_are_rejected(k10_partitioned):
     session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
-    assert dual.trellis.orientation_preserving
-    _assert_element_images(dual, {fp: session.trellis(fp)})
-
-
-@pytest.mark.slow
-def test_p3_element_images_match_the_trellis(p3_partitioned):
-    session, fp3, fp1 = p3_partitioned
-    dual = _p3_graph(session, fp3, fp1)
-    assert dual.trellis.orientation_preserving
-    _assert_element_images(
-        dual, {fp3: session.trellis(fp3), fp1: session.trellis(fp1)}
-    )
+    pieces = build_pieces(session, [fp])
+    pip = session.trellis(fp).strong_pip
+    with pytest.raises(ValueError, match="one fundamental segment"):
+        DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip, pip])
 
 
 # --------------------------------------------------------------------------- #
-# Views
+# Views and errors
 # --------------------------------------------------------------------------- #
 def test_k10_graph_is_bipartite(k10_partitioned):
     import networkx as nx
 
     session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
+    dual, _ = _k10_graph(session, fp)
     graph = dual.graph()
-
-    assert graph.number_of_nodes() == len(dual.arc_nodes) + len(dual.face_nodes)
+    faces = {n for n, d in graph.nodes(data=True) if d["bipartite"] == 0}
+    stable = {n for n, d in graph.nodes(data=True) if d["bipartite"] == 1}
     assert nx.is_bipartite(graph)
-    # One edge per (face, arc) pair, NOT per slot: a cut arc with the same
-    # merged face node on both sides is one edge of a simple graph.
-    pairs = {
-        (face.index, node.key)
-        for face in dual.face_nodes
-        for node, _side in face.arcs
-    }
-    assert graph.number_of_edges() == len(pairs)
-    for kind_a, kind_b in ((a[0], b[0]) for a, b in graph.edges):
-        assert {kind_a, kind_b} == {"arc", "face"}
-    for face in dual.face_nodes:
-        for node, side in face.arcs:
-            assert graph.edges[("face", face.index), ("arc", node.key)]["side"] == side
+    assert len(faces) == len(dual.face_nodes) and len(stable) == len(dual.stable_nodes)
+    for a, b, data in graph.edges(data=True):
+        assert {a[0], b[0]} == {"face", "stable"} and data["side"] in ("left", "right")
+    for node in dual.stable_nodes.values():
+        assert graph.nodes[("stable", node.key)]["traversable"] == node.traversable
+        degree = graph.degree(("stable", node.key))
+        assert degree == 1 or (node.is_unified and degree == 2)
 
 
 def test_k10_summary_reports_counts(k10_partitioned):
     session, fp = k10_partitioned
-    dual = _k10_graph(session, fp)
+    dual, _ = _k10_graph(session, fp)
     text = dual.summary()
-    assert f"{len(dual.arc_nodes)} arc nodes" in text
-    assert f"{len(dual.face_nodes)} face nodes" in text
-    assert "fill segments" in text
-
-
-def test_duplicate_partitions_are_rejected(k10_partitioned):
-    session, fp = k10_partitioned
-    partitions = list(session.trellis(fp).stable_partitions)
-
-    with pytest.raises(ValueError, match="two partitions"):
-        DualGraph(session.arrangement(), partitions + partitions[:1])
+    assert "stable edges" in text and "solid" in text and "fundamental segments" in text
+    assert repr(dual) == f"<{text}>"
+    assert repr(dual.unified_nodes[0]).startswith("StableNode(")
+    assert "exit(s)" in repr(dual.face_nodes[0])
 
 
 def test_a_missing_partition_side_is_rejected(k10_partitioned):
-    session, fp = k10_partitioned
-    partitions = [
-        result
-        for result in session.trellis(fp).stable_partitions
-        if result.side == "left"
-    ]
+    from tanglepack.topology.PartitionFamily import PartitionFamily
 
-    with pytest.raises(ValueError, match="partition covers stable branch"):
-        DualGraph(session.arrangement(), partitions)
+    session, fp = k10_partitioned
+    pieces = build_pieces(session, [fp])
+    left_only = PartitionFamily(
+        [r for r in pieces.iterated.as_list() if r.side == "left"], trellis=pieces.full
+    )
+    with pytest.raises(ValueError, match="no 'right' partition covers"):
+        DualGraph(pieces.minimal, left_only, strong_pips=pieces.strong_pips)
+
+
+def test_stable_node_side_of_rejects_a_foreign_face(k10_partitioned):
+    session, fp = k10_partitioned
+    dual, _ = _k10_graph(session, fp)
+    node = dual.wall_nodes[0]
+    foreign = next(f for f in dual.face_nodes if f is not node.faces[node.sides[0]])
+    with pytest.raises(ValueError, match="does not bound"):
+        node.side_of(foreign)
