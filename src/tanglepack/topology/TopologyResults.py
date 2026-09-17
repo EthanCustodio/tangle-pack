@@ -291,6 +291,18 @@ class PartitionInterval:
         branch_key: Manifold key of the stable branch this element lies on.
             None until stamped.
         side: Which side's partition this element belongs to. None until stamped.
+        parent_element_id: For an element of a REFINED partition (see
+            :class:`~tanglepack.topology.PartitionFamily.IteratedHomotopyPartition`),
+            the ``element_id`` of the element of the partition it refines
+            (same branch, same side) that owns this element's midpoint. None
+            on an element of an unrefined partition.
+        cut_by: For an element of a refined partition, the
+            :data:`~tanglepack.numerics.Bridge.BridgeId` of the image bridge
+            this element lies UNDER: the bridge lies on this side and the
+            element sits inside the closed span between its two crossings.
+            The innermost such bridge when several cover the element. None
+            for an element under no image bridge and on an unrefined
+            partition.
     """
 
     lo_id: Optional[int]
@@ -302,6 +314,8 @@ class PartitionInterval:
     element_id: int = -1
     branch_key: Optional["ManifoldKey"] = None
     side: Optional[Side] = None
+    parent_element_id: Optional[int] = None
+    cut_by: Optional["BridgeId"] = None
 
     @property
     def ref(self) -> ElementRef:

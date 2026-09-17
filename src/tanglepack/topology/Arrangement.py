@@ -197,13 +197,17 @@ class Arrangement:
             :attr:`open_faces` and :attr:`containing_faces` for the rest.
     """
 
-    def __init__(self, trellis: "Trellis"):
+    def __init__(self, trellis: "Trellis", *, sparse: bool = False):
         """
         Args:
             trellis: The trellis to build over. Prefer :meth:`from_trellis`, which
                 also runs the build.
+            sparse: Build over the trellis's BRIDGE LIST rather than over every
+                consecutive crossing pair of its unstable branches (see
+                :meth:`from_trellis`).
         """
         self.trellis = trellis
+        self.sparse = sparse
         self._nodes: dict[int, _Node] = {}
         self._half_edges: list[_HalfEdge] = []
         self._next_virtual_id: int = -1
@@ -218,7 +222,9 @@ class Arrangement:
     # ── construction ────────────────────────────────────────────────────────
 
     @classmethod
-    def from_trellis(cls, trellis: "Trellis") -> "Arrangement":
+    def from_trellis(
+        cls, trellis: "Trellis", *, sparse: bool = False
+    ) -> "Arrangement":
         """
         Build the arrangement of a trellis.
 
@@ -228,15 +234,26 @@ class Arrangement:
                 tangle in isolation: a heteroclinic crossing belongs to two fixed
                 points, and a single-fixed-point snapshot cuts the other side's
                 arcs off, turning real faces into open ones.
+            sparse: When True the unstable arcs are exactly the trellis's
+                (non-partial) bridges, not the consecutive crossing pairs of
+                its unstable branches, and a crossing missing an unstable ray
+                gets NO dangling stub for it: the two sectors either side of
+                the absent ray merge and the faces there stay closed. This is
+                the mode for a :class:`~tanglepack.topology.MinimalTrellis.MinimalTrellis`,
+                whose synthetic snapshot deliberately carries a subset of the
+                bridges. Stable dangling ends (the anchor end and the trimmed
+                end of a stable branch) keep their stubs in both modes.
 
         Returns:
             The built arrangement.
 
         Raises:
-            AssertionError: If the unstable arcs read off the branch orderings are
-                not exactly the trellis's bridges (see :meth:`_build_unstable_arcs`).
+            AssertionError: If (dense) the unstable arcs read off the branch
+                orderings are not exactly the trellis's bridges, or (sparse) a
+                bridge endpoint is not a node of the trellis (see
+                :meth:`_build_unstable_arcs`).
         """
-        arrangement = cls(trellis)
+        arrangement = cls(trellis, sparse=sparse)
         arrangement._build()
         return arrangement
 
@@ -318,6 +335,10 @@ class Arrangement:
             AssertionError: If a bridge's endpoints are not consecutive on any
                 unstable branch of this trellis.
         """
+        if self.sparse:
+            self._build_sparse_unstable_arcs()
+            return
+
         pairs: set["BridgeId"] = set()
         cut: set["BridgeId"] = {
             bridge.id for bridge in self.trellis.bridges if bridge.id is not None
@@ -350,6 +371,48 @@ class Arrangement:
                 sorted(uncut),
             )
 
+    def _build_sparse_unstable_arcs(self) -> None:
+        """
+        One arc per (non-partial) bridge of the trellis, and nothing else.
+
+        The sparse mode of :meth:`from_trellis`: a bridge is an unstable arc
+        exactly when the trellis lists it, so no arc is manufactured between two
+        kept crossings that merely happen to be consecutive on a branch whose
+        intervening bridges were dropped.
+
+        Raises:
+            AssertionError: If a bridge endpoint is not a node of this trellis,
+                or a bridge's two endpoints are not in unstable-cdist order.
+        """
+        for bridge in self.trellis.bridges:
+            bridge_id = bridge.id
+            if bridge_id is None:
+                continue
+            lo_id, hi_id = bridge_id
+            assert lo_id in self._nodes and hi_id in self._nodes, (
+                f"bridge {bridge_id} has an endpoint that is not a crossing of "
+                "this trellis; a sparse arrangement needs every kept bridge's "
+                "endpoints among the kept crossings"
+            )
+            lo = self.trellis.intersection(lo_id).unstable_cdist
+            hi = self.trellis.intersection(hi_id).unstable_cdist
+            assert lo <= hi, (
+                f"bridge {bridge_id} is not ordered by unstable canonical distance"
+            )
+            self._add_edge(
+                Arc(
+                    kind="unstable",
+                    lo_id=lo_id,
+                    hi_id=hi_id,
+                    branch_key=bridge.manifold_key,
+                    bridge_id=bridge_id,
+                )
+            )
+        logger.debug(
+            "sparse arrangement: %d unstable arcs from the bridge list",
+            sum(1 for bridge in self.trellis.bridges if bridge.id is not None),
+        )
+
     def _add_edge(self, arc: Arc) -> None:
         """Register both half-edges of one arc, in the two slots it occupies."""
         forward_slot: Slot = "s+" if arc.kind == "stable" else "u+"
@@ -379,11 +442,19 @@ class Arrangement:
         return half_edge
 
     def _build_virtual_half_edges(self) -> None:
-        """Fill every empty slot with a stub to a fresh degree-one node."""
+        """
+        Fill every empty slot with a stub to a fresh degree-one node.
+
+        In sparse mode only the STABLE slots are stubbed: an absent unstable ray
+        means "this bridge was deliberately left out", not "not computed this
+        far", so the two sectors either side of it merge instead of reflecting
+        off a slit (see :meth:`from_trellis`).
+        """
+        stub_slots: tuple[Slot, ...] = ("s+", "s-") if self.sparse else _ALL_SLOTS
         for node in list(self._nodes.values()):
             if node.virtual:
                 continue
-            for slot in _ALL_SLOTS:
+            for slot in stub_slots:
                 if slot in node.slots:
                     continue
                 virtual_id = self._next_virtual_id
@@ -400,12 +471,23 @@ class Arrangement:
     # ── face traversal ──────────────────────────────────────────────────────
 
     def _next(self, index: int) -> int:
-        """The half-edge that follows ``index`` around its face."""
+        """
+        The half-edge that follows ``index`` around its face.
+
+        The next ray counter-clockwise from the twin's slot that is PRESENT at
+        the node. On a dense node every slot is present (real or stub) and this
+        is the plain successor; on a sparse node an absent unstable slot is
+        skipped, which merges the two sectors it would have separated.
+        """
         twin = self._half_edges[self._half_edges[index].twin]
         node = self._nodes[twin.tail]
         rotation = node.rotation
         position = rotation.index(twin.slot)
-        return node.slots[rotation[(position + 1) % len(rotation)]]
+        for step in range(1, len(rotation) + 1):
+            candidate = rotation[(position + step) % len(rotation)]
+            if candidate in node.slots:
+                return node.slots[candidate]
+        raise AssertionError(f"node {node.id} has no rays at all")  # pragma: no cover
 
     def _build_faces(self) -> None:
         """Walk every ``next`` orbit once; each orbit is one face."""
@@ -821,8 +903,9 @@ class Arrangement:
         """A one-line description of the arrangement's size."""
         real = sum(1 for node in self._nodes.values() if not node.virtual)
         virtual = len(self._nodes) - real
+        mode = "sparse " if self.sparse else ""
         return (
-            f"Arrangement: {real} crossings (+{virtual} dangling ends), "
+            f"{mode}Arrangement: {real} crossings (+{virtual} dangling ends), "
             f"{self.component_count} component(s), {len(self.faces)} faces, "
             f"{len(self.regions)} regions "
             f"(+{len(self.containing_faces)} containing, "

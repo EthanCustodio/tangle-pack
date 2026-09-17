@@ -97,12 +97,14 @@ class Case:
     @property
     def title(self) -> str:
         """``"Hénon k=<k>"``."""
-        return f"Hénon k={self.k:g}"
+        blasted = f", {self.blasts} blast(s)" if self.blasts else ""
+        return f"Hénon k={self.k:g}{blasted}"
 
 
 CASES = [
     Case(k=10, unstable_steps=10, pip="image"),
     Case(k=2.8, unstable_steps=10, pip="image", blasts=1, area_cutoff=1e-7),
+    Case(k=2.8, unstable_steps=10, pip="image", blasts=2, area_cutoff=1e-7),
 ]
 
 

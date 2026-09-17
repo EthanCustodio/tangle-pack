@@ -21,6 +21,7 @@ import pytest
 from tanglepack import TangleSession
 from tanglepack.loom.TangleSession import TangleSession as _SessionClass
 from tanglepack.topology import StablePartition, plotting
+from minimal_helpers import build_pieces
 from tanglepack.topology.DualGraph import DualGraph
 from tanglepack.topology.Trellis import Trellis
 
@@ -228,167 +229,175 @@ def test_session_call_fanouts_go_through_fanout_call(henon_session, monkeypatch,
 
 
 # --------------------------------------------------------------------------- #
-# dual graph (B.4)
+# dual graph
 # --------------------------------------------------------------------------- #
 def _k10_dual_graph(k10_partitioned) -> DualGraph:
     """The dual graph of the k10_partitioned fixture, with its strong pip."""
     session, fp = k10_partitioned
-    trellis = session.trellis(fp)
-    return DualGraph(
-        session.arrangement(),
-        trellis.stable_partitions,
-        strong_pips=[trellis.strong_pip],
-    )
+    pieces = build_pieces(session, [fp])
+    return DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips)
 
 
-def test_plot_dual_graph_scatters_exactly_the_arc_nodes(k10_partitioned):
-    """The two arc-node collections split hollow/filled and sum to arc_nodes.
-
-    ``plot_dual_graph`` always scatters the hollow set first, the filled set
-    second (see its Dev Notes), so ``ax.collections[0]``/``[1]`` are pinned to
-    those two regardless of whether either set is empty.
-    """
+def test_plot_dual_graph_scatters_exactly_the_stable_nodes(k10_partitioned):
+    """Collections 0 and 1 are the open and solid stable nodes, always in that order."""
     dg = _k10_dual_graph(k10_partitioned)
-    filled_expected = sum(1 for node in dg.arc_nodes.values() if node.filled)
-    hollow_expected = len(dg.arc_nodes) - filled_expected
-
-    plt.figure()
+    fig, ax = plt.subplots()
     try:
-        ax = plt.gca()
-        result = plotting.plot_dual_graph(dg, ax=ax)
-        assert result is ax
-        hollow_collection, filled_collection = ax.collections[0], ax.collections[1]
-        hollow_count = len(hollow_collection.get_offsets())
-        filled_count = len(filled_collection.get_offsets())
-        assert hollow_count + filled_count == len(dg.arc_nodes)
-        assert filled_count == filled_expected
-        assert hollow_count == hollow_expected
+        plotting.plot_dual_graph(dg, ax=ax)
+        open_pts = ax.collections[0].get_offsets()
+        solid_pts = ax.collections[1].get_offsets()
+        assert len(open_pts) == len(dg.wall_nodes)
+        assert len(solid_pts) == len(dg.unified_nodes)
+        assert len(open_pts) + len(solid_pts) == len(dg.stable_nodes)
+        assert ax.collections[0].get_facecolors().size == 0
     finally:
-        plt.close()
+        plt.close(fig)
 
 
-def test_face_point_of_unbounded_node_is_outside_the_arc_bbox(k10_partitioned):
-    """The unbounded node's face point is pushed clear of every arc midpoint."""
+def test_side_nodes_sit_on_their_side_and_solid_nodes_on_the_edge(k10_partitioned):
+    from tanglepack.topology.StablePartition import _side_of
+    from tanglepack.topology.plotting import _anchorward_look
+
     dg = _k10_dual_graph(k10_partitioned)
-    mids = [
-        node.midpoint(dg.trellis) for node in dg.arc_nodes.values()
-    ]
-    mids = np.vstack([m for m in mids if m is not None])
-    mins, maxs = mids.min(axis=0), mids.max(axis=0)
+    trellis = dg.arrangement.trellis
+    checked = 0
+    for node in dg.stable_nodes.values():
+        point = plotting.stable_node_point(dg, node)
+        mid = node.midpoint(trellis)
+        if point is None or mid is None:
+            continue
+        if node.is_unified:
+            assert np.allclose(point, mid)
+            continue
+        look = _anchorward_look(node, trellis)
+        assert _side_of(look, point - mid) == node.sides[0]
+        checked += 1
+    assert checked == len(dg.wall_nodes)
 
+
+def test_face_point_of_unbounded_node_is_outside_the_edge_bbox(k10_partitioned):
+    dg = _k10_dual_graph(k10_partitioned)
+    mids = np.vstack([n.midpoint(dg.arrangement.trellis) for n in dg.stable_nodes.values()])
     point = plotting.face_point(dg, dg.unbounded)
-    assert np.any(point < mins) or np.any(point > maxs)
+    assert (point < mids.min(axis=0)).any() or (point > mids.max(axis=0)).any()
 
 
 def test_face_point_of_a_region_is_inside_it(k10_partitioned):
-    """A region node's face point lies inside its own region's boundary."""
     dg = _k10_dual_graph(k10_partitioned)
-    region_nodes = [node for node in dg.face_nodes if node.kind == "region"]
-    assert region_nodes, "the k=10 fixture must have at least one region node"
-    for node in region_nodes:
-        point = plotting.face_point(dg, node)
-        assert node.faces[0].contains(point)
+    regions = [f for f in dg.face_nodes if f.is_region]
+    assert regions
+    for face in regions:
+        assert face.faces[0].contains(plotting.face_point(dg, face))
 
 
 def test_face_point_of_a_region_returns_a_copy_not_the_cached_array(k10_partitioned):
-    """Mutating the returned point must not corrupt the region's own cache."""
     dg = _k10_dual_graph(k10_partitioned)
-    region_node = next(node for node in dg.face_nodes if node.kind == "region")
-    region = region_node.faces[0]
-    cached_before = region.representative_point.copy()
-
-    point = plotting.face_point(dg, region_node)
-    point += 1000.0
-
-    assert np.allclose(region.representative_point, cached_before)
+    face = next(f for f in dg.face_nodes if f.is_region)
+    point = plotting.face_point(dg, face)
+    point += 1e6
+    assert not np.allclose(point, face.faces[0].representative_point)
 
 
 def test_scatter_kwargs_reject_facecolors_and_c(k10_partitioned):
-    """facecolors/c are internally managed and raise a clear ValueError."""
     dg = _k10_dual_graph(k10_partitioned)
-    plt.figure()
+    fig, ax = plt.subplots()
     try:
-        ax = plt.gca()
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="facecolors"):
             plotting.plot_dual_graph(dg, ax=ax, facecolors="red")
-        with pytest.raises(ValueError):
-            plotting.plot_dual_graph(dg, ax=ax, c="blue")
+        with pytest.raises(ValueError, match="'c'"):
+            plotting.plot_dual_graph(dg, ax=ax, c="red")
+        plotting.plot_dual_graph(dg, ax=ax, color="tab:green", s=30)
     finally:
-        plt.close()
+        plt.close(fig)
 
 
 def _clip_bbox(dg: DualGraph):
-    """The (mins, maxs, pad) triple plot_dual_graph's clip_to_arcs computes."""
-    mids = [node.midpoint(dg.trellis) for node in dg.arc_nodes.values()]
-    points = [m for m in mids if m is not None]
-    points.append(plotting.face_point(dg, dg.unbounded))
+    trellis = dg.arrangement.trellis
+    points = [n.midpoint(trellis) for n in dg.stable_nodes.values()]
+    points = [p for p in points if p is not None] + [plotting.face_point(dg, dg.unbounded)]
     stacked = np.vstack(points)
     mins, maxs = stacked.min(axis=0), stacked.max(axis=0)
-    pad = plotting.DUAL_GRAPH_PUSH_FRACTION * np.linalg.norm(maxs - mins)
-    return mins, maxs, pad
+    pad = plotting.DUAL_GRAPH_PUSH_FRACTION * float(np.linalg.norm(maxs - mins))
+    return mins - pad, maxs + pad
 
 
-def test_clip_to_arcs_true_keeps_the_axes_within_the_padded_arc_bbox(k10_partitioned):
-    """clip_to_arcs=True limits the view to the padded arc/unbounded-point bbox."""
+def test_clip_to_arcs_true_keeps_the_axes_within_the_padded_edge_bbox(k10_partitioned):
     dg = _k10_dual_graph(k10_partitioned)
-    mins, maxs, pad = _clip_bbox(dg)
-
-    plt.figure()
+    lo, hi = _clip_bbox(dg)
+    fig, ax = plt.subplots()
     try:
-        ax = plt.gca()
-        plotting.plot_dual_graph(dg, ax=ax, clip_to_arcs=True)
-        xlim, ylim = ax.get_xlim(), ax.get_ylim()
-        assert xlim[0] == pytest.approx(mins[0] - pad)
-        assert xlim[1] == pytest.approx(maxs[0] + pad)
-        assert ylim[0] == pytest.approx(mins[1] - pad)
-        assert ylim[1] == pytest.approx(maxs[1] + pad)
+        plotting.plot_dual_graph(dg, ax=ax)
+        assert ax.get_xlim() == pytest.approx((lo[0], hi[0]))
+        assert ax.get_ylim() == pytest.approx((lo[1], hi[1]))
     finally:
-        plt.close()
+        plt.close(fig)
 
 
-def test_clip_to_arcs_false_lets_an_outlier_region_blow_out_the_axes(k10_partitioned):
-    """clip_to_arcs=False leaves the axes autoscaled to everything drawn.
-
-    On k=10 at least one bounded region's representative point sits well
-    outside the tangle's own arc-midpoint span, so the unclipped view must
-    reach past the padded bbox clip_to_arcs=True would have used.
-    """
+def test_clip_to_arcs_false_leaves_the_axes_to_autoscale(k10_partitioned):
     dg = _k10_dual_graph(k10_partitioned)
-    mins, maxs, pad = _clip_bbox(dg)
-
-    plt.figure()
+    lo, hi = _clip_bbox(dg)
+    fig, ax = plt.subplots()
     try:
-        ax = plt.gca()
         plotting.plot_dual_graph(dg, ax=ax, clip_to_arcs=False)
-        xlim, ylim = ax.get_xlim(), ax.get_ylim()
-        outside = (
-            xlim[0] < mins[0] - pad or xlim[1] > maxs[0] + pad
-            or ylim[0] < mins[1] - pad or ylim[1] > maxs[1] + pad
+        assert ax.get_xlim() != pytest.approx((lo[0], hi[0])) or ax.get_ylim() != pytest.approx(
+            (lo[1], hi[1])
         )
-        assert outside
     finally:
-        plt.close()
+        plt.close(fig)
 
 
-def test_show_labels_annotates_every_arc_and_face_node(k10_partitioned):
-    """show_labels=True adds one Text per plotted arc node and one per face node."""
+def test_show_labels_annotates_every_stable_and_face_node(k10_partitioned):
     dg = _k10_dual_graph(k10_partitioned)
-    expected_arc_labels = sum(
-        1 for node in dg.arc_nodes.values() if node.midpoint(dg.trellis) is not None
-    )
-
-    plt.figure()
+    fig, ax = plt.subplots()
     try:
-        ax = plt.gca()
-        result = plotting.plot_dual_graph(dg, ax=ax, show_labels=True)
-        assert result is ax
-        assert len(ax.texts) == expected_arc_labels + len(dg.face_nodes)
+        plotting.plot_dual_graph(dg, ax=ax, show_labels=True)
+        texts = [t.get_text() for t in ax.texts]
+        assert len(texts) == len(dg.stable_nodes) + len(dg.face_nodes)
+        for node in dg.stable_nodes.values():
+            assert "|".join(node.elements[s].label for s in node.sides) in texts
+        for face in dg.face_nodes:
+            assert f"{face.index}:{face.kind}" in texts
     finally:
-        plt.close()
+        plt.close(fig)
 
 
 def test_dual_graph_legend_handles_match_the_plotter():
     labels = [h.get_label() for h in plotting.dual_graph_legend_handles()]
     assert labels == [
-        "arc node (wall)", "arc node (passable)", "face node", "face-arc edge",
+        "stable node (open, wall)",
+        "stable node (solid, traversable)",
+        "face node",
+        "face-node edge",
     ]
+
+
+def test_plot_minimal_trellis_draws_every_kept_bridge(k10_partitioned):
+    session, fp = k10_partitioned
+    pieces = build_pieces(session, [fp])
+    minimal = pieces.minimal
+    fig, ax = plt.subplots()
+    try:
+        assert plotting.plot_minimal_trellis(minimal, ax=ax) is ax
+        assert len(ax.lines) == len(minimal.kept_bridge_ids) + len(minimal.dropped_bridge_ids)
+        ax.cla()
+        plotting.plot_minimal_trellis(minimal, ax=ax, show_dropped=False)
+        assert len(ax.lines) == len(minimal.kept_bridge_ids)
+    finally:
+        plt.close(fig)
+    labels = [h.get_label() for h in plotting.minimal_trellis_legend_handles()]
+    assert labels == ["hole bridge", "image bridge", "dropped bridge"]
+
+
+def test_plot_stable_partition_accepts_row_labels(k10_partitioned):
+    session, fp = k10_partitioned
+    pieces = build_pieces(session, [fp])
+    results = pieces.homotopy.as_list() + pieces.iterated.as_list()
+    labels = [f"{r.side} {i}" for i, r in enumerate(results)]
+    fig, ax = plt.subplots()
+    try:
+        plotting.plot_stable_partition(results, ax=ax, labels=labels)
+        assert [t.get_text() for t in ax.get_yticklabels()] == labels
+        with pytest.raises(ValueError, match="row labels"):
+            plotting.plot_stable_partition(results, ax=ax, labels=labels[:1])
+    finally:
+        plt.close(fig)

@@ -29,6 +29,8 @@ from ..topology.BridgeClass import (
     zone_label,
 )
 from ..topology.DualGraph import DualGraph
+from ..topology.MinimalTrellis import MinimalTrellis, minimal_trellis as _minimal_trellis
+from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
@@ -40,7 +42,7 @@ if TYPE_CHECKING:
 
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
-    from ..topology.TopologyResults import Endpoint, Side, StablePartitionResult
+    from ..topology.TopologyResults import Endpoint, Hole, Side, StablePartitionResult
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -110,6 +112,11 @@ class TangleSession:
         # (workbench.generation, partition signature, strong pips, graph) per
         # trellis-selection cache key; see dual_graph().
         self._dual_graphs: dict = {}
+        # (workbench.generation, partition signature, minimal trellis) and
+        # (..., iterated partition) per cache key; see minimal_trellis() and
+        # iterated_partition(). The dual graph is built over these two.
+        self._minimal_trellises: dict = {}
+        self._iterated_partitions: dict = {}
         # One resonance zone per (fixed_point, branch_index): a non-inversion point
         # has a single branch (one zone); an inversion point has two. Insertion order
         # is preserved so plotting/shading is deterministic.
@@ -445,6 +452,155 @@ class TangleSession:
                 ", ".join(f"{key[1:]} missing {sides}" for key, sides in missing),
             )
 
+    def _gathered_holes(
+        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
+    ) -> list["Hole"]:
+        """
+        Every punched hole of every cached, non-stale per-fixed-point trellis
+        whose fixed point falls inside ``fixed_points``.
+
+        The same scan as :meth:`_gathered_strong_pips`; the holes name the
+        hole bridges of the minimal trellis through their ``bounding_ids``.
+        """
+        selected = {id(fp) for fp in self._resolve_fixed_points(fixed_points)}
+        holes: list["Hole"] = []
+        for trellis in self._trellises.values():
+            if self._is_stale(trellis) or len(trellis.fixed_points) != 1:
+                continue
+            if id(trellis.fixed_points[0]) not in selected:
+                continue
+            holes.extend(trellis.holes)
+        return holes
+
+    def homotopy_partition(
+        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
+    ) -> HomotopyPartition:
+        """
+        The gathered stable partitions as a
+        :class:`~tanglepack.topology.PartitionFamily.HomotopyPartition`.
+
+        Wraps :meth:`_gathered_partitions` without recomputing anything, so
+        its ``signature()`` is the cache signature every other accessor keys
+        on. Cheap; not cached.
+
+        Args:
+            fixed_points: The trellis selection whose full trellis resolves
+                tolerances and crossings (all fixed points by default). The
+                partitions themselves are gathered from every cached
+                per-fixed-point trellis regardless.
+
+        Returns:
+            The family.
+        """
+        return HomotopyPartition.from_results(
+            self._gathered_partitions(), trellis=self.trellis(fixed_points)
+        )
+
+    def minimal_trellis(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        rebuild: bool = False,
+    ) -> MinimalTrellis:
+        """
+        Build (and cache) the :class:`~tanglepack.topology.MinimalTrellis.MinimalTrellis`
+        of a trellis selection.
+
+        Reduces the selected trellis to its hole bridges (from
+        :meth:`_gathered_holes`) and the first images of those in an active
+        class (from :meth:`bridge_classes`, itself cached on the same key).
+
+        Cached on ``(workbench.generation, partition signature)``, exactly as
+        :meth:`bridge_classes`.
+
+        Args:
+            fixed_points: A single FixedPoint, an iterable of them, or None (the
+                default) for all of them.
+            rebuild: Force a rebuild.
+
+        Returns:
+            The minimal trellis.
+
+        Note:
+            Needs every fixed point of interest classified, pseudoneighbored,
+            punched and partitioned first (the session fan-outs).
+        """
+        cache_key = self._cache_key(fixed_points)
+        trellis = self.trellis(fixed_points)
+        signature = self._partition_signature(self._gathered_partitions())
+        cached = self._minimal_trellises.get(cache_key)
+        if (
+            not rebuild
+            and cached is not None
+            and cached[0] == self.workbench.generation
+            and cached[1] == signature
+        ):
+            return cached[2]
+        minimal = _minimal_trellis(
+            trellis,
+            self._gathered_holes(fixed_points),
+            self.bridge_classes(fixed_points, rebuild=rebuild),
+        )
+        self._minimal_trellises[cache_key] = (self.workbench.generation, signature, minimal)
+        return minimal
+
+    def iterated_partition(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        rebuild: bool = False,
+    ) -> IteratedHomotopyPartition:
+        """
+        Build (and cache) the
+        :class:`~tanglepack.topology.PartitionFamily.IteratedHomotopyPartition`:
+        the homotopy partition cut by the image bridges of :meth:`minimal_trellis`.
+
+        Cached on ``(workbench.generation, partition signature)``.
+
+        Args:
+            fixed_points: The trellis selection.
+            rebuild: Force a rebuild of the partition over the CURRENT cached
+                minimal trellis (rebuild that first, through
+                :meth:`minimal_trellis`, to refresh both).
+
+        Returns:
+            The refined family.
+        """
+        cache_key = self._cache_key(fixed_points)
+        signature = self._partition_signature(self._gathered_partitions())
+        cached = self._iterated_partitions.get(cache_key)
+        if (
+            not rebuild
+            and cached is not None
+            and cached[0] == self.workbench.generation
+            and cached[1] == signature
+        ):
+            return cached[2]
+        iterated = IteratedHomotopyPartition.from_minimal(
+            self.minimal_trellis(fixed_points),
+            self.homotopy_partition(fixed_points),
+        )
+        self._iterated_partitions[cache_key] = (
+            self.workbench.generation,
+            signature,
+            iterated,
+        )
+        return iterated
+
+    def describe_iterated_partition(
+        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
+    ) -> str:
+        """
+        Human-readable report of :meth:`iterated_partition`, interval notation.
+
+        Args:
+            fixed_points: The trellis selection.
+
+        Returns:
+            The report, one line per element with its parent and cutting bridge.
+        """
+        return self.iterated_partition(fixed_points).describe()
+
     def dual_graph(
         self,
         fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
@@ -452,53 +608,47 @@ class TangleSession:
         rebuild: bool = False,
     ) -> DualGraph:
         """
-        Build (and cache) the bipartite :class:`~tanglepack.topology.DualGraph.DualGraph`
-        of a trellis's arrangement.
+        Build (and cache) the :class:`~tanglepack.topology.DualGraph.DualGraph`
+        of a trellis selection.
 
-        Mirrors :meth:`arrangement` and :meth:`bridge_classes`: the arrangement
-        dualled is the selected trellis's own (all fixed points by default), and
-        the stable partitions the graph's arc-node elements are resolved against
-        are gathered from EVERY cached, non-stale per-fixed-point trellis (see
-        :meth:`_gathered_partitions`), exactly as :meth:`bridge_classes` does.
-        The strong pips passed to :class:`~tanglepack.topology.DualGraph.DualGraph`
-        — they drive its fill, ``(f^k(q0), q0]`` on each pip's own branch —
-        are gathered the same way, one per cached per-fixed-point trellis whose
-        fixed point falls inside the selection (see :meth:`_gathered_strong_pips`).
+        The graph is built over :meth:`minimal_trellis` (its sparse
+        arrangement) and :meth:`iterated_partition` (the elements on each side
+        of every stable edge), both cached on the same key. The strong pips
+        passed to it — each declares the fundamental segment of its own
+        stable branch, ``(f^k(q0), q0]``, where the two side nodes of a stable
+        edge unify into one traversable node — are gathered one per cached
+        per-fixed-point trellis whose fixed point falls inside the selection
+        (see :meth:`_gathered_strong_pips`).
 
         Cached on ``(workbench.generation, partition signature, gathered strong
         pips)``: the first two exactly as :meth:`bridge_classes` (the same
         :meth:`_partition_signature` catches a re-partition that leaves the
-        workbench generation untouched), the third because a pip choice
-        changes the graph's ``filled`` flags and ``fill_segments``.
+        workbench generation untouched), the third because a pip choice moves
+        the unified nodes.
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None (the
-                default) for all of them — selects which trellis's arrangement
-                is dualled.
-            rebuild: Force a rebuild even if a cached graph exists for the
-                current generation and partition signature.
+                default) for all of them.
+            rebuild: Force a rebuild (of the minimal trellis and the iterated
+                partition too).
 
         Returns:
             The :class:`~tanglepack.topology.DualGraph.DualGraph`.
 
         Raises:
-            ValueError: Propagated from
-                :class:`~tanglepack.topology.DualGraph.DualGraph` when a stable
-                arc's branch has no partition on a side, or when an arrangement
+            ValueError: Propagated from the constructor when a stable edge's
+                branch has no partition on a side, or when an arrangement
                 component fails the graph's own topological checks.
 
         Note:
-            Like :meth:`bridge_classes`, this needs every fixed point of
-            interest already partitioned (:meth:`partition_stable_manifold`),
-            and only trellises still cached at call time contribute their
-            partitions and strong pips.
-
-            Calling :meth:`~tanglepack.topology.Trellis.Trellis.set_strong_pip`
-            on a cached per-fixed-point trellis, even without re-partitioning
-            or touching the workbench, changes the gathered pips and so the
-            next call rebuilds the graph with the new fill. A selection with
-            no classified pip builds a graph that fills nothing (the
-            constructor warns).
+            Needs every fixed point of interest already partitioned; only
+            trellises still cached at call time contribute their partitions,
+            holes and strong pips. Calling
+            :meth:`~tanglepack.topology.Trellis.Trellis.set_strong_pip` on a
+            cached per-fixed-point trellis changes the gathered pips and so
+            the next call rebuilds the graph with the new fundamental segment.
+            A selection with no classified pip builds a graph that unifies
+            nothing (the constructor warns).
         """
         cache_key = self._cache_key(fixed_points)
         trellis = self.trellis(fixed_points)
@@ -517,7 +667,9 @@ class TangleSession:
             return cached[3]
 
         self._warn_unpartitioned_branches(trellis, partitions)
-        dg = DualGraph(trellis.arrangement, partitions, strong_pips=strong_pips)
+        minimal = self.minimal_trellis(fixed_points, rebuild=rebuild)
+        iterated = self.iterated_partition(fixed_points, rebuild=rebuild)
+        dg = DualGraph(minimal, iterated, strong_pips=strong_pips)
 
         self._dual_graphs[cache_key] = (
             self.workbench.generation,
@@ -579,6 +731,34 @@ class TangleSession:
         """
         graph = dual_graph if dual_graph is not None else self.dual_graph()
         return plotting.plot_dual_graph(graph, ax=ax, **kwargs)
+
+    def plot_minimal_trellis(
+        self,
+        minimal: Optional[MinimalTrellis] = None,
+        ax: Optional["Axes"] = None,
+        **kwargs,
+    ) -> "Axes":
+        """
+        Draw a minimal trellis, defaulting to :meth:`minimal_trellis`'s own
+        (all fixed points, cached) result.
+
+        Thin delegate to
+        :func:`~tanglepack.topology.plotting.plot_minimal_trellis`.
+
+        Args:
+            minimal: The minimal trellis to draw. Defaults to
+                ``self.minimal_trellis()``.
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            **kwargs: Forwarded to
+                :func:`~tanglepack.topology.plotting.plot_minimal_trellis`
+                (e.g. ``show_dropped``).
+
+        Returns:
+            The Axes drawn on.
+        """
+        target = minimal if minimal is not None else self.minimal_trellis()
+        return plotting.plot_minimal_trellis(target, ax=ax, **kwargs)
 
     def invalidate_trellises(self) -> None:
         """
