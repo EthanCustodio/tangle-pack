@@ -49,15 +49,59 @@ FIGURES_DIR = Path(__file__).resolve().parent.parent / "figures"
 OUT_PATH = FIGURES_DIR / "henon_minimal_dual_graph.png"
 
 
-def _apply_plane_view(ax, view: tuple) -> None:
-    """The shared view of a row's plane panels, WITHOUT the equal aspect.
+#: How far past the trimmed stable manifold's y-extent a hole bridge's points
+#: still count as "the region of interest" (a fraction of that extent). The
+#: lobes' folds stay within the manifold's y-band; the outgoing arms leave it
+#: on their way to x ~ 25 (k=2.8) or x ~ 180 (k=10) and are cut there.
+BAND_MARGIN = 0.3
+#: How far to the right of the stable manifold the view extends, as a fraction
+#: of the folds' width (the folds lie to the LEFT of the manifold; the arms
+#: leave to the right and are cut just past the fixed point).
+RIGHT_MARGIN = 0.15
 
-    A k=10 bridge runs to x ~ 180 while the tangle sits within |y| < 20, so an
-    equal-aspect panel is a thin strip in which nothing near the fixed point is
-    legible; the dual graph is a topological picture and survives the stretch.
+
+def _trimmed_stable_points(session: TangleSession, fp) -> np.ndarray:
+    """The points of the stable manifold AS TRIMMED at the chosen pip."""
+    return np.vstack(
+        [
+            manifold.get_point_array()
+            for (fixed_point, stability, _o, _b), manifold in session.manifolds.items()
+            if fixed_point is fp and stability == "stable"
+        ]
+    )
+
+
+def _region_of_interest(session: TangleSession, fp, minimal) -> tuple:
     """
+    The view of a row's plane panels: the folds near the fixed point.
+
+    Frames the trimmed stable manifold plus every hole-bridge point whose y
+    lies within :data:`BAND_MARGIN` of that manifold's y-extent, then cuts the
+    right edge :data:`RIGHT_MARGIN` of the folds' width past the manifold, so
+    the lobes' folds (at negative x) are in and the long outgoing arms are out
+    — the framing of the blast figures. Equal aspect, as there.
+    """
+    stable_points = _trimmed_stable_points(session, fp)
+    y_lo, y_hi = float(stable_points[:, 1].min()), float(stable_points[:, 1].max())
+    margin = BAND_MARGIN * max(y_hi - y_lo, 1.0)
+    sets = [stable_points]
+    for bridge_id in minimal.hole_bridge_ids:
+        bridge = minimal.trellis.bridge_between(*bridge_id)
+        if bridge is None:
+            continue
+        points = bridge.get_point_array()
+        inside = points[(points[:, 1] >= y_lo - margin) & (points[:, 1] <= y_hi + margin)]
+        if len(inside):
+            sets.append(inside)
+    stacked = np.vstack(sets)
+    x_hi = float(stable_points[:, 0].max())
+    x_cap = x_hi + RIGHT_MARGIN * max(x_hi - float(stacked[:, 0].min()), 1.0)
+    return _view([stacked[stacked[:, 0] <= x_cap]])
+
+
+def _apply_plane_view(ax, view: tuple) -> None:
+    """The shared view of a row's plane panels (equal aspect)."""
     _apply_view(ax, view)
-    ax.set_aspect("auto")
 
 
 def _draw_stable(ax, session: TangleSession, fp) -> None:
@@ -126,12 +170,9 @@ def main() -> None:
     )
     axes = np.atleast_2d(axes)
     for row, case in enumerate(CASES):
-        session, fp, stable_points = build(case)
+        session, fp, _pre_trim_stable_points = build(case)
         minimal = session.minimal_trellis()
-        view = _view(
-            [stable_points]
-            + [bridge.get_point_array() for bridge in minimal.kept]
-        )
+        view = _region_of_interest(session, fp, minimal)
         report(session, case.title)
         draw_minimal_trellis(axes[row, 0], session, fp, view, case.title)
         draw_partitions(axes[row, 1], session, case.title)
