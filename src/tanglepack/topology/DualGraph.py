@@ -25,11 +25,17 @@ Payload. A stable node carries, per side it faces, the element of the
 partition it was built over (normally the iterated homotopy partition),
 that element's interval, the homotopy element it refines and the image
 bridge it lies under (``PartitionInterval.parent_element_id`` /
-``cut_by``), and the elements its element maps onto under one map step.
-A face node carries its regions, corners and bridge ids and can resolve its
-image face on request. Faces deliberately carry NO bridge class: a face may
-have several bridges through it, and the class-to-face relation is not one
-to one.
+``cut_by``), the elements its element maps onto under one map step, and
+the element's NAME (:class:`~.ElementNaming.ElementName`: side-tagged,
+anchor outward, ``R_1^2`` for the second child of the first right-hand
+homotopy element, plain ``R_3`` for an unsplit one). The names come from
+one :class:`~.ElementNaming.ElementNaming` built over the partition's
+homotopy family (:attr:`DualGraph.naming`); over a family with no homotopy
+parent every element is its own parent and prints plain. A face node
+carries its regions, corners and bridge ids and can resolve its image face
+on request. Faces deliberately carry NO bridge class: a face may have
+several bridges through it, and the class-to-face relation is not one to
+one.
 
 Dev Notes:
 
@@ -66,6 +72,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..numerics.geometry import point_in_polygon, signed_polygon_area
+from .ElementNaming import ElementName, ElementNaming
 from .TopologyResults import (
     Arc,
     ElementRef,
@@ -135,6 +142,9 @@ class StableNode:
             None.
         images: Per faced side, the elements the element maps onto under one
             map step (empty for an element with an unbounded end).
+        names: Per faced side, the element's
+            :class:`~.ElementNaming.ElementName` (``R_1^2``), filled by
+            :meth:`DualGraph._name_stable_nodes`.
         faces: The face node on each faced side, filled once the graph is
             built.
     """
@@ -153,7 +163,22 @@ class StableNode:
     parents: dict[Side, Optional[ElementRef]] = field(default_factory=dict)
     cut_by: dict[Side, Optional["BridgeId"]] = field(default_factory=dict)
     images: dict[Side, list[ElementRef]] = field(default_factory=dict)
+    names: dict[Side, ElementName] = field(default_factory=dict)
     faces: dict[Side, "FaceNode"] = field(default_factory=dict)
+
+    @property
+    def label(self) -> str:
+        """
+        The node's element name(s), one per faced side, joined by ``" | "``.
+
+        A unified node reads ``"R_1^2 | L_3"`` (left side first, matching
+        :attr:`sides`); a side node reads its one name. A side with no name
+        falls back to the element's :attr:`~.TopologyResults.ElementRef.label`.
+        """
+        return " | ".join(
+            self.names[side].text if side in self.names else self.elements[side].label
+            for side in self.sides
+        )
 
     @property
     def node_side(self) -> NodeSide:
@@ -404,6 +429,11 @@ class DualGraph:
         trellis: Its full trellis (registry lookups, iterates, strong pips).
         arrangement: The minimal trellis's sparse arrangement.
         partition: The partition family the stable nodes' elements come from.
+        naming: The :class:`~.ElementNaming.ElementNaming` the stable nodes'
+            names come from: over ``partition.homotopy`` and ``partition``
+            when the partition is an iterated homotopy partition with its
+            homotopy family attached, else over ``partition`` alone (every
+            element its own parent, superscript 1).
         stable_nodes: Every :class:`StableNode`, keyed by :attr:`StableNode.key`,
             in branch-then-cdist order (left before right before both).
         face_nodes: The merged faces; ``face_nodes[i].index == i``.
@@ -442,6 +472,8 @@ class DualGraph:
         self.trellis: "Trellis" = minimal.trellis
         self.arrangement: "Arrangement" = minimal.arrangement
         self.partition = partition
+        self.naming: Optional[ElementNaming] = None
+        self._naming_is_iterated = False
         self.stable_nodes: dict[tuple, StableNode] = {}
         self.face_nodes: list[FaceNode] = []
         self.fundamental_segments: dict["ManifoldKey", tuple[float, float]] = {}
@@ -450,6 +482,7 @@ class DualGraph:
 
         self._fundamental_segments_from(strong_pips)
         self._build_stable_nodes()
+        self._name_stable_nodes()
         classes = self._merge_faces()
         self._build_face_nodes(classes)
         self._attach()
@@ -598,6 +631,36 @@ class DualGraph:
             key=lambda n: (order.get(n.branch_key, len(order)), n.lo_cdist, rank[n.node_side]),
         ):
             self.stable_nodes[node.key] = node
+
+    # ── payload: element names ──────────────────────────────────────────────
+
+    def _build_naming(self) -> ElementNaming:
+        """
+        The naming the stable nodes' names come from (see :attr:`naming`).
+
+        Over the partition's homotopy family and the partition itself when the
+        partition is an :class:`~.PartitionFamily.IteratedHomotopyPartition`
+        with its ``homotopy`` attached; over the partition alone otherwise, in
+        which case every element is its own parent and prints plain.
+        """
+        homotopy = getattr(self.partition, "homotopy", None)
+        if homotopy is not None:
+            self._naming_is_iterated = True
+            return ElementNaming(homotopy, self.partition)
+        self._naming_is_iterated = False
+        return ElementNaming(self.partition)
+
+    def _name_stable_nodes(self) -> None:
+        """Record, per node and side, the name of the element on that side."""
+        self.naming = self._build_naming()
+        for node in self.stable_nodes.values():
+            for side in node.sides:
+                ref = node.elements[side]
+                node.names[side] = (
+                    self.naming.name(ref)
+                    if self._naming_is_iterated
+                    else self.naming.homotopy_name(ref)
+                )
 
     # ── face nodes and the merge rule ───────────────────────────────────────
 

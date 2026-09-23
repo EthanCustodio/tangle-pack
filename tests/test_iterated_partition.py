@@ -1,10 +1,12 @@
 """
 The iterated homotopy partition: the homotopy partition cut by image bridges.
 
-The rule, in bridges: every image bridge of the minimal trellis cuts the side
-of the stable manifold it lies on, the element under it closed at both its
-crossings and the neighbours open; existing hole boundaries stand; the other
-side is untouched at an image endpoint.
+The footprint rule: the crossings ``x_0 .. x_m`` of a hole bridge's image
+chain are paired ``(x_0, x_m), (x_1, x_2), ...``; each pair bounds a stretch
+of the image lobe's footprint, OPEN at both ends like a hole's stretch, and
+the element outside is CLOSED there. Every image piece cuts its own row at
+its two crossings toward their partners; existing hole boundaries stand; the
+other side is untouched at an image endpoint.
 """
 
 from __future__ import annotations
@@ -16,11 +18,29 @@ import logging
 import pytest
 
 from minimal_helpers import build_pieces
+from tanglepack.topology.BridgeClass import _image_chain
 from tanglepack.topology.PartitionFamily import IteratedHomotopyPartition
 from tanglepack.topology.StablePartition import owns_cdist, row_of_end
 
 #: The module (the package attribute of the same name is the class).
 family_module = importlib.import_module("tanglepack.topology.PartitionFamily")
+
+
+def _chain_partners(full, minimal):
+    """``{(piece, crossing): partner}`` over the full image chains (the rule under test)."""
+    partners = {}
+    for parent in minimal.image_chains:
+        chain = _image_chain(full, parent)
+        assert chain, "a kept chain is readable from the trellis"
+        crossings = [chain[0][0]] + [pair[1] for pair in chain]
+        partner_of = {crossings[0]: crossings[-1], crossings[-1]: crossings[0]}
+        for i in range(1, len(chain) - 1, 2):
+            partner_of[crossings[i]] = crossings[i + 1]
+            partner_of[crossings[i + 1]] = crossings[i]
+        for piece in chain:
+            for iid in piece:
+                partners[(frozenset(piece), iid)] = partner_of.get(iid)
+    return partners
 
 
 def _flanks(result, boundary_id):
@@ -80,8 +100,44 @@ def _check_iterated(pieces):
             assert result.element_of_intersection[iid] == owners[0].element_id
         assert len(result.intervals) >= len(parent_result.intervals)
 
-    # Under each same-branch image bridge, on its side: closed at both ends
-    # unless the end was already a boundary (then unchanged), open beyond.
+    # Every image piece opens, at each of its crossings and on its own row, the
+    # flank toward the crossing's footprint partner (unless the crossing was
+    # already a boundary, which stands unchanged).
+    partners = _chain_partners(full, minimal)
+    for bid in minimal.image_bridge_ids:
+        rows = {
+            iid: row_of_end(full, bid, which) for iid, which in zip(bid, ("first", "second"))
+        }
+        branches = {iid: full.intersection(iid).manifold_b_key for iid in bid}
+        a, b = bid
+        if branches[a] == branches[b] and rows[a] != rows[b]:
+            continue
+        for iid in bid:
+            partner = partners.get((frozenset(bid), iid))
+            if partner is None or full.intersection(partner).manifold_b_key != branches[iid]:
+                continue
+            result = iterated.result(branches[iid], rows[iid])
+            parent_result = homotopy.result(branches[iid], rows[iid])
+            old = {iv.lo_id for iv in parent_result.intervals} | {
+                iv.hi_id for iv in parent_result.intervals
+            }
+            if iid in old:
+                continue
+            before, after, _ = _flanks(result, iid)
+            own_c = full.intersection(iid).stable_cdist
+            partner_c = full.intersection(partner).stable_cdist
+            if partner_c < own_c:
+                assert before is False and after is True, f"{bid} at {iid}: expected )["
+            else:
+                assert before is True and after is False, f"{bid} at {iid}: expected ]("
+            applied = [
+                cut for cut in iterated.cuts
+                if cut.bridge_id == bid and cut.intersection_id == iid and cut.opened
+            ]
+            assert len(applied) == 1 and applied[0].partner == partner
+
+    # Every element under a same-branch image bridge records an image bridge
+    # covering it; the other side is untouched at the bridge's endpoints.
     for bid in minimal.image_bridge_ids:
         a, b = bid
         branch_a = full.intersection(a).manifold_b_key
@@ -91,17 +147,7 @@ def _check_iterated(pieces):
         if row != row_of_end(full, bid, "second"):
             continue
         result = iterated.result(branch_a, row)
-        parent_result = homotopy.result(branch_a, row)
-        old = {iv.lo_id for iv in parent_result.intervals} | {
-            iv.hi_id for iv in parent_result.intervals
-        }
         near, far = sorted(bid, key=lambda i: full.intersection(i).stable_cdist)
-        before_near, after_near, _ = _flanks(result, near)
-        before_far, after_far, _ = _flanks(result, far)
-        if near not in old:
-            assert after_near is True and before_near is False
-        if far not in old:
-            assert before_far is True and after_far is False
         # Every element under the bridge records an image bridge covering it.
         near_c = full.intersection(near).stable_cdist
         far_c = full.intersection(far).stable_cdist
@@ -117,8 +163,6 @@ def _check_iterated(pieces):
             )
             assert full.intersection(cover_near).stable_cdist <= iv.lo_cdist + tol
             assert full.intersection(cover_far).stable_cdist >= iv.hi_cdist - tol
-        if under[0].lo_id == near and under[-1].hi_id == far:
-            assert (near in old or under[0].closed_lo) and (far in old or under[-1].closed_hi)
         # The other side is not cut at an image endpoint by THIS bridge.
         other = iterated.result(branch_a, "right" if row == "left" else "left")
         other_parent = homotopy.result(branch_a, "right" if row == "left" else "left")
@@ -209,6 +253,54 @@ def test_a_row_invariant_violation_is_warned_and_skipped(
     assert sum(len(r.intervals) for r in iterated) < sum(
         len(r.intervals) for r in pieces.iterated
     )
+
+
+def test_cuts_record_partners(k10_partitioned):
+    session, fp = k10_partitioned
+    pieces = build_pieces(session, [fp])
+    chain_crossings = {
+        iid for parent in pieces.minimal.image_chains
+        for pair in _image_chain(pieces.full, parent) for iid in pair
+    }
+    applied = [cut for cut in pieces.iterated.cuts if cut.opened is not None]
+    assert applied
+    for cut in applied:
+        assert cut.partner in chain_crossings and cut.partner != cut.intersection_id
+        assert f"toward {cut.partner}" in repr(cut)
+    for cut in pieces.iterated.cuts:
+        if cut.opened is None:
+            assert cut.reason in {
+                "existing boundary", "row invariant", "no partition", "no partner",
+                "partner disagreement", "partner on another branch", "cut conflict",
+            }
+
+
+def test_an_even_chain_is_warned_and_leaves_a_crossing_unpaired(
+    k10_partitioned, monkeypatch, caplog
+):
+    session, fp = k10_partitioned
+    pieces = build_pieces(session, [fp])
+    parent = next(
+        p for p in pieces.minimal.image_chains
+        if len(_image_chain(pieces.full, p) or []) >= 3
+    )
+    full_chain = _image_chain(pieces.full, parent)
+    original = family_module._image_chain
+
+    def truncated(trellis, bridge_id):
+        chain = original(trellis, bridge_id)
+        return chain[:2] if bridge_id == parent else chain
+
+    monkeypatch.setattr(family_module, "_image_chain", truncated)
+    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.PartitionFamily"):
+        iterated = IteratedHomotopyPartition.from_minimal(pieces.minimal, pieces.homotopy)
+    assert any("even number of pieces" in record.message for record in caplog.records)
+    leftover = full_chain[0][1]  # x_1: (x_0, x_2) pair up, x_1 is left over
+    unpaired = [
+        cut for cut in iterated.cuts
+        if cut.intersection_id == leftover and cut.reason == "no partner"
+    ]
+    assert unpaired, "the leftover crossing of the even chain gets no partner"
 
 
 def test_describe_mentions_parents_and_cuts(k10_partitioned):

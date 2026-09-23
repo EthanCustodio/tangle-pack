@@ -438,9 +438,20 @@ def test_classes_and_members_come_out_in_the_documented_order(k10_partitioned):
     trellis, _partitions, table = _k10_table(session, fp)
 
     keys = table.classes
-    assert keys == sorted(keys, key=lambda cls: class_sort_key(cls, trellis.fixed_points))
+    by_class = {entry.bridge_class: entry for entry in table}
+    assert keys == sorted(
+        keys,
+        key=lambda cls: (
+            by_class[cls].min_unstable_cdist, class_sort_key(cls, trellis.fixed_points)
+        ),
+    )
+    # The anchor bridge (unstable cdist 0) puts its class first.
+    assert table.entries[0].min_unstable_cdist == 0.0
     for entry in table:
         assert entry.bridge_ids == sorted(entry.bridge_ids)
+        assert entry.min_unstable_cdist == min(
+            trellis.intersection(bid[0]).unstable_cdist for bid in entry.bridge_ids
+        )
 
     # The key really is (fixed point, orbit, branch, side, element) twice over.
     for cls in keys:

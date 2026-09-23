@@ -68,17 +68,23 @@ Dev Notes:
   of the STABLE branch's fixed point. Running this on the all-fixed-points
   trellis with every per-fixed-point trellis's partitions is what covers the
   nested and heteroclinic cases in one pass.
-* Ordering is deliberate and total (:func:`class_sort_key`): the table is built
-  in sorted order and each class's members are sorted by
-  :data:`~tanglepack.numerics.Bridge.BridgeId`, so two runs of the same trellis
-  enumerate the classes identically.
+* Ordering is deliberate and total: the table is built in ascending order of
+  each class's ``min_unstable_cdist`` (the smallest unstable canonical
+  distance of a member's first crossing, so the class holding the anchor
+  bridge comes first and takes the letter ``a``; author's rule, 2026-09-21),
+  ties broken by :func:`class_sort_key`, and each class's members are sorted
+  by :data:`~tanglepack.numerics.Bridge.BridgeId`, so two runs of the same
+  trellis enumerate the classes identically. Letters, legends and
+  transition-graph slots all follow this one order.
 * Letters (``a``, ``b``, ...) and resonance-zone membership are session-level
   annotations (the loom owns zones and the persistent alphabet); the slots for
   them live on :class:`BridgeClassEntry` so one object carries the whole record.
-* Refined symbols — subdividing one class into several symbols that all still
-  belong to it — are future work. They will hang off :class:`BridgeClassEntry`
-  (a finer grouping of its members); :class:`BridgeClass` itself stays the
-  coarse key.
+* Refined symbols — subdividing one class into several symbols (``a_1, a_2``)
+  that all still belong to it — live in ``SymbolicDynamics.py``
+  (``RefinedClass``, ``SymbolicDynamics.refined`` / ``member_refinement``),
+  derived from the walked itineraries of all classes, never from this table.
+  :class:`BridgeClass` stays the coarse key: a refinement groups an entry's
+  members more finely and changes no class identity.
 """
 
 from __future__ import annotations
@@ -195,6 +201,9 @@ class BridgeClassEntry:
         zone_key: The ``(fixed_point, branch_index)`` key of the resonance zone
             the class lies in, set by the session; ``None`` when it lies outside
             every zone or no zones are defined.
+        min_unstable_cdist: The smallest unstable canonical distance of a
+            member's first crossing — the table's sort key (the anchor class
+            has 0); ``inf`` for an entry assembled by hand.
     """
 
     bridge_class: BridgeClass
@@ -205,6 +214,7 @@ class BridgeClassEntry:
     unresolved: list["BridgeId"] = field(default_factory=list)
     letter: Optional[str] = None
     zone_key: Optional[tuple] = None
+    min_unstable_cdist: float = float("inf")
 
     @property
     def active(self) -> bool:
@@ -323,7 +333,8 @@ class BridgeClassEntry:
 @dataclass
 class BridgeClassTable:
     """
-    Every bridge class of a trellis, in :func:`class_sort_key` order.
+    Every bridge class of a trellis, in ascending ``min_unstable_cdist`` order
+    (ties by :func:`class_sort_key`).
 
     Attributes:
         entries: The classes, one :class:`BridgeClassEntry` each.
@@ -545,10 +556,12 @@ def bridge_classes(
             or not it is among these.
 
     Returns:
-        A :class:`BridgeClassTable` ordered by :func:`class_sort_key`, each
-        entry's members sorted by :data:`~tanglepack.numerics.Bridge.BridgeId`
-        and its ``inert`` flag and image evidence filled in. Letters and zone
-        keys are left unset (the session fills them).
+        A :class:`BridgeClassTable` ordered by each class's smallest member
+        first-crossing unstable canonical distance (``min_unstable_cdist``,
+        ties by :func:`class_sort_key`), each entry's members sorted by
+        :data:`~tanglepack.numerics.Bridge.BridgeId` and its ``inert`` flag and
+        image evidence filled in. Letters and zone keys are left unset (the
+        session fills them).
 
     Raises:
         ValueError: If two of ``partitions`` cover the same ``(branch, side)``;
@@ -607,12 +620,21 @@ def bridge_classes(
             ancestor_id,
         )
 
+    def min_cdist(members: list[BridgeMember]) -> float:
+        return min(
+            float(trellis.intersection(member.bridge_id[0]).unstable_cdist)
+            for member in members
+        )
+
     entries = [
         BridgeClassEntry(
-            bridge_class, sorted(members, key=lambda member: member.bridge_id)
+            bridge_class,
+            sorted(members, key=lambda member: member.bridge_id),
+            min_unstable_cdist=min_cdist(members),
         )
         for bridge_class, members in sorted(
-            grouped.items(), key=lambda item: class_sort_key(item[0], fixed_points)
+            grouped.items(),
+            key=lambda item: (min_cdist(item[1]), class_sort_key(item[0], fixed_points)),
         )
     ]
     for entry in entries:

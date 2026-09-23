@@ -31,6 +31,10 @@ from ..topology.BridgeClass import (
 from ..topology.DualGraph import DualGraph
 from ..topology.MinimalTrellis import MinimalTrellis, minimal_trellis as _minimal_trellis
 from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
+from ..topology.SymbolicDynamics import (
+    SymbolicDynamics,
+    symbolic_dynamics as _symbolic_dynamics,
+)
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
@@ -38,10 +42,15 @@ from .Blast import BlastResult, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
 
 if TYPE_CHECKING:
+    import networkx
     from matplotlib.axes import Axes
+    from matplotlib.lines import Line2D
+    from matplotlib.table import Table
 
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
+    from ..topology.DualWalk import Walk
+    from ..topology.plotting import CartoonLayout
     from ..topology.TopologyResults import Endpoint, Hole, Side, StablePartitionResult
 
 logger = logging.getLogger(__name__)
@@ -117,6 +126,10 @@ class TangleSession:
         # iterated_partition(). The dual graph is built over these two.
         self._minimal_trellises: dict = {}
         self._iterated_partitions: dict = {}
+        # (workbench.generation, partition signature, strong pips, dynamics) per
+        # trellis-selection cache key; see symbolic_dynamics(). Built over the
+        # dual graph and the bridge classes, so it shares the dual graph's key.
+        self._symbolic_dynamics: dict = {}
         # One resonance zone per (fixed_point, branch_index): a non-inversion point
         # has a single branch (one zone); an inversion point has two. Insertion order
         # is preserved so plotting/shading is deterministic.
@@ -267,9 +280,10 @@ class TangleSession:
 
         Returns:
             A :class:`~tanglepack.topology.BridgeClass.BridgeClassTable` in
-            :func:`~tanglepack.topology.BridgeClass.class_sort_key` order, each
-            entry carrying its members with directions, its ``letter`` and its
-            ``zone_key``.
+            ascending ``min_unstable_cdist`` order (the class holding the
+            smallest-cdist bridge first, so it is lettered ``a`` on first
+            sight), each entry carrying its members with directions, its
+            ``letter`` and its ``zone_key``.
 
         Raises:
             ValueError: Propagated from
@@ -703,6 +717,264 @@ class TangleSession:
             if trellis.strong_pip is not None:
                 pips.append(trellis.strong_pip)
         return pips
+
+    def symbolic_dynamics(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        rebuild: bool = False,
+    ) -> SymbolicDynamics:
+        """
+        Compute (and cache) the
+        :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics` of a
+        trellis selection.
+
+        The dynamics is read off :meth:`dual_graph` (the walks between the
+        one-step images of each class's two elements) and
+        :meth:`bridge_classes` (the classes, lettered by
+        :attr:`bridge_alphabet`), both cached on their own keys; see
+        :func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics` for the
+        algorithm (landing, singleton/trellis path, itinerary, word,
+        refinement, transition structure). Inert classes are lettered ``u, v,
+        ...`` by the topology layer for this result only; the session alphabet
+        stays active-only.
+
+        Cached on ``(workbench.generation, partition signature, gathered strong
+        pips)``, exactly the key of :meth:`dual_graph`: the dynamics depends on
+        the dual graph's unified nodes, so a pip change rebuilds it too.
+
+        Args:
+            fixed_points: A single FixedPoint, an iterable of them, or None (the
+                default) for all of them.
+            rebuild: Force a rebuild (of the dual graph, its pieces and the
+                bridge-class table too). Letters are stable across rebuilds.
+
+        Returns:
+            The :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`.
+
+        Raises:
+            ValueError: Propagated from :meth:`dual_graph` or
+                :meth:`bridge_classes` when the selection is not fully
+                partitioned.
+
+        Note:
+            Needs every fixed point of interest classified, punched and
+            partitioned first, as :meth:`dual_graph` does. A class whose image
+            is not registered (no walk, no image chain) is left unresolved
+            with a WARNING rather than raising — grow or blast and call again.
+        """
+        cache_key = self._cache_key(fixed_points)
+        self.trellis(fixed_points)
+        partitions = self._gathered_partitions()
+        signature = self._partition_signature(partitions)
+        strong_pips = tuple(self._gathered_strong_pips(fixed_points))
+
+        cached = self._symbolic_dynamics.get(cache_key)
+        if (
+            not rebuild
+            and cached is not None
+            and cached[0] == self.workbench.generation
+            and cached[1] == signature
+            and cached[2] == strong_pips
+        ):
+            return cached[3]
+
+        dual = self.dual_graph(fixed_points, rebuild=rebuild)
+        table = self.bridge_classes(fixed_points, rebuild=rebuild)
+        dynamics = _symbolic_dynamics(dual, table)
+
+        self._symbolic_dynamics[cache_key] = (
+            self.workbench.generation,
+            signature,
+            strong_pips,
+            dynamics,
+        )
+        return dynamics
+
+    def describe_symbolic_dynamics(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+    ) -> str:
+        """
+        A multi-line report of :meth:`symbolic_dynamics`.
+
+        Args:
+            fixed_points: The trellis selection, as for :meth:`symbolic_dynamics`.
+
+        Returns:
+            :meth:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics.describe`
+            of the (cached) dynamics: the naming, every class with its
+            itinerary and word, the refinement and the transition matrix.
+        """
+        return self.symbolic_dynamics(fixed_points).describe()
+
+    def plot_transition_graph(
+        self,
+        dynamics: Optional[SymbolicDynamics] = None,
+        ax: Optional["Axes"] = None,
+        *,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ) -> "networkx.DiGraph":
+        """
+        Draw a transition graph, defaulting to :meth:`symbolic_dynamics`'s own
+        (cached) result for ``fixed_points``.
+
+        Thin delegate to
+        :func:`~tanglepack.topology.plotting.plot_transition_graph`.
+
+        Args:
+            dynamics: The dynamics to draw. Defaults to
+                ``self.symbolic_dynamics(fixed_points)``.
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            fixed_points: The trellis selection used when ``dynamics`` is
+                omitted.
+            **kwargs: Forwarded to
+                :func:`~tanglepack.topology.plotting.plot_transition_graph`
+                (e.g. ``refined``).
+
+        Returns:
+            The ``networkx.DiGraph`` drawn, as the plotting function returns it.
+        """
+        target = dynamics if dynamics is not None else self.symbolic_dynamics(fixed_points)
+        return plotting.plot_transition_graph(target, ax=ax, **kwargs)
+
+    def plot_walk(
+        self,
+        walk: "Walk",
+        ax: Optional["Axes"] = None,
+        *,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ) -> "Optional[Line2D]":
+        """
+        Highlight one dual-graph walk over the plane, on
+        :meth:`dual_graph`'s (cached) graph for ``fixed_points``.
+
+        Thin delegate to :func:`~tanglepack.topology.plotting.plot_walk`. The
+        walk is normally one of a class's
+        :attr:`~tanglepack.topology.SymbolicDynamics.ClassDynamics.search`
+        results from :meth:`symbolic_dynamics`.
+
+        Args:
+            walk: The :class:`~tanglepack.topology.DualWalk.Walk` to draw.
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            fixed_points: The trellis selection whose dual graph the walk
+                belongs to.
+            **kwargs: Forwarded to
+                :func:`~tanglepack.topology.plotting.plot_walk` (line
+                overrides).
+
+        Returns:
+            The ``Line2D`` of the walk, or None when the walk visits no face,
+            as the plotting function returns it.
+        """
+        graph = self.dual_graph(fixed_points)
+        return plotting.plot_walk(graph, walk, ax=ax, **kwargs)
+
+    def plot_bridges_by_class(
+        self,
+        dynamics: Optional[SymbolicDynamics] = None,
+        ax: Optional["Axes"] = None,
+        *,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ) -> dict[str, object]:
+        """
+        Draw every classed bridge coloured by its (refined) class, defaulting
+        to :meth:`symbolic_dynamics`'s own (cached) result for ``fixed_points``.
+
+        Thin delegate to
+        :func:`~tanglepack.topology.plotting.plot_bridges_by_class`, drawn over
+        the (cached) :meth:`trellis` of the same selection.
+
+        Args:
+            dynamics: The dynamics whose classes colour the bridges. Defaults
+                to ``self.symbolic_dynamics(fixed_points)``.
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            fixed_points: The trellis selection.
+            **kwargs: Forwarded to
+                :func:`~tanglepack.topology.plotting.plot_bridges_by_class`
+                (e.g. ``refined``, ``show_inert``).
+
+        Returns:
+            ``{symbol name: colour}`` for every symbol drawn, in legend order,
+            as the plotting function returns it.
+        """
+        trellis = self.trellis(fixed_points)
+        target = dynamics if dynamics is not None else self.symbolic_dynamics(fixed_points)
+        return plotting.plot_bridges_by_class(trellis, target, ax=ax, **kwargs)
+
+    def plot_itinerary_table(
+        self,
+        dynamics: Optional[SymbolicDynamics] = None,
+        ax: Optional["Axes"] = None,
+        *,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ) -> "Optional[Table]":
+        """
+        Tabulate a symbolic dynamics (one row per class), defaulting to
+        :meth:`symbolic_dynamics`'s own (cached) result for ``fixed_points``.
+
+        Thin delegate to
+        :func:`~tanglepack.topology.plotting.plot_itinerary_table`.
+
+        Args:
+            dynamics: The dynamics to tabulate. Defaults to
+                ``self.symbolic_dynamics(fixed_points)``.
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            fixed_points: The trellis selection used when ``dynamics`` is
+                omitted.
+            **kwargs: Forwarded to
+                :func:`~tanglepack.topology.plotting.plot_itinerary_table`
+                (e.g. ``refined``).
+
+        Returns:
+            The matplotlib ``Table``, or None when the dynamics has no class,
+            as the plotting function returns it.
+        """
+        target = dynamics if dynamics is not None else self.symbolic_dynamics(fixed_points)
+        return plotting.plot_itinerary_table(target, ax=ax, **kwargs)
+
+    def plot_dual_graph_cartoon(
+        self,
+        dynamics: Optional[SymbolicDynamics] = None,
+        ax: Optional["Axes"] = None,
+        *,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        **kwargs,
+    ) -> "CartoonLayout":
+        """
+        Draw the dual graph as a chalkboard cartoon (elements as bars along a
+        line, one node each, bridges as arcs, itineraries element to element)
+        for ``fixed_points``, on :meth:`dual_graph`'s (cached) graph and
+        :meth:`symbolic_dynamics`'s (cached) dynamics.
+
+        Thin delegate to
+        :func:`~tanglepack.topology.plotting.plot_dual_graph_cartoon`.
+
+        Args:
+            dynamics: The dynamics to draw. Defaults to
+                ``self.symbolic_dynamics(fixed_points)``.
+            ax: Optional matplotlib Axes to draw on. Defaults to the current
+                axes (plt).
+            fixed_points: The trellis selection.
+            **kwargs: Forwarded to
+                :func:`~tanglepack.topology.plotting.plot_dual_graph_cartoon`
+                (``show_bridges``, ``show_walks``, ``walk_linewidths``, ...).
+
+        Returns:
+            The :class:`~tanglepack.topology.plotting.CartoonLayout` the
+            plotting function returns.
+        """
+        graph = self.dual_graph(fixed_points)
+        target = dynamics if dynamics is not None else self.symbolic_dynamics(fixed_points)
+        return plotting.plot_dual_graph_cartoon(graph, target, ax=ax, **kwargs)
 
     def plot_dual_graph(
         self,

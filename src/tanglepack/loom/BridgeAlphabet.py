@@ -15,7 +15,11 @@ Dev Notes:
   a new letter. Carrying identity across a refinement is the refined-symbols
   work, not this module's.
 * Letters run ``a``..``z`` then ``aa``, ``ab``, ... (bijective base 26), so
-  ``a`` and ``aa`` never collide with a future refined symbol such as ``a_1``.
+  ``a`` and ``aa`` never collide with a refined symbol such as ``a_1``.
+* This alphabet letters ACTIVE classes only. Inert classes take their own
+  series ``u, v, w, ...`` from ``topology/SymbolicDynamics.inert_letters``
+  (which skips any letter an active class already holds), never from here;
+  topology cannot import loom, and the two series are kept distinct on purpose.
 """
 
 from __future__ import annotations

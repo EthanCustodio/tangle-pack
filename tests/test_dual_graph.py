@@ -344,6 +344,84 @@ def test_p3_payload(p3_partitioned):
 
 
 # --------------------------------------------------------------------------- #
+# Payload: element names
+# --------------------------------------------------------------------------- #
+#: The iterated-element names of the k=10 fixture (planning prototype, pinned
+#: by the symbolic-dynamics plan): three children of R_1 and R_3, two of L_1.
+K10_ITERATED_NAMES = {
+    "L_1^1", "L_1^2", "L_2", "L_3",
+    "R_1^1", "R_1^2", "R_1^3", "R_2", "R_3^1", "R_3^2", "R_3^3",
+}
+
+
+def test_k10_every_stable_node_side_is_named(k10_partitioned):
+    """Each faced side carries an ElementName agreeing with the graph's naming."""
+    from tanglepack.topology.ElementNaming import ElementName, ElementNaming
+
+    session, fp = k10_partitioned
+    dual, pieces = _k10_graph(session, fp)
+    assert isinstance(dual.naming, ElementNaming)
+    for node in dual.stable_nodes.values():
+        assert set(node.names) == set(node.sides)
+        for side in node.sides:
+            name = node.names[side]
+            assert isinstance(name, ElementName)
+            assert name == dual.naming.name(node.elements[side])
+            assert name.side_letter == side[0].upper()
+            assert dual.naming.ref_of(name) == node.elements[side]
+
+
+def test_k10_stable_node_names_are_the_expected_iterated_names(k10_partitioned):
+    session, fp = k10_partitioned
+    dual, _ = _k10_graph(session, fp)
+    seen = {name.text for node in dual.stable_nodes.values() for name in node.names.values()}
+    assert seen <= K10_ITERATED_NAMES
+    # Every split element with an edge in the sparse arrangement shows up.
+    assert any(name.is_split for node in dual.stable_nodes.values() for name in node.names.values())
+    assert any("^" not in text for text in seen)
+
+
+def test_k10_stable_node_label_joins_the_names(k10_partitioned):
+    session, fp = k10_partitioned
+    dual, _ = _k10_graph(session, fp)
+    for node in dual.unified_nodes:
+        assert node.label == f"{node.names['left'].text} | {node.names['right'].text}"
+        assert " | " in node.label
+    for node in dual.wall_nodes:
+        assert node.label == node.names[node.sides[0]].text
+        assert "|" not in node.label
+    # With no name on a side the label falls back to the element label.
+    node = dual.wall_nodes[0]
+    saved = dict(node.names)
+    try:
+        node.names.clear()
+        assert node.label == node.elements[node.sides[0]].label
+    finally:
+        node.names.update(saved)
+
+
+def test_k10_homotopy_only_partition_names_plain(k10_partitioned):
+    """Over a family with no homotopy parent every element is its own parent."""
+    from tanglepack.topology.PartitionFamily import IteratedHomotopyPartition
+
+    session, fp = k10_partitioned
+    pieces = build_pieces(session, [fp])
+    over_homotopy = DualGraph(pieces.minimal, pieces.homotopy, strong_pips=pieces.strong_pips)
+    parentless = DualGraph(
+        pieces.minimal,
+        IteratedHomotopyPartition(pieces.iterated.as_list(), trellis=pieces.full),
+        strong_pips=pieces.strong_pips,
+    )
+    for dual in (over_homotopy, parentless):
+        for node in dual.stable_nodes.values():
+            for side in node.sides:
+                name = node.names[side]
+                assert not name.is_split and "^" not in name.text
+                assert name.subscript == node.elements[side].element_id + 1
+                assert name == dual.naming.homotopy_name(node.elements[side])
+
+
+# --------------------------------------------------------------------------- #
 # The fundamental segment
 # --------------------------------------------------------------------------- #
 def test_k10_unified_nodes_are_the_edges_between_the_pip_and_its_image(k10_partitioned):

@@ -23,6 +23,16 @@
 > (both fixtures) and `scripts/henon_k10_dual_graph.py` (chosen pip). Phase D
 > and the D-related Deferred items below are historical.
 
+> **A new, different symbolic dynamics landed on 2026-09-21.** It maps each
+> bridge class's two homotopy elements one step into the iterated homotopy
+> partition and reads the class's word off the shortest dual-graph walk between
+> the two landings (both sides recorded at every crossing, so the itinerary
+> splits into disjoint pairs, each a class or its inverse; singleton landings
+> read the same itinerary off the regular trellis instead), then refines
+> classes from the itineraries alone. It revives none of the retracted code:
+> `topology/ElementNaming.py`, `topology/DualWalk.py`,
+> `topology/SymbolicDynamics.py`, with `TangleSession.symbolic_dynamics` and
+> `scripts/henon_symbolic_itineraries.py`. See CLAUDE.md, "Symbolic dynamics".
 
 Date: 2026-09-03. Baseline: branch `regions-and-identity` at `66f5688`, suite 485
 passed / 1 skipped. Builds directly on `regions_bridge_identity_and_cleanup_plan.md`

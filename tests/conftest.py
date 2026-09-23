@@ -341,3 +341,55 @@ def k28_partitioned():
     session.partition_stable_manifold()
     assert session.trellis(fp).stable_partitions
     return session, fp
+
+
+@pytest.fixture(scope="session")
+def k28_two_blasts_partitioned():
+    """``(session, fp)``: the k=2.8 two-blast case of ``scripts/henon_bridge_classes.py``.
+
+    The ``k28_partitioned`` recipe with TWO single-iteration blasts of the
+    zone (classify / set the pip again after each), then pseudoneighbors /
+    holes / partition. The second blast registers the images the first one
+    left virtual, so every active class has a dual-graph walk: three active
+    classes, lettered by their smallest member cdist ``a = {R_1,R_5}`` (the
+    anchor class), ``b = {R_3,R_5}``, ``c = {R_1,R_3}``, and one inert
+    ``u = {L_1,L_3}``, the symbolic-dynamics fixture with a non-trivial
+    transition matrix. Session-scoped; the tests that use it are marked
+    ``slow`` like the one-blast fixture's (the build is a growth + two blasts;
+    well under a second with the bulk-loaded rtree, historically far longer)
+    and must not mutate the session (cache entries are fine). Registry
+    ids are not reproducible between builds — pin by element names and class
+    structure, never by id or letter.
+    """
+    session = TangleSession(_k28_map, _k28_map_inverse, _k28_jacobian)
+    session.workbench._man_machine.area_cutoff = 1e-7
+    fp = session.construct_fixed_point([4, -4])
+    session.orient_eigenvectors(
+        fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
+    )
+    session.initialize_both_manifolds(fp)
+    session.grow_n_times(fp, "unstable", num_iterations=10)
+    session.grow_until_turnaround(fp, "stable")
+    session.compute_intersections([fp])
+    session.trim_stable_manifolds(fp)
+    session.create_bridges(fp)
+    session.infer_iterate_table()
+
+    session.classify_strong_pips()
+    trellis = session.trellis(fp)
+    pip = trellis.iterate(trellis.strong_pip, 1)
+    assert pip is not None, "the default strong pip must have a registered image"
+
+    zone = session.resonance_zone(pip)
+    session.classify_strong_pips()
+    session.set_strong_pip(fp, pip)
+    for _ in range(2):
+        session.blast_zone(zone, num_iterations=1, fixed_point=[fp], min_separation=1e-5)
+        session.classify_strong_pips()
+        session.set_strong_pip(fp, pip)
+
+    session.compute_pseudoneighbors()
+    session.punch_holes()
+    session.partition_stable_manifold()
+    assert session.trellis(fp).stable_partitions
+    return session, fp
