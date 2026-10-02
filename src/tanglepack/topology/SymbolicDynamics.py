@@ -25,14 +25,17 @@ Dev Notes:
   can reach ``u``). The session's ``BridgeAlphabet`` stays active-only and is
   not imported (topology never imports loom).
 * Refinement occurrences come ONLY from the walked (or trellis) itineraries of
-  all classes, never from registered member images: on k=10 a registered
-  image endpoint sits exactly on a closed cut boundary and names
-  ``(R_1^2, R_3^2)``, a superscript-level mismatch that is reported at INFO
-  through :attr:`SymbolicDynamics.unmatched_members` and nothing else. A
-  class is split when its symbol occurs with two or more distinct iterated
-  pairs; every refined child inherits the parent's word rewritten in refined
-  symbols (``a_1 -> a_1 u^-1 a_2^-1`` AND ``a_2 -> a_1 u^-1 a_2^-1``). Members
-  are matched to refined children only for classes that actually split.
+  all classes, never from registered member images. A class is split when
+  its symbol occurs with two or more distinct iterated pairs; every refined
+  child inherits the parent's word rewritten in refined symbols
+  (``a_1 -> a_1 u^-1 a_2^-1`` AND ``a_2 -> a_1 u^-1 a_2^-1``). Members are
+  matched to refined children only for classes that actually split, by their
+  OWN endpoint owners: under the empty-stretch cut of ``PartitionFamily`` an
+  image crossing is owned by the element of the stable edge the walk crosses
+  there, so a child's occurrence names exactly the elements its members land
+  in (k=10's ``(8, 9)`` sits on ``a_1 = (R_1^1, R_3^3)``). A member matching
+  no child goes to :attr:`SymbolicDynamics.unmatched_members` at INFO and
+  nothing else.
 * The singleton path: a landing that is a singleton element owns no dual-graph
   node, so such a class walks the REGULAR trellis instead — the image chain
   (:func:`~tanglepack.topology.BridgeClass._image_chain`, iterate table only)
@@ -54,9 +57,13 @@ Dev Notes:
 * Ambiguous classes (several shortest walks with different itineraries) feed
   the first candidate, in the walk search's deterministic order, into the
   refinement and the graph; :attr:`SymbolicDynamics.is_reliable` is False.
-* Inert and virtual symbols are sinks of the transition graph (an inert class
-  with a non-empty word is reported at WARNING when the graph is built) and
-  their matrix rows are zero, so the graph and the matrix agree.
+* Inert classes are NOT nodes of the transition graph or the matrix (author,
+  2026-09-23): they contribute nothing to the dynamics, and their symbols
+  are still visible in the words. A token naming an inert class is dropped
+  from the edges (an inert class with a non-empty word of its own is
+  reported at WARNING when the graph is built). Virtual symbols stay as
+  sinks — they mark an arc no bridge spans yet — with zero matrix rows, so
+  the graph and the matrix agree.
 """
 
 from __future__ import annotations
@@ -734,10 +741,9 @@ class SymbolicDynamics:
         A member's own endpoint pair — the iterated owners of its two
         crossings on their rows, swapped for direction ``-1`` — is compared
         with the children's occurrences. No match leaves the member in
-        :attr:`unmatched_members` (INFO). Under the footprint cut rule the
-        fixtures match every member; an endpoint on an EXISTING hole
-        boundary, which the cut never re-opens, can still be owned by the
-        neighbour element.
+        :attr:`unmatched_members` (INFO). Under the empty-stretch cut every
+        image crossing is owned by the element of the edge the walk crosses
+        there, so the fixtures match every member.
 
         Args:
             trellis: The full trellis.
@@ -836,7 +842,9 @@ class SymbolicDynamics:
         The transition graph's nodes in their deterministic order.
 
         Active symbols first (letter order, a split class's children in
-        index order), then inert, then virtual.
+        index order), then virtual. Inert classes are not nodes (author,
+        2026-09-23): they contribute nothing to the dynamics, and their
+        symbols remain visible in the words.
 
         Args:
             refined: Use refined children (default) or the bare letters.
@@ -856,13 +864,12 @@ class SymbolicDynamics:
             else:
                 nodes.append(_SymbolNode(letter, kind, cls, letter, kind != "active", unresolved))
 
-        for kind in ("active", "inert"):
-            records = sorted(
-                (cd for cd in self.classes.values() if cd.kind == kind),
-                key=lambda cd: _letter_key(cd.letter),
-            )
-            for cd in records:
-                add(cd.bridge_class, cd.letter, kind, cd.itinerary is None)
+        records = sorted(
+            (cd for cd in self.classes.values() if cd.kind == "active"),
+            key=lambda cd: _letter_key(cd.letter),
+        )
+        for cd in records:
+            add(cd.bridge_class, cd.letter, "active", cd.itinerary is None)
         for cls, name in sorted(self.virtual_classes.items(), key=lambda item: _letter_key(item[1])):
             add(cls, name, "virtual", True)
         return nodes
@@ -871,24 +878,34 @@ class SymbolicDynamics:
         return self.refined_rules if refined else self.rules
 
     def _edges(self, refined: bool) -> dict[tuple[str, str], tuple[int, int]]:
-        """``{(source, target): (weight, inverse count)}`` over the sink-respecting rules."""
+        """
+        ``{(source, target): (weight, inverse count)}`` over the rules.
+
+        Only active symbols are sources; tokens naming an inert class are
+        dropped (inert classes are not in the graph). An inert class with a
+        non-empty word of its own is reported at WARNING. Virtual targets
+        are kept (sinks).
+        """
         nodes = {node.name: node for node in self.symbol_nodes(refined=refined)}
+        inert_names = {cd.letter for cd in self.classes.values() if cd.kind == "inert"}
         edges: dict[tuple[str, str], tuple[int, int]] = {}
         for name, symbols in self._rules_for(refined).items():
             node = nodes.get(name)
             if node is None:
-                continue
-            if node.kind != "active":
-                if symbols:
+                base = name.split("_", 1)[0] if refined else name
+                if base in inert_names and symbols:
                     logger.warning(
-                        "%s class %s has the non-empty word %r; it is a sink of the "
-                        "transition graph regardless",
-                        node.kind,
+                        "inert class %s has the non-empty word %r; inert classes are "
+                        "not part of the transition graph",
                         name,
                         " ".join(symbol.text for symbol in symbols),
                     )
                 continue
+            if node.kind != "active":
+                continue
             for symbol in symbols:
+                if symbol.kind == "inert":
+                    continue
                 target = symbol.base if refined else symbol.letter
                 weight, inverse = edges.get((name, target), (0, 0))
                 edges[(name, target)] = (weight + 1, inverse + (symbol.direction < 0))
@@ -896,7 +913,11 @@ class SymbolicDynamics:
 
     def transition_graph(self, *, refined: bool = True) -> "networkx.DiGraph":
         """
-        The transition graph: one node per symbol, one edge per token.
+        The transition graph: one node per active or virtual symbol, one edge
+        per token naming such a symbol.
+
+        Inert classes are not part of the graph (their tokens in a word are
+        skipped); virtual symbols are sinks.
 
         Args:
             refined: Over refined symbols (default) or bare letters.
@@ -905,8 +926,7 @@ class SymbolicDynamics:
             A directed graph whose nodes carry ``kind``, ``bridge_class``,
             ``parent``, ``inert`` and ``unresolved``; each edge carries
             ``weight`` (how many times the target occurs in the source's word)
-            and ``inverse`` (how many of those are ``^-1``). Inert and virtual
-            symbols are sinks.
+            and ``inverse`` (how many of those are ``^-1``).
         """
         import networkx
 
@@ -942,8 +962,8 @@ class SymbolicDynamics:
 
         Returns:
             ``(symbols, matrix)``: row ``i`` counts the occurrences of symbol
-            ``j`` in the word of symbol ``i`` (zero rows for the inert and
-            virtual sinks).
+            ``j`` in the word of symbol ``i`` (zero rows for the virtual
+            sinks; inert classes have no row or column).
         """
         names = [node.name for node in self.symbol_nodes(refined=refined)]
         index = {name: position for position, name in enumerate(names)}
@@ -952,21 +972,6 @@ class SymbolicDynamics:
             if source in index and target in index:
                 matrix[index[source], index[target]] = weight
         return names, matrix
-
-    def spectral_radius(self, *, refined: bool = True) -> float:
-        """
-        The largest eigenvalue modulus of the transition matrix.
-
-        Args:
-            refined: Over refined symbols (default) or bare letters.
-
-        Returns:
-            The spectral radius (``0.0`` for an empty matrix).
-        """
-        _names, matrix = self.transition_matrix(refined=refined)
-        if matrix.size == 0:
-            return 0.0
-        return float(np.max(np.abs(np.linalg.eigvals(matrix.astype(np.float64)))))
 
     # ── reporting ───────────────────────────────────────────────────────
 
@@ -1026,7 +1031,7 @@ class SymbolicDynamics:
                 f"({landing_names}); source {cd.source or '-'}; {cd.status}"
                 + (f" ({cd.unresolved_reason})" if cd.unresolved_reason else "")
             )
-            lines.append(f"    itinerary: {self.itinerary_text(cd.itinerary)}")
+            lines.append(f"    iterated itinerary: {self.itinerary_text(cd.itinerary)}")
             if cd.itinerary is not None:
                 refined_word = " ".join(
                     symbol.text
@@ -1068,8 +1073,6 @@ class SymbolicDynamics:
             lines.append(
                 f"  {name:>{width}}  " + " ".join(f"{int(value):>{width}}" for value in row)
             )
-        if names:
-            lines.append(f"spectral radius: {self.spectral_radius():.6g}")
         return "\n".join(lines)
 
     def __repr__(self) -> str:

@@ -243,15 +243,20 @@ class ElementRef:
         A short, deterministic, address-free name for this element.
 
         Formatted ``p{period}@{orbit}.{branch}/{L|R}#{element_id}``, e.g.
-        ``p3@1.0/L#2``. Two runs of the same trellis produce the same label, so
+        ``p3@1.0/L#2``, prefixed ``A:`` with the fixed point's
+        :attr:`~tanglepack.numerics.FixedPoint.FixedPoint.label` when it has one
+        (the workbench stamps one), so two saddles of the same period never
+        share a label. Two runs of the same trellis produce the same label, so
         it is safe to put in a report, a plot legend or a test expectation —
         unlike the default ``repr``, which prints the FixedPoint's address.
 
         Returns:
             The label string.
         """
+        letter = getattr(self.fixed_point, "label", None)
         return (
-            f"p{self.fixed_point.period}@{self.orbit_index}.{self.branch_index}"
+            (f"{letter}:" if letter else "")
+            + f"p{self.fixed_point.period}@{self.orbit_index}.{self.branch_index}"
             f"/{self.side[0].upper()}#{self.element_id}"
         )
 

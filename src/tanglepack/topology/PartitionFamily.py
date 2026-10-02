@@ -20,21 +20,36 @@ The iterated cut, in bridges
 Each NEW bridge of the minimal trellis (an image pair that is not itself a hole
 bridge) lies on one side of the stable manifold — its row, from
 :func:`~tanglepack.topology.StablePartition.row_of_end` — and cuts the
-partition on THAT side only, by the FOOTPRINT rule (author, 2026-09-21). The
-image ``f(H)`` of a hole ``H`` meets the stable manifold along the stretch
-between the two END crossings of its image chain (the image of the hole's own
-stretch) and along one CHORD per pair of consecutive interior crossings (where
-the chain crosses over and back). Those footprint stretches are OPEN at both
-ends, like a hole's stretch, and the elements outside them are CLOSED there:
-a homotopy element ``[ ]`` cut by one lobe reads ``[ ] ( ) [ ]``. Per
-crossing: pair the chain's crossings ``x_0 .. x_m`` (unstable order) as
-``(x_0, x_m), (x_1, x_2), (x_3, x_4), ...``; at ``x_i`` the flank toward its
-PARTNER is opened on the row of the piece being cut. A boundary the homotopy
-partition already has (a hole boundary) is never re-cut; its closedness
-stands. The other side is not cut at that crossing. When an image is
-subdivided (its pieces lie on alternating sides), each piece cuts its own
-side, so the crossing shared by two pieces is cut on both sides, once each,
-toward the same partner.
+partition on THAT side only, by the EMPTY-STRETCH rule (author, 2026-09-23).
+The stable manifold has EMPTY stretches and the rest is the inclusive shape:
+
+* a hole's stretch is empty (the open interval of the homotopy partition);
+* the image of a hole is empty where it meets the stable manifold: a hole
+  ``H`` bounded by one bridge iterates forward into a lobe ``f(H)`` that is
+  stretched and folded; it sits on the manifold along its BASE (between the
+  images of the hole's two ends, the chain's ``(x_0, x_m)``) and folds through
+  the manifold along one CHORD per pair of consecutive interior crossings
+  (``(x_1, x_2), (x_3, x_4), ...``, the doorways to its folds on the other
+  side). Base and chords are read off the hole bridge's full image chain
+  (:func:`~.BridgeClass._image_chain`, iterate table only). The anchor's
+  hole, which opens only beyond the manifold end, has no stretch and its
+  image contributes nothing.
+
+Empty stretches are empty on BOTH sides of the manifold. An image bridge's
+crossing ``x`` belongs, on the row the bridge cuts, to the element AWAY from
+the empty stretch it abuts: the flank toward the empty stretch is opened
+(``open_anchorward`` when the empty stretch is anchorward of ``x``,
+``open_outward`` when it is outward). k=2.8 two blasts: the lobe of the hole
+``(6, 5)`` has base ``(10, 7)`` and chord ``(8, 9)`` (its fold is the
+reference hole on the left), so the right row reads ``R_1^1 = [0, 10]``,
+``R_1^2 = (10, 7)``, ``R_1^3 = [7, 6]`` and ``R_5^1 = [3, 8]``, ``R_5^2 =
+(8, 9)``, ``R_5^3 = [9, 4]``; the anchor lobe's fold ``(4, 3)`` on the left
+abuts the hole ``(1, 3)`` at ``3``, so ``L_1^1 = [0, 3)``, ``L_1^2 = [3, 8]``.
+Every crossing then lies in the element of the stable edge the dual-graph
+walk crosses at it (a walk never enters a hole face), so a refined class's
+occurrence names exactly the elements its member bridges land in. A boundary
+the homotopy partition already has is never re-cut; the other side is not cut
+at that crossing; a subdivided image cuts each row once per piece.
 
 Dev Notes:
 
@@ -46,30 +61,33 @@ Dev Notes:
   the original is private to a module under concurrent edit and re-derives
   the anchor and outermost boundaries from the trellis, which a refinement
   must not do; ``tests/test_partition_family.py`` pins that rebuilding every
-  homotopy result from its own marks reproduces it exactly. In this
-  vocabulary a cut is ONE mark per crossing (the flank toward the partner:
-  ``open_anchorward`` when the partner is anchorward, ``open_outward`` when
-  it is outward), so a single piece can never produce the ``][`` collision
-  the singleton pass would otherwise have to arbitrate; two pieces asking for
-  opposite flanks at one crossing (possible only with disagreeing chains) are
-  caught before the marks change (``"cut conflict"``).
-* Partners need no geometry. A crossing's partner lies on ITS stable branch
-  whether or not the piece cutting it is cross-branch (a period-k orbit): the
-  pair bounds a connected stable arc of the disc ``f(H)`` — its boundary
-  stretch or an interior chord — so one rule cuts every piece, and a partner
-  on another branch is a broken chain (WARNING, ``"partner on another
-  branch"``, no cut). This replaced the geometric reading through
-  ``StablePartition._hole_openings`` for cross-branch bridges (2026-09-21);
-  no fixture exercises a cross-branch image bridge beyond the ownership
+  homotopy result from its own marks reproduces it exactly. A cut is one
+  mark per crossing and flank; a crossing that abuts empty stretches on BOTH
+  flanks (a hole against a base) is pinched into a closed singleton, as the
+  homotopy partition does between two holes (INFO). Two pieces sharing a
+  crossing on one row ask for the same flanks (they depend on the crossing
+  alone); the second is recorded as ``"already cut"``.
+* History. Commit ``2a2e35a`` closed the element under every image bridge at
+  both crossings; the footprint rule of 2026-09-21 opened the base and the
+  chords of every lobe, the anchor lobe's included, so the anchor lobe's fold
+  ``(4, 3)`` put ``3`` into the outer element ``L_1^1`` (rejected 2026-09-23:
+  "the bridge is included in the interior partition elements"); closing every
+  bridge's stretch instead put ``9`` into ``R_5^2`` (rejected the same day:
+  ``R_5^3`` must hold the ``a_1`` bridge that lands there). The empty-stretch
+  rule is the author's amendment: "all of the stretched and folded shape is
+  inclusive, the empty parts between the bends are open". It differs from the
+  footprint rule only in which chains count — those of holes with a stretch —
+  and from the closed cut in reading holes, not bridges.
+* A crossing that abuts no empty stretch gets no cut (WARNING, ``"no empty
+  stretch"``): the lobe fold it belongs to is not registered as a hole, and
+  the evidence is to grow or blast, not to guess.
+* Cross-branch pieces (a period-k orbit only; a bridge whose two crossings
+  lie on different stable branches) are cut like any other: the rule reads
+  the crossing's own branch. No fixture exercises one beyond the ownership
   invariants.
-* The crossings come from the FULL chain (:func:`~.BridgeClass._image_chain`,
-  lookup only), not from the minimal trellis's kept pieces, which omit pairs
-  without a ``Bridge`` object and would break consecutiveness. A chain with
-  an even number of pieces ends on different rows, so its end stretch is not
-  a footprint on one row; it is paired as stated anyway (WARNING) and its
-  leftover crossing gets no partner (``"no partner"``). A piece shared by two
-  chains takes its partners from each; a disagreement is a WARNING and no cut
-  at that end (``"partner disagreement"``).
+* Only pieces with a ``Bridge`` object cut (``minimal.image_bridge_ids``); a
+  chain pair the minimal trellis skipped (no bridge object) cuts nothing,
+  as ``MinimalTrellis`` already warns, but it still counts as a base or chord.
 * :class:`~tanglepack.topology.TopologyResults.ElementRef` stays
   ``(branch_key, side, element_id)`` with no family tag. The two families of
   one trellis therefore produce refs that collide by value; never mix refs
@@ -105,10 +123,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-#: Partner marker for a crossing two image chains pair differently (crossing
-#: ids are non-negative, so this never collides with one).
-_DISAGREEMENT = -1
 
 #: One boundary set of a partition on one (branch, side): the cdist of every
 #: boundary id (None = the anchor sentinel), and the ids whose outward /
@@ -524,14 +538,15 @@ class Cut:
         branch_key: The stable branch of that crossing.
         side: The row the bridge cut (its own).
         opened: ``"anchorward"`` / ``"outward"`` for the neighbouring interval
-            that was opened at the crossing (the flank toward the partner),
-            or None when nothing changed.
+            that was opened at the crossing (the flank toward the empty
+            stretch, so the crossing stays with the element away from it),
+            or None when nothing changed. A crossing pinched between two
+            empty stretches has one record per flank.
         reason: Why nothing changed (``"existing boundary"``, ``"row
-            invariant"``, ``"no partition"``, ``"no partner"``, ``"partner
-            disagreement"``, ``"partner on another branch"``, ``"cut
-            conflict"``), or None.
-        partner: The crossing paired with this one in its image chain (the
-            other end of the footprint stretch), or None when unknown.
+            invariant"``, ``"no partition"``, ``"no empty stretch"``,
+            ``"already cut"``), or None.
+        partner: The far end of the empty stretch this crossing abuts (the
+            other end of the hole, base or chord), or None when unknown.
     """
 
     def __init__(
@@ -629,7 +644,7 @@ class IteratedHomotopyPartition(PartitionFamily):
         }
         spans: dict[tuple["ManifoldKey", Side], list[tuple[float, float, "BridgeId"]]] = {}
         cuts: list[Cut] = []
-        decided: dict[tuple[tuple["ManifoldKey", Side], int], str] = {}
+        decided: set[tuple[tuple["ManifoldKey", Side], int, str]] = set()
 
         def open_at(
             key: tuple["ManifoldKey", Side],
@@ -639,7 +654,7 @@ class IteratedHomotopyPartition(PartitionFamily):
             partner: int,
         ) -> None:
             """Open the ``which`` neighbour at ``iid`` on ``key``, unless it is
-            an existing boundary or another piece already opened the other flank."""
+            an existing boundary or another piece already opened that flank."""
             if key not in marks:
                 cuts.append(Cut(bid, iid, key[0], key[1], None, "no partition", partner))
                 logger.warning(
@@ -661,27 +676,25 @@ class IteratedHomotopyPartition(PartitionFamily):
                     key[1],
                 )
                 return
-            previous = decided.get((key, iid))
-            if previous is not None and previous != which:
-                cuts.append(Cut(bid, iid, key[0], key[1], None, "cut conflict", partner))
-                logger.warning(
-                    "image bridge %s would open the %s flank of crossing %d on "
-                    "%s/%s, already opened %s by another piece; no cut there",
+            if (key, iid, which) in decided:
+                cuts.append(Cut(bid, iid, key[0], key[1], None, "already cut", partner))
+                logger.debug(
+                    "image bridge %s: the %s flank of crossing %d on %s/%s was already "
+                    "opened by another piece",
                     bid,
                     which,
                     iid,
                     key[0][1:],
                     key[1],
-                    previous,
                 )
                 return
-            decided[(key, iid)] = which
+            decided.add((key, iid, which))
             boundaries, open_outward, open_anchorward = marks[key]
             boundaries[iid] = float(trellis.intersection(iid).stable_cdist)
             (open_anchorward if which == "anchorward" else open_outward).add(iid)
             cuts.append(Cut(bid, iid, key[0], key[1], which, None, partner))
 
-        partners = cls._chain_partners(minimal)
+        empty = cls._empty_stretches(minimal, homotopy)
         for bid in minimal.image_bridge_ids:
             first, second = bid
             branch = {iid: trellis.intersection(iid).manifold_b_key for iid in bid}
@@ -700,31 +713,59 @@ class IteratedHomotopyPartition(PartitionFamily):
                 cuts.append(Cut(bid, first, branch[first], None, None, "row invariant"))
                 cuts.append(Cut(bid, second, branch[second], None, None, "row invariant"))
                 continue
-            slot = partners.get(frozenset(bid), {})
             for iid in bid:
                 key = (branch[iid], row[iid])
-                partner = slot.get(iid)
-                if partner is None or partner == _DISAGREEMENT:
-                    reason = "no partner" if partner is None else "partner disagreement"
-                    cuts.append(Cut(bid, iid, key[0], key[1], None, reason))
-                    continue
-                if trellis.intersection(partner).manifold_b_key != branch[iid]:
-                    logger.warning(
-                        "image bridge %s: crossing %d is paired with %d on another "
-                        "stable branch (a footprint stretch lies on one branch); "
-                        "no cut there",
+                if key in marks and iid in existing[key]:
+                    cuts.append(Cut(bid, iid, key[0], key[1], None, "existing boundary"))
+                    logger.debug(
+                        "image bridge %s meets existing boundary %d on %s/%s; "
+                        "its closedness stands",
                         bid,
                         iid,
-                        partner,
+                        key[0][1:],
+                        key[1],
                     )
-                    cuts.append(
-                        Cut(bid, iid, key[0], key[1], None, "partner on another branch", partner)
+                    continue
+                abutting = empty.get(iid, [])
+                if not abutting:
+                    cuts.append(Cut(bid, iid, key[0], key[1], None, "no empty stretch"))
+                    logger.warning(
+                        "image bridge %s: crossing %d abuts no hole and no image of a "
+                        "hole, so its element is not cut there; grow or blast until "
+                        "the lobe fold it belongs to is registered",
+                        bid,
+                        iid,
                     )
                     continue
                 own_c = float(trellis.intersection(iid).stable_cdist)
-                partner_c = float(trellis.intersection(partner).stable_cdist)
-                # The footprint stretch between the two lies open; open its flank.
-                open_at(key, iid, "anchorward" if partner_c < own_c else "outward", bid, partner)
+                flanks: dict[str, int] = {}
+                for other, kind in abutting:
+                    if trellis.intersection(other).manifold_b_key != key[0]:
+                        # A far end on another stable branch has no flank here:
+                        # the two cdists are measured along different curves.
+                        logger.warning(
+                            "image bridge %s: the %s stretch abutting crossing %d "
+                            "ends at %d on another stable branch; it is not read "
+                            "as a flank",
+                            bid,
+                            kind,
+                            iid,
+                            other,
+                        )
+                        continue
+                    other_c = float(trellis.intersection(other).stable_cdist)
+                    flanks.setdefault("anchorward" if other_c < own_c else "outward", other)
+                if len(flanks) == 2:
+                    logger.info(
+                        "image bridge %s: crossing %d is pinched between empty "
+                        "stretches on both flanks (%s); it becomes a singleton",
+                        bid,
+                        iid,
+                        abutting,
+                    )
+                # The crossing stays with the element AWAY from the empty stretch.
+                for which, other in flanks.items():
+                    open_at(key, iid, which, bid, other)
             if same_branch:
                 near_c, far_c = sorted(
                     float(trellis.intersection(iid).stable_cdist) for iid in bid
@@ -793,75 +834,98 @@ class IteratedHomotopyPartition(PartitionFamily):
         return family
 
     @staticmethod
-    def _chain_partners(
-        minimal: "MinimalTrellis",
-    ) -> dict[frozenset, dict[int, Optional[int]]]:
+    def _empty_stretches(
+        minimal: "MinimalTrellis", homotopy: HomotopyPartition
+    ) -> dict[int, list[tuple[int, str]]]:
         """
-        The footprint partner of every crossing of every image chain.
+        The empty stretches of the stable manifold, indexed by their ends.
 
         Args:
-            minimal: The minimal trellis whose ``image_chains`` name the hole
-                bridges that were mapped forward; each chain is re-read in
-                full from the trellis (lookup only).
+            minimal: The minimal trellis (its hole bridges and full trellis).
+            homotopy: The homotopy partition, whose open intervals are the
+                holes' stretches.
 
         Returns:
-            ``{frozenset(piece): {crossing id: partner id}}`` over every
-            piece of every chain. A crossing maps to None when it is the
-            leftover of an even chain and to :data:`_DISAGREEMENT` when two
-            chains pair it differently.
+            ``{crossing id: [(other end, kind), ...]}`` for every end of an
+            empty stretch, ``kind`` being ``"hole"`` (a hole's own stretch),
+            ``"base"`` (where a hole's image lobe sits on the manifold) or
+            ``"chord"`` (where it folds through to the other side). Stretches
+            are recorded without a side: they are empty on both.
 
         Note:
-            Crossings ``x_0 .. x_m`` are paired ``(x_0, x_m), (x_1, x_2),
-            (x_3, x_4), ...``: the end stretch and the chords of the image
-            lobe. A chain that is not consecutive cuts nothing (WARNING).
+            A hole's lobe is its bounding bridge's full image chain (lookup
+            only), read for every hole bridge whose stretch is an open
+            interval of the homotopy partition; the anchor's one-sided hole
+            has none. A chain with an even number of pieces ends on
+            different rows; its ``(x_0, x_m)`` is still the base, its interior
+            crossings pair as chords and one is left over (WARNING).
         """
         trellis = minimal.trellis
-        partners: dict[frozenset, dict[int, Optional[int]]] = {}
-        for parent, kept in minimal.image_chains.items():
-            chain = _image_chain(trellis, parent) or list(kept)
+        stretches: dict[frozenset, str] = {}
+        for result in homotopy.results.values():
+            for iv in result.intervals:
+                if iv.lo_id is None or iv.hi_id is None or iv.lo_id == iv.hi_id:
+                    continue
+                if not iv.closed_lo and not iv.closed_hi:
+                    stretches.setdefault(frozenset((iv.lo_id, iv.hi_id)), "hole")
+        for hole_bridge in minimal.hole_bridge_ids:
+            if frozenset(hole_bridge) not in stretches:
+                continue
+            chain = _image_chain(trellis, hole_bridge)
             if not chain:
                 continue
             if any(chain[i][1] != chain[i + 1][0] for i in range(len(chain) - 1)):
                 logger.warning(
-                    "image chain of %s is not consecutive (%s); its pieces cut nothing",
-                    parent,
+                    "image chain of hole bridge %s is not consecutive (%s); its lobe "
+                    "marks no empty stretch",
+                    hole_bridge,
                     chain,
                 )
-                for piece in chain:
-                    partners.setdefault(frozenset(piece), {})
                 continue
             crossings = [chain[0][0]] + [pair[1] for pair in chain]
-            pieces = len(chain)
-            if pieces % 2 == 0:
+            # The lobe sits on the stable branch of its base; an excursion of the
+            # image across ANOTHER stable branch (another orbit branch, another
+            # fixed point) folds nothing on this one, so only the base branch's
+            # crossings are paired into chords.
+            base_branch = trellis.intersection(crossings[0]).manifold_b_key
+            if trellis.intersection(crossings[-1]).manifold_b_key != base_branch:
                 logger.warning(
-                    "image chain of %s has an even number of pieces (%d), so its "
-                    "ends lie on different rows; pairing (x_0, x_m), (x_1, x_2), "
-                    "... regardless and leaving x_%d unpaired",
-                    parent,
-                    pieces,
-                    pieces - 1,
+                    "image chain of hole bridge %s ends on another stable branch "
+                    "than it starts (%d vs %d); its lobe marks no empty stretch",
+                    hole_bridge,
+                    crossings[0],
+                    crossings[-1],
                 )
-            pairs = [(crossings[0], crossings[-1])] + [
-                (crossings[i], crossings[i + 1]) for i in range(1, pieces - 1, 2)
+                continue
+            interior = [
+                c
+                for c in crossings[1:-1]
+                if trellis.intersection(c).manifold_b_key == base_branch
             ]
-            partner_of: dict[int, int] = {}
-            for x, y in pairs:
-                partner_of[x] = y
-                partner_of[y] = x
-            for piece in chain:
-                slot = partners.setdefault(frozenset(piece), {})
-                for iid in piece:
-                    proposed = partner_of.get(iid)
-                    if iid in slot and slot[iid] != proposed:
-                        logger.warning(
-                            "piece %s: chains disagree on the partner of crossing %d "
-                            "(%s vs %s); no cut there",
-                            piece,
-                            iid,
-                            slot[iid],
-                            proposed,
-                        )
-                        slot[iid] = _DISAGREEMENT
-                    else:
-                        slot.setdefault(iid, proposed)
-        return partners
+            if len(interior) < len(crossings) - 2:
+                logger.info(
+                    "image chain of hole bridge %s crosses %d foreign stable "
+                    "crossing(s); they are left out of the chord pairing",
+                    hole_bridge,
+                    len(crossings) - 2 - len(interior),
+                )
+            if len(interior) % 2 == 1:
+                logger.warning(
+                    "image chain of hole bridge %s has an odd number of interior "
+                    "crossings on its base branch (%d), so its lobe ends on "
+                    "different rows; reading its base and chords regardless and "
+                    "leaving the last one unpaired",
+                    hole_bridge,
+                    len(interior),
+                )
+            stretches.setdefault(frozenset((crossings[0], crossings[-1])), "base")
+            for i in range(0, len(interior) - 1, 2):
+                stretches.setdefault(frozenset((interior[i], interior[i + 1])), "chord")
+        empty: dict[int, list[tuple[int, str]]] = {}
+        for stretch, kind in stretches.items():
+            if len(stretch) != 2:
+                continue
+            a, b = sorted(stretch)
+            empty.setdefault(a, []).append((b, kind))
+            empty.setdefault(b, []).append((a, kind))
+        return empty

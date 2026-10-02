@@ -493,8 +493,12 @@ class DualGraph:
     # ── the fundamental segment ─────────────────────────────────────────────
 
     def _fundamental_segments_from(self, strong_pips: Optional[Iterable[int]]) -> None:
-        """Record ``(f^k(q0), q0]`` on each strong pip's own branch."""
-        pips = [pip for pip in (strong_pips or ()) if pip is not None]
+        """Record ``(f^k(q0), q0]`` on each strong pip's own branch.
+
+        The same pip gathered twice (from ``trellis(fp)`` and ``trellis([fp])``)
+        counts once; two DIFFERENT pips on one branch raise.
+        """
+        pips = list(dict.fromkeys(pip for pip in (strong_pips or ()) if pip is not None))
         if not pips:
             logger.warning(
                 "no strong pip supplied to the dual graph; nothing is unified and "

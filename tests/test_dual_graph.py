@@ -374,7 +374,7 @@ def test_k10_every_stable_node_side_is_named(k10_partitioned):
 def test_k10_stable_node_names_are_the_expected_iterated_names(k10_partitioned):
     session, fp = k10_partitioned
     dual, _ = _k10_graph(session, fp)
-    seen = {name.text for node in dual.stable_nodes.values() for name in node.names.values()}
+    seen = {name.short_text for node in dual.stable_nodes.values() for name in node.names.values()}
     assert seen <= K10_ITERATED_NAMES
     # Every split element with an edge in the sparse arrangement shows up.
     assert any(name.is_split for node in dual.stable_nodes.values() for name in node.names.values())
@@ -481,12 +481,31 @@ def test_k10_a_different_pip_moves_the_unified_set(k10_partitioned):
     }
 
 
-def test_two_pips_on_one_branch_are_rejected(k10_partitioned):
+def test_the_same_pip_twice_counts_once(k10_partitioned):
+    """``trellis(fp)`` and ``trellis([fp])`` can both hand in the same pip."""
     session, fp = k10_partitioned
     pieces = build_pieces(session, [fp])
     pip = session.trellis(fp).strong_pip
+    once = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip])
+    twice = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip, pip])
+    assert twice.fundamental_segments == once.fundamental_segments
+    assert {n.edge_key for n in twice.unified_nodes} == {n.edge_key for n in once.unified_nodes}
+
+
+def test_two_pips_on_one_branch_are_rejected(k10_partitioned):
+    session, fp = k10_partitioned
+    pieces = build_pieces(session, [fp])
+    trellis = session.trellis(fp)
+    pip = trellis.strong_pip
+    branch = trellis.intersection(pip).manifold_b_key
+    others = [
+        c for c in trellis.strong_pip_candidates
+        if c != pip and trellis.intersection(c).manifold_b_key == branch
+    ]
+    if not others:
+        pytest.skip("the fixture has a single strong-pip candidate on the pip's branch")
     with pytest.raises(ValueError, match="one fundamental segment"):
-        DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip, pip])
+        DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip, others[0]])
 
 
 # --------------------------------------------------------------------------- #

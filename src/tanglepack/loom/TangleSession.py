@@ -974,7 +974,199 @@ class TangleSession:
         """
         graph = self.dual_graph(fixed_points)
         target = dynamics if dynamics is not None else self.symbolic_dynamics(fixed_points)
+        if kwargs.get("shape") == "circle" and not all(
+            name in kwargs for name in ("interior_side", "parents", "arc_order")
+        ):
+            interior_side, parents, arc_order = self.cartoon_zones()
+            kwargs.setdefault("interior_side", interior_side)
+            kwargs.setdefault("parents", parents)
+            kwargs.setdefault("arc_order", arc_order)
+        if kwargs.get("shape") == "circle" and "enclosures" not in kwargs and kwargs.get("parents"):
+            kwargs["enclosures"] = self.cartoon_enclosures(
+                graph.minimal.kept_bridge_ids, kwargs["parents"]
+            )
         return plotting.plot_dual_graph_cartoon(graph, target, ax=ax, **kwargs)
+
+    def cartoon_enclosures(self, bridge_ids: Iterable, parents: dict) -> dict:
+        """
+        Which nested tangles each bridge's lobe encloses in the plane.
+
+        A bridge between two crossings of ONE stable branch, closed by the
+        stable segment between them, bounds a lobe; a fixed point nested in
+        that branch's zone (``parents``) is enclosed when the centroid of its
+        orbit lies inside the lobe. The circular cartoon routes such a
+        bridge's arc around the nested circle's far side, and every other
+        inward arc between the stable arc and the nested circle, so the
+        cartoon keeps the plane's topology.
+
+        Args:
+            bridge_ids: The bridges to test (the minimal trellis's).
+            parents: ``{id(fixed_point): id(parent fixed point)}`` from
+                :meth:`cartoon_zones`.
+
+        Returns:
+            ``{bridge_id: frozenset(id(nested fixed point), ...)}`` for the
+            bridges enclosing at least one nested fixed point.
+        """
+        from ..numerics.geometry import arc_polyline, point_in_polygon
+
+        workbench = self.workbench
+        registry = workbench.intersection_registry
+        tol = registry.cdist_tol
+        by_id = {id(fp): fp for fp in workbench.fixed_points}
+        children: dict = {}
+        for child, parent in parents.items():
+            if child in by_id:
+                children.setdefault(parent, []).append(by_id[child])
+        centroids = {
+            id(fp): np.mean(
+                [np.ravel(np.asarray(c, dtype=float))[:2] for c in fp.coordinates], axis=0
+            )
+            for group in children.values()
+            for fp in group
+        }
+        enclosures: dict = {}
+        for bridge_id in bridge_ids:
+            first, second = registry[bridge_id[0]], registry[bridge_id[1]]
+            key = first.manifold_b_key
+            if key is None or key != second.manifold_b_key:
+                continue
+            nested = children.get(id(key[0]))
+            if not nested or key not in workbench.manifolds:
+                continue
+            try:
+                bridge = workbench.bridge(bridge_id)
+            except KeyError:
+                continue
+            c_first, c_second = float(first.stable_cdist), float(second.stable_cdist)
+            stable = np.asarray(
+                arc_polyline(
+                    workbench.manifolds[key], min(c_first, c_second), max(c_first, c_second),
+                    stability="stable", tol=tol,
+                ),
+                dtype=float,
+            ).reshape(-1, 2)
+            if c_second > c_first:
+                stable = stable[::-1]  # back from the second crossing to the first
+            lobe = np.vstack([np.asarray(bridge.get_point_array(), dtype=float), stable])
+            if len(lobe) < 3:
+                continue
+            inside = frozenset(
+                id(fp) for fp in nested if point_in_polygon(centroids[id(fp)], lobe)
+            )
+            if inside:
+                enclosures[bridge_id] = inside
+        return enclosures
+
+    def cartoon_zones(self) -> tuple[dict, dict, dict]:
+        """
+        What the circular dual-graph cartoon needs from the resonance zones.
+
+        For every stable branch bounding a zone, which side of it faces the
+        zone's interior: a few points along the branch's boundary arc (anchor
+        to cut point) are pushed a short distance to the LEFT of the stable
+        dynamical direction (toward the anchor) and tested against the zone's
+        captured boundary polygon; the majority decides. And which zone nests
+        in which: a fixed point's circle goes inside the smallest OTHER zone
+        containing its first orbit point. And how each zone's stable arcs go
+        around it: the ring order of its boundary (pip_j, stable arc to z_j,
+        unstable side from z_j to pip_{j+1}, as ``ResonanceZone`` stitches
+        it), its rotational direction (the sign of the boundary polygon's
+        area) and the angle of every orbit point about the orbit's centroid.
+
+        Returns:
+            ``(interior_side, parents, arc_order)``: ``{branch_key: "left" |
+            "right"}`` for every branch bounding a zone, ``{id(fixed_point):
+            id(parent fixed point)}`` for the nested fixed points, and
+            ``{id(fixed_point): ZoneArcOrder}``. All empty without zones (the
+            cartoon then draws each branch's right side inside its circle, in
+            ``branch_cycle`` order, and puts the circles side by side).
+        """
+        from ..numerics.geometry import arc_polyline
+
+        workbench = self.workbench
+        tol = workbench.intersection_registry.cdist_tol
+        interior: dict = {}
+        zones = sorted(self.resonance_zones.values(), key=lambda zone: zone.area)
+        for zone in zones:
+            vertices = zone.boundary_vertices
+            if vertices is None or len(vertices) < 3:
+                continue
+            scale = float(np.linalg.norm(vertices.max(axis=0) - vertices.min(axis=0)))
+            eps = 1e-3 * max(scale, 1e-9)
+            for cut in zone.boundary_intersections:
+                key = cut.manifold_b_key
+                if key is None or key in interior or key not in workbench.manifolds:
+                    continue
+                points = np.asarray(
+                    arc_polyline(
+                        workbench.manifolds[key], 0.0, cut.stable_cdist,
+                        stability="stable", tol=tol,
+                    ),
+                    dtype=float,
+                )
+                votes = {"left": 0, "right": 0}
+                count = len(points)
+                for i in sorted({int(count * f) for f in (0.3, 0.45, 0.6, 0.75)}):
+                    if not 1 <= i < count:
+                        continue
+                    toward_anchor = points[i - 1] - points[i]
+                    norm = float(np.linalg.norm(toward_anchor))
+                    if norm == 0.0:
+                        continue
+                    left = np.array([-toward_anchor[1], toward_anchor[0]]) / norm
+                    in_left = zone.contains_point(points[i] + eps * left)
+                    in_right = zone.contains_point(points[i] - eps * left)
+                    if in_left != in_right:
+                        votes["left" if in_left else "right"] += 1
+                if votes["left"] == votes["right"]:
+                    logger.info(
+                        "cartoon zones: no side of stable branch %s is clearly inside "
+                        "its zone; the cartoon default is used",
+                        key[1:],
+                    )
+                    continue
+                interior[key] = "left" if votes["left"] > votes["right"] else "right"
+        from ..numerics.geometry import signed_polygon_area
+        from ..topology.plotting import ZoneArcOrder
+
+        arc_order: dict = {}
+        for zone in zones:
+            order = _zone_ring_order(zone)
+            vertices = zone.boundary_vertices
+            if not order or vertices is None or len(vertices) < 3:
+                continue
+            fixed_point = zone.fixed_point
+            points = [np.ravel(np.asarray(c, dtype=float))[:2] for c in fixed_point.coordinates]
+            centroid = np.mean(points, axis=0)
+            angles = {}
+            if len(order) > 1:
+                for key in order:
+                    offset = points[key[2]] - centroid
+                    angles[key] = float(np.arctan2(offset[1], offset[0]))
+            arc_order.setdefault(
+                id(fixed_point),
+                ZoneArcOrder(
+                    order=order,
+                    clockwise=signed_polygon_area(vertices) < 0,
+                    anchor_angles=angles,
+                ),
+            )
+        parents: dict = {}
+        for zone in zones:
+            fixed_point = zone.fixed_point
+            point = np.ravel(np.asarray(fixed_point.coordinates[0], dtype=float))[:2]
+            containers = [
+                other
+                for other in zones
+                if other.fixed_point is not fixed_point
+                and other.area > zone.area
+                and other.contains_point(point)
+            ]
+            if containers:
+                parent = min(containers, key=lambda other: other.area).fixed_point
+                parents[id(fixed_point)] = id(parent)
+        return interior, parents, arc_order
 
     def plot_dual_graph(
         self,
@@ -1776,3 +1968,30 @@ class TangleSession:
                 )
             )
         return handles
+
+
+def _zone_ring_order(zone: ResonanceZone) -> list:
+    """
+    The stable branch keys of a zone's boundary in ring order.
+
+    Mirrors ``ResonanceZone._build_boundary``: from a cut on stable branch
+    ``j`` the ring runs to ``z_j`` and out along the unstable branch of
+    ``z_j`` to the cut whose unstable branch starts there.
+
+    Returns:
+        The branch keys, starting at the first cut; empty when the cuts do
+        not close into one ring (iterates missing).
+    """
+    cuts = zone.boundary_intersections
+    by_u_orbit = {cut.manifold_a_key[2]: i for i, cut in enumerate(cuts)}
+    order: list = []
+    current = 0
+    for _ in range(len(cuts)):
+        order.append(cuts[current].manifold_b_key)
+        following = by_u_orbit.get(cuts[current].manifold_b_key[2])
+        if following is None:
+            return []
+        current = following
+        if current == 0:
+            break
+    return order if len(order) == len(cuts) else []

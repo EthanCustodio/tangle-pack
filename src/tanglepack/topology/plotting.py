@@ -51,6 +51,7 @@ from numpy.typing import NDArray
 from .TopologyResults import PartitionInterval, StablePartitionResult
 
 if TYPE_CHECKING:
+    from ..numerics.Bridge import BridgeId
     from .DualGraph import DualGraph, FaceNode, StableNode
     from .DualWalk import Walk
     from .MinimalTrellis import MinimalTrellis
@@ -755,17 +756,22 @@ def _clip_axes_to_arcs(ax, dual_graph: "DualGraph") -> None:
 
 #: ``_1``, ``^2`` and ``^-1`` in a plain symbol or element name.
 _SCRIPT_PATTERN = re.compile(r"([_^])(-?[A-Za-z0-9]+)")
+#: A parenthesised subscript, ``_(1.0;2)``, in an element name.
+_CODE_SUBSCRIPT_PATTERN = re.compile(r"_\(([^)]*)\)")
+#: A fixed-point letter prefix, ``A:``.
+_LETTER_PATTERN = re.compile(r"^[A-Z]+$")
 
 
 def name_mathtext(text: str) -> str:
     """
     A plain symbol or element name as matplotlib mathtext.
 
-    ``R_1^2`` becomes ``$R_{1}^{2}$``, ``a_2^-1`` becomes ``$a_{2}^{-1}$``,
-    ``u`` becomes ``$u$``; a branch-tagged element name keeps its tag as
-    plain prefix text outside the math (``p3@1.0:R_2`` -> ``p3@1.0:$R_{2}$``,
-    exactly as :attr:`~.ElementNaming.ElementName.mathtext` prints it).
-    Already dollar-wrapped text is returned unchanged.
+    ``R_(0.0;1)^2`` becomes ``$R_{0.0;1}^{2}$``, ``A:R_(1.0;2)`` becomes
+    ``${}^{A}R_{1.0;2}$`` (exactly as
+    :attr:`~.ElementNaming.ElementName.mathtext` prints them), ``a_2^-1``
+    becomes ``$a_{2}^{-1}$`` and ``u`` becomes ``$u$``. Any other ``prefix:``
+    (a ref label's branch tag, ``p3@1.0:R_2``) stays plain text outside the
+    math. Already dollar-wrapped text is returned unchanged.
 
     Args:
         text: The name, as :attr:`~.ElementNaming.ElementName.text`,
@@ -780,8 +786,13 @@ def name_mathtext(text: str) -> str:
     if text.startswith("$") and text.endswith("$"):
         return text
     tag, sep, body = text.rpartition(":")
+    body = _CODE_SUBSCRIPT_PATTERN.sub(lambda m: f"_{{{m.group(1)}}}", body)
     body = _SCRIPT_PATTERN.sub(lambda m: f"{m.group(1)}{{{m.group(2)}}}", body)
-    return f"{tag}:${body}$" if sep else f"${body}$"
+    if not sep:
+        return f"${body}$"
+    if _LETTER_PATTERN.match(tag):
+        return f"${{}}^{{{tag}}}{body}$"
+    return f"{tag}:${body}$"
 
 
 def stable_node_label(node: "StableNode", label_style: Literal["name", "ref"] = "name") -> str:
@@ -1086,7 +1097,23 @@ def walk_legend_handles(**line_kwargs) -> list:
 CLASS_COLORS = (
     "#2a78d6", "#eb6834", "#1baf7a", "#eda100",
     "#e87ba4", "#008300", "#4a3aa7", "#e34948",
+    "#17becf", "#8c564b", "#9467bd", "#bcbd22",
+    "#0b3d91", "#f7b267", "#7f7f7f", "#c2185b",
 )
+
+#: One colour family per tangle when a dynamics spans several fixed points
+#: (cool for the first tangle, warm for the second, ...), and one for the
+#: classes connecting two tangles. Families never share a colour, so no two
+#: symbols of a figure do; a family that runs out is extended from its
+#: colormap (:data:`TANGLE_FAMILY_CMAPS`) rather than repeating.
+TANGLE_COLOR_FAMILIES = (
+    ("#1f5fbf", "#1baf7a", "#17becf", "#4a3aa7", "#6fa8dc", "#0b6e4f",
+     "#8fd694", "#2c3e8f", "#5ec4d6", "#9b8fe0"),
+    ("#e34948", "#eda100", "#eb6834", "#e87ba4", "#8c564b", "#c2185b",
+     "#f7b267", "#a63603", "#f28e8e", "#d4a017"),
+)
+HETEROCLINIC_COLORS = ("#6a3d9a", "#7f7f7f", "#b15928", "#bcbd22", "#cab2d6", "#3f3f3f")
+TANGLE_FAMILY_CMAPS = ("winter", "autumn", "cool", "summer", "spring")
 
 #: Line defaults for a classed bridge (inert classes are additionally dashed).
 CLASS_BRIDGE_STYLE = {"linewidth": 2.0, "zorder": 6, "solid_capstyle": "round"}
@@ -1151,13 +1178,65 @@ def class_colors(dynamics: "SymbolicDynamics", *, refined: bool = True) -> dict[
             their parent letter where a class was split.
 
     Returns:
-        ``{symbol name: colour}`` with :data:`CLASS_COLORS` assigned in
-        ``dynamics.classes`` order (refined children in index order).
+        ``{symbol name: colour}``, no colour used twice. With one tangle,
+        :data:`CLASS_COLORS` in ``dynamics.classes`` order (refined children
+        in index order). With several (``BridgeClassEntry.tangle``), each
+        tangle's symbols take its own family of
+        :data:`TANGLE_COLOR_FAMILIES` in that order and the connecting
+        (heteroclinic) symbols take :data:`HETEROCLINIC_COLORS`.
     """
-    return {
-        name: CLASS_COLORS[index % len(CLASS_COLORS)]
-        for index, (name, _inert) in enumerate(_class_slots(dynamics, refined=refined))
-    }
+    slots = _class_slots(dynamics, refined=refined)
+    tangles = _slot_tangles(dynamics, refined=refined)
+    groups = sorted({t for t in tangles.values()}, key=lambda t: (t is None, t or 0))
+    if len(groups) <= 1 and None not in groups:
+        colors = _distinct_colors(CLASS_COLORS, len(slots), TANGLE_FAMILY_CMAPS[0])
+        return {name: colors[index] for index, (name, _inert) in enumerate(slots)}
+    palette: dict[str, str] = {}
+    for position, group in enumerate(groups):
+        names = [name for name, _inert in slots if tangles.get(name) == group]
+        if group is None:
+            base, cmap = HETEROCLINIC_COLORS, "Greys"
+        else:
+            family = position % len(TANGLE_COLOR_FAMILIES)
+            base = TANGLE_COLOR_FAMILIES[family] if position < len(TANGLE_COLOR_FAMILIES) else ()
+            cmap = TANGLE_FAMILY_CMAPS[position % len(TANGLE_FAMILY_CMAPS)]
+        for name, color in zip(names, _distinct_colors(base, len(names), cmap, avoid=palette.values())):
+            palette[name] = color
+    return palette
+
+
+def _slot_tangles(dynamics: "SymbolicDynamics", *, refined: bool) -> dict[str, Optional[int]]:
+    """``{symbol name: tangle index or None}`` for every slot of :func:`_class_slots`."""
+    tangles: dict[str, Optional[int]] = {}
+    for bridge_class, class_dynamics in dynamics.classes.items():
+        tangle = getattr(class_dynamics.entry, "tangle", None)
+        tangles[class_dynamics.letter] = tangle
+        if refined:
+            for child in dynamics.refined.get(bridge_class, []):
+                tangles[child.name] = tangle
+    return tangles
+
+
+def _distinct_colors(base: Sequence[str], count: int, cmap: str, avoid=()) -> list[str]:
+    """``count`` colours: ``base`` first, then samples of ``cmap``, none in ``avoid``."""
+    from matplotlib import colormaps
+    from matplotlib.colors import to_hex
+
+    taken = {to_hex(c) for c in avoid}
+    colors = [c for c in base if to_hex(c) not in taken][:count]
+    extra = count - len(colors)
+    if extra > 0:
+        samples = colormaps[cmap](np.linspace(0.15, 0.85, extra))
+        for sample in samples:
+            rgb = np.array(sample[:3])
+            color = to_hex(rgb)
+            for _ in range(20):  # darken until unused
+                if color not in taken and color not in colors:
+                    break
+                rgb = rgb * 0.9
+                color = to_hex(rgb)
+            colors.append(color)
+    return colors
 
 
 def _member_name(
@@ -1178,6 +1257,7 @@ def plot_bridges_by_class(
     *,
     refined: bool = True,
     show_inert: bool = True,
+    bridge_ids: Optional[Iterable["BridgeId"]] = None,
     **line_kwargs,
 ):
     """
@@ -1196,6 +1276,10 @@ def plot_bridges_by_class(
         ax: Optional matplotlib Axes. Defaults to the current axes.
         refined: Colour and name by refined class where a class was split.
         show_inert: Draw the inert classes too (default True).
+        bridge_ids: Draw only these member bridges (e.g. a minimal trellis's
+            ``kept_bridge_ids``); None draws every member. Every class member
+            is a bridge of the trellis, blast children included, so without
+            a filter each blast adds its children to the picture.
         **line_kwargs: Overrides on :data:`CLASS_BRIDGE_STYLE` applied to every
             bridge line (``linewidth``, ``alpha``, ``zorder``, ...).
 
@@ -1221,12 +1305,15 @@ def plot_bridges_by_class(
     style = dict(CLASS_BRIDGE_STYLE)
     style.update(line_kwargs)
 
+    only = None if bridge_ids is None else set(bridge_ids)
     drawn: dict[str, str] = {}
     for bridge_class, class_dynamics in dynamics.classes.items():
         inert = class_dynamics.kind != "active"
         if inert and not show_inert:
             continue
         for member in class_dynamics.entry.members:
+            if only is not None and member.bridge_id not in only:
+                continue
             name = _member_name(dynamics, member.bridge_id, class_dynamics.letter, refined=refined)
             color = palette.get(name, CLASS_UNKNOWN_COLOR)
             bridge = trellis.bridge_between(*member.bridge_id)
@@ -1345,14 +1432,14 @@ def plot_transition_graph(
     """
     Draw the transition graph of a symbolic dynamics.
 
-    Nodes are the (refined) symbols on a circle (``networkx.circular_layout``),
-    coloured as in :func:`plot_bridges_by_class` and labelled with their
-    mathtext; inert and virtual symbols are sinks drawn with a dashed
-    outline. Each edge ``x -> y`` (``y`` occurs in the word of ``x``) is
+    Nodes are the (refined) active symbols on a circle
+    (``networkx.circular_layout``), coloured as in :func:`plot_bridges_by_class`
+    and labelled with their mathtext; inert classes are not drawn (they are
+    not part of the graph, see ``SymbolicDynamics.transition_graph``) and
+    virtual symbols are sinks drawn with a dashed outline. Each edge ``x -> y`` (``y`` occurs in the word of ``x``) is
     curved so that ``a -> b`` and ``b -> a`` bow apart and a self-loop shows,
     with width growing with its ``weight`` (multiplicity), which is also
-    written on edges of weight above one. The title reports the spectral
-    radius of the transition matrix.
+    written on edges of weight above one. The title names the symbol family.
 
     Args:
         dynamics: The :class:`~.SymbolicDynamics.SymbolicDynamics`.
@@ -1370,11 +1457,7 @@ def plot_transition_graph(
     target = ax if ax is not None else plt.gca()
     graph = dynamics.transition_graph(refined=refined)
     palette = class_colors(dynamics, refined=refined)
-    radius = dynamics.spectral_radius(refined=refined)
-    title = (
-        f"transition graph ({'refined' if refined else 'class'} symbols); "
-        f"spectral radius {radius:.4g}"
-    )
+    title = f"transition graph ({'refined' if refined else 'class'} symbols)"
     target.set_title(title, fontsize=10)
     target.set_axis_off()
     if graph.number_of_nodes() == 0:
@@ -1452,7 +1535,7 @@ def plot_transition_graph(
 
 
 #: Column headings of :func:`plot_itinerary_table`, in order.
-ITINERARY_TABLE_COLUMNS = ("class", "itinerary", "word", "refined word", "status", "verified")
+ITINERARY_TABLE_COLUMNS = ("class", "iterated itinerary", "word", "refined word", "status", "verified")
 
 #: Largest font size (points) of :func:`plot_itinerary_table`; shrunk to fit.
 ITINERARY_TABLE_FONTSIZE = 8.0
@@ -1581,9 +1664,11 @@ def itinerary_table_rows(
 
     Returns:
         Rows of text in the chosen column order: the class as
-        ``letter = {X, Y}`` in homotopy names, the itinerary in iterated
-        names (``" | "`` between disjoint pairs), the word, the refined
-        word, the status and ``yes``/``no``/``-`` for ``verified``.
+        ``letter = {X, Y}`` in homotopy names, the ITERATED itinerary — the
+        class's image, in iterated element names (``" | "`` between disjoint
+        pairs; an inert class's is the trivial loop that makes it inert) —
+        the word, the refined word, the status and ``yes``/``no``/``-`` for
+        ``verified``.
 
     Raises:
         ValueError: If ``columns`` names a heading that is not a column.
@@ -1594,7 +1679,9 @@ def itinerary_table_rows(
         verified = class_dynamics.verified
         cells = {
             "class": _class_cell(dynamics, class_dynamics, bridge_class, mathtext=mathtext),
-            "itinerary": _itinerary_text(dynamics, class_dynamics.itinerary, mathtext=mathtext),
+            "iterated itinerary": _itinerary_text(
+                dynamics, class_dynamics.itinerary, mathtext=mathtext
+            ),
             "word": _word_text(class_dynamics.symbols, mathtext=mathtext),
             "refined word": _refined_word_text(
                 dynamics, bridge_class, class_dynamics.letter, mathtext=mathtext
@@ -1879,12 +1966,6 @@ def _side_sign(side) -> float:
     return 1.0 if side == "left" else -1.0
 
 
-def _row_label(branch_key) -> str:
-    """``p3@1.0``: the fixed point's period, orbit index and branch index."""
-    fixed_point, _stability, orbit, branch = branch_key
-    return f"p{fixed_point.period}@{orbit}.{branch}"
-
-
 def dual_graph_cartoon_layout(
     dual_graph: "DualGraph", *, anchor: Literal["left", "right"] = "right"
 ) -> CartoonLayout:
@@ -2073,9 +2154,22 @@ def plot_dual_graph_cartoon(
     label_elements: bool = True,
     label_fontsize: float = CARTOON_LABEL_FONTSIZE,
     label_position: Literal["beside", "outside"] = "beside",
-) -> CartoonLayout:
+    shape: Literal["line", "circle"] = "line",
+    interior_side: Optional[dict] = None,
+    parents: Optional[dict] = None,
+    arc_order: Optional[dict] = None,
+    enclosures: Optional[dict] = None,
+) -> Union[CartoonLayout, "ZoneLayout"]:
     """
     Draw the dual graph as a chalkboard cartoon rather than over the plane.
+
+    ``shape="line"`` (the default) draws each branch as a straight row, as
+    described below. ``shape="circle"`` draws each fixed point as a circle of
+    ``2n`` arcs, stable arcs alternating with empty (unstable) ones, one side
+    of each branch outside the circle and the other inside, nested circles
+    for nested zones (see :func:`dual_graph_zone_layout`); everything else --
+    bars, brackets, nodes, names, crossings, bridges, walks -- is drawn the
+    same way along the arcs, and every arc is labelled with its branch code.
 
     Each partitioned stable branch is a horizontal line with its iterated
     elements as bars along it in an ORDINAL coordinate (see
@@ -2122,17 +2216,48 @@ def plot_dual_graph_cartoon(
             repeats), later ones drawn thinner on top.
         label_elements: Annotate every element with its name.
         label_fontsize: Font size (points) of the element names.
-        label_position: ``"beside"`` (to the right of the node) or
-            ``"outside"`` (beyond the node, away from the line).
+        label_position: ``"beside"`` (to the right of the node; along the arc
+            toward the anchor in circle mode) or ``"outside"`` (beyond the
+            node, away from the line).
+        shape: ``"line"`` rows or ``"circle"`` zones.
+        interior_side: Circle mode: ``{branch_key: side}`` of the side facing
+            the zone's interior, drawn inside the circle
+            (:meth:`~tanglepack.loom.TangleSession.TangleSession.cartoon_zones`
+            computes it).
+        parents: Circle mode: ``{id(fixed_point): id(parent)}`` for nested
+            circles.
+        arc_order: Circle mode: ``{id(fixed_point): ZoneArcOrder}``, the
+            zones' ring order and direction (see :func:`dual_graph_zone_layout`).
+        enclosures: Circle mode: ``{bridge_id: {id(fixed_point), ...}}``,
+            the nested fixed points a bridge's lobe (the bridge closed by its
+            stable segment) encloses in the plane. An inward arc of a circle
+            holding nested circles goes around them the long way exactly
+            when its bridge encloses one, the short way otherwise; a walk's
+            arc copies the bridge between the same two elements.
 
     Returns:
-        The :class:`CartoonLayout`, with ``bridges_drawn`` / ``walks_drawn``
-        filled in.
+        The :class:`CartoonLayout` (a :class:`ZoneLayout` in circle mode),
+        with ``bridges_drawn`` / ``walks_drawn`` filled in.
+
+    Raises:
+        ValueError: For an unknown ``shape`` or ``label_position``.
     """
     target = ax if ax is not None else plt.gca()
+    if shape == "circle":
+        return _plot_cartoon_circle(
+            dual_graph, dynamics, target,
+            interior_side=interior_side, parents=parents, arc_order=arc_order,
+            enclosures=enclosures,
+            show_bridges=show_bridges, show_unified=show_unified, show_walks=show_walks,
+            color_bridges=color_bridges, bridge_color=bridge_color,
+            bridge_alpha=bridge_alpha, bridge_linewidth=bridge_linewidth,
+            walk_linewidths=walk_linewidths, label_elements=label_elements,
+            label_fontsize=label_fontsize, label_position=label_position,
+        )
+    if shape != "line":
+        raise ValueError(f"shape must be 'line' or 'circle', not {shape!r}")
     layout = dual_graph_cartoon_layout(dual_graph, anchor=anchor)
     partition = dual_graph.partition
-    several = len(layout.rows) > 1
     mirrored = layout.anchor == "right"
     y_min, y_max = 0.0, 0.0
 
@@ -2148,7 +2273,7 @@ def plot_dual_graph_cartoon(
         )
         anchor_x = x_to + 0.3 if mirrored else x_from - 0.3
         target.annotate(
-            "anchor" if not several else f"anchor  {_row_label(branch_key)}",
+            f"anchor  {_branch_code(dual_graph, branch_key)}",
             (anchor_x, y), textcoords="offset points", xytext=(4 if mirrored else -4, 0),
             ha="left" if mirrored else "right", va="center", fontsize=8, color="gray",
         )
@@ -2318,6 +2443,745 @@ def plot_dual_graph_cartoon(
     return layout
 
 
+# ── dual-graph cartoon on circular zones ────────────────────────────────────
+
+#: Fraction of a stable arc's angular slot the elements are spread over; the
+#: anchor sits :data:`ZONE_ANCHOR_MARGIN` of the slot in from its vertex.
+ZONE_FILL = 0.88
+ZONE_ANCHOR_MARGIN = 0.04
+
+#: Arc length (data units) of one ordinal step along a stable arc.
+ZONE_ARC_UNIT = 1.5
+
+#: Smallest radius of a zone circle (data units).
+ZONE_MIN_RADIUS = 2.0
+
+#: Half-length and serif length (data units) of the drawn bracket glyphs.
+ZONE_BRACKET_HALF = 0.1
+ZONE_BRACKET_SERIF = 0.07
+
+#: Gap between an inner circle's outermost drawing and its parent's inside nodes.
+ZONE_NEST_GAP = 1.2
+
+#: Horizontal gap between two circles that are not nested.
+ZONE_SIDE_GAP = 2.0
+
+#: A bridge bulging INTO its circle is capped at this fraction of the radius.
+ZONE_INWARD_CAP = 0.8
+
+#: Style of the empty (unstable) sides of a zone circle.
+ZONE_EMPTY_STYLE = {"color": "#b4b2a9", "linewidth": 1.0, "linestyle": ":", "zorder": 1}
+
+
+@dataclass
+class ZoneArcOrder:
+    """
+    How one fixed point's stable arcs go around its zone, read off the zone.
+
+    The boundary of a resonance zone runs pip_j --stable--> z_j
+    --unstable--> pip_{j+1} --stable--> z_{j+1} ... (``ResonanceZone``'s
+    stitching); the cartoon draws the stable arcs in that ring order, in that
+    rotational direction, each from its pip end to its anchor, the empty arc
+    after an anchor leading to the next branch's pip end.
+
+    Attributes:
+        order: The stable branch keys in ring order.
+        clockwise: True when the ring runs clockwise in the plane (negative
+            signed area of the boundary polygon).
+        anchor_angles: ``{branch_key: angle}`` of each branch's orbit point
+            about the orbit's centroid in the plane; the arcs are rotated so
+            the anchors sit as close to these as equal spacing allows. Empty
+            for a period-1 orbit (the arc is centred at the top instead).
+    """
+
+    order: list
+    clockwise: bool
+    anchor_angles: dict = field(default_factory=dict)
+
+
+@dataclass
+class ZoneLayout:
+    """
+    Where :func:`plot_dual_graph_cartoon` put everything in ``shape="circle"``.
+
+    Every fixed point is a circle split into ``2n`` equal arcs, ``n`` the
+    number of its partitioned stable branches: stable arcs alternate with
+    empty arcs standing for the zone's unstable sides, in the zone's ring
+    order and direction (:class:`ZoneArcOrder`). On a stable arc the
+    elements run from its anchor toward its pip end in the ordinal coordinate
+    of :func:`dual_graph_cartoon_layout`. One side of each branch is drawn
+    outside the circle, the other inside (:attr:`outside`).
+
+    Attributes:
+        circles: ``{id(fixed_point): (cx, cy, radius)}``.
+        parents: ``{id(fixed_point): id(parent fixed point)}`` for nested
+            circles (drawn inside their parent).
+        arcs: ``{branch_key: (id(fixed_point), alpha, sweep)}``: the stable
+            arc starts at angle ``alpha`` (its anchor vertex) and runs a
+            SIGNED ``sweep`` radians toward its pip end (positive
+            counter-clockwise).
+        ranks: As :attr:`CartoonLayout.ranks`.
+        tol: As :attr:`CartoonLayout.tol`.
+        outside: ``{branch_key: side}``, the side drawn OUTSIDE the circle
+            (the other side is inside).
+        segments: ``{element ref: (theta_lo, theta_hi, r_bar)}``: the angles
+            of an element's anchorward and outward ends and its bar's radius.
+        nodes: ``{element ref: (x, y)}``, ONE node per element.
+        normals: ``{element ref: (nx, ny)}``, the unit normal pointing from
+            the stable arc toward the element's side (the direction bridges
+            and walks leave its node in).
+        keepout: ``{id(fixed_point): radius}`` for a circle with circles
+            nested in it: nothing drawn from its inside side may come closer
+            to its centre than this (the nested circles and their outside
+            drawings live there), so its inward arcs route around them.
+        unified: As :attr:`CartoonLayout.unified`.
+        singletons: As :attr:`CartoonLayout.singletons`.
+        bridges_drawn: The number of minimal-trellis bridges drawn.
+        walks_drawn: The number of class itineraries drawn.
+    """
+
+    circles: dict = field(default_factory=dict)
+    parents: dict = field(default_factory=dict)
+    arcs: dict = field(default_factory=dict)
+    ranks: dict = field(default_factory=dict)
+    tol: float = 0.0
+    outside: dict = field(default_factory=dict)
+    segments: dict = field(default_factory=dict)
+    nodes: dict = field(default_factory=dict)
+    normals: dict = field(default_factory=dict)
+    keepout: dict = field(default_factory=dict)
+    unified: dict = field(default_factory=dict)
+    singletons: set = field(default_factory=set)
+    bridges_drawn: int = 0
+    walks_drawn: int = 0
+
+    @property
+    def anchor(self) -> str:
+        """Always ``"circle"`` (for code that switches on the layout kind)."""
+        return "circle"
+
+    def rank(self, branch_key, cdist: float) -> float:
+        """The ordinal coordinate of a boundary cdist on a branch."""
+        return _rank_of(self.ranks[branch_key], float(cdist), self.tol)
+
+    def span(self, branch_key) -> float:
+        """The largest ordinal coordinate of a branch (at least 1)."""
+        return float(max(len(self.ranks[branch_key]) - 1, 1))
+
+    def angle(self, branch_key, cdist: float) -> float:
+        """The angle of a boundary cdist on its branch's stable arc."""
+        _fp, alpha, sweep = self.arcs[branch_key]
+        fraction = self.rank(branch_key, cdist) / self.span(branch_key)
+        return alpha + sweep * (ZONE_ANCHOR_MARGIN + ZONE_FILL * fraction)
+
+    def radius(self, branch_key) -> float:
+        """The radius of a branch's circle."""
+        return self.circles[self.arcs[branch_key][0]][2]
+
+    def point(self, branch_key, theta: float, offset: float = 0.0) -> tuple[float, float]:
+        """The point at angle ``theta``, ``offset`` outside the branch's circle."""
+        cx, cy, radius = self.circles[self.arcs[branch_key][0]]
+        r = radius + offset
+        return (cx + r * np.cos(theta), cy + r * np.sin(theta))
+
+    def side_sign(self, branch_key, side) -> float:
+        """``+1`` when ``side`` is drawn outside the circle, ``-1`` inside."""
+        return 1.0 if self.outside.get(branch_key, "left") == side else -1.0
+
+
+def _branch_order(partition) -> dict:
+    """``{id(fixed_point): [branch_key, ...]}`` in ``branch_cycle`` order."""
+    order: dict = {}
+    fixed_points: dict = {}
+    for branch_key in partition.branch_keys:
+        fixed_points.setdefault(id(branch_key[0]), branch_key[0])
+        order.setdefault(id(branch_key[0]), []).append(branch_key)
+    for fp_id, keys in order.items():
+        fixed_point = fixed_points[fp_id]
+        try:
+            cycle = fixed_point.branch_cycle("stable")
+        except Exception:  # a hand-built fixed point without k_value
+            cycle = []
+        position = {key: i for i, key in enumerate(cycle)}
+        keys.sort(key=lambda key: (position.get(key, len(position)), key[2], key[3]))
+    return order
+
+
+def _zone_extent(layout: ZoneLayout, branch_keys, inward: bool) -> float:
+    """How far a circle's drawing reaches beyond (or, ``inward``, inside) its radius."""
+    deepest = max(
+        (CARTOON_ARC_BASE + CARTOON_ARC_SLOPE * layout.span(key) for key in branch_keys),
+        default=CARTOON_ARC_BASE,
+    )
+    reach = CARTOON_LABEL_OFFSET + (0.5 if inward else 1.0) * deepest
+    return reach
+
+
+def _place_arcs(
+    layout: ZoneLayout, fp_id: int, keys: list, sweep: float,
+    order: Optional[ZoneArcOrder], interior_side: dict,
+) -> None:
+    """Fill ``layout.arcs`` for one fixed point's branches (see :func:`dual_graph_zone_layout`)."""
+    n = len(keys)
+    if order is not None and set(order.order) == set(keys) and len(order.order) == n:
+        keys = list(order.order)
+        direction = -1.0 if order.clockwise else 1.0
+        anchor_angles = order.anchor_angles
+    else:
+        if order is not None:
+            logger.info(
+                "zone arc order names branches %s, not the partitioned %s; "
+                "falling back to branch_cycle order",
+                [k[2:] for k in order.order], [k[2:] for k in keys],
+            )
+        first_inside = interior_side.get(keys[0], "right")
+        direction = -1.0 if first_inside == "right" else 1.0
+        anchor_angles = {}
+    # Arc i: pip end at phi_i, anchor at phi_i + direction * sweep, the empty
+    # arc after the anchor up to the next pip end at phi_i + 2 direction sweep.
+    if n == 1:
+        phi0 = np.pi / 2 - direction * np.pi / 2
+    else:
+        phi0 = np.pi / 2 - direction * sweep / 2
+    anchors = [phi0 + direction * (2 * i + 1) * sweep for i in range(n)]
+    if n > 1 and all(key in anchor_angles for key in keys):
+        # Rotate (equal spacing kept) so the anchors best match the orbit.
+        offsets = [anchor_angles[key] - anchor for key, anchor in zip(keys, anchors)]
+        shift = float(np.angle(np.mean(np.exp(1j * np.array(offsets)))))
+        anchors = [anchor + shift for anchor in anchors]
+    for key, anchor in zip(keys, anchors):
+        layout.arcs[key] = (fp_id, float(anchor), float(-direction * sweep))
+
+
+def dual_graph_zone_layout(
+    dual_graph: "DualGraph",
+    *,
+    interior_side: Optional[dict] = None,
+    parents: Optional[dict] = None,
+    arc_order: Optional[dict] = None,
+) -> ZoneLayout:
+    """
+    Lay out the circular-zone cartoon of a dual graph.
+
+    Each fixed point is a circle of ``2n`` equal arcs (``n`` partitioned
+    stable branches): stable arcs alternating with empty arcs (the zone's
+    unstable sides). With a :class:`ZoneArcOrder` the arcs follow the zone's
+    boundary exactly: ring order, rotational direction, each arc from its pip
+    end to its anchor with the empty arc after the anchor leading to the next
+    branch's pip end, rotated so the anchors sit near the orbit points' real
+    angles. Without one, ``branch_cycle`` order, running clockwise when the
+    first branch's interior side is its right (a boundary traversed
+    clockwise has its interior on the right), counter-clockwise otherwise.
+    A period-1 fixed point is a circle half stable (the upper half), half
+    empty -- the line cartoon bent over (anchor at angle 0 when clockwise).
+    The radius is chosen so one ordinal step is :data:`ZONE_ARC_UNIT` of arc
+    length.
+    A fixed point with a parent is drawn inside its parent's circle, the
+    parent grown until the child and its drawing fit; circles without a
+    parent go side by side, left to right in partition order.
+
+    Args:
+        dual_graph: The :class:`~.DualGraph.DualGraph`.
+        interior_side: ``{branch_key: side}``, the side of each stable branch
+            that faces its resonance zone's interior (drawn INSIDE the
+            circle). A branch missing from it has its right side inside.
+        parents: ``{id(fixed_point): id(parent fixed point)}``: which circle
+            nests inside which.
+        arc_order: ``{id(fixed_point): ZoneArcOrder}``, read off each zone
+            (:meth:`~tanglepack.loom.TangleSession.TangleSession.cartoon_zones`).
+            Ignored for a fixed point whose order does not name exactly its
+            partitioned branches.
+
+    Returns:
+        The :class:`ZoneLayout`.
+    """
+    partition = dual_graph.partition
+    layout = ZoneLayout(tol=max(float(partition.tol), 1e-12))
+    interior_side = interior_side or {}
+    order = _branch_order(partition)
+    known = set(order)
+    layout.parents = {
+        child: parent
+        for child, parent in (parents or {}).items()
+        if child in known and parent in known and child != parent
+    }
+    for branch_key in partition.branch_keys:
+        boundaries = [
+            cdist
+            for side in partition.sides(branch_key)
+            for iv in partition.result(branch_key, side).intervals
+            for cdist in (iv.lo_cdist, iv.hi_cdist)
+        ]
+        layout.ranks[branch_key] = _cluster(boundaries, layout.tol)
+        inside = interior_side.get(branch_key, "right")
+        layout.outside[branch_key] = "left" if inside == "right" else "right"
+
+    # Natural radius of every circle, then grow parents around their children.
+    radius: dict = {}
+    for fp_id, keys in order.items():
+        n = len(keys)
+        sweep = np.pi / n
+        longest = max(layout.span(key) for key in keys)
+        radius[fp_id] = max(ZONE_MIN_RADIUS, ZONE_ARC_UNIT * longest / (ZONE_FILL * sweep))
+        _place_arcs(layout, fp_id, keys, sweep, (arc_order or {}).get(fp_id), interior_side)
+
+    def depth(fp_id) -> int:
+        seen, d = set(), 0
+        while fp_id in layout.parents and fp_id not in seen:
+            seen.add(fp_id)
+            fp_id = layout.parents[fp_id]
+            d += 1
+        return d
+
+    for fp_id in sorted(order, key=depth, reverse=True):
+        parent = layout.parents.get(fp_id)
+        if parent is None:
+            continue
+        need = (
+            radius[fp_id]
+            + _zone_extent(layout, order[fp_id], inward=False)
+            + _zone_extent(layout, order[parent], inward=True)
+            + ZONE_NEST_GAP
+        )
+        radius[parent] = max(radius[parent], need)
+
+    # Centres: roots side by side, children at their parent's centre.
+    x = 0.0
+    centres: dict = {}
+    for fp_id in order:
+        if fp_id in layout.parents:
+            continue
+        reach = radius[fp_id] + _zone_extent(layout, order[fp_id], inward=False)
+        if centres:
+            x += reach
+        centres[fp_id] = (x, 0.0)
+        x += reach + ZONE_SIDE_GAP
+    for fp_id in sorted(order, key=depth):
+        if fp_id in layout.parents:
+            centres[fp_id] = centres.get(layout.parents[fp_id], (0.0, 0.0))
+    for fp_id in order:
+        cx, cy = centres[fp_id]
+        layout.circles[fp_id] = (float(cx), float(cy), float(radius[fp_id]))
+    for child, parent in layout.parents.items():
+        reach = radius[child] + _zone_extent(layout, order[child], inward=False) + 0.5 * ZONE_NEST_GAP
+        layout.keepout[parent] = max(layout.keepout.get(parent, 0.0), float(reach))
+
+    for branch_key in partition.branch_keys:
+        cx, cy, _r = layout.circles[layout.arcs[branch_key][0]]
+        for side in partition.sides(branch_key):
+            sigma = layout.side_sign(branch_key, side)
+            result = partition.result(branch_key, side)
+            for iv in result.intervals:
+                ref = result.ref(iv.element_id)
+                t_lo = layout.angle(branch_key, iv.lo_cdist)
+                t_hi = layout.angle(branch_key, iv.hi_cdist)
+                layout.segments[ref] = (
+                    t_lo, t_hi, layout.radius(branch_key) + sigma * CARTOON_SEGMENT_OFFSET
+                )
+                if t_lo == t_hi:
+                    layout.singletons.add(ref)
+                    theta, offset = t_lo, sigma * CARTOON_SEGMENT_OFFSET
+                else:
+                    theta, offset = 0.5 * (t_lo + t_hi), sigma * CARTOON_NODE_OFFSET
+                layout.nodes[ref] = layout.point(branch_key, theta, offset)
+                layout.normals[ref] = (sigma * np.cos(theta), sigma * np.sin(theta))
+                layout.unified[ref] = any(
+                    node.is_unified for node in dual_graph.stable_nodes_of(ref)
+                )
+    return layout
+
+
+def _normal_bezier(p, n_p, q, n_q, *, depth: Optional[float] = None, cap_p=None, cap_q=None):
+    """
+    A cubic from ``p`` to ``q`` leaving along ``n_p`` and arriving along ``n_q``.
+
+    The control points sit ``h`` along each end's normal, ``h`` growing with
+    the chord like the line cartoon's U-arcs (so wider arcs nest outside
+    narrower ones), capped per end (``cap_p`` / ``cap_q``) so an arc bulging
+    into a circle stops short of its centre. ``p == q`` draws a teardrop.
+    """
+    from matplotlib.path import Path
+
+    p, q = np.asarray(p, dtype=float), np.asarray(q, dtype=float)
+    n_p, n_q = np.asarray(n_p, dtype=float), np.asarray(n_q, dtype=float)
+    chord = float(np.linalg.norm(q - p))
+    if depth is None:
+        depth = CARTOON_ARC_BASE + CARTOON_ARC_SLOPE * chord
+    height = 4.0 * depth / 3.0
+    h_p = height if cap_p is None else min(height, cap_p)
+    h_q = height if cap_q is None else min(height, cap_q)
+    if chord == 0.0:
+        tangent = np.array([-n_p[1], n_p[0]])
+        vertices = [
+            p,
+            p + h_p * n_p - CARTOON_LOOP_HALFWIDTH * tangent,
+            p + h_p * n_p + CARTOON_LOOP_HALFWIDTH * tangent,
+            p,
+        ]
+    else:
+        vertices = [p, p + h_p * n_p, q + h_q * n_q, q]
+    return Path([tuple(v) for v in vertices], [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
+
+
+def _zone_arc_curve(layout: ZoneLayout, a, b, *, around: bool = False):
+    """
+    The bridge/walk arc between two element nodes, each leaving along its normal.
+
+    Between two INWARD nodes of one circle that holds nested circles the arc
+    is routed around them (:func:`_polar_route`): the short way, between the
+    stable arc and the nested circles, or with ``around`` the long way,
+    beyond them -- which one is the topology of the real bridge (whether its
+    lobe encloses the nested tangle). Every other arc is a normal Bezier.
+    """
+    fp_a, fp_b = layout.arcs[a.branch_key][0], layout.arcs[b.branch_key][0]
+    inward = (
+        layout.side_sign(a.branch_key, a.side) < 0
+        and layout.side_sign(b.branch_key, b.side) < 0
+    )
+    if fp_a == fp_b and inward and fp_a in layout.keepout and a != b:
+        return _polar_route(layout, fp_a, layout.nodes[a], layout.nodes[b], around=around)
+    return _normal_bezier(
+        layout.nodes[a], layout.normals[a], layout.nodes[b], layout.normals[b],
+        cap_p=_inward_cap(layout, a), cap_q=_inward_cap(layout, b),
+    )
+
+
+def _polar_route(layout: ZoneLayout, fp_id: int, p, q, *, around: bool, samples: int = 96):
+    """
+    A curve from ``p`` to ``q`` inside circle ``fp_id`` that never comes
+    nearer its centre than the circle's keep-out radius.
+
+    In polar coordinates about the centre the angle eases from ``p``'s to
+    ``q``'s (the short way, or the long way round with ``around``) while the
+    radius dips to a depth growing with the chord, so wider arcs nest inside
+    narrower ones and every arc leaves and reaches its nodes radially.
+    """
+    from matplotlib.path import Path
+
+    cx, cy, _radius = layout.circles[fp_id]
+    centre = np.array([cx, cy])
+    p, q = np.asarray(p, dtype=float) - centre, np.asarray(q, dtype=float) - centre
+    r_p, r_q = float(np.hypot(*p)), float(np.hypot(*q))
+    t_p, t_q = float(np.arctan2(p[1], p[0])), float(np.arctan2(q[1], q[0]))
+    delta = (t_q - t_p + np.pi) % (2 * np.pi) - np.pi  # the short way
+    if around:
+        delta -= np.sign(delta or 1.0) * 2 * np.pi
+    band = max(min(r_p, r_q) - layout.keepout[fp_id], 1e-6)
+    reach = CARTOON_ARC_BASE + CARTOON_ARC_SLOPE * abs(delta) * 0.5 * (r_p + r_q)
+    depth = 0.92 * band * reach / (reach + band)
+    t = np.linspace(0.0, 1.0, samples)
+    ease = t * t * (3.0 - 2.0 * t)
+    theta = t_p + delta * ease
+    r = (1.0 - t) * r_p + t * r_q - depth * np.sin(np.pi * t)
+    vertices = centre + np.column_stack([r * np.cos(theta), r * np.sin(theta)])
+    codes = [Path.MOVETO] + [Path.LINETO] * (samples - 1)
+    return Path(vertices, codes)
+
+
+def _path_point(path, t: float):
+    """The point at parameter ``t`` of a single-cubic path or a polyline path."""
+    if len(path.vertices) == 4 and path.codes is not None and path.codes[1] == path.CURVE4:
+        return _cubic_point(path, t)
+    vertices = np.asarray(path.vertices, dtype=float)
+    position = t * (len(vertices) - 1)
+    index = min(int(position), len(vertices) - 2)
+    fraction = position - index
+    return (1 - fraction) * vertices[index] + fraction * vertices[index + 1]
+
+
+def _zone_cross_curve(layout: ZoneLayout, a, b):
+    """The S-curve crossing the stable arc from node ``a`` to node ``b``."""
+    na, nb = np.asarray(layout.normals[a]), np.asarray(layout.normals[b])
+    return _normal_bezier(
+        layout.nodes[a], -na, layout.nodes[b], -nb, depth=0.75 * CARTOON_S_PULL
+    )
+
+
+def _inward_cap(layout: ZoneLayout, ref) -> Optional[float]:
+    """The bulge cap of an arc leaving ``ref`` into its circle (None outward)."""
+    branch_key = ref.branch_key
+    if layout.side_sign(branch_key, ref.side) > 0:
+        return None
+    return ZONE_INWARD_CAP * layout.radius(branch_key)
+
+
+def _arc_points(cx: float, cy: float, r: float, t0: float, t1: float, n: int = 64) -> NDArray:
+    """``n`` points along a circular arc from angle ``t0`` to ``t1``."""
+    theta = np.linspace(t0, t1, n)
+    return np.column_stack([cx + r * np.cos(theta), cy + r * np.sin(theta)])
+
+
+def _branch_code(dual_graph: "DualGraph", branch_key) -> str:
+    """The branch code element names print (``"1.0"``, ``"A 1.0"``)."""
+    naming = dual_graph.naming
+    if naming is not None and hasattr(naming, "branch_code"):
+        return naming.branch_code(branch_key)
+    return f"{branch_key[2]}.{branch_key[3]}"
+
+
+def _plot_cartoon_circle(
+    dual_graph: "DualGraph",
+    dynamics: "SymbolicDynamics",
+    target,
+    *,
+    interior_side: Optional[dict],
+    parents: Optional[dict],
+    arc_order: Optional[dict],
+    enclosures: Optional[dict],
+    show_bridges: bool,
+    show_unified: bool,
+    show_walks: bool,
+    color_bridges: bool,
+    bridge_color: str,
+    bridge_alpha: float,
+    bridge_linewidth: Optional[float],
+    walk_linewidths: Sequence[float],
+    label_elements: bool,
+    label_fontsize: float,
+    label_position: str,
+) -> ZoneLayout:
+    """The ``shape="circle"`` body of :func:`plot_dual_graph_cartoon`."""
+    if label_position not in ("beside", "outside"):
+        raise ValueError(
+            f"label_position must be 'beside' or 'outside', not {label_position!r}"
+        )
+    layout = dual_graph_zone_layout(
+        dual_graph, interior_side=interior_side, parents=parents, arc_order=arc_order
+    )
+    partition = dual_graph.partition
+    extent: list = []
+
+    # The circles: dotted whole (the empty, unstable arcs), stable arcs solid
+    # on top.
+    for fp_id, (cx, cy, r) in layout.circles.items():
+        extent.append((cx - r, cy - r))
+        extent.append((cx + r, cy + r))
+        ring = _arc_points(cx, cy, r, 0.0, 2 * np.pi, n=256)
+        target.plot(ring[:, 0], ring[:, 1], **ZONE_EMPTY_STYLE)
+    for branch_key, (fp_id, alpha, sweep) in layout.arcs.items():
+        cx, cy, r = layout.circles[fp_id]
+        stable = _arc_points(cx, cy, r, alpha, alpha + sweep)
+        target.plot(stable[:, 0], stable[:, 1], solid_capstyle="round", **CARTOON_LINE_STYLE)
+        vertex = layout.point(branch_key, alpha)
+        target.plot(*vertex, marker="o", markersize=4, color="#52514e", zorder=2)
+        # The branch code sits just past the anchor vertex, on the empty arc
+        # leaving it, where no element is drawn.
+        code_at = layout.point(branch_key, alpha - 0.12 * sweep, 0.0)
+        target.annotate(
+            _branch_code(dual_graph, branch_key), code_at, ha="center", va="center",
+            fontsize=max(label_fontsize * 0.8, 7.0), color="#52514e", zorder=9,
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "edgecolor": "#b4b2a9"},
+        )
+
+    for branch_key in partition.branch_keys:
+        for side in partition.sides(branch_key):
+            color = CARTOON_SIDE_COLORS[side]
+            sigma = layout.side_sign(branch_key, side)
+            result = partition.result(branch_key, side)
+            fp_id = layout.arcs[branch_key][0]
+            cx, cy, _r = layout.circles[fp_id]
+            for iv in result.intervals:
+                ref = result.ref(iv.element_id)
+                t_lo, t_hi, r_bar = layout.segments[ref]
+                if t_lo == t_hi:
+                    x, y = cx + r_bar * np.cos(t_lo), cy + r_bar * np.sin(t_lo)
+                    target.plot(
+                        x, y, marker="o", markersize=7, markerfacecolor=color,
+                        markeredgecolor=color, linestyle="none", zorder=7,
+                    )
+                else:
+                    bar = _arc_points(cx, cy, r_bar, t_lo, t_hi, n=24)
+                    target.plot(bar[:, 0], bar[:, 1], color=color, linewidth=2,
+                                solid_capstyle="butt", zorder=5)
+                    # A bracket opens toward the element's interior: toward
+                    # the pip end at the anchorward end, and back.
+                    outward = float(np.sign(layout.arcs[branch_key][2]))
+                    for theta, closed, toward in (
+                        (t_lo, iv.closed_lo, outward), (t_hi, iv.closed_hi, -outward)
+                    ):
+                        _add_curve(
+                            target,
+                            _bracket_path(cx, cy, r_bar, theta, toward, closed),
+                            gid="bracket", edgecolor=color, linewidth=2.0, zorder=6,
+                        )
+                if label_elements:
+                    name = _cartoon_name(dual_graph, ref)
+                    style = {"fontsize": label_fontsize, "color": "black", "zorder": 9}
+                    theta = 0.5 * (t_lo + t_hi)
+                    if label_position == "beside":
+                        # Beside the node along the arc, away from the anchor
+                        # and a little off the bar: arcs leave the node
+                        # radially.
+                        normal = np.array(layout.normals[ref])
+                        outward = float(np.sign(layout.arcs[branch_key][2]))
+                        direction = outward * np.array([-np.sin(theta), np.cos(theta)]) + 0.8 * normal
+                        direction /= np.linalg.norm(direction)
+                        gap = 0.5 * np.sqrt(CARTOON_NODE_SIZE) + CARTOON_LABEL_GAP
+                        target.annotate(
+                            name, layout.nodes[ref], textcoords="offset points",
+                            xytext=tuple(gap * direction),
+                            ha=_align(direction[0], "left", "right"),
+                            va=_align(direction[1], "bottom", "top"),
+                            **style,
+                        )
+                    else:
+                        at = layout.point(branch_key, theta, sigma * CARTOON_LABEL_OFFSET)
+                        normal = np.array(layout.normals[ref])
+                        target.annotate(
+                            name, at, ha=_align(normal[0], "left", "right"),
+                            va=_align(normal[1], "bottom", "top"),
+                            bbox={"boxstyle": "round,pad=0.15", "facecolor": "white",
+                                  "edgecolor": "none", "alpha": 0.85},
+                            **style,
+                        )
+                extent.append(layout.point(branch_key, 0.5 * (t_lo + t_hi),
+                                           sigma * CARTOON_LABEL_OFFSET))
+
+    refs = [ref for ref in layout.nodes if ref not in layout.singletons]
+    xy = np.array([layout.nodes[ref] for ref in refs]).reshape(-1, 2)
+    filled = np.array([layout.unified[ref] for ref in refs], dtype=bool)
+    target.scatter(
+        xy[:, 0], xy[:, 1], s=CARTOON_NODE_SIZE,
+        facecolors=["black" if f else "white" for f in filled],
+        edgecolors="black", linewidths=1.2, zorder=8,
+    )
+
+    if show_unified:
+        pairs = {
+            (node.elements["left"], node.elements["right"])
+            for node in dual_graph.unified_nodes
+            if "left" in node.elements and "right" in node.elements
+        }
+        for left_ref, right_ref in sorted(pairs, key=lambda pair: layout.nodes[pair[0]]):
+            if left_ref in layout.nodes and right_ref in layout.nodes:
+                _add_curve(target, _zone_cross_curve(layout, left_ref, right_ref),
+                           gid="unified", **CARTOON_UNIFIED_STYLE)
+
+    pair_around: dict = {}
+    if show_bridges:
+        palette = class_colors(dynamics, refined=True) if color_bridges else {}
+        minimal = dual_graph.minimal
+        for bridge_id in minimal.kept_bridge_ids:
+            try:
+                first, second = _bridge_end_elements(dual_graph, bridge_id)
+            except (KeyError, ValueError) as error:
+                logger.warning("bridge %s has no owned end elements (%s); not drawn", bridge_id, error)
+                continue
+            if first not in layout.nodes or second not in layout.nodes:
+                logger.warning("bridge %s ends outside the drawn partition; not drawn", bridge_id)
+                continue
+            name, inert = _bridge_symbol(dynamics, bridge_id)
+            color = palette.get(name, CLASS_UNKNOWN_COLOR) if name and color_bridges else bridge_color
+            around = bool(set((enclosures or {}).get(bridge_id, ())) & set(
+                child for child, parent in layout.parents.items()
+                if parent == layout.arcs[first.branch_key][0]
+            ))
+            pair_around[frozenset((first, second))] = around
+            path = _zone_arc_curve(layout, first, second, around=around)
+            _add_curve(
+                target, path, gid=f"bridge:{bridge_id[0]}-{bridge_id[1]}",
+                edgecolor=color, linestyle="--" if inert else "-",
+                linewidth=(
+                    bridge_linewidth if bridge_linewidth is not None
+                    else CARTOON_HOLE_LINEWIDTH if minimal.is_hole_bridge(bridge_id)
+                    else CARTOON_IMAGE_LINEWIDTH
+                ),
+                alpha=bridge_alpha, zorder=4,
+            )
+            extent.append(tuple(_path_point(path, 0.5)))
+            layout.bridges_drawn += 1
+
+    if show_walks:
+        palette = class_colors(dynamics, refined=False)
+        drawn = 0
+        for class_dynamics in dynamics.classes.values():
+            itinerary = _cartoon_itinerary(class_dynamics)
+            if itinerary is None or any(ref not in layout.nodes for ref in itinerary):
+                continue
+            letter = class_dynamics.letter
+            color = palette.get(letter, CLASS_UNKNOWN_COLOR)
+            width = walk_linewidths[min(drawn, len(walk_linewidths) - 1)]
+            style = {
+                "edgecolor": color, "linewidth": width, "zorder": 10 + drawn,
+                "linestyle": ":" if class_dynamics.source == "trellis" else "-",
+            }
+            gid = f"walk:{letter}"
+            last = None
+            for index in range(0, len(itinerary), 2):
+                a, b = itinerary[index], itinerary[index + 1]
+                last = _zone_arc_curve(
+                    layout, a, b, around=pair_around.get(frozenset((a, b)), False)
+                )
+                _add_curve(target, last, gid=gid, **style)
+                extent.append(tuple(_path_point(last, 0.5)))
+                if index + 2 < len(itinerary):
+                    last = _zone_cross_curve(layout, b, itinerary[index + 2])
+                    _add_curve(target, last, gid=gid, **style)
+            start = layout.nodes[itinerary[0]]
+            target.plot(
+                start[0], start[1], marker="o", markersize=WALK_MARKER_SIZE, color=color,
+                linestyle="none", zorder=style["zorder"] + 0.5,
+            )
+            target.annotate(
+                "", xy=layout.nodes[itinerary[-1]], xytext=tuple(_path_point(last, 0.92)),
+                arrowprops={
+                    "arrowstyle": "-|>", "color": color, "linewidth": 0,
+                    "mutation_scale": 2.0 * WALK_MARKER_SIZE, "shrinkA": 0, "shrinkB": 0,
+                },
+                zorder=style["zorder"] + 0.5,
+            )
+            drawn += 1
+        layout.walks_drawn = drawn
+
+    points = np.array(extent, dtype=float).reshape(-1, 2)
+    lo, hi = points.min(axis=0), points.max(axis=0)
+    pad = 0.6 + 0.04 * float(np.max(hi - lo))
+    target.set_xlim(lo[0] - pad, hi[0] + pad)
+    target.set_ylim(lo[1] - pad, hi[1] + pad)
+    target.set_aspect("equal", adjustable="box")
+    target.set_axis_off()
+    return layout
+
+
+def _bracket_path(cx: float, cy: float, r: float, theta: float, toward: float, closed: bool):
+    """
+    A bracket drawn across a bar at angle ``theta``: ``[`` when ``closed``,
+    ``(`` when open, opening ``toward`` (+1 counter-clockwise, -1 clockwise).
+    """
+    from matplotlib.path import Path
+
+    radial = np.array([np.cos(theta), np.sin(theta)])
+    tangent = toward * np.array([-np.sin(theta), np.cos(theta)])
+    # Nudged into the element, so the two brackets of a shared boundary sit
+    # side by side rather than on top of each other.
+    centre = np.array([cx, cy]) + r * radial + 0.6 * ZONE_BRACKET_SERIF * tangent
+    top = centre + ZONE_BRACKET_HALF * radial
+    bottom = centre - ZONE_BRACKET_HALF * radial
+    if closed:
+        vertices = [
+            top + ZONE_BRACKET_SERIF * tangent, top, bottom, bottom + ZONE_BRACKET_SERIF * tangent
+        ]
+        codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO]
+    else:
+        # A quadratic bulging away from the interior.
+        vertices = [
+            top + ZONE_BRACKET_SERIF * tangent,
+            centre - 1.2 * ZONE_BRACKET_SERIF * tangent,
+            bottom + ZONE_BRACKET_SERIF * tangent,
+        ]
+        codes = [Path.MOVETO, Path.CURVE3, Path.CURVE3]
+    return Path([tuple(v) for v in vertices], codes)
+
+
+def _align(component: float, positive: str, negative: str) -> str:
+    """Text alignment along one axis for an offset direction component."""
+    if component > 0.3:
+        return positive
+    if component < -0.3:
+        return negative
+    return "center"
+
+
 def dual_graph_cartoon_legend_handles(
     dynamics: Optional["SymbolicDynamics"] = None,
     *,
@@ -2325,6 +3189,7 @@ def dual_graph_cartoon_legend_handles(
     bridge_alpha: float = CARTOON_BRIDGE_ALPHA,
     bridge_linewidth: Optional[float] = None,
     walks: bool = True,
+    empty_side: bool = False,
 ) -> list:
     """
     Legend proxies for :func:`plot_dual_graph_cartoon`.
@@ -2343,6 +3208,8 @@ def dual_graph_cartoon_legend_handles(
         walks: Include the walk entries (the trellis-itinerary line style
             and the per-class walks); False for a cartoon drawn with
             ``show_walks=False``.
+        empty_side: Include the ``empty (unstable) side`` entry of a
+            ``shape="circle"`` cartoon, after the node entries.
 
     Returns:
         ``Line2D`` handles: hole bridge, image bridge (or one ``bridge``
@@ -2378,6 +3245,10 @@ def dual_graph_cartoon_legend_handles(
         Line2D([0], [0], marker="o", markerfacecolor="black", markeredgecolor="black",
                linestyle="none", markersize=np.sqrt(CARTOON_NODE_SIZE), label="unified node"),
     ]
+    if empty_side:
+        handles.append(Line2D([0], [0], label="empty (unstable) side", **{
+            k: v for k, v in ZONE_EMPTY_STYLE.items() if k != "zorder"
+        }))
     if not walks:
         return handles
     handles.append(

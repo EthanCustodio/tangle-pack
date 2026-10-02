@@ -42,7 +42,7 @@ from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import ManifoldMachine
 from .Tangle import Tangle
-from .FixedPoint import FixedPoint
+from .FixedPoint import FixedPoint, position_letter
 from .BaseManifold import BaseManifold
 from .Bridge import Bridge, BridgeId
 from .Intersection import Intersection, ManifoldKey, Stability
@@ -297,11 +297,14 @@ class TangleWorkbench:
                 one row per orbit point.
 
         Returns:
-            FixedPoint: The constructed fixed point, already registered here. Its
-                branch count is derived (``FixedPoint.num_branches``).
+            FixedPoint: The constructed fixed point, already registered here and
+                labelled ``A, B, ...`` in construction order. Its branch count is
+                derived (``FixedPoint.num_branches``).
         """
 
         fixed_point = self._fp_solver.construct_fixed_point(initial_guess)
+        position = len(self.fixed_points)
+        fixed_point.label = position_letter(position)
 
         self.fixed_points.append(fixed_point)
 

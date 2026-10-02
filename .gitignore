@@ -20,3 +20,7 @@ venv/
 
 # profiling output
 profile.out
+
+# local Claude Code state
+.claude/settings.local.json
+.claude/worktrees/

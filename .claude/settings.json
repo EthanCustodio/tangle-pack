@@ -1,0 +1,22 @@
+{
+  "skillOverrides": {
+    "house_style": "name-only",
+    "knowledge_files": "name-only",
+    "verdict_writing": "name-only"
+  },
+  "athanor": {
+    "schemaVersion": 1,
+    "sigils": {
+      "tangle_refactor": {
+        "sourceHash": "sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690",
+        "transmuterVersion": "0.1.0",
+        "skillOverrides": {
+          "house_style": "name-only",
+          "knowledge_files": "name-only",
+          "verdict_writing": "name-only"
+        },
+        "orchestrator": "tangle_refactor"
+      }
+    }
+  }
+}

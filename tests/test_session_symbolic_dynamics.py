@@ -48,7 +48,7 @@ def _same_dynamics(a: SymbolicDynamics, b: SymbolicDynamics) -> bool:
 def _homotopy_names(dyn: SymbolicDynamics, cd) -> frozenset[str]:
     """The homotopy names of a class's two elements, e.g. ``{"R_1", "R_3"}``."""
     return frozenset(
-        dyn.naming.homotopy_name(ref).text
+        dyn.naming.homotopy_name(ref).short_text
         for ref in (cd.bridge_class.source, cd.bridge_class.target)
     )
 
@@ -297,7 +297,7 @@ def test_k28_two_blasts_structure(k28_two_blasts_partitioned):
     assert len(b.itinerary) == 2
 
     # Only {R_1, R_5} refines, into exactly two children (anchor outward), and
-    # under the footprint cut rule every member of it matches a child.
+    # every member of it matches a child by its own endpoint owners.
     assert set(dyn.refined) == {a.bridge_class}
     children = dyn.refined[a.bridge_class]
     assert [child.name for child in children] == [f"{a.letter}_1", f"{a.letter}_2"]
@@ -308,12 +308,13 @@ def test_k28_two_blasts_structure(k28_two_blasts_partitioned):
         member.bridge_id for member in a.entry.members if not member.is_loop
     }
 
-    # Unrefined matrix over (a, b, c) = [[1,1,0],[0,0,1],[2,0,0]].
+    # Unrefined matrix over (a, b, c) = [[1,1,0],[0,0,1],[2,0,0]]; the inert
+    # class u is in the words but not in the matrix.
     names, matrix = dyn.transition_matrix(refined=False)
-    order = [names.index(cd.letter) for cd in (a, b, c)]
-    restricted = matrix[np.ix_(order, order)]
-    assert restricted.tolist() == [[1, 1, 0], [0, 0, 1], [2, 0, 0]]
-    assert matrix[names.index(inert_letter)].tolist() == [0] * len(names)
+    assert names == [a.letter, b.letter, c.letter]
+    assert matrix.tolist() == [[1, 1, 0], [0, 0, 1], [2, 0, 0]]
+    assert inert_letter not in names
+    assert inert_letter not in dyn.transition_graph(refined=False)
 
     assert session.describe_symbolic_dynamics([fp]) == dyn.describe()
 
@@ -330,7 +331,7 @@ def test_p3_symbolic_dynamics_smoke(p3_partitioned):
     session, _fp3, _fp1 = p3_partitioned
     dyn = session.symbolic_dynamics()
     assert isinstance(dyn, SymbolicDynamics)
-    assert dyn.naming.tagged  # more than one stable branch is partitioned
+    assert len(dyn.naming.letters) == 2  # two fixed points are partitioned
     assert len(dyn.classes) > 0
     for cd in dyn.classes.values():
         if cd.itinerary is None:

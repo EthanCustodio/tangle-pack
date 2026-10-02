@@ -86,34 +86,37 @@ def _one_branch_families():
 # --------------------------------------------------------------------------- #
 def test_element_name_text_and_mathtext():
     key = _key(_FakeFixedPoint(3), orbit=1, branch=0)
-    split = ElementName(key, "right", 1, 2, 3, False)
+    split = ElementName(key, "right", 1, 2, 3)
     assert split.side_letter == "R"
     assert split.is_split
-    assert split.text == "R_1^2"
-    assert str(split) == "R_1^2"
-    assert split.mathtext == "$R_{1}^{2}$"
+    assert split.text == "R_(1.0;1)^2"
+    assert str(split) == "R_(1.0;1)^2"
+    assert split.short_text == "R_1^2"
+    assert split.mathtext == "$R_{1.0;1}^{2}$"
     assert split.tag == "p3@1.0"
+    assert split.orbit_code == "1.0" and split.branch_code == "1.0"
 
-    plain = ElementName(key, "left", 3, 1, 1, False)
+    plain = ElementName(key, "left", 3, 1, 1)
     assert plain.side_letter == "L"
     assert not plain.is_split
-    assert plain.text == "L_3"
-    assert plain.mathtext == "$L_{3}$"
+    assert plain.text == "L_(1.0;3)"
+    assert plain.mathtext == "$L_{1.0;3}$"
 
-    tagged = ElementName(key, "right", 2, 1, 2, True)
-    assert tagged.text == "p3@1.0:R_2^1"
-    assert tagged.mathtext == "p3@1.0:$R_{2}^{1}$"
-    tagged_plain = ElementName(key, "right", 2, 1, 1, True)
-    assert tagged_plain.text == "p3@1.0:R_2"
+    lettered = ElementName(key, "right", 2, 1, 2, "B")
+    assert lettered.text == "B:R_(1.0;2)^1"
+    assert lettered.mathtext == "${}^{B}R_{1.0;2}^{1}$"
+    assert lettered.branch_code == "B 1.0"
+    lettered_plain = ElementName(key, "right", 2, 1, 1, "B")
+    assert lettered_plain.text == "B:R_(1.0;2)"
 
 
 def test_element_name_is_hashable_and_compares_by_value():
     key = _key(_FakeFixedPoint())
-    a = ElementName(key, "right", 1, 2, 3, False)
-    b = ElementName(key, "right", 1, 2, 3, False)
+    a = ElementName(key, "right", 1, 2, 3)
+    b = ElementName(key, "right", 1, 2, 3)
     assert a == b and hash(a) == hash(b)
-    assert len({a, b, ElementName(key, "right", 1, 3, 3, False)}) == 2
-    assert repr(a) == "ElementName('R_1^2')"
+    assert len({a, b, ElementName(key, "right", 1, 3, 3)}) == 2
+    assert repr(a) == "ElementName('R_(0.0;1)^2')"
 
 
 # --------------------------------------------------------------------------- #
@@ -122,8 +125,8 @@ def test_element_name_is_hashable_and_compares_by_value():
 def test_homotopy_names_count_anchor_outward_per_side():
     _fp, key, homotopy, iterated = _one_branch_families()
     naming = ElementNaming(homotopy, iterated)
-    assert not naming.tagged
-    assert [n.text for n in naming.homotopy_names] == [
+    assert not naming.letters
+    assert [n.short_text for n in naming.homotopy_names] == [
         "L_1", "L_2", "L_3", "R_1", "R_2", "R_3",
     ]
     for side in ("left", "right"):
@@ -136,7 +139,7 @@ def test_homotopy_names_count_anchor_outward_per_side():
 def test_superscripts_follow_parent_groups_anchor_outward():
     _fp, key, homotopy, iterated = _one_branch_families()
     naming = ElementNaming(homotopy, iterated)
-    assert [n.text for n in naming.names] == [
+    assert [n.short_text for n in naming.names] == [
         "L_1^1", "L_1^2", "L_2", "L_3",
         "R_1", "R_2", "R_3^1", "R_3^2", "R_3^3",
     ]
@@ -151,7 +154,7 @@ def test_unsplit_elements_print_plain():
     naming = ElementNaming(homotopy, iterated)
     r1 = naming.name(ElementRef(key, "right", 0))
     assert not r1.is_split
-    assert r1.text == "R_1" and r1.mathtext == "$R_{1}$"
+    assert r1.short_text == "R_1" and r1.mathtext == "$R_{0.0;1}$"
     assert r1.superscript == 1 and r1.siblings == 1
 
 
@@ -162,13 +165,14 @@ def test_ref_of_name_round_trips_and_lookup_by_text():
         name = naming.name(ref)
         assert naming.ref_of(name) == ref
         assert naming.lookup(name.text) == ref
-    assert naming.lookup("R_3^2") == ElementRef(key, "right", 3)
+    assert naming.lookup("R_3^2") == ElementRef(key, "right", 3)  # short form
+    assert naming.lookup("R_(0.0;3)^2") == ElementRef(key, "right", 3)
     # A name assembled by hand with the same fields resolves too.
-    assert naming.ref_of(ElementName(key, "left", 1, 2, 2, False)) == ElementRef(key, "left", 1)
+    assert naming.ref_of(ElementName(key, "left", 1, 2, 2)) == ElementRef(key, "left", 1)
     with pytest.raises(KeyError, match="R_9"):
         naming.lookup("R_9")
     with pytest.raises(KeyError):
-        naming.ref_of(ElementName(key, "left", 1, 3, 3, False))
+        naming.ref_of(ElementName(key, "left", 1, 3, 3))
 
 
 def test_parent_of_and_children_of_round_trip():
@@ -196,9 +200,9 @@ def test_the_two_families_are_never_mixed():
     """Refs collide by value: iterated L#3 is L_3, homotopy L#2 is L_3 too."""
     _fp, key, homotopy, iterated = _one_branch_families()
     naming = ElementNaming(homotopy, iterated)
-    assert naming.homotopy_name(ElementRef(key, "left", 2)).text == "L_3"
-    assert naming.name(ElementRef(key, "left", 2)).text == "L_2"
-    assert naming.name(ElementRef(key, "left", 3)).text == "L_3"
+    assert naming.homotopy_name(ElementRef(key, "left", 2)).short_text == "L_3"
+    assert naming.name(ElementRef(key, "left", 2)).short_text == "L_2"
+    assert naming.name(ElementRef(key, "left", 3)).short_text == "L_3"
     with pytest.raises(KeyError):
         naming.homotopy_name(ElementRef(key, "left", 3))  # only the iterated family has #3
     with pytest.raises(KeyError):
@@ -215,7 +219,7 @@ def test_homotopy_only_naming_is_its_own_parent():
     _fp, key, homotopy, _iterated = _one_branch_families()
     naming = ElementNaming(homotopy)
     assert not naming.has_iterated
-    assert [n.text for n in naming.names] == ["L_1", "L_2", "L_3", "R_1", "R_2", "R_3"]
+    assert [n.short_text for n in naming.names] == ["L_1", "L_2", "L_3", "R_1", "R_2", "R_3"]
     for ref in naming.refs:
         assert naming.name(ref) == naming.homotopy_name(ref)
         assert not naming.name(ref).is_split
@@ -223,10 +227,10 @@ def test_homotopy_only_naming_is_its_own_parent():
         assert naming.children_of(ref) == [ref]
         assert naming.ref_of(naming.name(ref)) == ref
     assert len(naming) == 6
-    assert "L_2  (#1)" in naming.describe()
+    assert "L_(0.0;2)  (#1)" in naming.describe()
 
 
-def test_tagged_only_when_more_than_one_branch_is_partitioned():
+def test_branch_codes_always_and_letters_only_with_two_fixed_points():
     fp = _FakeFixedPoint(period=3)
     key_a = _key(fp, orbit=0)
     key_b = _key(fp, orbit=1)
@@ -235,21 +239,51 @@ def test_tagged_only_when_more_than_one_branch_is_partitioned():
             [_result(key_a, "left", [0, 1, 2]), _result(key_a, "right", [0, 1, 2])]
         )
     )
-    assert not single.tagged
-    assert [n.text for n in single.names] == ["L_1", "L_2", "R_1", "R_2"]
+    assert not single.letters
+    assert [n.text for n in single.names] == ["L_(0.0;1)", "L_(0.0;2)", "R_(0.0;1)", "R_(0.0;2)"]
 
     two = ElementNaming(
         HomotopyPartition.from_results(
             [_result(key_a, "left", [0, 1, 2]), _result(key_b, "left", [0, 1])]
         )
     )
-    assert two.tagged
-    assert [n.text for n in two.names] == ["p3@0.0:L_1", "p3@0.0:L_2", "p3@1.0:L_1"]
-    assert two.names[0].mathtext == "p3@0.0:$L_{1}$"
-    assert two.lookup("p3@1.0:L_1") == ElementRef(key_b, "left", 0)
+    assert not two.letters  # one fixed point, three branches: codes, no letter
+    assert [n.text for n in two.names] == ["L_(0.0;1)", "L_(0.0;2)", "L_(1.0;1)"]
+    assert two.names[0].mathtext == "$L_{0.0;1}$"
+    assert two.lookup("L_(1.0;1)") == ElementRef(key_b, "left", 0)
+    with pytest.raises(KeyError, match="ambiguous"):
+        two.lookup("L_1")  # the short form names an element on both branches
+    assert two.branch_code(key_b) == "1.0"
     # The tag matches the branch text of ElementRef.label.
     assert ElementRef(key_b, "left", 0).label.startswith(two.names[2].tag)
-    assert "branch-tagged" in two.describe()
+
+    other = _FakeFixedPoint(period=1)
+    key_c = _key(other, orbit=0)
+    nested = ElementNaming(
+        HomotopyPartition.from_results(
+            [_result(key_a, "left", [0, 1]), _result(key_c, "left", [0, 1])]
+        )
+    )
+    assert [n.text for n in nested.names] == ["A:L_(0.0;1)", "B:L_(0.0;1)"]
+    assert nested.names[1].mathtext == "${}^{B}L_{0.0;1}$"
+    assert nested.branch_code(key_c) == "B 0.0"
+    assert nested.lookup("B:L_(0.0;1)") == ElementRef(key_c, "left", 0)
+    assert "2 lettered fixed points" in nested.describe()
+
+
+def test_fixed_point_label_wins_over_position_and_disambiguates_ref_labels():
+    first, second = _FakeFixedPoint(period=1), _FakeFixedPoint(period=1)
+    first.label, second.label = "Q", "P"
+    key_1, key_2 = _key(first), _key(second)
+    naming = ElementNaming(
+        HomotopyPartition.from_results(
+            [_result(key_1, "left", [0, 1]), _result(key_2, "left", [0, 1])]
+        )
+    )
+    assert [n.text for n in naming.names] == ["Q:L_(0.0;1)", "P:L_(0.0;1)"]
+    # Same period, same orbit and branch: the letter keeps the labels apart.
+    assert ElementRef(key_1, "left", 0).label == "Q:p1@0.0/L#0"
+    assert ElementRef(key_1, "left", 0).label != ElementRef(key_2, "left", 0).label
 
 
 def test_missing_parent_id_reads_as_own_parent():
@@ -260,7 +294,7 @@ def test_missing_parent_id_reads_as_own_parent():
         [_result(key, "left", [0, 1, 2], parents=[None, None])], homotopy=homotopy
     )
     naming = ElementNaming(homotopy, iterated)
-    assert [n.text for n in naming.names] == ["L_1", "L_2"]
+    assert [n.short_text for n in naming.names] == ["L_1", "L_2"]
     assert naming.parent_of(ElementRef(key, "left", 1)) == ElementRef(key, "left", 1)
 
 
@@ -302,32 +336,32 @@ def k10_naming(k10_partitioned):
 
 def test_k10_homotopy_names(k10_naming):
     _pieces, naming = k10_naming
-    assert not naming.tagged
-    assert {n.text for n in naming.homotopy_names} == {
+    assert not naming.letters
+    assert {n.short_text for n in naming.homotopy_names} == {
         "L_1", "L_2", "L_3", "R_1", "R_2", "R_3",
     }
 
 
 def test_k10_iterated_names(k10_naming):
     _pieces, naming = k10_naming
-    assert {n.text for n in naming.names} == {
+    assert {n.short_text for n in naming.names} == {
         "L_1^1", "L_1^2", "L_2", "L_3",
         "R_1^1", "R_1^2", "R_1^3", "R_2", "R_3^1", "R_3^2", "R_3^3",
     }
     assert len(naming) == 11
     # Split parents and their children, by name.
-    assert [naming.name(c).text for c in naming.children_of(_homotopy(naming, "L_1"))] == ["L_1^1", "L_1^2"]
+    assert [naming.name(c).short_text for c in naming.children_of(_homotopy(naming, "L_1"))] == ["L_1^1", "L_1^2"]
     assert naming.parent_of(naming.lookup("L_1^2")) == _homotopy(naming, "L_1")
-    assert [naming.name(c).text for c in naming.children_of(_homotopy(naming, "R_1"))] == ["R_1^1", "R_1^2", "R_1^3"]
-    assert [naming.name(c).text for c in naming.children_of(_homotopy(naming, "R_3"))] == ["R_3^1", "R_3^2", "R_3^3"]
+    assert [naming.name(c).short_text for c in naming.children_of(_homotopy(naming, "R_1"))] == ["R_1^1", "R_1^2", "R_1^3"]
+    assert [naming.name(c).short_text for c in naming.children_of(_homotopy(naming, "R_3"))] == ["R_3^1", "R_3^2", "R_3^3"]
     for text in ("L_2", "L_3", "R_2"):
-        assert [naming.name(c).text for c in naming.children_of(_homotopy(naming, text))] == [text]
+        assert [naming.name(c).short_text for c in naming.children_of(_homotopy(naming, text))] == [text]
 
 
 def _homotopy(naming: ElementNaming, text: str) -> ElementRef:
     """The homotopy ref printing ``text``."""
     for ref, name in zip(naming.homotopy_refs, naming.homotopy_names):
-        if name.text == text:
+        if name.short_text == text:
             return ref
     raise KeyError(text)
 
@@ -358,24 +392,24 @@ def test_k10_names_agree_with_the_partition_structure(k10_naming):
 def test_k10_describe_lists_every_parent_with_its_children(k10_naming):
     _pieces, naming = k10_naming
     report = naming.describe()
-    assert "R_1  (#0) -> R_1^1, R_1^2, R_1^3" in report
-    assert "L_3  (#2) -> L_3" in report
+    assert "R_(0.0;1)  (#0) -> R_(0.0;1)^1, R_(0.0;1)^2, R_(0.0;1)^3" in report
+    assert "L_(0.0;3)  (#2) -> L_(0.0;3)" in report
     assert "11 iterated element(s)" in report
 
 
 @pytest.mark.slow
-def test_p3_names_are_branch_tagged(p3_partitioned):
-    """More than one stable branch is partitioned, so every name carries its tag."""
+def test_p3_names_carry_branch_codes_and_letters(p3_partitioned):
+    """Two fixed points are partitioned, so every name carries its letter and code."""
     session, fp3, fp1 = p3_partitioned
     pieces = build_pieces(session, [fp3, fp1])
     naming = ElementNaming(pieces.homotopy, pieces.iterated)
-    assert naming.tagged
+    assert naming.letters == {id(fp3): fp3.label, id(fp1): fp1.label}
+    assert fp3.label != fp1.label
     assert len(pieces.homotopy.branch_keys) > 1
-    tags = {name.tag for name in naming.names}
-    assert len(tags) == len(pieces.homotopy.branch_keys)
+    codes = {name.branch_code for name in naming.names}
+    assert len(codes) == len(pieces.homotopy.branch_keys)
     for ref, name in naming.items():
-        assert name.text.startswith(f"{name.tag}:")
-        assert ref.label.startswith(name.tag)
+        assert name.text.startswith(f"{name.fixed_point_letter}:")
+        assert ref.label.startswith(f"{name.fixed_point_letter}:{name.tag}")
         assert naming.ref_of(name) == ref
         assert naming.lookup(name.text) == ref
-    assert len({n.text for n in naming.names}) == len(naming)

@@ -68,10 +68,14 @@ Dev Notes:
   of the STABLE branch's fixed point. Running this on the all-fixed-points
   trellis with every per-fixed-point trellis's partitions is what covers the
   nested and heteroclinic cases in one pass.
-* Ordering is deliberate and total: the table is built in ascending order of
-  each class's ``min_unstable_cdist`` (the smallest unstable canonical
-  distance of a member's first crossing, so the class holding the anchor
-  bridge comes first and takes the letter ``a``; author's rule, 2026-09-21),
+* Ordering is deliberate and total: the table is grouped by TANGLE first --
+  the classes of ``trellis.fixed_points[0]``, then of the next fixed point,
+  then the classes connecting two tangles (heteroclinic) -- and within a group
+  built in ascending order of each class's ``min_unstable_cdist`` (the
+  smallest unstable canonical distance of a member's first crossing, so the
+  class holding a tangle's anchor bridge comes first in its group; author's
+  rules, 2026-09-21 and, for the grouping, 2026-09-30; unstable cdists of
+  different saddles are not comparable, so they are never interleaved),
   ties broken by :func:`class_sort_key`, and each class's members are sorted
   by :data:`~tanglepack.numerics.Bridge.BridgeId`, so two runs of the same
   trellis enumerate the classes identically. Letters, legends and
@@ -117,8 +121,9 @@ class BridgeClass:
     """
     The unordered pair of partition elements a bridge connects, canonically oriented.
 
-    ``source`` is the element nearer its branch anchor (smaller element id on one
-    branch and side; across branches the :func:`element_sort_key` order), so the
+    ``source`` is the element nearer its branch anchor (smaller element id, on
+    one branch or across branches; :func:`element_sort_key` breaks a tie of
+    ids, see :func:`anchor_outward_key`), so the
     pair ``{X, Y}`` has exactly one representation and the class hashes as one
     symbol whichever way its bridges run. Frozen, so it is usable as a dict key
     and as the key of a session alphabet.
@@ -202,8 +207,12 @@ class BridgeClassEntry:
             the class lies in, set by the session; ``None`` when it lies outside
             every zone or no zones are defined.
         min_unstable_cdist: The smallest unstable canonical distance of a
-            member's first crossing — the table's sort key (the anchor class
-            has 0); ``inf`` for an entry assembled by hand.
+            member's first crossing — the table's sort key within a tangle
+            (the anchor class has 0); ``inf`` for an entry assembled by hand.
+        tangle: The position in ``trellis.fixed_points`` of the one fixed
+            point the class belongs to (every member's unstable branch and
+            both elements' stable branches on it), or None for a class that
+            connects two tangles (heteroclinic). The table groups by it.
     """
 
     bridge_class: BridgeClass
@@ -215,6 +224,7 @@ class BridgeClassEntry:
     letter: Optional[str] = None
     zone_key: Optional[tuple] = None
     min_unstable_cdist: float = float("inf")
+    tangle: Optional[int] = None
 
     @property
     def active(self) -> bool:
@@ -333,8 +343,9 @@ class BridgeClassEntry:
 @dataclass
 class BridgeClassTable:
     """
-    Every bridge class of a trellis, in ascending ``min_unstable_cdist`` order
-    (ties by :func:`class_sort_key`).
+    Every bridge class of a trellis, grouped by tangle (``entry.tangle``,
+    heteroclinic last) and in ascending ``min_unstable_cdist`` order within a
+    group (ties by :func:`class_sort_key`).
 
     Attributes:
         entries: The classes, one :class:`BridgeClassEntry` each.
@@ -501,6 +512,30 @@ def class_sort_key(
     )
 
 
+def anchor_outward_key(
+    ref: ElementRef, fixed_points: Sequence["FixedPoint"]
+) -> tuple:
+    """
+    The key that orients a class anchor outward, across branches too.
+
+    Args:
+        ref: One end of a class.
+        fixed_points: The ordering context (see :func:`element_sort_key`).
+
+    Returns:
+        ``(element_id,) + element_sort_key(ref)``: anchor-nearness first, so a
+        class between two branches of one orbit starts at its anchor-nearer
+        element whichever branch that is (the classes of a period-k orbit are
+        then oriented alike on every branch, and a word does not pick up an
+        inverse from the orbit index wrapping), then the run-stable order.
+
+    Note:
+        On one branch and side this is the element-id order, exactly what
+        :func:`element_sort_key` gives, so same-branch classes are unchanged.
+    """
+    return (ref.element_id,) + element_sort_key(ref, fixed_points)
+
+
 def oriented_class(
     x: ElementRef, y: ElementRef, fixed_points: Sequence["FixedPoint"]
 ) -> tuple[BridgeClass, int]:
@@ -515,10 +550,11 @@ def oriented_class(
     Returns:
         ``(BridgeClass(source, target), direction)`` with ``direction = +1`` when
         ``x`` is the source, ``-1`` when ``y`` is, and ``0`` when ``x == y``.
+        The source is the anchor-nearer end (:func:`anchor_outward_key`).
     """
     if x == y:
         return BridgeClass(x, x), 0
-    if element_sort_key(x, fixed_points) <= element_sort_key(y, fixed_points):
+    if anchor_outward_key(x, fixed_points) <= anchor_outward_key(y, fixed_points):
         return BridgeClass(x, y), +1
     return BridgeClass(y, x), -1
 
@@ -626,16 +662,34 @@ def bridge_classes(
             for member in members
         )
 
+    def tangle_of(bridge_class: BridgeClass, members: list[BridgeMember]) -> Optional[int]:
+        owners = {id(bridge_class.source.fixed_point), id(bridge_class.target.fixed_point)}
+        for member in members:
+            key = trellis.intersection(member.bridge_id[0]).manifold_a_key
+            if key is not None:
+                owners.add(id(key[0]))
+        if len(owners) != 1:
+            return None
+        (owner,) = owners
+        return next((i for i, fp in enumerate(fixed_points) if id(fp) == owner), None)
+
+    def table_key(item) -> tuple:
+        bridge_class, members = item
+        tangle = tangle_of(bridge_class, members)
+        return (
+            len(fixed_points) if tangle is None else tangle,
+            min_cdist(members),
+            class_sort_key(bridge_class, fixed_points),
+        )
+
     entries = [
         BridgeClassEntry(
             bridge_class,
             sorted(members, key=lambda member: member.bridge_id),
             min_unstable_cdist=min_cdist(members),
+            tangle=tangle_of(bridge_class, members),
         )
-        for bridge_class, members in sorted(
-            grouped.items(),
-            key=lambda item: (min_cdist(item[1]), class_sort_key(item[0], fixed_points)),
-        )
+        for bridge_class, members in sorted(grouped.items(), key=table_key)
     ]
     for entry in entries:
         _collect_image_evidence(trellis, entry, ends, fixed_points)

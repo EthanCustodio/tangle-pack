@@ -405,6 +405,8 @@ def test_stable_node_label_falls_back_to_the_element_label_without_a_name(k10_pa
         ("u", "$u$"),
         ("new1", "$new1$"),
         ("p3@1.0:R_2^1", "p3@1.0:$R_{2}^{1}$"),
+        ("R_(0.0;1)^2", "$R_{0.0;1}^{2}$"),
+        ("A:R_(1.0;2)", "${}^{A}R_{1.0;2}$"),
         ("$a_{1}$", "$a_{1}$"),
         ("", ""),
     ],
@@ -683,21 +685,20 @@ def test_plot_transition_graph_draws_every_symbol(k10_partitioned, refined):
         graph = plotting.plot_transition_graph(dynamics, ax=ax, refined=refined)
         assert set(graph.nodes) == set(expected.nodes)
         assert set(graph.edges) == set(expected.edges)
-        assert "spectral radius" in ax.get_title()
-        assert f"{dynamics.spectral_radius(refined=refined):.4g}" in ax.get_title()
+        assert ax.get_title() == f"transition graph ({'refined' if refined else 'class'} symbols)"
         assert not ax.axison
         # One label per node, as mathtext.
         labels = {t.get_text() for t in ax.texts if t.get_text().startswith("$")}
         assert labels == {plotting.name_mathtext(node) for node in graph.nodes}
-        # Sinks (inert/virtual) are drawn dashed, sources solid.
-        sinks = [n for n in graph.nodes if graph.nodes[n]["kind"] != "active"]
-        assert sinks, "the k=10 fixture has an inert class"
+        # Inert classes are not drawn (the k=10 fixture has one, u); every node
+        # drawn is active and solid -- virtual sinks would be dashed.
+        assert all(graph.nodes[n]["kind"] == "active" for n in graph.nodes)
+        assert not any(plotting.name_mathtext("u") == t.get_text() for t in ax.texts)
         node_collections = [
-            c for c in ax.collections
-            if c.get_offsets().shape[0] in (len(sinks), len(graph) - len(sinks))
+            c for c in ax.collections if c.get_offsets().shape[0] == len(graph)
         ]
-        dashed = [c for c in node_collections if c.get_linestyle()[0][1] is not None]
-        assert any(c.get_offsets().shape[0] == len(sinks) for c in dashed)
+        assert node_collections
+        assert all(c.get_linestyle()[0][1] is None for c in node_collections)
         # A self-loop exists and is drawn (as a ring off its node).
         loops = [e for e in graph.edges if e[0] == e[1]]
         assert loops, "the k=10 word a -> a u^-1 a^-1 has a self-loop"
@@ -732,6 +733,10 @@ def test_plot_itinerary_table_lists_every_class(k10_partitioned):
                 assert shown_row[1].count(" | ") == row[1].count(" | ")
             assert shown_row[2] == " ".join(s.mathtext for s in cd.symbols)
             assert shown_row[-2:] == row[-2:]
+        # The inert class's iterated itinerary is the loop that makes it inert.
+        plain = {cd.letter: row for row, cd in zip(rows, dynamics.classes.values())}
+        assert plain["u"][1] == "L_(0.0;1)^1 L_(0.0;1)^1"
+        assert plain["u"][2] == "" and plain["u"][3] == ""
         # Row content: names, not ids; status words; the k=10 active class is walked.
         for row, cd in zip(rows, dynamics.classes.values()):
             assert row[0].startswith(f"{cd.letter} = {{")
@@ -817,7 +822,7 @@ def test_unmatched_member_gets_its_parent_letter_slot(k10_partitioned):
     cd = next(c for c in dynamics.classes.values() if c.kind == "active")
     letter = cd.letter
     children = dynamics.refined[cd.bridge_class]
-    assert dynamics.unmatched_members == {}, "the footprint rule matches every member"
+    assert dynamics.unmatched_members == {}, "every member sits on a walked occurrence"
     # Pretend one matched member matched nothing.
     bid = children[0].members[0]
     children[0].members.remove(bid)
@@ -940,7 +945,9 @@ def test_cartoon_brackets_match_closedness(k10_partitioned):
             # Anchor on the right: the anchorward (lo) end closes with ] / ).
             assert glyphs[(round(x_lo, 6), round(y_bar, 6), False)] == ("]" if iv.closed_lo else ")")
             assert glyphs[(round(x_hi, 6), round(y_bar, 6), True)] == ("[" if iv.closed_hi else "(")
-        # The k=10 right row reads [ ] ( ) [ ] ( ) [ ] ( ) [ ] under the footprint rule.
+        # The k=10 right row reads [ ] ( ) [ ] ( ) [ ] ( ) [ ] under the
+        # empty-stretch rule: the mapped hole's lobe base and chord are open
+        # like the hole between them.
         (branch_key,) = layout.rows
         right = dual.partition.result(branch_key, "right").intervals
         assert [(iv.closed_lo, iv.closed_hi) for iv in right] == [

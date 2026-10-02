@@ -284,46 +284,47 @@ def _k10_dynamics(layout) -> SymbolicDynamics:
     )
 
 
-def test_transition_matrix_and_spectral_radius(layout):
+def test_transition_matrix(layout):
+    # The inert class u is in the words (a -> a u^-1 a^-1) but not in the
+    # matrix: inert classes contribute nothing to the dynamics.
     dyn = _k10_dynamics(layout)
     names, matrix = dyn.transition_matrix()
-    assert names == ["a_1", "a_2", "u"]
-    assert matrix.tolist() == [[1, 1, 1], [1, 1, 1], [0, 0, 0]]
-    assert dyn.spectral_radius() == pytest.approx(2.0)
+    assert names == ["a_1", "a_2"]
+    assert matrix.tolist() == [[1, 1], [1, 1]]
     names, matrix = dyn.transition_matrix(refined=False)
-    assert names == ["a", "u"]
-    assert matrix.tolist() == [[2, 1], [0, 0]]
-    assert dyn.spectral_radius(refined=False) == pytest.approx(2.0)
+    assert names == ["a"]
+    assert matrix.tolist() == [[2]]
     assert matrix.dtype == np.int64
+    assert dyn.word("a", refined=False) == "a u^-1 a^-1", "the word still shows u"
 
 
-def test_transition_graph_inert_symbols_are_sinks(layout):
+def test_transition_graph_leaves_inert_classes_out(layout):
     networkx = pytest.importorskip("networkx")
     dyn = _k10_dynamics(layout)
     graph = dyn.transition_graph()
     assert isinstance(graph, networkx.DiGraph)
-    assert set(graph.nodes) == {"a_1", "a_2", "u"}
-    assert graph.out_degree("u") == 0
-    assert graph.nodes["u"]["inert"] is True and graph.nodes["u"]["kind"] == "inert"
+    assert set(graph.nodes) == {"a_1", "a_2"}
+    assert "u" not in graph
     assert graph.nodes["a_1"]["parent"] == "a" and graph.nodes["a_1"]["kind"] == "active"
     assert graph.edges["a_1", "a_2"]["weight"] == 1
     assert graph.edges["a_1", "a_2"]["inverse"] == 1
-    assert graph.edges["a_1", "u"]["inverse"] == 1
     assert graph.edges["a_1", "a_1"]["inverse"] == 0
+    assert set(graph.edges) == {("a_1", "a_1"), ("a_1", "a_2"), ("a_2", "a_1"), ("a_2", "a_2")}
+    assert set(dyn.transition_graph(refined=False).nodes) == {"a"}
 
 
-def test_inert_class_with_word_warns_but_stays_sink(layout, caplog):
+def test_inert_class_with_word_warns_and_stays_out(layout, caplog):
     dyn = layout.dynamics(
         {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_1^1", "L_3")}
     )
     with caplog.at_level(logging.WARNING, logger=SD.__name__):
         names, matrix = dyn.transition_matrix()
     # u now occurs with two distinct pairs across the itineraries, so it refines
-    assert names == ["a_1", "a_2", "u_1", "u_2"]
-    assert matrix[2].tolist() == [0, 0, 0, 0] and matrix[3].tolist() == [0, 0, 0, 0]
-    assert matrix[0].tolist() == [1, 1, 0, 1]
-    assert any("sink" in record.message for record in caplog.records)
-    assert dyn.spectral_radius() == pytest.approx(2.0)
+    # (u_1, u_2 exist as refined symbols) but stays out of the matrix.
+    assert [child.name for child in dyn.refined[layout.u]] == ["u_1", "u_2"]
+    assert names == ["a_1", "a_2"]
+    assert matrix[0].tolist() == [1, 1]
+    assert any("not part of the transition graph" in record.message for record in caplog.records)
 
 
 def test_is_reliable_and_describe(layout):
@@ -333,7 +334,7 @@ def test_is_reliable_and_describe(layout):
     assert "a -> a u^-1 a^-1" in text
     assert "R_1^1 R_3^3 | L_3 L_1^2 | R_3^1 R_1^3" in text
     assert "a_1 = (R_1^1, R_3^3)" in text and "a_2 = (R_1^3, R_3^1)" in text
-    assert "spectral radius: 2" in text
+    assert "transition matrix" in text and "spectral" not in text
     assert repr(dyn).startswith("<SymbolicDynamics")
     # an unresolved class makes the result unreliable
     partial = layout.dynamics({layout.a: layout.k10_itinerary})
@@ -399,7 +400,7 @@ def _dual_and_table(session, fixed_points):
 
 
 def _names(dyn, refs):
-    return [dyn.naming.name(ref).text for ref in refs]
+    return [dyn.naming.name(ref).short_text for ref in refs]
 
 
 @pytest.fixture
@@ -449,7 +450,7 @@ def test_k10_refinement_matches_every_member(k10_dynamics):
     assert _names(dyn, children[1].occurrence) == ["R_1^3", "R_3^1"]
     assert dyn.word(f"{letter}_1") == f"{letter}_1 u^-1 {letter}_2^-1"
     assert dyn.word(f"{letter}_2") == f"{letter}_1 u^-1 {letter}_2^-1"
-    # Under the footprint cut rule every member's own endpoint pair is one of
+    # Under the empty-stretch cut every member's own endpoint pair is one of
     # the walked occurrences: nothing is left unmatched.
     assert dyn.unmatched_members == {}
     assert dyn.member_refinement and all(
@@ -470,10 +471,10 @@ def test_k10_itineraries_even_and_matrix(k10_dynamics):
         assert cd.itinerary is not None, cd.unresolved_reason
         assert len(cd.itinerary) % 2 == 0
         assert not any(symbol.cross_side for symbol in cd.symbols)
-    assert dyn.spectral_radius() == pytest.approx(2.0)
-    assert dyn.spectral_radius(refined=False) == pytest.approx(2.0)
+    names, matrix = dyn.transition_matrix()
+    assert names == ["a_1", "a_2"] and matrix.tolist() == [[1, 1], [1, 1]]
     graph = dyn.transition_graph()
-    assert graph.out_degree("u") == 0
+    assert "u" not in graph, "inert classes are not part of the transition graph"
     assert dyn.describe()
 
 

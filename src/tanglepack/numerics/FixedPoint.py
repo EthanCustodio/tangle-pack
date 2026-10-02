@@ -41,6 +41,19 @@ _EIGENDIRECTIONS = 2
 _DET_TOL = 1e-9
 
 
+def position_letter(position: int) -> str:
+    """
+    The display letter of the fixed point at one position.
+
+    Args:
+        position: 0-based construction position.
+
+    Returns:
+        ``A, B, ..., Z, AA, BB, ...``.
+    """
+    return chr(ord("A") + position % 26) * (position // 26 + 1)
+
+
 class FixedPoint:
     """
     Implements the data structure to store all information about a fixed point.
@@ -78,6 +91,10 @@ class FixedPoint:
             eigenstuffs.
         partial_jacobians (List[np.ndarray]): List of the single step Jacobians
             at each iterate of the fixed point. These Jacobians are used to
+        label (Optional[str]): Display letter (``"A"``, ``"B"``, ...) that
+            tells fixed points apart in element names and labels; stamped by
+            :meth:`TangleWorkbench.construct_fixed_point` in construction
+            order, None on a fixed point built by hand.
     """
 
     def __init__(self, period: int) -> None:
@@ -119,6 +136,10 @@ class FixedPoint:
 
         # Filled in by set_k_value() once the eigenvalues are known.
         self.k_value: Optional[int] = None
+
+        # Display letter ("A", "B", ...), stamped by the workbench in
+        # construction order; None on a fixed point built by hand.
+        self.label: Optional[str] = None
 
         # Memoised branch bookkeeping. Both are functions of (k_value, period)
         # alone, and k_value only ever changes in set_k_value(), which clears
