@@ -45,7 +45,7 @@ fixed in conversation with the author (July 2026):
   stored as ``Hole.bridge_side``: a direct hole from its crossing signs
   (its lobe lies between the pair's stable arc and the bridge, see
   ``punch_holes``; 2026-10-02), a propagated hole from the backward-carried
-  point read against its own image sub-arc of the containing bridge. Holes know nothing of the stable
+  point read on its own image sub-arc. Holes know nothing of the stable
   manifold's sides or of resonance zones. The stable partition keeps its own
   independent left/right, defined by the STABLE dynamical direction — the
   flow toward the fixed point, i.e. looking toward the anchor (unchanged
@@ -817,7 +817,8 @@ def _bridge_side_of(
     if span is not None:
         # The image sub-arc only: a far fold of the same bridge can sit nearer
         # the point than the sub-arc it belongs to (2026-10-02).
-        cdists = sorted(node.cdist for node in bridge.get_point_array(return_nodes=True))
+        nodes = bridge.get_point_array(return_nodes=True)
+        cdists = sorted(node.cdist for node in nodes)
         lo = max(bisect_left(cdists, span[0]) - 1, 0)
         poly = poly[lo : bisect_right(cdists, span[1]) + 1]
     sign = _arc_side_of(poly, np.asarray(point, dtype=np.float64))
