@@ -21,10 +21,17 @@ Dev Notes:
 * Period 3 is CLOSED at 13 steps: every active hole bridge's image is already
   a hole bridge on the next branch (``a -> b -> c -> a u^-1 w^-1``), so the
   minimal trellis has no image bridges and blasting its zone changes nothing
-  topologically. Growing to 16 unstable steps trips the
-  ``check_holes_share_bridge_side`` invariant (holes of one origin disagree on
-  bridge side between iterate 0 and iterate -3, found 2026-09-30); not
-  investigated yet, so the default stays at 13.
+  topologically. Growing to 15 or 16 unstable steps, or blasting 6 or more
+  times, used to trip ``check_holes_share_bridge_side`` (2026-09-30): a
+  propagated hole's side was read against the nearest vertex of its whole
+  containing bridge, on another fold. Fixed 2026-10-02 (sides are read on the
+  image sub-arc); those runs now reach the symbolic dynamics but are not
+  reliable (an unreachable class, a virtual ``new1``), so the default stays
+  at 13.
+* Each nested zone blasts only its own fixed point (2026-10-02): blasting
+  both from either zone also iterated the other tangle's bridges, made the
+  result depend on blast order and collapsed the period-3 pseudoneighbors at
+  6 or more outer blasts.
 * The nested case's outer zone is blasted twice (the k=2.8 recipe): with no
   blast the outer class ``e`` is unresolved (a singleton landing with no
   registered chain); after two blasts every class resolves and the outer
@@ -226,8 +233,9 @@ def build_nested(
             (``henon_blast_period_3.py`` uses 1e-7; the ``henon_p3_session``
             fixture uses 1e-4).
         outer_blasts: Single-iteration blasts of the outer (larger) zone.
-        inner_blasts: Single-iteration blasts of the inner (smaller) zone, run
-            first so the outer blasts do not consume its bridges.
+        inner_blasts: Single-iteration blasts of the inner (smaller) zone.
+            Each zone's blast touches only its own tangle, so the order of
+            the inner and outer blasts does not matter.
         min_separation: The blasts' ``min_separation``.
 
     Returns:
@@ -253,7 +261,7 @@ def build_nested(
             result = session.blast_zone(
                 zone,
                 num_iterations=1,
-                fixed_point=fixed_points,
+                fixed_point=[zone.fixed_point],
                 min_separation=min_separation,
             )
             sizes.append(len(result.all_interior_bridges()))
