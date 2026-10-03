@@ -42,9 +42,10 @@ fixed in conversation with the author (July 2026):
   normalizes it once, from the endpoints' unstable cdists). Standing on the
   bridge looking along that direction, positive cross(tangent, displacement)
   = left, matching `_side_of`. The side is classified ONCE at punch time and
-  stored as ``Hole.bridge_side``: a direct hole from its own coordinates
-  (which lie between the pair's stable arc and the bridge), a propagated
-  hole from the backward-carried point. Holes know nothing of the stable
+  stored as ``Hole.bridge_side``: a direct hole from its crossing signs
+  (its lobe lies between the pair's stable arc and the bridge, see
+  ``punch_holes``; 2026-10-02), a propagated hole from the backward-carried
+  point read against its own image sub-arc of the containing bridge. Holes know nothing of the stable
   manifold's sides or of resonance zones. The stable partition keeps its own
   independent left/right, defined by the STABLE dynamical direction — the
   flow toward the fixed point, i.e. looking toward the anchor (unchanged
@@ -198,6 +199,7 @@ bridge_side=None and inward-default openings, with a warning.
 from __future__ import annotations
 
 import logging
+from bisect import bisect_left, bisect_right
 from typing import Iterable, Optional, TYPE_CHECKING
 
 import numpy as np
@@ -343,10 +345,15 @@ def punch_holes(
             coords = _step_into(arc_point, stable_mid, epsilon, chord_len)
         coords = (float(coords[0]), float(coords[1]))
 
-        # A direct hole opens the inward pair by construction (it sits in
-        # the region bounded by the pair's own stable segment and the
-        # bridge); the estimated side is stored for tracking and plotting.
-        bridge_side = _bridge_side_of(trellis, bridge, np.asarray(coords))
+        # A direct hole sits in the lobe between the bridge and the pair's own
+        # stable segment, so its side is read off the crossing signs like
+        # `row_of_end` (2026-10-02): the bridge leaves `first` along u+, the
+        # segment runs from `first` along s+ when it heads outward, and s+ is
+        # on the left of u+ iff crossing_sign > 0. Measuring the nearest
+        # bridge vertex picked the wrong fold on thin lobes.
+        first, second = sorted((near, far), key=lambda x: x.unstable_cdist)
+        outward = 1 if second.stable_cdist > first.stable_cdist else -1
+        bridge_side = "left" if first.crossing_sign * outward > 0 else "right"
         openings = _hole_openings(trellis, bridge, bridge_side, inward=True)
 
         hole = Hole(
@@ -780,7 +787,10 @@ def _build_oriented_bridge_polyline(
 
 
 def _bridge_side_of(
-    trellis: "Trellis", bridge: "Bridge", point: NDArray[np.float64]
+    trellis: "Trellis",
+    bridge: "Bridge",
+    point: NDArray[np.float64],
+    span: Optional[tuple[float, float]] = None,
 ) -> Optional[Side]:
     """Which side of ``bridge`` the point sits on, in dynamical orientation.
 
@@ -793,6 +803,9 @@ def _bridge_side_of(
         trellis: The Trellis resolving the bridge's endpoint intersections.
         bridge: The bridge to classify against.
         point: Phase-space point to classify.
+        span: Optional unstable-cdist extent of the sub-arc to read the side
+            against (a propagated hole's image sub-arc); the whole bridge
+            when omitted.
 
     Returns:
         ``"left"`` or ``"right"``, or None when the bridge cannot be oriented
@@ -801,6 +814,12 @@ def _bridge_side_of(
     poly = _oriented_bridge_polyline(trellis, bridge)
     if poly is None:
         return None
+    if span is not None:
+        # The image sub-arc only: a far fold of the same bridge can sit nearer
+        # the point than the sub-arc it belongs to (2026-10-02).
+        cdists = sorted(node.cdist for node in bridge.get_point_array(return_nodes=True))
+        lo = max(bisect_left(cdists, span[0]) - 1, 0)
+        poly = poly[lo : bisect_right(cdists, span[1]) + 1]
     sign = _arc_side_of(poly, np.asarray(point, dtype=np.float64))
     if sign is None:
         logger.debug(
@@ -1524,7 +1543,7 @@ def _punch_in_bridge(
         coords = _step_into(midpoint, stable_mid, 0.05, arc_chord)
 
     bridge_side = (
-        _bridge_side_of(trellis, bridge, carried) if carried is not None else None
+        _bridge_side_of(trellis, bridge, carried, span) if carried is not None else None
     )
     openings = _hole_openings(trellis, bridge, bridge_side)
     coords = (float(coords[0]), float(coords[1]))
