@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast/scripts/refactor_proof/hole-side-and-own-blast/panels.py", line 70, in main
+    built = build(hc, case)
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast/scripts/refactor_proof/hole-side-and-own-blast/panels.py", line 39, in build
+    return hc.build_nested(outer_blasts=outer, inner_blasts=inner)
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast-base/src/tanglepack/examples/henon_cases.py", line 261, in build_nested
+    _partition(session)
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast-base/src/tanglepack/examples/henon_cases.py", line 152, in _partition
+    session.punch_holes()
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast-base/src/tanglepack/loom/TangleSession.py", line 1585, in punch_holes
+    return self._fanout_call("punch_holes", fixed_point, **kwargs)
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast-base/src/tanglepack/loom/TangleSession.py", line 1296, in _fanout_call
+    results = {
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast-base/src/tanglepack/loom/TangleSession.py", line 1297, in <dictcomp>
+    fp: getattr(self.trellis(fp), name)(**kwargs)
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast-base/src/tanglepack/topology/Trellis.py", line 1145, in punch_holes
+    _check_sides(
+  File "/home/dezhu/Development/TanglePack/tangle-pack-hole-side-and-own-blast-base/src/tanglepack/topology/StablePartition.py", line 1125, in check_holes_share_bridge_side
+    assert not messages, "; ".join(messages)
+AssertionError: Holes of origin (51, 52) disagree on bridge_side: iterate 0 is right, iterate -3 is left; Holes of origin (51, 52) disagree on bridge_side: iterate 0 is right, iterate -5 is left; Holes of origin (51, 52) disagree on bridge_side: iterate 0 is right, iterate -6 is left
