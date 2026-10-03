@@ -1,6 +1,6 @@
 ---
 name: tangle_refactor
-description: "Run the tangle_refactor sigil: a compiled Athanor workflow that walks 39 steps across 12 agents and ends once `artifacts/figure_report_figure_maker_seal.md` exists."
+description: "Run the tangle_refactor sigil: a compiled Athanor workflow that walks 12 steps across 5 agents and ends at `seal`."
 disable-model-invocation: true
 hooks:
   PreToolUse:
@@ -9,7 +9,7 @@ hooks:
         - type: command
           command: "athanor hook spawn-gate --config ${CLAUDE_PROJECT_DIR}/.claude/athanor/tangle_refactor.hooks.json"
   SubagentStart:
-    - matcher: coder,figure-designer,liaison,loom-expert,package-expert,planner
+    - matcher: analyst,coder
       hooks:
         - type: command
           command: "athanor hook context-inject --config ${CLAUDE_PROJECT_DIR}/.claude/athanor/tangle_refactor.hooks.json"
@@ -25,8 +25,8 @@ hooks:
      to every future build. -->
 <!-- athanor:sigil tangle_refactor -->
 <!-- athanor:source sigils/tangle_refactor.sigil -->
-<!-- athanor:source-hash sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690 -->
-<!-- athanor:stamp:sha256:6cea73c5e98286b1ba6f786be056fdb9a4a5670414118c604c4393e486e1f1cf -->
+<!-- athanor:source-hash sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f -->
+<!-- athanor:stamp:sha256:e2d21224bfc3ffc8944c94ff7d62e4fa531973fb7e6611e5b88208eded0ef806 -->
 
 # tangle_refactor
 
@@ -50,94 +50,39 @@ following it is the whole of the correct response.
 ## The steps
 
 1. `origin` — where the sigil starts
-2. `liaison`
-3. the assay on `liaison`
-4. `survey_lead`, an occurrence of the `planner` agent
-5. `intake_revision`, an occurrence of the `liaison` agent
-6. `loom_expert`
-7. `numerics_expert`
-8. `topology_expert`
-9. `test_scout`
-10. `package_expert`
-11. the assay on `package_expert`
-12. `plan_author`, an occurrence of the `planner` agent
-13. `plan_liaison`, an occurrence of the `liaison` agent
-14. the assay on `plan_liaison`
-15. `spec_writer`, an occurrence of the `planner` agent
-16. `edit_designer`, an occurrence of the `package_expert` agent
-17. `implementer`, an occurrence of the `coder` agent
-18. `integrator`, an occurrence of the `coder` agent
-19. `code_reviewer`
-20. `test_engineer`
-21. the assay on `test_engineer`
-22. `rubric_judge`
-23. `loom_audit`, an occurrence of the `loom_expert` agent
-24. `redesign`, an occurrence of the `package_expert` agent
-25. `fixer`, an occurrence of the `coder` agent
-26. `numerics_audit`, an occurrence of the `numerics_expert` agent
-27. `topology_audit`, an occurrence of the `topology_expert` agent
-28. `test_audit`, an occurrence of the `test_scout` agent
-29. `audit_lead`, an occurrence of the `package_expert` agent
-30. the assay on `audit_lead`
-31. `debrief`, an occurrence of the `liaison` agent
-32. `replanner`, an occurrence of the `planner` agent
-33. the assay on `debrief`
-34. `figure_designer`
-35. `touchup`, an occurrence of the `coder` agent
-36. the assay on `figure_designer`
-37. `figure_maker`, an occurrence of the `coder` agent
-38. `figure_revision`, an occurrence of the `figure_designer` agent
-39. `seal` — where the sigil completes
+2. `analyst`
+3. `planner`
+4. the assay on `planner`
+5. `coder`
+6. `test_engineer`
+7. the assay on `test_engineer`
+8. `auditor`, an occurrence of the `analyst` agent
+9. the assay on `auditor`
+10. `toucher`, an occurrence of the `coder` agent
+11. `figure_maker`, an occurrence of the `coder` agent
+12. `seal` — where the sigil completes
 
 > **Where this rendering is weakest.**
 >
-> Nine transitions below send control to a step you have already worked through:
+> Four transitions below send control to a step you have already worked through:
 >
-> - step 5 (`intake_revision`) → step 2 (`liaison`)
-> - step 11 (the assay on `package_expert`) → step 6 (`loom_expert`), on `gaps`
-> - step 14 (the assay on `plan_liaison`) → step 12 (`plan_author`), on `revise`
-> - step 25 (`fixer`) → step 19 (`code_reviewer`)
-> - step 29 (`audit_lead`) → step 22 (`rubric_judge`)
-> - step 32 (`replanner`) → step 13 (`plan_liaison`)
-> - step 35 (`touchup`) → step 31 (`debrief`)
-> - step 38 (`figure_revision`) → step 34 (`figure_designer`)
-> - step 39 (`seal`) → step 37 (`figure_maker`), when the gate blocks
+> - step 4 (the assay on `planner`) → step 2 (`analyst`), on `revise`
+> - step 7 (the assay on `test_engineer`) → step 5 (`coder`), on `revise`
+> - step 10 (`toucher`) → step 6 (`test_engineer`)
+> - step 11 (`figure_maker`) → step 8 (`auditor`)
 >
-> 31 transitions jump forward into a step that leads straight back, so they are loops
-> that read as progress:
+> Nine transitions jump forward into a step that leads straight back, so they are
+> loops that read as progress:
 >
-> - step 2 (`liaison`) → step 3 (the assay on `liaison`)
-> - step 3 (the assay on `liaison`) → step 5 (`intake_revision`), on `discuss`
-> - step 6 (`loom_expert`) → step 7 (`numerics_expert`)
-> - step 7 (`numerics_expert`) → step 8 (`topology_expert`)
-> - step 8 (`topology_expert`) → step 9 (`test_scout`)
-> - step 9 (`test_scout`) → step 10 (`package_expert`)
-> - step 10 (`package_expert`) → step 11 (the assay on `package_expert`)
-> - step 12 (`plan_author`) → step 13 (`plan_liaison`)
-> - step 13 (`plan_liaison`) → step 14 (the assay on `plan_liaison`)
-> - step 14 (the assay on `plan_liaison`) → step 15 (`spec_writer`), on `approved`
-> - step 14 (the assay on `plan_liaison`) → step 15 (`spec_writer`), on `revise`
-> - step 15 (`spec_writer`) → step 16 (`edit_designer`)
-> - step 16 (`edit_designer`) → step 17 (`implementer`)
-> - step 17 (`implementer`) → step 18 (`integrator`)
-> - step 18 (`integrator`) → step 19 (`code_reviewer`)
-> - step 19 (`code_reviewer`) → step 20 (`test_engineer`)
-> - step 20 (`test_engineer`) → step 21 (the assay on `test_engineer`)
-> - step 21 (the assay on `test_engineer`) → step 23 (`loom_audit`), on `pass`
-> - step 21 (the assay on `test_engineer`) → step 24 (`redesign`), on `revise`
-> - step 21 (the assay on `test_engineer`) → step 23 (`loom_audit`), on `revise`
-> - step 23 (`loom_audit`) → step 26 (`numerics_audit`)
-> - step 24 (`redesign`) → step 25 (`fixer`)
-> - step 26 (`numerics_audit`) → step 27 (`topology_audit`)
-> - step 27 (`topology_audit`) → step 28 (`test_audit`)
-> - step 28 (`test_audit`) → step 29 (`audit_lead`)
-> - step 29 (`audit_lead`) → step 30 (the assay on `audit_lead`)
-> - step 30 (the assay on `audit_lead`) → step 32 (`replanner`), on `redo`
-> - step 31 (`debrief`) → step 33 (the assay on `debrief`)
-> - step 33 (the assay on `debrief`) → step 35 (`touchup`), on `concerns`
-> - step 34 (`figure_designer`) → step 36 (the assay on `figure_designer`)
-> - step 36 (the assay on `figure_designer`) → step 38 (`figure_revision`), on
-> `modify`
+> - step 2 (`analyst`) → step 3 (`planner`)
+> - step 3 (`planner`) → step 4 (the assay on `planner`)
+> - step 5 (`coder`) → step 6 (`test_engineer`)
+> - step 6 (`test_engineer`) → step 7 (the assay on `test_engineer`)
+> - step 7 (the assay on `test_engineer`) → step 8 (`auditor`), on `pass`
+> - step 7 (the assay on `test_engineer`) → step 8 (`auditor`), on `revise`
+> - step 8 (`auditor`) → step 9 (the assay on `auditor`)
+> - step 9 (the assay on `auditor`) → step 10 (`toucher`), on `touchup`
+> - step 9 (the assay on `auditor`) → step 11 (`figure_maker`), on `figures`
 >
 > Numbered prose is at its worst here, and it is worth saying so rather than hoping
 > otherwise. If you lose your place, do not reconstruct it from your memory of how
@@ -148,479 +93,118 @@ following it is the whole of the correct response.
 
 ## Step 1 — `origin` — where the sigil starts
 
-`origin` writes `request_origin_liaison.md` to disk and finishes. Nothing is returned to
-you from the spawn. `liaison` reads `request_origin_liaison.md` from disk before
-beginning; if `request_origin_liaison.md` is absent, `liaison` has nothing to work from,
-so do not spawn `liaison` until the file exists. `origin` is the sigil's entry boundary
-rather than an agent: nothing is spawned to write `request_origin_liaison.md` — it is
+`origin` writes `request_origin_analyst.md` to disk and finishes. Nothing is returned to
+you from the spawn. `analyst` reads `request_origin_analyst.md` from disk before
+beginning; if `request_origin_analyst.md` is absent, `analyst` has nothing to work from,
+so do not spawn `analyst` until the file exists. `origin` is the sigil's entry boundary
+rather than an agent: nothing is spawned to write `request_origin_analyst.md` — it is
 the input the run starts from and must already exist.
 
-*Tell the agent you spawn.* `liaison` reads this and its work is then assayed by the
-person running the session, who is asked directly, which grades it "agreed" or
-"discuss".
+→ Go to step 2 (`analyst`).
 
-→ Go to step 2 (`liaison`).
+## Step 2 — `analyst`
 
-## Step 2 — `liaison`
+`analyst` writes `findings_analyst_planner.md` to disk and finishes. Nothing is returned
+to you from the spawn. `planner` reads `findings_analyst_planner.md` from disk before
+beginning; if `findings_analyst_planner.md` is absent, `planner` has nothing to work
+from, so do not spawn `planner` until the file exists. `analyst` has 2 occurrences in
+this sigil and writes a different artifact at each; the spawn gate tells them apart by
+which one your prompt names. Name `findings_analyst_planner.md` in this spawn and do not
+mention `outcome_auditor_human_2.md`, even in passing.
 
-`liaison` writes `intake_brief_liaison_human_2.md` to disk and finishes. Nothing is
-returned to you from the spawn. You read that file yourself: it is the work the assay is
-about, and the person you are about to ask has to be shown it rather than told about it.
-`liaison` has 5 occurrences in this sigil and writes a different artifact at each; the
-spawn gate tells them apart by which one your prompt names. Name
-`intake_brief_liaison_human_2.md` in this spawn and do not mention
-`debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`,
-`intake_record_liaison_survey_lead.md` and `plan_brief_plan_liaison_human_2.md`, even in
-passing.
-
-*What you will observe.* A spawn of `liaison` that names
-`debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`,
-`intake_record_liaison_survey_lead.md` and `plan_brief_plan_liaison_human_2.md` as well
-as `intake_brief_liaison_human_2.md` — or that names no artifact at all — is a denied
+*What you will observe.* A spawn of `analyst` that names `outcome_auditor_human_2.md` as
+well as `findings_analyst_planner.md` — or that names no artifact at all — is a denied
 `Agent` call, not a warning: the gate cannot tell which edge it traverses or which
 budget to charge. The denial lists this agent's artifacts; re-issue naming
-`intake_brief_liaison_human_2.md` alone.
+`findings_analyst_planner.md` alone.
 
-Ask the person running this session to grade `liaison`'s work, and put
-`intake_brief_liaison_human_2.md` (`liaison`'s own work, which is what is being graded)
-in front of them when you do. Use `AskUserQuestion`, with one option per declared
-outcome — "agreed" or "discuss" — and no others. You must do this yourself:
+*Tell the agent you spawn.* `planner` reads this and its work is then assayed by the
+person running the session, who is asked directly, which grades it "approved", "revise"
+or "answered".
+
+→ Go to step 3 (`planner`), which can bring control back here.
+
+## Step 3 — `planner`
+
+`planner` writes `plan_planner_human_2.md` to disk and finishes. Nothing is returned to
+you from the spawn. You read that file yourself: it is the work the assay is about, and
+the person you are about to ask has to be shown it rather than told about it.
+
+Ask the person running this session to grade `planner`'s work, and put
+`plan_planner_human_2.md` (`planner`'s own work, which is what is being graded) in front
+of them when you do. Use `AskUserQuestion`, with one option per declared outcome —
+"approved", "revise" or "answered" — and no others. You must do this yourself:
 `AskUserQuestion` is removed from every subagent, in the foreground as well as the
 background, so there is no agent you could delegate the asking to. Then write their
-answer to `intake_ok_liaison_human.json` as a JSON object whose `status` is exactly the
+answer to `plan_ok_planner_human.json` as a JSON object whose `status` is exactly the
 outcome they chose, with a `notes` string carrying what they said. Nothing is routed off
 the conversation: the answer counts once it is in the file, and not before.
 
-*What you will observe.* Until `intake_ok_liaison_human.json` carries one of "agreed" or
-"discuss", the terminal gate blocks the turn from ending and tells you so, naming the
-allowed values. That block is the wait: it is what stops the sigil being abandoned while
-a person has not answered yet, and a status outside the declared set is treated exactly
-as no answer at all. Do not route on what was said in conversation, and do not widen the
-set to fit the answer — ask again if what you heard is not one of them.
-
-→ Go to step 3 (the assay on `liaison`), which can bring control back here.
-
-## Step 3 — the assay on `liaison`
-
-Exactly one of the following is live once you have read the verdict — that is what it
-means for "agreed" or "discuss" to be a declared set. Take the one the verdict names and
-leave the others alone.
-
-**If the verdict's `status` is "agreed".** `liaison` writes
-`intake_record_liaison_survey_lead.md` to disk and finishes. Nothing is returned to you
-from the spawn. `survey_lead` reads `intake_record_liaison_survey_lead.md` from disk
-before beginning; if `intake_record_liaison_survey_lead.md` is absent, `survey_lead` has
-nothing to work from, so do not spawn `survey_lead` until the file exists. `liaison` has
-5 occurrences in this sigil and writes a different artifact at each; the spawn gate
-tells them apart by which one your prompt names. Name
-`intake_record_liaison_survey_lead.md` in this spawn and do not mention
-`debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`,
-`intake_brief_liaison_human_2.md` and `plan_brief_plan_liaison_human_2.md`, even in
-passing.
-
-*What you will observe.* A spawn of `liaison` that names
-`debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`,
-`intake_brief_liaison_human_2.md` and `plan_brief_plan_liaison_human_2.md` as well as
-`intake_record_liaison_survey_lead.md` — or that names no artifact at all — is a denied
-`Agent` call, not a warning: the gate cannot tell which edge it traverses or which
-budget to charge. The denial lists this agent's artifacts; re-issue naming
-`intake_record_liaison_survey_lead.md` alone.
-
-→ Go to step 4 (`survey_lead`).
-
-**If the verdict's `status` is "discuss".** Reading the verdict is the whole of this
-transition: control moves to `intake_revision` and the collapse itself spawns nothing
-and writes no file. What happens at `intake_revision` is stated at its own step.
-
-*What you will observe.* This branch is metered on
-`intake_notes_intake_revision_liaison.md`: the 7th spawn of `intake_revision` is denied
-by the spawn gate, with a reason naming the ceiling of 6. That denial is the branch
-giving up, not a failure to work around — take it as the instruction to continue at
-`survey_lead`.
-
-→ Go to step 5 (`intake_revision`), which can bring control back here.
-
-**If the `discuss` branch has been taken 6 times without clearing the assay.** Stop
-re-entering `intake_revision` and continue at `survey_lead`, carrying the latest work
-forward: 6 versions of `intake_notes_intake_revision_liaison.md` exist and none of them
-cleared. The ceiling is not an error to recover from — it is where this branch ends.
-
-*What you will observe.* You observe the ceiling as a denied `Agent` call and as nothing
-else — no message arrives from any agent to tell you the branch is over. Do not retry
-the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 6,
-and the only move left is `survey_lead`.
-
-→ Go to step 4 (`survey_lead`).
-
-**If the person you asked never produces a verdict whose `status` is one of "agreed" or
-"discuss".** No verdict inside the declared set was ever produced, so nothing was graded
-and there is no version of the work to carry forward. Continue at `seal` and leave the
-run inspectable: Athanor writes a failure artifact recording the attempts rather than
-letting the sigil end quietly.
-
-*What you will observe.* You observe this as the terminal gate blocking your turn again
-and again, repeating the allowed values each time. Athanor gives up on blocking once its
-own budget is spent — deliberately before Claude Code's consecutive-block cut-off — so
-the run is diagnosed rather than truncated. Do not invent a grade to get past it; take
-this route.
-
-→ Go to step 39 (`seal`).
-
-## Step 4 — `survey_lead`, an occurrence of the `planner` agent
-
-`survey_lead` writes `survey_brief_survey_lead_loom_expert.md` to disk and finishes.
-Nothing is returned to you from the spawn. `loom_expert` reads
-`survey_brief_survey_lead_loom_expert.md` from disk before beginning; if
-`survey_brief_survey_lead_loom_expert.md` is absent, `loom_expert` has nothing to work
-from, so do not spawn `loom_expert` until the file exists. `planner` has 5 occurrences
-in this sigil and writes a different artifact at each; the spawn gate tells them apart
-by which one your prompt names. Name `survey_brief_survey_lead_loom_expert.md` in this
-spawn and do not mention `survey_ok_package_expert_planner.json`,
-`plan_plan_author_plan_liaison.md`, `replan_replanner_plan_liaison.md` and
-`spec_spec_writer_edit_designer.md`, even in passing.
-
-*What you will observe.* A spawn of `planner` that names
-`survey_ok_package_expert_planner.json`, `plan_plan_author_plan_liaison.md`,
-`replan_replanner_plan_liaison.md` and `spec_spec_writer_edit_designer.md` as well as
-`survey_brief_survey_lead_loom_expert.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`survey_brief_survey_lead_loom_expert.md` alone.
-
-→ Go to step 6 (`loom_expert`).
-
-## Step 5 — `intake_revision`, an occurrence of the `liaison` agent
-
-`intake_revision` writes `intake_notes_intake_revision_liaison.md` to disk and finishes.
-Nothing is returned to you from the spawn. `liaison` reads
-`intake_notes_intake_revision_liaison.md` from disk before beginning; if
-`intake_notes_intake_revision_liaison.md` is absent, `liaison` has nothing to work from,
-so do not spawn `liaison` until the file exists. `liaison` has 5 occurrences in this
-sigil and writes a different artifact at each; the spawn gate tells them apart by which
-one your prompt names. Name `intake_notes_intake_revision_liaison.md` in this spawn and
-do not mention `debrief_brief_debrief_human_2.md`, `intake_brief_liaison_human_2.md`,
-`intake_record_liaison_survey_lead.md` and `plan_brief_plan_liaison_human_2.md`, even in
-passing.
-
-*What you will observe.* A spawn of `liaison` that names
-`debrief_brief_debrief_human_2.md`, `intake_brief_liaison_human_2.md`,
-`intake_record_liaison_survey_lead.md` and `plan_brief_plan_liaison_human_2.md` as well
-as `intake_notes_intake_revision_liaison.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`intake_notes_intake_revision_liaison.md` alone.
-
-*Tell the agent you spawn.* `liaison` reads this and its work is then assayed by the
-person running the session, who is asked directly, which grades it "agreed" or
-"discuss".
-
-→ Go to step 2 (`liaison`), back the way you came.
-
-## Step 6 — `loom_expert`
-
-`loom_expert` writes `loom_notes_loom_expert_numerics_expert.md` to disk and finishes.
-Nothing is returned to you from the spawn. `numerics_expert` reads
-`loom_notes_loom_expert_numerics_expert.md` from disk before beginning; if
-`loom_notes_loom_expert_numerics_expert.md` is absent, `numerics_expert` has nothing to
-work from, so do not spawn `numerics_expert` until the file exists. `loom_expert` has 2
-occurrences in this sigil and writes a different artifact at each; the spawn gate tells
-them apart by which one your prompt names. Name
-`loom_notes_loom_expert_numerics_expert.md` in this spawn and do not mention
-`loom_audit_notes_loom_audit_numerics_audit.md`, even in passing.
-
-*What you will observe.* A spawn of `loom_expert` that names
-`loom_audit_notes_loom_audit_numerics_audit.md` as well as
-`loom_notes_loom_expert_numerics_expert.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`loom_notes_loom_expert_numerics_expert.md` alone.
-
-→ Go to step 7 (`numerics_expert`), which can bring control back here.
-
-## Step 7 — `numerics_expert`
-
-`numerics_expert` writes `numerics_notes_numerics_expert_topology_expert.md` to disk and
-finishes. Nothing is returned to you from the spawn. `topology_expert` reads
-`numerics_notes_numerics_expert_topology_expert.md` from disk before beginning; if
-`numerics_notes_numerics_expert_topology_expert.md` is absent, `topology_expert` has
-nothing to work from, so do not spawn `topology_expert` until the file exists.
-`numerics_expert` has 2 occurrences in this sigil and writes a different artifact at
-each; the spawn gate tells them apart by which one your prompt names. Name
-`numerics_notes_numerics_expert_topology_expert.md` in this spawn and do not mention
-`numerics_audit_notes_numerics_audit_topology_audit.md`, even in passing.
-
-*What you will observe.* A spawn of `numerics_expert` that names
-`numerics_audit_notes_numerics_audit_topology_audit.md` as well as
-`numerics_notes_numerics_expert_topology_expert.md` — or that names no artifact at all —
-is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`numerics_notes_numerics_expert_topology_expert.md` alone.
-
-→ Go to step 8 (`topology_expert`), which can bring control back here.
-
-## Step 8 — `topology_expert`
-
-`topology_expert` writes `topology_notes_topology_expert_test_scout.md` to disk and
-finishes. Nothing is returned to you from the spawn. `test_scout` reads
-`topology_notes_topology_expert_test_scout.md` from disk before beginning; if
-`topology_notes_topology_expert_test_scout.md` is absent, `test_scout` has nothing to
-work from, so do not spawn `test_scout` until the file exists. `topology_expert` has 2
-occurrences in this sigil and writes a different artifact at each; the spawn gate tells
-them apart by which one your prompt names. Name
-`topology_notes_topology_expert_test_scout.md` in this spawn and do not mention
-`topology_audit_notes_topology_audit_test_audit.md`, even in passing.
-
-*What you will observe.* A spawn of `topology_expert` that names
-`topology_audit_notes_topology_audit_test_audit.md` as well as
-`topology_notes_topology_expert_test_scout.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`topology_notes_topology_expert_test_scout.md` alone.
-
-→ Go to step 9 (`test_scout`), which can bring control back here.
-
-## Step 9 — `test_scout`
-
-`test_scout` writes `test_notes_test_scout_package_expert.md` to disk and finishes.
-Nothing is returned to you from the spawn. `package_expert` reads
-`test_notes_test_scout_package_expert.md` from disk before beginning; if
-`test_notes_test_scout_package_expert.md` is absent, `package_expert` has nothing to
-work from, so do not spawn `package_expert` until the file exists. `test_scout` has 2
-occurrences in this sigil and writes a different artifact at each; the spawn gate tells
-them apart by which one your prompt names. Name
-`test_notes_test_scout_package_expert.md` in this spawn and do not mention
-`test_audit_notes_test_audit_audit_lead.md`, even in passing.
-
-*What you will observe.* A spawn of `test_scout` that names
-`test_audit_notes_test_audit_audit_lead.md` as well as
-`test_notes_test_scout_package_expert.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`test_notes_test_scout_package_expert.md` alone.
-
-*Tell the agent you spawn.* `package_expert` reads this and its work is then assayed by
-`planner`, which grades it "complete" or "gaps".
-
-→ Go to step 10 (`package_expert`), which can bring control back here.
-
-## Step 10 — `package_expert`
-
-`package_expert` writes `package_report_package_expert_planner_2.md` to disk and
-finishes. Nothing is returned to you from the spawn. `planner` reads
-`package_report_package_expert_planner_2.md` from disk before beginning; if
-`package_report_package_expert_planner_2.md` is absent, `planner` has nothing to work
-from, so do not spawn `planner` until the file exists. `package_expert` has 4
-occurrences in this sigil and writes a different artifact at each; the spawn gate tells
-them apart by which one your prompt names. Name
-`package_report_package_expert_planner_2.md` in this spawn and do not mention
-`audit_report_audit_lead_rubric_judge_2.md`,
-`edit_proposals_edit_designer_implementer.md` and `revised_edits_redesign_fixer.md`,
-even in passing.
-
-*What you will observe.* A spawn of `package_expert` that names
-`audit_report_audit_lead_rubric_judge_2.md`,
-`edit_proposals_edit_designer_implementer.md` and `revised_edits_redesign_fixer.md` as
-well as `package_report_package_expert_planner_2.md` — or that names no artifact at all
-— is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses
-or which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`package_report_package_expert_planner_2.md` alone.
-
-`package_expert` submits its work for assay. Spawn `planner`, which reads
-`package_report_package_expert_planner_2.md` from disk and writes a verdict artifact
-whose `status` is exactly one of the declared outcome labels; it returns nothing to you.
-Read the verdict file and follow the single outcome edge its `status` names — the
-judgement is probabilistic, the routing is not. If `planner` writes a status outside the
-declared set, its SubagentStop hook blocks it from finishing with a reason listing the
-allowed values; wait for the corrected verdict rather than guessing an outcome. The
-verdict is `survey_ok_package_expert_planner.json`; its `status` is one of "complete" or
-"gaps". `planner` has 5 occurrences in this sigil and writes a different artifact at
-each; the spawn gate tells them apart by which one your prompt names. Name
-`survey_ok_package_expert_planner.json` in this spawn and do not mention
-`plan_plan_author_plan_liaison.md`, `replan_replanner_plan_liaison.md`,
-`spec_spec_writer_edit_designer.md` and `survey_brief_survey_lead_loom_expert.md`, even
-in passing.
-
-*What you will observe.* A blocked assayer means the verdict was malformed, not that the
-work failed: `planner` cannot finish until `survey_ok_package_expert_planner.json`
-carries one of "complete" or "gaps", so an out-of-enum status never reaches you. Wait
-for the corrected file rather than re-spawning the assayer or routing on a guess. A
-spawn of `planner` that names `plan_plan_author_plan_liaison.md`,
-`replan_replanner_plan_liaison.md`, `spec_spec_writer_edit_designer.md` and
-`survey_brief_survey_lead_loom_expert.md` as well as
-`survey_ok_package_expert_planner.json` — or that names no artifact at all — is a denied
-`Agent` call, not a warning: the gate cannot tell which edge it traverses or which
-budget to charge. The denial lists this agent's artifacts; re-issue naming
-`survey_ok_package_expert_planner.json` alone.
-
-→ Go to step 11 (the assay on `package_expert`), which can bring control back here.
-
-## Step 11 — the assay on `package_expert`
-
-Exactly one of the following is live once you have read the verdict — that is what it
-means for "complete" or "gaps" to be a declared set. Take the one the verdict names and
-leave the others alone.
-
-**If the verdict's `status` is "complete".** Reading the verdict is the whole of this
-transition: control moves to `plan_author` and the collapse itself spawns nothing and
-writes no file. What happens at `plan_author` is stated at its own step.
-
-*What you will observe.* You observe nothing when you take this branch: no `Agent` call
-is denied, no file appears, and no agent reports. The verdict's `status` is the whole of
-the evidence and it is enough — move to `plan_author` because the verdict says so, and
-do not wait for a further signal or for a file named after this branch.
-
-→ Go to step 12 (`plan_author`).
-
-**If the verdict's `status` is "gaps".** Reading the verdict is the whole of this
-transition: control moves to `loom_expert` and the collapse itself spawns nothing and
-writes no file. What happens at `loom_expert` is stated at its own step.
-
-*What you will observe.* This branch is metered on
-`loom_notes_loom_expert_numerics_expert.md`: the 3rd spawn of `loom_expert` is denied by
-the spawn gate, with a reason naming the ceiling of 2. That denial is the branch giving
-up, not a failure to work around — take it as the instruction to continue at
-`plan_author`.
-
-→ Go to step 6 (`loom_expert`), back the way you came.
-
-**If the `gaps` branch has been taken 2 times without clearing the assay.** Stop
-re-entering `loom_expert` and continue at `plan_author`, carrying the latest work
-forward: 2 versions of `loom_notes_loom_expert_numerics_expert.md` exist and none of
-them cleared. The ceiling is not an error to recover from — it is where this branch
-ends.
-
-*What you will observe.* You observe the ceiling as a denied `Agent` call and as nothing
-else — no message arrives from any agent to tell you the branch is over. Do not retry
-the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 2,
-and the only move left is `plan_author`.
-
-→ Go to step 12 (`plan_author`).
-
-**If `planner` never produces a verdict whose `status` is one of "complete" or "gaps".**
-No verdict inside the declared set was ever produced, so nothing was graded and there is
-no version of the work to carry forward. Continue at `seal` and leave the run
-inspectable: Athanor writes a failure artifact recording the attempts rather than
-letting the sigil end quietly.
-
-*What you will observe.* You observe this as `planner` failing to finish, over and over:
-its `SubagentStop` hook blocks it and repeats the allowed values each time. Athanor
-gives up on blocking once its own budget is spent — deliberately before Claude Code's
-consecutive-block cut-off — so the run is diagnosed rather than truncated. Do not invent
-a grade to get past it; take this route.
-
-→ Go to step 39 (`seal`).
-
-## Step 12 — `plan_author`, an occurrence of the `planner` agent
-
-`plan_author` writes `plan_plan_author_plan_liaison.md` to disk and finishes. Nothing is
-returned to you from the spawn. `plan_liaison` reads `plan_plan_author_plan_liaison.md`
-from disk before beginning; if `plan_plan_author_plan_liaison.md` is absent,
-`plan_liaison` has nothing to work from, so do not spawn `plan_liaison` until the file
-exists. `planner` has 5 occurrences in this sigil and writes a different artifact at
-each; the spawn gate tells them apart by which one your prompt names. Name
-`plan_plan_author_plan_liaison.md` in this spawn and do not mention
-`survey_ok_package_expert_planner.json`, `replan_replanner_plan_liaison.md`,
-`spec_spec_writer_edit_designer.md` and `survey_brief_survey_lead_loom_expert.md`, even
-in passing.
-
-*What you will observe.* A spawn of `planner` that names
-`survey_ok_package_expert_planner.json`, `replan_replanner_plan_liaison.md`,
-`spec_spec_writer_edit_designer.md` and `survey_brief_survey_lead_loom_expert.md` as
-well as `plan_plan_author_plan_liaison.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`plan_plan_author_plan_liaison.md` alone.
-
-*Tell the agent you spawn.* `plan_liaison` reads this and its work is then assayed by
-the person running the session, who is asked directly, which grades it "approved" or
-"revise".
-
-→ Go to step 13 (`plan_liaison`), which can bring control back here.
-
-## Step 13 — `plan_liaison`, an occurrence of the `liaison` agent
-
-`plan_liaison` writes `plan_brief_plan_liaison_human_2.md` to disk and finishes. Nothing
-is returned to you from the spawn. You read that file yourself: it is the work the assay
-is about, and the person you are about to ask has to be shown it rather than told about
-it. `liaison` has 5 occurrences in this sigil and writes a different artifact at each;
-the spawn gate tells them apart by which one your prompt names. Name
-`plan_brief_plan_liaison_human_2.md` in this spawn and do not mention
-`debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`,
-`intake_brief_liaison_human_2.md` and `intake_record_liaison_survey_lead.md`, even in
-passing.
-
-*What you will observe.* A spawn of `liaison` that names
-`debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`,
-`intake_brief_liaison_human_2.md` and `intake_record_liaison_survey_lead.md` as well as
-`plan_brief_plan_liaison_human_2.md` — or that names no artifact at all — is a denied
-`Agent` call, not a warning: the gate cannot tell which edge it traverses or which
-budget to charge. The denial lists this agent's artifacts; re-issue naming
-`plan_brief_plan_liaison_human_2.md` alone.
-
-Ask the person running this session to grade `plan_liaison`'s work, and put
-`plan_brief_plan_liaison_human_2.md` (`plan_liaison`'s own work, which is what is being
-graded) in front of them when you do. Use `AskUserQuestion`, with one option per
-declared outcome — "approved" or "revise" — and no others. You must do this yourself:
-`AskUserQuestion` is removed from every subagent, in the foreground as well as the
-background, so there is no agent you could delegate the asking to. Then write their
-answer to `plan_ok_plan_liaison_human.json` as a JSON object whose `status` is exactly
-the outcome they chose, with a `notes` string carrying what they said. Nothing is routed
-off the conversation: the answer counts once it is in the file, and not before.
-
-*What you will observe.* Until `plan_ok_plan_liaison_human.json` carries one of
-"approved" or "revise", the terminal gate blocks the turn from ending and tells you so,
+*What you will observe.* Until `plan_ok_planner_human.json` carries one of "approved",
+"revise" or "answered", the terminal gate blocks the turn from ending and tells you so,
 naming the allowed values. That block is the wait: it is what stops the sigil being
 abandoned while a person has not answered yet, and a status outside the declared set is
 treated exactly as no answer at all. Do not route on what was said in conversation, and
 do not widen the set to fit the answer — ask again if what you heard is not one of them.
 
-→ Go to step 14 (the assay on `plan_liaison`), which can bring control back here.
+→ Go to step 4 (the assay on `planner`), which can bring control back here.
 
-## Step 14 — the assay on `plan_liaison`
+## Step 4 — the assay on `planner`
 
 Exactly one of the following is live once you have read the verdict — that is what it
-means for "approved" or "revise" to be a declared set. Take the one the verdict names
-and leave the others alone.
+means for "approved", "revise" or "answered" to be a declared set. Take the one the
+verdict names and leave the others alone.
 
 **If the verdict's `status` is "approved".** Reading the verdict is the whole of this
-transition: control moves to `spec_writer` and the collapse itself spawns nothing and
-writes no file. What happens at `spec_writer` is stated at its own step.
+transition: control moves to `coder` and the collapse itself spawns nothing and writes
+no file. What happens at `coder` is stated at its own step.
 
 *What you will observe.* You observe nothing when you take this branch: no `Agent` call
 is denied, no file appears, and no agent reports. The verdict's `status` is the whole of
-the evidence and it is enough — move to `spec_writer` because the verdict says so, and
-do not wait for a further signal or for a file named after this branch.
+the evidence and it is enough — move to `coder` because the verdict says so, and do not
+wait for a further signal or for a file named after this branch.
 
-→ Go to step 15 (`spec_writer`), which can bring control back here.
+→ Go to step 5 (`coder`).
 
 **If the verdict's `status` is "revise".** Reading the verdict is the whole of this
-transition: control moves to `plan_author` and the collapse itself spawns nothing and
-writes no file. What happens at `plan_author` is stated at its own step.
+transition: control moves to `analyst` and the collapse itself spawns nothing and writes
+no file. What happens at `analyst` is stated at its own step.
 
-*What you will observe.* This branch is metered on `plan_plan_author_plan_liaison.md`:
-the 5th spawn of `plan_author` is denied by the spawn gate, with a reason naming the
-ceiling of 4. That denial is the branch giving up, not a failure to work around — take
-it as the instruction to continue at `spec_writer`.
+*What you will observe.* This branch is metered on `findings_analyst_planner.md`: the
+4th spawn of `analyst` is denied by the spawn gate, with a reason naming the ceiling of
+3. That denial is the branch giving up, not a failure to work around — take it as the
+instruction to continue at `seal`.
 
-→ Go to step 12 (`plan_author`), back the way you came.
+→ Go to step 2 (`analyst`), back the way you came.
 
-**If the `revise` branch has been taken 4 times without clearing the assay.** Stop
-re-entering `plan_author` and continue at `spec_writer`, carrying the latest work
-forward: 4 versions of `plan_plan_author_plan_liaison.md` exist and none of them
-cleared. The ceiling is not an error to recover from — it is where this branch ends.
+**If the `revise` branch has been taken 3 times without clearing the assay.** Stop
+re-entering `analyst` and continue at `seal`, carrying the latest work forward: 3
+versions of `findings_analyst_planner.md` exist and none of them cleared. The ceiling is
+not an error to recover from — it is where this branch ends.
 
 *What you will observe.* You observe the ceiling as a denied `Agent` call and as nothing
 else — no message arrives from any agent to tell you the branch is over. Do not retry
-the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 4,
-and the only move left is `spec_writer`.
+the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 3,
+and the only move left is `seal`.
 
-→ Go to step 15 (`spec_writer`), which can bring control back here.
+→ Go to step 12 (`seal`).
 
-**If the person you asked never produces a verdict whose `status` is one of "approved"
-or "revise".** No verdict inside the declared set was ever produced, so nothing was
-graded and there is no version of the work to carry forward. Continue at `seal` and
-leave the run inspectable: Athanor writes a failure artifact recording the attempts
-rather than letting the sigil end quietly.
+**If the verdict's `status` is "answered".** Reading the verdict is the whole of this
+transition: control moves to `seal` and the collapse itself spawns nothing and writes no
+file. What happens at `seal` is stated at its own step.
+
+*What you will observe.* You observe nothing when you take this branch: no `Agent` call
+is denied, no file appears, and no agent reports. The verdict's `status` is the whole of
+the evidence and it is enough — move to `seal` because the verdict says so, and do not
+wait for a further signal or for a file named after this branch.
+
+→ Go to step 12 (`seal`).
+
+**If the person you asked never produces a verdict whose `status` is one of "approved",
+"revise" or "answered".** No verdict inside the declared set was ever produced, so
+nothing was graded and there is no version of the work to carry forward. Continue at
+`seal` and leave the run inspectable: Athanor writes a failure artifact recording the
+attempts rather than letting the sigil end quietly.
 
 *What you will observe.* You observe this as the terminal gate blocking your turn again
 and again, repeating the allowed values each time. Athanor gives up on blocking once its
@@ -628,803 +212,296 @@ own budget is spent — deliberately before Claude Code's consecutive-block cut-
 the run is diagnosed rather than truncated. Do not invent a grade to get past it; take
 this route.
 
-→ Go to step 39 (`seal`).
+→ Go to step 12 (`seal`).
 
-## Step 15 — `spec_writer`, an occurrence of the `planner` agent
+## Step 5 — `coder`
 
-`spec_writer` writes `spec_spec_writer_edit_designer.md` to disk and finishes. Nothing
-is returned to you from the spawn. `edit_designer` reads
-`spec_spec_writer_edit_designer.md` from disk before beginning; if
-`spec_spec_writer_edit_designer.md` is absent, `edit_designer` has nothing to work from,
-so do not spawn `edit_designer` until the file exists. `planner` has 5 occurrences in
-this sigil and writes a different artifact at each; the spawn gate tells them apart by
-which one your prompt names. Name `spec_spec_writer_edit_designer.md` in this spawn and
-do not mention `survey_ok_package_expert_planner.json`,
-`plan_plan_author_plan_liaison.md`, `replan_replanner_plan_liaison.md` and
-`survey_brief_survey_lead_loom_expert.md`, even in passing.
+`coder` writes `change_coder_test_engineer.md` to disk and finishes. Nothing is returned
+to you from the spawn. `test_engineer` reads `change_coder_test_engineer.md` from disk
+before beginning; if `change_coder_test_engineer.md` is absent, `test_engineer` has
+nothing to work from, so do not spawn `test_engineer` until the file exists. `coder` has
+3 occurrences in this sigil and writes a different artifact at each; the spawn gate
+tells them apart by which one your prompt names. Name `change_coder_test_engineer.md` in
+this spawn and do not mention `figure_report_figure_maker_auditor.md` and
+`touchup_change_toucher_test_engineer.md`, even in passing.
 
-*What you will observe.* A spawn of `planner` that names
-`survey_ok_package_expert_planner.json`, `plan_plan_author_plan_liaison.md`,
-`replan_replanner_plan_liaison.md` and `survey_brief_survey_lead_loom_expert.md` as well
-as `spec_spec_writer_edit_designer.md` — or that names no artifact at all — is a denied
+*What you will observe.* A spawn of `coder` that names
+`figure_report_figure_maker_auditor.md` and `touchup_change_toucher_test_engineer.md` as
+well as `change_coder_test_engineer.md` — or that names no artifact at all — is a denied
 `Agent` call, not a warning: the gate cannot tell which edge it traverses or which
 budget to charge. The denial lists this agent's artifacts; re-issue naming
-`spec_spec_writer_edit_designer.md` alone.
-
-→ Go to step 16 (`edit_designer`), which can bring control back here.
-
-## Step 16 — `edit_designer`, an occurrence of the `package_expert` agent
-
-`edit_designer` writes `edit_proposals_edit_designer_implementer.md` to disk and
-finishes. Nothing is returned to you from the spawn. `implementer` reads
-`edit_proposals_edit_designer_implementer.md` from disk before beginning; if
-`edit_proposals_edit_designer_implementer.md` is absent, `implementer` has nothing to
-work from, so do not spawn `implementer` until the file exists. `package_expert` has 4
-occurrences in this sigil and writes a different artifact at each; the spawn gate tells
-them apart by which one your prompt names. Name
-`edit_proposals_edit_designer_implementer.md` in this spawn and do not mention
-`audit_report_audit_lead_rubric_judge_2.md`,
-`package_report_package_expert_planner_2.md` and `revised_edits_redesign_fixer.md`, even
-in passing.
-
-*What you will observe.* A spawn of `package_expert` that names
-`audit_report_audit_lead_rubric_judge_2.md`,
-`package_report_package_expert_planner_2.md` and `revised_edits_redesign_fixer.md` as
-well as `edit_proposals_edit_designer_implementer.md` — or that names no artifact at all
-— is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses
-or which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`edit_proposals_edit_designer_implementer.md` alone.
-
-Spawn 3 parallel instances of `implementer`. Each writes its own artifact under its own
-name; none of them reports back to you. Fan-in is the next agent reading all 3 files, so
-do not continue until all 3 exist on disk. All 3 write the stem
-`lane_patch_implementer_integrator.md`; the spawn gate gives each instance its own path
-— `lane_patch_implementer_integrator.k0.md`, `lane_patch_implementer_integrator.k1.md`
-and `lane_patch_implementer_integrator.k2.md`.
-
-→ Go to step 17 (`implementer`), which can bring control back here.
-
-## Step 17 — `implementer`, an occurrence of the `coder` agent
-
-`implementer` writes `lane_patch_implementer_integrator.md` to disk and finishes.
-Nothing is returned to you from the spawn. `integrator` reads
-`lane_patch_implementer_integrator.md` from disk before beginning; if
-`lane_patch_implementer_integrator.md` is absent, `integrator` has nothing to work from,
-so do not spawn `integrator` until the file exists. `implementer` fans out 3 ways, so
-`lane_patch_implementer_integrator.md` is 3 files on disk —
-`lane_patch_implementer_integrator.k0.md`, `lane_patch_implementer_integrator.k1.md` and
-`lane_patch_implementer_integrator.k2.md` — and `integrator` reads all 3 of them, not
-one: do not spawn it until all 3 exist. `coder` has 5 occurrences in this sigil and
-writes a different artifact at each; the spawn gate tells them apart by which one your
-prompt names. Name `lane_patch_implementer_integrator.md` in this spawn and do not
-mention `figure_report_figure_maker_seal.md`, `fix_fixer_code_reviewer.md`,
-`integration_integrator_code_reviewer.md` and `touchup_report_touchup_debrief.md`, even
-in passing.
-
-*What you will observe.* A spawn of `coder` that names
-`figure_report_figure_maker_seal.md`, `fix_fixer_code_reviewer.md`,
-`integration_integrator_code_reviewer.md` and `touchup_report_touchup_debrief.md` as
-well as `lane_patch_implementer_integrator.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`lane_patch_implementer_integrator.md` alone.
-
-→ Go to step 18 (`integrator`), which can bring control back here.
-
-## Step 18 — `integrator`, an occurrence of the `coder` agent
-
-`integrator` writes `integration_integrator_code_reviewer.md` to disk and finishes.
-Nothing is returned to you from the spawn. `code_reviewer` reads
-`integration_integrator_code_reviewer.md` from disk before beginning; if
-`integration_integrator_code_reviewer.md` is absent, `code_reviewer` has nothing to work
-from, so do not spawn `code_reviewer` until the file exists. `coder` has 5 occurrences
-in this sigil and writes a different artifact at each; the spawn gate tells them apart
-by which one your prompt names. Name `integration_integrator_code_reviewer.md` in this
-spawn and do not mention `figure_report_figure_maker_seal.md`,
-`fix_fixer_code_reviewer.md`, `lane_patch_implementer_integrator.md` and
-`touchup_report_touchup_debrief.md`, even in passing.
-
-*What you will observe.* A spawn of `coder` that names
-`figure_report_figure_maker_seal.md`, `fix_fixer_code_reviewer.md`,
-`lane_patch_implementer_integrator.md` and `touchup_report_touchup_debrief.md` as well
-as `integration_integrator_code_reviewer.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`integration_integrator_code_reviewer.md` alone.
-
-→ Go to step 19 (`code_reviewer`), which can bring control back here.
-
-## Step 19 — `code_reviewer`
-
-`code_reviewer` writes `code_review_code_reviewer_test_engineer.md` to disk and
-finishes. Nothing is returned to you from the spawn. `test_engineer` reads
-`code_review_code_reviewer_test_engineer.md` from disk before beginning; if
-`code_review_code_reviewer_test_engineer.md` is absent, `test_engineer` has nothing to
-work from, so do not spawn `test_engineer` until the file exists.
+`change_coder_test_engineer.md` alone.
 
 *Tell the agent you spawn.* `test_engineer` reads this and its work is then assayed by
-`rubric_judge`, which grades it "pass" or "revise".
+`code_reviewer`, which grades it "pass" or "revise".
 
-→ Go to step 20 (`test_engineer`), which can bring control back here.
+→ Go to step 6 (`test_engineer`), which can bring control back here.
 
-## Step 20 — `test_engineer`
+## Step 6 — `test_engineer`
 
-`test_engineer` writes `test_evidence_test_engineer_rubric_judge_2.md` to disk and
-finishes. Nothing is returned to you from the spawn. `rubric_judge` reads
-`test_evidence_test_engineer_rubric_judge_2.md` from disk before beginning; if
-`test_evidence_test_engineer_rubric_judge_2.md` is absent, `rubric_judge` has nothing to
-work from, so do not spawn `rubric_judge` until the file exists.
+`test_engineer` writes `test_evidence_test_engineer_code_reviewer_2.md` to disk and
+finishes. Nothing is returned to you from the spawn. `code_reviewer` reads
+`test_evidence_test_engineer_code_reviewer_2.md` from disk before beginning; if
+`test_evidence_test_engineer_code_reviewer_2.md` is absent, `code_reviewer` has nothing
+to work from, so do not spawn `code_reviewer` until the file exists.
 
-→ Go to step 22 (`rubric_judge`).
-
-`test_engineer` submits its work for assay. Spawn `rubric_judge`, which reads
-`test_evidence_test_engineer_rubric_judge_2.md` from disk and writes a verdict artifact
+`test_engineer` submits its work for assay. Spawn `code_reviewer`, which reads
+`test_evidence_test_engineer_code_reviewer_2.md` from disk and writes a verdict artifact
 whose `status` is exactly one of the declared outcome labels; it returns nothing to you.
 Read the verdict file and follow the single outcome edge its `status` names — the
-judgement is probabilistic, the routing is not. If `rubric_judge` writes a status
+judgement is probabilistic, the routing is not. If `code_reviewer` writes a status
 outside the declared set, its SubagentStop hook blocks it from finishing with a reason
 listing the allowed values; wait for the corrected verdict rather than guessing an
-outcome. The verdict is `cycle_ok_test_engineer_rubric_judge.json`; its `status` is one
-of "pass" or "revise". `rubric_judge` has 2 occurrences in this sigil and writes a
-different artifact at each; the spawn gate tells them apart by which one your prompt
-names. Name `cycle_ok_test_engineer_rubric_judge.json` in this spawn and do not mention
-`outcome_ok_audit_lead_rubric_judge.json`, even in passing.
+outcome. The verdict is `cycle_ok_test_engineer_code_reviewer.json`; its `status` is one
+of "pass" or "revise".
 
 *What you will observe.* A blocked assayer means the verdict was malformed, not that the
-work failed: `rubric_judge` cannot finish until
-`cycle_ok_test_engineer_rubric_judge.json` carries one of "pass" or "revise", so an
+work failed: `code_reviewer` cannot finish until
+`cycle_ok_test_engineer_code_reviewer.json` carries one of "pass" or "revise", so an
 out-of-enum status never reaches you. Wait for the corrected file rather than
-re-spawning the assayer or routing on a guess. A spawn of `rubric_judge` that names
-`outcome_ok_audit_lead_rubric_judge.json` as well as
-`cycle_ok_test_engineer_rubric_judge.json` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`cycle_ok_test_engineer_rubric_judge.json` alone.
+re-spawning the assayer or routing on a guess.
 
-→ Go to step 21 (the assay on `test_engineer`), which can bring control back here.
+→ Go to step 7 (the assay on `test_engineer`), which can bring control back here.
 
-## Step 21 — the assay on `test_engineer`
+## Step 7 — the assay on `test_engineer`
 
 Exactly one of the following is live once you have read the verdict — that is what it
 means for "pass" or "revise" to be a declared set. Take the one the verdict names and
 leave the others alone.
 
 **If the verdict's `status` is "pass".** Reading the verdict is the whole of this
-transition: control moves to `loom_audit` and the collapse itself spawns nothing and
-writes no file. What happens at `loom_audit` is stated at its own step.
+transition: control moves to `auditor` and the collapse itself spawns nothing and writes
+no file. What happens at `auditor` is stated at its own step.
 
 *What you will observe.* You observe nothing when you take this branch: no `Agent` call
 is denied, no file appears, and no agent reports. The verdict's `status` is the whole of
-the evidence and it is enough — move to `loom_audit` because the verdict says so, and do
+the evidence and it is enough — move to `auditor` because the verdict says so, and do
 not wait for a further signal or for a file named after this branch.
 
-→ Go to step 23 (`loom_audit`), which can bring control back here.
+→ Go to step 8 (`auditor`), which can bring control back here.
 
 **If the verdict's `status` is "revise".** Reading the verdict is the whole of this
-transition: control moves to `redesign` and the collapse itself spawns nothing and
-writes no file. What happens at `redesign` is stated at its own step.
+transition: control moves to `coder` and the collapse itself spawns nothing and writes
+no file. What happens at `coder` is stated at its own step.
 
-*What you will observe.* This branch is metered on `revised_edits_redesign_fixer.md`:
-the 3rd spawn of `redesign` is denied by the spawn gate, with a reason naming the
-ceiling of 2. That denial is the branch giving up, not a failure to work around — take
-it as the instruction to continue at `loom_audit`.
+*What you will observe.* This branch is metered on `change_coder_test_engineer.md`: the
+4th spawn of `coder` is denied by the spawn gate, with a reason naming the ceiling of 3.
+That denial is the branch giving up, not a failure to work around — take it as the
+instruction to continue at `auditor`.
 
-→ Go to step 24 (`redesign`), which can bring control back here.
+→ Go to step 5 (`coder`), back the way you came.
 
-**If the `revise` branch has been taken 2 times without clearing the assay.** Stop
-re-entering `redesign` and continue at `loom_audit`, carrying the latest work forward: 2
-versions of `revised_edits_redesign_fixer.md` exist and none of them cleared. The
-ceiling is not an error to recover from — it is where this branch ends.
+**If the `revise` branch has been taken 3 times without clearing the assay.** Stop
+re-entering `coder` and continue at `auditor`, carrying the latest work forward: 3
+versions of `change_coder_test_engineer.md` exist and none of them cleared. The ceiling
+is not an error to recover from — it is where this branch ends.
 
 *What you will observe.* You observe the ceiling as a denied `Agent` call and as nothing
 else — no message arrives from any agent to tell you the branch is over. Do not retry
-the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 2,
-and the only move left is `loom_audit`.
+the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 3,
+and the only move left is `auditor`.
 
-→ Go to step 23 (`loom_audit`), which can bring control back here.
+→ Go to step 8 (`auditor`), which can bring control back here.
 
-**If `rubric_judge` never produces a verdict whose `status` is one of "pass" or
+**If `code_reviewer` never produces a verdict whose `status` is one of "pass" or
 "revise".** No verdict inside the declared set was ever produced, so nothing was graded
 and there is no version of the work to carry forward. Continue at `seal` and leave the
 run inspectable: Athanor writes a failure artifact recording the attempts rather than
 letting the sigil end quietly.
 
-*What you will observe.* You observe this as `rubric_judge` failing to finish, over and
+*What you will observe.* You observe this as `code_reviewer` failing to finish, over and
 over: its `SubagentStop` hook blocks it and repeats the allowed values each time.
 Athanor gives up on blocking once its own budget is spent — deliberately before Claude
 Code's consecutive-block cut-off — so the run is diagnosed rather than truncated. Do not
 invent a grade to get past it; take this route.
 
-→ Go to step 39 (`seal`).
+→ Go to step 12 (`seal`).
 
-## Step 22 — `rubric_judge`
+## Step 8 — `auditor`, an occurrence of the `analyst` agent
 
-No transition leaves `rubric_judge`.
+`auditor` writes `outcome_auditor_human_2.md` to disk and finishes. Nothing is returned
+to you from the spawn. You read that file yourself: it is the work the assay is about,
+and the person you are about to ask has to be shown it rather than told about it.
+`analyst` has 2 occurrences in this sigil and writes a different artifact at each; the
+spawn gate tells them apart by which one your prompt names. Name
+`outcome_auditor_human_2.md` in this spawn and do not mention
+`findings_analyst_planner.md`, even in passing.
 
-## Step 23 — `loom_audit`, an occurrence of the `loom_expert` agent
-
-`loom_audit` writes `loom_audit_notes_loom_audit_numerics_audit.md` to disk and
-finishes. Nothing is returned to you from the spawn. `numerics_audit` reads
-`loom_audit_notes_loom_audit_numerics_audit.md` from disk before beginning; if
-`loom_audit_notes_loom_audit_numerics_audit.md` is absent, `numerics_audit` has nothing
-to work from, so do not spawn `numerics_audit` until the file exists. `loom_expert` has
-2 occurrences in this sigil and writes a different artifact at each; the spawn gate
-tells them apart by which one your prompt names. Name
-`loom_audit_notes_loom_audit_numerics_audit.md` in this spawn and do not mention
-`loom_notes_loom_expert_numerics_expert.md`, even in passing.
-
-*What you will observe.* A spawn of `loom_expert` that names
-`loom_notes_loom_expert_numerics_expert.md` as well as
-`loom_audit_notes_loom_audit_numerics_audit.md` — or that names no artifact at all — is
-a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`loom_audit_notes_loom_audit_numerics_audit.md` alone.
-
-→ Go to step 26 (`numerics_audit`), which can bring control back here.
-
-## Step 24 — `redesign`, an occurrence of the `package_expert` agent
-
-`redesign` writes `revised_edits_redesign_fixer.md` to disk and finishes. Nothing is
-returned to you from the spawn. `fixer` reads `revised_edits_redesign_fixer.md` from
-disk before beginning; if `revised_edits_redesign_fixer.md` is absent, `fixer` has
-nothing to work from, so do not spawn `fixer` until the file exists. `package_expert`
-has 4 occurrences in this sigil and writes a different artifact at each; the spawn gate
-tells them apart by which one your prompt names. Name `revised_edits_redesign_fixer.md`
-in this spawn and do not mention `audit_report_audit_lead_rubric_judge_2.md`,
-`edit_proposals_edit_designer_implementer.md` and
-`package_report_package_expert_planner_2.md`, even in passing.
-
-*What you will observe.* A spawn of `package_expert` that names
-`audit_report_audit_lead_rubric_judge_2.md`,
-`edit_proposals_edit_designer_implementer.md` and
-`package_report_package_expert_planner_2.md` as well as
-`revised_edits_redesign_fixer.md` — or that names no artifact at all — is a denied
+*What you will observe.* A spawn of `analyst` that names `findings_analyst_planner.md`
+as well as `outcome_auditor_human_2.md` — or that names no artifact at all — is a denied
 `Agent` call, not a warning: the gate cannot tell which edge it traverses or which
 budget to charge. The denial lists this agent's artifacts; re-issue naming
-`revised_edits_redesign_fixer.md` alone.
+`outcome_auditor_human_2.md` alone.
 
-→ Go to step 25 (`fixer`), which can bring control back here.
+Ask the person running this session to grade `auditor`'s work, and put
+`outcome_auditor_human_2.md` (`auditor`'s own work, which is what is being graded) in
+front of them when you do. Use `AskUserQuestion`, with one option per declared outcome —
+"confirmed", "touchup" or "figures" — and no others. You must do this yourself:
+`AskUserQuestion` is removed from every subagent, in the foreground as well as the
+background, so there is no agent you could delegate the asking to. Then write their
+answer to `debrief_ok_auditor_human.json` as a JSON object whose `status` is exactly the
+outcome they chose, with a `notes` string carrying what they said. Nothing is routed off
+the conversation: the answer counts once it is in the file, and not before.
 
-## Step 25 — `fixer`, an occurrence of the `coder` agent
+*What you will observe.* Until `debrief_ok_auditor_human.json` carries one of
+"confirmed", "touchup" or "figures", the terminal gate blocks the turn from ending and
+tells you so, naming the allowed values. That block is the wait: it is what stops the
+sigil being abandoned while a person has not answered yet, and a status outside the
+declared set is treated exactly as no answer at all. Do not route on what was said in
+conversation, and do not widen the set to fit the answer — ask again if what you heard
+is not one of them.
 
-`fixer` writes `fix_fixer_code_reviewer.md` to disk and finishes. Nothing is returned to
-you from the spawn. `code_reviewer` reads `fix_fixer_code_reviewer.md` from disk before
-beginning; if `fix_fixer_code_reviewer.md` is absent, `code_reviewer` has nothing to
-work from, so do not spawn `code_reviewer` until the file exists. `coder` has 5
-occurrences in this sigil and writes a different artifact at each; the spawn gate tells
-them apart by which one your prompt names. Name `fix_fixer_code_reviewer.md` in this
-spawn and do not mention `figure_report_figure_maker_seal.md`,
-`lane_patch_implementer_integrator.md`, `integration_integrator_code_reviewer.md` and
-`touchup_report_touchup_debrief.md`, even in passing.
+→ Go to step 9 (the assay on `auditor`), which can bring control back here.
 
-*What you will observe.* A spawn of `coder` that names
-`figure_report_figure_maker_seal.md`, `lane_patch_implementer_integrator.md`,
-`integration_integrator_code_reviewer.md` and `touchup_report_touchup_debrief.md` as
-well as `fix_fixer_code_reviewer.md` — or that names no artifact at all — is a denied
-`Agent` call, not a warning: the gate cannot tell which edge it traverses or which
-budget to charge. The denial lists this agent's artifacts; re-issue naming
-`fix_fixer_code_reviewer.md` alone.
-
-→ Go to step 19 (`code_reviewer`), back the way you came.
-
-## Step 26 — `numerics_audit`, an occurrence of the `numerics_expert` agent
-
-`numerics_audit` writes `numerics_audit_notes_numerics_audit_topology_audit.md` to disk
-and finishes. Nothing is returned to you from the spawn. `topology_audit` reads
-`numerics_audit_notes_numerics_audit_topology_audit.md` from disk before beginning; if
-`numerics_audit_notes_numerics_audit_topology_audit.md` is absent, `topology_audit` has
-nothing to work from, so do not spawn `topology_audit` until the file exists.
-`numerics_expert` has 2 occurrences in this sigil and writes a different artifact at
-each; the spawn gate tells them apart by which one your prompt names. Name
-`numerics_audit_notes_numerics_audit_topology_audit.md` in this spawn and do not mention
-`numerics_notes_numerics_expert_topology_expert.md`, even in passing.
-
-*What you will observe.* A spawn of `numerics_expert` that names
-`numerics_notes_numerics_expert_topology_expert.md` as well as
-`numerics_audit_notes_numerics_audit_topology_audit.md` — or that names no artifact at
-all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it
-traverses or which budget to charge. The denial lists this agent's artifacts; re-issue
-naming `numerics_audit_notes_numerics_audit_topology_audit.md` alone.
-
-→ Go to step 27 (`topology_audit`), which can bring control back here.
-
-## Step 27 — `topology_audit`, an occurrence of the `topology_expert` agent
-
-`topology_audit` writes `topology_audit_notes_topology_audit_test_audit.md` to disk and
-finishes. Nothing is returned to you from the spawn. `test_audit` reads
-`topology_audit_notes_topology_audit_test_audit.md` from disk before beginning; if
-`topology_audit_notes_topology_audit_test_audit.md` is absent, `test_audit` has nothing
-to work from, so do not spawn `test_audit` until the file exists. `topology_expert` has
-2 occurrences in this sigil and writes a different artifact at each; the spawn gate
-tells them apart by which one your prompt names. Name
-`topology_audit_notes_topology_audit_test_audit.md` in this spawn and do not mention
-`topology_notes_topology_expert_test_scout.md`, even in passing.
-
-*What you will observe.* A spawn of `topology_expert` that names
-`topology_notes_topology_expert_test_scout.md` as well as
-`topology_audit_notes_topology_audit_test_audit.md` — or that names no artifact at all —
-is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`topology_audit_notes_topology_audit_test_audit.md` alone.
-
-→ Go to step 28 (`test_audit`), which can bring control back here.
-
-## Step 28 — `test_audit`, an occurrence of the `test_scout` agent
-
-`test_audit` writes `test_audit_notes_test_audit_audit_lead.md` to disk and finishes.
-Nothing is returned to you from the spawn. `audit_lead` reads
-`test_audit_notes_test_audit_audit_lead.md` from disk before beginning; if
-`test_audit_notes_test_audit_audit_lead.md` is absent, `audit_lead` has nothing to work
-from, so do not spawn `audit_lead` until the file exists. `test_scout` has 2 occurrences
-in this sigil and writes a different artifact at each; the spawn gate tells them apart
-by which one your prompt names. Name `test_audit_notes_test_audit_audit_lead.md` in this
-spawn and do not mention `test_notes_test_scout_package_expert.md`, even in passing.
-
-*What you will observe.* A spawn of `test_scout` that names
-`test_notes_test_scout_package_expert.md` as well as
-`test_audit_notes_test_audit_audit_lead.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`test_audit_notes_test_audit_audit_lead.md` alone.
-
-*Tell the agent you spawn.* `audit_lead` reads this and its work is then assayed by
-`rubric_judge`, which grades it "success" or "redo".
-
-→ Go to step 29 (`audit_lead`), which can bring control back here.
-
-## Step 29 — `audit_lead`, an occurrence of the `package_expert` agent
-
-`audit_lead` writes `audit_report_audit_lead_rubric_judge_2.md` to disk and finishes.
-Nothing is returned to you from the spawn. `rubric_judge` reads
-`audit_report_audit_lead_rubric_judge_2.md` from disk before beginning; if
-`audit_report_audit_lead_rubric_judge_2.md` is absent, `rubric_judge` has nothing to
-work from, so do not spawn `rubric_judge` until the file exists. `package_expert` has 4
-occurrences in this sigil and writes a different artifact at each; the spawn gate tells
-them apart by which one your prompt names. Name
-`audit_report_audit_lead_rubric_judge_2.md` in this spawn and do not mention
-`edit_proposals_edit_designer_implementer.md`,
-`package_report_package_expert_planner_2.md` and `revised_edits_redesign_fixer.md`, even
-in passing.
-
-*What you will observe.* A spawn of `package_expert` that names
-`edit_proposals_edit_designer_implementer.md`,
-`package_report_package_expert_planner_2.md` and `revised_edits_redesign_fixer.md` as
-well as `audit_report_audit_lead_rubric_judge_2.md` — or that names no artifact at all —
-is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`audit_report_audit_lead_rubric_judge_2.md` alone.
-
-→ Go to step 22 (`rubric_judge`), back the way you came.
-
-`audit_lead` submits its work for assay. Spawn `rubric_judge`, which reads
-`audit_report_audit_lead_rubric_judge_2.md` from disk and writes a verdict artifact
-whose `status` is exactly one of the declared outcome labels; it returns nothing to you.
-Read the verdict file and follow the single outcome edge its `status` names — the
-judgement is probabilistic, the routing is not. If `rubric_judge` writes a status
-outside the declared set, its SubagentStop hook blocks it from finishing with a reason
-listing the allowed values; wait for the corrected verdict rather than guessing an
-outcome. The verdict is `outcome_ok_audit_lead_rubric_judge.json`; its `status` is one
-of "success" or "redo". `rubric_judge` has 2 occurrences in this sigil and writes a
-different artifact at each; the spawn gate tells them apart by which one your prompt
-names. Name `outcome_ok_audit_lead_rubric_judge.json` in this spawn and do not mention
-`cycle_ok_test_engineer_rubric_judge.json`, even in passing.
-
-*What you will observe.* A blocked assayer means the verdict was malformed, not that the
-work failed: `rubric_judge` cannot finish until
-`outcome_ok_audit_lead_rubric_judge.json` carries one of "success" or "redo", so an
-out-of-enum status never reaches you. Wait for the corrected file rather than
-re-spawning the assayer or routing on a guess. A spawn of `rubric_judge` that names
-`cycle_ok_test_engineer_rubric_judge.json` as well as
-`outcome_ok_audit_lead_rubric_judge.json` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`outcome_ok_audit_lead_rubric_judge.json` alone.
-
-→ Go to step 30 (the assay on `audit_lead`), which can bring control back here.
-
-## Step 30 — the assay on `audit_lead`
+## Step 9 — the assay on `auditor`
 
 Exactly one of the following is live once you have read the verdict — that is what it
-means for "success" or "redo" to be a declared set. Take the one the verdict names and
-leave the others alone.
+means for "confirmed", "touchup" or "figures" to be a declared set. Take the one the
+verdict names and leave the others alone.
 
-**If the verdict's `status` is "success".** Reading the verdict is the whole of this
-transition: control moves to `debrief` and the collapse itself spawns nothing and writes
-no file. What happens at `debrief` is stated at its own step.
+**If the verdict's `status` is "confirmed".** Reading the verdict is the whole of this
+transition: control moves to `seal` and the collapse itself spawns nothing and writes no
+file. What happens at `seal` is stated at its own step.
 
 *What you will observe.* You observe nothing when you take this branch: no `Agent` call
 is denied, no file appears, and no agent reports. The verdict's `status` is the whole of
-the evidence and it is enough — move to `debrief` because the verdict says so, and do
-not wait for a further signal or for a file named after this branch.
+the evidence and it is enough — move to `seal` because the verdict says so, and do not
+wait for a further signal or for a file named after this branch.
 
-→ Go to step 31 (`debrief`).
+→ Go to step 12 (`seal`).
 
-**If the verdict's `status` is "redo".** Reading the verdict is the whole of this
-transition: control moves to `replanner` and the collapse itself spawns nothing and
-writes no file. What happens at `replanner` is stated at its own step.
+**If the verdict's `status` is "touchup".** Reading the verdict is the whole of this
+transition: control moves to `toucher` and the collapse itself spawns nothing and writes
+no file. What happens at `toucher` is stated at its own step.
 
-*What you will observe.* This branch is metered on `replan_replanner_plan_liaison.md`:
-the 2nd spawn of `replanner` is denied by the spawn gate, with a reason naming the
-ceiling of 1. That denial is the branch giving up, not a failure to work around — take
-it as the instruction to continue at `debrief`.
+*What you will observe.* This branch is metered on
+`touchup_change_toucher_test_engineer.md`: the 3rd spawn of `toucher` is denied by the
+spawn gate, with a reason naming the ceiling of 2. That denial is the branch giving up,
+not a failure to work around — take it as the instruction to continue at `seal`.
 
-→ Go to step 32 (`replanner`), which can bring control back here.
+→ Go to step 10 (`toucher`), which can bring control back here.
 
-**If the `redo` branch has been taken 1 time without clearing the assay.** Stop
-re-entering `replanner` and continue at `debrief`, carrying the latest work forward: 1
-versions of `replan_replanner_plan_liaison.md` exist and none of them cleared. The
+**If the `touchup` branch has been taken 2 times without clearing the assay.** Stop
+re-entering `toucher` and continue at `seal`, carrying the latest work forward: 2
+versions of `touchup_change_toucher_test_engineer.md` exist and none of them cleared.
+The ceiling is not an error to recover from — it is where this branch ends.
+
+*What you will observe.* You observe the ceiling as a denied `Agent` call and as nothing
+else — no message arrives from any agent to tell you the branch is over. Do not retry
+the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 2,
+and the only move left is `seal`.
+
+→ Go to step 12 (`seal`).
+
+**If the verdict's `status` is "figures".** Reading the verdict is the whole of this
+transition: control moves to `figure_maker` and the collapse itself spawns nothing and
+writes no file. What happens at `figure_maker` is stated at its own step.
+
+*What you will observe.* This branch is metered on
+`figure_report_figure_maker_auditor.md`: the 3rd spawn of `figure_maker` is denied by
+the spawn gate, with a reason naming the ceiling of 2. That denial is the branch giving
+up, not a failure to work around — take it as the instruction to continue at `seal`.
+
+→ Go to step 11 (`figure_maker`), which can bring control back here.
+
+**If the `figures` branch has been taken 2 times without clearing the assay.** Stop
+re-entering `figure_maker` and continue at `seal`, carrying the latest work forward: 2
+versions of `figure_report_figure_maker_auditor.md` exist and none of them cleared. The
 ceiling is not an error to recover from — it is where this branch ends.
 
 *What you will observe.* You observe the ceiling as a denied `Agent` call and as nothing
 else — no message arrives from any agent to tell you the branch is over. Do not retry
-the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 1,
-and the only move left is `debrief`.
+the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 2,
+and the only move left is `seal`.
 
-→ Go to step 31 (`debrief`).
+→ Go to step 12 (`seal`).
 
-**If `rubric_judge` never produces a verdict whose `status` is one of "success" or
-"redo".** No verdict inside the declared set was ever produced, so nothing was graded
-and there is no version of the work to carry forward. Continue at `seal` and leave the
-run inspectable: Athanor writes a failure artifact recording the attempts rather than
-letting the sigil end quietly.
+**If the person you asked never produces a verdict whose `status` is one of "confirmed",
+"touchup" or "figures".** No verdict inside the declared set was ever produced, so
+nothing was graded and there is no version of the work to carry forward. Continue at
+`seal` and leave the run inspectable: Athanor writes a failure artifact recording the
+attempts rather than letting the sigil end quietly.
 
-*What you will observe.* You observe this as `rubric_judge` failing to finish, over and
-over: its `SubagentStop` hook blocks it and repeats the allowed values each time.
-Athanor gives up on blocking once its own budget is spent — deliberately before Claude
-Code's consecutive-block cut-off — so the run is diagnosed rather than truncated. Do not
-invent a grade to get past it; take this route.
+*What you will observe.* You observe this as the terminal gate blocking your turn again
+and again, repeating the allowed values each time. Athanor gives up on blocking once its
+own budget is spent — deliberately before Claude Code's consecutive-block cut-off — so
+the run is diagnosed rather than truncated. Do not invent a grade to get past it; take
+this route.
 
-→ Go to step 39 (`seal`).
+→ Go to step 12 (`seal`).
 
-## Step 31 — `debrief`, an occurrence of the `liaison` agent
+## Step 10 — `toucher`, an occurrence of the `coder` agent
 
-`debrief` writes `debrief_brief_debrief_human_2.md` to disk and finishes. Nothing is
-returned to you from the spawn. You read that file yourself: it is the work the assay is
-about, and the person you are about to ask has to be shown it rather than told about it.
-`liaison` has 5 occurrences in this sigil and writes a different artifact at each; the
-spawn gate tells them apart by which one your prompt names. Name
-`debrief_brief_debrief_human_2.md` in this spawn and do not mention
-`intake_notes_intake_revision_liaison.md`, `intake_brief_liaison_human_2.md`,
-`intake_record_liaison_survey_lead.md` and `plan_brief_plan_liaison_human_2.md`, even in
-passing.
+`toucher` writes `touchup_change_toucher_test_engineer.md` to disk and finishes. Nothing
+is returned to you from the spawn. `test_engineer` reads
+`touchup_change_toucher_test_engineer.md` from disk before beginning; if
+`touchup_change_toucher_test_engineer.md` is absent, `test_engineer` has nothing to work
+from, so do not spawn `test_engineer` until the file exists. `coder` has 3 occurrences
+in this sigil and writes a different artifact at each; the spawn gate tells them apart
+by which one your prompt names. Name `touchup_change_toucher_test_engineer.md` in this
+spawn and do not mention `change_coder_test_engineer.md` and
+`figure_report_figure_maker_auditor.md`, even in passing.
 
-*What you will observe.* A spawn of `liaison` that names
-`intake_notes_intake_revision_liaison.md`, `intake_brief_liaison_human_2.md`,
-`intake_record_liaison_survey_lead.md` and `plan_brief_plan_liaison_human_2.md` as well
-as `debrief_brief_debrief_human_2.md` — or that names no artifact at all — is a denied
+*What you will observe.* A spawn of `coder` that names `change_coder_test_engineer.md`
+and `figure_report_figure_maker_auditor.md` as well as
+`touchup_change_toucher_test_engineer.md` — or that names no artifact at all — is a
+denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
+which budget to charge. The denial lists this agent's artifacts; re-issue naming
+`touchup_change_toucher_test_engineer.md` alone.
+
+*Tell the agent you spawn.* `test_engineer` reads this and its work is then assayed by
+`code_reviewer`, which grades it "pass" or "revise".
+
+→ Go to step 6 (`test_engineer`), back the way you came.
+
+## Step 11 — `figure_maker`, an occurrence of the `coder` agent
+
+`figure_maker` writes `figure_report_figure_maker_auditor.md` to disk and finishes.
+Nothing is returned to you from the spawn. `auditor` reads
+`figure_report_figure_maker_auditor.md` from disk before beginning; if
+`figure_report_figure_maker_auditor.md` is absent, `auditor` has nothing to work from,
+so do not spawn `auditor` until the file exists. `coder` has 3 occurrences in this sigil
+and writes a different artifact at each; the spawn gate tells them apart by which one
+your prompt names. Name `figure_report_figure_maker_auditor.md` in this spawn and do not
+mention `change_coder_test_engineer.md` and `touchup_change_toucher_test_engineer.md`,
+even in passing.
+
+*What you will observe.* A spawn of `coder` that names `change_coder_test_engineer.md`
+and `touchup_change_toucher_test_engineer.md` as well as
+`figure_report_figure_maker_auditor.md` — or that names no artifact at all — is a denied
 `Agent` call, not a warning: the gate cannot tell which edge it traverses or which
 budget to charge. The denial lists this agent's artifacts; re-issue naming
-`debrief_brief_debrief_human_2.md` alone.
+`figure_report_figure_maker_auditor.md` alone.
 
-Ask the person running this session to grade `debrief`'s work, and put
-`debrief_brief_debrief_human_2.md` (`debrief`'s own work, which is what is being graded)
-in front of them when you do. Use `AskUserQuestion`, with one option per declared
-outcome — "confirmed" or "concerns" — and no others. You must do this yourself:
-`AskUserQuestion` is removed from every subagent, in the foreground as well as the
-background, so there is no agent you could delegate the asking to. Then write their
-answer to `debrief_ok_debrief_human.json` as a JSON object whose `status` is exactly the
-outcome they chose, with a `notes` string carrying what they said. Nothing is routed off
-the conversation: the answer counts once it is in the file, and not before.
+*Tell the agent you spawn.* `auditor` reads this and its work is then assayed by the
+person running the session, who is asked directly, which grades it "confirmed",
+"touchup" or "figures".
 
-*What you will observe.* Until `debrief_ok_debrief_human.json` carries one of
-"confirmed" or "concerns", the terminal gate blocks the turn from ending and tells you
-so, naming the allowed values. That block is the wait: it is what stops the sigil being
-abandoned while a person has not answered yet, and a status outside the declared set is
-treated exactly as no answer at all. Do not route on what was said in conversation, and
-do not widen the set to fit the answer — ask again if what you heard is not one of them.
+→ Go to step 8 (`auditor`), back the way you came.
 
-→ Go to step 33 (the assay on `debrief`), which can bring control back here.
+## Step 12 — `seal` — where the sigil completes
 
-## Step 32 — `replanner`, an occurrence of the `planner` agent
-
-`replanner` writes `replan_replanner_plan_liaison.md` to disk and finishes. Nothing is
-returned to you from the spawn. `plan_liaison` reads `replan_replanner_plan_liaison.md`
-from disk before beginning; if `replan_replanner_plan_liaison.md` is absent,
-`plan_liaison` has nothing to work from, so do not spawn `plan_liaison` until the file
-exists. `planner` has 5 occurrences in this sigil and writes a different artifact at
-each; the spawn gate tells them apart by which one your prompt names. Name
-`replan_replanner_plan_liaison.md` in this spawn and do not mention
-`survey_ok_package_expert_planner.json`, `plan_plan_author_plan_liaison.md`,
-`spec_spec_writer_edit_designer.md` and `survey_brief_survey_lead_loom_expert.md`, even
-in passing.
-
-*What you will observe.* A spawn of `planner` that names
-`survey_ok_package_expert_planner.json`, `plan_plan_author_plan_liaison.md`,
-`spec_spec_writer_edit_designer.md` and `survey_brief_survey_lead_loom_expert.md` as
-well as `replan_replanner_plan_liaison.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`replan_replanner_plan_liaison.md` alone.
-
-*Tell the agent you spawn.* `plan_liaison` reads this and its work is then assayed by
-the person running the session, who is asked directly, which grades it "approved" or
-"revise".
-
-→ Go to step 13 (`plan_liaison`), back the way you came.
-
-## Step 33 — the assay on `debrief`
-
-Exactly one of the following is live once you have read the verdict — that is what it
-means for "confirmed" or "concerns" to be a declared set. Take the one the verdict names
-and leave the others alone.
-
-**If the verdict's `status` is "confirmed".** Reading the verdict is the whole of this
-transition: control moves to `figure_designer` and the collapse itself spawns nothing
-and writes no file. What happens at `figure_designer` is stated at its own step.
-
-*What you will observe.* You observe nothing when you take this branch: no `Agent` call
-is denied, no file appears, and no agent reports. The verdict's `status` is the whole of
-the evidence and it is enough — move to `figure_designer` because the verdict says so,
-and do not wait for a further signal or for a file named after this branch.
-
-→ Go to step 34 (`figure_designer`).
-
-**If the verdict's `status` is "concerns".** Reading the verdict is the whole of this
-transition: control moves to `touchup` and the collapse itself spawns nothing and writes
-no file. What happens at `touchup` is stated at its own step.
-
-*What you will observe.* This branch is metered on `touchup_report_touchup_debrief.md`:
-the 4th spawn of `touchup` is denied by the spawn gate, with a reason naming the ceiling
-of 3. That denial is the branch giving up, not a failure to work around — take it as the
-instruction to continue at `figure_designer`.
-
-→ Go to step 35 (`touchup`), which can bring control back here.
-
-**If the `concerns` branch has been taken 3 times without clearing the assay.** Stop
-re-entering `touchup` and continue at `figure_designer`, carrying the latest work
-forward: 3 versions of `touchup_report_touchup_debrief.md` exist and none of them
-cleared. The ceiling is not an error to recover from — it is where this branch ends.
-
-*What you will observe.* You observe the ceiling as a denied `Agent` call and as nothing
-else — no message arrives from any agent to tell you the branch is over. Do not retry
-the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 3,
-and the only move left is `figure_designer`.
-
-→ Go to step 34 (`figure_designer`).
-
-**If the person you asked never produces a verdict whose `status` is one of "confirmed"
-or "concerns".** No verdict inside the declared set was ever produced, so nothing was
-graded and there is no version of the work to carry forward. Continue at `seal` and
-leave the run inspectable: Athanor writes a failure artifact recording the attempts
-rather than letting the sigil end quietly.
-
-*What you will observe.* You observe this as the terminal gate blocking your turn again
-and again, repeating the allowed values each time. Athanor gives up on blocking once its
-own budget is spent — deliberately before Claude Code's consecutive-block cut-off — so
-the run is diagnosed rather than truncated. Do not invent a grade to get past it; take
-this route.
-
-→ Go to step 39 (`seal`).
-
-## Step 34 — `figure_designer`
-
-`figure_designer` writes `figure_menu_figure_designer_human_2.md` to disk and finishes.
-Nothing is returned to you from the spawn. You read that file yourself: it is the work
-the assay is about, and the person you are about to ask has to be shown it rather than
-told about it. `figure_designer` has 2 occurrences in this sigil and writes a different
-artifact at each; the spawn gate tells them apart by which one your prompt names. Name
-`figure_menu_figure_designer_human_2.md` in this spawn and do not mention
-`figure_menu_rev_figure_revision_figure_designer.md`, even in passing.
-
-*What you will observe.* A spawn of `figure_designer` that names
-`figure_menu_rev_figure_revision_figure_designer.md` as well as
-`figure_menu_figure_designer_human_2.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`figure_menu_figure_designer_human_2.md` alone.
-
-Ask the person running this session to grade `figure_designer`'s work, and put
-`figure_menu_figure_designer_human_2.md` (`figure_designer`'s own work, which is what is
-being graded) in front of them when you do. Use `AskUserQuestion`, with one option per
-declared outcome — "chosen" or "modify" — and no others. You must do this yourself:
-`AskUserQuestion` is removed from every subagent, in the foreground as well as the
-background, so there is no agent you could delegate the asking to. Then write their
-answer to `figure_choice_figure_designer_human.json` as a JSON object whose `status` is
-exactly the outcome they chose, with a `notes` string carrying what they said. Nothing
-is routed off the conversation: the answer counts once it is in the file, and not
-before.
-
-*What you will observe.* Until `figure_choice_figure_designer_human.json` carries one of
-"chosen" or "modify", the terminal gate blocks the turn from ending and tells you so,
-naming the allowed values. That block is the wait: it is what stops the sigil being
-abandoned while a person has not answered yet, and a status outside the declared set is
-treated exactly as no answer at all. Do not route on what was said in conversation, and
-do not widen the set to fit the answer — ask again if what you heard is not one of them.
-
-→ Go to step 36 (the assay on `figure_designer`), which can bring control back here.
-
-## Step 35 — `touchup`, an occurrence of the `coder` agent
-
-`touchup` writes `touchup_report_touchup_debrief.md` to disk and finishes. Nothing is
-returned to you from the spawn. `debrief` reads `touchup_report_touchup_debrief.md` from
-disk before beginning; if `touchup_report_touchup_debrief.md` is absent, `debrief` has
-nothing to work from, so do not spawn `debrief` until the file exists. `coder` has 5
-occurrences in this sigil and writes a different artifact at each; the spawn gate tells
-them apart by which one your prompt names. Name `touchup_report_touchup_debrief.md` in
-this spawn and do not mention `figure_report_figure_maker_seal.md`,
-`fix_fixer_code_reviewer.md`, `lane_patch_implementer_integrator.md` and
-`integration_integrator_code_reviewer.md`, even in passing.
-
-*What you will observe.* A spawn of `coder` that names
-`figure_report_figure_maker_seal.md`, `fix_fixer_code_reviewer.md`,
-`lane_patch_implementer_integrator.md` and `integration_integrator_code_reviewer.md` as
-well as `touchup_report_touchup_debrief.md` — or that names no artifact at all — is a
-denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or
-which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`touchup_report_touchup_debrief.md` alone.
-
-*Tell the agent you spawn.* `debrief` reads this and its work is then assayed by the
-person running the session, who is asked directly, which grades it "confirmed" or
-"concerns".
-
-→ Go to step 31 (`debrief`), back the way you came.
-
-## Step 36 — the assay on `figure_designer`
-
-Exactly one of the following is live once you have read the verdict — that is what it
-means for "chosen" or "modify" to be a declared set. Take the one the verdict names and
-leave the others alone.
-
-**If the verdict's `status` is "chosen".** Reading the verdict is the whole of this
-transition: control moves to `figure_maker` and the collapse itself spawns nothing and
-writes no file. What happens at `figure_maker` is stated at its own step.
-
-*What you will observe.* You observe nothing when you take this branch: no `Agent` call
-is denied, no file appears, and no agent reports. The verdict's `status` is the whole of
-the evidence and it is enough — move to `figure_maker` because the verdict says so, and
-do not wait for a further signal or for a file named after this branch.
-
-→ Go to step 37 (`figure_maker`).
-
-**If the verdict's `status` is "modify".** Reading the verdict is the whole of this
-transition: control moves to `figure_revision` and the collapse itself spawns nothing
-and writes no file. What happens at `figure_revision` is stated at its own step.
-
-*What you will observe.* This branch is metered on
-`figure_menu_rev_figure_revision_figure_designer.md`: the 5th spawn of `figure_revision`
-is denied by the spawn gate, with a reason naming the ceiling of 4. That denial is the
-branch giving up, not a failure to work around — take it as the instruction to continue
-at `figure_maker`.
-
-→ Go to step 38 (`figure_revision`), which can bring control back here.
-
-**If the `modify` branch has been taken 4 times without clearing the assay.** Stop
-re-entering `figure_revision` and continue at `figure_maker`, carrying the latest work
-forward: 4 versions of `figure_menu_rev_figure_revision_figure_designer.md` exist and
-none of them cleared. The ceiling is not an error to recover from — it is where this
-branch ends.
-
-*What you will observe.* You observe the ceiling as a denied `Agent` call and as nothing
-else — no message arrives from any agent to tell you the branch is over. Do not retry
-the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 4,
-and the only move left is `figure_maker`.
-
-→ Go to step 37 (`figure_maker`).
-
-**If the person you asked never produces a verdict whose `status` is one of "chosen" or
-"modify".** No verdict inside the declared set was ever produced, so nothing was graded
-and there is no version of the work to carry forward. Continue at `seal` and leave the
-run inspectable: Athanor writes a failure artifact recording the attempts rather than
-letting the sigil end quietly.
-
-*What you will observe.* You observe this as the terminal gate blocking your turn again
-and again, repeating the allowed values each time. Athanor gives up on blocking once its
-own budget is spent — deliberately before Claude Code's consecutive-block cut-off — so
-the run is diagnosed rather than truncated. Do not invent a grade to get past it; take
-this route.
-
-→ Go to step 39 (`seal`).
-
-## Step 37 — `figure_maker`, an occurrence of the `coder` agent
-
-`figure_maker` writes `figure_report_figure_maker_seal.md` to disk and finishes. Nothing
-is returned to you from the spawn. `seal` reads `figure_report_figure_maker_seal.md`
-from disk before beginning; if `figure_report_figure_maker_seal.md` is absent, `seal`
-has nothing to work from, so do not spawn `seal` until the file exists. `seal` is the
-sigil's completion boundary rather than an agent: nothing is spawned to read
-`figure_report_figure_maker_seal.md`. `coder` has 5 occurrences in this sigil and writes
-a different artifact at each; the spawn gate tells them apart by which one your prompt
-names. Name `figure_report_figure_maker_seal.md` in this spawn and do not mention
-`fix_fixer_code_reviewer.md`, `lane_patch_implementer_integrator.md`,
-`integration_integrator_code_reviewer.md` and `touchup_report_touchup_debrief.md`, even
-in passing.
-
-*What you will observe.* A spawn of `coder` that names `fix_fixer_code_reviewer.md`,
-`lane_patch_implementer_integrator.md`, `integration_integrator_code_reviewer.md` and
-`touchup_report_touchup_debrief.md` as well as `figure_report_figure_maker_seal.md` — or
-that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot
-tell which edge it traverses or which budget to charge. The denial lists this agent's
-artifacts; re-issue naming `figure_report_figure_maker_seal.md` alone.
-
-*Tell the agent you spawn.* The sigil seals on `figure_report_figure_maker_seal.md`:
-nothing downstream reads it except the terminal gate, and the run ends once it exists.
-
-→ Go to step 39 (`seal`).
-
-## Step 38 — `figure_revision`, an occurrence of the `figure_designer` agent
-
-`figure_revision` writes `figure_menu_rev_figure_revision_figure_designer.md` to disk
-and finishes. Nothing is returned to you from the spawn. `figure_designer` reads
-`figure_menu_rev_figure_revision_figure_designer.md` from disk before beginning; if
-`figure_menu_rev_figure_revision_figure_designer.md` is absent, `figure_designer` has
-nothing to work from, so do not spawn `figure_designer` until the file exists.
-`figure_designer` has 2 occurrences in this sigil and writes a different artifact at
-each; the spawn gate tells them apart by which one your prompt names. Name
-`figure_menu_rev_figure_revision_figure_designer.md` in this spawn and do not mention
-`figure_menu_figure_designer_human_2.md`, even in passing.
-
-*What you will observe.* A spawn of `figure_designer` that names
-`figure_menu_figure_designer_human_2.md` as well as
-`figure_menu_rev_figure_revision_figure_designer.md` — or that names no artifact at all
-— is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses
-or which budget to charge. The denial lists this agent's artifacts; re-issue naming
-`figure_menu_rev_figure_revision_figure_designer.md` alone.
-
-*Tell the agent you spawn.* `figure_designer` reads this and its work is then assayed by
-the person running the session, who is asked directly, which grades it "chosen" or
-"modify".
-
-→ Go to step 34 (`figure_designer`), back the way you came.
-
-## Step 39 — `seal` — where the sigil completes
-
-Before `seal` may be considered complete, the condition is checked mechanically. If it
-does not hold you will see your attempt to end the turn blocked, with a reason naming
-the unmet condition. Do not narrate around it and do not re-check by hand: re-run the
-step that produces the missing evidence, then let the check run again. The condition is:
-`figure_report_figure_maker_seal.md` exists on disk.
-
-*What you will observe.* While the condition holds you observe nothing at all — the
-check is silent on success, so do not assert that it passed and do not write
-`figure_report_figure_maker_seal.md` by hand to satisfy it.
-
-→ Once it holds, the sigil is sealed and the run is over.
-
-**If `figure_report_figure_maker_seal.md` is missing when you try to end the turn.**
-Re-run `figure_maker`, the step that writes `figure_report_figure_maker_seal.md`, then
-let the check run again. Do not narrate around the block and do not write the file
-yourself.
-
-*What you will observe.* You observe this as your attempt to end the turn being blocked,
-with a reason naming the unmet condition. The block is Athanor's terminal gate rather
-than a message from any agent, so there is nothing to reply to and no way to talk past
-it: it clears the moment the evidence exists. It does not block forever either — once
-Athanor's own block budget is spent it gives up, writes a failure artifact and lets the
-turn end, so a wedged sigil ends up inspectable rather than silent.
-
-→ Go to step 37 (`figure_maker`), back the way you came.
+Nothing follows. The sigil is sealed and the run is over.
 
 ---
 
 ## Agent names — the `subagent_type` to spawn
 
 **Spawn the name in the first column, not the one in the second.** `code_reviewer` is
-spawned as `code-reviewer`, `figure_designer` is spawned as `figure-designer`,
-`loom_expert` is spawned as `loom-expert`, `numerics_expert` is spawned as
-`numerics-expert`, `package_expert` is spawned as `package-expert`, `rubric_judge` is
-spawned as `rubric-judge`, `test_engineer` is spawned as `test-engineer`, `test_scout`
-is spawned as `test-scout`, `topology_expert` is spawned as `topology-expert` — a Claude
+spawned as `code-reviewer`, `test_engineer` is spawned as `test-engineer` — a Claude
 Code agent name is lowercase letters and hyphens and may not contain `_` (§2), so the
 sigil's spelling and the `subagent_type` differ. Spawning the sigil's spelling is
 refused outright rather than silently mis-routed. One definition can also appear at more
-than one step: `implementer` and `integrator` and `fixer` and `touchup` and
-`figure_maker` are occurrences of the same `coder` (§11.1), so they share one file and
-one `subagent_type`.
+than one step: `analyst` and `auditor` are occurrences of the same `analyst` (§11.1), so
+they share one file and one `subagent_type`.
 
 | `subagent_type` | spelled in the sigil | appears at | model | file |
 |---|---|---|---|---|
-| `code-reviewer` | `code_reviewer` | step 19 | opus | `.claude/agents/code-reviewer.md` |
-| `coder` | `implementer`, `integrator`, `fixer`, `touchup`, `figure_maker` | step 17, step 18, step 25, step 35, step 37 | opus | `.claude/agents/coder.md` |
-| `figure-designer` | `figure_designer`, `figure_revision` | step 34, step 38 | opus | `.claude/agents/figure-designer.md` |
-| `liaison` | `liaison`, `intake_revision`, `plan_liaison`, `debrief` | step 2, step 5, step 13, step 31 | opus | `.claude/agents/liaison.md` |
-| `loom-expert` | `loom_expert`, `loom_audit` | step 6, step 23 | opus | `.claude/agents/loom-expert.md` |
-| `numerics-expert` | `numerics_expert`, `numerics_audit` | step 7, step 26 | opus | `.claude/agents/numerics-expert.md` |
-| `package-expert` | `package_expert`, `edit_designer`, `redesign`, `audit_lead` | step 10, step 16, step 24, step 29 | opus | `.claude/agents/package-expert.md` |
-| `planner` | `survey_lead`, `planner`, `plan_author`, `spec_writer`, `replanner` | step 4, step 11 (the assay), step 12, step 15, step 32 | opus | `.claude/agents/planner.md` |
-| `rubric-judge` | `rubric_judge` | step 22 | opus | `.claude/agents/rubric-judge.md` |
-| `test-engineer` | `test_engineer` | step 20 | opus | `.claude/agents/test-engineer.md` |
-| `test-scout` | `test_scout`, `test_audit` | step 9, step 28 | opus | `.claude/agents/test-scout.md` |
-| `topology-expert` | `topology_expert`, `topology_audit` | step 8, step 27 | opus | `.claude/agents/topology-expert.md` |
+| `analyst` | `analyst`, `auditor` | step 2, step 8 | opus | `.claude/agents/analyst.md` |
+| `code-reviewer` | `code_reviewer` | step 7 (the assay) | opus | `.claude/agents/code-reviewer.md` |
+| `coder` | `coder`, `toucher`, `figure_maker` | step 5, step 10, step 11 | opus | `.claude/agents/coder.md` |
+| `planner` | `planner` | step 3 | opus | `.claude/agents/planner.md` |
+| `test-engineer` | `test_engineer` | step 6 | opus | `.claude/agents/test-engineer.md` |
 
 ## Pre-flight
 
@@ -1439,92 +516,56 @@ with the sigil. Its content hash is stamped at the top of this file — if you e
 prose above, that hash is what tells Athanor not to overwrite you.
 
 ```
-// tangle_refactor — a refactor of tanglepack: more compact, more human, bugs out, every
-// feature confirmed. Seven phases, read top to bottom:
+// tangle_refactor — one targeted change to tanglepack, from a question to a reviewed branch.
+// Ask it an integration question ("how does X reach Y, and should it?"), or point it at code
+// to humanise or refactor. Four steps, read top to bottom:
 //
-//   1. intake    — chat with the author until the brief is agreed
-//   2. survey    — the read-only experts study loom, numerics, topology and the tests
-//   3. plan      — the planner writes a plan and discusses it with the author
-//   4. implement — three parallel lanes, then review, test and a rubric verdict, twice at most
-//   5. audit     — the experts re-read the result; a bad enough miss replans from scratch
-//   6. debrief   — the author confirms it was done the way they meant
-//   7. figures   — the author picks figure scripts that prove the result, and they are run
+//   1. findings — the analyst answers the question with evidence; the planner turns that into
+//                 a scoped plan. The author approves it, sends it back, or stops there
+//                 because the answer was all they needed
+//   2. change   — the coder makes the change on its own branch and worktree
+//   3. review   — the test engineer pins the old behaviour and checks the new code keeps it;
+//                 the reviewer grades both against the plan's rubric, at most three rounds
+//   4. debrief  — the analyst audits the result against the question; the author confirms,
+//                 asks for touch-ups (which go through review again), or asks for figures
 
 grimoire std_bonds
 
-agent liaison, planner, loom_expert, numerics_expert, topology_expert, test_scout
-agent package_expert, coder, code_reviewer, test_engineer, rubric_judge, figure_designer
+agent analyst, planner, coder, test_engineer, code_reviewer
 
-artifact intake_ok = "intake_ok.json"
-artifact survey_ok = "survey_ok.json"
 artifact plan_ok = "plan_ok.json"
 artifact cycle_ok = "cycle_ok.json"
-artifact outcome_ok = "outcome_ok.json"
 artifact debrief_ok = "debrief_ok.json"
-artifact figure_choice = "figure_choice.json"
 
 sigil tangle_refactor {
-  // 1. intake
-  origin -> request -> liaison
-  liaison ~assay(kind: human, subject: intake_brief, verdict: intake_ok, malformed: seal) {
-    agreed -> intake_record -> planner as survey_lead
-    discuss -> liaison as intake_revision @6@ else survey_lead
-  }
-  intake_revision -> intake_notes -> liaison
-
-  // 2. survey — the experts run in sequence, each reading the notes before it
-  survey_lead -> survey_brief -> loom_expert -> loom_notes -> numerics_expert -> numerics_notes -> topology_expert -> topology_notes -> test_scout -> test_notes -> package_expert
-  package_expert ~assay(by: planner, subject: package_report, verdict: survey_ok, malformed: seal) {
-    complete -> planner as plan_author
-    gaps -> loom_expert @2@ else plan_author
+  // 1. findings
+  origin -> request -> analyst -> findings -> planner
+  planner ~assay(kind: human, subject: plan, verdict: plan_ok, malformed: seal) {
+    approved -> coder
+    revise -> analyst @3@ else seal
+    answered -> seal
   }
 
-  // 3. plan
-  plan_author -> plan -> liaison as plan_liaison
-  plan_liaison ~assay(kind: human, subject: plan_brief, verdict: plan_ok, malformed: seal) {
-    approved -> planner as spec_writer
-    revise -> plan_author @4@ else spec_writer
+  // 2. change and 3. review
+  coder -> change -> test_engineer
+  test_engineer ~assay(by: code_reviewer, subject: test_evidence, verdict: cycle_ok, malformed: seal) {
+    pass -> analyst as auditor
+    revise -> coder @3@ else auditor
   }
 
-  // 4. implement — suggest, implement in three parallel lanes, review, test, grade
-  spec_writer -> spec -> package_expert as edit_designer
-  edit_designer -> edit_proposals -> coder as implementer
-  edit_designer |3| implementer
-  implementer -> lane_patch -> coder as integrator -> integration -> code_reviewer -> code_review -> test_engineer
-  test_engineer ~assay(by: rubric_judge, subject: test_evidence, verdict: cycle_ok, malformed: seal) {
-    pass -> loom_expert as loom_audit
-    revise -> package_expert as redesign @2@ else loom_audit
+  // 4. debrief
+  auditor ~assay(kind: human, subject: outcome, verdict: debrief_ok, malformed: seal) {
+    confirmed -> seal
+    touchup -> coder as toucher @2@ else seal
+    figures -> coder as figure_maker @2@ else seal
   }
-  redesign -> revised_edits -> coder as fixer -> fix -> code_reviewer
-
-  // 5. audit
-  loom_audit -> loom_audit_notes -> numerics_expert as numerics_audit -> numerics_audit_notes -> topology_expert as topology_audit -> topology_audit_notes -> test_scout as test_audit -> test_audit_notes -> package_expert as audit_lead
-  audit_lead ~assay(by: rubric_judge, subject: audit_report, verdict: outcome_ok, malformed: seal) {
-    success -> liaison as debrief
-    redo -> planner as replanner @1@ else debrief
-  }
-  replanner -> replan -> plan_liaison
-
-  // 6. debrief
-  debrief ~assay(kind: human, subject: debrief_brief, verdict: debrief_ok, malformed: seal) {
-    confirmed -> figure_designer
-    concerns -> coder as touchup @3@ else figure_designer
-  }
-  touchup -> touchup_report -> debrief
-
-  // 7. figures
-  figure_designer ~assay(kind: human, subject: figure_menu, verdict: figure_choice, malformed: seal) {
-    chosen -> coder as figure_maker
-    modify -> figure_designer as figure_revision @4@ else figure_maker
-  }
-  figure_revision -> figure_menu_rev -> figure_designer
-  figure_maker -> figure_report -> seal
-  seal |= gate(file: "figure_report.md")
+  toucher -> touchup_change -> test_engineer
+  figure_maker -> figure_report -> auditor
 }
 ```
 
 <!-- athanor:source-begin sigils/tangle_refactor.sigil -->
-<!-- athanor:source-end sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690 -->
+<!-- athanor:source-end sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f -->
 
 ## Source map
 
@@ -1535,59 +576,23 @@ a reader can find the line that produced a sentence. **They are not how the sigi
 reconstructed** — the verbatim block above is — so a marker gone stale is cosmetic
 rather than corrupting.
 
-<!-- athanor:bond id=origin->request_origin_liaison bond=handoff from=origin to=request_origin_liaison channel=origin_liaison step=1 line=27 col=10 -->
-<!-- athanor:bond id=liaison->intake_brief_liaison_human_2 bond=handoff from=liaison to=intake_brief_liaison_human_2 channel=liaison_human_2 step=2 line=28 col=40 -->
-<!-- athanor:bond id=liaison->intake_ok_liaison_human bond=handoff from=liaison to=intake_ok_liaison_human channel=liaison_human step=2 line=28 col=63 -->
-<!-- athanor:bond id=liaison->intake_record_liaison_survey_lead bond=handoff from=liaison to=intake_record_liaison_survey_lead channel=liaison_survey_lead outcome=agreed step=3 line=29 col=12 -->
-<!-- athanor:bond id=liaison->intake_revision bond=assay from=liaison to=intake_revision outcome=discuss step=3 line=30 col=13 -->
-<!-- athanor:bond id=intake_revision->intake_notes_intake_revision_liaison bond=handoff from=intake_revision to=intake_notes_intake_revision_liaison channel=intake_revision_liaison step=5 line=32 col=19 -->
-<!-- athanor:bond id=survey_lead->survey_brief_survey_lead_loom_expert bond=handoff from=survey_lead to=survey_brief_survey_lead_loom_expert channel=survey_lead_loom_expert step=4 line=35 col=15 -->
-<!-- athanor:bond id=loom_expert->loom_notes_loom_expert_numerics_expert bond=handoff from=loom_expert to=loom_notes_loom_expert_numerics_expert channel=loom_expert_numerics_expert step=6 line=35 col=46 -->
-<!-- athanor:bond id=numerics_expert->numerics_notes_numerics_expert_topology_expert bond=handoff from=numerics_expert to=numerics_notes_numerics_expert_topology_expert channel=numerics_expert_topology_expert step=7 line=35 col=79 -->
-<!-- athanor:bond id=topology_expert->topology_notes_topology_expert_test_scout bond=handoff from=topology_expert to=topology_notes_topology_expert_test_scout channel=topology_expert_test_scout step=8 line=35 col=116 -->
-<!-- athanor:bond id=test_scout->test_notes_test_scout_package_expert bond=handoff from=test_scout to=test_notes_test_scout_package_expert channel=test_scout_package_expert step=9 line=35 col=148 -->
-<!-- athanor:bond id=package_expert->planner bond=assay from=package_expert to=planner step=10 line=36 col=19 -->
-<!-- athanor:bond id=package_expert->package_report_package_expert_planner_2 bond=handoff from=package_expert to=package_report_package_expert_planner_2 channel=package_expert_planner_2 step=10 line=36 col=47 -->
-<!-- athanor:bond id=planner->survey_ok_package_expert_planner bond=handoff from=planner to=survey_ok_package_expert_planner channel=package_expert_planner step=11 line=36 col=72 -->
-<!-- athanor:bond id=package_expert->plan_author bond=assay from=package_expert to=plan_author outcome=complete step=11 line=37 col=14 -->
-<!-- athanor:bond id=package_expert->loom_expert bond=assay from=package_expert to=loom_expert outcome=gaps step=11 line=38 col=10 -->
-<!-- athanor:bond id=plan_author->plan_plan_author_plan_liaison bond=handoff from=plan_author to=plan_plan_author_plan_liaison channel=plan_author_plan_liaison step=12 line=42 col=15 -->
-<!-- athanor:bond id=plan_liaison->plan_brief_plan_liaison_human_2 bond=handoff from=plan_liaison to=plan_brief_plan_liaison_human_2 channel=plan_liaison_human_2 step=13 line=43 col=45 -->
-<!-- athanor:bond id=plan_liaison->plan_ok_plan_liaison_human bond=handoff from=plan_liaison to=plan_ok_plan_liaison_human channel=plan_liaison_human step=13 line=43 col=66 -->
-<!-- athanor:bond id=plan_liaison->spec_writer bond=assay from=plan_liaison to=spec_writer outcome=approved step=14 line=44 col=14 -->
-<!-- athanor:bond id=plan_liaison->plan_author bond=assay from=plan_liaison to=plan_author outcome=revise step=14 line=45 col=12 -->
-<!-- athanor:bond id=spec_writer->spec_spec_writer_edit_designer bond=handoff from=spec_writer to=spec_spec_writer_edit_designer channel=spec_writer_edit_designer step=15 line=49 col=15 -->
-<!-- athanor:bond id=edit_designer->edit_proposals_edit_designer_implementer bond=handoff from=edit_designer to=edit_proposals_edit_designer_implementer channel=edit_designer_implementer step=16 line=50 col=17 -->
-<!-- athanor:bond id=edit_designer->implementer bond=fanout from=edit_designer to=implementer step=16 line=51 col=17 -->
-<!-- athanor:bond id=implementer->lane_patch_implementer_integrator bond=handoff from=implementer to=lane_patch_implementer_integrator channel=implementer_integrator step=17 line=52 col=15 -->
-<!-- athanor:bond id=integrator->integration_integrator_code_reviewer bond=handoff from=integrator to=integration_integrator_code_reviewer channel=integrator_code_reviewer step=18 line=52 col=52 -->
-<!-- athanor:bond id=code_reviewer->code_review_code_reviewer_test_engineer bond=handoff from=code_reviewer to=code_review_code_reviewer_test_engineer channel=code_reviewer_test_engineer step=19 line=52 col=84 -->
-<!-- athanor:bond id=test_engineer->rubric_judge bond=assay from=test_engineer to=rubric_judge step=20 line=53 col=18 -->
-<!-- athanor:bond id=test_engineer->test_evidence_test_engineer_rubric_judge_2 bond=handoff from=test_engineer to=test_evidence_test_engineer_rubric_judge_2 channel=test_engineer_rubric_judge_2 step=20 line=53 col=51 -->
-<!-- athanor:bond id=rubric_judge->cycle_ok_test_engineer_rubric_judge bond=handoff from=rubric_judge to=cycle_ok_test_engineer_rubric_judge channel=test_engineer_rubric_judge step=22 line=53 col=75 -->
-<!-- athanor:bond id=test_engineer->loom_audit bond=assay from=test_engineer to=loom_audit outcome=pass step=21 line=54 col=10 -->
-<!-- athanor:bond id=test_engineer->redesign bond=assay from=test_engineer to=redesign outcome=revise step=21 line=55 col=12 -->
-<!-- athanor:bond id=redesign->revised_edits_redesign_fixer bond=handoff from=redesign to=revised_edits_redesign_fixer channel=redesign_fixer step=24 line=57 col=12 -->
-<!-- athanor:bond id=fixer->fix_fixer_code_reviewer bond=handoff from=fixer to=fix_fixer_code_reviewer channel=fixer_code_reviewer step=25 line=57 col=47 -->
-<!-- athanor:bond id=loom_audit->loom_audit_notes_loom_audit_numerics_audit bond=handoff from=loom_audit to=loom_audit_notes_loom_audit_numerics_audit channel=loom_audit_numerics_audit step=23 line=60 col=14 -->
-<!-- athanor:bond id=numerics_audit->numerics_audit_notes_numerics_audit_topology_audit bond=handoff from=numerics_audit to=numerics_audit_notes_numerics_audit_topology_audit channel=numerics_audit_topology_audit step=26 line=60 col=71 -->
-<!-- athanor:bond id=topology_audit->topology_audit_notes_topology_audit_test_audit bond=handoff from=topology_audit to=topology_audit_notes_topology_audit_test_audit channel=topology_audit_test_audit step=27 line=60 col=132 -->
-<!-- athanor:bond id=test_audit->test_audit_notes_test_audit_audit_lead bond=handoff from=test_audit to=test_audit_notes_test_audit_audit_lead channel=test_audit_audit_lead step=28 line=60 col=184 -->
-<!-- athanor:bond id=audit_lead->rubric_judge bond=assay from=audit_lead to=rubric_judge step=29 line=61 col=15 -->
-<!-- athanor:bond id=audit_lead->audit_report_audit_lead_rubric_judge_2 bond=handoff from=audit_lead to=audit_report_audit_lead_rubric_judge_2 channel=audit_lead_rubric_judge_2 step=29 line=61 col=48 -->
-<!-- athanor:bond id=rubric_judge->outcome_ok_audit_lead_rubric_judge bond=handoff from=rubric_judge to=outcome_ok_audit_lead_rubric_judge channel=audit_lead_rubric_judge step=22 line=61 col=71 -->
-<!-- athanor:bond id=audit_lead->debrief bond=assay from=audit_lead to=debrief outcome=success step=30 line=62 col=13 -->
-<!-- athanor:bond id=audit_lead->replanner bond=assay from=audit_lead to=replanner outcome=redo step=30 line=63 col=10 -->
-<!-- athanor:bond id=replanner->replan_replanner_plan_liaison bond=handoff from=replanner to=replan_replanner_plan_liaison channel=replanner_plan_liaison step=32 line=65 col=13 -->
-<!-- athanor:bond id=debrief->debrief_brief_debrief_human_2 bond=handoff from=debrief to=debrief_brief_debrief_human_2 channel=debrief_human_2 step=31 line=68 col=40 -->
-<!-- athanor:bond id=debrief->debrief_ok_debrief_human bond=handoff from=debrief to=debrief_ok_debrief_human channel=debrief_human step=31 line=68 col=64 -->
-<!-- athanor:bond id=debrief->figure_designer bond=assay from=debrief to=figure_designer outcome=confirmed step=33 line=69 col=15 -->
-<!-- athanor:bond id=debrief->touchup bond=assay from=debrief to=touchup outcome=concerns step=33 line=70 col=14 -->
-<!-- athanor:bond id=touchup->touchup_report_touchup_debrief bond=handoff from=touchup to=touchup_report_touchup_debrief channel=touchup_debrief step=35 line=72 col=11 -->
-<!-- athanor:bond id=figure_designer->figure_menu_figure_designer_human_2 bond=handoff from=figure_designer to=figure_menu_figure_designer_human_2 channel=figure_designer_human_2 step=34 line=75 col=48 -->
-<!-- athanor:bond id=figure_designer->figure_choice_figure_designer_human bond=handoff from=figure_designer to=figure_choice_figure_designer_human channel=figure_designer_human step=34 line=75 col=70 -->
-<!-- athanor:bond id=figure_designer->figure_maker bond=assay from=figure_designer to=figure_maker outcome=chosen step=36 line=76 col=12 -->
-<!-- athanor:bond id=figure_designer->figure_revision bond=assay from=figure_designer to=figure_revision outcome=modify step=36 line=77 col=12 -->
-<!-- athanor:bond id=figure_revision->figure_menu_rev_figure_revision_figure_designer bond=handoff from=figure_revision to=figure_menu_rev_figure_revision_figure_designer channel=figure_revision_figure_designer step=38 line=79 col=19 -->
-<!-- athanor:bond id=figure_maker->figure_report_figure_maker_seal bond=handoff from=figure_maker to=figure_report_figure_maker_seal channel=figure_maker_seal step=37 line=80 col=16 -->
-<!-- athanor:bond id=gate_seal bond=gate from=seal step=39 line=81 col=8 -->
+<!-- athanor:bond id=origin->request_origin_analyst bond=handoff from=origin to=request_origin_analyst channel=origin_analyst step=1 line=24 col=10 -->
+<!-- athanor:bond id=analyst->findings_analyst_planner bond=handoff from=analyst to=findings_analyst_planner channel=analyst_planner step=2 line=24 col=32 -->
+<!-- athanor:bond id=planner->plan_planner_human_2 bond=handoff from=planner to=plan_planner_human_2 channel=planner_human_2 step=3 line=25 col=40 -->
+<!-- athanor:bond id=planner->plan_ok_planner_human bond=handoff from=planner to=plan_ok_planner_human channel=planner_human step=3 line=25 col=55 -->
+<!-- athanor:bond id=planner->coder bond=assay from=planner to=coder outcome=approved step=4 line=26 col=14 -->
+<!-- athanor:bond id=planner->analyst bond=assay from=planner to=analyst outcome=revise step=4 line=27 col=12 -->
+<!-- athanor:bond id=planner->seal bond=assay from=planner to=seal outcome=answered step=4 line=28 col=14 -->
+<!-- athanor:bond id=coder->change_coder_test_engineer bond=handoff from=coder to=change_coder_test_engineer channel=coder_test_engineer step=5 line=32 col=9 -->
+<!-- athanor:bond id=test_engineer->code_reviewer bond=assay from=test_engineer to=code_reviewer step=6 line=33 col=18 -->
+<!-- athanor:bond id=test_engineer->test_evidence_test_engineer_code_reviewer_2 bond=handoff from=test_engineer to=test_evidence_test_engineer_code_reviewer_2 channel=test_engineer_code_reviewer_2 step=6 line=33 col=52 -->
+<!-- athanor:bond id=code_reviewer->cycle_ok_test_engineer_code_reviewer bond=handoff from=code_reviewer to=cycle_ok_test_engineer_code_reviewer channel=test_engineer_code_reviewer step=7 line=33 col=76 -->
+<!-- athanor:bond id=test_engineer->auditor bond=assay from=test_engineer to=auditor outcome=pass step=7 line=34 col=10 -->
+<!-- athanor:bond id=test_engineer->coder bond=assay from=test_engineer to=coder outcome=revise step=7 line=35 col=12 -->
+<!-- athanor:bond id=auditor->outcome_auditor_human_2 bond=handoff from=auditor to=outcome_auditor_human_2 channel=auditor_human_2 step=8 line=39 col=40 -->
+<!-- athanor:bond id=auditor->debrief_ok_auditor_human bond=handoff from=auditor to=debrief_ok_auditor_human channel=auditor_human step=8 line=39 col=58 -->
+<!-- athanor:bond id=auditor->seal bond=assay from=auditor to=seal outcome=confirmed step=9 line=40 col=15 -->
+<!-- athanor:bond id=auditor->toucher bond=assay from=auditor to=toucher outcome=touchup step=9 line=41 col=13 -->
+<!-- athanor:bond id=auditor->figure_maker bond=assay from=auditor to=figure_maker outcome=figures step=9 line=42 col=13 -->
+<!-- athanor:bond id=toucher->touchup_change_toucher_test_engineer bond=handoff from=toucher to=touchup_change_toucher_test_engineer channel=toucher_test_engineer step=10 line=44 col=11 -->
+<!-- athanor:bond id=figure_maker->figure_report_figure_maker_auditor bond=handoff from=figure_maker to=figure_report_figure_maker_auditor channel=figure_maker_auditor step=11 line=45 col=16 -->

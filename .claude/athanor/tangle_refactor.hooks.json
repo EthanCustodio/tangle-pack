@@ -1,661 +1,214 @@
 {
   "assays": [
     {
-      "agent": "rubric-judge",
-      "assayId": "assay_audit_lead",
-      "edgeId": "audit_lead_rubric_judge",
-      "malformedTarget": "seal",
-      "outcomes": [
-        "success",
-        "redo"
-      ],
-      "passOutcomes": [
-        "success"
-      ],
-      "proseContract": "A blocked assayer means the verdict was malformed, not that the work failed: `rubric_judge` cannot finish until `outcome_ok_audit_lead_rubric_judge.json` carries one of \"success\" or \"redo\", so an out-of-enum status never reaches you. Wait for the corrected file rather than re-spawning the assayer or routing on a guess. A spawn of `rubric_judge` that names `cycle_ok_test_engineer_rubric_judge.json` as well as `outcome_ok_audit_lead_rubric_judge.json` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `outcome_ok_audit_lead_rubric_judge.json` alone."
-    },
-    {
       "agent": null,
-      "assayId": "assay_debrief",
-      "edgeId": "debrief_human",
+      "assayId": "assay_auditor",
+      "edgeId": "auditor_human",
       "malformedTarget": "seal",
       "outcomes": [
         "confirmed",
-        "concerns"
+        "touchup",
+        "figures"
       ],
       "passOutcomes": [
         "confirmed"
       ],
-      "proseContract": "Until `debrief_ok_debrief_human.json` carries one of \"confirmed\" or \"concerns\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
+      "proseContract": "Until `debrief_ok_auditor_human.json` carries one of \"confirmed\", \"touchup\" or \"figures\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
     },
     {
       "agent": null,
-      "assayId": "assay_figure_designer",
-      "edgeId": "figure_designer_human",
-      "malformedTarget": "seal",
-      "outcomes": [
-        "chosen",
-        "modify"
-      ],
-      "passOutcomes": [
-        "chosen"
-      ],
-      "proseContract": "Until `figure_choice_figure_designer_human.json` carries one of \"chosen\" or \"modify\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
-    },
-    {
-      "agent": null,
-      "assayId": "assay_liaison",
-      "edgeId": "liaison_human",
-      "malformedTarget": "seal",
-      "outcomes": [
-        "agreed",
-        "discuss"
-      ],
-      "passOutcomes": [
-        "agreed"
-      ],
-      "proseContract": "Until `intake_ok_liaison_human.json` carries one of \"agreed\" or \"discuss\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
-    },
-    {
-      "agent": "planner",
-      "assayId": "assay_package_expert",
-      "edgeId": "package_expert_planner",
-      "malformedTarget": "seal",
-      "outcomes": [
-        "complete",
-        "gaps"
-      ],
-      "passOutcomes": [
-        "complete"
-      ],
-      "proseContract": "A blocked assayer means the verdict was malformed, not that the work failed: `planner` cannot finish until `survey_ok_package_expert_planner.json` carries one of \"complete\" or \"gaps\", so an out-of-enum status never reaches you. Wait for the corrected file rather than re-spawning the assayer or routing on a guess. A spawn of `planner` that names `plan_plan_author_plan_liaison.md`, `replan_replanner_plan_liaison.md`, `spec_spec_writer_edit_designer.md` and `survey_brief_survey_lead_loom_expert.md` as well as `survey_ok_package_expert_planner.json` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `survey_ok_package_expert_planner.json` alone."
-    },
-    {
-      "agent": null,
-      "assayId": "assay_plan_liaison",
-      "edgeId": "plan_liaison_human",
+      "assayId": "assay_planner",
+      "edgeId": "planner_human",
       "malformedTarget": "seal",
       "outcomes": [
         "approved",
-        "revise"
+        "revise",
+        "answered"
       ],
-      "passOutcomes": [],
-      "proseContract": "Until `plan_ok_plan_liaison_human.json` carries one of \"approved\" or \"revise\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
+      "passOutcomes": [
+        "approved",
+        "answered"
+      ],
+      "proseContract": "Until `plan_ok_planner_human.json` carries one of \"approved\", \"revise\" or \"answered\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
     },
     {
-      "agent": "rubric-judge",
+      "agent": "code-reviewer",
       "assayId": "assay_test_engineer",
-      "edgeId": "test_engineer_rubric_judge",
+      "edgeId": "test_engineer_code_reviewer",
       "malformedTarget": "seal",
       "outcomes": [
         "pass",
         "revise"
       ],
       "passOutcomes": [],
-      "proseContract": "A blocked assayer means the verdict was malformed, not that the work failed: `rubric_judge` cannot finish until `cycle_ok_test_engineer_rubric_judge.json` carries one of \"pass\" or \"revise\", so an out-of-enum status never reaches you. Wait for the corrected file rather than re-spawning the assayer or routing on a guess. A spawn of `rubric_judge` that names `outcome_ok_audit_lead_rubric_judge.json` as well as `cycle_ok_test_engineer_rubric_judge.json` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `cycle_ok_test_engineer_rubric_judge.json` alone."
+      "proseContract": "A blocked assayer means the verdict was malformed, not that the work failed: `code_reviewer` cannot finish until `cycle_ok_test_engineer_code_reviewer.json` carries one of \"pass\" or \"revise\", so an out-of-enum status never reaches you. Wait for the corrected file rather than re-spawning the assayer or routing on a guess."
     }
   ],
-  "athanorStamp": "athanor:stamp:sha256:0a86a40a5059a3610c6592f487f888c3672e0c4e8b22fdaf8f6530401e188841",
+  "athanorStamp": "athanor:stamp:sha256:5252ecda267866ad2f30de4850d6527297d4fcfdca545ca198bccbe7e4692d1b",
   "edges": [
     {
-      "agent": "rubric-judge",
+      "agent": "analyst",
       "artifact": {
-        "base": "outcome_ok_audit_lead_rubric_judge",
-        "ext": ".json",
-        "prefix": "outcome_ok"
-      },
-      "budget": null,
-      "edgeId": "audit_lead_rubric_judge",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A blocked assayer means the verdict was malformed, not that the work failed: `rubric_judge` cannot finish until `outcome_ok_audit_lead_rubric_judge.json` carries one of \"success\" or \"redo\", so an out-of-enum status never reaches you. Wait for the corrected file rather than re-spawning the assayer or routing on a guess. A spawn of `rubric_judge` that names `cycle_ok_test_engineer_rubric_judge.json` as well as `outcome_ok_audit_lead_rubric_judge.json` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `outcome_ok_audit_lead_rubric_judge.json` alone."
-    },
-    {
-      "agent": "package-expert",
-      "artifact": {
-        "base": "audit_report_audit_lead_rubric_judge_2",
+        "base": "findings_analyst_planner",
         "ext": ".md",
-        "prefix": "audit_report"
+        "prefix": "findings"
       },
-      "budget": null,
-      "edgeId": "audit_lead_rubric_judge_2",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `package_expert` that names `edit_proposals_edit_designer_implementer.md`, `package_report_package_expert_planner_2.md` and `revised_edits_redesign_fixer.md` as well as `audit_report_audit_lead_rubric_judge_2.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `audit_report_audit_lead_rubric_judge_2.md` alone."
-    },
-    {
-      "agent": "code-reviewer",
-      "artifact": {
-        "base": "code_review_code_reviewer_test_engineer",
-        "ext": ".md",
-        "prefix": "code_review"
+      "budget": {
+        "assayId": "assay_planner",
+        "ceiling": 3,
+        "declaredOn": "planner->analyst",
+        "elseTarget": "seal",
+        "outcome": "revise"
       },
-      "budget": null,
-      "edgeId": "code_reviewer_test_engineer",
+      "edgeId": "analyst_planner",
       "fanout": null,
-      "feedbackFrom": null,
-      "preamble": "`test_engineer` reads this and its work is then assayed by `rubric_judge`, which grades it \"pass\" or \"revise\".",
-      "proseContract": null
+      "feedbackFrom": "assay_planner",
+      "preamble": "`planner` reads this and its work is then assayed by the person running the session, who is asked directly, which grades it \"approved\", \"revise\" or \"answered\".",
+      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 3, and the only move left is `seal`."
     },
     {
       "agent": null,
       "artifact": {
-        "base": "debrief_ok_debrief_human",
+        "base": "debrief_ok_auditor_human",
         "ext": ".json",
         "prefix": "debrief_ok"
       },
       "budget": null,
-      "edgeId": "debrief_human",
+      "edgeId": "auditor_human",
       "fanout": null,
       "feedbackFrom": null,
       "preamble": null,
-      "proseContract": "Until `debrief_ok_debrief_human.json` carries one of \"confirmed\" or \"concerns\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
+      "proseContract": "Until `debrief_ok_auditor_human.json` carries one of \"confirmed\", \"touchup\" or \"figures\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
     },
     {
-      "agent": "liaison",
+      "agent": "analyst",
       "artifact": {
-        "base": "debrief_brief_debrief_human_2",
+        "base": "outcome_auditor_human_2",
         "ext": ".md",
-        "prefix": "debrief_brief"
+        "prefix": "outcome"
       },
       "budget": null,
-      "edgeId": "debrief_human_2",
+      "edgeId": "auditor_human_2",
       "fanout": null,
       "feedbackFrom": null,
       "preamble": null,
-      "proseContract": "A spawn of `liaison` that names `intake_notes_intake_revision_liaison.md`, `intake_brief_liaison_human_2.md`, `intake_record_liaison_survey_lead.md` and `plan_brief_plan_liaison_human_2.md` as well as `debrief_brief_debrief_human_2.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `debrief_brief_debrief_human_2.md` alone."
-    },
-    {
-      "agent": "package-expert",
-      "artifact": {
-        "base": "edit_proposals_edit_designer_implementer",
-        "ext": ".md",
-        "prefix": "edit_proposals"
-      },
-      "budget": null,
-      "edgeId": "edit_designer_implementer",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `package_expert` that names `audit_report_audit_lead_rubric_judge_2.md`, `package_report_package_expert_planner_2.md` and `revised_edits_redesign_fixer.md` as well as `edit_proposals_edit_designer_implementer.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `edit_proposals_edit_designer_implementer.md` alone."
-    },
-    {
-      "agent": null,
-      "artifact": {
-        "base": "figure_choice_figure_designer_human",
-        "ext": ".json",
-        "prefix": "figure_choice"
-      },
-      "budget": null,
-      "edgeId": "figure_designer_human",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "Until `figure_choice_figure_designer_human.json` carries one of \"chosen\" or \"modify\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
-    },
-    {
-      "agent": "figure-designer",
-      "artifact": {
-        "base": "figure_menu_figure_designer_human_2",
-        "ext": ".md",
-        "prefix": "figure_menu"
-      },
-      "budget": null,
-      "edgeId": "figure_designer_human_2",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `figure_designer` that names `figure_menu_rev_figure_revision_figure_designer.md` as well as `figure_menu_figure_designer_human_2.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `figure_menu_figure_designer_human_2.md` alone."
+      "proseContract": "A spawn of `analyst` that names `findings_analyst_planner.md` as well as `outcome_auditor_human_2.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `outcome_auditor_human_2.md` alone."
     },
     {
       "agent": "coder",
       "artifact": {
-        "base": "figure_report_figure_maker_seal",
+        "base": "change_coder_test_engineer",
+        "ext": ".md",
+        "prefix": "change"
+      },
+      "budget": {
+        "assayId": "assay_test_engineer",
+        "ceiling": 3,
+        "declaredOn": "test_engineer->coder",
+        "elseTarget": "auditor",
+        "outcome": "revise"
+      },
+      "edgeId": "coder_test_engineer",
+      "fanout": null,
+      "feedbackFrom": "assay_test_engineer",
+      "preamble": "`test_engineer` reads this and its work is then assayed by `code_reviewer`, which grades it \"pass\" or \"revise\".",
+      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 3, and the only move left is `auditor`."
+    },
+    {
+      "agent": "coder",
+      "artifact": {
+        "base": "figure_report_figure_maker_auditor",
         "ext": ".md",
         "prefix": "figure_report"
       },
-      "budget": null,
-      "edgeId": "figure_maker_seal",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": "The sigil seals on `figure_report_figure_maker_seal.md`: nothing downstream reads it except the terminal gate, and the run ends once it exists.",
-      "proseContract": "A spawn of `coder` that names `fix_fixer_code_reviewer.md`, `lane_patch_implementer_integrator.md`, `integration_integrator_code_reviewer.md` and `touchup_report_touchup_debrief.md` as well as `figure_report_figure_maker_seal.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `figure_report_figure_maker_seal.md` alone."
-    },
-    {
-      "agent": "figure-designer",
-      "artifact": {
-        "base": "figure_menu_rev_figure_revision_figure_designer",
-        "ext": ".md",
-        "prefix": "figure_menu_rev"
-      },
       "budget": {
-        "assayId": "assay_figure_designer",
-        "ceiling": 4,
-        "declaredOn": "figure_designer->figure_revision",
-        "elseTarget": "figure_maker",
-        "outcome": "modify"
-      },
-      "edgeId": "figure_revision_figure_designer",
-      "fanout": null,
-      "feedbackFrom": "assay_figure_designer",
-      "preamble": "`figure_designer` reads this and its work is then assayed by the person running the session, who is asked directly, which grades it \"chosen\" or \"modify\".",
-      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 4, and the only move left is `figure_maker`."
-    },
-    {
-      "agent": "coder",
-      "artifact": {
-        "base": "fix_fixer_code_reviewer",
-        "ext": ".md",
-        "prefix": "fix"
-      },
-      "budget": null,
-      "edgeId": "fixer_code_reviewer",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `coder` that names `figure_report_figure_maker_seal.md`, `lane_patch_implementer_integrator.md`, `integration_integrator_code_reviewer.md` and `touchup_report_touchup_debrief.md` as well as `fix_fixer_code_reviewer.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `fix_fixer_code_reviewer.md` alone."
-    },
-    {
-      "agent": "coder",
-      "artifact": {
-        "base": "lane_patch_implementer_integrator",
-        "ext": ".md",
-        "prefix": "lane_patch"
-      },
-      "budget": null,
-      "edgeId": "implementer_integrator",
-      "fanout": 3,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `coder` that names `figure_report_figure_maker_seal.md`, `fix_fixer_code_reviewer.md`, `integration_integrator_code_reviewer.md` and `touchup_report_touchup_debrief.md` as well as `lane_patch_implementer_integrator.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `lane_patch_implementer_integrator.md` alone."
-    },
-    {
-      "agent": "liaison",
-      "artifact": {
-        "base": "intake_notes_intake_revision_liaison",
-        "ext": ".md",
-        "prefix": "intake_notes"
-      },
-      "budget": {
-        "assayId": "assay_liaison",
-        "ceiling": 6,
-        "declaredOn": "liaison->intake_revision",
-        "elseTarget": "survey_lead",
-        "outcome": "discuss"
-      },
-      "edgeId": "intake_revision_liaison",
-      "fanout": null,
-      "feedbackFrom": "assay_liaison",
-      "preamble": "`liaison` reads this and its work is then assayed by the person running the session, who is asked directly, which grades it \"agreed\" or \"discuss\".",
-      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 6, and the only move left is `survey_lead`."
-    },
-    {
-      "agent": "coder",
-      "artifact": {
-        "base": "integration_integrator_code_reviewer",
-        "ext": ".md",
-        "prefix": "integration"
-      },
-      "budget": null,
-      "edgeId": "integrator_code_reviewer",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `coder` that names `figure_report_figure_maker_seal.md`, `fix_fixer_code_reviewer.md`, `lane_patch_implementer_integrator.md` and `touchup_report_touchup_debrief.md` as well as `integration_integrator_code_reviewer.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `integration_integrator_code_reviewer.md` alone."
-    },
-    {
-      "agent": null,
-      "artifact": {
-        "base": "intake_ok_liaison_human",
-        "ext": ".json",
-        "prefix": "intake_ok"
-      },
-      "budget": null,
-      "edgeId": "liaison_human",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "Until `intake_ok_liaison_human.json` carries one of \"agreed\" or \"discuss\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
-    },
-    {
-      "agent": "liaison",
-      "artifact": {
-        "base": "intake_brief_liaison_human_2",
-        "ext": ".md",
-        "prefix": "intake_brief"
-      },
-      "budget": null,
-      "edgeId": "liaison_human_2",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `liaison` that names `debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`, `intake_record_liaison_survey_lead.md` and `plan_brief_plan_liaison_human_2.md` as well as `intake_brief_liaison_human_2.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `intake_brief_liaison_human_2.md` alone."
-    },
-    {
-      "agent": "liaison",
-      "artifact": {
-        "base": "intake_record_liaison_survey_lead",
-        "ext": ".md",
-        "prefix": "intake_record"
-      },
-      "budget": null,
-      "edgeId": "liaison_survey_lead",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `liaison` that names `debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`, `intake_brief_liaison_human_2.md` and `plan_brief_plan_liaison_human_2.md` as well as `intake_record_liaison_survey_lead.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `intake_record_liaison_survey_lead.md` alone."
-    },
-    {
-      "agent": "loom-expert",
-      "artifact": {
-        "base": "loom_audit_notes_loom_audit_numerics_audit",
-        "ext": ".md",
-        "prefix": "loom_audit_notes"
-      },
-      "budget": null,
-      "edgeId": "loom_audit_numerics_audit",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `loom_expert` that names `loom_notes_loom_expert_numerics_expert.md` as well as `loom_audit_notes_loom_audit_numerics_audit.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `loom_audit_notes_loom_audit_numerics_audit.md` alone."
-    },
-    {
-      "agent": "loom-expert",
-      "artifact": {
-        "base": "loom_notes_loom_expert_numerics_expert",
-        "ext": ".md",
-        "prefix": "loom_notes"
-      },
-      "budget": {
-        "assayId": "assay_package_expert",
+        "assayId": "assay_auditor",
         "ceiling": 2,
-        "declaredOn": "package_expert->loom_expert",
-        "elseTarget": "plan_author",
-        "outcome": "gaps"
+        "declaredOn": "auditor->figure_maker",
+        "elseTarget": "seal",
+        "outcome": "figures"
       },
-      "edgeId": "loom_expert_numerics_expert",
+      "edgeId": "figure_maker_auditor",
       "fanout": null,
-      "feedbackFrom": "assay_package_expert",
-      "preamble": null,
-      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 2, and the only move left is `plan_author`."
-    },
-    {
-      "agent": "numerics-expert",
-      "artifact": {
-        "base": "numerics_audit_notes_numerics_audit_topology_audit",
-        "ext": ".md",
-        "prefix": "numerics_audit_notes"
-      },
-      "budget": null,
-      "edgeId": "numerics_audit_topology_audit",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `numerics_expert` that names `numerics_notes_numerics_expert_topology_expert.md` as well as `numerics_audit_notes_numerics_audit_topology_audit.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `numerics_audit_notes_numerics_audit_topology_audit.md` alone."
-    },
-    {
-      "agent": "numerics-expert",
-      "artifact": {
-        "base": "numerics_notes_numerics_expert_topology_expert",
-        "ext": ".md",
-        "prefix": "numerics_notes"
-      },
-      "budget": null,
-      "edgeId": "numerics_expert_topology_expert",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `numerics_expert` that names `numerics_audit_notes_numerics_audit_topology_audit.md` as well as `numerics_notes_numerics_expert_topology_expert.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `numerics_notes_numerics_expert_topology_expert.md` alone."
-    },
-    {
-      "agent": "planner",
-      "artifact": {
-        "base": "survey_ok_package_expert_planner",
-        "ext": ".json",
-        "prefix": "survey_ok"
-      },
-      "budget": null,
-      "edgeId": "package_expert_planner",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A blocked assayer means the verdict was malformed, not that the work failed: `planner` cannot finish until `survey_ok_package_expert_planner.json` carries one of \"complete\" or \"gaps\", so an out-of-enum status never reaches you. Wait for the corrected file rather than re-spawning the assayer or routing on a guess. A spawn of `planner` that names `plan_plan_author_plan_liaison.md`, `replan_replanner_plan_liaison.md`, `spec_spec_writer_edit_designer.md` and `survey_brief_survey_lead_loom_expert.md` as well as `survey_ok_package_expert_planner.json` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `survey_ok_package_expert_planner.json` alone."
-    },
-    {
-      "agent": "package-expert",
-      "artifact": {
-        "base": "package_report_package_expert_planner_2",
-        "ext": ".md",
-        "prefix": "package_report"
-      },
-      "budget": null,
-      "edgeId": "package_expert_planner_2",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `package_expert` that names `audit_report_audit_lead_rubric_judge_2.md`, `edit_proposals_edit_designer_implementer.md` and `revised_edits_redesign_fixer.md` as well as `package_report_package_expert_planner_2.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `package_report_package_expert_planner_2.md` alone."
-    },
-    {
-      "agent": "planner",
-      "artifact": {
-        "base": "plan_plan_author_plan_liaison",
-        "ext": ".md",
-        "prefix": "plan"
-      },
-      "budget": {
-        "assayId": "assay_plan_liaison",
-        "ceiling": 4,
-        "declaredOn": "plan_liaison->plan_author",
-        "elseTarget": "spec_writer",
-        "outcome": "revise"
-      },
-      "edgeId": "plan_author_plan_liaison",
-      "fanout": null,
-      "feedbackFrom": "assay_plan_liaison",
-      "preamble": "`plan_liaison` reads this and its work is then assayed by the person running the session, who is asked directly, which grades it \"approved\" or \"revise\".",
-      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 4, and the only move left is `spec_writer`."
+      "feedbackFrom": "assay_auditor",
+      "preamble": "`auditor` reads this and its work is then assayed by the person running the session, who is asked directly, which grades it \"confirmed\", \"touchup\" or \"figures\".",
+      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 2, and the only move left is `seal`."
     },
     {
       "agent": null,
       "artifact": {
-        "base": "plan_ok_plan_liaison_human",
+        "base": "plan_ok_planner_human",
         "ext": ".json",
         "prefix": "plan_ok"
       },
       "budget": null,
-      "edgeId": "plan_liaison_human",
+      "edgeId": "planner_human",
       "fanout": null,
       "feedbackFrom": null,
       "preamble": null,
-      "proseContract": "Until `plan_ok_plan_liaison_human.json` carries one of \"approved\" or \"revise\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
-    },
-    {
-      "agent": "liaison",
-      "artifact": {
-        "base": "plan_brief_plan_liaison_human_2",
-        "ext": ".md",
-        "prefix": "plan_brief"
-      },
-      "budget": null,
-      "edgeId": "plan_liaison_human_2",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `liaison` that names `debrief_brief_debrief_human_2.md`, `intake_notes_intake_revision_liaison.md`, `intake_brief_liaison_human_2.md` and `intake_record_liaison_survey_lead.md` as well as `plan_brief_plan_liaison_human_2.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `plan_brief_plan_liaison_human_2.md` alone."
-    },
-    {
-      "agent": "package-expert",
-      "artifact": {
-        "base": "revised_edits_redesign_fixer",
-        "ext": ".md",
-        "prefix": "revised_edits"
-      },
-      "budget": {
-        "assayId": "assay_test_engineer",
-        "ceiling": 2,
-        "declaredOn": "test_engineer->redesign",
-        "elseTarget": "loom_audit",
-        "outcome": "revise"
-      },
-      "edgeId": "redesign_fixer",
-      "fanout": null,
-      "feedbackFrom": "assay_test_engineer",
-      "preamble": null,
-      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 2, and the only move left is `loom_audit`."
+      "proseContract": "Until `plan_ok_planner_human.json` carries one of \"approved\", \"revise\" or \"answered\", the terminal gate blocks the turn from ending and tells you so, naming the allowed values. That block is the wait: it is what stops the sigil being abandoned while a person has not answered yet, and a status outside the declared set is treated exactly as no answer at all. Do not route on what was said in conversation, and do not widen the set to fit the answer — ask again if what you heard is not one of them."
     },
     {
       "agent": "planner",
       "artifact": {
-        "base": "replan_replanner_plan_liaison",
+        "base": "plan_planner_human_2",
         "ext": ".md",
-        "prefix": "replan"
-      },
-      "budget": {
-        "assayId": "assay_audit_lead",
-        "ceiling": 1,
-        "declaredOn": "audit_lead->replanner",
-        "elseTarget": "debrief",
-        "outcome": "redo"
-      },
-      "edgeId": "replanner_plan_liaison",
-      "fanout": null,
-      "feedbackFrom": "assay_audit_lead",
-      "preamble": "`plan_liaison` reads this and its work is then assayed by the person running the session, who is asked directly, which grades it \"approved\" or \"revise\".",
-      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 1, and the only move left is `debrief`."
-    },
-    {
-      "agent": "planner",
-      "artifact": {
-        "base": "spec_spec_writer_edit_designer",
-        "ext": ".md",
-        "prefix": "spec"
+        "prefix": "plan"
       },
       "budget": null,
-      "edgeId": "spec_writer_edit_designer",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `planner` that names `survey_ok_package_expert_planner.json`, `plan_plan_author_plan_liaison.md`, `replan_replanner_plan_liaison.md` and `survey_brief_survey_lead_loom_expert.md` as well as `spec_spec_writer_edit_designer.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `spec_spec_writer_edit_designer.md` alone."
-    },
-    {
-      "agent": "planner",
-      "artifact": {
-        "base": "survey_brief_survey_lead_loom_expert",
-        "ext": ".md",
-        "prefix": "survey_brief"
-      },
-      "budget": null,
-      "edgeId": "survey_lead_loom_expert",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A spawn of `planner` that names `survey_ok_package_expert_planner.json`, `plan_plan_author_plan_liaison.md`, `replan_replanner_plan_liaison.md` and `spec_spec_writer_edit_designer.md` as well as `survey_brief_survey_lead_loom_expert.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `survey_brief_survey_lead_loom_expert.md` alone."
-    },
-    {
-      "agent": "test-scout",
-      "artifact": {
-        "base": "test_audit_notes_test_audit_audit_lead",
-        "ext": ".md",
-        "prefix": "test_audit_notes"
-      },
-      "budget": null,
-      "edgeId": "test_audit_audit_lead",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": "`audit_lead` reads this and its work is then assayed by `rubric_judge`, which grades it \"success\" or \"redo\".",
-      "proseContract": "A spawn of `test_scout` that names `test_notes_test_scout_package_expert.md` as well as `test_audit_notes_test_audit_audit_lead.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `test_audit_notes_test_audit_audit_lead.md` alone."
-    },
-    {
-      "agent": "rubric-judge",
-      "artifact": {
-        "base": "cycle_ok_test_engineer_rubric_judge",
-        "ext": ".json",
-        "prefix": "cycle_ok"
-      },
-      "budget": null,
-      "edgeId": "test_engineer_rubric_judge",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": null,
-      "proseContract": "A blocked assayer means the verdict was malformed, not that the work failed: `rubric_judge` cannot finish until `cycle_ok_test_engineer_rubric_judge.json` carries one of \"pass\" or \"revise\", so an out-of-enum status never reaches you. Wait for the corrected file rather than re-spawning the assayer or routing on a guess. A spawn of `rubric_judge` that names `outcome_ok_audit_lead_rubric_judge.json` as well as `cycle_ok_test_engineer_rubric_judge.json` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `cycle_ok_test_engineer_rubric_judge.json` alone."
-    },
-    {
-      "agent": "test-engineer",
-      "artifact": {
-        "base": "test_evidence_test_engineer_rubric_judge_2",
-        "ext": ".md",
-        "prefix": "test_evidence"
-      },
-      "budget": null,
-      "edgeId": "test_engineer_rubric_judge_2",
+      "edgeId": "planner_human_2",
       "fanout": null,
       "feedbackFrom": null,
       "preamble": null,
       "proseContract": null
     },
     {
-      "agent": "test-scout",
+      "agent": "code-reviewer",
       "artifact": {
-        "base": "test_notes_test_scout_package_expert",
-        "ext": ".md",
-        "prefix": "test_notes"
+        "base": "cycle_ok_test_engineer_code_reviewer",
+        "ext": ".json",
+        "prefix": "cycle_ok"
       },
       "budget": null,
-      "edgeId": "test_scout_package_expert",
-      "fanout": null,
-      "feedbackFrom": null,
-      "preamble": "`package_expert` reads this and its work is then assayed by `planner`, which grades it \"complete\" or \"gaps\".",
-      "proseContract": "A spawn of `test_scout` that names `test_audit_notes_test_audit_audit_lead.md` as well as `test_notes_test_scout_package_expert.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `test_notes_test_scout_package_expert.md` alone."
-    },
-    {
-      "agent": "topology-expert",
-      "artifact": {
-        "base": "topology_audit_notes_topology_audit_test_audit",
-        "ext": ".md",
-        "prefix": "topology_audit_notes"
-      },
-      "budget": null,
-      "edgeId": "topology_audit_test_audit",
+      "edgeId": "test_engineer_code_reviewer",
       "fanout": null,
       "feedbackFrom": null,
       "preamble": null,
-      "proseContract": "A spawn of `topology_expert` that names `topology_notes_topology_expert_test_scout.md` as well as `topology_audit_notes_topology_audit_test_audit.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `topology_audit_notes_topology_audit_test_audit.md` alone."
+      "proseContract": "A blocked assayer means the verdict was malformed, not that the work failed: `code_reviewer` cannot finish until `cycle_ok_test_engineer_code_reviewer.json` carries one of \"pass\" or \"revise\", so an out-of-enum status never reaches you. Wait for the corrected file rather than re-spawning the assayer or routing on a guess."
     },
     {
-      "agent": "topology-expert",
+      "agent": "test-engineer",
       "artifact": {
-        "base": "topology_notes_topology_expert_test_scout",
+        "base": "test_evidence_test_engineer_code_reviewer_2",
         "ext": ".md",
-        "prefix": "topology_notes"
+        "prefix": "test_evidence"
       },
       "budget": null,
-      "edgeId": "topology_expert_test_scout",
+      "edgeId": "test_engineer_code_reviewer_2",
       "fanout": null,
       "feedbackFrom": null,
       "preamble": null,
-      "proseContract": "A spawn of `topology_expert` that names `topology_audit_notes_topology_audit_test_audit.md` as well as `topology_notes_topology_expert_test_scout.md` — or that names no artifact at all — is a denied `Agent` call, not a warning: the gate cannot tell which edge it traverses or which budget to charge. The denial lists this agent's artifacts; re-issue naming `topology_notes_topology_expert_test_scout.md` alone."
+      "proseContract": null
     },
     {
       "agent": "coder",
       "artifact": {
-        "base": "touchup_report_touchup_debrief",
+        "base": "touchup_change_toucher_test_engineer",
         "ext": ".md",
-        "prefix": "touchup_report"
+        "prefix": "touchup_change"
       },
       "budget": {
-        "assayId": "assay_debrief",
-        "ceiling": 3,
-        "declaredOn": "debrief->touchup",
-        "elseTarget": "figure_designer",
-        "outcome": "concerns"
+        "assayId": "assay_auditor",
+        "ceiling": 2,
+        "declaredOn": "auditor->toucher",
+        "elseTarget": "seal",
+        "outcome": "touchup"
       },
-      "edgeId": "touchup_debrief",
+      "edgeId": "toucher_test_engineer",
       "fanout": null,
-      "feedbackFrom": "assay_debrief",
-      "preamble": "`debrief` reads this and its work is then assayed by the person running the session, who is asked directly, which grades it \"confirmed\" or \"concerns\".",
-      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 3, and the only move left is `figure_designer`."
+      "feedbackFrom": "assay_auditor",
+      "preamble": "`test_engineer` reads this and its work is then assayed by `code_reviewer`, which grades it \"pass\" or \"revise\".",
+      "proseContract": "You observe the ceiling as a denied `Agent` call and as nothing else — no message arrives from any agent to tell you the branch is over. Do not retry the spawn and do not re-read the verdict: the counter is Athanor's, it is already at 2, and the only move left is `seal`."
     }
   ],
   "paths": {
@@ -664,14 +217,12 @@
   },
   "schemaVersion": 1,
   "sigil": "tangle_refactor",
-  "sourceHash": "sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690",
+  "sourceHash": "sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f",
   "terminal": {
     "abandonReason": "The `tangle_refactor` sigil made no progress across repeated attempts to end the turn, so Athanor is abandoning it rather than leaving the session wedged. The failure artifact under `artifacts/` records what was and was not reached.",
     "maxBlocks": 6,
-    "reason": "The `tangle_refactor` sigil has not sealed: `artifacts/figure_report_figure_maker_seal.md` does not exist yet. Resume it where it left off rather than ending the turn — the step you are on is the one whose output is missing. Do not repeat a spawn that was just denied; a denial names the branch that ended and where to go next.",
-    "requiredArtifacts": [
-      "artifacts/figure_report_figure_maker_seal.md"
-    ]
+    "reason": "The `tangle_refactor` sigil has not sealed: its terminal gate has not passed. Resume it where it left off rather than ending the turn — the step you are on is the one whose output is missing. Do not repeat a spawn that was just denied; a denial names the branch that ended and where to go next.",
+    "requiredArtifacts": []
   },
   "transmuterVersion": "0.1.0"
 }

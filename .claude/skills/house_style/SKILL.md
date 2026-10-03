@@ -12,8 +12,8 @@ user-invocable: false
      to every future build. -->
 <!-- athanor:sigil tangle_refactor -->
 <!-- athanor:source sigils/tangle_refactor.sigil -->
-<!-- athanor:source-hash sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690 -->
-<!-- athanor:stamp:sha256:b75d4b1414384b4a4863b4d6e6b997d498aacd9220ac8b30ae66c014ec0d860d -->
+<!-- athanor:source-hash sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f -->
+<!-- athanor:stamp:sha256:f67f8fbb3cd6a8791fc656832c48772e56b8f6d1bd49e74c9fef6d6d22f6cd73 -->
 <!-- athanor:closure-skill house_style from=./skills/house_style/SKILL.md -->
 <!-- athanor:isolation user-invocable=false skillOverride=name-only -->
 
@@ -25,7 +25,6 @@ it than the problem needs.
 **Write**
 
 - Plain functions and small classes. Reach for a class only when there is real state to hold.
-- Names that say what a thing *is* in the mathematics: `stable_cdist`, `bridge_class`, `hole`.
 - Comprehensions, unpacking, `enumerate`, `zip`, dataclasses, early returns.
 - A docstring where the *why* is not obvious. Comments explain intent, never restate code.
 - Keep the module's existing idiom. Read the surrounding file before adding to it.
@@ -40,6 +39,17 @@ it than the problem needs.
 - Speculative generality, feature flags, or backwards-compatibility shims nobody asked for.
 - Silent behaviour changes. A refactor that changes an output says so in its report.
 
+**Humanising** means a reader who knows the maths can follow the code without a debugger:
+
+- One idea per function, in the order the mathematics happens; the top of a module reads as
+  its outline.
+- Names from the paper, not from the plumbing: `unstable_cdist`, not `val2`; `image_chain`,
+  not `process_data`.
+- Delete narration comments (`# loop over bridges`) and commented-out code.
+  Keep the comment that says *why* — an author's rule, an invariant, a date it was decided.
+- Collapse indirection a reader has to chase: a wrapper that only forwards, a flag only one
+  caller sets, a dict built to be read once.
+
 **The test of a change:** it is shorter or clearer than what it replaced, the suite still
 passes, and someone who knows the maths can read it top to bottom without jumping around.
 
@@ -47,11 +57,10 @@ passes, and someone who knows the maths can read it top to bottom without jumpin
 
 - **Repo:** the project root (`tangle-pack`). Run Python as `MPLBACKEND=Agg env/bin/python`;
   run tests as `MPLBACKEND=Agg env/bin/python -m pytest -q`.
-- **Run artifacts:** `artifacts/` — the files the workflow hands between agents. The exact
-  filename you must write is in your instructions; write exactly that file.
-- **Knowledge:** `.refactor/knowledge/` — long-lived notes, one file per expert, kept across runs.
-- **Branches:** each implementation lane works in its own worktree,
-  `../tangle-pack-lane-<k>` on branch `refactor/lane-<k>`, made from the base commit the spec
-  names. Lanes are merged into `refactor/integration`, checked out at
-  `../tangle-pack-integration`; every later fix happens there. Never commit to the author's
-  current branch and never touch their uncommitted changes.
+- **Run artifacts:** `artifacts/`. Write exactly the filename your instructions give.
+- **Decisions:** `.refactor/decisions.md` — the author's, binding, kept across runs.
+- **Branches:** each run is one targeted change with a slug, named in the plan. The change lives
+  on `refactor/<slug>` in the worktree `../tangle-pack-<slug>`, made from the author's `HEAD`;
+  the old code, when someone needs to run it, is a detached worktree at the base commit,
+  `../tangle-pack-<slug>-base`. Never commit to the author's current branch and never touch
+  their uncommitted changes.

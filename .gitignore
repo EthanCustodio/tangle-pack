@@ -24,3 +24,10 @@ profile.out
 # local Claude Code state
 .claude/settings.local.json
 .claude/worktrees/
+
+# refactor proof figures: PNGs and data are tracked, the heavy SVG/pickle copies stay local
+figures/refactor_proof/**/*.svg
+figures/refactor_proof/**/*.fig.pickle
+
+# Athanor sigil run state (runtime)
+.claude/athanor/state/

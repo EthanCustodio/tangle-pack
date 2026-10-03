@@ -12,8 +12,8 @@ user-invocable: false
      to every future build. -->
 <!-- athanor:sigil tangle_refactor -->
 <!-- athanor:source sigils/tangle_refactor.sigil -->
-<!-- athanor:source-hash sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690 -->
-<!-- athanor:stamp:sha256:92946a4d05b06e9cca62b64c0c478730f6cfaf26a62e7e0079c36578c57f3a7c -->
+<!-- athanor:source-hash sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f -->
+<!-- athanor:stamp:sha256:edb39c20bc781789a1832fac8abb6f4727bdb9e1b6f595b212ac7085a229d9aa -->
 <!-- athanor:closure-skill verdict_writing from=./skills/verdict_writing/SKILL.md -->
 <!-- athanor:isolation user-invocable=false skillOverride=name-only -->
 

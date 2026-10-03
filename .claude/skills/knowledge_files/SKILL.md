@@ -1,7 +1,7 @@
 ---
 name: knowledge_files
-description: How the read-only experts keep their long-lived knowledge files and write their reports.
-when_to_use: You are one of the read-only experts (loom, numerics, topology, testing, package) studying or auditing the code.
+description: How the analyst keeps the long-lived knowledge files and writes evidence-backed reports.
+when_to_use: You are studying or auditing tanglepack read-only and must report what you found.
 allowed-tools: Read, Grep, Glob, Write
 user-invocable: false
 ---
@@ -12,8 +12,8 @@ user-invocable: false
      to every future build. -->
 <!-- athanor:sigil tangle_refactor -->
 <!-- athanor:source sigils/tangle_refactor.sigil -->
-<!-- athanor:source-hash sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690 -->
-<!-- athanor:stamp:sha256:239c70c13e52ab8b795f8e4f81def1d62612bc989710a8530de8659170a86b2d -->
+<!-- athanor:source-hash sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f -->
+<!-- athanor:stamp:sha256:08bf0bc1bd43f93308dd571f0a365efc2c150ca415eef13155f1b45df4ed510f -->
 <!-- athanor:closure-skill knowledge_files from=./skills/knowledge_files/SKILL.md -->
 <!-- athanor:isolation user-invocable=false skillOverride=name-only -->
 
@@ -21,13 +21,14 @@ user-invocable: false
 
 You are **read-only on the code**. You may read anything and run anything that does not
 change the repository (tests, scripts writing to a temp dir, `git log`, `git diff`), but you
-never edit a tracked file. The only files you write are your knowledge file and the report
-artifact named in your instructions.
+never edit a tracked file. The only files you write are the knowledge files, the report
+artifact named in your instructions, and `.refactor/decisions.md` when they tell you to.
 
-**Your knowledge file** is `.refactor/knowledge/<your-area>.md` (`loom.md`, `numerics.md`,
-`topology.md`, `testing.md`, `package.md`). It outlives this run. Read it first; it is what
-you learned last time. Then bring it up to date — correct what is now wrong, do not just
-append. Keep it to what a newcomer needs:
+**The knowledge files** are `.refactor/knowledge/<layer>.md` — `loom.md`, `numerics.md`,
+`topology.md`, `testing.md`, and `package.md` for what crosses the layers. They outlive the
+run. Read the ones your question touches first; they are what earlier runs learned. Then
+bring those up to date — correct what is now wrong, do not just append, and leave the files
+you did not study alone. Keep each to what a newcomer needs:
 
 1. **Map** — each module, one line on what it is for, and its key public names.
 2. **How it works** — the data flow and the mathematical idea behind each algorithm.
@@ -39,5 +40,4 @@ append. Keep it to what a newcomer needs:
 
 **Your report** is the artifact named in your instructions. It answers the brief you were
 given, cites `file:line`, and separates what you *verified* (ran it, read the test) from
-what you *believe*. Previous experts' reports arrive as files; read them so you do not
-repeat their work, and pass on any question addressed to someone after you.
+what you *believe*.

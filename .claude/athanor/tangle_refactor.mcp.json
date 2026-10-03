@@ -1,5 +1,5 @@
 {
-  "athanorStamp": "athanor:stamp:sha256:4d6124e3bf7994b0b5106a0b9fee9981d9c75ef97ef661baaf4a32fc338002b9",
+  "athanorStamp": "athanor:stamp:sha256:86c8e1829e9ca839abe7099e721a244720499891d874e0b4a106e1f9af16e55e",
   "declaration": "Declared, never copied. Athanor knows which MCP servers this sigil needs and nothing about how to reach them: a server config carries commands, paths and credentials that differ per machine, so merging these into the target's .mcp.json is a prompted step, not something a build performs (§6).",
   "mergeInto": ".mcp.json",
   "mergeShape": "Each server above must exist as a key under `mcpServers` in the target's .mcp.json, with the command/args/env that project uses. Athanor supplies the names and grants access through each agent's tool allowlist; it supplies no transport of any kind.",
@@ -7,6 +7,6 @@
   "servers": [],
   "sigil": "tangle_refactor",
   "source": "sigils/tangle_refactor.sigil",
-  "sourceHash": "sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690",
+  "sourceHash": "sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f",
   "transmuterVersion": "0.1.0"
 }

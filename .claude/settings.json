@@ -8,7 +8,7 @@
     "schemaVersion": 1,
     "sigils": {
       "tangle_refactor": {
-        "sourceHash": "sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690",
+        "sourceHash": "sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f",
         "transmuterVersion": "0.1.0",
         "skillOverrides": {
           "house_style": "name-only",

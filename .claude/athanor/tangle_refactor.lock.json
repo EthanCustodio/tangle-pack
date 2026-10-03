@@ -1,77 +1,35 @@
 {
-  "athanorStamp": "athanor:stamp:sha256:0960492fb571c63f40874f22cd614e34f6e0ef00480b3599f47da496051b20bc",
+  "athanorStamp": "athanor:stamp:sha256:2c859db9a71217efc1956a9936de2955a8f7db7e82170a5ca24e71bd12a76498",
   "closure": [
     {
-      "hash": "sha256:4e467f4533d44eeb0c34e8c609877e77fa2614a47c30b8b1a6060311c1e6748d",
+      "hash": "sha256:233f5ae9ca0bda91c9c2b5066e99fc7b72f3f0491f077a75f3760c211630b59e",
+      "kind": "agent",
+      "name": "agent:analyst",
+      "origin": "./agents/analyst/agent"
+    },
+    {
+      "hash": "sha256:046340a77e35ec4f60a2cdbef7d28908a9bcbf7962b479889d3b58294cb6f664",
       "kind": "agent",
       "name": "agent:code_reviewer",
       "origin": "./agents/code_reviewer/agent"
     },
     {
-      "hash": "sha256:414466740ab28e13c532856111c45847ae7e08df8b4daddcf84f41c13254688f",
+      "hash": "sha256:6147f44690ad2264478c9779c66485d05ce68a5c54d85eda014036c79a034722",
       "kind": "agent",
       "name": "agent:coder",
       "origin": "./agents/coder/agent"
     },
     {
-      "hash": "sha256:00c1f7a7f3b2fbdaa02761106444c3ac718264b7d425a31a663d947a9a856314",
-      "kind": "agent",
-      "name": "agent:figure_designer",
-      "origin": "./agents/figure_designer/agent"
-    },
-    {
-      "hash": "sha256:63c8350aea0553e710a9944c17c424e54449672f50069a1737b4257fef56b1c4",
-      "kind": "agent",
-      "name": "agent:liaison",
-      "origin": "./agents/liaison/agent"
-    },
-    {
-      "hash": "sha256:4abad27694aaac354cc5581a863d1b65173a43d7035ee40c92f85b0bd8ceddc4",
-      "kind": "agent",
-      "name": "agent:loom_expert",
-      "origin": "./agents/loom_expert/agent"
-    },
-    {
-      "hash": "sha256:38bf6377e7c9b27ec6b4f341374a12ccc029e53166e9d0f3015b6c36a652d5e9",
-      "kind": "agent",
-      "name": "agent:numerics_expert",
-      "origin": "./agents/numerics_expert/agent"
-    },
-    {
-      "hash": "sha256:53f2a1fecc7a10dd40abf0f4dc0318e78e68d27ec9c1c00c882d48fb62ff3acd",
-      "kind": "agent",
-      "name": "agent:package_expert",
-      "origin": "./agents/package_expert/agent"
-    },
-    {
-      "hash": "sha256:7f6529c556246e2347ad6d3096b05ac20ee0e132dccda62c37b2ac20f4bd7ddc",
+      "hash": "sha256:46abba282bdc86c00f79c2b1f88a5a06a985f9059b72237f75603d0bd9ff959d",
       "kind": "agent",
       "name": "agent:planner",
       "origin": "./agents/planner/agent"
     },
     {
-      "hash": "sha256:332833ddd97dfc42957dcef411d8a81eb0b35b815e46b98bd35167f7ff70ca41",
-      "kind": "agent",
-      "name": "agent:rubric_judge",
-      "origin": "./agents/rubric_judge/agent"
-    },
-    {
-      "hash": "sha256:53ac1a0674431c67ac3cc5baf19f868e742b59b5ac9b0e8083b95487c841b74a",
+      "hash": "sha256:d51bd964e8aa1c67479b5c37ea2c7709310a5754809da71e83c66e65903f4eb4",
       "kind": "agent",
       "name": "agent:test_engineer",
       "origin": "./agents/test_engineer/agent"
-    },
-    {
-      "hash": "sha256:9c93caae7c82a4797807dd53f0bd411f963f0391f5d44a5646a3bc91afad61d0",
-      "kind": "agent",
-      "name": "agent:test_scout",
-      "origin": "./agents/test_scout/agent"
-    },
-    {
-      "hash": "sha256:7f89cd3082c8f8bebbe50d586d9ca5606fe9849b4415abc5fdebca50cdbcab75",
-      "kind": "agent",
-      "name": "agent:topology_expert",
-      "origin": "./agents/topology_expert/agent"
     },
     {
       "hash": "sha256:d9dec0cd730e997367f5b9c7297a65d7b600738f9232fd2ae3147553e3772038",
@@ -80,19 +38,19 @@
       "origin": "./bonds/std_bonds"
     },
     {
-      "hash": "sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690",
+      "hash": "sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f",
       "kind": "sigil",
       "name": "sigil:tangle_refactor",
       "origin": "sigils/tangle_refactor.sigil"
     },
     {
-      "hash": "sha256:ac38de026439b80ee6d0a37e5f277b5c3a206723e0be4a2c920ebbbc39007f2d",
+      "hash": "sha256:6171f2a3584427b4290851c7b860bc7aaad7e7e751f75014814a517e954c0364",
       "kind": "skill",
       "name": "skill:house_style",
       "origin": "./skills/house_style/SKILL.md"
     },
     {
-      "hash": "sha256:0607d2ff8aa9c312b3f03795bb9953a264d4fc8720eab499ca15ab79a666e749",
+      "hash": "sha256:921aadc12798f020068b29877ee340ac6d27b6a619bef774bb7f1875b44b92ec",
       "kind": "skill",
       "name": "skill:knowledge_files",
       "origin": "./skills/knowledge_files/SKILL.md"
@@ -107,6 +65,6 @@
   "schemaVersion": 1,
   "sigil": "tangle_refactor",
   "source": "sigils/tangle_refactor.sigil",
-  "sourceHash": "sha256:a33c1437208ab7ef6668dbaf607e732480e065680bf6c2cca436f5f592095690",
+  "sourceHash": "sha256:ba280e297beea8d789b9a5785d8ca45bb810a8bbb1db347bd65d8df51f20058f",
   "transmuterVersion": "0.1.0"
 }
