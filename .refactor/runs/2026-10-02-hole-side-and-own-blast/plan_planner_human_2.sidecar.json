@@ -1,0 +1,31 @@
+{
+  "agent": "planner",
+  "artifact": "plan_planner_human_2",
+  "counter": 1,
+  "edgeId": "planner_human_2",
+  "history": [
+    {
+      "agentId": "a145f79b467080498",
+      "at": "2026-10-03T05:36:05.245Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/plan_planner_human_2.md",
+      "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+      "status": null,
+      "traversal": 1
+    }
+  ],
+  "latest": {
+    "agentId": "a145f79b467080498",
+    "at": "2026-10-03T05:36:05.245Z",
+    "fanIndex": null,
+    "notes": null,
+    "payload": "artifacts/plan_planner_human_2.md",
+    "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+    "status": null,
+    "traversal": 1
+  },
+  "preamble": null,
+  "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+  "schemaVersion": 1
+}

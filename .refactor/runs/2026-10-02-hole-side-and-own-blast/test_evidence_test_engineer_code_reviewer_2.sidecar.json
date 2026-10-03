@@ -1,0 +1,31 @@
+{
+  "agent": "test-engineer",
+  "artifact": "test_evidence_test_engineer_code_reviewer_2",
+  "counter": 1,
+  "edgeId": "test_engineer_code_reviewer_2",
+  "history": [
+    {
+      "agentId": "ac102e3b9f7771d01",
+      "at": "2026-10-03T05:54:14.605Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/test_evidence_test_engineer_code_reviewer_2.md",
+      "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+      "status": null,
+      "traversal": 1
+    }
+  ],
+  "latest": {
+    "agentId": "ac102e3b9f7771d01",
+    "at": "2026-10-03T05:54:14.605Z",
+    "fanIndex": null,
+    "notes": null,
+    "payload": "artifacts/test_evidence_test_engineer_code_reviewer_2.md",
+    "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+    "status": null,
+    "traversal": 1
+  },
+  "preamble": null,
+  "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+  "schemaVersion": 1
+}

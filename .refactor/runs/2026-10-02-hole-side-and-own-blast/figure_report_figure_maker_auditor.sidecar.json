@@ -1,0 +1,31 @@
+{
+  "agent": "coder",
+  "artifact": "figure_report_figure_maker_auditor",
+  "counter": 1,
+  "edgeId": "figure_maker_auditor",
+  "history": [
+    {
+      "agentId": "a8174b38d29c8959f",
+      "at": "2026-10-03T06:10:57.048Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/figure_report_figure_maker_auditor.t1.md",
+      "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+      "status": null,
+      "traversal": 1
+    }
+  ],
+  "latest": {
+    "agentId": "a8174b38d29c8959f",
+    "at": "2026-10-03T06:10:57.048Z",
+    "fanIndex": null,
+    "notes": null,
+    "payload": "artifacts/figure_report_figure_maker_auditor.t1.md",
+    "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+    "status": null,
+    "traversal": 1
+  },
+  "preamble": "`auditor` reads this and its work is then assayed by the person running the session, who is asked directly, which grades it \"confirmed\", \"touchup\" or \"figures\".",
+  "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+  "schemaVersion": 1
+}

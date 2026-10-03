@@ -1,0 +1,41 @@
+{
+  "agent": "analyst",
+  "artifact": "outcome_auditor_human_2",
+  "counter": 2,
+  "edgeId": "auditor_human_2",
+  "history": [
+    {
+      "agentId": "ab38de3856d514253",
+      "at": "2026-10-03T06:01:34.999Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/outcome_auditor_human_2.md",
+      "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+      "status": null,
+      "traversal": 1
+    },
+    {
+      "agentId": "ae48be9d761ef633b",
+      "at": "2026-10-03T06:14:41.380Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/outcome_auditor_human_2.md",
+      "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+      "status": null,
+      "traversal": 2
+    }
+  ],
+  "latest": {
+    "agentId": "ae48be9d761ef633b",
+    "at": "2026-10-03T06:14:41.380Z",
+    "fanIndex": null,
+    "notes": null,
+    "payload": "artifacts/outcome_auditor_human_2.md",
+    "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+    "status": null,
+    "traversal": 2
+  },
+  "preamble": null,
+  "runId": "71e21633-ea51-40b5-81a9-56015ac501ee.1",
+  "schemaVersion": 1
+}
