@@ -391,3 +391,67 @@ def test_nested_outer_arcs_go_around_the_inner_circle(nested_built):
         assert routed >= len(enclosures)
     finally:
         plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# Nested blasts: each zone blasts only its own tangle
+# --------------------------------------------------------------------------- #
+def _tangle_words(build, fixed_point) -> dict:
+    """Every class of one tangle mapped to its word, letters spelled out.
+
+    Letters differ between sessions, so a class is named by its two homotopy
+    elements (orbit code and short name, no fixed-point letter) and each token
+    by its class's name and direction.
+    """
+    dynamics = build.session.symbolic_dynamics()
+
+    def spelled(bridge_class):
+        ends = (bridge_class.source, bridge_class.target)
+        names = (dynamics.naming.homotopy_name(ref) for ref in ends)
+        return tuple((name.orbit_code, name.short_text) for name in names)
+
+    return {
+        spelled(cd.bridge_class): [(spelled(s.bridge_class), s.direction) for s in cd.symbols]
+        for cd in dynamics.classes.values()
+        if cd.bridge_class.source.branch_key[0] is fixed_point
+    }
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_nested_inner_words_are_the_period3_words():
+    """The outer blasts leave the inner tangle exactly as it is alone."""
+    alone = build_period3(blasts=4)
+    nested = build_nested(outer_blasts=2, inner_blasts=4)
+    _outer, inner = nested.fixed_points
+    words = _tangle_words(alone, alone.fixed_points[0])
+    assert words and _tangle_words(nested, inner) == words
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_nested_blast_order_does_not_matter(caplog):
+    with caplog.at_level(logging.WARNING, logger="tanglepack.loom.Blast"):
+        inner_first = build_nested(outer_blasts=4, inner_blasts=4)
+    assert not [r for r in caplog.records if "skipping bridge" in r.message]
+
+    outer_first = build_nested(outer_blasts=4)
+    session = outer_first.session
+    inner_zone = min(session.resonance_zones.values(), key=lambda zone: zone.area)
+    for _ in range(4):
+        session.blast_zone(
+            inner_zone, 1, fixed_point=[inner_zone.fixed_point], min_separation=1e-4
+        )
+        session.classify_strong_pips()
+        for fp, pip in zip(outer_first.fixed_points, outer_first.pips):
+            session.set_strong_pip(fp, pip)
+    session.compute_pseudoneighbors()
+    session.punch_holes()
+    session.partition_stable_manifold()
+
+    for one, other in zip(inner_first.fixed_points, outer_first.fixed_points):
+        words = _tangle_words(inner_first, one)
+        assert words and _tangle_words(outer_first, other) == words
+        assert len(inner_first.session.trellis(one).bridges) == len(
+            session.trellis(other).bridges
+        )
