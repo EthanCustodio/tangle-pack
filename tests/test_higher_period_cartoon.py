@@ -455,3 +455,34 @@ def test_nested_blast_order_does_not_matter(caplog):
         assert len(inner_first.session.trellis(one).bridges) == len(
             session.trellis(other).bridges
         )
+
+
+_P3_WORDS = {"a": "b", "b": "c", "c": "a u^-1 w^-1"}
+
+
+def _active_words(build) -> dict:
+    dynamics = build.session.symbolic_dynamics()
+    return {cd.letter: cd.word for cd in dynamics.classes.values() if cd.kind == "active"}
+
+
+@pytest.mark.slow
+def test_p3_words_survive_four_blasts():
+    """Blasting the closed period-3 zone changes nothing topologically."""
+    assert _active_words(build_period3(blasts=4)) == _P3_WORDS
+
+
+@pytest.mark.slow
+def test_nested_default_words_are_pinned(nested_built):
+    """The nested words at the defaults, as at 2315204 (2026-10-02)."""
+    outer_words = {"d": "d uu^-1 e^-1", "e": "f", "f": "d uu^-1 d^-1"}
+    assert _active_words(nested_built) == {**_P3_WORDS, **outer_words}
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_nested_outer_blasts_leave_the_inner_bridges_alone(p3_built, nested_built):
+    """The outer zone's blasts no longer iterate the period-3 bridges (2026-10-02)."""
+    _outer, inner = nested_built.fixed_points
+    (fp3,) = p3_built.fixed_points
+    inner_bridges = nested_built.session.trellis(inner).bridges
+    assert len(inner_bridges) == len(p3_built.session.trellis(fp3).bridges)

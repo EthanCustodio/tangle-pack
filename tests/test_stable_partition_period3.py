@@ -27,6 +27,7 @@ from __future__ import annotations
 import matplotlib
 
 matplotlib.use("Agg")  # headless: the session fixture touches the plotting stack
+import numpy as np
 import pytest
 
 from tanglepack.examples.henon_cases import build_period3
@@ -35,7 +36,7 @@ from tanglepack.topology import (
     check_holes_share_bridge_side,
 )
 from tanglepack.topology.Pseudoneighbor import forward_unstable_branch_cycle
-from tanglepack.topology.StablePartition import bridge_for_pair
+from tanglepack.topology.StablePartition import _bridge_side_of, bridge_for_pair
 
 
 @pytest.fixture
@@ -134,3 +135,69 @@ def test_deep_p3_holes_share_bridge_side_through_symbolic_dynamics(kwargs):
         trellis.holes, orientation_preserving=trellis.orientation_preserving
     )
     assert build.session.symbolic_dynamics().classes
+
+
+def _hole_sides(trellis) -> list:
+    """Every hole as ``(iterate, bridge_side, sorted (which, row) openings)``, ids dropped."""
+    return sorted(
+        (hole.iterate, hole.bridge_side, sorted((which, row) for _id, which, row in hole.openings))
+        for hole in trellis.holes
+    )
+
+
+_OPENS_LEFT = [("anchorward", "left"), ("outward", "left")]
+_OPENS_RIGHT = [("anchorward", "right"), ("outward", "right")]
+
+
+@pytest.mark.slow
+def test_p3_hole_sides_are_pinned():
+    """Sides and openings of every period-3 hole, as at 2315204 (2026-10-02).
+
+    Direct holes (iterates 0..2) open their inward pair; each orbit's
+    propagated holes keep its side. Ids are not reproducible, so none appear.
+    """
+    build = build_period3()
+    (fp3,) = build.fixed_points
+    expected = []
+    for iterate in range(-3, 3):
+        if iterate < 0:
+            expected += [(iterate, "left", [("outward", "right")]), (iterate, "right", _OPENS_RIGHT)]
+        else:
+            expected += [(iterate, "left", _OPENS_RIGHT), (iterate, "right", _OPENS_LEFT)]
+    assert _hole_sides(build.session.trellis(fp3)) == expected
+
+
+@pytest.mark.slow
+def test_k28_two_blast_hole_sides_are_pinned(k28_two_blasts_partitioned):
+    """Sides and openings of the k=2.8 two-blast holes, as at 2315204."""
+    session, fp = k28_two_blasts_partitioned
+    assert _hole_sides(session.trellis(fp)) == [
+        (-3, "left", [("outward", "right")]),
+        (-2, "left", _OPENS_RIGHT),
+        (-1, "left", _OPENS_RIGHT),
+        (0, "left", _OPENS_LEFT),
+    ]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "fixture",
+    ["k10_partitioned", "k28_partitioned", "k28_two_blasts_partitioned", "p3_partitioned"],
+)
+def test_direct_hole_side_is_the_side_of_its_coordinates(fixture, request):
+    """The crossing-sign rule agrees with measuring the hole against its bridge.
+
+    On these cases the old nearest-vertex measurement was right, so the
+    combinatorial rule (2026-10-02) must reproduce it hole for hole.
+    """
+    session, *fixed_points = request.getfixturevalue(fixture)
+    checked = 0
+    for fp in fixed_points:
+        trellis = session.trellis(fp)
+        for hole in trellis.holes:
+            if hole.pair is None:
+                continue
+            bridge = bridge_for_pair(trellis, hole.pair)
+            assert hole.bridge_side == _bridge_side_of(trellis, bridge, np.asarray(hole.coords))
+            checked += 1
+    assert checked
