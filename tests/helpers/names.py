@@ -172,6 +172,64 @@ def refined_children(
     ]
 
 
+def refined_symbol_pair(
+    dyn: "SymbolicDynamics", symbol: "Symbol", *, short: bool = False
+) -> NamePair:
+    """
+    One REFINED word token as an oriented pair, inverse tokens reversed.
+
+    A token of a split class is spelled by its refined child's iterated pair
+    (the child's ``occurrence``, source end first); a token of an unsplit class
+    by its homotopy pair, exactly as :func:`symbol_pair`.
+
+    Args:
+        dyn: The symbolic dynamics.
+        symbol: A token of :attr:`SymbolicDynamics.refined_rules`.
+        short: Use the short names.
+
+    Returns:
+        ``(source, target)`` for direction ``+1``, ``(target, source)`` for ``-1``.
+    """
+    if symbol.refined_index is None:
+        return symbol_pair(dyn.naming, symbol, short=short)
+    child = dyn.refined[symbol.bridge_class][symbol.refined_index - 1]
+    pair = occurrence_in_names(dyn.naming, child.occurrence, short=short)
+    return pair if symbol.direction > 0 else (pair[1], pair[0])
+
+
+def refined_words_in_names(
+    dyn: "SymbolicDynamics", cd: "ClassDynamics", *, short: bool = False
+) -> dict[NamePair, list[NamePair]]:
+    """
+    A class's refined rule(s), keyed and spelled letter-free.
+
+    A split class has one rule per refined child, keyed by the child's
+    oriented iterated pair; an unsplit class has one rule keyed by its
+    homotopy pair. Each word token is spelled by :func:`refined_symbol_pair`.
+
+    Args:
+        dyn: The symbolic dynamics.
+        cd: The class record (resolved; an unresolved class has no rule).
+        short: Use the short names.
+
+    Returns:
+        ``{rule key: [token pair, ...]}``; empty when the class has no rule.
+    """
+    children = dyn.refined.get(cd.bridge_class, [])
+    if children:
+        keyed = [
+            (occurrence_in_names(dyn.naming, child.occurrence, short=short), child.name)
+            for child in children
+        ]
+    else:
+        keyed = [(homotopy_pair(dyn, cd, short=short), cd.letter)]
+    return {
+        key: [refined_symbol_pair(dyn, symbol, short=short) for symbol in dyn.refined_rules[name]]
+        for key, name in keyed
+        if name in dyn.refined_rules
+    }
+
+
 def itinerary_pairs(
     dyn: "SymbolicDynamics", cd: "ClassDynamics", *, short: bool = False
 ) -> Optional[list[NamePair]]:
@@ -274,3 +332,25 @@ def matrix_by_classes(
         row_key: {col_key: int(matrix[i, j]) for j, col_key in enumerate(keys)}
         for i, row_key in enumerate(keys)
     }
+
+
+def class_by_pair(
+    dyn: "SymbolicDynamics", pair: NamePair, *, short: bool = False
+) -> "ClassDynamics":
+    """
+    The one class whose oriented homotopy pair is ``pair``.
+
+    Args:
+        dyn: The symbolic dynamics.
+        pair: ``(source, target)`` in homotopy names, anchor outward.
+        short: ``pair`` is spelled in short names.
+
+    Returns:
+        The class record.
+
+    Raises:
+        AssertionError: No class, or more than one, carries that pair.
+    """
+    matches = [cd for cd in dyn.classes.values() if homotopy_pair(dyn, cd, short=short) == pair]
+    assert len(matches) == 1, f"expected one class {pair}, found {len(matches)}"
+    return matches[0]

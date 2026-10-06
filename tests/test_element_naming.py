@@ -3,8 +3,8 @@ Tests for ``tanglepack.topology.ElementNaming``: the ``L_i`` / ``R_i^j`` names
 of the homotopy and iterated partition elements.
 
 The synthetic tests build partition families by hand (a fake fixed point is
-all an ``ElementRef`` asks for); the fixture tests pin the k=10 combinatorics
-of the plan BY NAME TEXT, never by registry id.
+all an ``ElementRef`` asks for); one fixture test reads the names over two
+fixed points. The k=10 rows are pinned in ``tests/golden/test_golden_k10.py``.
 """
 
 from __future__ import annotations
@@ -317,47 +317,8 @@ def test_bad_parent_raises_value_error():
 
 
 # --------------------------------------------------------------------------- #
-# Fixture tests: the k=10 combinatorics of the plan, pinned by name text
+# Fixture test: names over two fixed points
 # --------------------------------------------------------------------------- #
-@pytest.fixture
-def k10_naming(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    return pieces, ElementNaming(pieces.homotopy, pieces.iterated)
-
-
-def test_k10_homotopy_names(k10_naming):
-    _pieces, naming = k10_naming
-    assert not naming.letters
-    assert {n.short_text for n in naming.homotopy_names} == {
-        "L_1", "L_2", "L_3", "R_1", "R_2", "R_3",
-    }
-
-
-def test_k10_iterated_names(k10_naming):
-    _pieces, naming = k10_naming
-    assert {n.short_text for n in naming.names} == {
-        "L_1^1", "L_1^2", "L_2", "L_3",
-        "R_1^1", "R_1^2", "R_1^3", "R_2", "R_3^1", "R_3^2", "R_3^3",
-    }
-    assert len(naming) == 11
-    # Split parents and their children, by name.
-    assert [naming.name(c).short_text for c in naming.children_of(_homotopy(naming, "L_1"))] == ["L_1^1", "L_1^2"]
-    assert naming.parent_of(naming.lookup("L_1^2")) == _homotopy(naming, "L_1")
-    assert [naming.name(c).short_text for c in naming.children_of(_homotopy(naming, "R_1"))] == ["R_1^1", "R_1^2", "R_1^3"]
-    assert [naming.name(c).short_text for c in naming.children_of(_homotopy(naming, "R_3"))] == ["R_3^1", "R_3^2", "R_3^3"]
-    for text in ("L_2", "L_3", "R_2"):
-        assert [naming.name(c).short_text for c in naming.children_of(_homotopy(naming, text))] == [text]
-
-
-def _homotopy(naming: ElementNaming, text: str) -> ElementRef:
-    """The homotopy ref printing ``text``."""
-    for ref, name in zip(naming.homotopy_refs, naming.homotopy_names):
-        if name.short_text == text:
-            return ref
-    raise KeyError(text)
-
-
 @pytest.mark.slow
 def test_p3_names_carry_branch_codes_and_letters(p3_partitioned):
     """Two fixed points are partitioned, so every name carries its letter and code."""

@@ -105,33 +105,6 @@ def test_a_crossing_abutting_no_empty_stretch_is_not_cut(k10_partitioned, monkey
     )
 
 
-def test_k10_empty_stretch_cut_reads_as_expected(k10_partitioned):
-    """k=10 right row ``[ ] ( ) [ ] ( ) [ ] ( ) [ ]``, left row ``[ ) [ ] ( ) [ ]``.
-
-    Right: the mapped hole's lobe has a base and a chord (the reference hole
-    on the left), both open, and the hole between them stays open. Left: the
-    anchor lobe's fold abuts the right-row hole at its inner crossing, which
-    therefore belongs to the outer element.
-    """
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    (branch_key,) = {key for key, _side in pieces.iterated.results}
-    right = pieces.iterated.result(branch_key, "right")
-    assert [(iv.closed_lo, iv.closed_hi) for iv in right.intervals] == [
-        (True, True), (False, False), (True, True), (False, False),
-        (True, True), (False, False), (True, True),
-    ]
-    left = pieces.iterated.result(branch_key, "left")
-    assert [(iv.closed_lo, iv.closed_hi) for iv in left.intervals] == [
-        (True, False), (True, True), (False, False), (True, True),
-    ]
-    # Every crossing is owned by a closed element on both rows.
-    for result in (right, left):
-        for iid, element_id in result.element_of_intersection.items():
-            iv = result.element(element_id)
-            assert iv.closed_lo or iv.closed_hi
-
-
 def test_describe_mentions_parents_and_cuts(k10_partitioned):
     session, fp = k10_partitioned
     pieces = build_pieces(session, [fp])

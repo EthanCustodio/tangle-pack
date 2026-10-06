@@ -1,8 +1,8 @@
 """Tests for the symbolic dynamics built from bridge classes and dual-graph walks.
 
 The synthetic tests use a fake naming and hand-built classes over hand-made
-``ElementRef`` s; the fixture tests pin the author's k=10 example and the
-k=2.8 one-blast singleton path (never by registry ids or bridge counts).
+``ElementRef`` s. The author's fixture words (k=10, k=2.8) are pinned once,
+letter-free, in ``tests/golden/``.
 """
 
 from __future__ import annotations
@@ -381,103 +381,3 @@ def test_unreadable_image_chain_is_skipped_as_evidence(layout, monkeypatch, capl
     assert [e.bridge_id for e in evidence] == [(0, 5)]
     assert evidence[0].itinerary == good
     assert_logged(caplog, logging.WARNING, SD.__name__)
-
-
-# --------------------------------------------------------------------------- #
-# Fixture tests: k=10 (function-scoped) and k=2.8 one blast (session, slow)
-# --------------------------------------------------------------------------- #
-def _dual_and_table(session, fixed_points):
-    from minimal_helpers import build_pieces
-    from tanglepack.topology.DualGraph import DualGraph
-
-    pieces = build_pieces(session, fixed_points)
-    dual = DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips)
-    return pieces, dual
-
-
-def _names(dyn, refs):
-    return [dyn.naming.name(ref).short_text for ref in refs]
-
-
-@pytest.fixture
-def k10_dynamics(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces, dual = _dual_and_table(session, [fp])
-    return pieces, dual, symbolic_dynamics(dual, pieces.table)
-
-
-def test_k10_active_class_word(k10_dynamics):
-    _pieces, _dual, dyn = k10_dynamics
-    active = [cd for cd in dyn.classes.values() if cd.kind == "active"]
-    assert len(active) == 1
-    cd = active[0]
-    assert not cd.ambiguous and cd.unresolved_reason is None
-    assert _names(dyn, cd.itinerary) == ["R_1^1", "R_3^3", "L_3", "L_1^2", "R_3^1", "R_1^3"]
-    letter = cd.letter
-    inert = [c.letter for c in dyn.classes.values() if c.kind == "inert"]
-    assert inert == ["u"]
-    assert cd.word == f"{letter} u^-1 {letter}^-1"
-    assert dyn.word(letter, refined=False) == cd.word
-    assert cd.verified is True
-    assert cd.evidence, "the k=10 anchor class has registered member images"
-    assert dyn.is_reliable
-
-
-def test_k10_refinement_matches_every_member(k10_dynamics):
-    _pieces, _dual, dyn = k10_dynamics
-    cd = next(c for c in dyn.classes.values() if c.kind == "active")
-    letter = cd.letter
-    children = dyn.refined[cd.bridge_class]
-    assert [child.name for child in children] == [f"{letter}_1", f"{letter}_2"]
-    assert _names(dyn, children[0].occurrence) == ["R_1^1", "R_3^3"]
-    assert _names(dyn, children[1].occurrence) == ["R_1^3", "R_3^1"]
-    assert dyn.word(f"{letter}_1") == f"{letter}_1 u^-1 {letter}_2^-1"
-    assert dyn.word(f"{letter}_2") == f"{letter}_1 u^-1 {letter}_2^-1"
-    # Under the empty-stretch cut every member's own endpoint pair is one of
-    # the walked occurrences: nothing is left unmatched.
-    assert dyn.unmatched_members == {}
-    assert dyn.member_refinement and all(
-        child is not None for child in dyn.member_refinement.values()
-    )
-    assert {bid for child in children for bid in child.members} == {
-        member.bridge_id for member in cd.entry.members if not member.is_loop
-    }
-    assert all(
-        bid in dyn.refined[cd.bridge_class][child.index - 1].members
-        for bid, child in dyn.member_refinement.items()
-    )
-
-
-def test_k10_transition_matrix(k10_dynamics):
-    """The k=10 fact: every class resolves and the refined matrix is all ones.
-
-    (The itinerary laws -- even length, same-side pairs, inert classes outside
-    the graph -- live in ``tests/invariants/test_law_symbolic.py``.)
-    """
-    _pieces, _dual, dyn = k10_dynamics
-    for cd in dyn.classes.values():
-        assert cd.itinerary is not None, cd.unresolved_reason
-    names, matrix = dyn.transition_matrix()
-    assert names == ["a_1", "a_2"] and matrix.tolist() == [[1, 1], [1, 1]]
-
-
-@pytest.mark.slow
-def test_k28_one_blast_singleton_path(k28_partitioned):
-    session, fp = k28_partitioned
-    pieces, dual = _dual_and_table(session, [fp])
-    dyn = symbolic_dynamics(dual, pieces.table)
-    active = [cd for cd in dyn.classes.values() if cd.kind == "active"]
-    assert len(active) == 1
-    cd = active[0]
-    assert cd.unresolved_reason is None
-    assert any(landing.singleton for landing in cd.landings)
-    assert len(cd.itinerary) == 6
-    assert len(cd.symbols) == 3
-    assert cd.verified is True
-    for other in dyn.classes.values():
-        if other.kind == "inert":
-            assert other.itinerary is not None, other.unresolved_reason
-            assert other.symbols == [], other.word
-    for other in dyn.classes.values():
-        assert len(other.itinerary) % 2 == 0
-    assert dyn.describe()

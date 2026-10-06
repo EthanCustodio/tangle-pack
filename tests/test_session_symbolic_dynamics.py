@@ -1,10 +1,9 @@
 """
 TangleSession.symbolic_dynamics / describe_symbolic_dynamics and the plot
-delegates: results, caching, invalidation, and the two-blast k=2.8 pin.
+delegates: results, caching and invalidation.
 
 Mirrors ``test_session_dual_graph.py``. Nothing here pins a registry id, a
-bridge count or a class letter: the two-blast structure is located through
-the homotopy names of each class's elements.
+bridge count or a fixture word: those are pinned once in ``tests/golden/``.
 """
 
 from __future__ import annotations
@@ -45,22 +44,6 @@ def _same_dynamics(a: SymbolicDynamics, b: SymbolicDynamics) -> bool:
     )
 
 
-def _homotopy_names(dyn: SymbolicDynamics, cd) -> frozenset[str]:
-    """The homotopy names of a class's two elements, e.g. ``{"R_1", "R_3"}``."""
-    return frozenset(
-        dyn.naming.homotopy_name(ref).short_text
-        for ref in (cd.bridge_class.source, cd.bridge_class.target)
-    )
-
-
-def _class_named(dyn: SymbolicDynamics, *names: str):
-    """The active class whose elements carry exactly these homotopy names."""
-    wanted = frozenset(names)
-    matches = [cd for cd in dyn.classes.values() if _homotopy_names(dyn, cd) == wanted]
-    assert len(matches) == 1, f"expected one class {sorted(wanted)}, found {matches}"
-    return matches[0]
-
-
 # --------------------------------------------------------------------------- #
 # k=10: results and caching
 # --------------------------------------------------------------------------- #
@@ -73,16 +56,6 @@ def test_k10_symbolic_dynamics_matches_a_direct_build(k10_partitioned):
     assert isinstance(dyn, SymbolicDynamics)
     assert _same_dynamics(dyn, direct)
     assert dyn.rules, "the k=10 fixture has at least one resolved class"
-
-
-def test_k10_symbolic_dynamics_is_built_over_the_cached_pieces(k10_partitioned):
-    session, fp = k10_partitioned
-    dyn = session.symbolic_dynamics([fp])
-    active = [cd for cd in dyn.classes.values() if cd.kind == "active"]
-    assert len(active) == 1
-    letter = active[0].letter
-    assert active[0].word == f"{letter} u^-1 {letter}^-1"
-    assert dyn.is_reliable
 
 
 def test_cache_hits_return_the_same_object(k10_partitioned):
@@ -236,82 +209,6 @@ def test_session_plot_delegates_forward_to_plotting(k10_partitioned, monkeypatch
     assert calls[3][1] is dyn and calls[3][3] == {"refined": True}
     assert session.plot_dual_graph_cartoon(show_walks=False) == "cartoon"
     assert calls[4][1] == (session.dual_graph(), dyn) and calls[4][3] == {"show_walks": False}
-
-
-# --------------------------------------------------------------------------- #
-# k=2.8, two blasts: the three-class structure, pinned by element names
-# --------------------------------------------------------------------------- #
-@pytest.mark.slow
-def test_k28_two_blasts_structure(k28_two_blasts_partitioned):
-    session, fp = k28_two_blasts_partitioned
-    dyn = session.symbolic_dynamics([fp])
-    assert dyn.is_reliable, dyn.describe()
-
-    active = [cd for cd in dyn.classes.values() if cd.kind == "active"]
-    assert len(active) == 3, dyn.describe()
-    for cd in dyn.classes.values():
-        assert cd.itinerary is not None, cd.unresolved_reason
-        assert len(cd.itinerary) % 2 == 0
-        assert cd.verified is True
-    inert = [cd for cd in dyn.classes.values() if cd.kind == "inert"]
-    assert [_homotopy_names(dyn, cd) for cd in inert] == [frozenset({"L_1", "L_3"})]
-    inert_letter = inert[0].letter
-    assert inert[0].symbols == []
-
-    # Letters follow the smallest member cdist: the anchor class {R_1, R_5} is
-    # a, then {R_3, R_5} is b and {R_1, R_3} is c; the inert {L_1, L_3} is u.
-    a = _class_named(dyn, "R_1", "R_5")
-    b = _class_named(dyn, "R_3", "R_5")
-    c = _class_named(dyn, "R_1", "R_3")
-    assert (a.letter, b.letter, c.letter, inert_letter) == ("a", "b", "c", "u")
-    table = session.bridge_classes([fp])
-    assert table.entries[0].bridge_class == a.bridge_class
-    assert table.entries[0].min_unstable_cdist == pytest.approx(
-        0.0, abs=session.workbench.intersection_registry.cdist_tol
-    )
-    assert [entry.min_unstable_cdist for entry in table] == sorted(
-        entry.min_unstable_cdist for entry in table
-    )
-
-    # c -> a u^-1 a^-1: three symbols, X then inert^-1 then X^-1 with X = {R_1, R_5}.
-    assert [(s.bridge_class, s.direction) for s in c.symbols] == [
-        (a.bridge_class, +1),
-        (inert[0].bridge_class, -1),
-        (a.bridge_class, -1),
-    ]
-    assert c.word == f"{a.letter} {inert_letter}^-1 {a.letter}^-1"
-    # a -> a u^-1 b^-1.
-    assert [(s.bridge_class, s.direction) for s in a.symbols] == [
-        (a.bridge_class, +1),
-        (inert[0].bridge_class, -1),
-        (b.bridge_class, -1),
-    ]
-    # b -> c: the single pair (R_1^3, R_3).
-    assert [(s.bridge_class, s.direction) for s in b.symbols] == [(c.bridge_class, +1)]
-    assert b.word == c.letter
-    assert len(b.itinerary) == 2
-
-    # Only {R_1, R_5} refines, into exactly two children (anchor outward), and
-    # every member of it matches a child by its own endpoint owners.
-    assert set(dyn.refined) == {a.bridge_class}
-    children = dyn.refined[a.bridge_class]
-    assert [child.name for child in children] == [f"{a.letter}_1", f"{a.letter}_2"]
-    assert dyn.word(f"{a.letter}_1") == dyn.word(f"{a.letter}_2")
-    assert dyn.word(c.letter) == f"{a.letter}_1 {inert_letter}^-1 {a.letter}_2^-1"
-    assert dyn.unmatched_members == {}
-    assert {bid for child in children for bid in child.members} == {
-        member.bridge_id for member in a.entry.members if not member.is_loop
-    }
-
-    # Unrefined matrix over (a, b, c) = [[1,1,0],[0,0,1],[2,0,0]]; the inert
-    # class u is in the words but not in the matrix.
-    names, matrix = dyn.transition_matrix(refined=False)
-    assert names == [a.letter, b.letter, c.letter]
-    assert matrix.tolist() == [[1, 1, 0], [0, 0, 1], [2, 0, 0]]
-    assert inert_letter not in names
-    assert inert_letter not in dyn.transition_graph(refined=False)
-
-    assert session.describe_symbolic_dynamics([fp]) == dyn.describe()
 
 
 # --------------------------------------------------------------------------- #

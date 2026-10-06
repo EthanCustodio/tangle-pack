@@ -661,18 +661,16 @@ def test_plot_transition_graph_draws_every_symbol(k10_partitioned, refined):
         # One label per node, as mathtext.
         labels = {t.get_text() for t in ax.texts if t.get_text().startswith("$")}
         assert labels == {plotting.name_mathtext(node) for node in graph.nodes}
-        # Inert classes are not drawn (the k=10 fixture has one, u); every node
-        # drawn is active and solid -- virtual sinks would be dashed.
+        # Inert classes are not drawn; every node drawn is active and solid --
+        # virtual sinks would be dashed.
         assert all(graph.nodes[n]["kind"] == "active" for n in graph.nodes)
-        assert not any(plotting.name_mathtext("u") == t.get_text() for t in ax.texts)
+        inert = {cd.letter for cd in dynamics.classes.values() if cd.kind == "inert"}
+        assert not any(plotting.name_mathtext(letter) == t.get_text() for letter in inert for t in ax.texts)
         node_collections = [
             c for c in ax.collections if c.get_offsets().shape[0] == len(graph)
         ]
         assert node_collections
         assert all(c.get_linestyle()[0][1] is None for c in node_collections)
-        # A self-loop exists and is drawn (as a ring off its node).
-        loops = [e for e in graph.edges if e[0] == e[1]]
-        assert loops, "the k=10 word a -> a u^-1 a^-1 has a self-loop"
         fig.canvas.draw()
     finally:
         plt.close(fig)
@@ -704,10 +702,6 @@ def test_plot_itinerary_table_lists_every_class(k10_partitioned):
                 assert shown_row[1].count(" | ") == row[1].count(" | ")
             assert shown_row[2] == " ".join(s.mathtext for s in cd.symbols)
             assert shown_row[-2:] == row[-2:]
-        # The inert class's iterated itinerary is the loop that makes it inert.
-        plain = {cd.letter: row for row, cd in zip(rows, dynamics.classes.values())}
-        assert plain["u"][1] == "L_(0.0;1)^1 L_(0.0;1)^1"
-        assert plain["u"][2] == "" and plain["u"][3] == ""
         # Row content: names, not ids; status words; the k=10 active class is walked.
         for row, cd in zip(rows, dynamics.classes.values()):
             assert row[0].startswith(f"{cd.letter} = {{")
@@ -916,15 +910,6 @@ def test_cartoon_brackets_match_closedness(k10_partitioned):
             # Anchor on the right: the anchorward (lo) end closes with ] / ).
             assert glyphs[(round(x_lo, 6), round(y_bar, 6), False)] == ("]" if iv.closed_lo else ")")
             assert glyphs[(round(x_hi, 6), round(y_bar, 6), True)] == ("[" if iv.closed_hi else "(")
-        # The k=10 right row reads [ ] ( ) [ ] ( ) [ ] ( ) [ ] under the
-        # empty-stretch rule: the mapped hole's lobe base and chord are open
-        # like the hole between them.
-        (branch_key,) = layout.rows
-        right = dual.partition.result(branch_key, "right").intervals
-        assert [(iv.closed_lo, iv.closed_hi) for iv in right] == [
-            (True, True), (False, False), (True, True), (False, False),
-            (True, True), (False, False), (True, True),
-        ]
     finally:
         plt.close(fig)
 

@@ -1000,3 +1000,170 @@ bug keeps a guard as a law that runs on the case where it broke (column 3).
 10. **The b = -1 placeholder** is a standalone test with `issue_marks`
     (through `law_params` it would also run the six law cases).
 11. `tests/conftest.py`'s function-scoped `law_case` is removed (superseded).
+
+---
+
+## §5 Phase 5: the golden tier (`tests/golden/`, `@pytest.mark.golden`)
+
+### What landed
+
+- **`tests/golden/`** (no `__init__.py`; module-level `pytestmark =
+  pytest.mark.golden`; every module docstring says AUTHOR-GATED, change only
+  with the author's sign-off, no re-record mechanism). Each test makes a fresh,
+  function-scoped build from `tests/cases.py` (decision 7). 21 cases, ~4 s.
+  - `test_golden_k10.py` (7, `build_k10()`): iterated rows with closedness
+    (and the homotopy names, branch code `0.0`); exactly two classes, X =
+    (R_1 → R_3) active and mapping over itself, U = (L_1 → L_3) inert; U rests
+    on its folded loop (E8); itinerary `(R_1^1,R_3^3) (L_3,L_1^2)
+    (R_3^1,R_1^3)`, not ambiguous, word [X, U⁻¹, X⁻¹], U a trivial loop;
+    refinement X₁ = (R_1^1,R_3^3), X₂ = (R_1^3,R_3^1), both words
+    [X₁, U⁻¹, X₂⁻¹], no unmatched member; refined matrix all ones over
+    (X₁, X₂), U absent; `X.verified`, `is_reliable`.
+  - `test_golden_k28.py` (9). One blast: classes {X = (R_1→R_5) active,
+    U = (L_1→L_3), V = (R_2→R_4) inert}; X's two landings are singletons; word
+    [X, U⁻¹, V⁻¹]; U and V trivial loops; X verified; reliable; the exterior
+    class U is inert through a VIRTUAL loop (its one image loop's pair has no
+    `Bridge`); 0 image bridges (E8). Two blasts: active classes in table order
+    A = (R_1→R_5), B = (R_3→R_5), C = (R_1→R_3), inert U = (L_1→L_3), A first
+    with min cdist ≈ 0 (`cdist_tol`); words A → [A, U⁻¹, B⁻¹], B → [C],
+    C → [A, U⁻¹, A⁻¹], U → []; only A refines, A₁ = (R_1^1,R_5^3),
+    A₂ = (R_1^3,R_5^1), equal words, C's refined word [A₁, U⁻¹, A₂⁻¹], every
+    member matched; unrefined matrix over (A,B,C) `[[1,1,0],[0,0,1],[2,0,0]]`;
+    the cut's closedness plus every P7 id-free relation (anchor start, lobe
+    base = images of the iterate −1 hole's bounds, chord = reference hole =
+    L_2, L_1^2 = R_5^1's ends, L_1^1/L_1^2 boundary = R_5^1.lo in the iterate
+    −2 hole, holes at {0,−1,−2,−3}, R_2 = the iterate −1 hole); every class
+    resolves and is verified; reliable.
+  - `test_golden_period3.py` (5): p3 words (below); closed (0 image bridges);
+    the same words after 4 blasts; every class resolves and is verified, no
+    virtual symbol, reliable; nested (2 outer blasts): every class resolves,
+    at least one `unique` walk and no `unreachable` one, image bridges exist,
+    reliable.
+- **`tests/helpers/names.py`**: `refined_symbol_pair`,
+  `refined_words_in_names` (refined rules spelled letter-free: a split
+  class's token by its child's iterated pair), `class_by_pair`.
+- `source == "walk"/"trellis"` is asserted NOWHERE (decision 2, overriding the
+  planner's E2 default); the k28 one-blast "resolved via the trellis path"
+  fact is represented by its two singleton landings. `is_reliable` /
+  `verified` now appear only in `tests/golden/` (the one remaining
+  `a.is_reliable == b.is_reliable` is the session-vs-direct equivalence of
+  `test_session_symbolic_dynamics._same_dynamics`, Phase 6).
+
+### p3 element names pinned (AUTHOR ITEM E8)
+
+Full names, recorded from today's build (CLAUDE.md states the p3 words in
+letters only: `a -> b -> c -> a u^-1 w^-1`):
+
+| CLAUDE.md | Pinned oriented pair |
+|---|---|
+| a (X₀) | (R_(0.0;1) → R_(1.0;5)) |
+| b (X₁) | (R_(1.0;1) → R_(2.0;5)) |
+| c (X₂) | (R_(2.0;1) → R_(0.0;5)) |
+| u (U) | (L_(1.0;1) → L_(1.0;3)), inert |
+| w (W) | (R_(1.0;2) → R_(1.0;4)), inert |
+
+Words: X₀ → [X₁], X₁ → [X₂], X₂ → [X₀, (L_(1.0;3), L_(1.0;1)),
+(R_(1.0;4), R_(1.0;2))]. The same pairs and words hold after 4 blasts and
+for the inner tangle of the nested build (letter `A:` prefixed).
+
+### Flagged for author sign-off (E8)
+
+1. **p3 names** above (`test_golden_period3.py`, constants `X0..X2`, `U`, `W`).
+2. **k10 folded loop**: `test_golden_k10.py::test_k10_inert_class_rests_on_its_folded_loop`
+   (U inert, exactly one member with no registered image, no image class,
+   image loops = its folded loops).
+3. **k28 one blast, 0 image bridges**:
+   `test_golden_k28.py::test_k28_one_blast_has_no_image_bridges` (from the
+   minimal-dual-graph memory note, not CLAUDE.md).
+4. (Added) **which k28 one-blast class is "exterior"**: pinned as U =
+   (L_1 → L_3), the inert class whose only evidence is the virtual loop (taken
+   from the deleted `test_k28_has_one_active_and_two_inert_classes`); the
+   other inert class (R_2 → R_4) holds the folded blast-child loop, which is
+   no longer pinned (not a CLAUDE.md fact).
+
+### Deletion ledger, Phase 5
+
+19 collected node ids removed, 21 added (the golden tier): 1080 → 1082
+(`nodeids_p5.txt`, `p5_deleted.txt`). Every deleted name and subject was
+grepped in the regression-guard notes: no hit; the nested own-blast guards
+(`test_nested_inner_words_are_the_period3_words`,
+`test_nested_blast_order_does_not_matter`,
+`test_nested_outer_blasts_leave_the_inner_bridges_alone`) are kept.
+
+| Node id | New home | Guard checked |
+|---|---|---|
+| `test_bridge_class::test_k10_has_one_active_and_one_inert_class` | `golden/test_golden_k10::test_k10_classes`, `::test_k10_inert_class_rests_on_its_folded_loop` (member direction counts dropped: not a CLAUDE.md fact; fold mechanics stay in `test_loop_folds_into_its_preimage_class`) | none |
+| `test_bridge_class::test_k10_inert_class_rests_on_its_folded_loop_despite_an_unresolved_member` | `golden/test_golden_k10::test_k10_inert_class_rests_on_its_folded_loop` (E8), `::test_k10_classes` (X maps over itself) | none |
+| `test_bridge_class::test_k28_has_one_active_and_two_inert_classes` | `golden/test_golden_k28::test_k28_one_blast_classes_and_word`, `::test_k28_one_blast_exterior_class_is_inert_through_a_virtual_loop` | none |
+| `test_session_bridge_classes::test_active_class_is_lettered_a_and_the_inert_one_is_not` | law `only_active_classes_lettered` (Phase 4); letters are presentation | none |
+| `test_session_bridge_classes::test_k28_letters_only_the_anchor_class` | law `only_active_classes_lettered`; golden k28 one-blast classes | none |
+| `test_element_naming::test_k10_homotopy_names`, `::test_k10_iterated_names` | `golden/test_golden_k10::test_k10_iterated_rows` (children/parent round trips stay in the synthetic naming tests) | none |
+| `test_iterated_partition::test_k10_empty_stretch_cut_reads_as_expected` | `golden/test_golden_k10::test_k10_iterated_rows`; "every crossing owned closedly" is the law `iterated_unique_owner` | none |
+| `test_symbolic_dynamics::test_k10_active_class_word` | `golden/test_golden_k10::test_k10_itinerary_and_word`, `::test_k10_evidence` | none |
+| `test_symbolic_dynamics::test_k10_refinement_matches_every_member` | `golden/test_golden_k10::test_k10_refinement` | none |
+| `test_symbolic_dynamics::test_k10_transition_matrix` | `golden/test_golden_k10::test_k10_transition_matrix` | none |
+| `test_symbolic_dynamics::test_k28_one_blast_singleton_path` | `golden/test_golden_k28::test_k28_one_blast_classes_and_word` | none |
+| `test_session_symbolic_dynamics::test_k28_two_blasts_structure` | `golden/test_golden_k28::test_k28_two_blasts_*` (6 tests) | none |
+| `test_session_symbolic_dynamics::test_k10_symbolic_dynamics_is_built_over_the_cached_pieces` | after Phase 3b only the k10 word substring and `is_reliable` were left: golden k10; session = direct build stays in `test_k10_symbolic_dynamics_matches_a_direct_build` | none |
+| `test_dual_walk::test_k10_landings_and_the_active_class_walk` | golden k10 itinerary / `verified`; law `landings_contained` | none |
+| `test_higher_period_cartoon::test_p3_words_are_equivariant_under_the_orbit_shift` | `golden/test_golden_period3::test_p3_words_form_the_orbit_shift_chain`, `::test_p3_resolves_and_is_reliable` | none |
+| `test_higher_period_cartoon::test_p3_words_survive_four_blasts` | `golden/test_golden_period3::test_p3_words_survive_four_blasts` (letter-free) | none |
+| `test_higher_period_cartoon::test_nested_resolves_everything_with_real_walks` | `golden/test_golden_period3::test_nested_resolves_everything_after_two_outer_blasts` | none |
+| `test_higher_period_cartoon::test_nested_default_words_are_pinned` | deleted, no new home: a commit snapshot (2315204), not a CLAUDE.md fact (decisions 2, 3) | hole-side-own-blast: the three own-blast guards are kept |
+
+**Assertions removed inside surviving tests:**
+- `test_topology_plotting::test_cartoon_brackets_match_closedness`: the k=10
+  right-row closedness pin (golden k10 rows); the glyph = closedness property
+  stays.
+- `test_topology_plotting::test_plot_transition_graph_draws_every_symbol`:
+  the letter `u` pin (now: no inert class's letter is drawn) and the k=10
+  self-loop fact.
+- `test_topology_plotting::test_plot_itinerary_table_lists_every_class`: the
+  `plain["u"]` k=10 inert-loop row pin (not in the planner's list; same kind
+  of fact half).
+- Orphaned helpers removed: `k10_dynamics` / `_dual_and_table` / `_names`
+  (`test_symbolic_dynamics`), `k10_naming` / `_homotopy`
+  (`test_element_naming`), `_homotopy_names` / `_class_named`
+  (`test_session_symbolic_dynamics`), `_P3_WORDS` / `_active_words`
+  (`test_higher_period_cartoon`), three unused imports in `test_dual_walk`;
+  module docstrings now point to `tests/golden/`.
+
+### Verification
+
+- Collected **1082** (`nodeids_p5.txt`).
+- `1042 passed, 32 skipped, 8 xfailed` in 149 s with coverage (`p5_run.txt`);
+  `-rxX` lists exactly the 8 `KNOWN_ISSUES` xfails; no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_p5.json`).
+- `pytest -m golden` selects exactly the 21 `tests/golden/` cases
+  (1061 deselected); `pytest tests/golden` passes repeatedly (fresh builds,
+  permuted registry ids).
+- Isolation: `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`
+  (passed alone this time; the P6 id-nondeterminism makes it flaky alone, fix
+  still planned for Phase 7), `golden/test_golden_k28.py::test_k28_two_blasts_cut`,
+  `golden/test_golden_period3.py::test_p3_words_survive_four_blasts`,
+  `numerics/test_intersection_registry_fixes.py::test_synthetic_forwards_manifold_keys`,
+  `test_stable_partition.py::test_plot_stable_partition_smoke`,
+  `numerics/test_generation_and_caches.py::test_workbench_generation_bumps_on_every_mutation[trim_stable_manifolds]`:
+  all pass alone.
+
+### Deviations, Phase 5
+
+1. **E2 resolved by decision 2, not the planner default:** the k28 one-blast
+   class's "trellis path" is not pinned (`source` and `search is None` are
+   asserted nowhere); its singleton landings are.
+2. **Not re-pinned (not CLAUDE.md facts, snapshot detail):** the k10 active
+   class's member directions `[-1,-1,1,1]`, the k28 one-blast folded
+   blast-child loop and `zone_key` of the right-side classes, the k28 active
+   class's single anchor member, and the k10 landing details of the deleted
+   dual-walk test (anchor element lands on element 0, image on the same
+   branch).
+3. **Kept as is:** `test_session_symbolic_dynamics::test_describe_symbolic_dynamics`
+   (Phase 3b already reduced it to "non-empty and mentions every class";
+   no word substring remained).
+4. **Kept the nested "at least one `unique` walk" assertion** (planner §D) —
+   it reads `search.status`, not `source`.
+5. **Extra derived pins:** k10's unrefined matrix `{X: {X: 2}}` (follows from
+   the word) and "X maps over itself" (CLAUDE.md: "the anchor bridge maps over
+   itself").
+6. One fact half beyond the planner's list was removed from the plotting
+   itinerary-table test (see above).

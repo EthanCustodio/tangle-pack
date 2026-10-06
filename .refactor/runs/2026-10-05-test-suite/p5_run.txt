@@ -1,0 +1,46 @@
+...............................x....ss..x....x............x..ss......... [  6%]
+.........................................................x.............. [ 13%]
+....................................x................................... [ 19%]
+..................................................s............s........ [ 26%]
+.....s.............s.s...........................s.....s................ [ 33%]
+.....s.....s...................................ssssssssssss............s [ 39%]
+s..............ss...........x.xss....................................... [ 46%]
+........................................................s............... [ 53%]
+........................................................................ [ 59%]
+........................................................................ [ 66%]
+........................................................................ [ 73%]
+........................................................................ [ 79%]
+........................................................................ [ 86%]
+........................................................................ [ 93%]
+........................................................................ [ 99%]
+..                                                                       [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.10.12-final-0 _______________
+
+Coverage JSON written to file .refactor/runs/2026-10-05-test-suite/cov_p5.json
+============================= slowest 15 durations =============================
+3.61s call     tests/test_session_bridge_classes.py::test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip
+3.10s call     tests/test_higher_period_cartoon.py::test_nested_blast_order_does_not_matter
+2.55s call     tests/test_session_bridge_classes.py::test_workbench_mutation_invalidates_the_cache
+2.52s call     tests/numerics/test_grow_until.py::test_faces_closed_raises_at_the_cap_for_the_anchor
+2.52s call     tests/test_session_dual_graph.py::test_workbench_mutation_invalidates_the_caches
+2.51s call     tests/test_session_symbolic_dynamics.py::test_workbench_mutation_invalidates_the_cache
+2.35s setup    tests/numerics/test_inversion_fixture.py::test_one_map_step_scales_cdist_by_per_step_beta[0]
+2.35s setup    tests/numerics/test_inversion_fixture.py::test_advance_key_flips_the_branch_and_returns_after_k_value_steps[stable]
+2.33s setup    tests/numerics/test_inversion_fixture.py::test_one_map_step_scales_cdist_by_per_step_beta[1]
+2.32s setup    tests/numerics/test_bridge_identity.py::test_iterating_an_inversion_bridge_lands_on_the_other_branch
+2.32s setup    tests/invariants/test_law_partition.py::test_partition_covers_branch[inversion]
+2.31s setup    tests/invariants/test_law_crossings.py::test_recompute_preserves_ids[inversion]
+2.31s setup    tests/invariants/test_law_iterated.py::test_iterated_child_inside_parent[inversion]
+2.30s setup    tests/invariants/test_law_bridges.py::test_bridge_partial_iff_no_id[inversion]
+2.25s setup    tests/invariants/test_law_classes.py::test_every_bridge_in_one_class[inversion]
+=========================== short test summary info ============================
+XFAIL tests/invariants/test_law_anchors.py::test_one_anchor_per_unstable_branch[inversion] - an inversion point registers one (0,0) anchor per (unstable, stable) branch pair, i.e. two per unstable branch; the author's rule is one (P2)
+XFAIL tests/invariants/test_law_arrangement.py::test_arrangement_regions_disjoint[k28_one_blast] - a zero-area region bounded by an unstable arc no Bridge object spans (after a blast) reports a representative point inside a neighbouring region (Phase 4 finding)
+XFAIL tests/invariants/test_law_arrangement.py::test_arrangement_regions_disjoint[k28_two_blasts] - a zero-area region bounded by an unstable arc no Bridge object spans (after a blast) reports a representative point inside a neighbouring region (Phase 4 finding)
+XFAIL tests/invariants/test_law_arrangement.py::test_arrangement_euler[inversion] - the inversion arrangement has V - E + F = 0 on its one component (four coincident anchors; Phase 4 finding)
+XFAIL tests/invariants/test_law_case_sanity.py::test_orientation_reversing_case_builds[orientation_reversing] - det J < 0 is not supported: FixedPoint.set_k_value rejects a saddle with exactly one negative eigenvalue (P4)
+XFAIL tests/invariants/test_law_classes.py::test_anchor_bridge_class_leads_its_tangle[inversion] - with two anchors per unstable branch, the bridge leaving the second anchor sits in an inert class (Phase 4 finding, tied to the anchor issue)
+XFAIL tests/invariants/test_law_symbolic.py::test_itinerary_pairs_same_side[inversion] - an inversion class's walked itinerary pairs a left element of branch 0.1 with a right element of branch 0.0 (a cross-side pair; Phase 4 finding)
+XFAIL tests/invariants/test_law_symbolic.py::test_landings_contained[inversion] - an inversion class's one-step landing straddles a cut of the image branch (contained=False; Phase 4 finding)
+1042 passed, 32 skipped, 8 xfailed in 148.99s (0:02:28)

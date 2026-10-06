@@ -6,7 +6,7 @@ pin the walk: trivial cases, entry-then-exit recording, walls never crossed,
 merged-face self-adjacency, ties, dedupe of parallel nodes, unreachability,
 missing nodes, several start faces and the ``max_walks`` cap. Hand-made
 partition families and a duck-typed trellis pin the landing and the trellis
-itinerary. One fixture test on k=10 pins the real thing without registry ids.
+itinerary. The real k=10 walk is pinned in ``tests/golden/test_golden_k10.py``.
 """
 
 from __future__ import annotations
@@ -16,9 +16,6 @@ import logging
 import pytest
 
 from helpers.logs import assert_logged
-from minimal_helpers import build_pieces
-from tanglepack.topology.BridgeClass import _image_chain
-from tanglepack.topology.DualGraph import DualGraph
 from tanglepack.topology.DualWalk import (
     ElementLanding,
     Walk,
@@ -608,63 +605,3 @@ def test_trellis_itinerary_errors(key, chain_setup):
     unsigned = FakeTrellis({0: 0.0, 1: 1.0}, {}, key, signs={0: 0, 1: -1})
     with pytest.raises(ValueError):
         trellis_itinerary(unsigned, _OwnerFamily(key), [(0, 1)], +1)
-
-
-# --------------------------------------------------------------------------- #
-# k=10 fixture
-# --------------------------------------------------------------------------- #
-def test_k10_landings_and_the_active_class_walk(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    dual = DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips)
-    trellis = pieces.full
-
-    landings = {}
-    for result in pieces.homotopy:
-        for interval in result.intervals:
-            element = result.ref(interval.element_id)
-            landing = land_element(trellis, pieces.homotopy, pieces.iterated, element)
-            assert landing.resolved, landing.reason
-            assert landing.contained and not landing.singleton
-            assert landing.image_key == element.branch_key
-            assert landing.image_side == element.side  # Henon with b = 1 preserves orientation
-            landings[element] = landing
-    # The anchor-side element of each side lands in the anchor-side iterated element.
-    for result in pieces.homotopy:
-        anchor = landings[result.ref(0)]
-        assert anchor.target.element_id == 0 and anchor.span[0] == 0.0
-
-    active = pieces.table.active
-    assert len(active) == 1
-    entry = active[0]
-    x, y = entry.bridge_class.source, entry.bridge_class.target
-    search = shortest_walks(dual, landings[x].target, landings[y].target)
-    assert search.status == "unique", search
-    assert not search.truncated
-    walk = search.walk
-    assert len(walk.itinerary) == 6
-    assert walk.itinerary[0] == landings[x].target and walk.itinerary[-1] == landings[y].target
-    for first, second in _pairs(walk.itinerary):
-        assert first.side == second.side
-    assert all(step.node.is_unified for step in walk.steps)
-
-    # Every registered member image reads the same route off the regular
-    # trellis, up to the homotopy parents of each pair.
-    def parents(itinerary):
-        return [
-            pieces.iterated.element(element).parent_element_id for element in itinerary
-        ]
-
-    checked = 0
-    for member in entry.members:
-        if member.is_loop:
-            continue
-        chain = _image_chain(trellis, member.bridge_id)
-        if chain is None:
-            continue
-        itinerary = trellis_itinerary(trellis, pieces.iterated, chain, member.direction)
-        assert len(itinerary) % 2 == 0
-        assert len(itinerary) == len(walk.itinerary)
-        assert parents(itinerary) == parents(walk.itinerary)
-        checked += 1
-    assert checked > 0

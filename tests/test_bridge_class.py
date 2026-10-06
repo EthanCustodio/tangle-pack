@@ -21,7 +21,8 @@ in one element) must fold into the class of the bridge it iterated from and
 make that class inert. The class laws on every law case (every bridge in one
 class, anchor-outward orientation and member directions, the anchor bridge's
 class, table order and tangle grouping, every orbit branch named, letters on
-active classes only) live in ``tests/invariants/test_law_classes.py``.
+active classes only) live in ``tests/invariants/test_law_classes.py``; the
+k=10 and k=2.8 class facts are pinned once in ``tests/golden/``.
 """
 
 from __future__ import annotations
@@ -185,37 +186,6 @@ def _k10_table(session, fp):
     trellis = session.trellis()
     partitions = _all_partitions(session, [fp])
     return trellis, partitions, bridge_classes(trellis, partitions)
-
-
-def test_k10_has_one_active_and_one_inert_class(k10_partitioned):
-    """The k=10 fixture (one hole orbit, three elements per side) has exactly
-    two homotopy classes: the zone-side pair with four bridges, two each way,
-    and the exterior pair whose forward image is a loop pushed into the anchor
-    element — folded in, making that class inert."""
-    session, fp = k10_partitioned
-    _trellis, _partitions, table = _k10_table(session, fp)
-
-    assert len(table) == 2
-    assert len(table.active) == 1 and len(table.inert) == 1
-    active, inert = table.active[0], table.inert[0]
-
-    directions = sorted(m.direction for m in active.members)
-    assert directions == [-1, -1, 1, 1]
-    assert not active.loops
-
-    loops = inert.loops
-    assert len(loops) == 1
-    loop = loops[0]
-    assert loop.folded_from is not None
-    ancestor = inert.member(loop.folded_from)
-    assert ancestor.direction == -1, "the loop's ancestor runs outer -> anchor element"
-    assert loop.loop_element == inert.bridge_class.source, "the loop sits in the anchor element"
-    assert sorted(m.direction for m in inert.members) == [-1, 0, 1]
-
-    for entry in table:
-        assert not entry.bridge_class.is_loop
-        assert entry.bridge_class.source.side == entry.bridge_class.target.side
-    assert active.bridge_class.source.side != inert.bridge_class.source.side
 
 
 def test_loop_folds_into_its_preimage_class(k10_partitioned):
@@ -410,50 +380,3 @@ def test_an_unresolved_loop_class_is_inert_outright():
     assert entry.bridge_class.is_loop and entry.inert
 
 
-def test_k10_inert_class_rests_on_its_folded_loop_despite_an_unresolved_member(k10_partitioned):
-    """k=10: the exterior class has one member with no registered image and one
-    whose image is the folded loop; the loop is the evidence, the unresolved
-    member is no counter-evidence. The active class maps over itself."""
-    session, fp = k10_partitioned
-    _trellis, _partitions, table = _k10_table(session, fp)
-    active, inert = table.active[0], table.inert[0]
-
-    assert inert.image_loops and not inert.image_classes
-    assert inert.unresolved, "an exterior member's image is not grown yet"
-    assert {pair for pair, _element in inert.image_loops} == {m.bridge_id for m in inert.loops}
-    assert active.bridge_class in active.image_classes
-    assert active.has_image_evidence
-
-
-def test_k28_has_one_active_and_two_inert_classes(k28_partitioned):
-    """The blasted k=2.8 tangle (holes backward only): the anchor bridge's class
-    is the only active one; the exterior class is inert through a VIRTUAL loop
-    (its image pair is registered but no bridge spans it); the interior class is
-    inert through the folded blast-child loop."""
-    session, fp = k28_partitioned
-    trellis = session.trellis()
-    partitions = _all_partitions(session, [fp])
-    table = bridge_classes(trellis, partitions)
-
-    assert len(table) == 3
-    assert len(table.active) == 1 and len(table.inert) == 2
-    active = table.active[0]
-    anchor = next(iid for iid in trellis.own_intersection_ids
-                  if trellis.intersection(iid).unstable_cdist == 0.0)
-    assert [m.bridge_id[0] for m in active.members] == [anchor]
-    assert active.bridge_class in active.image_classes
-    assert {e.bridge_class for e in table.inert} <= set(active.image_classes)
-
-    virtual, folded = sorted(table.inert, key=lambda e: len(e.loops))
-    assert not virtual.loops and len(virtual.members) == 1
-    assert len(virtual.image_loops) == 1 and not virtual.image_classes
-    (pair, element), = virtual.image_loops
-    assert trellis.bridge_between(*pair) is None, "the virtual loop has no bridge object"
-    assert element.side == virtual.bridge_class.source.side
-
-    assert len(folded.loops) == 1 and len(folded.members) == 2
-    loop = folded.loops[0]
-    assert loop.folded_from == next(m.bridge_id for m in folded.members if not m.is_loop)
-    assert folded.image_loops == [(loop.bridge_id, loop.loop_element)]
-    for entry in table:
-        assert not entry.bridge_class.is_loop

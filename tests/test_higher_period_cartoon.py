@@ -183,27 +183,6 @@ def test_line_cartoon_labels_every_row_with_its_branch_code(k10_partitioned):
 # Period 3
 # --------------------------------------------------------------------------- #
 @pytest.mark.slow
-def test_p3_words_are_equivariant_under_the_orbit_shift(p3_built):
-    """The three active classes map one to the next, oriented alike (A2)."""
-    dynamics = p3_built.session.symbolic_dynamics()
-    active = [cd for cd in dynamics.classes.values() if cd.kind == "active"]
-    assert len(active) == 3
-    # Every active class starts at its anchor element, on whichever branch.
-    for cd in active:
-        assert cd.bridge_class.source.element_id == 0
-        assert cd.bridge_class.target.element_id > 0
-    words = {cd.letter: cd.word for cd in active}
-    a, b, c = sorted(words)
-    assert words[a] == b and words[b] == c
-    assert words[c].split()[0] == a  # no orbit-shift inverse on the anchor bridge
-    # Everything resolves and no walk is unreachable.
-    for cd in dynamics.classes.values():
-        assert cd.itinerary is not None, cd.unresolved_reason
-        assert cd.search is None or cd.search.status != "unreachable"
-    assert dynamics.is_reliable
-
-
-@pytest.mark.slow
 def test_p3_names_carry_orbit_codes_without_a_letter(p3_built):
     naming = p3_built.session.symbolic_dynamics().naming
     assert not naming.letters
@@ -253,16 +232,6 @@ def test_p3_circle_follows_the_zone_boundary(p3_built):
 # --------------------------------------------------------------------------- #
 # Nested
 # --------------------------------------------------------------------------- #
-@pytest.mark.slow
-def test_nested_resolves_everything_with_real_walks(nested_built):
-    session = nested_built.session
-    dynamics = session.symbolic_dynamics()
-    assert all(cd.itinerary is not None for cd in dynamics.classes.values())
-    statuses = {cd.search.status for cd in dynamics.classes.values() if cd.search is not None}
-    assert "unique" in statuses and "unreachable" not in statuses
-    assert session.minimal_trellis().image_bridge_ids
-
-
 @pytest.mark.slow
 def test_nested_names_carry_fixed_point_letters(nested_built):
     outer, inner = nested_built.fixed_points
@@ -456,27 +425,6 @@ def test_nested_blast_order_does_not_matter(caplog):
         assert len(inner_first.session.trellis(one).bridges) == len(
             session.trellis(other).bridges
         )
-
-
-_P3_WORDS = {"a": "b", "b": "c", "c": "a u^-1 w^-1"}
-
-
-def _active_words(build) -> dict:
-    dynamics = build.session.symbolic_dynamics()
-    return {cd.letter: cd.word for cd in dynamics.classes.values() if cd.kind == "active"}
-
-
-@pytest.mark.slow
-def test_p3_words_survive_four_blasts():
-    """Blasting the closed period-3 zone changes nothing topologically."""
-    assert _active_words(build_period3(blasts=4)) == _P3_WORDS
-
-
-@pytest.mark.slow
-def test_nested_default_words_are_pinned(nested_built):
-    """The nested words at the defaults, as at 2315204 (2026-10-02)."""
-    outer_words = {"d": "d uu^-1 e^-1", "e": "f", "f": "d uu^-1 d^-1"}
-    assert _active_words(nested_built) == {**_P3_WORDS, **outer_words}
 
 
 @pytest.mark.slow

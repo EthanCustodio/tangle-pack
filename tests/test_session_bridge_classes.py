@@ -87,23 +87,6 @@ def test_p3_session_result_matches_a_direct_call(p3_partitioned):
 # --------------------------------------------------------------------------- #
 # (b) letters and symbols
 # --------------------------------------------------------------------------- #
-def test_active_class_is_lettered_a_and_the_inert_one_is_not(k10_partitioned):
-    session, _fp = k10_partitioned
-
-    table = session.bridge_classes()
-    active, inert = table.active[0], table.inert[0]
-
-    assert active.letter == "a"
-    assert inert.letter is None
-    assert session.bridge_alphabet.assigned == {active.bridge_class: "a"}
-    assert session.bridge_alphabet.class_of("a") == active.bridge_class
-
-    symbols = sorted(table.symbol(bid) for bid in active.bridge_ids)
-    assert symbols == ["a", "a", "a^-1", "a^-1"]
-    with pytest.raises(ValueError):
-        inert.symbol(inert.bridge_ids[0])
-
-
 def test_letters_are_stable_across_a_rebuild(k10_partitioned):
     session, _fp = k10_partitioned
 
@@ -322,13 +305,3 @@ def test_alphabet_reuses_assigns_and_resets():
     assert alphabet.letter_for(second) == "a"
 
 
-def test_k28_letters_only_the_anchor_class(k28_partitioned):
-    session, _fp = k28_partitioned
-
-    table = session.bridge_classes()
-
-    assert len(table.active) == 1 and len(table.inert) == 2
-    assert table.describe()
-    assert [e.letter for e in table.active] == ["a"]
-    assert all(e.letter is None for e in table.inert)
-    assert all(e.zone_key is not None for e in table if e.bridge_class.source.side == "right")
