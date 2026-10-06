@@ -20,8 +20,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tanglepack import TangleWorkbench
-from tanglepack.examples import henon_jacobian, henon_map, henon_map_inverse
 from tanglepack.numerics.ManifoldInitializer import _MIN_SEED_STEP
 
 
@@ -131,24 +129,3 @@ def test_one_map_step_scales_cdist_by_per_step_beta(henon_inversion, branch_inde
         assert ratio != pytest.approx(wrong, rel=0.5)
 
 
-# --------------------------------------------------------------------------- #
-# (d) an orientation-REVERSING map is rejected, not silently mismodelled
-# --------------------------------------------------------------------------- #
-_B_NEGATIVE = (10, -1)
-_henon_b_negative = henon_map(*_B_NEGATIVE)
-_henon_b_negative_inverse = henon_map_inverse(*_B_NEGATIVE)
-_henon_b_negative_jacobian = henon_jacobian(*_B_NEGATIVE)
-
-
-def test_mixed_eigenvalue_signs_are_rejected():
-    """det J = b = -1: one eigenvalue negative, one positive.
-
-    The unstable and stable manifolds then have DIFFERENT inversion status, which
-    a single ``k_value`` cannot represent, so ``set_k_value`` must refuse rather
-    than silently model the point as if only the unstable side inverted.
-    """
-    workbench = TangleWorkbench(
-        _henon_b_negative, _henon_b_negative_inverse, _henon_b_negative_jacobian
-    )
-    with pytest.raises(ValueError):
-        workbench.construct_fixed_point([3.1623, 3.1623])

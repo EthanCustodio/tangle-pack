@@ -180,17 +180,9 @@ def test_both_eigendirection_slots_are_always_allocated():
 
 
 # --------------------------------------------------------------------------- #
-# Plan 2.5 -- set_k_value guards the eigenvalue signs
+# Plan 2.5 -- set_k_value on placeholder eigenvalues (the det J < 0 rejection
+# is the b = -1 placeholder case in tests/cases.py, xfail until supported)
 # --------------------------------------------------------------------------- #
-def test_set_k_value_rejects_disagreeing_eigenvalue_signs():
-    """An orientation-reversing map (det J < 0) cannot be modelled by one k_value."""
-    fp = FixedPoint(1)
-    fp.unstable_eigenvalues = [6.48]
-    fp.stable_eigenvalues = [-0.154]
-    with pytest.raises(ValueError):
-        fp.set_k_value()
-
-
 def test_set_k_value_tolerates_unset_stable_eigenvalues():
     """Eigenvalues left at their 0.0 placeholder carry no sign to disagree with."""
     fp = FixedPoint(2)

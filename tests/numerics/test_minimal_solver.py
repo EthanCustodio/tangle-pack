@@ -127,7 +127,13 @@ def test_orient_hook_is_honoured():
 
 
 def test_period_three_orbit_at_k_two_is_accepted():
-    """The exact k=2 period-3 orbit (residual 0) must converge and be a saddle."""
+    """The exact k=2 period-3 orbit (residual 0) must converge and be a saddle.
+
+    Guards the 2026 solver root cause (element-wise ``scipy.newton`` on the
+    coupled shooting system): the orbit must really close under three map
+    steps, each orbit point must map to the next, and the eigenvalues of
+    ``DM^3`` must multiply to ``det DM^3 = 1`` (area preservation).
+    """
 
     henon_k2 = _henon_map_factory(*HENON_P3)
     henon_k2_inverse = _henon_map_inverse_factory(*HENON_P3)
@@ -135,7 +141,20 @@ def test_period_three_orbit_at_k_two_is_accepted():
     solver = FixedPointSolver(DynamicalSystem(henon_k2, henon_k2_inverse))
     fp = solver.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
 
+    orbit = [np.asarray(c, dtype=float).ravel()[:2] for c in fp.coordinates]
+    assert len(orbit) == 3
+    for i, point in enumerate(orbit):
+        image = np.asarray(henon_k2(point), dtype=float).ravel()[:2]
+        assert np.allclose(image, orbit[(i + 1) % 3], atol=1e-9)
+    closed = orbit[0]
+    for _ in range(3):
+        closed = np.asarray(henon_k2(closed), dtype=float).ravel()[:2]
+    assert np.allclose(closed, orbit[0], atol=1e-9)
+    # a pair of orbit points must be distinct, or the "orbit" is a fixed point
+    assert np.linalg.norm(orbit[0] - orbit[1]) > 1e-3
+
     for i in range(3):
-        u = float(np.abs(np.asarray(fp.unstable_eigenvalues[i], dtype=float).ravel()[0]))
-        s = float(np.abs(np.asarray(fp.stable_eigenvalues[i], dtype=float).ravel()[0]))
-        assert s < 1.0 < u
+        u = float(np.asarray(fp.unstable_eigenvalues[i], dtype=float).ravel()[0])
+        s = float(np.asarray(fp.stable_eigenvalues[i], dtype=float).ravel()[0])
+        assert abs(s) < 1.0 < abs(u)
+        assert u * s == pytest.approx(1.0, rel=1e-6)

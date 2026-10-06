@@ -21,19 +21,21 @@ What is pinned here:
   which is the only reason a caller may hold an id across a growth round at all.
 
 Note:
-    ``grow_until_faces_closed`` is pinned on its two reachable outcomes rather
-    than on an open-to-closed transition. The unbounded face of a tangle touches
-    the outermost crossings permanently: growing a branch pushes its tip further
-    out but the crossings already on the outer envelope stay on it, and every
-    experiment on the k=10 fixture (four growth patterns, both stabilities) shows
-    the open-face corner set only ever GROWING, with each round's new crossings
-    born already interior. The cap test uses the anchor, which never closes for a
-    different and more repairable reason: the arrangement registers one anchor per
-    (unstable branch, stable branch) pair and has no notion of a branch continuing
-    THROUGH a node, so a periodic point's ``u-``/``s-`` slots get virtual stubs
-    instead of the other branch's ``u+``/``s+``. That is the deferred item in the
-    "Inversion caveat" Dev Note of ``tanglepack.topology.Arrangement``, not a
-    consequence of what an anchor is.
+    ``grow_until_faces_closed`` is pinned only on its reachable "already
+    closed" outcome. The unbounded face of a tangle touches the outermost
+    crossings permanently (every experiment on the k=10 fixture shows the
+    open-face corner set only ever GROWING), so no open-to-closed transition is
+    available to test.
+
+Dev Notes:
+    The anchor never closes under the arrangement's current anchor model (one
+    anchor per (unstable branch, stable branch) pair, virtual stubs in the
+    ``u-``/``s-`` slots; the "Inversion caveat" Dev Note of
+    ``tanglepack.topology.Arrangement``). That is a provisional limitation, not
+    a rule, so it is not pinned (the old
+    ``test_faces_closed_raises_at_the_cap_for_the_anchor`` was deleted in the
+    2026-10-05 refactor); the cap itself is covered by
+    ``test_driver_raises_at_the_cap_after_growing``.
 """
 
 from __future__ import annotations
@@ -92,13 +94,37 @@ def test_grow_until_checks_the_predicate_before_growing(small_tangle):
     assert _point_counts(workbench) == before
 
 
-def test_grow_until_raises_at_the_cap(small_tangle):
-    """An impossible predicate exhausts the cap and raises, like the siblings."""
-    workbench, fp = small_tangle
+def _cap_grow_until(workbench, fp) -> None:
+    """``grow_until`` with an impossible predicate."""
+    workbench.grow_until(fp, lambda wb: False, max_iterations=1)
+
+
+def _cap_grow_until_intersection(workbench, fp) -> None:
+    """``grow_until_intersection`` with too small a cap to reach a crossing."""
+    workbench.grow_until_intersection(fp, "unstable", max_iterations=1)
+
+
+def _cap_grow_until_arclength(workbench, fp) -> None:
+    """``grow_until_arclength`` with an unreachable length."""
+    workbench.grow_until_arclength(fp, "unstable", length=1e9, max_iterations=2)
+
+
+@pytest.mark.parametrize(
+    ("fixture", "drive"),
+    [
+        ("small_tangle", _cap_grow_until),
+        ("initialized", _cap_grow_until_intersection),
+        ("initialized", _cap_grow_until_arclength),
+    ],
+    ids=["grow_until", "grow_until_intersection", "grow_until_arclength"],
+)
+def test_driver_raises_at_the_cap_after_growing(request, fixture, drive):
+    """Every ``grow_until_*`` driver raises ``ValueError`` at its cap, having grown."""
+    workbench, fp = request.getfixturevalue(fixture)
     before = _point_counts(workbench)
 
     with pytest.raises(ValueError):
-        workbench.grow_until(fp, lambda wb: False, max_iterations=1)
+        drive(workbench, fp)
 
     after = _point_counts(workbench)
     assert any(after[key] > before[key] for key in before), (
@@ -121,22 +147,6 @@ def test_grow_until_grows_only_the_requested_stabilities(small_tangle):
         if key[1] == "stable":
             assert after[key] == before[key]
     assert after[(fp, "unstable", 0, 0)] > before[(fp, "unstable", 0, 0)]
-
-
-def test_grow_until_rejects_an_empty_grow_set(small_tangle):
-    workbench, fp = small_tangle
-    before = _point_counts(workbench)
-    with pytest.raises(ValueError):
-        workbench.grow_until(fp, lambda wb: False, grow=())
-    assert _point_counts(workbench) == before, (
-        "the request must be refused before any growth"
-    )
-
-
-def test_grow_until_requires_an_initialized_manifold(fixed_point):
-    workbench, fp = fixed_point  # no manifolds seeded yet
-    with pytest.raises(ValueError):
-        workbench.grow_until(fp, lambda wb: True)
 
 
 def test_grow_until_preserves_crossing_ids_across_rounds(small_tangle):
@@ -231,27 +241,6 @@ def test_iterates_closed_is_a_no_op_when_already_closed(small_tangle):
     assert _point_counts(workbench) == before
 
 
-def test_iterates_closed_rejects_an_unknown_id(small_tangle):
-    workbench, fp = small_tangle
-    before = _point_counts(workbench)
-    unknown = max(iid for iid, _ix in workbench.intersection_registry) + 100
-    with pytest.raises(ValueError):
-        workbench.grow_until_iterates_closed(fp, ids=[unknown])
-    assert _point_counts(workbench) == before, (
-        "the request must be refused before any growth"
-    )
-
-
-def test_iterates_closed_rejects_an_unknown_direction(small_tangle):
-    workbench, fp = small_tangle
-    before = _point_counts(workbench)
-    with pytest.raises(ValueError):
-        workbench.grow_until_iterates_closed(fp, direction="sideways")
-    assert _point_counts(workbench) == before, (
-        "the request must be refused before any growth"
-    )
-
-
 # --------------------------------------------------------------------------- #
 # grow_until_faces_closed
 # --------------------------------------------------------------------------- #
@@ -268,35 +257,72 @@ def test_faces_closed_returns_immediately_for_interior_crossings(small_tangle):
     assert _point_counts(workbench) == before
 
 
-def test_faces_closed_raises_at_the_cap_for_the_anchor(small_tangle):
-    """An anchor cannot close under the arrangement's current anchor model.
+# --------------------------------------------------------------------------- #
+# rejected requests -- refused before any growth
+# --------------------------------------------------------------------------- #
+def _reject_empty_grow_set(workbench, fp) -> None:
+    """``grow_until`` asked to grow nothing."""
+    workbench.grow_until(fp, lambda wb: False, grow=())
 
-    A periodic point is topologically ONE degree-four node whose ``u-`` and ``s-``
-    rays are the other branch's ``u+`` and ``s+``. The arrangement does not model
-    that: ``_register_anchors`` registers one anchor per (unstable branch, stable
-    branch) pair and nothing joins them, so those two slots are filled with
-    virtual stubs and every face through one of them is open, however far the
-    manifolds are grown. Until that deferred item is closed (the "Inversion
-    caveat" Dev Note in ``tanglepack.topology.Arrangement``) an anchor is exactly
-    the request the cap exists to stop.
+
+def _reject_uninitialized_manifold(workbench, fp) -> None:
+    """``grow_until`` on a fixed point with no seeded manifolds."""
+    workbench.grow_until(fp, lambda wb: True)
+
+
+def _reject_unknown_id(workbench, fp) -> None:
+    """``grow_until_iterates_closed`` on an id the registry does not hold."""
+    unknown = max(iid for iid, _ix in workbench.intersection_registry) + 100
+    workbench.grow_until_iterates_closed(fp, ids=[unknown])
+
+
+def _reject_unknown_direction(workbench, fp) -> None:
+    """``grow_until_iterates_closed`` with a direction that is not one."""
+    workbench.grow_until_iterates_closed(fp, direction="sideways")
+
+
+def _reject_empty_face_id_set(workbench, fp) -> None:
+    """``grow_until_faces_closed`` with nothing to close."""
+    workbench.grow_until_faces_closed(fp, ids=[])
+
+
+def _reject_uninitialized_branch(workbench, fp) -> None:
+    """``grow_until_intersection`` on branch 1 of a one-branch saddle.
+
+    Guards the ``branch_index`` fix (audit 2026-07): the index must reach the
+    manifold lookup instead of silently growing branch 0 to the cap.
     """
-    workbench, fp = small_tangle
-    anchors = [iid for iid, ix in workbench.intersection_registry if ix.is_synthetic]
-    assert anchors, "compute_intersections must have registered the anchor"
-    assert anchors[0] not in _interior_ids(workbench)
-
-    with pytest.raises(ValueError):
-        workbench.grow_until_faces_closed(fp, ids=anchors, max_iterations=2)
+    workbench.grow_until_intersection(fp, "unstable", branch_index=1)
 
 
-def test_faces_closed_rejects_an_empty_id_set(small_tangle):
-    workbench, fp = small_tangle
+@pytest.mark.parametrize(
+    ("fixture", "request_growth"),
+    [
+        ("small_tangle", _reject_empty_grow_set),
+        ("fixed_point", _reject_uninitialized_manifold),
+        ("small_tangle", _reject_unknown_id),
+        ("small_tangle", _reject_unknown_direction),
+        ("small_tangle", _reject_empty_face_id_set),
+        ("initialized", _reject_uninitialized_branch),
+    ],
+    ids=[
+        "grow_until-empty_grow_set",
+        "grow_until-uninitialized_manifold",
+        "iterates_closed-unknown_id",
+        "iterates_closed-unknown_direction",
+        "faces_closed-empty_id_set",
+        "grow_until_intersection-uninitialized_branch",
+    ],
+)
+def test_driver_rejects_a_bad_request_before_growing(request, fixture, request_growth):
+    """A malformed driver request raises ``ValueError`` and moves no point."""
+    workbench, fp = request.getfixturevalue(fixture)
     before = _point_counts(workbench)
+
     with pytest.raises(ValueError):
-        workbench.grow_until_faces_closed(fp, ids=[])
-    assert _point_counts(workbench) == before, (
-        "the request must be refused before any growth"
-    )
+        request_growth(workbench, fp)
+
+    assert _point_counts(workbench) == before
 
 
 # --------------------------------------------------------------------------- #

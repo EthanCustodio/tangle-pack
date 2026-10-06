@@ -13,8 +13,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tanglepack import Point
 from invariants import assert_iterate_relation
+from tanglepack import FixedPoint, Point, TangleSession, TangleWorkbench
+from tanglepack.examples import (
+    HENON_P3,
+    henon_jacobian,
+    henon_map,
+    henon_map_inverse,
+    saddle_guesses,
+)
+from tanglepack.topology.Trellis import SCALING_RTOL
 
 
 def _real_points(manifold):
@@ -47,26 +55,55 @@ def test_iterate_law_holds_on_initial_segment(initialized, stability):
     assert_iterate_relation(manifold, rtol=1e-9)
 
 
-@pytest.mark.parametrize("stability", ["unstable", "stable"])
-def test_alpha_matches_distance_ratio(initialized, stability):
-    """alpha == (cdist ratio of adjacent iterates) ** (1 / k_value)."""
-    workbench, fp = initialized
-    manifold = workbench.manifolds[(fp, stability, 0, 0)]
-    points = _real_points(manifold)
+def _p3_initialized() -> tuple[TangleWorkbench, FixedPoint]:
+    """``(workbench, fp)``: the inner period-3 orbit with its fundamental segments.
 
-    # The growth iterate runs away from the fixed point; step toward it to find
-    # the outer point's pre-image and compare cdists.
-    back_attr = "prev_iterate" if stability == "unstable" else "next_iterate"
-    outer = points[-1]
-    inner = getattr(outer, back_attr, None)
-    assert isinstance(inner, Point) and inner.cdist is not None, (
-        "outer point has no real toward-fixed-point iterate"
+    Returns:
+        The workbench and the period-3 fixed point (``k_value = 3``).
+    """
+    session = TangleSession(
+        henon_map(*HENON_P3), henon_map_inverse(*HENON_P3), henon_jacobian(*HENON_P3)
     )
+    fp = session.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
+    session.orient_eigenvectors(
+        fp, {"unstable": np.array([0, -1]), "stable": np.array([-1, -1])}
+    )
+    session.initialize_both_manifolds(fp)
+    return session.workbench, fp
+
+
+@pytest.mark.parametrize("stability", ["unstable", "stable"])
+@pytest.mark.parametrize("case", ["k10", "inversion", "p3"])
+def test_alpha_is_the_per_step_factor(request, case, stability):
+    """``alpha`` is the PER-MAP-STEP stretch, for k_value = 1, 2 and 3.
+
+    The seed's two real points are ``k_value`` map steps apart (the fictitious
+    pre-iterates fill the chain between them), so their cdist ratio is
+    ``alpha ** k_value``; and ``alpha`` agrees with the eigenvalue's per-step
+    factor (``per_step_beta``; its reciprocal on the stable side, which the
+    initializer grows under the inverse map) to ``SCALING_RTOL``.
+    """
+    if case == "p3":
+        workbench, fp = _p3_initialized()
+    else:
+        fixture = "initialized" if case == "k10" else "henon_inversion_initialized"
+        workbench, fp = request.getfixturevalue(fixture)
+    manifold = workbench.manifolds[(fp, stability, 0, 0)]
+    outer = manifold.tail
 
     alpha = outer.stretch_param
-    assert alpha is not None and alpha > 0
-    # one iterate step divides cdist by alpha
-    assert np.isclose(inner.cdist, outer.cdist / alpha, rtol=1e-9)
-    # and alpha is the k_value-th root of the full ratio across that step
-    ratio = outer.cdist / inner.cdist
-    assert np.isclose(alpha, ratio ** (1 / fp.k_value), rtol=1e-9)
+    assert alpha is not None and alpha > 1.0
+
+    # step k_value iterate links toward the fixed point to the other real point
+    back_attr = "prev_iterate" if stability == "unstable" else "next_iterate"
+    inner = outer
+    for _ in range(fp.k_value):
+        inner = getattr(inner, back_attr)
+        assert isinstance(inner, Point) and inner.cdist is not None
+        assert inner.stretch_param == pytest.approx(alpha)
+    assert outer.cdist / inner.cdist == pytest.approx(alpha ** fp.k_value, rel=1e-9)
+
+    eigen_factor = fp.per_step_beta(stability)
+    if stability == "stable":
+        eigen_factor = 1.0 / eigen_factor
+    assert alpha == pytest.approx(eigen_factor, rel=SCALING_RTOL)

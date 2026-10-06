@@ -31,24 +31,24 @@ def _manifold(workbench, fp, stability: str, branch_index: int = 0):
     return workbench.manifolds[(fp, stability, 0, branch_index)]
 
 
-def test_fundamental_segments_have_injective_cdist(initialized):
-    """Both fundamental segments come out of the initializer collision-free."""
+def test_low_stretch_growth_keeps_cdist_injective(initialized):
+    """The fundamental segments, and two growth iterations of them, keep cdist
+    injective on the k=10 horseshoe.
+
+    The only ``strict`` cdist check of the suite (author decision 2026-10-05):
+    the k=10 binary horseshoe is low stretch -- after two iterations the
+    tightest cdist gap is still ~1e-7, orders of magnitude above the 1e-12
+    collision tolerance, so any tie here is a merge/refine bug, not a genuine
+    fold.
+    """
     workbench, fp = initialized
     for stability in ("unstable", "stable"):
         manifold = _manifold(workbench, fp, stability)
-        nodes = manifold.get_point_array(return_nodes=True)
-        assert len(nodes) >= 3, "fundamental segment is degenerate"
+        assert len(manifold.get_point_array(return_nodes=True)) >= 3, (
+            "fundamental segment is degenerate"
+        )
         assert_no_cdist_collision(manifold)
 
-
-def test_low_stretch_growth_keeps_cdist_injective(initialized):
-    """Two growth iterations of the k=10 horseshoe keep cdist injective.
-
-    The k=10 binary horseshoe is low stretch: after two iterations the tightest
-    cdist gap is still ~1e-7, orders of magnitude above the 1e-12 collision
-    tolerance, so any tie here is a merge/refine bug, not a genuine fold.
-    """
-    workbench, fp = initialized
     for stability in ("unstable", "stable"):
         workbench.grow_n_times(fp, stability, num_iterations=2)
 

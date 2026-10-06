@@ -10,81 +10,66 @@ Pins:
 
 from __future__ import annotations
 
-import numpy as np
+from typing import Optional
 
-from tanglepack.numerics.FixedPoint import FixedPoint
+import pytest
+
+from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 
 
-def _stub_fixed_point(lambda_u: float) -> FixedPoint:
-    """A minimal period-1 FixedPoint carrying one unstable eigenvalue."""
-    fp = FixedPoint(1)
-    fp.unstable_eigenvalues = [np.array([lambda_u])]
-    fp.stable_eigenvalues = [np.array([1.0 / lambda_u])]
-    return fp
-
-
 # ── 1.9 Intersection.fixed_points ──────────────────────────────────────────
 
-
-def test_fixed_points_with_only_b_key():
-    fp = _stub_fixed_point(3.0)
-    ix = Intersection(
-        coords=(0.0, 0.0),
-        unstable_cdist=1.0,
-        stable_cdist=1.0,
-        manifold_b_key=(fp, "stable", 0, 0),
-    )
-    assert ix.fixed_points == (fp,)
-
-
-def test_fixed_points_with_only_a_key():
-    fp = _stub_fixed_point(3.0)
-    ix = Intersection(
-        coords=(0.0, 0.0),
-        unstable_cdist=1.0,
-        stable_cdist=1.0,
-        manifold_a_key=(fp, "unstable", 0, 0),
-    )
-    assert ix.fixed_points == (fp,)
+#: (a-key fixed point, b-key fixed point, expected ``fixed_points``), with
+#: ``"p"`` / ``"q"`` naming two distinct fixed points and ``None`` an unset key.
+FIXED_POINTS_TABLE: list[tuple[Optional[str], Optional[str], tuple[str, ...]]] = [
+    (None, "p", ("p",)),      # only the b key: the IndexError case (1.9)
+    ("p", None, ("p",)),      # only the a key
+    ("p", "p", ("p",)),       # one fixed point on both keys: deduplicated
+    ("p", "q", ("p", "q")),   # two fixed points: a-key first
+    (None, None, ()),         # no keys at all
+]
 
 
-def test_fixed_points_same_fixed_point_is_deduped():
-    fp = _stub_fixed_point(3.0)
-    ix = Intersection(
-        coords=(0.0, 0.0),
-        unstable_cdist=1.0,
-        stable_cdist=1.0,
-        manifold_a_key=(fp, "unstable", 0, 0),
-        manifold_b_key=(fp, "stable", 0, 0),
-    )
-    assert ix.fixed_points == (fp,)
+@pytest.mark.parametrize(
+    ("a_fp", "b_fp", "expected"),
+    FIXED_POINTS_TABLE,
+    ids=["only_b", "only_a", "same_deduped", "distinct_ab_order", "no_keys"],
+)
+def test_fixed_points_table(
+    a_fp: Optional[str], b_fp: Optional[str], expected: tuple[str, ...]
+) -> None:
+    """``Intersection.fixed_points`` reads whichever keys are set, a-key first."""
+    points = {"p": bare_fixed_point(beta=1 / 3), "q": bare_fixed_point(beta=1 / 5)}
+    keys = {}
+    if a_fp is not None:
+        keys["manifold_a_key"] = (points[a_fp], "unstable", 0, 0)
+    if b_fp is not None:
+        keys["manifold_b_key"] = (points[b_fp], "stable", 0, 0)
 
+    ix = Intersection(coords=(0.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0, **keys)
 
-def test_fixed_points_distinct_fixed_points_in_ab_order():
-    fp_a = _stub_fixed_point(3.0)
-    fp_b = _stub_fixed_point(5.0)
-    ix = Intersection(
-        coords=(0.0, 0.0),
-        unstable_cdist=1.0,
-        stable_cdist=1.0,
-        manifold_a_key=(fp_a, "unstable", 0, 0),
-        manifold_b_key=(fp_b, "stable", 0, 0),
-    )
-    assert ix.fixed_points == (fp_a, fp_b)
-
-
-def test_fixed_points_with_no_keys_is_empty():
-    ix = Intersection(coords=(0.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0)
-    assert ix.fixed_points == ()
+    assert ix.fixed_points == tuple(points[name] for name in expected)
 
 
 # ── 1.10 Intersection.synthetic ────────────────────────────────────────────
 
 
-def test_synthetic_does_not_put_the_label_in_the_id_slot():
-    ix = Intersection.synthetic((1.0, 2.0), 0.5, 0.25, label="anchor")
+def test_synthetic_keeps_the_label_out_of_the_id_slot_and_forwards_keys() -> None:
+    """The label lands in ``label`` (not ``id``) and both manifold keys are kept."""
+    fp = bare_fixed_point(beta=1 / 3)
+    a_key = (fp, "unstable", 0, 0)
+    b_key = (fp, "stable", 0, 1)
+
+    ix = Intersection.synthetic(
+        (1.0, 2.0),
+        0.5,
+        0.25,
+        label="anchor",
+        manifold_a_key=a_key,
+        manifold_b_key=b_key,
+    )
 
     assert ix.id is None
     assert ix.label == "anchor"
@@ -92,28 +77,13 @@ def test_synthetic_does_not_put_the_label_in_the_id_slot():
     assert ix.coords == (1.0, 2.0)
     assert ix.unstable_cdist == 0.5
     assert ix.stable_cdist == 0.25
-
-
-def test_synthetic_forwards_manifold_keys():
-    fp = _stub_fixed_point(3.0)
-    a_key = (fp, "unstable", 0, 0)
-    b_key = (fp, "stable", 0, 1)
-    ix = Intersection.synthetic(
-        (0.0, 0.0),
-        0.0,
-        0.0,
-        label="anchor",
-        manifold_a_key=a_key,
-        manifold_b_key=b_key,
-    )
-
     assert ix.manifold_a_key == a_key
     assert ix.manifold_b_key == b_key
-    assert ix.is_synthetic
 
 
-def test_registry_add_synthetic_keeps_label_and_registry_id():
-    fp = _stub_fixed_point(3.0)
+def test_registry_add_synthetic_keeps_label_and_registry_id() -> None:
+    """A registered synthetic crossing carries the registry id and its label."""
+    fp = bare_fixed_point(beta=1 / 3)
     registry = IntersectionRegistry()
     iid = registry.add_synthetic(
         (0.0, 0.0),

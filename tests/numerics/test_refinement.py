@@ -1,16 +1,19 @@
-"""Characterization of the refiner's cdist rule.
+"""The refiner's cdist rule: a refined point lies between its neighbours.
 
-This is a *characterization* test, not a correctness gate: it documents that
-``_get_refined_point`` currently assigns the new point the arithmetic mean of its
-neighbours' cdists. The mean rule is itself suspect (the geometric midpoint of the
-two pre-iterates need not have the mean canonical distance) and may change when
-the wavy-lobe bug is addressed -- at which point this test should be updated to
-match the corrected rule.
+Only the FIRM part of the rule is tested: the new point between two adjacent
+nodes gets a canonical distance strictly between theirs, so refinement never
+breaks the ordering along the curve.
+
+Dev Notes:
+    The current rule assigns the arithmetic MEAN of the neighbours' cdists.
+    That is provisional (the geometric midpoint of the two pre-iterates need
+    not have the mean canonical distance, and it may change when the wavy-lobe
+    bug is addressed), so it is deliberately not pinned; the old
+    ``test_refined_cdist_is_mean_of_neighbours`` was replaced by this test in
+    the 2026-10-05 refactor.
 """
 
 from __future__ import annotations
-
-import numpy as np
 
 from tanglepack import ManifoldView
 
@@ -27,7 +30,9 @@ def _adjacent_pair_with_preiterates(manifold):
     return None
 
 
-def test_refined_cdist_is_mean_of_neighbours(grown_unstable):
+def test_refined_cdist_lies_strictly_between_its_neighbours(grown_unstable):
+    """``_get_refined_point`` (the refinement kernel, no public single-point
+    route) places the new point's cdist strictly inside its neighbours'."""
     workbench, fp, manifold = grown_unstable
     machine = workbench._man_machine
     viewer = ManifoldView(manifold, machine.system)
@@ -35,9 +40,9 @@ def test_refined_cdist_is_mean_of_neighbours(grown_unstable):
     pair = _adjacent_pair_with_preiterates(manifold)
     assert pair is not None, "no suitable adjacent pair found"
     p0, p1 = pair
+    lo, hi = sorted((float(p0.cdist), float(p1.cdist)))
+    assert lo < hi
 
     new_point = machine._get_refined_point(p0, p1, viewer, "unstable")
-    expected = 0.5 * (float(p0.cdist) + float(p1.cdist))
-    assert np.isclose(float(new_point.cdist), expected, rtol=1e-12), (
-        f"refined cdist {new_point.cdist} != mean of neighbours {expected}"
-    )
+
+    assert lo < float(new_point.cdist) < hi

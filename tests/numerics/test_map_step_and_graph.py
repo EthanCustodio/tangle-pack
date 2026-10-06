@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import pytest
 
-from tanglepack import FixedPoint, TangleWorkbench
+from cases import build_k10
+from tanglepack import FixedPoint
 from tanglepack.numerics.IterateTable import IterateTable
+from tanglepack.topology.Trellis import Trellis
 
 
 def _bare_fixed_point(
@@ -58,19 +60,12 @@ def test_per_step_beta_unstable_is_the_period_th_root_of_the_eigenvalue():
         assert beta > 1.0
         # a branch return is k_value steps and costs lambda ** num_branches
         assert beta ** fp.k_value == pytest.approx(4.0 ** fp.num_branches)
-
-
-def test_per_step_beta_is_the_k_th_root_only_without_inversion():
-    """The old (wrong) k_value-th root and the right one agree iff k == period."""
-    plain = _bare_fixed_point(3)
-    assert plain.per_step_beta("unstable") == pytest.approx(
-        4.0 ** (1.0 / plain.k_value)
-    )
-
-    inverted = _bare_fixed_point(3, inversion=True)
-    assert inverted.per_step_beta("unstable") != pytest.approx(
-        4.0 ** (1.0 / inverted.k_value)
-    )
+        # the old (wrong) k_value-th root agrees iff there is no inversion
+        kth_root = 4.0 ** (1.0 / fp.k_value)
+        if fp.k_value == fp.period:
+            assert beta == pytest.approx(kth_root)
+        else:
+            assert beta != pytest.approx(kth_root)
 
 
 def test_per_step_beta_stable_is_the_reciprocal_on_an_area_preserving_map():
@@ -137,10 +132,55 @@ def test_branch_cycle_rejects_an_unknown_stability():
 # --------------------------------------------------------------------------- #
 # 2.5 -- one advance rule, one scaling unit
 # --------------------------------------------------------------------------- #
-def test_workbench_has_no_private_key_advance():
-    """``_advance_key_forward`` is gone; ``FixedPoint.advance_key`` is the rule."""
-    assert not hasattr(TangleWorkbench, "_advance_key_forward")
-    assert not hasattr(TangleWorkbench, "_per_step_beta")
+def test_every_map_step_reaches_fixed_point_advance_key(monkeypatch):
+    """One rule: iterate inference, bridge iteration and the trellis's derived
+    image all advance keys through ``FixedPoint.advance_key``.
+
+    A counting spy wraps the method; each consumer must call it at least once.
+    Replaces the old ``hasattr`` check that the workbench's private
+    ``_advance_key_forward`` / ``_per_step_beta`` were gone -- a behavioural
+    guard that a re-grown private copy would fail.
+
+    Note:
+        Inference is exercised through ``infer_iterates`` on a registry built
+        with ``infer_iterates=False``: ``infer_iterate_table`` shares its
+        prediction step but only visits endpoints of iterated bridges, which
+        ``iterate_bridge`` has already linked, so on a real build it has
+        nothing left to predict.
+    """
+    case = build_k10(through="grown")
+    workbench, fp = case.workbench, case.fixed_point
+    calls: list[int] = []
+    original = FixedPoint.advance_key
+
+    def spy(self, key, n):
+        calls.append(n)
+        return original(self, key, n)
+
+    monkeypatch.setattr(FixedPoint, "advance_key", spy)
+    workbench.compute_intersections([fp], infer_iterates=False)
+    workbench.trim_stable_manifolds(fp)
+    workbench.create_bridges(fp)
+    registry = workbench.intersection_registry
+
+    calls.clear()
+    assert workbench.infer_iterates() > 0
+    assert calls, "iterate inference did not reach FixedPoint.advance_key"
+
+    calls.clear()
+    outermost = max(
+        (b for b in workbench.uniiterated_bridges if not b.partial),
+        key=lambda b: registry[b.second_intersection].unstable_cdist,
+    )
+    workbench.iterate_bridge(outermost)
+    assert calls, "iterate_bridge did not reach FixedPoint.advance_key"
+
+    calls.clear()
+    trellis = Trellis.from_workbench(workbench, fp)
+    crossing = next(iid for iid, ix in registry if not ix.is_synthetic)
+    _key, _cdist, from_table = trellis.image_cdist(crossing, 40, "stable")
+    assert not from_table, "40 steps must fall off the iterate table"
+    assert calls, "Trellis.image_cdist did not reach FixedPoint.advance_key"
 
 
 def test_scale_cdist_is_in_map_steps(henon_p3_session):

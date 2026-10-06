@@ -33,25 +33,20 @@ CONCAVE = np.array(
 # --------------------------------------------------------------------------- #
 # signed_polygon_area
 # --------------------------------------------------------------------------- #
-def test_signed_area_of_a_ccw_square_is_positive_one():
-    assert signed_polygon_area(SQUARE) == pytest.approx(1.0)
-
-
-def test_signed_area_flips_with_winding():
-    assert signed_polygon_area(SQUARE[::-1]) == pytest.approx(-1.0)
+@pytest.mark.parametrize(
+    ("polygon", "area"),
+    [(SQUARE, 1.0), (TRIANGLE, 6.0), (CONCAVE, 3.0)],
+    ids=["square", "triangle", "L"],
+)
+def test_signed_area_of_a_known_shape_flips_with_winding(polygon, area):
+    """Shoelace area of an analytic shape: positive CCW, negated when reversed."""
+    assert signed_polygon_area(polygon) == pytest.approx(area)
+    assert signed_polygon_area(polygon[::-1]) == pytest.approx(-area)
 
 
 def test_signed_area_ignores_an_explicit_closing_vertex():
     closed = np.vstack([SQUARE, SQUARE[:1]])
     assert signed_polygon_area(closed) == pytest.approx(signed_polygon_area(SQUARE))
-
-
-def test_signed_area_of_a_triangle():
-    assert signed_polygon_area(TRIANGLE) == pytest.approx(6.0)
-
-
-def test_signed_area_of_a_concave_polygon():
-    assert signed_polygon_area(CONCAVE) == pytest.approx(3.0)
 
 
 def test_signed_area_of_a_degenerate_polygon_is_zero():
@@ -76,21 +71,15 @@ def test_point_in_polygon_on_edge_and_on_vertex_count_as_inside():
     assert point_in_polygon((1.0, 1.0), SQUARE)
 
 
-def test_point_in_polygon_respects_the_concavity():
-    assert point_in_polygon((0.5, 1.5), CONCAVE)
-    assert not point_in_polygon((1.5, 1.5), CONCAVE)
-
-
-def test_point_in_polygon_is_winding_independent():
-    for poly in (CONCAVE, CONCAVE[::-1]):
-        assert point_in_polygon((0.5, 1.5), poly)
-        assert not point_in_polygon((1.5, 1.5), poly)
-
-
-def test_point_in_polygon_accepts_an_explicitly_closed_ring():
-    closed = np.vstack([CONCAVE, CONCAVE[:1]])
-    assert point_in_polygon((0.5, 1.5), closed)
-    assert not point_in_polygon((1.5, 1.5), closed)
+@pytest.mark.parametrize(
+    "polygon",
+    [CONCAVE, CONCAVE[::-1], np.vstack([CONCAVE, CONCAVE[:1]])],
+    ids=["ccw", "cw", "closed_ring"],
+)
+def test_point_in_polygon_respects_the_concavity(polygon):
+    """The bitten-out corner is outside, whatever the winding or closing vertex."""
+    assert point_in_polygon((0.5, 1.5), polygon)
+    assert not point_in_polygon((1.5, 1.5), polygon)
 
 
 def test_point_in_polygon_of_a_degenerate_polygon_is_false():
@@ -135,17 +124,15 @@ CRESCENT = np.vstack(
 
 
 @pytest.mark.parametrize(
-    "polygon", [SQUARE, TRIANGLE, CONCAVE, CRESCENT], ids="square triangle L crescent".split()
+    "polygon",
+    [SQUARE, TRIANGLE, CONCAVE, CONCAVE[::-1], CRESCENT, CRESCENT[::-1]],
+    ids="square triangle L L_cw crescent crescent_cw".split(),
 )
 def test_interior_point_is_inside(polygon):
+    """The scanline interior point lies inside the polygon for either winding."""
     point = polygon_interior_point(polygon)
     assert point is not None
     assert point_in_polygon(point, polygon)
-
-
-def test_interior_point_is_winding_independent():
-    for polygon in (CONCAVE, CONCAVE[::-1], CRESCENT, CRESCENT[::-1]):
-        assert point_in_polygon(polygon_interior_point(polygon), polygon)
 
 
 def test_interior_point_beats_the_vertex_mean_on_a_crescent():
@@ -205,6 +192,7 @@ def test_oriented_bridge_polyline_runs_in_the_dynamical_direction(
     workbench, _fp = henon_tangle_with_bridges
     registry = workbench.intersection_registry
 
+    checked = 0
     for bridge in workbench.bridges:
         if bridge.id is None:
             continue
@@ -218,13 +206,19 @@ def test_oriented_bridge_polyline_runs_in_the_dynamical_direction(
         if poly is None:
             continue
         raw = bridge.get_point_array()
-        # Either the storage order or its reverse, and always low-cdist first.
+        # Either the storage order or its reverse ...
         assert np.allclose(poly, raw) or np.allclose(poly, raw[::-1])
-        nodes = bridge.get_point_array(return_nodes=True)
-        ordered = [n.get_cdist("unstable") for n in nodes]
-        if ordered[0] > ordered[-1]:
-            ordered = ordered[::-1]
-        assert ordered == sorted(ordered)
+        # ... always starting at the low-cdist end: the endpoint crossing of
+        # smaller unstable cdist is nearer poly[0] than poly[-1].
+        lo, hi = sorted((registry[first], registry[second]), key=lambda c: c.unstable_cdist)
+        checked += 1
+        assert np.linalg.norm(poly[0] - lo.coords) < np.linalg.norm(poly[-1] - lo.coords)
+        assert np.linalg.norm(poly[-1] - hi.coords) < np.linalg.norm(poly[0] - hi.coords)
+        ends = bridge.get_point_array(return_nodes=True)
+        end_cdists = [ends[0].get_cdist("unstable"), ends[-1].get_cdist("unstable")]
+        low_end = ends[0] if end_cdists[0] < end_cdists[1] else ends[-1]
+        assert np.allclose(poly[0], low_end.get_point())
+    assert checked > 0
 
 
 def test_oriented_bridge_polyline_refuses_equal_cdist_endpoints(

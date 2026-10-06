@@ -37,15 +37,28 @@ def test_compute_intersections_returns_one_coord_per_registered_crossing(grown_b
 
 
 def test_trim_stable_manifolds_reads_the_registry(grown_both):
-    """The new tail is the first node at or past the outermost crossing."""
+    """The new tail is the first node at or past the outermost crossing.
+
+    The stable manifold grown to turnaround runs well past its outermost
+    crossing, so the trim must actually remove points.
+    """
     workbench, fp = grown_both
     workbench.compute_intersections([fp], infer_iterates=False)
+    manifold = workbench.manifolds[(fp, "stable", 0, 0)]
+    points_before = len(manifold.get_point_array())
+    tail_cdist_before = manifold.tail.get_cdist("stable")
 
     outermost = max(ix.stable_cdist for _iid, ix in workbench.intersection_registry)
     workbench.trim_stable_manifolds(fp)
 
-    manifold = workbench.manifolds[(fp, "stable", 0, 0)]
-    assert manifold.tail.get_cdist("stable") >= outermost
+    tail = manifold.tail
+    assert tail.get_cdist("stable") >= outermost
+    assert tail.get_cdist("stable") < tail_cdist_before
+    assert len(manifold.get_point_array()) < points_before
+    # the FIRST such node: the node before it (root to tail) is short of it
+    nodes = manifold.get_point_array(return_nodes=True)
+    assert nodes[-1] is tail
+    assert nodes[-2].get_cdist("stable") < outermost
 
 
 # --------------------------------------------------------------------------- #

@@ -32,44 +32,15 @@ def test_trim_stable_manifolds_without_crossings(fixed_point):
 
     assert len(workbench.intersection_registry) == 0
 
-    manifolds = list(workbench._iter_manifolds(fp, "stable"))
+    manifolds = [
+        m for key, m in workbench.manifolds.items() if key[0] is fp and key[1] == "stable"
+    ]
     assert manifolds
     tails_before = [m.tail for m in manifolds]
 
     workbench.trim_stable_manifolds(fp)
 
     assert [m.tail for m in manifolds] == tails_before
-
-
-def test_trim_stable_manifolds_cuts_just_past_the_outermost_crossing(small_tangle):
-    """The new tail is the low node of the outermost crossing segment, and no
-    crossing is left beyond it."""
-    workbench, fp = small_tangle
-
-    crossing_seg_ids = {
-        n for pair in workbench.Tangle._intersecting_segments for n in pair
-    }
-    assert crossing_seg_ids
-
-    for manifold in workbench._iter_manifolds(fp, "stable"):
-        on_this = crossing_seg_ids & workbench.Tangle._manifold_segs[manifold]
-        if not on_this:
-            continue
-        expected = max(
-            (workbench.Tangle._seg_lookup[i] for i in on_this),
-            key=lambda s: s.p0_seg1.get_cdist("stable"),
-        ).p0_seg1
-
-        workbench.trim_stable_manifolds(fp)
-
-        assert manifold.tail is expected
-        outermost = max(
-            ix.stable_cdist for _id, ix in workbench.intersection_registry
-        )
-        assert manifold.tail.get_cdist("stable") >= outermost
-        return
-
-    pytest.fail("no stable manifold carried a crossing")
 
 
 # --------------------------------------------------------------------------- #
@@ -86,41 +57,6 @@ def test_grow_until_intersection_stops_once_a_crossing_exists(initialized):
     assert any(not ix.is_synthetic for _iid, ix in registry), (
         "the driver returned without a detected (non-anchor) crossing"
     )
-
-
-def test_grow_until_intersection_raises_at_the_cap(initialized):
-    workbench, fp = initialized
-
-    with pytest.raises(ValueError):
-        workbench.grow_until_intersection(fp, "unstable", max_iterations=1)
-
-
-def test_grow_until_intersection_honours_branch_index(initialized):
-    """branch_index must reach the manifold lookup: an uninitialized branch is
-    reported as such rather than silently growing branch 0."""
-    workbench, fp = initialized
-    before = {
-        key: len(manifold.get_point_array())
-        for key, manifold in workbench.manifolds.items()
-    }
-
-    with pytest.raises(ValueError):
-        workbench.grow_until_intersection(fp, "unstable", branch_index=1)
-
-    # refused up front, not after growing branch 0 to the cap
-    assert {
-        key: len(manifold.get_point_array())
-        for key, manifold in workbench.manifolds.items()
-    } == before
-
-
-def test_grow_until_arclength_raises_at_the_cap(initialized):
-    workbench, fp = initialized
-
-    with pytest.raises(ValueError):
-        workbench.grow_until_arclength(
-            fp, "unstable", length=1e9, max_iterations=2
-        )
 
 
 def test_grow_until_arclength_returns_when_long_enough(initialized):

@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from tanglepack import ManifoldInitializer
+from tanglepack import ManifoldInitializer, Point
 from tanglepack import DynamicalSystem
 from tanglepack import FixedPointSolver
 from tanglepack.examples import (
@@ -86,15 +86,46 @@ def test_kevin_way_period_one_keys_and_points(stability):
     assert len(segments[(0, 0)].get_point_array()) == 3
 
 
-@pytest.mark.parametrize("stability", ["unstable", "stable"])
-def test_kevin_way_period_three_orbit_chain(stability):
+@pytest.mark.parametrize(
+    ("stability", "chain"),
+    [("unstable", [0, 1, 2]), ("stable", [0, 2, 1])],
+    ids=["unstable", "stable"],
+)
+def test_kevin_way_period_three_orbit_chain(stability, chain):
     """Chain order: unstable walks 0, 1, 2; stable walks 0, 2, 1 (the inverse map
-    grows the stable fundamental segment)."""
+    grows the stable fundamental segment).
+
+    The chain is read off the iterate links: from the innermost seeded point of
+    orbit 0, the growth-direction link (``next_iterate`` for unstable,
+    ``prev_iterate`` for stable) visits the other orbit points' segments in
+    chain order, at strictly increasing canonical distance.
+    """
     man_maker, fixed_point = _p3_fixed_point()
 
     segments = man_maker.construct_kevin_way(fixed_point, stability)
 
     assert set(segments) == {(0, 0), (1, 0), (2, 0)}
+    owner = {
+        id(node): key
+        for key, manifold in segments.items()
+        for node in manifold.get_point_array(return_nodes=True)
+    }
+    growth_link = "next_iterate" if stability == "unstable" else "prev_iterate"
+    node = min(
+        (
+            n
+            for n in segments[(0, 0)].get_point_array(return_nodes=True)
+            if isinstance(n, Point) and n.cdist is not None
+        ),
+        key=lambda n: n.cdist,
+    )
+    visited, cdists = [], []
+    while node is not None and id(node) in owner and len(visited) < len(chain):
+        visited.append(owner[id(node)][0])
+        cdists.append(node.cdist)
+        node = getattr(node, growth_link)
+    assert visited == chain
+    assert cdists == sorted(cdists) and len(set(cdists)) == len(cdists)
     for (orbit_index, _branch_index), manifold in segments.items():
         assert manifold.root is fixed_point.branch_points[orbit_index]
         # every segment sits on the orbit point it is keyed to

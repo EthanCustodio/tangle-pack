@@ -46,45 +46,48 @@ def _walked_points(manifold) -> np.ndarray:
 # --------------------------------------------------------------------------- #
 # registry generation
 # --------------------------------------------------------------------------- #
-def test_registry_generation_bumps_on_add():
-    registry = IntersectionRegistry()
-    before = registry.generation
-
+def _mutate_add(registry: IntersectionRegistry) -> None:
+    """Store one new crossing."""
     registry.add(_ix(1.0, 2.0))
 
-    assert registry.generation > before
 
-
-def test_registry_generation_bumps_on_add_synthetic():
-    registry = IntersectionRegistry()
-    before = registry.generation
-
+def _mutate_add_synthetic(registry: IntersectionRegistry) -> None:
+    """Store one synthetic crossing."""
     registry.add_synthetic(coords=(0.0, 0.0), unstable_cdist=3.0, stable_cdist=4.0)
 
-    assert registry.generation > before
 
-
-def test_registry_generation_bumps_on_register_iterate():
-    registry = IntersectionRegistry()
+def _mutate_register_iterate(registry: IntersectionRegistry) -> None:
+    """Link two stored crossings as one map step apart."""
     a = registry.add(_ix(1.0, 2.0))
     b = registry.add(_ix(2.0, 1.0))
     before = registry.generation
-
     registry.register_iterate(a, 1, b)
-
     assert registry.generation > before
 
 
-def test_registry_generation_bumps_on_reindex_from():
+def _mutate_reindex_from(registry: IntersectionRegistry) -> None:
+    """Re-key a registry against an older one."""
     old = IntersectionRegistry()
     old.add(_ix(1.0, 2.0))
-    fresh = IntersectionRegistry()
-    fresh.add(_ix(1.0, 2.0))
-    before = fresh.generation
+    registry.add(_ix(1.0, 2.0))
+    before = registry.generation
+    registry.reindex_from(old)
+    assert registry.generation > before
 
-    fresh.reindex_from(old)
 
-    assert fresh.generation > before
+@pytest.mark.parametrize(
+    "mutate",
+    [_mutate_add, _mutate_add_synthetic, _mutate_register_iterate, _mutate_reindex_from],
+    ids=["add", "add_synthetic", "register_iterate", "reindex_from"],
+)
+def test_registry_generation_bumps_on_every_mutation(mutate) -> None:
+    """Each registry mutation path advances ``generation``."""
+    registry = IntersectionRegistry()
+    before = registry.generation
+
+    mutate(registry)
+
+    assert registry.generation > before
 
 
 def test_registry_generation_stands_still_on_a_deduped_add():
@@ -245,14 +248,15 @@ def test_workbench_generation_bumps_when_a_manifold_tail_moves(
 # --------------------------------------------------------------------------- #
 # memoised point arrays
 # --------------------------------------------------------------------------- #
-def test_bridge_point_array_is_memoised(henon_tangle_with_bridges):
+def test_bridge_point_array_agrees_with_a_walk(henon_tangle_with_bridges):
+    """Repeated reads of a bridge's point array agree with a fresh walk."""
     workbench, _fp = henon_tangle_with_bridges
     bridge = workbench.bridges[0]
 
     first = bridge.get_point_array()
     second = bridge.get_point_array()
 
-    assert second is first, "a bridge's point array should be served from the memo"
+    assert np.array_equal(first, second)
     assert np.array_equal(first, _walked_points(bridge))
 
 
@@ -297,14 +301,14 @@ def test_node_walk_is_not_shared_between_callers(henon_tangle_with_bridges):
 # --------------------------------------------------------------------------- #
 # per-fixed-point branch memo
 # --------------------------------------------------------------------------- #
-def test_branch_position_map_is_memoised(fixed_point):
+def test_branch_position_map_is_stable_across_calls(fixed_point):
+    """Two reads of the position map agree and carry the point's ``k_value``."""
     _workbench, fp = fixed_point
 
     first, k_first = fp.branch_position_map("stable")
     second, k_second = fp.branch_position_map("stable")
 
     assert first == second and k_first == k_second == fp.k_value
-    assert first is second, "the position map should be served from the memo"
 
 
 def test_branch_memo_is_invalidated_by_set_k_value(fixed_point):

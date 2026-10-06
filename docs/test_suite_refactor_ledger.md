@@ -1296,3 +1296,155 @@ drop the cached trellis) is the `restore` row.
    compared order-free (see above).
 6. Kept `test_session_symbolic_dynamics::test_p3_symbolic_dynamics_smoke` and
    the plot-delegate mocks: not cache tests; they are Phase 7/8 items.
+
+## §7a Phase 7a: unit consolidation, numerics
+
+### What changed
+
+- **Linked-list points** (`tests/test_point.py`, `tests/test_branch_point.py`
+  merged into it and deleted): the iterate tests are parametrized over the two
+  point kinds (`point`, `branch_point`): 8 → 4 functions. The `Point(num_branches)`
+  misuse (it set `x = 2`) is gone; the tautological `test_get_point`
+  (`a.all() == b.all()`) is folded into `test_point_creation` /
+  `test_branch_point_creation` as `assert_array_equal(get_point(), [x, y])`.
+- **Geometry** (`test_geometry.py`): the three area tests and the winding test
+  → `test_signed_area_of_a_known_shape_flips_with_winding[square|triangle|L]`;
+  concavity + winding + closed-ring containment →
+  `test_point_in_polygon_respects_the_concavity[ccw|cw|closed_ring]`;
+  interior-point winding merged into `test_interior_point_is_inside` (`L_cw`,
+  `crescent_cw` added). **Strengthened:**
+  `test_oriented_bridge_polyline_runs_in_the_dynamical_direction` now asserts
+  `poly[0]` is the low-cdist end (nearer the lower-cdist registered crossing,
+  equal to the lower-cdist end node), non-vacuously.
+- **Registry generation** (`test_generation_and_caches.py`): four bump tests →
+  `test_registry_generation_bumps_on_every_mutation[add|add_synthetic|register_iterate|reindex_from]`
+  (the two multi-step mutators assert their own step's bump). Memo `is`
+  asserts dropped (decision: no cache-identity pins outside the facade):
+  `test_bridge_point_array_is_memoised` → `…_agrees_with_a_walk`,
+  `test_branch_position_map_is_memoised` → `…_is_stable_across_calls`.
+- **Growth drivers** (`test_grow_until.py`, `test_workbench_bugfixes.py`):
+  - caps → `test_driver_raises_at_the_cap_after_growing[grow_until|grow_until_intersection|grow_until_arclength]`
+    (each asserts the cap is reached by growing);
+  - rejections → `test_driver_rejects_a_bad_request_before_growing[...]` (6
+    rows: empty grow set, uninitialized manifold, unknown id, unknown
+    direction, empty faces id set, uninitialized branch = the
+    `honours_branch_index` **guard**, audit 2026-07), each asserting no point
+    moved;
+  - the anchor faces-closed limitation moved to the module's Dev Notes
+    (decision 3, provisional).
+- **`Intersection.fixed_points`** (`test_intersection_registry_fixes.py`): five
+  tests → `test_fixed_points_table[only_b|only_a|same_deduped|distinct_ab_order|no_keys]`
+  (**guard**: the IndexError, codebase-audit-2026-09); the two
+  `Intersection.synthetic` tests → one, keeping the label-slot assertion
+  (**guard**); the local `_stub_fixed_point` replaced by
+  `helpers.fakes.bare_fixed_point` (a real `FixedPoint`).
+- **One-rule guard upgraded** (`test_map_step_and_graph.py`, open item E9):
+  `test_workbench_has_no_private_key_advance` (a `hasattr` tombstone) →
+  `test_every_map_step_reaches_fixed_point_advance_key`: a counting spy on
+  `FixedPoint.advance_key`, asserting iterate inference, `iterate_bridge` and
+  `Trellis.image_cdist` (40 steps, off the table, `from_table=False`) each
+  reach it. `test_per_step_beta_is_the_k_th_root_only_without_inversion` is
+  merged as the explicit inversion branch of
+  `test_per_step_beta_unstable_is_the_period_th_root_of_the_eigenvalue`
+  (**guard**: the k_value-root bug).
+- **Strengthened:**
+  - `test_kevin_way_period_three_orbit_chain[unstable|stable]` asserts the
+    chain order read off the iterate links (unstable 0, 1, 2; stable 0, 2, 1)
+    at strictly increasing cdist (**guard**: kevin-way ordering,
+    codebase-audit-2026-09).
+  - `test_period_three_orbit_at_k_two_is_accepted`: each orbit point maps to
+    the next, `f^3(p) = p`, the orbit is not a fixed point, and
+    `lambda_u * lambda_s = 1` per orbit point (**guard**: solver root cause).
+  - Initializer alpha: `test_alpha_matches_distance_ratio` (tautological for
+    k = 1) → `test_alpha_is_the_per_step_factor[k10|inversion|p3 × stability]`:
+    the two real seed points are `k_value` iterate links apart with cdist ratio
+    `alpha ** k_value`, every fictitious link carries `alpha`, and
+    `alpha ≈ per_step_beta` (reciprocal on the stable side) to `SCALING_RTOL`.
+  - `test_trim_stable_manifolds_reads_the_registry` asserts the trim removed
+    points and the tail is the FIRST node at or past the outermost crossing.
+  - `test_min_separation_drops_close_bridges` asserts the distances: every
+    kept child's interior is ≥ `min_separation` from the curve accumulated
+    before it, every dropped one < (**guard**: zig-zag).
+  - `test_blast_recognizes_already_known_bridges`: no bridge is a parent
+    twice, no already-known child is a later parent (gap 6).
+  - `test_low_stretch_growth_keeps_cdist_injective` absorbs the
+    fundamental-segment case (still the only strict cdist test).
+- **Replaced:** `test_refined_cdist_is_mean_of_neighbours` →
+  `test_refined_cdist_lies_strictly_between_its_neighbours` (decision 3; the
+  mean rule is in the module's Dev Notes). It still calls the refinement kernel
+  `_get_refined_point` (no public single-point route).
+
+### Deletion ledger, Phase 7a
+
+54 collected node ids removed, 50 added: 1112 → 1108 (`nodeids_p7a.txt`,
+`p7a_deleted.txt`, `p7a_added.txt`). Every deleted subject was grepped in the
+regression-guard notes; the hits (mixed signs, `_advance_key_forward`,
+kevin-way, `Intersection.fixed_points`, label slot) are all kept as noted.
+
+| Node id | New home / reason | Guard checked |
+|---|---|---|
+| `test_point::test_get_point`, `::test_insert_next_iterate`, `::test_insert_prev_iterate`, `::test_insert_next_iterate_error`, `::test_insert_prev_iterate_error`; `test_branch_point::*` (9) | `test_point::test_point_creation` / `test_branch_point_creation` / `test_branch_point_insert_point_*` / `test_insert_{next,prev}_iterate[*]` / `test_insert_{next,prev}_iterate_twice_raises[*]` | none |
+| `test_geometry::test_signed_area_of_a_ccw_square_is_positive_one`, `::test_signed_area_flips_with_winding`, `::test_signed_area_of_a_triangle`, `::test_signed_area_of_a_concave_polygon` | `::test_signed_area_of_a_known_shape_flips_with_winding[*]` | none |
+| `test_geometry::test_point_in_polygon_respects_the_concavity` (unparametrized), `::test_point_in_polygon_is_winding_independent`, `::test_point_in_polygon_accepts_an_explicitly_closed_ring` | `::test_point_in_polygon_respects_the_concavity[ccw|cw|closed_ring]` | none |
+| `test_geometry::test_interior_point_is_winding_independent` | `::test_interior_point_is_inside[L_cw|crescent_cw]` | none |
+| `test_generation_and_caches::test_registry_generation_bumps_on_{add,add_synthetic,register_iterate,reindex_from}` | `::test_registry_generation_bumps_on_every_mutation[*]` | none |
+| `test_generation_and_caches::test_bridge_point_array_is_memoised`, `::test_branch_position_map_is_memoised` | renamed `…_agrees_with_a_walk` / `…_is_stable_across_calls`, memo `is` dropped | none |
+| `test_grow_until::test_grow_until_raises_at_the_cap`, `test_workbench_bugfixes::test_grow_until_intersection_raises_at_the_cap`, `::test_grow_until_arclength_raises_at_the_cap` | `test_grow_until::test_driver_raises_at_the_cap_after_growing[*]` | none |
+| `test_grow_until::test_grow_until_rejects_an_empty_grow_set`, `::test_grow_until_requires_an_initialized_manifold`, `::test_iterates_closed_rejects_an_unknown_id`, `::test_iterates_closed_rejects_an_unknown_direction`, `::test_faces_closed_rejects_an_empty_id_set`, `test_workbench_bugfixes::test_grow_until_intersection_honours_branch_index` | `test_grow_until::test_driver_rejects_a_bad_request_before_growing[*]` | `honours_branch_index` (audit-polish-2026-07): kept as the `uninitialized_branch` row |
+| `test_grow_until::test_faces_closed_raises_at_the_cap_for_the_anchor` | deleted (decision 3/4: provisional anchor limitation → module Dev Notes; the cap is the parametrized cap test) | regions-refactor mentions `grow_until_faces_closed` as a feature only |
+| `test_workbench_bugfixes::test_trim_stable_manifolds_cuts_just_past_the_outermost_crossing` | deleted (private R-tree oracle: `Tangle._intersecting_segments`, `_manifold_segs`, `_seg_lookup`); the property → strengthened `test_single_source_of_truth::test_trim_stable_manifolds_reads_the_registry` | none |
+| `test_intersection_registry_fixes::test_fixed_points_*` (5) | `::test_fixed_points_table[*]` | IndexError (codebase-audit-2026-09): every row kept |
+| `test_intersection_registry_fixes::test_synthetic_does_not_put_the_label_in_the_id_slot`, `::test_synthetic_forwards_manifold_keys` | `::test_synthetic_keeps_the_label_out_of_the_id_slot_and_forwards_keys` | label slot (codebase-audit-2026-09): kept |
+| `test_invariant_helpers::test_fundamental_segments_have_injective_cdist` | `::test_low_stretch_growth_keeps_cdist_injective` | cdist-strict-monotonicity-fix: strict stays on low stretch only |
+| `test_inversion_fixture::test_mixed_eigenvalue_signs_are_rejected`, `test_fixed_point::test_set_k_value_rejects_disagreeing_eigenvalue_signs` | deleted (decision 9/14): the b = -1 placeholder `test_law_case_sanity::test_orientation_reversing_case_builds[orientation_reversing]`, `xfail(strict=True, raises=ValueError)`, encodes it and still executes the raise (coverage guard OK) | regions-refactor ("`set_k_value` raises on mixed signs"): covered by the placeholder |
+| `test_map_step_and_graph::test_per_step_beta_is_the_k_th_root_only_without_inversion` | merged into `::test_per_step_beta_unstable_is_the_period_th_root_of_the_eigenvalue` | k_value-root bug: kept |
+| `test_map_step_and_graph::test_workbench_has_no_private_key_advance` | `::test_every_map_step_reaches_fixed_point_advance_key` (spy) | `_advance_key_forward` (codebase-audit, numerics-test-suite): behavioural guard now |
+| `test_initializer_cdist::test_alpha_matches_distance_ratio[*]` | `::test_alpha_is_the_per_step_factor[*]` | none |
+| `test_refinement::test_refined_cdist_is_mean_of_neighbours` | `::test_refined_cdist_lies_strictly_between_its_neighbours` | none |
+| `test_manifold_initializer::test_kevin_way_period_three_orbit_chain[unstable|stable]` | same name, new ids `[unstable|stable]` from the `(stability, chain)` parametrization | kevin-way (codebase-audit): strengthened |
+
+### Verification
+
+- Collected **1108** (`nodeids_p7a.txt`).
+- `1068 passed, 32 skipped, 8 xfailed` in 161 s with coverage (`p7a_run.txt`);
+  `-rxX` lists exactly the 8 `KNOWN_ISSUES` xfails; no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_p7a.json`).
+- Isolation (each alone): `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `numerics/test_map_step_and_graph.py::test_every_map_step_reaches_fixed_point_advance_key`,
+  `numerics/test_initializer_cdist.py::test_alpha_is_the_per_step_factor[p3-stable]`,
+  `numerics/test_grow_until.py::test_driver_rejects_a_bad_request_before_growing[grow_until_intersection-uninitialized_branch]`,
+  `numerics/test_blast_proximity_guard.py::test_min_separation_drops_close_bridges`,
+  `test_manifold_initializer.py::test_kevin_way_period_three_orbit_chain[stable]`,
+  `numerics/test_generation_and_caches.py::test_workbench_generation_bumps_on_every_mutation[compute_intersections]`:
+  all pass.
+
+### Deviations, Phase 7a
+
+1. **Spy reaches inference through `infer_iterates`, not
+   `infer_iterate_table`.** `infer_iterate_table` only visits endpoints of
+   iterated bridges, and `iterate_bridge` already links those, so on any real
+   build it predicts nothing (0 spy calls). The spy test builds k10 with
+   `compute_intersections(infer_iterates=False)` and calls `infer_iterates()`,
+   which runs the same `_image_prediction` step.
+2. **Scope split.** Items in the Phase 7 list that live in topology/loom
+   files (fakes rewiring and `FakeFixedPoint` retirement, `build_pieces`,
+   dual-graph assembly copies, `k10_session` shadows, `_define_zone`, the
+   dual-walk / strong-pip / blast-error merges, the pseudoneighbor
+   strengthenings, `test_forward_unstable_branch_cycle_matches_orbit_order`,
+   the snap tripwire, the half-edge and `_region_key` tests) are Phase 7b.
+   Two blast tests in `tests/numerics/` (proximity guard, already-known) were
+   done here because they live in the numerics directory.
+3. **Files not renamed.** The merged Point/BranchPoint tests stay in
+   `tests/test_point.py` (planned destination `unit/numerics/test_linked_list.py`
+   is a Phase 10 move).
+4. **Finding, not fixed (regression tier, Phase 9):**
+   `regression/test_high_stretch_period3_growth.py` is VACUOUS on the current
+   code: four unstable growth steps of the k = 2.1 period-3 orbit leave 7
+   nodes per branch with adjacent cdist gaps of ~3e15 ULP (no refinement
+   happens), so the run never reaches the near-ULP regime it guards. Planner
+   §B's "add a non-vacuity check" would fail today; the parameters need
+   re-deriving (author item). `regression/test_cdist_collision_growth.py`
+   merge and the blast-monotonicity strengthening were also left for that
+   phase.
+5. **Dissipative `per_step_beta` test kept** (E6 lists it as a deletion
+   candidate pending the author's answer; until then current behaviour stays).

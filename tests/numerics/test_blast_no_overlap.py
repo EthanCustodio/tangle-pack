@@ -40,11 +40,24 @@ def test_iterating_fixed_point_bridge_returns_existing_copies(henon_p3_session):
 
 @pytest.mark.slow
 def test_blast_recognizes_already_known_bridges(henon_p3_session):
+    """Already-known children are counted once and never re-iterated.
+
+    The fixed-point bridge (and other re-tracing images) yield bridges the blast
+    has already enqueued; the loom must recognise them rather than feed them to
+    a later step, so no bridge is a parent twice and no already-known child is
+    a later parent.
+    """
     session, _fp3, fp1, zone = henon_p3_session
     result = session.blast_zone(zone, num_iterations=2, fixed_point=fp1)
 
-    # The fixed-point bridge (and other re-tracing images) yield already-known
-    # bridges that the loom recognizes rather than re-iterating.
     assert result.already_known > 0
     total = sum(len(step.already_known) for step in result.steps)
     assert total == result.already_known
+
+    parents = [b for step in result.steps for b in step.interior_parents]
+    assert len({id(b) for b in parents}) == len(parents), "a bridge was iterated twice"
+    for index, step in enumerate(result.steps):
+        later = {id(b) for s in result.steps[index + 1:] for b in s.interior_parents}
+        for child in step.already_known:
+            assert id(child) not in later, f"already-known {child.id} was re-iterated"
+            assert id(child) not in {id(b) for b in step.kept_interior}
