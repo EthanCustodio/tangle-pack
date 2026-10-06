@@ -1,18 +1,13 @@
-"""A.4 -- TangleSession.bridge_classes: gathering, caching, letters, zones.
+"""A.4 -- TangleSession.bridge_classes: describe, zones, warnings, the alphabet.
 
-:func:`tanglepack.topology.BridgeClass.bridge_classes` (A.3) needs a trellis to
-read bridges from and a list of stable partitions to resolve elements against.
-:meth:`TangleSession.bridge_classes` is the session-level wrapper that supplies
-both: the trellis is the selection's own (default: the all-fixed-points one,
-mirroring :meth:`TangleSession.arrangement`), and the partitions are gathered
-from every cached, non-stale per-fixed-point trellis via the private
-:meth:`TangleSession._gathered_partitions` helper. The session then letters the
-active classes from its persistent :class:`BridgeAlphabet` and records the
-resonance zone each class lies in. This module pins that composition, the
-``workbench.generation``-keyed cache, letter stability across rebuilds, the
-zone annotation after trimming at a pip, the warning logged for an
-unpartitioned stable branch, and (on the nested fixture) that no class mixes
-the two fixed points.
+:meth:`TangleSession.bridge_classes` gathers the per-fixed-point partitions,
+letters the active classes from its persistent :class:`BridgeAlphabet` and
+records the resonance zone each class lies in. This module checks the
+describe report, the zone annotation after trimming at a pip, the warnings
+(a class straddling zones, an unpartitioned branch) and the alphabet on its
+own. The cache contract and letter stability across rebuilds are
+``tests/facade/test_session_caches.py``; session = direct build is
+``tests/facade/test_session_equivalence.py``.
 """
 
 from __future__ import annotations
@@ -28,27 +23,11 @@ import pytest
 from helpers.logs import assert_logged
 from tanglepack import TangleSession
 from tanglepack.loom.BridgeAlphabet import BridgeAlphabet, letter
-from tanglepack.topology.BridgeClass import bridge_classes as compute_bridge_classes
 
 
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
-def _direct_table(session, fixed_point_list):
-    """The same computation session.bridge_classes() should produce, done by hand."""
-    partitions = []
-    for fp in fixed_point_list:
-        partitions.extend(session.trellis(fp).stable_partitions)
-    return compute_bridge_classes(session.trellis(), partitions)
-
-
-def _strip(table):
-    """The table's structural content, without the session's annotations."""
-    return [
-        (entry.bridge_class, tuple(entry.members)) for entry in table
-    ]
-
-
 def _repartition_at(session, fp, pip):
     """Trim at ``pip``, then redo the topological steps the trim invalidates."""
     zone = session.resonance_zone(pip)
@@ -61,44 +40,8 @@ def _repartition_at(session, fp, pip):
 
 
 # --------------------------------------------------------------------------- #
-# (a) the session result matches a direct call over the gathered partitions
+# (a) describe and zones
 # --------------------------------------------------------------------------- #
-def test_k10_session_result_matches_a_direct_call(k10_partitioned):
-    session, fp = k10_partitioned
-
-    expected = _direct_table(session, [fp])
-    actual = session.bridge_classes()
-
-    assert _strip(actual) == _strip(expected)
-    assert len(actual) == 2
-
-
-@pytest.mark.slow
-def test_p3_session_result_matches_a_direct_call(p3_partitioned):
-    session, fp3, fp1 = p3_partitioned
-
-    expected = _direct_table(session, [fp3, fp1])
-    actual = session.bridge_classes()
-
-    assert _strip(actual) == _strip(expected)
-    assert len(actual) > 0
-
-
-# --------------------------------------------------------------------------- #
-# (b) letters and symbols
-# --------------------------------------------------------------------------- #
-def test_letters_are_stable_across_a_rebuild(k10_partitioned):
-    session, _fp = k10_partitioned
-
-    first = session.bridge_classes()
-    second = session.bridge_classes(rebuild=True)
-
-    assert second is not first
-    assert second == first
-    assert [e.letter for e in second] == [e.letter for e in first]
-    assert len(session.bridge_alphabet) == 1
-
-
 def test_describe_reports_letters_and_inertness(k10_partitioned):
     session, _fp = k10_partitioned
 
@@ -109,9 +52,6 @@ def test_describe_reports_letters_and_inertness(k10_partitioned):
         assert entry.name in report
 
 
-# --------------------------------------------------------------------------- #
-# (c) zones
-# --------------------------------------------------------------------------- #
 @pytest.mark.slow
 def test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip(
     henon_map, henon_map_inverse
@@ -174,96 +114,7 @@ def test_a_class_straddling_zones_warns_and_gets_no_zone(k10_partitioned, caplog
 
 
 # --------------------------------------------------------------------------- #
-# (d) caching
-# --------------------------------------------------------------------------- #
-def test_cache_hit_returns_the_same_object(k10_partitioned):
-    session, _fp = k10_partitioned
-
-    first = session.bridge_classes()
-
-    assert session.bridge_classes() is first
-
-
-def test_workbench_mutation_invalidates_the_cache(k10_partitioned):
-    session, fp = k10_partitioned
-    first = session.bridge_classes()
-
-    # Bump the workbench generation and restore a fully partitioned state, so
-    # the post-mutation call recomputes successfully rather than hitting the
-    # "no partition" ValueError tested separately below.
-    session.grow_n_times(fp, "unstable", num_iterations=1)
-    session.compute_intersections([fp], preserve_ids=True)
-    session.create_bridges(fp)
-    session.classify_strong_pips()
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-
-    assert session.bridge_classes() is not first
-
-
-def test_repartitioning_at_the_same_generation_invalidates_the_cache(k10_partitioned):
-    """Punching holes and partitioning are Trellis-level mutations: they never
-    touch the workbench, so the generation alone cannot see a re-partition.
-    Force one by re-running the four partition steps against a different
-    strong pip (same registry, same generation, different element boundaries)
-    and check the cache does not serve the stale table. A class whose element
-    pair survived keeps its letter; a new pair takes a new one."""
-    session, fp = k10_partitioned
-    first = session.bridge_classes()
-    generation_before = session.workbench.generation
-
-    trellis = session.trellis(fp)
-    trellis.clear_results()
-    trellis.classify_strong_pips()
-    alternates = [c for c in trellis.strong_pip_candidates if c != trellis.strong_pip]
-    assert alternates, "the k10 fixture must offer more than one strong-pip candidate"
-    trellis.set_strong_pip(alternates[0])
-    session.compute_pseudoneighbors(fp)
-    session.punch_holes(fp)
-    session.partition_stable_manifold(fp)
-
-    # The mutation happened entirely on the Trellis: the workbench itself
-    # never moved.
-    assert session.workbench.generation == generation_before
-
-    second = session.bridge_classes()
-    assert second is not first
-    letters = {e.bridge_class: e.letter for e in second if e.letter is not None}
-    for bridge_class, assigned in letters.items():
-        assert session.bridge_alphabet.assigned[bridge_class] == assigned
-    assert len(session.bridge_alphabet) >= 1
-
-
-def test_reads_do_not_invalidate_the_cache(k10_partitioned):
-    session, fp = k10_partitioned
-    first = session.bridge_classes()
-
-    session.workbench.bridges
-    session.trellis(fp).stable_partitions
-
-    assert session.bridge_classes() is first
-
-
-def test_cache_is_kept_per_fixed_point_selection(k10_partitioned):
-    session, fp = k10_partitioned
-
-    whole = session.bridge_classes()
-    single = session.bridge_classes(fp)
-
-    # Different cache keys (None vs. the fp itself): both are valid, cheap to
-    # ask for independently, and a hit on one must not disturb the other. A
-    # cache that collapsed every selector to one key would hand back one
-    # object for both, so the two results must be distinct objects.
-    assert single is not whole
-    assert session.bridge_classes() is whole
-    assert session.bridge_classes(fp) is single
-    # Same classes either way, so the alphabet handed out one letter.
-    assert len(session.bridge_alphabet) == 1
-
-
-# --------------------------------------------------------------------------- #
-# (e) no partitions: ValueError from A.3, and the warning
+# (b) no partitions: ValueError from A.3, and the warning
 # --------------------------------------------------------------------------- #
 def test_no_partitions_raises_and_warns(k10_session, caplog):
     session, _fp = k10_session
@@ -276,7 +127,7 @@ def test_no_partitions_raises_and_warns(k10_session, caplog):
 
 
 # --------------------------------------------------------------------------- #
-# (g) the alphabet on its own
+# (c) the alphabet on its own
 # --------------------------------------------------------------------------- #
 def test_letter_sequence():
     assert [letter(i) for i in range(4)] == ["a", "b", "c", "d"]

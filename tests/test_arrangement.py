@@ -261,15 +261,6 @@ def test_open_faces_refuse_to_answer_geometric_questions(k10_session):
             attempt()
 
 
-def test_arrangement_is_cached_by_generation(k10_session):
-    session, fp = k10_session
-    first = session.arrangement()
-    assert session.arrangement() is first
-
-    session.grow_n_times(fp, "unstable", num_iterations=1)
-    assert session.arrangement() is not first
-
-
 def test_regions_at_and_bounded_by_agree_with_the_regions(k10_session):
     session, _fp = k10_session
     arrangement = session.arrangement()

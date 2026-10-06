@@ -303,7 +303,11 @@ def test_faces_closed_rejects_an_empty_id_set(small_tangle):
 # session exposure
 # --------------------------------------------------------------------------- #
 def test_session_exposes_the_drivers(henon_map, henon_map_inverse):
-    """The drivers are session methods, and the trellis cache follows along."""
+    """The drivers run as session methods (delegated to the workbench).
+
+    The delegation itself and the trellis cache dropping on growth are
+    ``tests/facade/`` (``test_session_fanouts``, ``test_session_caches``).
+    """
     from tanglepack import TangleSession
 
     session = TangleSession(henon_map, henon_map_inverse)
@@ -316,17 +320,10 @@ def test_session_exposes_the_drivers(henon_map, henon_map_inverse):
     session.grow_until_turnaround(fp, "stable")
     session.compute_intersections([fp])
 
-    stale = session.trellis(fp)
     rounds = session.grow_until_iterates_closed(fp, max_iterations=4)
 
     assert rounds >= 1
-    assert session.trellis(fp) is not stale, (
-        "growth moved the generation; the cached trellis must have been rebuilt"
-    )
     assert session.grow_until(fp, lambda wb: True) == 0
-    # reachable as session methods (delegated to the workbench, not re-declared)
-    for name in ("grow_until", "grow_until_iterates_closed", "grow_until_faces_closed"):
-        assert callable(getattr(session, name))
 
 
 # --------------------------------------------------------------------------- #

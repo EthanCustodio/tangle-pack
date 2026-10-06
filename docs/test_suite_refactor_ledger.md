@@ -1167,3 +1167,132 @@ grepped in the regression-guard notes: no hit; the nested own-blast guards
    itself").
 6. One fact half beyond the planner's list was removed from the plotting
    itinerary-table test (see above).
+
+## §6 Phase 6: the facade tier (`tests/facade/`)
+
+### What landed
+
+- **`tests/facade/test_session_caches.py`** (50 cases, ~3.5 s): the cache
+  contract as one literal `EXPECTED` table, products (`trellis`,
+  `arrangement`, `bridge_classes`, `minimal_trellis`, `iterated_partition`,
+  `dual_graph`, `symbolic_dynamics`) × events (`hit` = reads only, `rebuild`
+  = `rebuild=True`, `generation_bump`, `partition_signature`, `pip_change`),
+  each cell a fresh `build_k10()`:
+
+  | product | hit | rebuild | gen bump | signature | pip |
+  |---|---|---|---|---|---|
+  | trellis, arrangement | HIT | MISS | MISS | HIT | HIT |
+  | bridge_classes, minimal_trellis, iterated_partition | HIT | MISS | MISS | MISS | HIT |
+  | dual_graph, symbolic_dynamics | HIT | MISS | MISS | MISS | MISS |
+
+  - The generation bump is one `iterate_bridge` + the partition redone
+    through the fan-outs; the event asserts the partition signature and the
+    strong pip come back unchanged, so the generation alone is the cause.
+  - The signature event re-partitions at the same generation against another
+    pip and then restores the original pip (asserted), so only the signature
+    moves. This fills the gap: `symbolic_dynamics` invalidated by a
+    signature change (it was only tested through the pip before).
+  - `rebuild` asserts only the product's own rebuild (no cascade).
+  - Extra trellis rows (all MISS): growth, `iterate_bridge`,
+    `rebuild_bridges`, `add_resonance_zones`, a zone's `restore` (**guard**:
+    the stale-trellis gap `invalidate_trellises` used to leave), and
+    `compute_intersections` on the two-fixed-point nested session (the cached
+    trellis follows the swapped registry).
+  - Per-selection keys for every product (`product()` vs `product(fp)`), and
+    the alphabet across a rebuild (equal table, same letters, same alphabet
+    size) and a re-partition (every lettered class carries the alphabet's
+    letter).
+- **`tests/facade/test_session_equivalence.py`** (16 cases, ~4 s): session
+  result = direct build for `trellis`, `arrangement`, `homotopy_partition`,
+  `bridge_classes`, `minimal_trellis`, `iterated_partition`, `dual_graph`,
+  `symbolic_dynamics`, on `k10` and `nested` (2 outer blasts). The direct
+  build uses only public constructors (`Trellis.from_workbench`,
+  `bridge_classes`, `minimal_trellis`, `HomotopyPartition.from_results`,
+  `IteratedHomotopyPartition.from_minimal`, `DualGraph`,
+  `symbolic_dynamics`) over the partitions, holes and pips read off the
+  per-fixed-point trellises; no `_gathered_partitions`, no `build_pieces`.
+  Dynamics compared letter-free (`helpers.names`). Partition families are
+  compared order-free: the session gathers in trellis-cache order, which on
+  nested differs from the case's outermost-first order.
+- **`tests/facade/test_session_fanouts.py`** (4 cases): no-argument fan-outs
+  (`classify_strong_pips`, `compute_pseudoneighbors`, `punch_holes`,
+  `partition_stable_manifold`) return a dict over both nested fixed points
+  equal to each trellis's own result; single-fixed-point calls return that
+  trellis's list; the describe fan-outs hold every per-trellis report under
+  its fixed point; workbench attributes and drivers are reachable on the
+  session (delegation smoke).
+
+### Deletion ledger, Phase 6
+
+40 collected node ids removed, 70 added: 1082 → 1112 (`nodeids_p6.txt`,
+`p6_deleted.txt`). Every deleted name and subject was grepped in the
+regression-guard notes: no hit; the one guard in this area (a restore must
+drop the cached trellis) is the `restore` row.
+
+| Node id | New home | Guard checked |
+|---|---|---|
+| `test_session_trellis_cache::test_same_generation_is_a_cache_hit`, `::test_reads_do_not_invalidate_the_cache` | `facade/test_session_caches::test_session_cache_table[trellis-hit]` (reads in the `hit` event) | none |
+| `test_session_trellis_cache::test_rebuild_flag_forces_a_miss` | `…cache_table[trellis-rebuild]` | none |
+| `test_session_trellis_cache::test_growth_invalidates_the_cache`, `::test_iterate_bridge_…`, `::test_rebuild_bridges_…`, `::test_add_resonance_zones_…`, `::test_restore_invalidates_the_cache` | `…test_trellis_misses_after_every_mutation_path[growth / iterate_bridge / rebuild_bridges / add_resonance_zones / restore]` | restore = the 2026-07 stale-trellis gap: kept as a row |
+| `test_session_trellis_cache::test_compute_intersections_invalidates_the_cache`, `test_session_strong_pips::test_trellis_auto_rebuilds_after_registry_change` | `…test_trellis_misses_after_a_recompute_on_the_nested_session` (registry identity kept) | none |
+| `test_arrangement::test_arrangement_is_cached_by_generation` | `…cache_table[arrangement-hit / arrangement-generation_bump]` | none |
+| `test_session_bridge_classes::test_cache_hit_returns_the_same_object`, `::test_reads_do_not_invalidate_the_cache`, `::test_workbench_mutation_invalidates_the_cache`, `::test_repartitioning_at_the_same_generation_invalidates_the_cache` | `…cache_table[bridge_classes-*]`; the letter half → `…test_bridge_class_letters_survive_rebuilds_and_repartitions` | none |
+| `test_session_bridge_classes::test_cache_is_kept_per_fixed_point_selection` | `…test_cache_is_kept_per_fixed_point_selection[*]` (all products) | none |
+| `test_session_bridge_classes::test_letters_are_stable_across_a_rebuild` | `…test_bridge_class_letters_survive_rebuilds_and_repartitions` (+ `…cache_table[bridge_classes-rebuild]`) | none |
+| `test_session_bridge_classes::test_k10_session_result_matches_a_direct_call`, `::test_p3_session_result_matches_a_direct_call` | `facade/test_session_equivalence::…[bridge_classes-k10 / -nested]` (nested now the 2-outer-blast case, not the unblasted 1e-4 one) | none |
+| `test_session_dual_graph::test_cache_hits_return_the_same_objects`, `::test_rebuild_flag_forces_fresh_equivalent_objects` (cascade dropped), `::test_workbench_mutation_invalidates_the_caches`, `::test_repartitioning_at_the_same_generation_invalidates_the_caches`, `::test_pip_change_at_the_same_generation_and_partition_invalidates_the_graph` | `…cache_table[minimal_trellis-* / iterated_partition-* / dual_graph-*]`; "a different pip moves the unified set" stays in `test_dual_graph::test_k10_a_different_pip_moves_the_unified_set` | none |
+| `test_session_dual_graph::test_dual_graph_is_built_over_the_cached_pieces` | deleted (private `_partition_signature` / `_gathered_partitions`, cache identity); content equality → equivalence `[homotopy_partition-*]`, `[iterated_partition-*]`, `[dual_graph-*]` | none |
+| `test_session_dual_graph::test_k10_dual_graph_matches_a_direct_build`, `::test_p3_dual_graph_matches_a_direct_build` | equivalence `[dual_graph-k10 / -nested]` | none |
+| `test_session_symbolic_dynamics::test_cache_hits_return_the_same_object`, `::test_rebuild_flag_forces_a_fresh_equivalent_object` (cascade dropped), `::test_workbench_mutation_invalidates_the_cache`, `::test_pip_change_at_the_same_generation_invalidates_the_cache` | `…cache_table[symbolic_dynamics-*]` (+ the new signature cell); the "itineraries stay even" half is the law `itineraries_even` | none |
+| `test_session_symbolic_dynamics::test_k10_symbolic_dynamics_matches_a_direct_build` | equivalence `[symbolic_dynamics-k10 / -nested]` (letter-free; `is_reliable` no longer compared outside golden) | none |
+| `test_partition_family::test_from_results_signature_matches_the_session_signature` | equivalence `[homotopy_partition-*]` (public `signature()`, no `_partition_signature` / `_gathered_partitions`) | none |
+| `test_session_strong_pips::test_classify_strong_pips_all_fixed_points`, `::test_classify_single_fixed_point_returns_list` | `facade/test_session_fanouts::test_no_argument_fanouts_…`, `::test_single_fixed_point_fanouts_…` | none |
+| `test_session_pseudoneighbors::test_compute_all_fixed_points_returns_dict`, `::test_compute_single_fixed_point_returns_list`, `::test_punch_and_partition_fan_out_to_every_fixed_point`, `::test_punch_and_partition_single_fixed_point_return_lists`, `::test_describe_fan_outs_mention_every_fixed_point` | `facade/test_session_fanouts` (dict shapes now over the two nested fixed points instead of the single k10 one) | none |
+
+**Assertions removed inside surviving tests:**
+- `numerics/test_grow_until::test_session_exposes_the_drivers`: the cache half
+  (`trellis(fp) is not stale` after growth → the `growth` row) and the
+  `callable(getattr(session, …))` loop (→ the fan-out delegation smoke).
+- Orphaned helpers and imports removed (`_direct_table`, `_strip`,
+  `_same_graph`, `_rule_texts`, `_refined_rule_texts`, `_same_dynamics`,
+  `build_pieces` in the two session files, unused `DualGraph`,
+  `HomotopyPartition`, `symbolic_dynamics`, `numpy`, `pytest`,
+  `TangleSession` imports); module docstrings point to `tests/facade/`.
+
+### Verification
+
+- Collected **1112** (`nodeids_p6.txt`).
+- `1072 passed, 32 skipped, 8 xfailed` in 150 s with coverage (`p6_run.txt`); `-rxX`
+  lists exactly the 8 `KNOWN_ISSUES` xfails; no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_p6.json`). The first run
+  flagged `BridgeClassTable.__eq__` (lines 445/447), covered only by the
+  deleted `test_letters_are_stable_across_a_rebuild`; the letters test now
+  asserts `rebuilt == first`.
+- Isolation (each alone): `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `facade/test_session_caches.py::test_session_cache_table[symbolic_dynamics-partition_signature]`,
+  `facade/test_session_caches.py::test_trellis_misses_after_every_mutation_path[restore]`,
+  `facade/test_session_equivalence.py::test_session_product_equals_a_direct_build[dual_graph-nested]`,
+  `facade/test_session_fanouts.py::test_no_argument_fanouts_return_one_entry_per_fixed_point`,
+  `test_session_bridge_classes.py::test_no_partitions_raises_and_warns`,
+  `numerics/test_grow_until.py::test_session_exposes_the_drivers`: all pass.
+
+### Deviations, Phase 6
+
+1. **Wall time not reduced** (~151 s vs ~149 s with coverage). The deleted
+   tests were cheap (k10 builds take ~0.05 s); the table adds 50 cells and
+   the equivalence suite 16, each a fresh function-scoped build (decision 7).
+   The facade tier costs ~8 s in all.
+2. **The generation-bump event is cleaner than planned:** `iterate_bridge` on
+   k10 registers no new crossing, so after re-partitioning the signature and
+   pip are asserted unchanged, isolating the generation as the cause.
+3. **The signature event restores the original pip** so the `pip` component
+   of the dual-graph/dynamics key stays put; the old repartition tests moved
+   both at once.
+4. **Fan-out shape tests moved in this phase** (planner §B puts
+   `test_session_pseudoneighbors` / `test_session_strong_pips` fan-outs in
+   `F/fanouts`); their plot halves stay for Phase 8.
+5. `homotopy_partition` added as an eighth equivalence product (it replaces
+   the deleted `from_results` signature test); the partition families are
+   compared order-free (see above).
+6. Kept `test_session_symbolic_dynamics::test_p3_symbolic_dynamics_smoke` and
+   the plot-delegate mocks: not cache tests; they are Phase 7/8 items.

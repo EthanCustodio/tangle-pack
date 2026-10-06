@@ -1,9 +1,10 @@
 """
 TangleSession.symbolic_dynamics / describe_symbolic_dynamics and the plot
-delegates: results, caching and invalidation.
+delegates.
 
 Mirrors ``test_session_dual_graph.py``. Nothing here pins a registry id, a
 bridge count or a fixture word: those are pinned once in ``tests/golden/``.
+The cache contract and session = direct build are ``tests/facade/``.
 """
 
 from __future__ import annotations
@@ -13,108 +14,15 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pytest
 
-from minimal_helpers import build_pieces
 from tanglepack.topology import plotting
-from tanglepack.topology.DualGraph import DualGraph
-from tanglepack.topology.SymbolicDynamics import SymbolicDynamics, symbolic_dynamics
-
-
-def _rule_texts(dyn: SymbolicDynamics) -> dict[str, str]:
-    """``{letter: word}`` over unrefined symbols, as text."""
-    return {letter: dyn.word(letter, refined=False) for letter in dyn.rules}
-
-
-def _refined_rule_texts(dyn: SymbolicDynamics) -> dict[str, str]:
-    return {name: dyn.word(name) for name in dyn.refined_rules}
-
-
-def _same_dynamics(a: SymbolicDynamics, b: SymbolicDynamics) -> bool:
-    """Word-level equivalence: the same rules, refined rules and matrix."""
-    names_a, matrix_a = a.transition_matrix()
-    names_b, matrix_b = b.transition_matrix()
-    return (
-        _rule_texts(a) == _rule_texts(b)
-        and _refined_rule_texts(a) == _refined_rule_texts(b)
-        and names_a == names_b
-        and np.array_equal(matrix_a, matrix_b)
-        and a.is_reliable == b.is_reliable
-    )
+from tanglepack.topology.SymbolicDynamics import SymbolicDynamics
 
 
 # --------------------------------------------------------------------------- #
-# k=10: results and caching
+# k=10: the report
 # --------------------------------------------------------------------------- #
-def test_k10_symbolic_dynamics_matches_a_direct_build(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    dual = DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips)
-    direct = symbolic_dynamics(dual, session.bridge_classes([fp]))
-    dyn = session.symbolic_dynamics([fp])
-    assert isinstance(dyn, SymbolicDynamics)
-    assert _same_dynamics(dyn, direct)
-    assert dyn.rules, "the k=10 fixture has at least one resolved class"
-
-
-def test_cache_hits_return_the_same_object(k10_partitioned):
-    session, fp = k10_partitioned
-    assert session.symbolic_dynamics() is session.symbolic_dynamics()
-    assert session.symbolic_dynamics(fp) is session.symbolic_dynamics(fp)
-    assert session.symbolic_dynamics([fp]) is session.symbolic_dynamics([fp])
-
-
-def test_rebuild_flag_forces_a_fresh_equivalent_object(k10_partitioned):
-    session, fp = k10_partitioned
-    before = session.symbolic_dynamics()
-    dual_before = session.dual_graph()
-    after = session.symbolic_dynamics(rebuild=True)
-    assert after is not before and _same_dynamics(before, after)
-    # A rebuild rebuilds the dual graph and the table it reads too.
-    assert session.dual_graph() is not dual_before
-    assert after.table is session.bridge_classes()
-    assert session.symbolic_dynamics() is after
-
-
-def test_workbench_mutation_invalidates_the_cache(k10_partitioned):
-    session, fp = k10_partitioned
-    before = session.symbolic_dynamics()
-    # Bump the workbench generation and restore a fully partitioned state, so
-    # the post-mutation call recomputes successfully rather than raising.
-    session.grow_n_times(fp, "unstable", num_iterations=1)
-    session.compute_intersections([fp], preserve_ids=True)
-    session.create_bridges(fp)
-    session.classify_strong_pips()
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-    after = session.symbolic_dynamics()
-    assert after is not before
-    assert after.table is session.bridge_classes()
-    for cd in after.classes.values():
-        if cd.itinerary is not None:
-            assert len(cd.itinerary) % 2 == 0
-
-
-def test_pip_change_at_the_same_generation_invalidates_the_cache(k10_partitioned):
-    session, fp = k10_partitioned
-    trellis = session.trellis(fp)
-    alternatives = [c for c in trellis.strong_pip_candidates if c != trellis.strong_pip]
-    if not alternatives:
-        pytest.skip("the fixture has a single strong-pip candidate")
-    generation = session.workbench.generation
-    before = session.symbolic_dynamics()
-    table_before = session.bridge_classes()
-    trellis.set_strong_pip(alternatives[0])
-    assert session.workbench.generation == generation
-    after = session.symbolic_dynamics()
-    assert after is not before
-    # The classes do not depend on the pip choice; the dual graph does.
-    assert session.bridge_classes() is table_before
-    assert after.table is table_before
-
-
 def test_describe_symbolic_dynamics(k10_partitioned):
     session, fp = k10_partitioned
     text = session.describe_symbolic_dynamics([fp])

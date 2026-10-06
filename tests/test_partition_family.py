@@ -1,8 +1,9 @@
 """
 The partition-family base class and the homotopy family.
 
-Pins: the homotopy family is exactly the trellis's own partition; its
-signature is the session's cache signature; midpoint ownership is unique
+Pins: the homotopy family is exactly the trellis's own partition (the
+session's family = a direct build is ``tests/facade/test_session_equivalence``);
+midpoint ownership is unique
 across the full arrangement; the marks round trip reproduces every result
 exactly (which validates the local interval builder against
 ``StablePartition._build_intervals`` without importing it).
@@ -12,7 +13,6 @@ from __future__ import annotations
 
 import pytest
 
-from tanglepack.loom.TangleSession import TangleSession
 from tanglepack.topology.PartitionFamily import (
     HomotopyPartition,
     PartitionFamily,
@@ -38,14 +38,6 @@ def test_build_reproduces_the_trellis_partition(k10_partitioned):
         built = family.result(stored.branch_key, stored.side)
         assert _boundaries(built) == _boundaries(stored)
         assert built.element_of_intersection == stored.element_of_intersection
-
-
-def test_from_results_signature_matches_the_session_signature(k10_partitioned):
-    session, fp = k10_partitioned
-    gathered = session._gathered_partitions()
-    family = HomotopyPartition.from_results(gathered, trellis=session.trellis())
-    assert family.signature() == TangleSession._partition_signature(gathered)
-    assert family.as_list() == gathered
 
 
 def test_element_at_owns_every_arc_midpoint_exactly_once(k10_partitioned):
