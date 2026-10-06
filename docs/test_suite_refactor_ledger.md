@@ -2184,3 +2184,84 @@ verbatim so the accounting is mechanical.
 5. **Mutation sanity check (plan "Verification")** not run in this phase: it
    needs a scratch branch with a `src/` edit, which this phase's rules
    forbid on the working branch. Left for the author or a follow-up.
+
+## Author follow-up (2026-10-05): law tier per layer x case, the hole rule
+
+### What landed
+
+- **Law tier collapsed from one test per (law x case) to one test per
+  (LAYER x case).** `tests/invariants/test_law_<layer>.py` each hold
+  `test_<layer>_laws = layer_test("<layer>")`, parametrized over
+  `cases.LAW_CASES`. `helpers/law_tier.run_layer` runs every check of the
+  layer, insists each applicable check counted at least one item, and raises
+  ONE `AssertionError` listing every failing or vacuous check with its message
+  and failing source line. `helpers.laws` / `helpers.invariants` are now
+  assert-rewritten (`pytest.register_assert_rewrite` at the top of
+  `tests/conftest.py`), so the messages carry the compared values.
+- **Known issues stay precise.** A `(law, case)` pair in `KNOWN_ISSUES` is left
+  out of its layer run and gets its own `test_<layer>_known_issue[<law>-<case>]`
+  test, `xfail(strict=True)` (`known_issue_test`), so a fix flips to XPASS.
+  `NOT_APPLICABLE` pairs are skipped inside the layer and not counted; a layer
+  with nothing applicable on a case would be a skip (none today).
+- **Builds:** module-scoped read-only `law_case` + the fingerprint guard kept.
+  The two mutating laws became the `recompute` layer
+  (`laws.MUTATING_LAYERS`), run in order on ONE fresh build per case
+  (`test_recompute_laws`, in `test_law_crossings.py`) instead of one fresh
+  build per law.
+- **The hole rule (author).** A hole maps backward onto the same side of the
+  BRIDGE it is punched in (I1), not the same side of the stable manifold.
+  `check_holes_share_bridge_side` (which delegated to the library's
+  `bridge_side_violations`) is replaced by
+  `check_backward_holes_keep_bridge_side`: every hole of an origin carries the
+  reference hole's `bridge_side` (parity-flipped under an orientation-reversing
+  map), and the reference hole's coordinates carried back `|iterate|` steps by
+  the real inverse map lie on that side of the propagated hole's own bridge
+  (an independent geometric oracle). Runs on every case with holes (k10, k28
+  one/two blasts, p3, nested; inversion has none). `check_openings_linked_bound`
+  (a propagated hole keeps its origin's `(which, row)` at a linked bound) is
+  DELETED: it asserted row preservation, which the author's rule says is not a
+  law (closes E7). No law compares stable-manifold rows along an orbit;
+  `openings_on_own_bridge_row` only checks each hole against ITS OWN bridge.
+- **Wiring guard** `test_every_law_runs_in_the_tier` rewritten: every
+  `check_*` of `helpers.laws` is in exactly the layers, every layer has its
+  `layer_test`, every layer with known issues has its `known_issue_test`, and
+  every `KNOWN_ISSUES` / `NOT_APPLICABLE` key names a real law.
+- `cases.law_params` removed (unused); `NOT_APPLICABLE` keys renamed /
+  dropped with the two laws above.
+
+### Deletion / change ledger
+
+- `tests/invariants/test_law_*.py::test_<law>[<case>]` (446 ids: 407 pass,
+  31 skip, 8 xfail) -> `test_<layer>_laws[<case>]` (11 layers x 6 cases) +
+  `test_recompute_laws[<case>]` (6) + `test_<layer>_known_issue[<law>-<case>]`
+  (7) + `test_orientation_reversing_case_builds` + `test_every_law_runs_in_the_tier`
+  = 81 ids (73 pass, 8 xfail). Every check still runs on every case it ran on.
+- Deleted law `openings_linked_bound` (row preservation along the backward
+  orbit; author's hole rule). Its `NOT_APPLICABLE` entries (k10,
+  k28_two_blasts, inversion) removed.
+- Replaced law `holes_share_bridge_side` -> `backward_holes_keep_bridge_side`
+  (explicit I1 against the reference hole + geometric carried-point oracle).
+- `tests/facade/test_session_caches.py::_alternate_pip` picks the
+  anchor-nearest alternate candidate by stable cdist instead of `alternates[0]`
+  (registry-id order is not reproducible between builds, so the old choice
+  flipped `DualGraph._pip_segment`'s no-registered-iterate branch in and out of
+  coverage and failed the coverage guard on one run).
+
+### Verification
+
+- `env/bin/python -m pytest -q -rxX`: 751 passed, 1 deselected, 11 xfailed in
+  90.5 s (`followup_run.txt`); the 11 xfails are exactly `KNOWN_ISSUES`
+  (8 law tier + 3 `open_p3_deep_runs`), no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_followup.json`).
+- Law-tier wall time: 36.0-38.6 s over three runs, against 36.3-40.9 s for
+  the per-law tier on the same machine (not grown).
+- A probe layer with one failing and one vacuous check raised one error naming
+  both (`bad: AssertionError: assert 1 == 2 [...]`, `empty: checked nothing`).
+
+### Deviations
+
+1. CLAUDE.md line "`invariants/` (physical laws, one test per law x case ...)"
+   still says per law: CLAUDE.md is the author's to edit; it should read "one
+   test per layer x case; a known issue has its own xfail".
+2. The `_alternate_pip` fix in `facade/` is outside the law tier; it was needed
+   to make the coverage guard deterministic.

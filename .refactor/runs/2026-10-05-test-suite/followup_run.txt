@@ -1,0 +1,24 @@
+........................................................................ [  9%]
+..................................x......xxx............x.......x....... [ 18%]
+...................................xx................................... [ 28%]
+........................................xxx............................. [ 37%]
+........................................................................ [ 47%]
+........................................................................ [ 56%]
+........................................................................ [ 66%]
+........................................................................ [ 75%]
+........................................................................ [ 85%]
+........................................................................ [ 94%]
+..........................................                               [100%]
+=========================== short test summary info ============================
+XFAIL tests/invariants/test_law_anchors.py::test_anchors_known_issue[one_anchor_per_unstable_branch-inversion] - an inversion point registers one (0,0) anchor per (unstable, stable) branch pair, i.e. two per unstable branch; the author's rule is one (P2)
+XFAIL tests/invariants/test_law_arrangement.py::test_arrangement_known_issue[arrangement_euler-inversion] - the inversion arrangement has V - E + F = 0 on its one component (four coincident anchors; Phase 4 finding)
+XFAIL tests/invariants/test_law_arrangement.py::test_arrangement_known_issue[arrangement_regions_disjoint-k28_one_blast] - a zero-area region bounded by an unstable arc no Bridge object spans (after a blast) reports a representative point inside a neighbouring region (Phase 4 finding)
+XFAIL tests/invariants/test_law_arrangement.py::test_arrangement_known_issue[arrangement_regions_disjoint-k28_two_blasts] - a zero-area region bounded by an unstable arc no Bridge object spans (after a blast) reports a representative point inside a neighbouring region (Phase 4 finding)
+XFAIL tests/invariants/test_law_case_sanity.py::test_orientation_reversing_case_builds[orientation_reversing] - det J < 0 is not supported: FixedPoint.set_k_value rejects a saddle with exactly one negative eigenvalue (P4)
+XFAIL tests/invariants/test_law_classes.py::test_classes_known_issue[anchor_bridge_class_leads_its_tangle-inversion] - with two anchors per unstable branch, the bridge leaving the second anchor sits in an inert class (Phase 4 finding, tied to the anchor issue)
+XFAIL tests/invariants/test_law_symbolic.py::test_symbolic_known_issue[itinerary_pairs_same_side-inversion] - an inversion class's walked itinerary pairs a left element of branch 0.1 with a right element of branch 0.0 (a cross-side pair; Phase 4 finding)
+XFAIL tests/invariants/test_law_symbolic.py::test_symbolic_known_issue[landings_contained-inversion] - an inversion class's one-step landing straddles a cut of the image branch (contained=False; Phase 4 finding)
+XFAIL tests/regression/test_open_p3_deep_runs.py::test_deep_p3_every_class_resolves_without_virtual_symbols[p3_15] - 15 unstable steps: an unreachable class and a virtual new1 (P3)
+XFAIL tests/regression/test_open_p3_deep_runs.py::test_deep_p3_every_class_resolves_without_virtual_symbols[p3_16] - 16 unstable steps: an unreachable class and a virtual new1 (P3)
+XFAIL tests/regression/test_open_p3_deep_runs.py::test_deep_p3_every_class_resolves_without_virtual_symbols[p3_6_blasts] - 6 blasts: an unreachable class and a virtual new1 (P3)
+751 passed, 1 deselected, 11 xfailed in 90.52s (0:01:30)

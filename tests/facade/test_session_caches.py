@@ -90,11 +90,15 @@ def _repartition(session: TangleSession) -> None:
 
 
 def _alternate_pip(session: TangleSession, fp: Any) -> int:
-    """A strong-pip candidate of ``fp`` other than the chosen one."""
+    """The anchor-nearest strong-pip candidate of ``fp`` other than the chosen one.
+
+    Chosen by stable cdist, never by list position: the candidates come in
+    registry-id order, which is not reproducible between builds.
+    """
     trellis = session.trellis(fp)
     alternates = [c for c in trellis.strong_pip_candidates if c != trellis.strong_pip]
     assert alternates, "the k10 case must offer more than one strong-pip candidate"
-    return alternates[0]
+    return min(alternates, key=lambda c: float(trellis.intersection(c).stable_cdist))
 
 
 def _reads(case: Case) -> None:

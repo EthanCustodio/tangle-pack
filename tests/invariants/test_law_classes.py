@@ -14,17 +14,7 @@ lettered.
 
 from __future__ import annotations
 
-from helpers import laws
-from helpers.law_tier import law_test
+from helpers.law_tier import known_issue_test, layer_test
 
-test_every_bridge_in_one_class = law_test(laws.check_every_bridge_in_one_class)
-test_class_orientation_anchor_outward = law_test(laws.check_class_orientation_anchor_outward)
-test_row_of_end_is_geometry = law_test(laws.check_row_of_end_is_geometry)
-test_bridge_rows_consistent = law_test(laws.check_bridge_rows_consistent)
-test_anchor_bridge_class_leads_its_tangle = law_test(
-    laws.check_anchor_bridge_class_leads_its_tangle
-)
-test_class_table_order = law_test(laws.check_class_table_order)
-test_classes_do_not_mix_tangles = law_test(laws.check_classes_do_not_mix_tangles)
-test_classes_use_every_orbit_branch = law_test(laws.check_classes_use_every_orbit_branch)
-test_only_active_classes_lettered = law_test(laws.check_only_active_classes_lettered)
+test_classes_laws = layer_test("classes")
+test_classes_known_issue = known_issue_test("classes")

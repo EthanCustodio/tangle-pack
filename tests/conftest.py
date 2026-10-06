@@ -35,9 +35,12 @@ process): locate crossings by cdist order or structure, never by id.
 
 Layout (tiers; every test basename is unique, no ``__init__.py``):
 
-* ``invariants/`` -- the physical-law tier: one test per (law, case) over
-  :data:`cases.LAW_CASES`, a module-scoped read-only build per case behind a
-  fingerprint guard; the checks live in ``helpers/laws.py``.
+* ``invariants/`` -- the physical-law tier: one test per (layer, case) over
+  :data:`cases.LAW_CASES` (author, 2026-10-05), each running every check of
+  its layer and reporting every failing check in one error; a known issue is
+  left out of its layer and has its own ``xfail(strict=True)`` test. A
+  module-scoped read-only build per case behind a fingerprint guard; the
+  checks live in ``helpers/laws.py``, the plumbing in ``helpers/law_tier.py``.
 * ``unit/numerics``, ``unit/topology``, ``unit/loom`` -- rules and kernels of
   each layer, public API first (private access only for the pure kernels the
   2026-10-05 policy allows).
@@ -102,8 +105,10 @@ Dev Notes:
       (``regression/test_open_p3_deep_runs.py``): an unreachable class and a
       virtual ``new1``.
 
-    Not-applicable pairs (:data:`cases.NOT_APPLICABLE`) are skips with a
-    reason, never xfails. The running record of every deleted test and every
+    Not-applicable pairs (:data:`cases.NOT_APPLICABLE`) are left out of
+    their layer test with a reason (not counted, never xfails); a layer with
+    nothing applicable on a case is a skip. The law-tier known issues each
+    have their own ``test_<layer>_known_issue[<law>-<case>]`` test. The running record of every deleted test and every
     deviation is ``docs/test_suite_refactor_ledger.md``.
 """
 
@@ -111,12 +116,17 @@ from __future__ import annotations
 
 from typing import Callable
 
-import matplotlib
+import pytest
+
+# The law checks assert with bare ``assert``; rewrite them so a failing layer
+# test names the compared values (must run before ``helpers`` is imported).
+pytest.register_assert_rewrite("helpers.laws", "helpers.invariants")
+
+import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
 
 import numpy as np  # noqa: E402
-import pytest  # noqa: E402
 
 from tanglepack import TangleSession, TangleWorkbench  # noqa: E402
 from tanglepack.examples import (  # noqa: E402

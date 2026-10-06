@@ -6,8 +6,9 @@ law tier can insist that a law was not vacuous (a count of 0 is a failure
 unless the ``(law, case)`` pair is listed in ``cases.NOT_APPLICABLE``). The
 checks only read the case; they never mutate the session (the law tier shares
 one build per module and fingerprints it around every test). The two laws
-that must mutate a session (a recompute) take a FRESH build of their own:
-:func:`check_recompute_preserves_ids` and :func:`check_recompute_is_idempotent`.
+that must mutate a session (a recompute) share ONE fresh build per case, the
+``recompute`` layer of :data:`MUTATING_LAYERS`:
+:func:`check_recompute_preserves_ids` then :func:`check_recompute_is_idempotent`.
 
 A check reads the session's cached products (``session.trellis()``,
 ``arrangement()``, ``bridge_classes()``, ``minimal_trellis()``,
@@ -15,7 +16,8 @@ A check reads the session's cached products (``session.trellis()``,
 law-tier fixture builds every one of them before the first test, so a check
 never triggers a build.
 
-The checks are grouped into :data:`LAYERS`; the law id of a check (the key of
+The checks are grouped into :data:`LAYERS` (and :data:`MUTATING_LAYERS`); the
+law tier runs ONE test per (layer, case). The law id of a check (the key of
 ``cases.KNOWN_ISSUES`` / ``cases.NOT_APPLICABLE``) is its name without the
 ``check_`` prefix (:func:`law_id`).
 
@@ -63,7 +65,6 @@ from tanglepack.topology.StablePartition import (
     _side_of,
     bridge_for_pair,
     bridge_row_violation,
-    bridge_side_violations,
     owns_cdist,
     row_of_end,
     rows_of_bridge,
@@ -900,16 +901,52 @@ def check_holes_are_classified(case: "Case") -> int:
     return count
 
 
-def check_holes_share_bridge_side(case: "Case") -> int:
-    """I1: all holes of one origin share their side of their bridge (parity-flipped
-    under an orientation-reversing map)."""
+def check_backward_holes_keep_bridge_side(case: "Case") -> int:
+    """I1 (author rule, 2026-10-05): a hole maps backward onto the same side of the
+    BRIDGE it is punched in -- never "the same side of the stable manifold".
+
+    Every hole of an origin carries the ``bridge_side`` of the origin's
+    reference hole (iterate 0), parity-flipped under an orientation-reversing
+    map; and, measured on the curves, the reference hole's coordinates carried
+    back ``|iterate|`` steps by the real inverse map sit on that side of the
+    propagated hole's own bridge. Nothing is asserted about the stable-manifold
+    ROW of a backward hole: it may differ from its origin's, and that is
+    correct.
+    """
+    inverse = case.workbench.dynamical_system.map_inv
     count = 0
     for trellis in _per_fp_trellises(case):
-        violations = bridge_side_violations(
-            trellis.holes, orientation_preserving=trellis.orientation_preserving
-        )
-        assert not violations, violations
-        count += len(trellis.holes)
+        preserving = trellis.orientation_preserving
+        reference = {
+            hole.origin: hole
+            for hole in trellis.holes
+            if hole.pair is not None and hole.iterate == 0
+        }
+        for hole in trellis.holes:
+            if hole.iterate == 0 and hole.pair is not None:
+                continue
+            origin = reference.get(hole.origin)
+            assert origin is not None, f"hole {hole.bounding_ids} has no reference hole"
+            flip = not preserving and hole.iterate % 2 == 1
+            expected = origin.bridge_side
+            if flip:
+                expected = "right" if expected == "left" else "left"
+            assert hole.bridge_side == expected, (
+                f"hole of origin {hole.origin} at iterate {hole.iterate}: bridge side "
+                f"{hole.bridge_side}, origin {origin.bridge_side}"
+            )
+            if hole.pair is None:
+                point = np.asarray(origin.coords, dtype=float)
+                for _ in range(-hole.iterate):
+                    point = np.asarray(inverse(point), dtype=float)
+                bridge = trellis.bridge_between(*hole.bounding_ids)
+                assert bridge is not None and bridge.id is not None, hole.bounding_ids
+                measured = _point_side_of_bridge(case, bridge, point)
+                assert measured == expected, (
+                    f"origin {hole.origin}'s hole carried back {-hole.iterate} step(s) "
+                    f"lies on the {measured} of bridge {bridge.id}, expected {expected}"
+                )
+            count += 1
     return count
 
 
@@ -953,8 +990,9 @@ def check_direct_hole_opens_inward_pair(case: "Case") -> int:
 
 
 def check_openings_on_own_bridge_row(case: "Case") -> int:
-    """Openings law (1'): every opening of every hole sits on the row its bridge has at
-    that bound (a backward hole's row may differ from its origin's: P1)."""
+    """Openings law (1'): every opening of every hole sits on the row ITS OWN bridge has
+    at that bound. Rows are never compared along an orbit: a backward hole keeps
+    its side of the bridge (I1), not its row of the stable manifold."""
     count = 0
     for trellis, hole in _holes(case):
         bridge = trellis.bridge_between(*hole.bounding_ids)
@@ -963,36 +1001,6 @@ def check_openings_on_own_bridge_row(case: "Case") -> int:
             endpoint = "first" if intersection_id == bridge.id[0] else "second"
             assert row == row_of_end(trellis, bridge.id, endpoint), (hole.bounding_ids, row)
             count += 1
-    return count
-
-
-def check_openings_linked_bound(case: "Case") -> int:
-    """Openings law (2): at a bound that is the registered iterate of its origin's
-    direct-hole bound, a propagated hole keeps the origin's ``(which, row)``."""
-    count = 0
-    for trellis in _per_fp_trellises(case):
-        direct = {
-            hole.origin: hole
-            for hole in trellis.holes
-            if hole.pair is not None and hole.iterate == 0
-        }
-        for hole in trellis.holes:
-            if hole.pair is not None or hole.iterate is None or hole.iterate >= 0:
-                continue
-            reference = direct.get(hole.origin)
-            if reference is None:
-                continue
-            reference_open = {iid: (w, r) for iid, w, r in reference.openings}
-            here_open = {iid: (w, r) for iid, w, r in hole.openings}
-            for reference_id in reference.bounding_ids:
-                image = trellis.iterate(reference_id, hole.iterate)
-                if image is None or image not in hole.bounding_ids:
-                    continue
-                if reference_id in reference_open and image in here_open:
-                    assert here_open[image] == reference_open[reference_id], (
-                        hole.origin, hole.iterate, reference_id, image,
-                    )
-                    count += 1
     return count
 
 
@@ -1917,7 +1925,8 @@ def check_matrix_is_token_counts(case: "Case") -> int:
     return int(matrix.sum()) + len(names)
 
 
-#: The law checks by layer (the module of the law tier that runs them).
+#: The read-only law checks by layer: ONE law-tier test per (layer, case) runs
+#: every check of its layer (``helpers.law_tier.run_layer``).
 LAYERS: dict[str, list[LawCheck]] = {
     "case_sanity": [
         check_case_builds,
@@ -1955,11 +1964,10 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_partition_unique_owner,
         check_partition_singletons,
         check_holes_are_classified,
-        check_holes_share_bridge_side,
+        check_backward_holes_keep_bridge_side,
         check_direct_hole_side_is_coordinate_side,
         check_direct_hole_opens_inward_pair,
         check_openings_on_own_bridge_row,
-        check_openings_linked_bound,
         check_openings_missing_only_at_anchor_or_tail,
         check_propagated_holes_land_on_predicted_branch,
         check_propagation_terminates,
@@ -2012,7 +2020,13 @@ LAYERS: dict[str, list[LawCheck]] = {
     ],
 }
 
-#: The two laws that mutate their session: run on a FRESH build, never the shared one.
-MUTATING: tuple[LawCheck, ...] = (check_recompute_preserves_ids, check_recompute_is_idempotent)
+#: The layers whose laws mutate their session: run on ONE fresh build per case,
+#: never the shared one (the checks run in order on that build).
+MUTATING_LAYERS: dict[str, list[LawCheck]] = {
+    "recompute": [check_recompute_preserves_ids, check_recompute_is_idempotent],
+}
+
+#: The two laws that mutate their session.
+MUTATING: tuple[LawCheck, ...] = tuple(MUTATING_LAYERS["recompute"])
 
 

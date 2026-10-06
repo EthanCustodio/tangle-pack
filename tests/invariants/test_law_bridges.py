@@ -10,13 +10,6 @@ lands on the advanced branch and round-trips through the preimage.
 
 from __future__ import annotations
 
-from helpers import laws
-from helpers.law_tier import law_test
+from helpers.law_tier import layer_test
 
-test_bridge_partial_iff_no_id = law_test(laws.check_bridge_partial_iff_no_id)
-test_bridge_id_in_unstable_order = law_test(laws.check_bridge_id_in_unstable_order)
-test_bridge_endpoints_on_own_branch = law_test(laws.check_bridge_endpoints_on_own_branch)
-test_bridges_at_exact = law_test(laws.check_bridges_at_exact)
-test_bridge_single_copy = law_test(laws.check_bridge_single_copy)
-test_bridges_do_not_overlap = law_test(laws.check_bridges_do_not_overlap)
-test_bridge_image_round_trip = law_test(laws.check_bridge_image_round_trip)
+test_bridges_laws = layer_test("bridges")

@@ -7,23 +7,28 @@ orientation reversing), every branch of every cycle is built and grown, and
 every unstable and stable branch crosses something. The ``b = -1`` orientation-reversing
 placeholder is a known issue: ``construct_fixed_point`` raises ``ValueError``
 until det J < 0 is supported.
+
+This module also guards the tier's wiring: every check of ``helpers.laws``
+runs in some layer, every layer has its ``test_law_<layer>.py`` test, every
+known issue of a layer has its own test, and every ``KNOWN_ISSUES`` /
+``NOT_APPLICABLE`` key names a real law.
 """
 
 from __future__ import annotations
 
-import re
+import inspect
 from pathlib import Path
 
 import pytest
 
-from cases import BUILDERS, issue_marks
+from cases import BUILDERS, KNOWN_ISSUES, NOT_APPLICABLE, issue_marks
 from helpers import laws
-from helpers.law_tier import assert_non_vacuous, build_products, law_test
+from helpers.law_tier import assert_non_vacuous, build_products, known_issue_pairs, layer_test
 
-test_case_builds = law_test(laws.check_case_builds)
-test_k_value_matches_inversion = law_test(laws.check_k_value_matches_inversion)
-test_every_branch_is_built = law_test(laws.check_every_branch_is_built)
-test_every_branch_crosses = law_test(laws.check_every_branch_crosses)
+test_case_sanity_laws = layer_test("case_sanity")
+
+#: Known-issue ids that are tests of their own, not ``helpers.laws`` checks.
+_STANDALONE_ISSUES = {"orientation_reversing_case_builds", "open_p3_deep_runs"}
 
 
 @pytest.mark.parametrize(
@@ -46,17 +51,35 @@ def test_orientation_reversing_case_builds(name: str) -> None:
 
 
 def test_every_law_runs_in_the_tier() -> None:
-    """Every check of ``helpers.laws`` is wired into a ``test_law_*`` module.
+    """Every check is in a layer, every layer (and known issue) is wired into a module,
+    and the issue registries name real laws.
 
-    A law written but never parametrized over the cases would check nothing.
+    A law written but never run over the cases would check nothing.
     """
-    sources = "".join(
-        path.read_text() for path in Path(__file__).parent.glob("test_law_*.py")
-    )
-    checks = [check for layer in laws.LAYERS.values() for check in layer] + list(laws.MUTATING)
-    missing = [
-        check.__name__
-        for check in checks
-        if not re.search(rf"\blaw_test\(\s*laws\.{check.__name__}\b", sources)
+    layers = {**laws.LAYERS, **laws.MUTATING_LAYERS}
+    layered = {check for checks in layers.values() for check in checks}
+    defined = {
+        obj
+        for name, obj in inspect.getmembers(laws, inspect.isfunction)
+        if name.startswith("check_") and obj.__module__ == laws.__name__
+    }
+    assert defined == layered, sorted(c.__name__ for c in defined ^ layered)
+
+    here = Path(__file__).parent
+    sources = {path.stem: path.read_text() for path in here.glob("test_law_*.py")}
+    everything = "".join(sources.values())
+    missing = [layer for layer in layers if f'layer_test("{layer}")' not in everything]
+    missing += [
+        f"known_issue_test({layer!r})"
+        for layer in layers
+        if known_issue_pairs(layer) and f'known_issue_test("{layer}")' not in everything
     ]
     assert not missing, missing
+
+    ids = {laws.law_id(check) for check in layered}
+    unknown = [
+        pair
+        for pair in list(KNOWN_ISSUES) + list(NOT_APPLICABLE)
+        if pair[0] not in ids and pair[0] not in _STANDALONE_ISSUES
+    ]
+    assert not unknown, unknown

@@ -10,11 +10,6 @@ OWN branch (author, 2026-09-30); the graph is bipartite with walls of degree
 
 from __future__ import annotations
 
-from helpers import laws
-from helpers.law_tier import law_test
+from helpers.law_tier import layer_test
 
-test_dual_node_structure = law_test(laws.check_dual_node_structure)
-test_dual_face_nodes = law_test(laws.check_dual_face_nodes)
-test_dual_face_side_is_geometry = law_test(laws.check_dual_face_side_is_geometry)
-test_dual_unified_is_pip_segment = law_test(laws.check_dual_unified_is_pip_segment)
-test_dual_bipartite_degree = law_test(laws.check_dual_bipartite_degree)
+test_dual_graph_laws = layer_test("dual_graph")

@@ -7,10 +7,7 @@ anchor's crossing sign is the handedness of the two oriented eigendirections.
 
 from __future__ import annotations
 
-from helpers import laws
-from helpers.law_tier import law_test
+from helpers.law_tier import known_issue_test, layer_test
 
-test_one_anchor_per_unstable_branch = law_test(laws.check_one_anchor_per_unstable_branch)
-test_anchor_sign_matches_eigendirections = law_test(
-    laws.check_anchor_sign_matches_eigendirections
-)
+test_anchors_laws = layer_test("anchors")
+test_anchors_known_issue = known_issue_test("anchors")

@@ -703,7 +703,9 @@ class KnownIssue:
 
 
 #: ``(law_id, case) -> KnownIssue``; fixing these is out of scope (decision 10).
-#: The law ids are the ``helpers.laws`` check names without ``check_``.
+#: The law ids are the ``helpers.laws`` check names without ``check_``. A
+#: law-tier pair is left out of its layer's run and gets a test of its own
+#: (``helpers.law_tier.known_issue_test``), so a fix flips loudly to XPASS.
 KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
     {
         ("one_anchor_per_unstable_branch", "inversion"): KnownIssue(
@@ -757,18 +759,18 @@ _NO_HOLES = "no pseudoneighbors, hence no holes, at the only feasible depth (P2)
 _NO_IMAGE_BRIDGES = "the minimal trellis maps no hole bridge forward (no image bridges)"
 _NO_REFINEMENT = "no class splits (no refined children)"
 
-#: ``(law_id, case) -> reason``: the law has nothing to check on that case.
+#: ``(law_id, case) -> reason``: the law has nothing to check on that case; the
+#: layer test skips it (and does not count it) on that case.
 NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
     {
         **{
             (law, "inversion"): _NO_HOLES
             for law in (
                 "holes_are_classified",
-                "holes_share_bridge_side",
+                "backward_holes_keep_bridge_side",
                 "direct_hole_side_is_coordinate_side",
                 "direct_hole_opens_inward_pair",
                 "openings_on_own_bridge_row",
-                "openings_linked_bound",
                 "openings_missing_only_at_anchor_or_tail",
                 "propagated_holes_land_on_predicted_branch",
                 "propagation_terminates",
@@ -793,10 +795,6 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
         ("arrangement_preimage_inverts_image", "k10"): "no region has a closed image",
         ("partition_singletons", "k10"): "no hole pair pinches a crossing",
         ("partition_singletons", "k28_two_blasts"): "no hole pair pinches a crossing",
-        ("openings_linked_bound", "k10"): "no propagated bound is a registered iterate (P1)",
-        ("openings_linked_bound", "k28_two_blasts"): (
-            "no propagated bound is a registered iterate (P1)"
-        ),
         ("iterated_cut_provenance", "k28_one_blast"): _NO_IMAGE_BRIDGES,
         ("iterated_cut_provenance", "p3"): _NO_IMAGE_BRIDGES,
         ("refined_children_inherit_word", "k28_one_blast"): _NO_REFINEMENT,
@@ -830,26 +828,3 @@ def issue_marks(law_id: str, case: str) -> list:
     if reason is not None:
         marks.append(pytest.mark.skip(reason=f"not applicable: {reason}"))
     return marks
-
-
-def law_params(law_id: str) -> list:
-    """
-    The ``pytest.param`` list of case names for one law, marks applied.
-
-    Every :data:`LAW_CASES` entry is included; a case named only in
-    :data:`KNOWN_ISSUES` or :data:`NOT_APPLICABLE` for this law is appended.
-    A known issue becomes ``xfail(strict=True)`` (with ``raises`` when given),
-    a not-applicable pair a ``skip`` (:func:`issue_marks`).
-
-    Args:
-        law_id: The law's identifier.
-
-    Returns:
-        The parameters, ids equal to the case names.
-    """
-    names = list(LAW_CASES)
-    for registry in (KNOWN_ISSUES, NOT_APPLICABLE):
-        for law, case in registry:
-            if law == law_id and case not in names:
-                names.append(case)
-    return [pytest.param(name, marks=issue_marks(law_id, name), id=name) for name in names]

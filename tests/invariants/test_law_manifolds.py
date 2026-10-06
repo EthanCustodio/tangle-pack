@@ -8,10 +8,6 @@ and the geometric and iterate linked lists are acyclic and consistent.
 
 from __future__ import annotations
 
-from helpers import laws
-from helpers.law_tier import law_test
+from helpers.law_tier import layer_test
 
-test_manifold_cdist_monotone = law_test(laws.check_manifold_cdist_monotone)
-test_manifold_no_spikes = law_test(laws.check_manifold_no_spikes)
-test_manifold_iterate_law = law_test(laws.check_manifold_iterate_law)
-test_manifold_one_to_one = law_test(laws.check_manifold_one_to_one)
+test_manifolds_laws = layer_test("manifolds")

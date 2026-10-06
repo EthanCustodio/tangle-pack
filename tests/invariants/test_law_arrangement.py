@@ -10,13 +10,7 @@ preimage undo each other where both are recorded.
 
 from __future__ import annotations
 
-from helpers import laws
-from helpers.law_tier import law_test
+from helpers.law_tier import known_issue_test, layer_test
 
-test_arrangement_euler = law_test(laws.check_arrangement_euler)
-test_arrangement_regions_sound = law_test(laws.check_arrangement_regions_sound)
-test_arrangement_regions_disjoint = law_test(laws.check_arrangement_regions_disjoint)
-test_arrangement_image_of = law_test(laws.check_arrangement_image_of)
-test_arrangement_preimage_inverts_image = law_test(
-    laws.check_arrangement_preimage_inverts_image
-)
+test_arrangement_laws = layer_test("arrangement")
+test_arrangement_known_issue = known_issue_test("arrangement")

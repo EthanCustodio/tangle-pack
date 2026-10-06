@@ -13,15 +13,6 @@ bridges and closes up.
 
 from __future__ import annotations
 
-from helpers import laws
-from helpers.law_tier import law_test
+from helpers.law_tier import layer_test
 
-test_iterated_child_inside_parent = law_test(laws.check_iterated_child_inside_parent)
-test_iterated_keeps_homotopy_boundaries = law_test(laws.check_iterated_keeps_homotopy_boundaries)
-test_iterated_unique_owner = law_test(laws.check_iterated_unique_owner)
-test_iterated_cut_provenance = law_test(laws.check_iterated_cut_provenance)
-test_names_agree_with_structure = law_test(laws.check_names_agree_with_structure)
-test_minimal_trellis_bridges = law_test(laws.check_minimal_trellis_bridges)
-test_minimal_trellis_nodes_and_arrangement = law_test(
-    laws.check_minimal_trellis_nodes_and_arrangement
-)
+test_iterated_laws = layer_test("iterated")
