@@ -18,48 +18,6 @@ henon_map = _henon_map_factory(*HENON_K10)
 henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 
 
-def test_initialization_unstable():
-
-    henon = DynamicalSystem(henon_map, henon_map_inverse)
-
-    initial_guess = saddle_guesses(*HENON_K10)["saddle"]
-
-    fp_solver = FixedPointSolver(henon)
-
-    fixed_point = fp_solver.construct_fixed_point(initial_guess)
-
-    man_maker = ManifoldInitializer(henon)
-
-    initial_segment = man_maker.get_initial_fundamental_segment(fixed_point, 0, 0, 'unstable')
-    initial_points = initial_segment.get_point_array()
-
-    assert len(initial_points) == 3
-
-    assert np.linalg.norm(initial_points[1] - initial_points[0]) < np.linalg.norm(initial_points[2] - initial_points[0])
-
-
-def test_initialization_stable():
-
-    henon = DynamicalSystem(henon_map, henon_map_inverse)
-
-    initial_guess = saddle_guesses(*HENON_K10)["saddle"]
-
-    fp_solver = FixedPointSolver(henon)
-
-    fixed_point = fp_solver.construct_fixed_point(initial_guess)
-
-    man_maker = ManifoldInitializer(henon)
-
-    initial_segment = man_maker.get_initial_fundamental_segment(fixed_point, 0, 0, 'stable')
-    initial_points = initial_segment.get_point_array()
-
-    assert len(initial_points) == 3
-
-    assert np.linalg.norm(initial_points[1] - initial_points[0]) < np.linalg.norm(initial_points[2] - initial_points[0])
-
-
-
-
 # --------------------------------------------------------------------------- #
 # Plan 1.6 -- ManifoldInitializer called a nonexistent FixedPoint.has_inversion()
 # --------------------------------------------------------------------------- #

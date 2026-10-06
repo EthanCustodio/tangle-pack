@@ -15,7 +15,6 @@ import pytest
 from tanglepack.loom.TangleSession import TangleSession
 from tanglepack.topology.PartitionFamily import (
     HomotopyPartition,
-    IteratedHomotopyPartition,
     PartitionFamily,
     _intervals_from_marks,
     _marks_of,
@@ -148,9 +147,3 @@ def test_marks_round_trip_on_the_nested_fixture(p3_partitioned):
             ]
 
 
-def test_kinds_are_distinct():
-    assert PartitionFamily.kind == "base"
-    assert HomotopyPartition.kind == "homotopy"
-    assert IteratedHomotopyPartition.kind == "iterated_homotopy"
-    assert issubclass(HomotopyPartition, PartitionFamily)
-    assert issubclass(IteratedHomotopyPartition, PartitionFamily)

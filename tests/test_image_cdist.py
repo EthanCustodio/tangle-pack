@@ -202,32 +202,6 @@ def test_image_cdist_at_zero_steps_is_the_identity(p3_partitioned_c):
     assert checked
 
 
-@pytest.mark.slow
-def test_image_cdist_is_additive_in_n_on_the_scaling_branch(p3_partitioned_c):
-    """Two derived steps land where one derived double step does.
-
-    ``advance_key`` is additive in ``n`` and ``per_step_beta ** n`` is
-    multiplicative, so the scaling branch composes exactly — the property that
-    lets a caller ask for any depth without walking the chain.
-    """
-    session, _fp3, _fp1 = p3_partitioned_c
-    trellis = session.trellis()
-
-    checked = 0
-    for iid in trellis.registry.all_ids():
-        crossing = trellis.intersection(iid)
-        if crossing.manifold_b_key is None:
-            continue
-        fixed_point = crossing.manifold_b_key[0]
-        beta = fixed_point.per_step_beta("stable")
-        key_1, cdist_1 = trellis._scaled_image_cdist(iid, 1, "stable")
-        key_2, cdist_2 = trellis._scaled_image_cdist(iid, 2, "stable")
-        assert fixed_point.advance_key(key_1, 1) == key_2
-        assert cdist_2 == pytest.approx(cdist_1 * beta, rel=1e-12)
-        checked += 1
-    assert checked
-
-
 # --------------------------------------------------------------------------- #
 # C.1 -- error cases
 # --------------------------------------------------------------------------- #
@@ -302,30 +276,6 @@ def test_element_images_agree_whether_or_not_the_table_is_used(p3_partitioned_c)
 
 
 @pytest.mark.slow
-def test_every_bounded_element_now_has_an_image(p3_partitioned_c):
-    """No bounded element answers None any more, registered iterate or not.
-
-    Coverage is all that can be asserted for the elements whose iterates are
-    unregistered: nothing in the registry knows where they went, so there is no
-    ground truth to compare the scaled answer against.
-    """
-    session, fp3, fp1 = p3_partitioned_c
-
-    fell_back = 0
-    for fixed_point in (fp3, fp1):
-        trellis = session.trellis(fixed_point)
-        for result, interval in _bounded_elements(trellis):
-            images = trellis.image_of_element(result, interval.element_id, 1)
-            assert images is not None
-            if (
-                trellis.iterate(interval.lo_id, 1) is None
-                or trellis.iterate(interval.hi_id, 1) is None
-            ):
-                fell_back += 1
-    assert fell_back, "the outermost elements have no registered forward iterate"
-
-
-@pytest.mark.slow
 def test_image_of_element_accepts_partitions_from_another_trellis(p3_partitioned_c):
     """The all-fixed-points trellis can map elements it holds no partition for.
 
@@ -382,31 +332,6 @@ def test_image_of_element_covers_both_endpoint_images(p3_partitioned_c):
             _key, cdist, _from_table = trellis.image_cdist(end_id, 1, "stable")
             slack = tol + abs(cdist) * SCALING_RTOL
             assert span_lo - slack <= cdist <= span_hi + slack
-        checked += 1
-    assert checked
-
-
-@pytest.mark.slow
-def test_scaled_element_image_stays_on_the_advanced_branch(p3_partitioned_c):
-    """``use_table=False`` still lands on ``advance_key(branch, n)``, not elsewhere."""
-    session, fp3, _fp1 = p3_partitioned_c
-    trellis = session.trellis(fp3)
-
-    checked = 0
-    for result, interval in _bounded_elements(trellis):
-        image_key = fp3.advance_key(result.branch_key, 1)
-        element_ids = trellis.image_of_element(
-            result, interval.element_id, 1, use_table=False
-        )
-        assert element_ids
-        image_result = next(
-            r
-            for r in trellis.stable_partitions
-            if r.branch_key == image_key and r.side == result.side
-        )
-        assert all(
-            image_result.element(e).branch_key == image_key for e in element_ids
-        )
         checked += 1
     assert checked
 

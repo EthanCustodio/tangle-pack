@@ -23,7 +23,6 @@ must be logged and discarded rather than raised on.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from tanglepack.numerics.Point import Point
 from tanglepack.numerics.Tangle import Tangle, _Segment
@@ -174,9 +173,3 @@ def test_parallel_offset_pair_yields_no_crossing_and_no_exception():
     assert pair not in tangle._intersecting_segments
 
 
-def test_small_tangle_crossing_count_is_unchanged(small_tangle):
-    """The relative epsilons must not change the k=10 fixture's crossing count."""
-    workbench, _fp = small_tangle
-    coords = {ix.coords for _iid, ix in workbench.intersection_registry}
-    assert len(coords) == 2
-    assert len(workbench.intersection_registry) == 2

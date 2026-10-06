@@ -1,25 +1,13 @@
 """Phase 2 Task A — single sources of truth in the numerics core.
 
-Two kinds of test live here.
-
-**Pin tests** record today's bridge-cutting result as expected data: for every
-bridge, its unstable ``(orbit_index, branch_index)`` and the two canonical
-distances of each of its two bounding crossings, rounded to six significant
-digits, plus the registry size. They were captured against the pre-refactor
-code (crossings resolved into ``Tangle._intersecting_coords``, bridge endpoints
-assigned afterwards by nearest-cdist lookup) and must be reproduced exactly by
-the registry-only cutting path.
-
-**Acceptance tests** pin the new invariants: resolved crossings live only in the
-``IntersectionRegistry``; a bridge's endpoints are the registry ids of the two
-crossings it was cut at; every manifold and every bridge carries its
-``manifold_key``; and the forward iterate of a bridge's two endpoint crossings is
-registered explicitly rather than inferred.
+These tests pin the registry-only invariants: resolved crossings live only in
+the ``IntersectionRegistry``; a bridge's endpoints are the registry ids of the
+two crossings it was cut at; every manifold and every bridge carries its
+``manifold_key``; and the forward iterate of a bridge's two endpoint crossings
+is registered explicitly rather than inferred.
 """
 
 from __future__ import annotations
-
-from math import floor, log10
 
 import numpy as np
 import pytest
@@ -30,136 +18,8 @@ from tanglepack.numerics.Point import Point
 
 
 # --------------------------------------------------------------------------- #
-# fingerprint helpers
-# --------------------------------------------------------------------------- #
-def _sig(value: float | None, digits: int = 6) -> float | None:
-    """Round to ``digits`` significant digits (None passes through)."""
-    if value is None:
-        return None
-    value = float(value)
-    if value == 0.0:
-        return 0.0
-    return round(value, -int(floor(log10(abs(value)))) + (digits - 1))
-
-
-def bridge_fingerprint(workbench) -> list[tuple]:
-    """Sorted ``(orbit/branch, first cdists, second cdists)`` of every bridge."""
-    registry = workbench.intersection_registry
-    rows = []
-    for bridge in workbench.bridges:
-        first_id, second_id = bridge.first_intersection, bridge.second_intersection
-        first = registry[first_id] if first_id in registry else None
-        second = registry[second_id] if second_id in registry else None
-        rows.append(
-            (
-                bridge.manifold_key[2:] if bridge.manifold_key is not None else None,
-                _sig(first.unstable_cdist) if first else None,
-                _sig(first.stable_cdist) if first else None,
-                _sig(second.unstable_cdist) if second else None,
-                _sig(second.stable_cdist) if second else None,
-            )
-        )
-    return sorted(rows, key=repr)
-
-
-# --------------------------------------------------------------------------- #
-# expected data, captured against the pre-refactor code (2026-09-02)
-# --------------------------------------------------------------------------- #
-K10_REGISTRY_SIZE = 8
-K10_BRIDGE_ENDPOINTS = [
-    ((0, 0), 0.0, 0.0, 9.90728, 84.3686),
-    ((0, 0), 631.412, 8.70701, 651.766, 76.5359),
-    ((0, 0), 651.766, 76.5359, 697.225, 81.8741),
-    ((0, 0), 697.225, 81.8741, 718.466, 1.16361),
-    ((0, 0), 74.146, 74.146, 84.3686, 9.90728),
-    ((0, 0), 84.3686, 9.90728, 631.412, 8.70701),
-    ((0, 0), 9.90728, 84.3686, 74.146, 74.146),
-]
-
-P3_REGISTRY_SIZE = 34
-P3_BRIDGE_ENDPOINTS = [
-    ((0, 0), 0.0, 0.0, 0.615371, 1.48055),
-    ((0, 0), 0.0, 0.0, 37.1964, 7.05211),
-    ((0, 0), 0.615371, 1.48055, 1.19459, 0.770302),
-    ((0, 0), 1.19459, 0.770302, 2.29603, 0.3968),
-    ((0, 0), 155.287, 5.58106, 196.194, 1.33696),
-    ((0, 0), 16.6409, 0.0552914, 31.9846, 0.0284734),
-    ((0, 0), 2.29603, 0.3968, 4.45774, 0.206421),
-    ((0, 0), 31.9846, 0.0284734, 62.1091, 0.0148128),
-    ((0, 0), 37.1964, 7.05211, 155.287, 5.58106),
-    ((0, 0), 4.45774, 0.206421, 8.57387, 0.106253),
-    ((0, 0), 62.1091, 0.0148128, 119.366, 0.00762394),
-    ((0, 0), 8.57387, 0.106253, 16.6409, 0.0552914),
-    ((1, 0), 0.0, 0.0, 0.954405, 0.954604),
-    ((1, 0), 0.954405, 0.954604, 1.8529, 0.496622),
-    ((1, 0), 1.8529, 0.496622, 3.56148, 0.255809),
-    ((1, 0), 13.288, 0.0685557, 25.8148, 0.0356415),
-    ((1, 0), 25.8148, 0.0356415, 49.6083, 0.0183569),
-    ((1, 0), 3.56148, 0.255809, 6.918, 0.13301),
-    ((1, 0), 49.6083, 0.0183569, 96.3395, 0.00954955),
-    ((1, 0), 6.918, 0.13301, 13.288, 0.0685557),
-    ((1, 0), 96.3395, 0.00954955, 185.15, 0.00491442),
-    ((2, 0), 0.0, 0.0, 1.48041, 0.61542),
-    ((2, 0), 1.48041, 0.61542, 2.87409, 0.320164),
-    ((2, 0), 10.7305, 0.0857516, 20.6125, 0.0441966),
-    ((2, 0), 149.435, 0.00615608, 287.189, 0.003164),
-    ((2, 0), 2.87409, 0.320164, 5.5245, 0.164912),
-    ((2, 0), 20.6125, 0.0441966, 40.042, 0.0229778),
-    ((2, 0), 40.042, 0.0229778, 76.9492, 0.0118349),
-    ((2, 0), 5.5245, 0.164912, 10.7305, 0.0857516),
-    ((2, 0), 76.9492, 0.0118349, 149.435, 0.00615608),
-]
-
-
-# --------------------------------------------------------------------------- #
-# pin tests
-# --------------------------------------------------------------------------- #
-def test_bridge_cutting_pin_k10(henon_tangle_with_bridges):
-    """Registry-only cutting agrees with the pre-refactor result (k=10)."""
-    workbench, _fp = henon_tangle_with_bridges
-
-    assert len(workbench.intersection_registry) == K10_REGISTRY_SIZE
-    assert bridge_fingerprint(workbench) == K10_BRIDGE_ENDPOINTS
-
-
-@pytest.mark.slow
-def test_bridge_cutting_pin_period_3(henon_p3_session):
-    """Registry-only cutting agrees with the pre-refactor result (nested p3)."""
-    session, _fp3, _fp1, _zone = henon_p3_session
-    workbench = session.workbench
-
-    assert len(workbench.intersection_registry) == P3_REGISTRY_SIZE
-    assert bridge_fingerprint(workbench) == P3_BRIDGE_ENDPOINTS
-
-
-# --------------------------------------------------------------------------- #
 # 2.1 -- resolved crossings live in the registry only
 # --------------------------------------------------------------------------- #
-def test_tangle_keeps_only_index_state(small_tangle):
-    workbench, _fp = small_tangle
-    tangle = workbench.Tangle
-
-    for gone in (
-        "_intersections",
-        "_intersecting_coords",
-        "_intersecting_points",
-        "_intersection_by_seg",
-        "iter_intersection_coords",
-    ):
-        assert not hasattr(tangle, gone), f"Tangle still owns {gone}"
-
-    for kept in (
-        "_intersecting_segments",
-        "_seg_lookup",
-        "_manifold_segs",
-        "_seg_manifolds",
-        "_edge_to_sid",
-        "_processed_pairs",
-        "_rtree",
-    ):
-        assert hasattr(tangle, kept), f"Tangle lost its index state {kept}"
-
-
 def test_compute_intersections_returns_one_coord_per_registered_crossing(grown_both):
     """The returned coords are the registry's, read back independently.
 

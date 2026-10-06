@@ -6,7 +6,6 @@ and assert all four geometric invariants hold on the result, for a range of N.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from invariants import (
@@ -38,14 +37,3 @@ def test_stable_growth_preserves_invariants(initialized, n_iter):
     assert_one_to_one(manifold)
 
 
-def test_cdists_are_positive_and_increasing(grown_unstable):
-    """cdist is a distance from the fixed point: strictly positive and growing."""
-    from invariants import manifold_cdists
-
-    _, _, manifold = grown_unstable
-    cdists = manifold_cdists(manifold, "unstable")
-    assert len(cdists) > 3
-    # the root fixed point sits at cdist 0; every other point is strictly positive
-    assert all(c >= 0 for c in cdists)
-    assert cdists[-1] > 0
-    assert cdists == sorted(cdists)

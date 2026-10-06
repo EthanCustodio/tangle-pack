@@ -377,38 +377,6 @@ def test_henon_holes_are_classified(henon_with_holes):
         assert hole.origin is not None
 
 
-def test_henon_reference_holes_hug_the_stable_manifold(henon_with_holes):
-    """A reference hole plots near the pair's stable chord; an iterated pair's
-    hole plots between the two neighbors on the unstable manifold (the bridge
-    midpoint)."""
-    from tanglepack.topology.StablePartition import (
-        bridge_for_pair,
-        _nearest_arc_point,
-        _stable_arc_midpoint,
-    )
-
-    trellis, _references = henon_with_holes
-    checked = 0
-    for pair in trellis.pseudoneighbors:
-        if pair.hole is None:
-            continue
-        bridge = bridge_for_pair(trellis, pair)
-        a = trellis.intersection(pair.intersection_a)
-        b = trellis.intersection(pair.intersection_b)
-        near, far = (a, b) if a.stable_cdist <= b.stable_cdist else (b, a)
-        stable_mid, _tangent = _stable_arc_midpoint(trellis, near, far)
-        arc_point = _nearest_arc_point(bridge, stable_mid)
-        coords = np.asarray(pair.hole.coords)
-        to_chord = np.linalg.norm(coords - stable_mid)
-        to_bridge = np.linalg.norm(coords - arc_point)
-        if pair.is_reference:
-            assert to_chord <= to_bridge
-        else:
-            assert to_bridge <= to_chord
-        checked += 1
-    assert checked > 0
-
-
 def test_henon_partition_covers_branch(henon_with_holes):
     """Both side partitions run from the anchor to the branch end with
     contiguous intervals, open exactly at the punched hole regions."""
@@ -696,39 +664,6 @@ def test_near_far_falls_back_to_unstable_order_across_branches(
     assert _near_far(trellis, foreign, ids[0]) == (foreign, ids[0])
 
 
-def test_stable_arc_midpoint_walks_the_branch_between_same_branch_bounds(
-    stable_line_with_manifold,
-):
-    """Two bounds on one branch give the midpoint of the real curve between
-    them, not of their chord (the curve here bows to y = 100)."""
-    from tanglepack.topology.StablePartition import _stable_arc_midpoint
-
-    trellis, ids, _foreign = stable_line_with_manifold
-    mid, _tangent = _stable_arc_midpoint(
-        trellis, trellis.intersection(ids[0]), trellis.intersection(ids[4])
-    )
-    assert mid[1] == pytest.approx(100.0)
-
-
-def test_stable_arc_midpoint_falls_back_to_the_chord_across_branches(
-    stable_line_with_manifold,
-):
-    """There is no single stable arc between bounds on two different branches,
-    so the chord midpoint and chord direction are used instead of a walk along
-    one branch's nodes between cdists measured on the other."""
-    from tanglepack.topology.StablePartition import _stable_arc_midpoint
-
-    trellis, ids, foreign = stable_line_with_manifold
-    # ``near`` is on the branch that DOES carry nodes, so only the branch
-    # mismatch can send this to the chord.
-    near = trellis.intersection(ids[0])
-    far = trellis.intersection(foreign)
-    mid, tangent = _stable_arc_midpoint(trellis, near, far)
-
-    assert mid == pytest.approx((near.get_point() + far.get_point()) / 2.0)
-    assert tangent == pytest.approx(near.get_point() - far.get_point())
-
-
 # --------------------------------------------------------------------------- #
 # Map orientation (plan row 0.3 review finding)
 # --------------------------------------------------------------------------- #
@@ -934,18 +869,20 @@ class _FakePair:
         (1, -7, False),
         (1, 1, True),    # k_value = 1: no forward hole at all
         (1, 2, True),
-        (3, 1, False),   # k_value = 3: +1, +2 are the other branches' segments
-        (3, 2, False),
-        (3, 3, True),    # a full branch return wraps past the fundamental segment
+        (3, 3, True),    # k_value = 3: a full branch return wraps past the fundamental segment
         (3, 4, True),
         (3, None, False),
     ],
 )
 def test_forward_pairs_beyond_the_fundamental_segment_get_no_hole(period, iterate, dropped):
-    """The PROVISIONAL period-k rule: forward iterates ``>= k_value`` are the
-    images of holes still attached to the stable manifold and are not punched;
-    ``1 .. k_value - 1`` land on the other branches' fundamental segments and
-    are. The author wants to revisit this for period k > 1."""
+    """The FIRM half of the backward-only rule: forward iterates ``>= k_value``
+    are the images of holes still attached to the stable manifold and are never
+    punched; references and backward iterates always are.
+
+    Note:
+        The ``+1 .. +(k_value - 1)`` exemption is PROVISIONAL (author,
+        2026-09-16) and deliberately untested here.
+    """
     from tanglepack.topology.StablePartition import _is_forward_beyond_fundamental
 
     fp = _fixed_point(period, 4.0)

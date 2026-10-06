@@ -467,9 +467,19 @@ def test_k10_a_different_pip_moves_the_unified_set(k10_partitioned):
     session, fp = k10_partitioned
     trellis = session.trellis(fp)
     default = trellis.strong_pip
-    alternatives = [c for c in trellis.strong_pip_candidates if c != default]
+    # Registry ids are not reproducible between builds, so the alternative is
+    # chosen by stable cdist among the candidates whose k-th iterate is
+    # registered (the rule needs it), never by id.
+    alternatives = sorted(
+        (
+            c
+            for c in trellis.strong_pip_candidates
+            if c != default and trellis.iterate(c, fp.k_value) is not None
+        ),
+        key=lambda c: trellis.intersection(c).stable_cdist,
+    )
     if not alternatives:
-        pytest.skip("the fixture has a single strong-pip candidate")
+        pytest.skip("the fixture has no other strong-pip candidate with a registered iterate")
     pieces = build_pieces(session, [fp])
     before = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[default])
     after = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[alternatives[0]])
@@ -527,16 +537,6 @@ def test_k10_graph_is_bipartite(k10_partitioned):
         assert graph.nodes[("stable", node.key)]["traversable"] == node.traversable
         degree = graph.degree(("stable", node.key))
         assert degree == 1 or (node.is_unified and degree == 2)
-
-
-def test_k10_summary_reports_counts(k10_partitioned):
-    session, fp = k10_partitioned
-    dual, _ = _k10_graph(session, fp)
-    text = dual.summary()
-    assert "stable edges" in text and "solid" in text and "fundamental segments" in text
-    assert repr(dual) == f"<{text}>"
-    assert repr(dual.unified_nodes[0]).startswith("StableNode(")
-    assert "exit(s)" in repr(dual.face_nodes[0])
 
 
 def test_a_missing_partition_side_is_rejected(k10_partitioned):

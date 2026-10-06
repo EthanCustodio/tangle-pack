@@ -1,23 +1,9 @@
 """Phase 6.7 — the resonance zone on the region layer.
 
-``ResonanceZone`` used to inline its own shoelace sum and its own ray cast, and
-built its boundary as a bare vertex array. It now describes its boundary as a list
-of :class:`~tanglepack.topology.TopologyResults.Arc` and delegates area and
+``ResonanceZone`` describes its boundary as a list of
+:class:`~tanglepack.topology.TopologyResults.Arc` and delegates area and
 containment to :mod:`tanglepack.numerics.geometry`, which is the same code the
 regions use.
-
-The point of this file is that NOTHING a caller can observe changed. The expected
-values below were captured against the pre-6.7 implementation (2026-09-03), before
-the anchors became deliberate and before the geometry moved, and are asserted
-against the refactored one:
-
-* ``zone.area`` to twelve significant digits;
-* the in/out answer on an 11x11 grid over each zone's own bounding box, expanded
-  by 10% — a signature dense enough that any change to the ray cast, the boundary
-  stitching or the vertex list shows up as a different bit string.
-
-The bounding box is derived from the zone's own captured boundary, so the grid
-follows the geometry rather than hard-coding coordinates.
 """
 
 from __future__ import annotations
@@ -26,48 +12,7 @@ import numpy as np
 import pytest
 
 from tanglepack import TangleSession
-from tanglepack.loom.ResonanceZone import BoundaryArc
 from tanglepack.topology.TopologyResults import Arc
-
-
-# --------------------------------------------------------------------------- #
-# expected data, captured 2026-09-03 against the pre-6.7 implementation
-# --------------------------------------------------------------------------- #
-K10_ZONE_AREA = 97.9399955713
-K10_ZONE_MASK = (
-    "0000000000000000000000001111000000011111100000111111100001111111100011111110"
-    "001111111000011110000000100000000000000000000"
-)
-
-P3_INNER_ZONE_AREA = 0.538178460497
-P3_INNER_ZONE_MASK = (
-    "0000000000000011100000001111111000001111110000000111100000000111100000000111"
-    "000000001110000000001000000000000000000000000"
-)
-
-P3_OUTER_ZONE_AREA = 21.0625044173
-P3_OUTER_ZONE_MASK = (
-    "0000000000000000100000000011100000001111100000011111000000111111000011111110"
-    "000111111100001111110000110000000000000000000"
-)
-
-
-def bbox_grid(zone, n: int = 11, pad: float = 0.1) -> list[tuple[float, float]]:
-    """An ``n`` x ``n`` grid over the zone's own bounding box, expanded by ``pad``."""
-    verts = zone.boundary_vertices
-    lo, hi = verts.min(axis=0), verts.max(axis=0)
-    span = hi - lo
-    lo, hi = lo - pad * span, hi + pad * span
-    return [
-        (float(x), float(y))
-        for x in np.linspace(lo[0], hi[0], n)
-        for y in np.linspace(lo[1], hi[1], n)
-    ]
-
-
-def containment_mask(zone) -> str:
-    """The zone's in/out answer over :func:`bbox_grid`, as a bit string."""
-    return "".join("1" if zone.contains_point(p) else "0" for p in bbox_grid(zone))
 
 
 @pytest.fixture
@@ -92,36 +37,18 @@ def k10_zone_session(henon_map, henon_map_inverse):
 
 
 # --------------------------------------------------------------------------- #
-# area and containment are unchanged
+# area and containment
 # --------------------------------------------------------------------------- #
-def test_k10_zone_area_and_containment_are_unchanged(k10_zone_session):
-    session, _fp = k10_zone_session
-    (zone,) = session.resonance_zones.values()
-
-    assert zone.area == pytest.approx(K10_ZONE_AREA, rel=1e-11)
-    assert containment_mask(zone) == K10_ZONE_MASK
-
-
-@pytest.mark.slow
-def test_p3_zone_areas_and_containment_are_unchanged(henon_p3_session):
-    session, _fp3, _fp1, _zone = henon_p3_session
-    inner, outer = sorted(session.resonance_zones.values(), key=lambda z: z.area)
-
-    assert inner.area == pytest.approx(P3_INNER_ZONE_AREA, rel=1e-11)
-    assert containment_mask(inner) == P3_INNER_ZONE_MASK
-    assert outer.area == pytest.approx(P3_OUTER_ZONE_AREA, rel=1e-11)
-    assert containment_mask(outer) == P3_OUTER_ZONE_MASK
-
-
 def test_zone_area_is_positive_and_winding_independent(k10_zone_session):
     """The zone reports a magnitude, whichever way its ring happens to wind."""
     session, _fp = k10_zone_session
     (zone,) = session.resonance_zones.values()
     original = zone.boundary_vertices
 
-    assert zone.area > 0.0
+    area = zone.area
+    assert area > 0.0
     zone.boundary_vertices = original[::-1]
-    assert zone.area == pytest.approx(K10_ZONE_AREA, rel=1e-11)
+    assert zone.area == pytest.approx(area)
     zone.boundary_vertices = original
 
 
@@ -186,11 +113,6 @@ def test_boundary_intersection_id_resolves_on_demand(k10_zone_session):
     )
 
 
-def test_boundary_arc_dataclass_is_gone():
-    """The zone-local arc record is replaced by the shared topology Arc."""
-    assert BoundaryArc is Arc
-
-
 # --------------------------------------------------------------------------- #
 # the blast/classification path still uses the same test point
 # --------------------------------------------------------------------------- #
@@ -205,23 +127,6 @@ def test_bridge_classification_uses_the_memoised_midpoint(k10_zone_session):
     for bridge in inside:
         point = session._bridge_test_point(bridge)
         assert zone.contains_point(point)
-
-
-def test_shapely_is_not_a_dependency():
-    """Phase 6.7 drops shapely: nothing imports it and it is not declared."""
-    import pathlib
-    import re
-
-    root = pathlib.Path(__file__).resolve().parents[1]
-    pyproject = (root / "pyproject.toml").read_text()
-    assert "shapely" not in pyproject.lower()
-
-    offenders = [
-        path
-        for path in (root / "src").rglob("*.py")
-        if re.search(r"\bshapely\b", path.read_text())
-    ]
-    assert offenders == []
 
 
 # --------------------------------------------------------------------------- #

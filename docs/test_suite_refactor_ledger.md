@@ -441,3 +441,104 @@ re-export shims; no node id changed.)
    stay until Phase 7; `bare_fixed_point()` is added now.
 6. **`laws.py` covers the numerics layers only**; the topology layers land
    with the law-tier modules in Phase 4 (the task allowed a scaffold).
+
+---
+
+## §2 Phase 2: pure deletions
+
+### Deletion ledger, Phase 2
+
+Every candidate was checked against the regression-guard notes (P5 verdict,
+§0): none guards a past bug that lacks another kept guard. 74 collected node
+ids removed, 2 added (796 → 724); `tests/visualizations/` (2 uncollected
+scripts) deleted too.
+
+| Node id(s) | Reason | Guard checked |
+|---|---|---|
+| `tests/visualizations/viz_nested_bridges.py`, `viz_unstable_artifacts.py` (uncollected) | dead scripts: not collected, crash with KeyError None, match a dead log string | none |
+| `numerics/test_workbench_split.py` (whole file, 20 ids: `collaborators_are_wired…`, `delegating_signatures_unchanged[×7]`, `moved_bodies_live_in_their_new_module[×9]`, `new_modules_import_cleanly`, `top_level_import_still_works`, `visualize_signature_unchanged`, `iterate_bridge_still_patchable…`) | code-layout and signature pins (decision 4); the patchability guard is redundant (the blast error tests break loudly if patching stops working) | none |
+| `test_manifold_machine.py` (whole file: `machine_initialization`, `new_grow_manifold_matches_old_period_one/three`) | frozen pre-1.8 grow loop (migration snapshot) plus a tautology | none |
+| `numerics/test_bridge_identity.py::test_deleted_genealogy_attributes_are_gone` | tombstone | none |
+| `numerics/test_workbench_bugfixes.py::test_grown_until_intersection_is_gone` | tombstone | none |
+| `numerics/test_workbench_bugfixes.py::test_advance_key_returns_the_next_orbit_point` | tombstone half (`_advance_key_forward` gone) + duplicate of the `test_fixed_point` advance_key tests | advance_key kept in `test_fixed_point` |
+| `numerics/test_map_step_and_graph.py::test_per_step_beta_matches_the_expression_it_replaces` | migration pin | k_value-root bug: `test_per_step_beta_is_the_k_th_root_only_without_inversion` + inversion `test_one_map_step_scales_cdist_by_per_step_beta` kept |
+| `numerics/test_map_step_and_graph.py::test_k10_intersection_graph_is_unchanged` | migration snapshot (counts 8/18/7/7/4) | none |
+| `numerics/test_map_step_and_graph.py::test_branch_cycle_reproduces_the_topology_branch_orders` | dead API (`forward_*_branch_cycle` wrappers, whitelisted) | none |
+| `numerics/test_single_source_of_truth.py::test_bridge_cutting_pin_k10`, `::test_bridge_cutting_pin_period_3` | migration snapshot (6-digit bridge-cutting cdists); fingerprint helpers and pinned constants removed with them | none (refactor finished) |
+| `numerics/test_single_source_of_truth.py::test_tangle_keeps_only_index_state` | tombstone | none |
+| `numerics/test_cleanup_walkers_and_examples.py::test_string_dispatched_iter_method_is_gone`, `::test_stability_alias_is_defined_once_in_numerics`, `::test_no_test_or_script_defines_its_own_henon` | tombstone / code-layout | none; `test_collect_is_the_only_traversal` KEPT |
+| `numerics/test_tangle_index_and_orientation.py::test_small_tangle_crossing_count_is_unchanged` | fixture-count snapshot | none |
+| `test_fixed_point.py::test_fixed_point_takes_no_branch_count` | signature tombstone; `num_branches` is derived and tested | has_inversion bug: two-branch init / kevin-way tests kept |
+| `numerics/test_intersection_registry_fixes.py::test_get_lambda_u_*` (×4), `::test_on_interval_stable_uses_the_stable_side_eigenvalue` | dead API (whitelisted) | none |
+| `numerics/test_closed_form_curvature.py::test_curvature_area_batch_matches_scalar` | dead API (scalar `_curvature_area`, whitelisted) | `test_parabolic_fit_matches_vandermonde` kept |
+| `test_session_trellis_cache.py::test_invalidate_trellises_is_a_deprecated_no_op` | dead API (whitelisted) | restore-invalidates guard kept |
+| `test_resonance_zone_region.py::test_boundary_arc_dataclass_is_gone`, `::test_shapely_is_not_a_dependency` | tombstone / layout | none |
+| `test_resonance_zone_region.py::test_k10_zone_area_and_containment_are_unchanged`, `::test_p3_zone_areas_and_containment_are_unchanged` | migration snapshot (areas to 1e-11, containment bit masks); masks, `bbox_grid`, `containment_mask` removed | area code stays covered by the winding test (rewritten, see below) |
+| `test_manifold_initializer.py::test_initialization_unstable`, `::test_initialization_stable` | migration snapshot ("exactly 3 init points") | none |
+| `numerics/test_machine_iterate_invariants.py::test_cdists_are_positive_and_increasing` | implied by the monotonicity tests | none |
+| `test_minimal_trellis.py::test_image_chain_is_the_bridge_class_function`, `test_partition_family.py::test_kinds_are_distinct`, `test_element_naming.py::test_names_are_deterministic_across_builds` | tautologies | none |
+| `test_topology_plotting.py::test_every_plotter_is_a_module_function_in_plotting`, `::test_stable_partition_module_holds_no_drawing_code`, `::test_hole_style_conventions_live_once`, `::test_session_exposes_one_fanout_helper_per_shape` | code-layout | none |
+| `test_topology_invariants.py::test_henon_partition_still_built_after_wiring` | historical smoke | none |
+| `test_image_cdist.py::test_image_cdist_is_additive_in_n_on_the_scaling_branch`, `::test_scaled_element_image_stays_on_the_advanced_branch`, `::test_every_bounded_element_now_has_an_image` | private / tautology / duplicate | KEPT `test_partition_elements::test_image_of_element_falls_back_when_an_iterate_is_missing` |
+| `test_partition_elements.py::test_image_of_element_lands_on_the_advanced_branch` | subsumed | KEPT `test_image_cdist::test_image_of_element_covers_both_endpoint_images` |
+| `test_session_bridge_classes.py::test_session_result_matches_gathered_partitions_helper` | private tautology (`_gathered_partitions`) | session-vs-direct tests kept |
+| `test_session_bridge_classes.py::test_p3_no_class_mixes_fixed_points` | verbatim twin | KEPT `test_bridge_class::test_p3_classes_cover_both_tangles_and_mix_neither` |
+| `test_session_bridge_classes.py::test_describe_reports_the_image_evidence` | string pin; evidence asserted structurally elsewhere | covered by the new report smoke test |
+| `test_stable_partition.py::test_henon_reference_holes_hug_the_stable_manifold`, `::test_stable_arc_midpoint_walks_the_branch_between_same_branch_bounds`, `::test_stable_arc_midpoint_falls_back_to_the_chord_across_branches` | private display placement | coordinates still covered by KEPT `test_direct_hole_side_is_the_side_of_its_coordinates` and `test_henon_propagated_hole_side_matches_coords` |
+| `test_stable_partition.py::test_forward_pairs_beyond_the_fundamental_segment_get_no_hole[3-1-False]`, `[3-2-False]` | the provisional `+1..+(k-1)` exemption (decision 3) | holes-backward-only: the firm parameters (references/backward punched; iterate ≥ k_value never) stay; docstring now names the provisional half as untested |
+| `test_dual_graph.py::test_k10_summary_reports_counts`, `test_dual_walk.py::test_walk_search_repr_and_walk_repr`, `test_element_naming.py::test_k10_describe_lists_every_parent_with_its_children` | string pins (decision 5) | replaced in this commit by `test_report_smoke.py` |
+
+### Added / changed in the same commit
+
+- **`tests/test_report_smoke.py::test_reports_are_non_empty_and_mention_what_they_report`**
+  (new): on k10, `DualGraph.summary()`/repr, a `StableNode` and a `FaceNode`
+  repr, `ElementNaming.describe()` (mentions every homotopy element's name),
+  `describe_bridge_classes()` (mentions every lettered class), every
+  `WalkSearch`/`Walk` repr, `SymbolicDynamics.describe()`/repr: all non-empty.
+- **`tests/numerics/test_bridge_identity.py::test_standalone_collaborators_agree_with_the_workbench`**
+  (new): the deleted `test_workbench_split` was the only coverage of the public
+  `BridgeIterator.workbench` / `IterateInference.workbench` properties
+  (coverage guard flagged `BridgeIterator.py:80`, `IterateInference.py:72`).
+  Rewritten behaviourally: standalone collaborators over a workbench give the
+  same image/preimage genealogy as its delegates, and a second inference pass
+  adds nothing.
+- **`test_resonance_zone_region.py::test_zone_area_is_positive_and_winding_independent`**:
+  compared the reversed-ring area with the deleted `K10_ZONE_AREA` pin at
+  rel=1e-11; now compares it with the forward-ring area (`pytest.approx`).
+- Orphaned imports, module constants, fingerprint helpers and empty section
+  headers removed; module docstrings of `test_single_source_of_truth`,
+  `test_resonance_zone_region`, `test_cleanup_walkers_and_examples` and
+  `test_intersection_registry_fixes` no longer describe the deleted pins.
+
+### Verification
+
+- Collected **724** (796 − 74 + 2), node-id diff in
+  `.refactor/runs/2026-10-05-test-suite/p2_deleted.txt` (`nodeids_p2.txt`).
+- `723 passed, 1 skipped` in 108 s with coverage; `-rxX`: no xfail, no xpass.
+- Coverage guard vs `cov_base.json`: OK (`cov_p2.json`); the only newly missed
+  lines are whitelisted dead API (`on_interval`, `_get_lambda_u`,
+  `invalidate_trellises`).
+- Isolation: `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`
+  now PASSES alone (see deviation 1), `test_pseudoneighbor.py::test_table_linked_deep_iterate_does_not_disqualify`,
+  `numerics/test_generation_and_caches.py::test_point_arrays_reflect_growth`,
+  `numerics/test_grow_until.py::test_grow_until_preserves_crossing_ids_across_rounds`,
+  `test_report_smoke.py::test_reports_are_non_empty_and_mention_what_they_report`: all pass.
+
+### Deviations, Phase 2
+
+1. **`test_k10_a_different_pip_moves_the_unified_set` fixed now, not in
+   Phase 7.** After the deletions it failed in the FULL run too (fewer k10
+   builds before it changed the registry-id permutation, P6 root cause). Its
+   alternative pip is now chosen by stable cdist among the candidates whose
+   `k_value`-th iterate is registered, never by id (the P6 fix). Test-only
+   change; it passes alone and in the suite.
+2. **Two tests added beyond the planned smoke test** (the collaborator test
+   and the rewritten winding assertion), so the coverage guard holds and the
+   winding test no longer depends on a deleted migration pin.
+3. The plan's summary list and planner §A differ slightly; the union was
+   applied (§A adds `test_advance_key_returns_the_next_orbit_point`,
+   `test_cdists_are_positive_and_increasing`,
+   `test_describe_reports_the_image_evidence`). 74 ids, matching the ~75 estimate.
+4. Not touched (later phases): `test_p3_forward_holes_stop_at_the_branch_return`
+   still asserts the provisional `+1, +2` forward holes on p3 (decision 3);
+   flagged for Phase 3b/4.

@@ -13,13 +13,10 @@ neighbours on any curve.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from tanglepack import FixedPoint, TangleWorkbench
 from tanglepack.numerics.IterateTable import IterateTable
-from tanglepack.topology.Pseudoneighbor import forward_unstable_branch_cycle
-from tanglepack.topology.StrongPip import forward_stable_branch_cycle
 
 
 def _bare_fixed_point(
@@ -101,15 +98,6 @@ def test_per_step_beta_rejects_an_unknown_stability():
         fp.per_step_beta("sideways")
 
 
-def test_per_step_beta_matches_the_expression_it_replaces(fixed_point):
-    """The k=10 saddle has no inversion (k_value == period == 1), so this is bit
-    for bit the ``lambda_u ** (1 / k_value)`` the call sites used to write."""
-    _workbench, fp = fixed_point
-    assert fp.k_value == fp.period
-    lambda_u = float(np.abs(np.asarray(fp.unstable_eigenvalues[0]).ravel()[0]))
-    assert fp.per_step_beta("unstable") == lambda_u ** (1.0 / fp.k_value)
-
-
 # --------------------------------------------------------------------------- #
 # 2.5 -- branch_cycle
 # --------------------------------------------------------------------------- #
@@ -133,17 +121,6 @@ def test_branch_cycle_is_the_advance_key_chain(fp, stability):
         assert fp.advance_key(a, 1) == b
     # the cycle closes
     assert fp.advance_key(cycle[-1], 1) == cycle[0]
-
-
-def test_branch_cycle_reproduces_the_topology_branch_orders():
-    """The two hand-rolled cycles in topology/ are exactly this one method."""
-    for fp in (
-        _bare_fixed_point(1),
-        _bare_fixed_point(3),
-        _bare_fixed_point(2, inversion=True),
-    ):
-        assert forward_unstable_branch_cycle(fp) == fp.branch_cycle("unstable")
-        assert forward_stable_branch_cycle(fp) == fp.branch_cycle("stable")
 
 
 def test_branch_cycle_rejects_an_unknown_stability():
@@ -207,25 +184,6 @@ def _adjacency(graph, stability):
         for u, v, d in graph.edges(data=True)
         if d.get("type") == "adjacency" and d.get("stability") == stability
     ]
-
-
-def test_k10_intersection_graph_is_unchanged(henon_tangle_with_bridges):
-    """Pinned before the rebuild: one stable branch, so nothing may move."""
-    workbench, _fp = henon_tangle_with_bridges
-    graph = workbench.build_intersection_graph()
-
-    assert graph.number_of_nodes() == 8
-    assert graph.number_of_edges() == 18
-    assert len(_adjacency(graph, "stable")) == 7
-    assert len(_adjacency(graph, "unstable")) == 7
-    # Three ordinary iterate edges plus the anchor's self-loop: the periodic point
-    # is registered as a crossing at cdist (0, 0) and, on a period-1 orbit, is its
-    # own forward image.
-    iterate_edges = [
-        (u, v) for u, v, d in graph.edges(data=True) if d.get("type") == "iterate"
-    ]
-    assert len(iterate_edges) == 4
-    assert sum(1 for u, v in iterate_edges if u == v) == 1
 
 
 def test_stable_edges_join_consecutive_crossings_on_one_branch(henon_p3_session):

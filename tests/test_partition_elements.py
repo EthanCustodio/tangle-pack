@@ -320,49 +320,6 @@ def test_element_for_rejects_an_unknown_endpoint_name(p3_partitioned):
 # --------------------------------------------------------------------------- #
 # element -> image element
 # --------------------------------------------------------------------------- #
-def test_image_of_element_lands_on_the_advanced_branch(p3_partitioned):
-    """One forward step sends an element onto elements of ``advance_key(key, 1)``.
-
-    The image elements tile the arc between the two endpoint images, so their
-    combined cdist span contains both images' cdists.
-    """
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
-    tol = trellis.registry.cdist_tol
-
-    checked = 0
-    for result in trellis.stable_partitions:
-        image_key = fp3.advance_key(result.branch_key, 1)
-        for interval in result.intervals:
-            if interval.lo_id is None or interval.hi_id is None:
-                continue
-            images = [
-                trellis.iterate(interval.lo_id, 1),
-                trellis.iterate(interval.hi_id, 1),
-            ]
-            if any(image is None for image in images):
-                continue
-
-            element_ids = trellis.image_of_element(result, interval.element_id, 1)
-            assert element_ids, "an image arc with both ends known is covered"
-
-            image_result = next(
-                r
-                for r in trellis.stable_partitions
-                if r.branch_key == image_key and r.side == result.side
-            )
-            covered = [image_result.element(e) for e in element_ids]
-            assert all(iv.branch_key == image_key for iv in covered)
-
-            span_lo = min(iv.lo_cdist for iv in covered)
-            span_hi = max(iv.hi_cdist for iv in covered)
-            for image in images:
-                cdist = float(trellis.intersection(image).stable_cdist)
-                assert span_lo - tol <= cdist <= span_hi + tol
-            checked += 1
-    assert checked, "the period-3 partition should have iterable elements"
-
-
 def test_image_of_element_is_none_exactly_at_an_unbounded_end(p3_partitioned):
     """Only an unbounded end has no image arc; that is the sole None.
 

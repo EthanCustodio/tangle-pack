@@ -315,15 +315,6 @@ def test_bad_parent_raises_value_error():
         ElementNaming(homotopy, other_side)
 
 
-def test_names_are_deterministic_across_builds():
-    _fp, _key_, homotopy, iterated = _one_branch_families()
-    first = ElementNaming(homotopy, iterated)
-    second = ElementNaming(homotopy, iterated)
-    assert first.names == second.names
-    assert first.refs == second.refs
-    assert first.describe() == second.describe()
-
-
 # --------------------------------------------------------------------------- #
 # Fixture tests: the k=10 combinatorics of the plan, pinned by name text
 # --------------------------------------------------------------------------- #
@@ -387,14 +378,6 @@ def test_k10_names_agree_with_the_partition_structure(k10_naming):
             child_iv = pieces.iterated.element(child)
             assert child_iv.lo_cdist >= span.lo_cdist - pieces.homotopy.tol
             assert child_iv.hi_cdist <= span.hi_cdist + pieces.homotopy.tol
-
-
-def test_k10_describe_lists_every_parent_with_its_children(k10_naming):
-    _pieces, naming = k10_naming
-    report = naming.describe()
-    assert "R_(0.0;1)  (#0) -> R_(0.0;1)^1, R_(0.0;1)^2, R_(0.0;1)^3" in report
-    assert "L_(0.0;3)  (#2) -> L_(0.0;3)" in report
-    assert "11 iterated element(s)" in report
 
 
 @pytest.mark.slow

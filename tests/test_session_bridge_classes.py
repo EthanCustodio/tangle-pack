@@ -83,17 +83,6 @@ def test_p3_session_result_matches_a_direct_call(p3_partitioned):
     assert len(actual) > 0
 
 
-def test_session_result_matches_gathered_partitions_helper(k10_partitioned):
-    """The private gathering helper session.bridge_classes() actually uses."""
-    session, fp = k10_partitioned
-    session.bridge_classes()  # populate/observe the same cache the helper reads
-
-    gathered = session._gathered_partitions()
-    expected = compute_bridge_classes(session.trellis(), gathered)
-
-    assert _strip(session.bridge_classes()) == _strip(expected)
-
-
 # --------------------------------------------------------------------------- #
 # (b) letters and symbols
 # --------------------------------------------------------------------------- #
@@ -307,23 +296,6 @@ def test_no_partitions_raises_and_warns(k10_session, caplog):
 
 
 # --------------------------------------------------------------------------- #
-# (f) on p3, no class mixes fixed points
-# --------------------------------------------------------------------------- #
-@pytest.mark.slow
-def test_p3_no_class_mixes_fixed_points(p3_partitioned):
-    session, fp3, fp1 = p3_partitioned
-
-    table = session.bridge_classes()
-
-    seen = set()
-    for cls in table.classes:
-        owners = {id(cls.source.fixed_point), id(cls.target.fixed_point)}
-        assert len(owners) == 1, f"class {cls} mixes two fixed points"
-        seen |= owners
-    assert seen == {id(fp3), id(fp1)}, "both tangles must contribute classes"
-
-
-# --------------------------------------------------------------------------- #
 # (g) the alphabet on its own
 # --------------------------------------------------------------------------- #
 def test_letter_sequence():
@@ -351,19 +323,6 @@ def test_alphabet_reuses_assigns_and_resets():
     alphabet.reset()
     assert len(alphabet) == 0
     assert alphabet.letter_for(second) == "a"
-
-
-def test_describe_reports_the_image_evidence(k10_partitioned):
-    """Each line ends with the images the class maps to: the active class names
-    itself by letter, the inert one lists its loop and its unresolved member."""
-    session, _fp = k10_partitioned
-
-    report = session.describe_bridge_classes()
-    active_line = next(l for l in report.splitlines() if "[active" in l)
-    inert_line = next(l for l in report.splitlines() if "[inert" in l)
-
-    assert "; images: a" in active_line
-    assert "loop in" in inert_line and "no registered image" in inert_line
 
 
 def test_k28_letters_only_the_anchor_class(k28_partitioned):

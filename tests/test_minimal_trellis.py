@@ -13,12 +13,7 @@ import logging
 import pytest
 
 from minimal_helpers import build_pieces
-import importlib
 from tanglepack.topology.MinimalTrellis import image_chain, minimal_trellis
-
-#: The module (the package attribute of the same name is the class).
-bridge_class_module = importlib.import_module("tanglepack.topology.BridgeClass")
-
 
 def _kept_pairs(arrangement):
     return {
@@ -148,11 +143,6 @@ def test_k28_minimal_trellis_invariants(k28_partitioned):
     _check_minimal(pieces)
     # Every active hole bridge was mapped (its chain may land on hole bridges only).
     assert pieces.minimal.image_chains or pieces.minimal.unmapped
-
-
-def test_image_chain_is_the_bridge_class_function():
-    """The minimal trellis reads a bridge's image exactly as the class table does."""
-    assert image_chain is bridge_class_module._image_chain
 
 
 def test_a_pair_with_no_bridge_object_is_skipped_with_a_warning(

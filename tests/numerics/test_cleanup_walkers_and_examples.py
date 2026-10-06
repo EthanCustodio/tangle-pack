@@ -1,28 +1,21 @@
-"""Phase 8A: the single manifold walker, the single branch walker, the single
-``Stability`` alias, and the shared Hénon example maps.
+"""Phase 8A: the single manifold walker, the single branch walker and the
+shared Hénon example maps.
 
-Four duplications were collapsed here and each one is pinned:
+The duplications were collapsed here and each one is pinned:
 
 * :meth:`BaseManifold._collect` is now the ONE traversal behind all five array
   getters. The getters are thin wrappers, so the test compares each of them
   against an independent hand-rolled walk of the linked list -- if a wrapper
   ever passes the wrong ``kind`` / ``value`` / ``stop_at_final`` the comparison
-  catches it. The old string-dispatched ``_iter_method`` must be gone: a
-  ``getattr(node, f"{prefix}_{...}_iterate")`` lookup hides a typo until the
-  walk runs.
+  catches it.
 * :meth:`BaseManifold.first_node` is the ONE "step past the root BranchPoint"
   helper that ``ManifoldMachine._branch_view`` and
   ``ManifoldInitializer.construct_kevin_way`` had each open-coded.
-* ``Stability`` is defined once, in ``numerics.Intersection``.
-* ``tanglepack.examples.henon`` is the one Hénon definition; roughly thirty
-  files used to carry their own copy.
+* ``tanglepack.examples.henon`` is the one Hénon definition.
 """
 
 from __future__ import annotations
 
-import importlib
-import re
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -37,7 +30,6 @@ from tanglepack.examples import (
     saddle_guesses,
 )
 from tanglepack.numerics import BaseManifold, BranchPoint
-from tanglepack.numerics.Intersection import Stability as _INTERSECTION_STABILITY
 
 
 # --------------------------------------------------------------------------- #
@@ -144,19 +136,6 @@ def test_collect_is_the_only_traversal(grown_unstable):
             call()
 
 
-def test_string_dispatched_iter_method_is_gone():
-    """``_iter_method`` built method names with an f-string; nothing may use it."""
-    assert not hasattr(BaseManifold, "_iter_method")
-
-    numerics = Path(tanglepack.numerics.__file__).parent
-    offenders = [
-        p.name
-        for p in numerics.glob("*.py")
-        if "_iter_method(" in p.read_text(encoding="utf-8")
-    ]
-    assert offenders == []
-
-
 def test_collect_rejects_a_broken_iterate_link(grown_unstable):
     """A node that claims an iterate it does not have is an error, not a None row."""
     workbench, fp, manifold = grown_unstable
@@ -235,28 +214,6 @@ def test_first_node_needs_a_branch_index(initialized):
 
 
 # --------------------------------------------------------------------------- #
-# one Stability alias
-# --------------------------------------------------------------------------- #
-def test_stability_alias_is_defined_once_in_numerics():
-    """No module of any subpackage re-declares the alias; all import it."""
-    package = Path(tanglepack.__file__).parent
-    pattern = re.compile(r"^Stability\s*=\s*Literal", re.MULTILINE)
-
-    definers = sorted(
-        str(p.relative_to(package))
-        for sub in ("numerics", "topology", "loom", "examples")
-        for p in (package / sub).glob("*.py")
-        if pattern.search(p.read_text(encoding="utf-8"))
-    )
-    assert definers == ["numerics/Intersection.py"], definers
-    assert tanglepack.numerics.Stability is _INTERSECTION_STABILITY
-    assert (
-        importlib.import_module("tanglepack.topology.Trellis").Stability
-        is _INTERSECTION_STABILITY
-    )
-
-
-# --------------------------------------------------------------------------- #
 # one Hénon definition
 # --------------------------------------------------------------------------- #
 def test_henon_factories_match_the_closed_form():
@@ -311,17 +268,3 @@ def test_saddle_guesses_refuses_unknown_parameters():
         saddle_guesses(3.7, 1)
 
 
-def test_no_test_or_script_defines_its_own_henon():
-    """The whole point: one definition, imported everywhere."""
-    root = Path(tanglepack.__file__).resolve().parents[2]
-    pattern = re.compile(
-        r"^\s*def (_?henon\w*|_p3_\w+|_k10_\w+)\(point\)", re.MULTILINE
-    )
-
-    offenders = sorted(
-        str(p.relative_to(root))
-        for folder in ("tests", "scripts")
-        for p in (root / folder).rglob("*.py")
-        if pattern.search(p.read_text(encoding="utf-8"))
-    )
-    assert offenders == [], offenders

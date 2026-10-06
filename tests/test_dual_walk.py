@@ -21,7 +21,6 @@ from tanglepack.topology.DualGraph import DualGraph
 from tanglepack.topology.DualWalk import (
     ElementLanding,
     Walk,
-    WalkSearch,
     WalkStep,
     land_element,
     shortest_walks,
@@ -282,16 +281,6 @@ def test_walks_are_sorted_deterministically(key):
     assert [walk.itinerary for walk in explicit.walks] == [
         walk.itinerary for walk in search.walks
     ]
-
-
-def test_walk_search_repr_and_walk_repr(key):
-    dual = FakeDual()
-    f0, f1 = dual.face(), dual.face()
-    dual.unified(f0, f1, L(key, 0), R(key, 0))
-    search = shortest_walks(dual, L(key, 0), R(key, 0))
-    assert isinstance(search, WalkSearch)
-    assert "unique" in repr(search)
-    assert "1 step(s)" in repr(search.walk)
 
 
 # --------------------------------------------------------------------------- #

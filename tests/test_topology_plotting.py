@@ -20,10 +20,9 @@ import pytest
 
 from tanglepack import TangleSession
 from tanglepack.loom.TangleSession import TangleSession as _SessionClass
-from tanglepack.topology import StablePartition, plotting
+from tanglepack.topology import plotting
 from minimal_helpers import build_pieces
 from tanglepack.topology.DualGraph import DualGraph
-from tanglepack.topology.Trellis import Trellis
 
 
 @pytest.fixture
@@ -67,18 +66,6 @@ PLOTTERS = (
 # --------------------------------------------------------------------------- #
 # the split itself
 # --------------------------------------------------------------------------- #
-def test_every_plotter_is_a_module_function_in_plotting():
-    """All five drawing routines live in topology/plotting.py."""
-    for name in PLOTTERS:
-        assert callable(getattr(plotting, name)), name
-
-
-def test_stable_partition_module_holds_no_drawing_code():
-    """StablePartition.py is partition logic only — no plotters, no pyplot."""
-    assert not [n for n in vars(StablePartition) if n.startswith("plot_")]
-    assert not hasattr(StablePartition, "plt")
-
-
 def test_trellis_plotters_delegate_to_plotting(populated_trellis, monkeypatch):
     """Each Trellis.plot_* method calls its plotting.py counterpart."""
     for name in PLOTTERS:
@@ -88,13 +75,6 @@ def test_trellis_plotters_delegate_to_plotting(populated_trellis, monkeypatch):
         )
         assert getattr(populated_trellis, name)() == "sentinel", name
         assert len(calls) == 1, name
-
-
-def test_hole_style_conventions_live_once():
-    """The per-orbit hole marker/colour tables are plotting.py's, not Trellis's."""
-    assert len(plotting.HOLE_MARKERS) == len(plotting.HOLE_COLORS)
-    assert not hasattr(Trellis, "_HOLE_MARKERS")
-    assert not hasattr(Trellis, "_HOLE_COLORS")
 
 
 def test_plotters_draw_on_a_real_tangle(populated_trellis):
@@ -177,12 +157,6 @@ def test_verbose_survives_an_application_level_above_info(populated_trellis, cap
 # --------------------------------------------------------------------------- #
 # session fan-outs
 # --------------------------------------------------------------------------- #
-def test_session_exposes_one_fanout_helper_per_shape():
-    """TangleSession routes its fan-outs through two shared helpers."""
-    assert callable(_SessionClass._fanout_plot)
-    assert callable(_SessionClass._fanout_call)
-
-
 @pytest.mark.parametrize(
     "name",
     [

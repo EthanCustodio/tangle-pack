@@ -264,9 +264,3 @@ def test_henon_bridge_rows_consistent(henon_punched):
         check_bridge_rows_consistent(henon_punched, bridge)
 
 
-def test_henon_partition_still_built_after_wiring(henon_punched):
-    """The production wiring is observational: partitioning is unaffected."""
-    fp = henon_punched.fixed_points[0]
-    results = henon_punched.partition_stable_manifold((fp, "stable", 0, 0))
-    assert [r.side for r in results] == ["left", "right"]
-    assert all(r.intervals for r in results)

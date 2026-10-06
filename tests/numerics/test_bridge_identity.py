@@ -91,14 +91,6 @@ def test_partial_pieces_are_held_outside_the_id_registry(henon_tangle_with_bridg
     assert all(bid == b.id for bid, b in workbench._bridges.items())
 
 
-def test_deleted_genealogy_attributes_are_gone(henon_tangle_with_bridges):
-    """The stored parent/children/next/prev links no longer exist."""
-    workbench, _fp = henon_tangle_with_bridges
-    bridge = workbench.bridges[0]
-    for name in ("parent", "children", "next_bridge", "prev_bridge"):
-        assert not hasattr(bridge, name), f"Bridge.{name} must be deleted"
-
-
 # --------------------------------------------------------------------------- #
 # registry: bridge(), bridges_at(), single copy
 # --------------------------------------------------------------------------- #
@@ -109,6 +101,26 @@ def test_bridge_lookup_by_id(henon_tangle_with_bridges):
         assert workbench.bridge(bridge.id) is bridge
     with pytest.raises(KeyError):
         workbench.bridge((-1, -2))
+
+
+def test_standalone_collaborators_agree_with_the_workbench(henon_tangle_with_bridges):
+    """A ``BridgeIterator`` / ``IterateInference`` built over a workbench reads
+    that workbench: its genealogy matches the workbench's delegates, and a
+    second inference pass over an already-inferred table adds nothing."""
+    from tanglepack.numerics.BridgeIterator import BridgeIterator
+    from tanglepack.numerics.IterateInference import IterateInference
+
+    workbench, _fp = henon_tangle_with_bridges
+    iterator = BridgeIterator(workbench)
+    inference = IterateInference(workbench)
+    assert iterator.workbench is workbench and inference.workbench is workbench
+
+    bridges = _full_bridges(workbench)
+    assert bridges
+    for bridge in bridges:
+        assert iterator.image_bridges(bridge.id) == workbench.image_bridges(bridge.id)
+        assert iterator.preimage_bridges(bridge.id) == workbench.preimage_bridges(bridge.id)
+    assert inference.infer_iterate_table() == 0
 
 
 def test_bridges_at_indexes_exactly_the_two_endpoints(henon_tangle_with_bridges):

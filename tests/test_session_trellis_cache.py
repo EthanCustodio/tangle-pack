@@ -159,12 +159,3 @@ def test_restore_invalidates_the_cache(k10_session):
     assert session.trellis(fp) is not cached
 
 
-def test_invalidate_trellises_is_a_deprecated_no_op(k10_session):
-    """Kept as an alias for one release; it warns and drops nothing."""
-    session, fp = k10_session
-    first = session.trellis(fp)
-
-    with pytest.warns(DeprecationWarning, match="no-op"):
-        session.invalidate_trellises()
-
-    assert session.trellis(fp) is first

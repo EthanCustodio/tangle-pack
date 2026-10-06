@@ -1,6 +1,5 @@
 import pytest
 import numpy as np
-from tanglepack import BranchPoint
 from tanglepack import FixedPoint
 
 
@@ -164,12 +163,6 @@ def test_num_branches_agrees_with_get_branch_array():
         _bare_fixed_point(2, inversion=True),
     ):
         assert fp.get_branch_array() == list(range(fp.num_branches))
-
-
-def test_fixed_point_takes_no_branch_count():
-    """The constructor derives everything from the period."""
-    with pytest.raises(TypeError):
-        FixedPoint(3, 2)
 
 
 def test_both_eigendirection_slots_are_always_allocated():
