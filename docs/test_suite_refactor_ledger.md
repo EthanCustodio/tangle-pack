@@ -2551,3 +2551,49 @@ the full broken build at `accuracy` 3e-3..7e-3, all from the merge nudge).
   85.7 s; the 11 xfails are exactly `KNOWN_ISSUES`, no XPASS.
 - Coverage guard vs `cov_base.json`: OK (`cov_followup.json`); total
   90.24 % (unchanged; src untouched).
+
+## Author follow-up (2026-10-06): colour family per tangle tested as a rule
+
+The author asked (2026-10-05) for the `TANGLE_COLOR_FAMILIES` business to be
+tested as a rule, not a style pin. New file
+`tests/plotting/test_class_color_families.py` checks the CLAUDE.md
+`class_colors` rule by FAMILY MEMBERSHIP only (no colour value, no slot order):
+
+- no colour is used twice, and the palette keys are exactly the symbols;
+- one tangle, no connecting class: every colour from `CLASS_COLORS`;
+- several tangles: each tangle's symbols (refined children inherit their
+  class's tangle) draw from exactly one `TANGLE_COLOR_FAMILIES` family, no two
+  tangles share a family, and no tangle borrows from another family or from
+  `HETEROCLINIC_COLORS`;
+- connecting classes (`entry.tangle is None`) draw from `HETEROCLINIC_COLORS`
+  and never from a tangle family;
+- a group larger than its family exhausts the family first, then extends
+  (colormap samples) without repeating or borrowing.
+
+Connecting classes do not occur on the real builds, so a hand-built stand-in
+dynamics (`SimpleNamespace` with only what `class_colors` reads: `classes`
+with `letter`/`kind`/`entry.tangle`/`entry.members`, `refined`,
+`unmatched_members`) exercises two tangles + connecting classes (refined and
+not), interleaved table order, one tangle + a connecting class, family
+overflow, and the single-tangle case. The real builds: nested (tangles 0 and
+1, refined and not) and k=10 (single tangle, `CLASS_COLORS`).
+
+Teeth (monkeypatched `class_colors` in a scratch run, src untouched): drawing
+every symbol from `CLASS_COLORS` fails 7 of 9; swapping the first and last
+symbols' colours (crossing two families) fails 7 of 9.
+
+### Deletion / change ledger
+
+| old | new | why |
+|---|---|---|
+| - | `plotting/test_class_color_families.py` (9 tests) | author follow-up: colour family per tangle as a rule |
+
+Nothing deleted; `test_plot_topology.py::test_class_colors_never_repeat` kept
+(it also checks the key set on both builds).
+
+### Verification
+
+- `env/bin/python -m pytest -q -rxX`: 738 passed, 1 deselected, 11 xfailed in
+  86 s; the 11 xfails are exactly `KNOWN_ISSUES`, no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_followup.json`); total
+  90.34 % (`plotting.py` 91.39 % -> 92.57 %); src untouched.
