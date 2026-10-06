@@ -36,18 +36,6 @@ def test_compute_intersections_returns_one_coord_per_registered_crossing(grown_b
         assert coord == registry[iid].coords
 
 
-def test_every_registered_crossing_carries_its_unstable_segment(small_tangle):
-    """The bracketing points ``create_bridges`` cuts between are on the crossing."""
-    workbench, _fp = small_tangle
-
-    for _iid, ix in workbench.intersection_registry:
-        assert ix.unstable_manifold is not None
-        assert ix.unstable_segment is not None
-        p0, p1 = ix.unstable_segment
-        lo, hi = sorted((p0.get_cdist("unstable"), p1.get_cdist("unstable")))
-        assert lo - 1e-9 <= ix.unstable_cdist <= hi + 1e-9
-
-
 def test_trim_stable_manifolds_reads_the_registry(grown_both):
     """The new tail is the first node at or past the outermost crossing."""
     workbench, fp = grown_both
@@ -63,28 +51,6 @@ def test_trim_stable_manifolds_reads_the_registry(grown_both):
 # --------------------------------------------------------------------------- #
 # 2.2 -- bridge endpoints set at cut time
 # --------------------------------------------------------------------------- #
-def test_bridge_endpoints_are_the_ids_of_the_crossings_it_was_cut_at(
-    henon_tangle_with_bridges,
-):
-    workbench, _fp = henon_tangle_with_bridges
-    registry = workbench.intersection_registry
-
-    assert not hasattr(workbench, "_assign_bridge_intersections")
-    assert not hasattr(workbench, "_endpoint_candidates")
-
-    for bridge in workbench.bridges:
-        assert not bridge.partial
-        assert isinstance(bridge.first_intersection, int)
-        assert isinstance(bridge.second_intersection, int)
-        first = registry[bridge.first_intersection]
-        second = registry[bridge.second_intersection]
-        assert first.unstable_cdist < second.unstable_cdist
-        root_u = bridge.root.get_cdist("unstable")
-        tail_u = bridge.tail.get_cdist("unstable")
-        assert root_u <= first.unstable_cdist
-        assert second.unstable_cdist <= tail_u
-
-
 def test_partial_bridge_reports_its_missing_endpoint(henon_tangle_with_bridges):
     """A piece of an image bounded by fewer than two crossings is ``partial``."""
     workbench, fp = henon_tangle_with_bridges

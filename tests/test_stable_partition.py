@@ -3,7 +3,10 @@
 The synthetic tests fabricate holes directly on a hand-built trellis to pin the
 interval logic (open/closed ends, singletons, the both-sides pinch) without
 any manifold numerics; the Hénon tests run the real punch → propagate →
-partition pipeline on a computed tangle.
+partition pipeline on a computed tangle. The hole and partition laws (coverage,
+classification, inward pairs, the openings law, propagation landing and
+termination, no hole at iterate >= k_value) run on every law case in
+``tests/invariants/test_law_partition.py``.
 """
 
 from __future__ import annotations
@@ -361,81 +364,6 @@ def henon_with_holes(henon_tangle_with_bridges):
     return trellis, references
 
 
-def test_henon_holes_are_classified(henon_with_holes):
-    """Every punched hole gets a bridge side, its toward-anchor member as
-    near_intersection_id, bounding intersections on one stable branch, and its
-    orbit identity (origin + iterate). No bridge on this tangle is degenerate,
-    so no side may be None."""
-    trellis, references = henon_with_holes
-
-    assert len(trellis.holes) >= len(references)
-    for hole in trellis.holes:
-        assert hole.bridge_side in ("left", "right")
-        near, far = hole.bounding_ids
-        assert hole.near_intersection_id == near
-        s_near = trellis.intersection(near).stable_cdist
-        s_far = trellis.intersection(far).stable_cdist
-        assert s_near <= s_far
-        assert np.isfinite(hole.coords).all()
-        assert hole.iterate is not None
-        assert hole.origin is not None
-
-
-def test_henon_partition_covers_branch(henon_with_holes):
-    """Both side partitions run from the anchor to the branch end with
-    contiguous intervals, open exactly at the punched hole regions."""
-    trellis, _references = henon_with_holes
-    fp = trellis.fixed_points[0]
-    branch_key = (fp, "stable", 0, 0)
-
-    results = trellis.partition_stable_manifold(branch_key)
-    assert [r.side for r in results] == ["left", "right"]
-
-    branch = trellis.branch(branch_key)
-    s_max = trellis.intersection(branch.ordered_ids()[-1]).stable_cdist
-    for result in results:
-        intervals = result.intervals
-        assert intervals[0].lo_cdist <= trellis.registry.cdist_tol
-        assert intervals[-1].hi_cdist == pytest.approx(s_max)
-        for prev, nxt in zip(intervals, intervals[1:]):
-            assert prev.hi_cdist == pytest.approx(nxt.lo_cdist)
-        open_spans = {
-            (iv.lo_id, iv.hi_id)
-            for iv in intervals
-            if not iv.closed_lo and not iv.closed_hi
-        }
-        # A hole acts on this row exactly when one of its openings does.
-        hole_spans = {
-            tuple(sorted(h.bounding_ids, key=lambda i: trellis.intersection(i).stable_cdist))
-            for h in trellis.holes
-            if h.bounding_ids is not None
-            and any(row == result.side for _iid, _which, row in (h.openings or []))
-        }
-        # Every open interval is a punched hole region on this side.
-        assert open_spans <= hole_spans
-
-
-def test_henon_direct_hole_side_reproduces_inward_pair(henon_with_holes):
-    """A direct hole sits on the side of its bridge facing the pair's own
-    stable segment, so its bridge-side-derived openings must reproduce the
-    inward pair: outward of the near bound, anchorward of the far bound
-    (modulo an anchor-artifact end, which opens nothing)."""
-    trellis, _references = henon_with_holes
-
-    checked = 0
-    for pair in trellis.pseudoneighbors:
-        hole = pair.hole
-        if hole is None:
-            continue
-        assert hole.bridge_side in ("left", "right")
-        near, far = hole.bounding_ids
-        assert hole.openings
-        for iid, which, _row in hole.openings:
-            assert which == ("outward" if iid == near else "anchorward")
-        checked += 1
-    assert checked > 0
-
-
 def test_henon_propagated_hole_side_matches_coords(henon_with_holes):
     """A propagated hole's coordinates are nudged toward the carried point's
     side of the containing bridge, so re-classifying them reproduces the
@@ -467,27 +395,6 @@ def test_describe_reports(henon_with_holes):
     assert trellis.describe_pseudoneighbors()
     assert trellis.describe_holes()
     assert trellis.describe_stable_partitions()
-
-
-def test_p3_propagation_terminates_at_periodicity(henon_p3_session):
-    """Period-3: one backward step moves a bridge to the previous branch of
-    the cycle, so termination must compare bridges at the same cycle residue.
-    The regression signature of the broken (consecutive-step) rule is the
-    backward orbit cycling through the same bridges at ever deeper iterates —
-    i.e. one origin punching the same bounding region more than once."""
-    session, fp3, _fp1, _zone = henon_p3_session
-    trellis = session.trellis(fp3)
-    trellis.classify_strong_pips()
-    references = trellis.compute_pseudoneighbors()
-    assert references
-
-    trellis.punch_holes()
-
-    propagated = [h for h in trellis.holes if h.iterate not in (0, None)]
-    assert propagated, "backward propagation should punch holes"
-    for origin in {h.origin for h in propagated}:
-        regions = [h.bounding_ids for h in propagated if h.origin == origin]
-        assert len(regions) == len(set(regions))
 
 
 def test_henon_plot_helpers_smoke(henon_with_holes):
@@ -894,46 +801,3 @@ def test_forward_pairs_beyond_the_fundamental_segment_get_no_hole(period, iterat
     assert _is_forward_beyond_fundamental(None, pair) is dropped
 
 
-def test_k28_blast_child_gets_no_forward_hole(k28_partitioned):
-    """On the blasted k=2.8 tangle the +1 image of a reference pair is a
-    registered blast-child bridge. It gets NO hole: the trellis carries exactly
-    the two reference holes and their backward images in the anchor bridge, and
-    the +1 pair is recorded (a real pseudoneighbor pair) but unpunched."""
-    session, fp = k28_partitioned
-    trellis = session.trellis(fp)
-
-    assert all(hole.iterate is not None and hole.iterate <= 0 for hole in trellis.holes)
-    references = [p for p in trellis.pseudoneighbors if p.is_reference]
-    assert len(references) == 2 and all(p.hole is not None for p in references)
-    forward = [p for p in trellis.pseudoneighbors if p.iterate and p.iterate > 0]
-    assert forward, "the blast registers the forward pair"
-    assert all(p.hole is None for p in forward)
-
-    anchor = next(iid for iid in trellis.own_intersection_ids
-                  if trellis.intersection(iid).unstable_cdist == 0.0)
-    allowed = {frozenset(p.as_tuple()) for p in references}
-    for hole in trellis.holes:
-        bounding = frozenset(hole.bounding_ids)
-        assert bounding in allowed or anchor in bounding, (
-            f"hole {hole.bounding_ids} at iterate {hole.iterate} is neither a "
-            "reference hole nor a backward image in the anchor bridge"
-        )
-    assert len(trellis.holes) == 4
-
-
-def test_p3_forward_holes_stop_at_the_branch_return(p3_partitioned):
-    """Period 3: nothing at iterate ``k_value`` (+3) or beyond is punched,
-    although such forward pairs are recorded.
-
-    Only this firm half of the holes-backward-only rule is tested; whether the
-    +1 and +2 iterates (the pair's appearances on the other two branches) are
-    punched is the PROVISIONAL exemption (author decision 3, Dev Notes).
-    """
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
-    k = fp3.k_value
-
-    assert all(h.iterate < k for h in trellis.holes if h.iterate is not None)
-    beyond = [p for p in trellis.pseudoneighbors if p.iterate is not None and p.iterate >= k]
-    assert beyond, "the fixture records forward pairs at or beyond k_value"
-    assert not [p for p in beyond if p.hole]

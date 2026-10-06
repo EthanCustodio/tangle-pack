@@ -406,19 +406,6 @@ def k10_dynamics(k10_partitioned):
     return pieces, dual, symbolic_dynamics(dual, pieces.table)
 
 
-def test_k10_every_landing_contained(k10_dynamics):
-    _pieces, _dual, dyn = k10_dynamics
-    for cd in dyn.classes.values():
-        for landing in cd.landings:
-            assert landing is not None and landing.target is not None
-            assert landing.contained
-    # the anchor-side element lands in element 0
-    for cd in dyn.classes.values():
-        source, _target = cd.landings
-        if source.source.element_id == 0:
-            assert source.target.element_id == 0
-
-
 def test_k10_active_class_word(k10_dynamics):
     _pieces, _dual, dyn = k10_dynamics
     active = [cd for cd in dyn.classes.values() if cd.kind == "active"]
@@ -461,17 +448,17 @@ def test_k10_refinement_matches_every_member(k10_dynamics):
     )
 
 
-def test_k10_itineraries_even_and_matrix(k10_dynamics):
+def test_k10_transition_matrix(k10_dynamics):
+    """The k=10 fact: every class resolves and the refined matrix is all ones.
+
+    (The itinerary laws -- even length, same-side pairs, inert classes outside
+    the graph -- live in ``tests/invariants/test_law_symbolic.py``.)
+    """
     _pieces, _dual, dyn = k10_dynamics
     for cd in dyn.classes.values():
         assert cd.itinerary is not None, cd.unresolved_reason
-        assert len(cd.itinerary) % 2 == 0
-        assert not any(symbol.cross_side for symbol in cd.symbols)
     names, matrix = dyn.transition_matrix()
     assert names == ["a_1", "a_2"] and matrix.tolist() == [[1, 1], [1, 1]]
-    graph = dyn.transition_graph()
-    assert "u" not in graph, "inert classes are not part of the transition graph"
-    assert dyn.describe()
 
 
 @pytest.mark.slow

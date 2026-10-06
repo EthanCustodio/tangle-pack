@@ -27,21 +27,6 @@ def _full_bridges(workbench):
     return [b for b in workbench.bridges if not b.partial]
 
 
-def _check_id_ordering(workbench) -> int:
-    """Assert every non-partial bridge's id is its endpoints in cdist order."""
-    registry = workbench.intersection_registry
-    checked = 0
-    for bridge in _full_bridges(workbench):
-        bid = bridge.id
-        assert bid == (bridge.first_intersection, bridge.second_intersection)
-        first, second = bid
-        assert registry[first].unstable_cdist < registry[second].unstable_cdist, (
-            f"bridge id {bid} is not ordered by increasing unstable cdist"
-        )
-        checked += 1
-    return checked
-
-
 def _iterable_interior_bridge(session, fp, zone):
     """An un-iterated interior bridge of ``fp`` inside ``zone``, or None."""
     for bridge in session.workbench.uniiterated_bridges:
@@ -56,19 +41,6 @@ def _iterable_interior_bridge(session, fp, zone):
 # --------------------------------------------------------------------------- #
 # Bridge.id
 # --------------------------------------------------------------------------- #
-def test_bridge_id_is_endpoints_in_unstable_order(henon_tangle_with_bridges):
-    """``Bridge.id`` is ``(first, second)`` with strictly increasing cdist."""
-    workbench, _fp = henon_tangle_with_bridges
-    assert _check_id_ordering(workbench) > 0, "the fixture must produce bridges"
-
-
-@pytest.mark.slow
-def test_bridge_id_ordering_on_period_three(henon_p3_session):
-    """The same ordering invariant on the nested period-3 tangle."""
-    session, _fp3, _fp1, _zone = henon_p3_session
-    assert _check_id_ordering(session.workbench) > 0
-
-
 def test_partial_pieces_are_held_outside_the_id_registry(henon_tangle_with_bridges):
     """A partial image piece is a bridge object but carries no identity."""
     workbench, _fp = henon_tangle_with_bridges
@@ -130,30 +102,6 @@ def test_standalone_collaborators_agree_with_the_workbench(henon_tangle_with_bri
     assert inference.infer_iterate_table() == 0
 
 
-def test_bridges_at_indexes_exactly_the_two_endpoints(henon_tangle_with_bridges):
-    """Every id appears in ``bridges_at`` of exactly its two endpoints."""
-    workbench, _fp = henon_tangle_with_bridges
-    ids = {b.id for b in _full_bridges(workbench)}
-    assert ids
-
-    registry = workbench.intersection_registry
-    for iid in registry.all_ids():
-        at = workbench.bridges_at(iid)
-        assert len(at) == len(set(at)), f"duplicate ids in bridges_at({iid})"
-        assert set(at) == {bid for bid in ids if iid in bid}
-
-
-@pytest.mark.slow
-def test_bridges_at_consistency_on_period_three(henon_p3_session):
-    """The reverse index stays consistent after the period-3 build."""
-    session, _fp3, _fp1, _zone = henon_p3_session
-    workbench = session.workbench
-    ids = {b.id for b in _full_bridges(workbench)}
-    for bid in ids:
-        for endpoint in bid:
-            assert bid in workbench.bridges_at(endpoint)
-
-
 # --------------------------------------------------------------------------- #
 # rebuild_bridges
 # --------------------------------------------------------------------------- #
@@ -206,29 +154,6 @@ def test_image_bridges_matches_iterate_bridge(henon_p3_session):
         preimage = workbench.preimage_bridges(child_id)
         if preimage is not None:
             assert bid in preimage
-
-
-@pytest.mark.slow
-def test_image_and_preimage_round_trip(henon_p3_session):
-    """Wherever both directions are registered, image and preimage agree."""
-    session, _fp3, _fp1, _zone = henon_p3_session
-    workbench = session.workbench
-
-    checked = 0
-    for bridge in _full_bridges(workbench):
-        image = workbench.image_bridges(bridge.id)
-        if not image:
-            continue
-        for child_id in image:
-            preimage = workbench.preimage_bridges(child_id)
-            if preimage is None:
-                continue
-            assert bridge.id in preimage, (
-                f"{child_id} is an image of {bridge.id} but not a preimage of it"
-            )
-            checked += 1
-
-    assert checked > 0, "the fixture must exercise at least one round trip"
 
 
 def test_image_bridges_is_none_without_a_registered_iterate(
@@ -407,52 +332,31 @@ def test_rebuild_keeps_metadata_after_a_preserving_recompute(
 # --------------------------------------------------------------------------- #
 # inversion saddle (k_value == 2 * period)
 # --------------------------------------------------------------------------- #
-def test_bridge_identity_on_the_inversion_saddle(henon_inversion_initialized):
-    """Ids, iteration and the derived image work on an inversion fixed point.
+def test_iterating_an_inversion_bridge_lands_on_the_other_branch(henon_inversion):
+    """``iterate_bridge`` on an inversion point advances the BRANCH index too.
 
-    The inversion path advances the BRANCH index as well as the orbit index
-    (:meth:`FixedPoint.advance_key`), which is exactly what ``image_bridges`` relies
-    on to name the image branch, so it is worth its own pass.
+    One map step sends a bridge of branch ``(0, 0)`` to ``(0, 1)`` and back
+    (:meth:`FixedPoint.advance_key`), which is exactly what ``image_bridges``
+    relies on to name the image branch: every child of an iterated bridge lies
+    on the advanced key, and the DERIVED image contains every identified child
+    (it can contain more: the image arc may also cover bridges already there).
 
-    It also exposes a pre-existing defect this phase does NOT fix: the periodic point
-    is registered as one crossing per (unstable branch, stable branch) pair, i.e.
-    FOUR crossings at canonical distance (0, 0), so each unstable branch carries two
-    distinct anchor crossings and ``create_bridges`` cuts a degenerate zero-length
-    bridge between them. The ordering check below therefore exempts a pair whose two
-    endpoints are both anchors -- and asserts that this is the ONLY way a tie arises,
-    so the exemption becomes vacuous once anchors are deduplicated (plan 6.3) rather
-    than quietly hiding a new tie.
+    The id, ``bridges_at`` and single-copy laws on this saddle run in
+    ``tests/invariants/test_law_bridges.py`` (case ``inversion``); a bridge
+    between the saddle's two coincident anchors (the known two-anchors issue)
+    is skipped here.
     """
-    workbench, fp = henon_inversion_initialized
-    workbench.grow_n_times(fp, "unstable", num_iterations=6)
-    workbench.grow_n_times(fp, "stable", num_iterations=5)
-    workbench.compute_intersections([fp])
+    workbench, fp = henon_inversion
     bridges = workbench.create_bridges(fp)
     registry = workbench.intersection_registry
-    tol = registry.cdist_tol
-
-    def is_anchor(iid):
-        ix = registry[iid]
-        return abs(ix.unstable_cdist) <= tol and abs(ix.stable_cdist) <= tol
-
-    full = [b for b in bridges if not b.partial]
-    assert full, "the inversion fixture must produce at least one full bridge"
-
-    proper = []
-    for bridge in full:
-        first, second = bridge.id
-        assert bridge.id == (bridge.first_intersection, bridge.second_intersection)
-        if registry[first].unstable_cdist < registry[second].unstable_cdist:
-            proper.append(bridge)
-            continue
-        assert is_anchor(first) and is_anchor(second), (
-            f"bridge {bridge.id} ties on unstable cdist away from the anchor"
-        )
+    proper = [
+        b
+        for b in bridges
+        if not b.partial
+        and registry[b.id[0]].unstable_cdist < registry[b.id[1]].unstable_cdist
+    ]
     assert proper, "the inversion fixture must produce a non-degenerate bridge"
 
-    # Every proper bridge iterates onto the branch one map step forward, and the
-    # DERIVED image contains exactly the bridges the cut produced (it can contain
-    # more: the image arc may also cover bridges that were already there).
     exact = 0
     checked = 0
     for bridge in proper:

@@ -17,7 +17,8 @@ I2. A bridge whose two defining crossings lie on the SAME stable branch
     (heteroclinic / period > 1) are exempt.
 
 The synthetic tests pin the checks themselves (they must FIRE on hand-built
-violations); the Hénon tests run them on the real k = 10 tangle.
+violations); both invariants run on every law case in
+``tests/invariants/test_law_partition.py`` (I1) and ``test_law_classes.py`` (I2).
 """
 
 from __future__ import annotations
@@ -229,33 +230,3 @@ def test_bridge_rows_on_different_stable_branches_are_exempt():
     bridge = _StubBridge(a_id, b_id, _CROSSING_LOBE)
     check_bridge_rows_consistent(trellis, bridge)
     assert bridge_row_violation(trellis, bridge) is None
-
-
-# --------------------------------------------------------------------------- #
-# Both invariants on the real k = 10 tangle
-# --------------------------------------------------------------------------- #
-@pytest.fixture
-def henon_punched(henon_tangle_with_bridges):
-    """A k = 10 trellis with pseudoneighbors computed and every hole punched."""
-    workbench, fp = henon_tangle_with_bridges
-    trellis = Trellis.from_workbench(workbench, fp)
-    trellis.classify_strong_pips()
-    trellis.compute_pseudoneighbors()
-    trellis.punch_holes()
-    return trellis
-
-
-def test_henon_holes_share_bridge_side(henon_punched):
-    """The k = 10 backward chains never switch sides (Hénon b = 1 preserves
-    orientation, so no parity flip is expected)."""
-    assert henon_punched.holes
-    check_holes_share_bridge_side(henon_punched.holes)
-
-
-def test_henon_bridge_rows_consistent(henon_punched):
-    """Every k = 10 bridge lies on one side of its stable branch at both ends."""
-    assert henon_punched.bridges
-    for bridge in henon_punched.bridges:
-        check_bridge_rows_consistent(henon_punched, bridge)
-
-

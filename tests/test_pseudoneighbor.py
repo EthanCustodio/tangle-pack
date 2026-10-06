@@ -3,8 +3,8 @@ and trajectory extension.
 
 The synthetic tests hand-build a registry (explicit canonical distances and
 branch keys) plus the TrellisBranch ordering, so every geometric case is pinned
-exactly; the Hénon test checks structural invariants on a real tangle without
-hard-coding registry ids.
+exactly. The structural validity of the reference pairs on real tangles is the
+law ``reference_pairs_valid`` of ``tests/invariants/test_law_partition.py``.
 """
 
 from __future__ import annotations
@@ -480,32 +480,6 @@ def test_trellis_wrapper_populates_and_clears_slots():
     assert len(references) == 2
     trellis.clear_results()
     assert trellis.pseudoneighbors == []
-
-
-def test_henon_reference_pairs_are_structurally_valid(henon_tangle_with_bridges):
-    """On a real tangle every reference pair is a consecutive intersection pair
-    on BOTH its stable and unstable branch, inside the reference window."""
-    workbench, fp = henon_tangle_with_bridges
-    trellis = Trellis.from_workbench(workbench, fp)
-
-    references = trellis.compute_pseudoneighbors(extend=False)
-    assert references, "the k=10 horseshoe tangle should contain reference pairs"
-
-    lambda_u = trellis.lambda_u(fp)
-    stable_branch = trellis.branch((fp, "stable", 0, 0))
-    s_max = trellis.intersection(stable_branch.ordered_ids()[-1]).stable_cdist
-
-    for pair in references:
-        a, b = pair.as_tuple()
-        s_branch = trellis.branch_containing(a, "stable")
-        u_branch = trellis.branch_containing(a, "unstable")
-        s_ids, u_ids = s_branch.intersection_ids, u_branch.intersection_ids
-        assert abs(s_ids.index(a) - s_ids.index(b)) == 1
-        assert abs(u_ids.index(a) - u_ids.index(b)) == 1
-        for iid in (a, b):
-            s = trellis.intersection(iid).stable_cdist
-            assert s >= s_max / lambda_u * (1 - 1e-6)
-            assert s <= s_max * (1 + 1e-6)
 
 
 # --------------------------------------------------------------------------- #

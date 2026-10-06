@@ -786,3 +786,217 @@ backward-endpoint guards untouched).
 4. Test names describing the old wording checks (`test_describe_mentions_parents_and_cuts`,
    `test_is_reliable_and_describe`, `test_a_missing_partition_names_the_branch`,
    …) are kept so no node id moves; Phases 4–10 rename or delete them.
+
+---
+
+## §4 Phase 4: the physical-law tier (`tests/invariants/`)
+
+### What landed
+
+- **`tests/invariants/`** (11 modules, one test per (law × case)):
+  `test_law_case_sanity` (4 laws + the b = -1 placeholder + a wiring meta
+  test), `test_law_manifolds` (4), `test_law_crossings` (9, two of them on
+  fresh builds), `test_law_anchors` (2), `test_law_bridges` (7),
+  `test_law_partition` (14, the P1 openings law among them),
+  `test_law_arrangement` (5), `test_law_classes` (9), `test_law_iterated` (7),
+  `test_law_dual_graph` (5), `test_law_symbolic` (8). 74 laws, 446 cases.
+- **`tests/invariants/conftest.py`**: module-scoped indirect `law_case` (one
+  read-only build per module per case, every product built inside the
+  fixture), function-scoped `fresh_law_case` for the two mutating laws
+  (`recompute_preserves_ids`, `recompute_is_idempotent`), and the autouse
+  FINGERPRINT GUARD (workbench and registry generation, crossings, bridge
+  ids, holes with openings, pips, partition signature, session alphabet, the
+  identity of every cached product). Checked to bite: a scratch test growing
+  the shared k10 build errors in teardown.
+- **`tests/helpers/laws.py`**: every check is `check_<law>(case) -> int`; the
+  law id is the name without `check_`. Topology layers added (partition,
+  arrangement, classes, iterated, dual graph, symbolic). Tolerances read from
+  library defaults: `AREA_LINK_RTOL` = `compute_pseudoneighbors`'
+  `collision_rtol` (1e-2; settles Phase 1 deviation 4), `LINK_SCALING_RTOL` =
+  `infer_iterate_table`'s `cdist_rtol`, `REGION_AREA_RTOL` =
+  `Arrangement.image_of`'s `rtol`, cdists against `cdist_tol`. The geometric
+  oracles (crossing sign, row of a bridge end, a direct hole's side, a face's
+  side) are measured on the curves with public geometry and the `_side_of`
+  kernel. `run_layer` (unused) removed.
+- **`tests/helpers/law_tier.py`**: `build_products`, `fingerprint`,
+  `assert_non_vacuous` (count > 0, else the pair belongs in `NOT_APPLICABLE`),
+  `law_test(check)` (the parametrized test factory).
+- **`tests/cases.py`**: `KNOWN_ISSUES` / `NOT_APPLICABLE` keyed by real law ids
+  (the generic `("holes", "inversion")` key replaced per law); `issue_marks`
+  factored out of `law_params`.
+- **`tests/conftest.py`**: the function-scoped `law_case` removed (superseded
+  by the module-scoped one in `tests/invariants/conftest.py`); docstring
+  updated.
+
+### P1 outcome: the openings law (no xfail)
+
+Four laws in `test_law_partition`, all passing where applicable:
+`direct_hole_opens_inward_pair` (outward of the near bound, anchorward of the
+far, on its own bridge's row), `openings_on_own_bridge_row` (every opening of
+every hole sits on the row of the hole's bridge at that bound: this is what
+makes the P1 "flips" legitimate), `openings_linked_bound` (at a registered
+iterate of the origin's bound the opening is the origin's; not applicable on
+k10, k28 two blasts, inversion), `openings_missing_only_at_anchor_or_tail`.
+The two snapshots `test_p3_hole_sides_are_pinned` and
+`test_k28_two_blast_hole_sides_are_pinned` are deleted in this commit.
+AUTHOR ITEM E7 stands (confirm the row of a backward hole may differ from its
+origin's when its image lobe's stable side was never computed).
+
+### KNOWN_ISSUES (all `xfail(strict=True)`)
+
+| (law, case) | Reason | New? |
+|---|---|---|
+| `one_anchor_per_unstable_branch`, inversion | two (0,0) anchors per unstable branch (P2) | P2 |
+| `orientation_reversing_case_builds`, orientation_reversing | `set_k_value` raises `ValueError` (P4), `raises=ValueError` | P4 |
+| `arrangement_euler`, inversion | V - E + F = 0 on the one component (3 open faces) | **Phase 4** |
+| `anchor_bridge_class_leads_its_tangle`, inversion | the bridge leaving the second anchor sits in an inert class | **Phase 4** |
+| `itinerary_pairs_same_side`, inversion | a walked pair `L` of branch 0.1 with `R` of branch 0.0 (even length holds) | **Phase 4** |
+| `landings_contained`, inversion | a landing straddles a cut (`contained=False`) | **Phase 4** |
+| `arrangement_regions_disjoint`, k28_one_blast and k28_two_blasts | a zero-area region bounded by an unstable arc no `Bridge` spans reports a representative point inside its neighbour | **Phase 4** |
+
+The four inversion findings are probably downstream of the anchor issue
+(unverified; source fixes are out of scope). The k28 one is NOT on inversion:
+the arrangement of a blasted trellis classifies a zero-area, bridgeless
+2-corner face as a region (AUTHOR ITEM). The P3 deep-p3 issues stay listed for
+Phase 9.
+
+### NOT_APPLICABLE (skip with reason; 31 cases)
+
+Inversion: the 16 hole/refinement/image-bridge laws (no pseudoneighbors at the
+only feasible depth), `dual_face_side_is_geometry` (the minimal arrangement
+closes no region), `arrangement_image_of` / `_preimage_inverts_image`. k10:
+`arrangement_image_of` / `_preimage_inverts_image` (its one carrier is a
+sub-face), `partition_singletons`, `openings_linked_bound`. k28 two blasts:
+`partition_singletons`, `openings_linked_bound`. k28 one blast and p3:
+`iterated_cut_provenance` (no image bridges), `refined_children_inherit_word`,
+`member_matching_consistent` (no split class).
+
+### Deletion ledger, Phase 4
+
+95 collected node ids removed, 449 added (446 law-tier cases and 3 outside
+it): 726 → 1080. Node-id diff in
+`.refactor/runs/2026-10-05-test-suite/p4_deleted.txt` (`nodeids_p4.txt`).
+Every candidate was checked against the regression-guard notes: each guarded
+bug keeps a guard as a law that runs on the case where it broke (column 3).
+
+| Node id(s) | New home (law, cases) | Guard checked |
+|---|---|---|
+| `test_arrangement::test_every_detected_crossing_has_a_definite_sign`, `::test_crossing_sign_is_the_cross_product_of_the_two_directions` | `crossing_sign_is_cross_product` (all six; blast crossings read on the bridge that ends there) | none |
+| `test_arrangement::test_anchor_sign_matches_the_oriented_eigendirections` | `anchor_sign_matches_eigendirections` | none |
+| `test_arrangement::test_signs_alternate_along_a_stable_branch` | deleted: its own docstring says it is not an invariant | none |
+| `test_arrangement::test_k10_/test_p3_arrangement_is_*_component*_and_euler_holds`, `::test_k10_/test_p3_regions_are_pairwise_disjoint`, `::test_k10_/test_p3_arrangement_regions_are_geometrically_sound`, `::test_k10_/test_p3_region_images_agree_with_the_dynamics`, `::test_preimage_inverts_image` (9) | `arrangement_euler`, `_regions_disjoint`, `_regions_sound`, `_image_of`, `_preimage_inverts_image` | regions memory (nested swallow bug): disjoint law on nested |
+| `numerics/test_machine_iterate_invariants.py` (whole file, 7) | `manifold_cdist_monotone` / `_no_spikes` / `_iterate_law` / `_one_to_one` | cdist-strict: non-strict + no-spike on all cases; the strict low-stretch test is kept |
+| `numerics/test_growth_integration::test_bridges_individually_satisfy_invariants` | the manifold laws now include every bridge | none |
+| `numerics/test_tangle_intersection_cdist.py` (whole file, 3) | `crossings_cdists_defined`, `crossings_unstable_by_stable` + `no_same_stability_crossing`, `crossing_cdist_bracketed` (unstable side, through the public `unstable_segment`) | straddle cdist: `regression/test_boundary_straddle_cdist` kept |
+| `numerics/test_no_same_stability_crossing.py` (1) | `no_same_stability_crossing` (geometric, manifolds + blast image bridges, all branches and fixed points, u×u and s×s) | numerics-test-suite (self-crossing): law on all six |
+| `numerics/test_bridge_identity::test_bridge_id_is_endpoints_in_unstable_order`, `::test_bridge_id_ordering_on_period_three`, `::test_bridges_at_indexes_exactly_the_two_endpoints`, `::test_bridges_at_consistency_on_period_three`, `::test_image_and_preimage_round_trip` | `bridge_id_in_unstable_order`, `bridges_at_exact`, `bridge_image_round_trip` | none |
+| `numerics/test_bridge_identity::test_bridge_identity_on_the_inversion_saddle` | id/order → inversion law params + anchor xfail; its iterate half kept as the NEW `test_iterating_an_inversion_bridge_lands_on_the_other_branch` | inversion advance_key path kept |
+| `numerics/test_workbench_bugfixes::test_bridge_endpoints_stay_on_the_bridges_own_branch` | `bridge_endpoints_on_own_branch` (p3, nested) | codebase-audit root cause: law on p3 and nested |
+| `numerics/test_single_source_of_truth::test_every_registered_crossing_carries_its_unstable_segment`, `::test_bridge_endpoints_are_the_ids_of_the_crossings_it_was_cut_at` | `crossing_cdist_bracketed`, `bridge_id_in_unstable_order` + `bridge_endpoints_on_own_branch` | none |
+| `numerics/test_blast_no_overlap::test_workbench_keeps_single_copy_per_bridge` | `bridge_single_copy`, `bridges_do_not_overlap` (blasted k28 and nested) | numerics-test-suite single copy: `test_iterating_fixed_point_bridge_returns_existing_copies` kept |
+| `numerics/test_inversion_fixture::test_the_fixture_really_is_an_inversion_point`, `::test_growth_preserves_the_invariants_on_both_branches` (×4), `::test_forward_iterates_are_registered_on_the_inversion_tangle`, `::test_intersections_carry_keys_on_both_branches` | `k_value_matches_inversion`, the manifold laws, `iterate_link_scales_by_beta`, `every_branch_is_built` / `every_branch_crosses` (inversion) | has_inversion: kevin-way two-branch test kept; k_value-root: `test_one_map_step_scales_cdist_by_per_step_beta` kept |
+| `numerics/test_invariant_helpers::test_area_preserved_along_every_recorded_iterate_chain` | `area_along_iterate_links` | none |
+| `test_bridge_class::test_row_of_end_agrees_with_the_geometry_on_k10/_p3` | `row_of_end_is_geometry` | none |
+| `test_bridge_class::test_same_branch_bridges_never_mismatch_on_k10/_p3` | `bridge_rows_consistent` (I2) | none |
+| `test_bridge_class::test_every_non_partial_bridge_lands_in_exactly_one_class` | `every_bridge_in_one_class` | none |
+| `test_bridge_class::test_k10_anchor_bridge_runs_source_to_target` | `anchor_bridge_class_leads_its_tangle` | none |
+| `test_bridge_class::test_direction_matches_the_element_order_at_the_ends`, `::test_oriented_class_orders_anchor_outward` | `class_orientation_anchor_outward` | none |
+| `test_bridge_class::test_classes_and_members_come_out_in_the_documented_order` | `class_table_order` (tangle grouping, then min cdist, then `class_sort_key`) | none |
+| `test_bridge_class::test_p3_classes_cover_both_tangles_and_mix_neither` | `classes_do_not_mix_tangles` | none |
+| `test_bridge_class::test_p3_period_three_classes_use_every_stable_branch` | `classes_use_every_orbit_branch` | planner guard: law on p3 and nested |
+| `test_dual_graph::test_k10_/test_p3_node_structure`, `::test_k10_/test_p3_face_side_agrees_with_the_geometry`, `::test_k10_/test_p3_payload`, `::test_k10_unified_nodes_…`, `::test_p3_unifies_…`, `::test_k10_graph_is_bipartite` | `dual_node_structure` (now with the wall raises, face corners/bridge ids), `dual_face_side_is_geometry`, `dual_face_nodes` (with `image_face`), `dual_unified_is_pip_segment`, `dual_bipartite_degree`; payload deleted as tautological | none |
+| `test_partition_elements::test_element_ids_are_positional_…`, `::test_element_of_intersection_covers_…`, `::test_simple_tangle_elements_own_…`, `::test_singleton_elements_own_…` | `partition_covers_branch`, `partition_unique_owner`, `partition_singletons` | none |
+| `test_stable_partition::test_henon_holes_are_classified`, `::test_henon_partition_covers_branch`, `::test_henon_direct_hole_side_reproduces_inward_pair` | `holes_are_classified`, `partition_covers_branch`, `direct_hole_opens_inward_pair` | pseudoneighbor-partition: inward pair law on all hole cases |
+| `test_stable_partition::test_p3_propagation_terminates_at_periodicity` | `propagation_terminates` | pseudoneighbor-partition (07-06 termination): law on p3 and nested |
+| `test_stable_partition::test_k28_blast_child_gets_no_forward_hole`, `::test_p3_forward_holes_stop_at_the_branch_return` | `no_direct_hole_beyond_fundamental` (firm half only) | holes-backward-only: firm half on all hole cases |
+| `test_stable_partition_period3::test_p3_holes_share_bridge_side`, `::test_p3_bridge_rows_consistent`, `test_topology_invariants::test_henon_holes_share_bridge_side`, `::test_henon_bridge_rows_consistent` | `holes_share_bridge_side` (I1), `bridge_rows_consistent` (I2) | hole-side 2026-10-02: I1 law on p3, nested; deep-run I1 test kept |
+| `test_stable_partition_period3::test_p3_propagated_holes_land_on_the_predicted_branch` | `propagated_holes_land_on_predicted_branch` | none |
+| `test_stable_partition_period3::test_direct_hole_side_is_the_side_of_its_coordinates[×4]` | `direct_hole_side_is_coordinate_side` (critic note 1; nested added) | hole-side 2026-10-02 |
+| `test_stable_partition_period3::test_p3_hole_sides_are_pinned`, `::test_k28_two_blast_hole_sides_are_pinned` | the openings law (P1) | none |
+| `test_pseudoneighbor::test_henon_reference_pairs_are_structurally_valid` | `reference_pairs_valid` (pip window) | none |
+| `test_iterated_partition::test_k10_/p3_/k28_iterated_partition_invariants` | `iterated_child_inside_parent`, `_keeps_homotopy_boundaries`, `_unique_owner`, `_cut_provenance`; the test-side `_empty_stretches` oracle deleted | none |
+| `test_minimal_trellis::test_k10_/p3_/k28_minimal_trellis_invariants`, `::test_k10_minimal_trellis_drops_something` | `minimal_trellis_bridges`, `minimal_trellis_nodes_and_arrangement` (public API; the private half-edge check dropped); "drops something" is not a law | none |
+| `test_symbolic_dynamics::test_k10_every_landing_contained` | `landings_contained` | none |
+| `test_symbolic_dynamics::test_k10_itineraries_even_and_matrix` | law half → `itineraries_even`, `itinerary_pairs_same_side`, `inert_classes_outside_transitions`; fact half renamed `test_k10_transition_matrix` (Phase 5 golden) | none |
+| `test_element_naming::test_k10_names_agree_with_the_partition_structure` | `names_agree_with_structure` | none |
+
+### Added / changed in the same commit (outside the tier)
+
+- `numerics/test_bridge_identity::test_iterating_an_inversion_bridge_lands_on_the_other_branch`
+  (the iterate half of the deleted inversion test; the coverage guard flagged
+  `BridgeIterator` 239/246/357, `IterateInference` 415, `ManifoldMachine`
+  317–352 and `Tangle` 797, reached only through it).
+- `test_minimal_trellis::test_an_active_hole_bridge_without_a_registered_image_is_unmapped`
+  (unblasted nested: no law case has an unmapped hole bridge; covers
+  `MinimalTrellis.describe`'s unmapped line).
+- `test_symbolic_dynamics::test_k10_transition_matrix` (rename, see above).
+- `test_iterated_partition::test_cuts_record_the_far_end_of_the_empty_stretch`
+  checks the cut partner against the library kernel
+  `IteratedHomotopyPartition._empty_stretches` (allowed kernel) instead of the
+  deleted test-side reimplementation.
+- `test_minimal_trellis::test_a_pair_with_no_bridge_object_…` also asserts the
+  report is non-empty; `test_report_smoke` adds the minimal trellis's
+  summary/repr/describe.
+- Module docstrings of every file that lost tests now point to the law that
+  replaced them; empty section headers removed; orphaned helpers and imports
+  removed.
+
+### Verification
+
+- Collected **1080** (726 − 95 + 449; `nodeids_p4.txt`); the law tier alone
+  is 446 cases.
+- `1040 passed, 32 skipped, 8 xfailed` in 145 s with coverage (`p4_run.txt`),
+  about 78 s without. `-rxX` lists exactly the 8 `KNOWN_ISSUES` xfails above;
+  no XPASS. Skips: 31 `NOT_APPLICABLE` + the GPU no-CuPy skip (Phase 9).
+- **Law tier wall time: 37 s** without coverage (`pytest tests/invariants`,
+  407 passed, 31 skipped, 8 xfailed), within the ~40 s budget; one
+  module-scoped build per case per module (~2.3 s per module, inversion 54 %)
+  plus 12 fresh builds for the two recompute laws.
+- Coverage guard vs `cov_base.json`: OK (`cov_p4.json`), after the two added
+  tests and the dual-graph law additions above.
+- Isolation: `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `invariants/test_law_partition.py::test_openings_linked_bound[p3]`,
+  `invariants/test_law_crossings.py::test_recompute_is_idempotent[nested]`,
+  `numerics/test_bridge_identity.py::test_iterating_an_inversion_bridge_lands_on_the_other_branch`,
+  `test_element_naming.py::test_element_name_is_hashable_and_compares_by_value`,
+  `test_loom_blast_restore.py::test_restore_rebuilds_bridges`: all pass alone;
+  `pytest tests/invariants` alone passes.
+
+### Deviations, Phase 4
+
+1. **Per-check form** (plan.md: one test per (law × case)), not the
+   planner's per-layer fallback: the module-scoped shared build (decision 7)
+   keeps it at 37 s. It brings the suite to 1080 cases for now (446 in the
+   tier); Phases 5–7 delete the remaining fact pins and duplicates.
+2. **Kept, not deleted:** `numerics/test_growth_integration::test_unstable_invariants_hold_at_every_step`
+   (the per-step check is not subsumed by a law on finished builds; planner §B
+   moves it to `unit/numerics/test_growth.py`), and
+   `test_single_source_of_truth::test_partial_bridge_reports_its_missing_endpoint`
+   (no law case carries a partial bridge, so `bridge_partial_iff_no_id` cannot
+   cover partials).
+3. **Deleted beyond the planner's §A list** because their assertions moved
+   into a law in this commit: the crossing-sign and anchor-sign tests,
+   `test_preimage_inverts_image`, `test_image_and_preimage_round_trip`,
+   `test_p3_period_three_classes_use_every_stable_branch`, and the four I1/I2
+   re-check tests (planned for Phase 9; the production-wiring spy still lands
+   there).
+4. **Kept from the "twins" list:** `test_dual_graph::test_k10_face_nodes_…`
+   and `::test_p3_merges_…` (not in the planner's list; the face law is more
+   general but the nested merge fact stays), and the iterate half of the
+   inversion bridge test (re-added, see above).
+5. **New known issues** (5 laws, 6 cases) beyond P2's draft; see the table.
+   The k28 `arrangement_regions_disjoint` finding is not inversion-related.
+6. **Crossing cdist bracket** is checked on the unstable side only (through
+   the public `unstable_segment`); the old stable-side half read the private
+   `Tangle._seg_lookup`.
+7. **Crossing sign** is rebuilt from the curve the crossing lies on: a blast
+   registers crossings on image bridges, which the manifold nodes do not pass
+   through (the old test ran on the unblasted 7-step k10 only).
+8. **Same-stability law** includes the blast's image bridges (curves sharing
+   no node with a manifold) and runs inside the crossings' box padded by 10 %
+   (the old p3 test used a fixed |x|, |y| < 6 box).
+9. **The anchor law** now requires exactly one anchor on EVERY unstable
+   manifold (the Phase 1 check only looked at branches that had one).
+10. **The b = -1 placeholder** is a standalone test with `issue_marks`
+    (through `law_params` it would also run the six law cases).
+11. `tests/conftest.py`'s function-scoped `law_case` is removed (superseded).

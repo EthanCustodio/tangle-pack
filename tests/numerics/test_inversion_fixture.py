@@ -9,6 +9,10 @@ map the rest of the suite uses.
 
 The chain of manifold pieces is therefore ``(0, 0) -> (0, 1) -> (0, 0)``: one map
 step lands on the opposite branch, and only two steps return.
+
+The growth invariants on both branches, the registered forward iterates, the
+crossing keys on both branches and the fixture's inversion facts run as laws on
+the ``inversion`` case of ``tests/invariants/``.
 """
 
 from __future__ import annotations
@@ -16,11 +20,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from invariants import (
-    assert_cdist_monotonic,
-    assert_no_geometric_spikes,
-    assert_one_to_one,
-)
 from tanglepack import TangleWorkbench
 from tanglepack.examples import henon_jacobian, henon_map, henon_map_inverse
 from tanglepack.numerics.ManifoldInitializer import _MIN_SEED_STEP
@@ -29,21 +28,6 @@ from tanglepack.numerics.ManifoldInitializer import _MIN_SEED_STEP
 # --------------------------------------------------------------------------- #
 # (a) advance_key round trips with the branch flip
 # --------------------------------------------------------------------------- #
-def test_the_fixture_really_is_an_inversion_point(henon_inversion):
-    _workbench, fp = henon_inversion
-
-    assert fp.period == 1
-    assert fp.check_inversion() is True
-    assert fp.k_value == 2
-    assert fp.num_branches == 2
-    assert fp.unstable_eigenvalues[0] < 0
-    assert fp.stable_eigenvalues[0] < 0
-    # orientation preserving: det J = lambda_u * lambda_s = 1
-    lambda_u = float(np.asarray(fp.unstable_eigenvalues[0]).ravel()[0])
-    lambda_s = float(np.asarray(fp.stable_eigenvalues[0]).ravel()[0])
-    assert lambda_u * lambda_s == pytest.approx(1.0)
-
-
 @pytest.mark.parametrize("stability", ["unstable", "stable"])
 def test_advance_key_flips_the_branch_and_returns_after_k_value_steps(
     henon_inversion, stability
@@ -93,22 +77,8 @@ def test_kevin_way_builds_both_branches_in_opposite_directions(
 
 
 # --------------------------------------------------------------------------- #
-# (c) growth keeps the geometric invariants on BOTH branches
+# (c) one map step scales cdist by per_step_beta on BOTH branches
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("stability", ["unstable", "stable"])
-@pytest.mark.parametrize("branch_index", [0, 1])
-def test_growth_preserves_the_invariants_on_both_branches(
-    henon_inversion, stability, branch_index
-):
-    workbench, fp = henon_inversion
-    manifold = workbench.manifolds[(fp, stability, 0, branch_index)]
-
-    assert len(manifold.get_point_array()) > 5, "the branch never grew"
-    assert_cdist_monotonic(manifold)
-    assert_no_geometric_spikes(manifold)
-    assert_one_to_one(manifold)
-
-
 def _walk(manifold, branch_index):
     """Every node of one branch, root first."""
     nodes = []
@@ -161,75 +131,8 @@ def test_one_map_step_scales_cdist_by_per_step_beta(henon_inversion, branch_inde
         assert ratio != pytest.approx(wrong, rel=0.5)
 
 
-def test_forward_iterates_are_registered_on_the_inversion_tangle(henon_inversion):
-    """The crossings' iterate chains are found, at the per-map-step factor.
-
-    This is the downstream half of the map-step fix: the registry predicts an
-    image at ``(u * beta, s / beta)`` and matches on both canonical distances, so
-    a wrong beta finds nothing at all on an inversion tangle.
-    """
-    workbench, fp = henon_inversion
-    registry = workbench.intersection_registry
-    beta = fp.per_step_beta("unstable")
-
-    transverse = [
-        (source_id, target_id)
-        for source_id, n, target_id in registry.iterate_table.items()
-        if n == 1 and registry[source_id].unstable_cdist > 0
-    ]
-    assert len(transverse) >= 2, (
-        "no forward iterate of a transverse crossing was registered on the "
-        "inversion tangle"
-    )
-    for source_id, target_id in transverse:
-        source, target = registry[source_id], registry[target_id]
-        assert target.unstable_cdist / source.unstable_cdist == pytest.approx(
-            beta, rel=1e-3
-        )
-        assert target.stable_cdist / source.stable_cdist == pytest.approx(
-            1.0 / beta, rel=1e-3
-        )
-
-
 # --------------------------------------------------------------------------- #
-# (d) crossings carry both branch indices
-# --------------------------------------------------------------------------- #
-def test_intersections_carry_keys_on_both_branches(henon_inversion):
-    workbench, fp = henon_inversion
-    registry = workbench.intersection_registry
-
-    assert len(registry) > 0, "the inversion tangle produced no crossings"
-
-    # The anchors (cdist 0 on both manifolds) are synthetic crossings that exist
-    # on all four (unstable branch, stable branch) pairs by construction, so they
-    # would satisfy this vacuously; only real transverse crossings count.
-    transverse = [
-        ix for _ix_id, ix in registry if ix.unstable_cdist > 0 and ix.stable_cdist > 0
-    ]
-    assert len(transverse) >= 4, "no transverse crossings in the inversion tangle"
-
-    seen_unstable, seen_stable = set(), set()
-    for ix in transverse:
-        assert ix.manifold_b_key is not None
-        for key, stability in (
-            (ix.manifold_a_key, "unstable"),
-            (ix.manifold_b_key, "stable"),
-        ):
-            if key is None:
-                continue
-            assert key[0] is fp
-            assert key[1] == stability
-            assert key[3] in (0, 1)
-        if ix.manifold_a_key is not None:
-            seen_unstable.add(ix.manifold_a_key[3])
-        seen_stable.add(ix.manifold_b_key[3])
-
-    assert seen_unstable == {0, 1}
-    assert seen_stable == {0, 1}
-
-
-# --------------------------------------------------------------------------- #
-# (e) an orientation-REVERSING map is rejected, not silently mismodelled
+# (d) an orientation-REVERSING map is rejected, not silently mismodelled
 # --------------------------------------------------------------------------- #
 _B_NEGATIVE = (10, -1)
 _henon_b_negative = henon_map(*_B_NEGATIVE)

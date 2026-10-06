@@ -48,4 +48,7 @@ def test_reports_are_non_empty_and_mention_what_they_report(k10_partitioned) -> 
     texts.append(dynamics.describe())
     texts.append(repr(dynamics))
 
+    minimal = session.minimal_trellis()
+    texts.extend([minimal.summary(), repr(minimal), minimal.describe()])
+
     assert all(isinstance(text, str) and text.strip() for text in texts)

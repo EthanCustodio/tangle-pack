@@ -358,29 +358,6 @@ def _homotopy(naming: ElementNaming, text: str) -> ElementRef:
     raise KeyError(text)
 
 
-def test_k10_names_agree_with_the_partition_structure(k10_naming):
-    pieces, naming = k10_naming
-    for result in pieces.iterated.as_list():
-        for interval in result.intervals:
-            ref = result.ref(interval.element_id)
-            name = naming.name(ref)
-            parent = naming.parent_of(ref)
-            assert parent.element_id == interval.parent_element_id
-            assert parent.branch_key == ref.branch_key and parent.side == ref.side
-            assert name.subscript == interval.parent_element_id + 1
-            assert name.side_letter == result.side[0].upper()
-            assert naming.ref_of(name) == ref
-            assert naming.lookup(name.text) == ref
-            assert naming.homotopy_name(parent).subscript == name.subscript
-    # Every iterated element lies within its parent's span.
-    for parent in naming.homotopy_refs:
-        span = pieces.homotopy.element(parent)
-        for child in naming.children_of(parent):
-            child_iv = pieces.iterated.element(child)
-            assert child_iv.lo_cdist >= span.lo_cdist - pieces.homotopy.tol
-            assert child_iv.hi_cdist <= span.hi_cdist + pieces.homotopy.tol
-
-
 @pytest.mark.slow
 def test_p3_names_carry_branch_codes_and_letters(p3_partitioned):
     """Two fixed points are partitioned, so every name carries its letter and code."""

@@ -1,23 +1,20 @@
-"""Phase 6.2/6.4/6.5/6.6 — the crossing sign and the planar arrangement.
+"""Phase 6.4/6.5/6.6 -- the planar arrangement and its regions.
 
-Three layers are pinned here.
+**The arrangement** (6.4) is checked on a hand-built two-crossing fixture whose
+face count can be worked out by hand and by Euler's formula; on the real
+fixtures the faces that merely ENCLOSE another component are pinned as
+non-regions, open faces refuse geometric questions, and the lookups agree with
+the regions.
 
-**The crossing sign** (6.2) is the one datum the arrangement's rotation system is
-built from, so it is checked before anything is built on it: it is always +/-1 on
-a detected crossing, it is the sign of the cross product of the two increasing-cdist
-directions, and along a stable branch it alternates.
+**The regions** (6.5, 6.6): a region whose mapped corner cycle is carried by a
+proper sub-face of its true image is rejected by area preservation, a region's
+preimage is checked against a hand-derived backward image, and a blast (arcs
+on iterated bridges) still builds.
 
-**The arrangement** (6.4) is first checked on a hand-built two-crossing fixture
-whose face count can be worked out by hand and by Euler's formula, then on the two
-real fixtures, where ``V - E + F`` is pinned against the component count and the
-faces that merely ENCLOSE another component are pinned as non-regions.
-
-**The regions** (6.5, 6.6) are checked against geometry the combinatorics never
-sees: the regions are pairwise interior-disjoint, every one of them has a
-representative point that survives an independent ray cast, and a region's
-combinatorial image is the region the real map sends that point into — with area
-preservation used to reject a face that merely carries the mapped corner cycle
-while being a proper sub-face of the true image.
+The crossing-sign laws and the per-case arrangement laws (Euler per component,
+regions sound and disjoint, ``image_of`` against the dynamics, preimage of the
+image) run on every law case in ``tests/invariants/`` (``test_law_crossings``,
+``test_law_anchors``, ``test_law_arrangement``).
 """
 
 from __future__ import annotations
@@ -33,105 +30,6 @@ from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.TopologyResults import Arc, canonical_corners
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch
-
-
-# --------------------------------------------------------------------------- #
-# 6.2 -- the crossing sign
-# --------------------------------------------------------------------------- #
-def test_every_detected_crossing_has_a_definite_sign(small_tangle):
-    workbench, _fp = small_tangle
-    for _iid, intersection in workbench.intersection_registry:
-        assert intersection.crossing_sign in (1, -1)
-
-
-def test_crossing_sign_is_the_cross_product_of_the_two_directions(small_tangle):
-    """Recompute the sign from the manifolds themselves, not from the segments.
-
-    The sign is stored at resolve time from the two bracketing segments; here it
-    is rebuilt from the nodes flanking the crossing on each branch, so a mix-up of
-    which segment is which (or of the cdist direction) would show up.
-    """
-    workbench, _fp = small_tangle
-    registry = workbench.intersection_registry
-
-    for _iid, ix in registry:
-        if ix.is_synthetic:
-            continue  # an anchor's rays are the eigendirections, covered below
-        u_dir = _local_direction(
-            workbench.manifolds[ix.manifold_a_key], "unstable", ix.unstable_cdist
-        )
-        s_dir = _local_direction(
-            workbench.manifolds[ix.manifold_b_key], "stable", ix.stable_cdist
-        )
-        expected = np.sign(u_dir[0] * s_dir[1] - u_dir[1] * s_dir[0])
-        assert ix.crossing_sign == expected
-
-
-def _local_direction(manifold, stability, cdist):
-    """The curve direction at ``cdist``, taken in increasing canonical distance."""
-    nodes = manifold.get_point_array(return_nodes=True)
-    cdists = [n.get_cdist(stability) for n in nodes]
-    index = int(np.searchsorted(cdists, cdist))
-    index = min(max(index, 1), len(nodes) - 1)
-    return nodes[index].get_point() - nodes[index - 1].get_point()
-
-
-def test_anchor_sign_matches_the_oriented_eigendirections(small_tangle):
-    workbench, fp = small_tangle
-    registry = workbench.intersection_registry
-    anchors = [ix for _i, ix in registry if ix.label == "anchor"]
-    assert anchors, "the periodic point must be registered as an anchor"
-
-    for anchor in anchors:
-        unstable = workbench.manifolds[anchor.manifold_a_key]
-        stable = workbench.manifolds[anchor.manifold_b_key]
-        u_nodes = unstable.get_point_array(return_nodes=True)
-        s_nodes = stable.get_point_array(return_nodes=True)
-        u_dir = u_nodes[1].get_point() - u_nodes[0].get_point()
-        s_dir = s_nodes[1].get_point() - s_nodes[0].get_point()
-        assert anchor.crossing_sign == np.sign(
-            u_dir[0] * s_dir[1] - u_dir[1] * s_dir[0]
-        )
-
-
-def test_signs_alternate_along_a_stable_branch(henon_tangle_with_bridges):
-    """Consecutive crossings along one stable branch have opposite signs -- HERE.
-
-    The argument holds under a precondition the k=10 fixture happens to meet: when
-    the two crossings are joined by a piece of ONE complete unstable curve, that
-    curve leaves the stable branch at the first and comes back to it at the second,
-    so it passes from one side to the other and back and the handedness must flip.
-
-    The precondition is not a law of the tangle, and this is a pin on the fixture,
-    not an invariant:
-
-    * two DIFFERENT unstable branches (a nested tangle, or two branches of one
-      periodic orbit) can cross the same stable branch at consecutive crossings,
-      and nothing relates their handedness;
-    * a computed unstable branch that dead-ends between the two crossings never
-      makes the return trip.
-
-    Nothing in :class:`~tanglepack.topology.Arrangement.Arrangement` depends on the
-    alternation: the rotation at each node is read from that node's own
-    ``crossing_sign`` alone. This test exists to catch a systematic sign error in
-    :meth:`~tanglepack.numerics.Tangle.Tangle._crossing_sign`, which would show up
-    as a run of equal signs where the geometry demands a flip.
-    """
-    workbench, fp = henon_tangle_with_bridges
-    trellis = Trellis.from_workbench(workbench, fp)
-
-    checked = 0
-    for branch in trellis.stable_branches:
-        ordered = branch.ordered_ids()
-        for lo_id, hi_id in zip(ordered, ordered[1:]):
-            lo = trellis.intersection(lo_id)
-            hi = trellis.intersection(hi_id)
-            assert lo.crossing_sign == -hi.crossing_sign, (
-                f"crossings {lo_id} and {hi_id} are consecutive on {branch.key[1:]}"
-                f" but share sign {lo.crossing_sign}"
-            )
-            checked += 1
-    assert checked >= 3, "the fixture must have several consecutive pairs"
 
 
 # --------------------------------------------------------------------------- #
@@ -318,99 +216,6 @@ def test_arc_reverse_round_trips():
 # --------------------------------------------------------------------------- #
 # 6.4/6.5 -- the real fixtures
 # --------------------------------------------------------------------------- #
-def _check_arrangement(session):
-    arrangement = session.arrangement()
-    assert arrangement.faces, "an arrangement must have at least the outer face"
-    assert arrangement.regions, "the fixture must close at least one face"
-
-    for region in arrangement.regions:
-        assert region.is_closed
-        assert len(region.corners) == len(region.arcs) >= 2
-        assert region.corners == canonical_corners(region.corners)
-        # Every arc runs between consecutive corners.
-        for index, arc in enumerate(region.arcs):
-            assert arc.tail_id == region.corners[index]
-            assert arc.head_id == region.corners[(index + 1) % len(region.corners)]
-        assert region.verify_representative_point(), (
-            f"region {region.corners} has a representative point outside itself"
-        )
-        assert region.contains(region.representative_point)
-    return arrangement
-
-
-def _assert_regions_are_disjoint(arrangement):
-    """No region's representative point lies in any OTHER region.
-
-    The plan defines a region as a face containing no other manifold piece, so two
-    regions can share a boundary arc but never an interior point. Within one
-    connected component a planar subdivision gives that for free; across components
-    it does not, which is why
-    :meth:`~tanglepack.topology.Arrangement.Arrangement._classify_minimality`
-    exists. This is the check that would have caught the nested-fixture bug where
-    the period-1 tangle's outer face swallowed 25 of the period-3 tangle's faces.
-    """
-    for region in arrangement.regions:
-        point = region.representative_point
-        if point is None:
-            continue
-        for other in arrangement.regions:
-            if other is region:
-                continue
-            assert not other.contains(point), (
-                f"region {region.corners} sits inside region {other.corners}"
-            )
-
-
-def _assert_euler(arrangement, expected_components: int):
-    """``V - E + F == 2 * components``.
-
-    The face traversal walks each connected component's outer boundary as its own
-    cycle rather than merging them into one unbounded face, so every component
-    contributes its own ``V - E + F = 2`` (the textbook ``1 + C``, which counts a
-    single shared outer face, is this minus ``C - 1``). Getting this right is the
-    end-to-end check that no face was missed or double-counted.
-    """
-    assert arrangement.component_count == expected_components
-    assert arrangement.euler_characteristic == 2 * expected_components, (
-        f"V - E + F = {arrangement.euler_characteristic}, expected "
-        f"{2 * expected_components} for {expected_components} component(s)"
-    )
-    # One open face per component: each component's outer boundary.
-    assert len(arrangement.open_faces) >= expected_components
-
-
-def test_k10_arrangement_is_one_component_and_euler_holds(k10_session):
-    session, _fp = k10_session
-    arrangement = session.arrangement()
-    # One saddle, one tangle: everything is joined through the anchor.
-    _assert_euler(arrangement, expected_components=1)
-    assert arrangement.containing_faces == []
-
-
-def test_k10_regions_are_pairwise_disjoint(k10_session):
-    session, _fp = k10_session
-    _assert_regions_are_disjoint(session.arrangement())
-
-
-@pytest.mark.slow
-def test_p3_arrangement_is_two_components_and_euler_holds(henon_p3_session):
-    """The nested fixture is TWO drawings on one plane.
-
-    No heteroclinic crossing between the period-1 and period-3 tangles has been
-    computed at this growth, so their arcs never meet and the face traversal cannot
-    walk from one to the other.
-    """
-    session, _fp3, _fp1, _zone = henon_p3_session
-    arrangement = session.arrangement()
-    _assert_euler(arrangement, expected_components=2)
-
-
-@pytest.mark.slow
-def test_p3_regions_are_pairwise_disjoint(henon_p3_session):
-    session, _fp3, _fp1, _zone = henon_p3_session
-    _assert_regions_are_disjoint(session.arrangement())
-
-
 @pytest.mark.slow
 def test_p3_has_a_closed_face_that_swallows_the_inner_tangle(henon_p3_session):
     """The outer tangle's enclosing face is closed but is NOT a region.
@@ -454,19 +259,6 @@ def test_open_faces_refuse_to_answer_geometric_questions(k10_session):
     ):
         with pytest.raises(ValueError):
             attempt()
-
-
-def test_k10_arrangement_regions_are_geometrically_sound(k10_session):
-    session, _fp = k10_session
-    arrangement = _check_arrangement(session)
-    print(f"\nk=10 {arrangement.summary()}")
-
-
-@pytest.mark.slow
-def test_p3_arrangement_regions_are_geometrically_sound(henon_p3_session):
-    session, _fp3, _fp1, _zone = henon_p3_session
-    arrangement = _check_arrangement(session)
-    print(f"\nnested p3 {arrangement.summary()}")
 
 
 def test_arrangement_is_cached_by_generation(k10_session):
@@ -525,47 +317,6 @@ def test_stable_arcs_report_their_partition_elements(k10_session):
 # --------------------------------------------------------------------------- #
 # 6.6 -- the combinatorial image agrees with the dynamics
 # --------------------------------------------------------------------------- #
-def _image_agreement(session):
-    """Map each region's representative point forward and locate it by ray cast.
-
-    The located region must be the combinatorial image and nothing else: the
-    regions of an arrangement are pairwise interior-disjoint (that is what the
-    component/containment classification buys), so the ray cast has exactly one
-    answer and no tie-break is needed or allowed.
-    """
-    arrangement = session.arrangement()
-    dynamical_map = session.workbench.dynamical_system.map
-
-    with_image = 0
-    agreed = 0
-    for region in arrangement.regions:
-        image = arrangement.image_of(region, 1)
-        if image is None:
-            continue
-        with_image += 1
-        point = region.representative_point
-        mapped = np.asarray(dynamical_map(np.asarray(point, dtype=float)), dtype=float)
-        located = [other for other in arrangement.regions if other.contains(mapped)]
-        assert located == [image], (
-            f"region {region.corners} maps combinatorially to {image.corners} but "
-            f"its representative point lands in {[r.corners for r in located]}"
-        )
-        # These maps are area preserving, so the image's area is the source's.
-        assert abs(image.area) == pytest.approx(abs(region.area), rel=2e-2)
-        agreed += 1
-    return arrangement, with_image, agreed
-
-
-def test_k10_region_images_agree_with_the_dynamics(k10_session):
-    session, _fp = k10_session
-    arrangement, with_image, agreed = _image_agreement(session)
-    print(
-        f"\nk=10 regions with an image: {with_image}/{len(arrangement.regions)}; "
-        f"agreeing: {agreed}"
-    )
-    assert agreed == with_image
-
-
 def test_k10_rejects_an_image_that_is_only_a_sub_face(k10_session):
     """A face carrying the mapped corner cycle need not BE the image.
 
@@ -612,18 +363,6 @@ def test_k10_rejects_an_image_that_is_only_a_sub_face(k10_session):
 
 
 @pytest.mark.slow
-def test_p3_region_images_agree_with_the_dynamics(henon_p3_session):
-    session, _fp3, _fp1, _zone = henon_p3_session
-    arrangement, with_image, agreed = _image_agreement(session)
-    print(
-        f"\nnested p3 regions with an image: {with_image}/"
-        f"{len(arrangement.regions)}; agreeing: {agreed}"
-    )
-    assert with_image > 0, "no region has a computed image"
-    assert agreed == with_image
-
-
-@pytest.mark.slow
 def test_preimage_of_a_region_is_its_hand_derived_backward_image(henon_p3_session):
     """A worked example: take one region, map its corners BACK by hand, look up.
 
@@ -657,31 +396,6 @@ def test_preimage_of_a_region_is_its_hand_derived_backward_image(henon_p3_sessio
         assert region.contains(mapped)
         checked += 1
     assert checked > 0, "no region had a hand-derivable preimage"
-
-
-@pytest.mark.slow
-def test_preimage_inverts_image(henon_p3_session):
-    """Where both directions are recorded, image and preimage undo each other.
-
-    Only on the nested p3 fixture: the k=10 tangle's single region with an image
-    maps onto a face whose extra corners (crossings the trimmed stable manifold
-    hides on the source side) have no recorded backward iterate, so the round trip
-    is not defined there at all. That asymmetry is a property of the computed
-    picture, not of the map.
-    """
-    session, _fp3, _fp1, _zone = henon_p3_session
-    arrangement = session.arrangement()
-    checked = 0
-    for region in arrangement.regions:
-        image = arrangement.image_of(region, 1)
-        if image is None:
-            continue
-        back = arrangement.preimage_of(image, 1)
-        if back is None:
-            continue
-        assert back is region
-        checked += 1
-    assert checked > 0, "no region round-tripped through image/preimage"
 
 
 def test_arrangement_survives_a_blast(k10_session):

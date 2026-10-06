@@ -703,11 +703,38 @@ class KnownIssue:
 
 
 #: ``(law_id, case) -> KnownIssue``; fixing these is out of scope (decision 10).
+#: The law ids are the ``helpers.laws`` check names without ``check_``.
 KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
     {
         ("one_anchor_per_unstable_branch", "inversion"): KnownIssue(
             "an inversion point registers one (0,0) anchor per (unstable, stable) "
             "branch pair, i.e. two per unstable branch; the author's rule is one (P2)"
+        ),
+        ("anchor_bridge_class_leads_its_tangle", "inversion"): KnownIssue(
+            "with two anchors per unstable branch, the bridge leaving the second "
+            "anchor sits in an inert class (Phase 4 finding, tied to the anchor issue)"
+        ),
+        ("arrangement_euler", "inversion"): KnownIssue(
+            "the inversion arrangement has V - E + F = 0 on its one component (four "
+            "coincident anchors; Phase 4 finding)"
+        ),
+        ("itinerary_pairs_same_side", "inversion"): KnownIssue(
+            "an inversion class's walked itinerary pairs a left element of branch 0.1 "
+            "with a right element of branch 0.0 (a cross-side pair; Phase 4 finding)"
+        ),
+        ("landings_contained", "inversion"): KnownIssue(
+            "an inversion class's one-step landing straddles a cut of the image "
+            "branch (contained=False; Phase 4 finding)"
+        ),
+        ("arrangement_regions_disjoint", "k28_one_blast"): KnownIssue(
+            "a zero-area region bounded by an unstable arc no Bridge object spans "
+            "(after a blast) reports a representative point inside a neighbouring "
+            "region (Phase 4 finding)"
+        ),
+        ("arrangement_regions_disjoint", "k28_two_blasts"): KnownIssue(
+            "a zero-area region bounded by an unstable arc no Bridge object spans "
+            "(after a blast) reports a representative point inside a neighbouring "
+            "region (Phase 4 finding)"
         ),
         ("orientation_reversing_case_builds", "orientation_reversing"): KnownIssue(
             "det J < 0 is not supported: FixedPoint.set_k_value rejects a saddle "
@@ -726,18 +753,83 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
     }
 )
 
+_NO_HOLES = "no pseudoneighbors, hence no holes, at the only feasible depth (P2)"
+_NO_IMAGE_BRIDGES = "the minimal trellis maps no hole bridge forward (no image bridges)"
+_NO_REFINEMENT = "no class splits (no refined children)"
+
 #: ``(law_id, case) -> reason``: the law has nothing to check on that case.
 NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
     {
-        ("holes", "inversion"): "no pseudoneighbors at the only feasible depth (P2)",
+        **{
+            (law, "inversion"): _NO_HOLES
+            for law in (
+                "holes_are_classified",
+                "holes_share_bridge_side",
+                "direct_hole_side_is_coordinate_side",
+                "direct_hole_opens_inward_pair",
+                "openings_on_own_bridge_row",
+                "openings_linked_bound",
+                "openings_missing_only_at_anchor_or_tail",
+                "propagated_holes_land_on_predicted_branch",
+                "propagation_terminates",
+                "no_direct_hole_beyond_fundamental",
+                "reference_pairs_valid",
+                "partition_singletons",
+                "minimal_trellis_bridges",
+                "iterated_cut_provenance",
+                "refined_children_inherit_word",
+                "member_matching_consistent",
+            )
+        },
+        ("dual_face_side_is_geometry", "inversion"): (
+            "the minimal trellis keeps no bridge, so its arrangement closes no region (P2)"
+        ),
         ("arrangement_image_of", "inversion"): "image_of closes no region (P2)",
+        ("arrangement_preimage_inverts_image", "inversion"): "image_of closes no region (P2)",
+        ("arrangement_image_of", "k10"): (
+            "the one face carrying a region's mapped corners is a proper sub-face, "
+            "which image_of rejects; no region has a closed image"
+        ),
+        ("arrangement_preimage_inverts_image", "k10"): "no region has a closed image",
+        ("partition_singletons", "k10"): "no hole pair pinches a crossing",
+        ("partition_singletons", "k28_two_blasts"): "no hole pair pinches a crossing",
         ("openings_linked_bound", "k10"): "no propagated bound is a registered iterate (P1)",
         ("openings_linked_bound", "k28_two_blasts"): (
             "no propagated bound is a registered iterate (P1)"
         ),
-        ("openings_linked_bound", "inversion"): "no holes (P2)",
+        ("iterated_cut_provenance", "k28_one_blast"): _NO_IMAGE_BRIDGES,
+        ("iterated_cut_provenance", "p3"): _NO_IMAGE_BRIDGES,
+        ("refined_children_inherit_word", "k28_one_blast"): _NO_REFINEMENT,
+        ("refined_children_inherit_word", "p3"): _NO_REFINEMENT,
+        ("member_matching_consistent", "k28_one_blast"): _NO_REFINEMENT,
+        ("member_matching_consistent", "p3"): _NO_REFINEMENT,
     }
 )
+
+
+def issue_marks(law_id: str, case: str) -> list:
+    """
+    The pytest marks one ``(law, case)`` pair carries.
+
+    Args:
+        law_id: The law's identifier.
+        case: The case name.
+
+    Returns:
+        ``xfail(strict=True)`` (with ``raises`` when given) for a known issue,
+        a ``skip`` for a not-applicable pair, nothing otherwise.
+    """
+    marks = []
+    issue = KNOWN_ISSUES.get((law_id, case))
+    if issue is not None:
+        kwargs = {"strict": True, "reason": issue.reason}
+        if issue.raises is not None:
+            kwargs["raises"] = issue.raises
+        marks.append(pytest.mark.xfail(**kwargs))
+    reason = NOT_APPLICABLE.get((law_id, case))
+    if reason is not None:
+        marks.append(pytest.mark.skip(reason=f"not applicable: {reason}"))
+    return marks
 
 
 def law_params(law_id: str) -> list:
@@ -747,7 +839,7 @@ def law_params(law_id: str) -> list:
     Every :data:`LAW_CASES` entry is included; a case named only in
     :data:`KNOWN_ISSUES` or :data:`NOT_APPLICABLE` for this law is appended.
     A known issue becomes ``xfail(strict=True)`` (with ``raises`` when given),
-    a not-applicable pair a ``skip``.
+    a not-applicable pair a ``skip`` (:func:`issue_marks`).
 
     Args:
         law_id: The law's identifier.
@@ -760,17 +852,4 @@ def law_params(law_id: str) -> list:
         for law, case in registry:
             if law == law_id and case not in names:
                 names.append(case)
-    params = []
-    for name in names:
-        marks = []
-        issue = KNOWN_ISSUES.get((law_id, name))
-        if issue is not None:
-            kwargs = {"strict": True, "reason": issue.reason}
-            if issue.raises is not None:
-                kwargs["raises"] = issue.raises
-            marks.append(pytest.mark.xfail(**kwargs))
-        reason = NOT_APPLICABLE.get((law_id, name))
-        if reason is not None:
-            marks.append(pytest.mark.skip(reason=f"not applicable: {reason}"))
-        params.append(pytest.param(name, marks=marks, id=name))
-    return params
+    return [pytest.param(name, marks=issue_marks(law_id, name), id=name) for name in names]

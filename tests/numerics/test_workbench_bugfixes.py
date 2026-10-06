@@ -1,54 +1,15 @@
 """Regression tests for the Phase 1 TangleWorkbench bug fixes.
 
-Covers plan rows 1.2 (bridge endpoint assignment must stay on the bridge's own
-unstable branch -- since plan row 2.2 this holds by construction, because the cut
-itself records the two crossings it was made at), 1.11 (``trim_stable_manifolds`` on a branch with no crossings)
+Covers plan rows 1.11 (``trim_stable_manifolds`` on a branch with no crossings)
 and 1.12 (growth-loop iteration caps and the ``grow_until_intersection`` rename).
+Row 1.2 (a bridge's endpoints stay on its own unstable branch) is the law
+``bridge_endpoints_on_own_branch`` of ``tests/invariants/test_law_bridges.py``,
+run on the period-3 and nested cases where it once broke.
 """
 
 from __future__ import annotations
 
 import pytest
-
-
-# --------------------------------------------------------------------------- #
-# 1.2 -- a bridge's endpoints must be crossings on its own unstable branch
-# --------------------------------------------------------------------------- #
-def test_bridge_endpoints_stay_on_the_bridges_own_branch(henon_p3_session):
-    """On a period-3 tangle every unstable branch has its own crossing at
-    unstable cdist ~0, so a registry-wide nearest-cdist lookup hands the first
-    bridge of one branch an endpoint belonging to another."""
-    session, _fp3, _fp1, _zone = henon_p3_session
-    workbench = session.workbench
-    registry = workbench.intersection_registry
-
-    keyed = [b for b in workbench.bridges if b.manifold_key is not None]
-    assert keyed, "expected at least one keyed bridge on the period-3 tangle"
-
-    for bridge in keyed:
-        first_id = bridge.first_intersection
-        second_id = bridge.second_intersection
-        assert first_id is not None and second_id is not None
-        assert first_id in registry and second_id in registry
-        assert first_id != second_id
-
-        first = registry[first_id]
-        second = registry[second_id]
-
-        for endpoint in (first, second):
-            assert endpoint.manifold_a_key in (bridge.manifold_key, None), (
-                f"bridge {bridge.manifold_key} got an endpoint from "
-                f"{endpoint.manifold_a_key}"
-            )
-
-        root_u = bridge.root.get_cdist("unstable")
-        tail_u = bridge.tail.get_cdist("unstable")
-        assert (
-            root_u <= first.unstable_cdist < second.unstable_cdist <= tail_u
-        ), (
-            f"bridge {bridge.manifold_key} spans [{root_u}, {tail_u}] but was "
-            f"given endpoints at {first.unstable_cdist}, {second.unstable_cdist}"
-        )
 
 
 # --------------------------------------------------------------------------- #

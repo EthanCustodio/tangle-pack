@@ -10,7 +10,8 @@ the invariants they encode:
 * ``assert_area_preserved_along_chain`` — the map is area preserving, so one
   forward step scales the unstable canonical distance up and the stable one down
   by the same per-step factor and the product ``unstable_cdist * stable_cdist`` is
-  invariant *along one iterate chain*.
+  invariant *along one iterate chain* (the area law over every registered link
+  of every law case runs in ``tests/invariants/test_law_crossings.py``).
 
 Note:
     Per CLAUDE.md the canonical-area product is only invariant *within* a chain;
@@ -56,29 +57,6 @@ def test_low_stretch_growth_keeps_cdist_injective(initialized):
         nodes = manifold.get_point_array(return_nodes=True)
         assert len(nodes) > 3, "growth added no points"
         assert_no_cdist_collision(manifold)
-
-
-def test_area_preserved_along_every_recorded_iterate_chain(
-    henon_tangle_with_bridges,
-):
-    """Every n=1 link in the iterate table preserves the canonical-area product.
-
-    ``compute_intersections`` fills the table via ``infer_iterates``, which matches
-    an image by predicted branch keys plus canonical distances (unstable stretched
-    by the per-step factor, stable contracted by it). The prediction preserves the
-    product exactly, so the *matched* crossing must too, up to the tolerance of the
-    match itself (observed worst case here ~2e-4).
-    """
-    workbench, _fp = henon_tangle_with_bridges
-    registry = workbench.intersection_registry
-
-    chain_starts = [
-        iid for iid in registry.all_ids() if registry.iterate_table[iid, 1] is not None
-    ]
-    assert chain_starts, "no n=1 iterate links recorded; the test would be vacuous"
-
-    for start_id in chain_starts:
-        assert_area_preserved_along_chain(registry, start_id, rtol=1e-3)
 
 
 def test_area_preserved_helper_rejects_a_broken_chain(henon_tangle_with_bridges):

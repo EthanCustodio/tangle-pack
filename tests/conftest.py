@@ -3,9 +3,9 @@
 Every fixture here is a THIN, FUNCTION-SCOPED call to a builder of the
 tests-only :mod:`cases` module, where every case's parameters are frozen
 (author decision 7, 2026-10-05): a test gets a fresh build it may mutate, and
-no fixture shares state between tests. The only planned exception is the
-physical-law tier, which builds one read-only case per module behind a
-fingerprint guard.
+no fixture shares state between tests. The one exception is the physical-law
+tier (``tests/invariants/conftest.py``), which builds one read-only case per
+module (``law_case``) behind a fingerprint guard.
 
 Fixtures:
 
@@ -28,7 +28,6 @@ Fixtures:
   ``henon_cases.build_nested``, ``(session, fp3, fp1)``.
 * ``k28_partitioned`` / ``k28_two_blasts_partitioned`` -- ``(session, fp)``,
   the k=2.8 zone blasted once / twice, partitioned.
-* ``law_case`` -- indirect: ``request.param`` is a ``cases.BUILDERS`` name.
 
 Registry ids are not reproducible between builds (even of one case in one
 process): locate crossings by cdist order or structure, never by id.
@@ -54,8 +53,6 @@ from tanglepack.examples import (  # noqa: E402
 )
 
 from cases import (  # noqa: E402
-    BUILDERS,
-    Case,
     build_inversion,
     build_k10,
     build_k28,
@@ -234,12 +231,3 @@ def k28_two_blasts_partitioned() -> tuple[TangleSession, object]:
     case = build_k28(blasts=2)
     assert case.session.trellis(case.fixed_point).stable_partitions
     return case.session, case.fixed_point
-
-
-# --------------------------------------------------------------------------- #
-# The law tier
-# --------------------------------------------------------------------------- #
-@pytest.fixture
-def law_case(request: pytest.FixtureRequest) -> Case:
-    """A fresh build of the case named by ``request.param`` (indirect)."""
-    return BUILDERS[request.param]()

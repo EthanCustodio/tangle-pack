@@ -2,10 +2,10 @@
 
 A stable partition is not just a list of spans — each of its intervals is an
 *element*, an identifiable piece of the stable branch that a region will later be
-glued to. These tests pin the three lookups the region layer needs:
+glued to. These tests pin the lookups the region layer needs (unique ownership
+of every crossing, positional ids and singletons are laws of
+``tests/invariants/test_law_partition.py``):
 
-* every crossing on a branch is owned by exactly one element per side
-  (``StablePartitionResult.element_of_intersection``);
 * every non-partial bridge with an endpoint on the branch resolves to the element
   at that endpoint (``elements_at_bridge`` / :meth:`Trellis.element_for`), with a
   ``None`` for an endpoint that sits on a different branch;
@@ -31,19 +31,6 @@ from tanglepack.topology.Trellis import Trellis
 # --------------------------------------------------------------------------- #
 # fixtures
 # --------------------------------------------------------------------------- #
-@pytest.fixture
-def henon_partitioned(henon_tangle_with_bridges):
-    """``trellis`` for the single k=10 saddle, punched and partitioned."""
-    workbench, fp = henon_tangle_with_bridges
-    trellis = Trellis.from_workbench(workbench, fp)
-    trellis.classify_strong_pips()
-    trellis.compute_pseudoneighbors()
-    trellis.punch_holes()
-    trellis.partition_stable_manifold()
-    assert trellis.stable_partitions
-    return trellis
-
-
 def _wrapping_bridge(trellis):
     """A bridge of ``trellis`` whose two endpoints sit on different stable branches."""
     for bridge in trellis.bridges:
@@ -53,106 +40,6 @@ def _wrapping_bridge(trellis):
         if keys[0] != keys[1]:
             return bridge
     return None
-
-
-# --------------------------------------------------------------------------- #
-# element identity
-# --------------------------------------------------------------------------- #
-def test_element_ids_are_positional_and_carry_their_branch(p3_partitioned):
-    """Each interval knows its own index, branch, and side; ids are unique."""
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
-
-    for result in trellis.stable_partitions:
-        ids = [iv.element_id for iv in result.intervals]
-        assert ids == list(range(len(result.intervals)))
-        assert len(set(ids)) == len(ids)
-        for interval in result.intervals:
-            assert interval.branch_key == result.branch_key
-            assert interval.side == result.side
-            assert result.element(interval.element_id) is interval
-
-
-def _owners_from_interval_fields(intervals, cdist, tol):
-    """Element ids covering a cdist, recomputed here from the raw interval fields.
-
-    Deliberately independent of production code (and of
-    ``element_of_intersection``): a point strictly inside a span is covered, a
-    point on an end only when that end is closed.
-    """
-    owners = []
-    for interval in intervals:
-        if cdist < interval.lo_cdist - tol or cdist > interval.hi_cdist + tol:
-            continue
-        if abs(cdist - interval.lo_cdist) <= tol:
-            covered = interval.closed_lo
-        elif abs(cdist - interval.hi_cdist) <= tol:
-            covered = interval.closed_hi
-        else:
-            covered = True
-        if covered:
-            owners.append(interval.element_id)
-    return owners
-
-
-def _check_ownership(trellis):
-    """Every crossing on every partitioned branch has exactly one owning element."""
-    tol = trellis.registry.cdist_tol
-    checked = 0
-    for result in trellis.stable_partitions:
-        branch = trellis.branch(result.branch_key)
-        for intersection_id in branch.intersection_ids:
-            cdist = float(trellis.intersection(intersection_id).stable_cdist)
-            owners = _owners_from_interval_fields(result.intervals, cdist, tol)
-            assert owners == [result.element_of_intersection[intersection_id]], (
-                f"crossing {intersection_id} at {cdist} on {result.branch_key[1:]} "
-                f"({result.side}) is covered by {owners}, reported as "
-                f"{result.element_of_intersection.get(intersection_id)}"
-            )
-            checked += 1
-        # No stray keys: the table names crossings of this branch and nothing else.
-        assert set(result.element_of_intersection) == set(branch.intersection_ids)
-    assert checked, "the fixture should have crossings to own"
-
-
-def test_element_of_intersection_covers_every_crossing_on_the_branch(p3_partitioned):
-    """Every crossing lies in exactly one element's span, and that is its owner."""
-    session, fp3, _fp1 = p3_partitioned
-    _check_ownership(session.trellis(fp3))
-
-
-def test_simple_tangle_elements_own_every_crossing_once(henon_partitioned):
-    """k=10: the same ownership invariant on a single-saddle branch."""
-    _check_ownership(henon_partitioned)
-
-
-def test_singleton_elements_own_exactly_their_own_point(p3_partitioned):
-    """A pinched singleton [x, x] owns its crossing and nothing else.
-
-    Note:
-        The plan asked for this on the k=10 tangle, but that tangle's partition
-        has no pinched point at any growth the suite can afford (its holes never
-        flank one boundary from both sides); the period-3 fixture pinches the
-        anchor and branch-end crossings of every branch, so it is pinned there.
-    """
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
-
-    singletons = 0
-    for result in trellis.stable_partitions:
-        for interval in result.intervals:
-            if interval.lo_id is None or interval.lo_id != interval.hi_id:
-                continue
-            singletons += 1
-            assert interval.closed_lo and interval.closed_hi
-            assert interval.lo_cdist == interval.hi_cdist
-            owned = [
-                iid
-                for iid, element_id in result.element_of_intersection.items()
-                if element_id == interval.element_id
-            ]
-            assert owned == [interval.lo_id]
-    assert singletons, "the period-3 partition should pinch singletons"
 
 
 # --------------------------------------------------------------------------- #
