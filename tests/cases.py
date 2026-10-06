@@ -2,7 +2,8 @@
 
 Each builder returns a :class:`Case`: the session, its fixed points (outermost
 first), the chosen strong pips, the resonance zones it made and the
-:class:`CaseExpect` facts the law tier can assume about the case. The builder
+:class:`CaseExpect` construction parameters (periods, inversion, tangles,
+blasts) the law tier checks the build against. The builder
 parameters are FROZEN in this file. They are never read from the defaults of
 :mod:`tanglepack.examples.henon_cases` (those serve the figure scripts and may
 move), so a change of a figure recipe can never silently change a test case.
@@ -138,15 +139,12 @@ class CaseExpect:
         inversion: Whether any fixed point has inversion (``k_value == 2 * period``).
         n_tangles: The number of fixed points.
         blasts: Single-iteration blasts applied (outer blasts for nested).
-        has_image_bridges: Whether the minimal trellis is expected to carry
-            image bridges (None when not stated by the author).
     """
 
     periods: tuple[int, ...]
     inversion: bool = False
     n_tangles: int = 1
     blasts: int = 0
-    has_image_bridges: Optional[bool] = None
 
 
 @dataclass
@@ -239,7 +237,7 @@ def build_k10(
         session=session,
         fixed_points=[],
         pips=[None],
-        expect=CaseExpect(periods=(1,), has_image_bridges=True),
+        expect=CaseExpect(periods=(1,)),
         stage=through,
     )
     if not _reached(through, "fixed_point"):
@@ -388,7 +386,7 @@ def build_period3(
         session=build.session,
         fixed_points=list(build.fixed_points),
         pips=list(build.pips),
-        expect=CaseExpect(periods=(3,), blasts=blasts, has_image_bridges=False),
+        expect=CaseExpect(periods=(3,), blasts=blasts),
         zones=list(build.session.resonance_zones.values()),
     )
 
@@ -522,7 +520,6 @@ def build_nested(
             periods=(1, 3),
             n_tangles=2,
             blasts=outer_blasts,
-            has_image_bridges=True if outer_blasts == 2 and not inner_blasts else None,
         ),
         zones=list(build.session.resonance_zones.values()),
     )

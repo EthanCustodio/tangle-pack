@@ -1,8 +1,8 @@
 """Tests for the symbolic dynamics built from bridge classes and dual-graph walks.
 
 The synthetic tests use a fake naming and hand-built classes over hand-made
-``ElementRef`` s. The author's fixture words (k=10, k=2.8) are pinned once,
-letter-free, in ``tests/golden/``.
+``ElementRef`` s; a word spelled here is the rule's output on that hand-made
+input. No real build's word, matrix or letter is pinned (author, 2026-10-05).
 """
 
 from __future__ import annotations
@@ -328,7 +328,7 @@ def test_inert_class_with_word_warns_and_stays_out(layout, caplog):
     assert_logged(caplog, logging.WARNING, SD.__name__)
 
 
-def test_is_reliable_and_describe(layout):
+def test_describe_lists_every_class(layout):
     dyn = _k10_dynamics(layout)
     text = dyn.describe()
     assert text and repr(dyn)

@@ -1049,7 +1049,7 @@ bug keeps a guard as a law that runs on the case where it broke (column 3).
   `a.is_reliable == b.is_reliable` is the session-vs-direct equivalence of
   `test_session_symbolic_dynamics._same_dynamics`, Phase 6).
 
-### p3 element names pinned (AUTHOR ITEM E8)
+### p3 element names pinned (AUTHOR ITEM E8, CLOSED: golden tier removed by the author)
 
 Full names, recorded from today's build (CLAUDE.md states the p3 words in
 letters only: `a -> b -> c -> a u^-1 w^-1`):
@@ -1066,7 +1066,12 @@ Words: X₀ → [X₁], X₁ → [X₂], X₂ → [X₀, (L_(1.0;3), L_(1.0;1)),
 (R_(1.0;4), R_(1.0;2))]. The same pairs and words hold after 4 blasts and
 for the inner tangle of the nested build (letter `A:` prefixed).
 
-### Flagged for author sign-off (E8)
+### Flagged for author sign-off (E8) -- CLOSED: removed by the author
+
+**CLOSED (2026-10-05, author follow-up):** the author removed the golden tier
+entirely, so none of the items below is pinned any more; see "Author
+follow-up (2026-10-05): golden tier removed" at the end of this ledger.
+
 
 1. **p3 names** above (`test_golden_period3.py`, constants `X0..X2`, `U`, `W`).
 2. **k10 folded loop**: `test_golden_k10.py::test_k10_inert_class_rests_on_its_folded_loop`
@@ -1744,6 +1749,9 @@ kept.
    right", CLAUDE.md) stays in the plotting tier as a cyclic-order property;
    it is a fixture fact not in `tests/golden/`. Author item: move it to
    `golden/test_golden_period3.py` (needs sign-off) or leave it here.
+   CLOSED (author follow-up, golden removed): the ring-order / clockwise /
+   right-interior pins were dropped; the test now checks the circle against
+   whatever order and direction `cartoon_zones()` reports.
 5. **Non-plot half of `test_plot_stable_partition_smoke` kept** as
    `test_stable_partition::test_trellis_partition_of_one_branch_is_stored`
    (the one-branch `Trellis.partition_stable_manifold` store had no other
@@ -2265,3 +2273,138 @@ verbatim so the accounting is mechanical.
    test per layer x case; a known issue has its own xfail".
 2. The `_alternate_pip` fix in `facade/` is outside the law tier; it was needed
    to make the coverage guard deterministic.
+
+## Author follow-up (2026-10-05): golden tier removed
+
+The author removed the golden tier entirely ("incredibly arbitrary and
+irrelevant"). The CLAUDE.md fixture facts stay in CLAUDE.md as documentation;
+no test pins a case-specific word, element name, transition matrix, letter or
+count of a real build. `is_reliable`, `verified` and `source` are asserted
+nowhere (the only remaining `.source` assertion is `ElementLanding.source`, the
+landing's homotopy element, which is a different attribute).
+
+### What changed
+
+- **`tests/golden/` deleted** (3 files, 21 cases).
+- **`pyproject.toml`**: the `golden` marker is no longer registered; `perf` is
+  the only marker (`--strict-markers` would now reject a stray `golden`).
+- **`tests/conftest.py`** docstring: the `golden/` tier line and the `golden`
+  marker removed; a paragraph states the no-case-fact rule (a specific word or
+  name appears only in a synthetic test whose input was built by hand to
+  produce it).
+- **`tests/helpers/names.py`**: the golden-only helpers `brackets`,
+  `refined_children` and `class_by_pair` deleted, and the golden-only
+  `short=` parameter dropped from every speller (always the full
+  `ElementName.text`). What is left serves `facade/test_session_equivalence.py`
+  (session product = direct build), which compares two builds of one case and
+  pins nothing. Module docstring rewritten to say so.
+- **`tests/cases.py`**: `CaseExpect.has_image_bridges` deleted (a per-case fact
+  that no test read once golden was gone; k10 True, p3 False, nested True).
+  The remaining `CaseExpect` fields are construction parameters (periods,
+  inversion, number of tangles, blasts).
+- **Scattered pins turned into rules** (found by grepping for letters, names,
+  matrices and counts on real builds):
+  - `facade/test_session_bridge_classes.py::test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip`
+    pinned the k=10 (10-step) table: 2 classes, letter `"a"`, 4 members,
+    1 loop. Now: there is an active class; every class's `zone_key` is the
+    zone's or None; a class is lettered iff active; every active class lies
+    in the zone; a class holding a loop is inert; some class is recorded
+    exterior (`zone_key is None`).
+  - `plotting/test_plot_topology.py::test_p3_circle_follows_the_zone_boundary`
+    pinned the p3 ring as clockwise with every interior on the right and the
+    orbit order 0 -> 1 -> 2. Now: the ring holds each stable branch of the
+    cycle once, interiors are `left`/`right`, and the circle keeps whatever
+    cyclic order and direction `cartoon_zones()` reports, interiors inside.
+  - `unit/topology/test_element_naming.py::test_p3_names_carry_orbit_codes_without_a_letter`
+    pinned the codes `{"0.0", "1.0", "2.0"}`. Now: the codes are exactly the
+    `branch_code` of each key in `fp.branch_cycle("stable")`, `k_value` of
+    them.
+  - `unit/topology/test_bridge_class.py::test_unresolved_loop_stands_alone_and_warns`
+    (k10 build) pinned the k=10 class count `len(table) == 3` (arrived with
+    the Phase 10a move, missed by the first grep; found by the verifier).
+    The line is deleted: the rule is already asserted (the loop now stands
+    alone as an inert `BridgeClass(x, x)` with no `folded_from`, a WARNING is
+    logged, and the class it used to fold into is now active). Its k10
+    precondition (an inert class holding a folded loop) and that of
+    `test_loop_folds_into_its_preimage_class` are now looked up among all
+    inert classes (not `inert[0]`) and the tests skip when the build has none.
+  - `unit/topology/test_symbolic_dynamics.py::test_is_reliable_and_describe`
+    renamed `test_describe_lists_every_class` (it never asserted
+    `is_reliable`; the name was a leftover).
+- **Docstrings pointing at `tests/golden/`** rewritten in
+  `facade/test_session_symbolic_dynamics.py`, `unit/topology/test_dual_walk.py`,
+  `unit/topology/test_bridge_class.py`, `unit/topology/test_element_naming.py`,
+  `unit/topology/test_symbolic_dynamics.py`.
+- **CLAUDE.md** "Run tests": `-m golden` line and `golden` in the tier list
+  removed; the tier paragraph drops `golden/`, says the law tier is one test
+  per layer x case (closing deviation 1 of the previous follow-up), and states
+  the no-case-fact rule. The fixture facts elsewhere in CLAUDE.md are
+  untouched.
+- **E8 CLOSED** (removed by the author): the p3 names, the k10 folded loop,
+  the k28 one-blast "0 image bridges" and the "exterior class" pins no longer
+  exist. The Phase 8 deviation 4 item (p3 ring-order fact) is closed the same
+  way.
+
+Kept on purpose: synthetic tests that spell words, names or matrices
+(`test_symbolic_dynamics.py`'s hand-made layout, `test_element_naming.py`'s
+hand-built families, `test_bridge_class.py`'s hand-built references): those
+outputs are the rule applied to an input the test constructed, not a fact of
+a real build. `test_nested_names_carry_fixed_point_letters` keeps
+`{outer.label, inner.label} == {"A", "B"}` (the workbench stamps `A, B, ...`
+in construction order, a rule).
+
+### Deletion / change ledger
+
+| Deleted id | Where its rule is checked now | Coverage lost |
+|---|---|---|
+| `golden/test_golden_k10.py::test_k10_iterated_rows` | law `iterated_unique_owner`, `names_agree_with_structure`; naming rules in `unit/topology/test_element_naming.py` | none |
+| `golden/test_golden_k10.py::test_k10_classes` | laws `anchor_bridge_class_leads_its_tangle`, `class_orientation_anchor_outward`, `only_active_classes_lettered` | none |
+| `golden/test_golden_k10.py::test_k10_inert_class_rests_on_its_folded_loop` | `unit/topology/test_bridge_class.py` loop folding / inertness on hand-built tables | none |
+| `golden/test_golden_k10.py::test_k10_itinerary_and_word` | symbolic laws `itineraries_even`, `itinerary_pairs_same_side`, `itinerary_pairs_are_classes` | none |
+| `golden/test_golden_k10.py::test_k10_refinement` | laws `refined_children_inherit_word`, `member_matching_consistent` + refinement on the synthetic layout in `test_symbolic_dynamics.py` | none |
+| `golden/test_golden_k10.py::test_k10_transition_matrix` | law `matrix_is_token_counts` | none |
+| `golden/test_golden_k10.py::test_k10_evidence` | (asserted `verified`/`is_reliable`; dropped by policy) | none |
+| `golden/test_golden_k28.py::test_k28_one_blast_classes_and_word` | class + symbolic laws on `k28_one_blast` | none |
+| `golden/test_golden_k28.py::test_k28_one_blast_exterior_class_is_inert_through_a_virtual_loop` | inertness rules in `unit/topology/test_bridge_class.py` | none |
+| `golden/test_golden_k28.py::test_k28_one_blast_has_no_image_bridges` | none (a case count) | none |
+| `golden/test_golden_k28.py::test_k28_two_blasts_classes_in_table_order` | laws `class_table_order`, `anchor_bridge_class_leads_its_tangle` | none |
+| `golden/test_golden_k28.py::test_k28_two_blasts_words` | symbolic laws on `k28_two_blasts` | none |
+| `golden/test_golden_k28.py::test_k28_two_blasts_refinement` | laws `refined_children_inherit_word`, `member_matching_consistent` | none |
+| `golden/test_golden_k28.py::test_k28_two_blasts_transition_matrix` | law `matrix_is_token_counts` | none |
+| `golden/test_golden_k28.py::test_k28_two_blasts_cut` | laws `iterated_child_inside_parent`, `iterated_keeps_homotopy_boundaries`, `iterated_unique_owner`, `iterated_cut_provenance` + `unit/topology/test_iterated_partition.py` | none |
+| `golden/test_golden_k28.py::test_k28_two_blasts_evidence` | (asserted `verified`/`is_reliable`; dropped by policy) | none |
+| `golden/test_golden_period3.py::test_p3_words_form_the_orbit_shift_chain` | symbolic laws on `p3` | none |
+| `golden/test_golden_period3.py::test_p3_is_closed` | none (a case count) | none |
+| `golden/test_golden_period3.py::test_p3_words_survive_four_blasts` | `regression/test_nested_own_blast.py` (inner words = p3 words, relational) | none |
+| `golden/test_golden_period3.py::test_p3_resolves_and_is_reliable` | (asserted `is_reliable`; dropped by policy); resolution checked by symbolic laws | none |
+| `golden/test_golden_period3.py::test_nested_resolves_everything_after_two_outer_blasts` | symbolic laws on `nested` | none |
+
+Changed (not deleted): the five tests listed under "Scattered pins turned
+into rules" above; `helpers/names.py` (3 helpers and the `short=` parameter
+removed); `cases.CaseExpect.has_image_bridges` removed.
+
+### Verification
+
+- `env/bin/python -m pytest -q -rxX`: 730 passed, 1 deselected, 11 xfailed in
+  86.8 s (751 -> 730: the 21 golden cases). The 11 xfails are exactly
+  `KNOWN_ISSUES` (8 law tier + 3 `open_p3_deep_runs`), no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_followup.json`). Against the
+  previous follow-up's `cov_followup.json` (HEAD): total 90.24 % -> 90.24 %,
+  and no line of any module changed state (zero newly missed, zero newly
+  hit): everything the golden tier exercised is exercised elsewhere.
+- Re-verified after the count-pin fix: 730 passed, 1 deselected, 11 xfailed
+  (exactly `KNOWN_ISSUES`, no XPASS) in 86.1 s; coverage guard OK. A second
+  grep for `len(...) == <int>`, nested-list matrices, letters and element
+  names finds only synthetic inputs, construction parameters (nested has two
+  fixed points) and rule counts.
+- `grep -rn golden tests/` finds only the conftest sentence recording the
+  removal.
+
+### Deviations
+
+1. CLAUDE.md's tier paragraph also had the stale "one test per law x case";
+   since the paragraph was being edited for golden anyway, it now reads "one
+   test per layer x case; a known issue has its own xfail" (deviation 1 of
+   the previous follow-up).
+2. The colour-family-per-tangle test (`TANGLE_COLOR_FAMILIES` /
+   `HETEROCLINIC_COLORS` as a rule) is not part of this change.

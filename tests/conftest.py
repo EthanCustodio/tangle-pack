@@ -46,17 +46,22 @@ Layout (tiers; every test basename is unique, no ``__init__.py``):
   2026-10-05 policy allows).
 * ``facade/`` -- ``TangleSession``: the one cache-contract table, session =
   direct build, fan-outs, delegates and reports.
-* ``golden/`` -- the CLAUDE.md fixture facts, each pinned ONCE
-  (``@pytest.mark.golden``, runs by default; author-gated, no re-record).
 * ``regression/`` -- fixed bugs that need their own build, and the open deep
   period-3 runs.
 * ``plotting/`` -- smoke plus topological properties of the drawings.
-* ``helpers/`` (checks, fakes, letter-free name spellers, log assertion),
+* ``helpers/`` (checks, fakes, letter-free name spellers for comparing two
+  builds, log assertion),
   ``cases.py`` (frozen builders, ``KNOWN_ISSUES``, ``NOT_APPLICABLE``) and
   ``_tools/coverage_guard.py`` are not collected.
 
-Markers: ``golden`` (runs by default; ``pytest -m golden`` selects the golden
-tier) and ``perf`` (opt-in, ``pytest -m perf``; ``addopts`` deselects it).
+Marker: ``perf`` (opt-in, ``pytest -m perf``; ``addopts`` deselects it).
+
+No test pins a case-specific fact: no word, element name, transition matrix,
+letter or count of a particular build (author, 2026-10-05: the golden tier was
+removed as "arbitrary and irrelevant"; the CLAUDE.md fixture facts are
+documentation). A real build is checked against RULES; a specific word or name
+appears only in a synthetic test whose input was built by hand to produce it.
+``is_reliable``, ``verified`` and ``source`` are never asserted.
 
 Dev Notes:
     Provisional rules, tested only in their firm part (author decision 3,

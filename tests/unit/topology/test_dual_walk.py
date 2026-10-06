@@ -6,7 +6,8 @@ pin the walk: trivial cases, entry-then-exit recording, walls never crossed,
 merged-face self-adjacency, ties, dedupe of parallel nodes, unreachability,
 missing nodes, several start faces and the ``max_walks`` cap. Hand-made
 partition families and a duck-typed trellis pin the landing and the trellis
-itinerary. The real k=10 walk is pinned in ``tests/golden/test_golden_k10.py``.
+itinerary. Real walks are checked by the law tier (even itineraries, same-side
+pairs, contained landings), never pinned.
 """
 
 from __future__ import annotations

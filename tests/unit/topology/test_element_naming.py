@@ -5,7 +5,8 @@ of the homotopy and iterated partition elements, and their mathtext
 
 The synthetic tests build partition families by hand (over bare fixed points);
 the fixture tests read the names on the period-3 orbit alone (codes, no
-letter) and over two fixed points (codes and letters). The k=10 rows are pinned in ``tests/golden/test_golden_k10.py``.
+letter) and over two fixed points (codes and letters). No real build's names
+are pinned.
 """
 
 from __future__ import annotations
@@ -364,10 +365,13 @@ def test_p3_names_carry_branch_codes_and_letters(p3_partitioned):
 
 def test_p3_names_carry_orbit_codes_without_a_letter():
     """The period-3 orbit alone: every name has its orbit code, none a letter."""
-    naming = build_period3().session.symbolic_dynamics().naming
+    case = build_period3()
+    (fp,) = case.fixed_points
+    naming = case.session.symbolic_dynamics().naming
     assert not naming.letters
     codes = {name.branch_code for name in naming.names}
-    assert codes == {"0.0", "1.0", "2.0"}
+    assert codes == {naming.branch_code(key) for key in fp.branch_cycle("stable")}
+    assert len(codes) == fp.k_value
 
 
 def test_nested_names_carry_fixed_point_letters():

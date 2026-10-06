@@ -2,7 +2,7 @@
 TangleSession.symbolic_dynamics / describe_symbolic_dynamics.
 
 Mirrors ``test_session_dual_graph.py``. Nothing here pins a registry id, a
-bridge count or a fixture word: those are pinned once in ``tests/golden/``.
+bridge count or a fixture word (no test pins a case-specific fact).
 The plot delegates are ``tests/plotting/``; the cache contract and session =
 direct build are ``tests/facade/``.
 """

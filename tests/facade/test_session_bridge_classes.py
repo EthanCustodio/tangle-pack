@@ -69,13 +69,16 @@ def test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip():
     zone = _repartition_at(session, fp, pip)
     table = session.bridge_classes()
 
-    assert len(table) == 2
-    active, inert = table.active[0], table.inert[0]
-    assert active.letter == "a" and inert.letter is None
-    assert active.zone_key == zone.key
-    assert inert.zone_key is None
-    assert active.describe()
-    assert len(active.members) == 4 and len(inert.loops) == 1
+    assert table.active, "trimming at f(q0) keeps the zone's own lobes"
+    for entry in table:
+        assert entry.zone_key in (zone.key, None)
+        assert (entry.letter is not None) == entry.active
+        if entry.active:
+            assert entry.zone_key == zone.key, "an active class lies in the zone"
+        if entry.loops:
+            assert entry.inert, "a class holding a loop is inert"
+        assert entry.describe()
+    assert any(entry.zone_key is None for entry in table), "the exterior lobes are recorded"
 
 
 def test_a_class_straddling_zones_warns_and_gets_no_zone(k10_partitioned, caplog):
