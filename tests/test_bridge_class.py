@@ -22,12 +22,16 @@ make that class inert. The class laws on every law case (every bridge in one
 class, anchor-outward orientation and member directions, the anchor bridge's
 class, table order and tangle grouping, every orbit branch named, letters on
 active classes only) live in ``tests/invariants/test_law_classes.py``; the
-k=10 and k=2.8 class facts are pinned once in ``tests/golden/``.
+k=10 and k=2.8 class facts are pinned once in ``tests/golden/``. No law case
+has a class connecting two tangles or a cross-branch tie, so the cross-branch
+orientation and the connecting-classes-last grouping are pinned here on
+hand-built references.
 """
 
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 
 import matplotlib
 
@@ -35,10 +39,11 @@ matplotlib.use("Agg")  # headless: the session fixtures touch the plotting stack
 import pytest
 
 from helpers.logs import assert_logged
-from helpers.fakes import bare_fixed_point
+from helpers.fakes import bare_fixed_point, make_result
 from tanglepack.topology.BridgeClass import (
     BridgeClass,
     bridge_classes,
+    oriented_class,
 )
 from tanglepack.topology.StablePartition import (
     row_of_end,
@@ -377,3 +382,77 @@ def test_an_unresolved_loop_class_is_inert_outright():
     assert entry.bridge_class.is_loop and entry.inert
 
 
+
+
+# --------------------------------------------------------------------------- #
+# Cross-branch orientation and tangle grouping (hand-built)
+# --------------------------------------------------------------------------- #
+def test_a_cross_branch_class_runs_from_the_anchor_nearer_element():
+    """Across two orbit branches the SMALLER element id is the source, whichever
+    branch it is on (anchor outward, 2026-09-30); a tie falls back to the
+    run-stable branch order."""
+    fp = bare_fixed_point(3)
+    near = ElementRef((fp, "stable", 2, 0), "right", 0)  # later branch, element 0
+    far = ElementRef((fp, "stable", 0, 0), "right", 1)  # earlier branch, element 1
+    assert oriented_class(near, far, [fp]) == (BridgeClass(near, far), +1)
+    assert oriented_class(far, near, [fp]) == (BridgeClass(near, far), -1)
+
+    tie = ElementRef((fp, "stable", 0, 0), "right", 0)
+    assert oriented_class(near, tie, [fp]) == (BridgeClass(tie, near), -1)
+
+
+class _ClassTrellis:
+    """The slice of a trellis ``bridge_classes`` reads: crossings, no iterates.
+
+    Every crossing is ``(unstable cdist, unstable key, stable key, sign)``; no
+    crossing has a registered iterate, so every class is unresolved (active)
+    and no loop occurs.
+    """
+
+    def __init__(self, crossings: dict, fixed_points: list) -> None:
+        self._crossings = crossings
+        self.fixed_points = list(fixed_points)
+
+    def intersection(self, iid: int) -> SimpleNamespace:
+        """One crossing as the registry would hand it out."""
+        cdist, unstable, stable, sign = self._crossings[iid]
+        return SimpleNamespace(
+            id=iid,
+            unstable_cdist=cdist,
+            stable_cdist=float(iid),
+            manifold_a_key=unstable,
+            manifold_b_key=stable,
+            crossing_sign=sign,
+        )
+
+    def iterate(self, iid: int, n: int) -> None:
+        """No iterate is registered."""
+        return None
+
+
+def test_classes_group_by_tangle_with_connecting_classes_last():
+    """Tangle 0's classes, then tangle 1's, then the classes connecting two tangles
+    (``tangle is None``) -- even when a connecting class has the smallest cdist."""
+    outer, inner = bare_fixed_point(1, label="A"), bare_fixed_point(1, label="B")
+    u_a, s_a = (outer, "unstable", 0, 0), (outer, "stable", 0, 0)
+    u_b, s_b = (inner, "unstable", 0, 0), (inner, "stable", 0, 0)
+    # sign +1 at the first end and -1 at the second puts both ends on the left row.
+    crossings = {
+        1: (5.0, u_a, s_a, +1), 2: (6.0, u_a, s_a, -1),  # tangle 0
+        3: (1.0, u_b, s_b, +1), 4: (2.0, u_b, s_b, -1),  # tangle 1
+        5: (0.5, u_a, s_a, +1), 6: (0.6, u_a, s_b, -1),  # connecting, smallest cdist
+    }
+    trellis = _ClassTrellis(crossings, [outer, inner])
+    interval = (None, None, 0.0, 1.0, True, True)
+    partitions = [
+        make_result(s_a, "left", [interval] * 3, {1: 0, 2: 1, 5: 2}),
+        make_result(s_b, "left", [interval] * 3, {3: 0, 4: 1, 6: 2}),
+    ]
+    table = bridge_classes(trellis, partitions, bridge_ids=[(1, 2), (3, 4), (5, 6)])
+
+    assert [entry.tangle for entry in table] == [0, 1, None]
+    assert [entry.bridge_ids for entry in table] == [[(1, 2)], [(3, 4)], [(5, 6)]]
+    connecting = table.entries[-1]
+    # Element 2 on both fixed points: the tie goes to the outer one (run-stable order).
+    assert connecting.bridge_class.source.fixed_point is outer
+    assert connecting.members[0].direction == +1

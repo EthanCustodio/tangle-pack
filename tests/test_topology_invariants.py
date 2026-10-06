@@ -18,7 +18,9 @@ I2. A bridge whose two defining crossings lie on the SAME stable branch
 
 The synthetic tests pin the checks themselves (they must FIRE on hand-built
 violations); both invariants run on every law case in
-``tests/invariants/test_law_partition.py`` (I1) and ``test_law_classes.py`` (I2).
+``tests/invariants/test_law_partition.py`` (I1) and ``test_law_classes.py`` (I2),
+and ``tests/unit/topology/test_production_checks.py`` pins that ``punch_holes``
+runs both checks itself.
 """
 
 from __future__ import annotations

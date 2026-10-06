@@ -4,23 +4,19 @@ cross-branch fixes they need. The circular-zone dual-graph cartoon is
 ``tests/plotting/``.
 
 The period-3 and nested cases come from the tests-only :mod:`cases` builders
-(parameters frozen there), built fresh per test.
+(parameters frozen there), built fresh per test. The cross-branch chord rules
+of the iterated cut are ``tests/unit/topology/test_iterated_cut.py``.
 """
 
 from __future__ import annotations
 
-import importlib
 import logging
-from types import SimpleNamespace
 
 import pytest
 
 from helpers.logs import assert_logged
 from cases import Case, build_nested, build_period3
 from tanglepack.topology.ElementNaming import ElementNaming
-from tanglepack.topology.TopologyResults import PartitionInterval
-
-family_module = importlib.import_module("tanglepack.topology.PartitionFamily")
 
 
 # --------------------------------------------------------------------------- #
@@ -36,59 +32,6 @@ def p3_built() -> Case:
 def nested_built() -> Case:
     """The nested period-1 + period-3 tangle, outer zone blasted twice."""
     return build_nested()
-
-
-# --------------------------------------------------------------------------- #
-# Chord pairing across stable branches (synthetic)
-# --------------------------------------------------------------------------- #
-class _FakeTrellis:
-    """Just enough trellis for ``_empty_stretches``: a crossing's stable branch."""
-
-    def __init__(self, branches: dict[int, tuple]):
-        self._branches = branches
-
-    def intersection(self, iid: int):
-        return SimpleNamespace(manifold_b_key=self._branches[iid])
-
-
-def _hole_homotopy(lo_id: int, hi_id: int, branch) -> SimpleNamespace:
-    """A homotopy family with one open-open interval, the hole ``(lo, hi)``."""
-    hole = PartitionInterval(
-        lo_id=lo_id, hi_id=hi_id, lo_cdist=1.0, hi_cdist=2.0,
-        closed_lo=False, closed_hi=False,
-    )
-    return SimpleNamespace(results={(branch, "right"): SimpleNamespace(intervals=[hole])})
-
-
-def test_chords_pair_only_the_base_branchs_crossings(monkeypatch, caplog):
-    own, foreign = ("fp", "stable", 1, 0), ("fp", "stable", 2, 0)
-    branches = {1: own, 2: own, 10: own, 11: own, 12: own, 13: own, 98: foreign, 99: foreign}
-    minimal = SimpleNamespace(trellis=_FakeTrellis(branches), hole_bridge_ids=[(1, 2)])
-    # The image of the hole bridge crosses the foreign branch twice between
-    # its two folds on its own branch.
-    chain = [(10, 11), (11, 99), (99, 98), (98, 12), (12, 13)]
-    monkeypatch.setattr(family_module, "_image_chain", lambda trellis, bid: chain)
-    with caplog.at_level(logging.INFO, logger="tanglepack.topology.PartitionFamily"):
-        empty = family_module.IteratedHomotopyPartition._empty_stretches(
-            minimal, _hole_homotopy(1, 2, own)
-        )
-    assert (13, "base") in empty[10]
-    assert (12, "chord") in empty[11]
-    assert 99 not in empty and 98 not in empty
-    assert_logged(caplog, logging.INFO, "tanglepack.topology.PartitionFamily")
-
-
-def test_a_lobe_ending_on_another_branch_marks_nothing(monkeypatch, caplog):
-    own, foreign = ("fp", "stable", 1, 0), ("fp", "stable", 2, 0)
-    branches = {1: own, 2: own, 10: own, 11: own, 12: foreign}
-    minimal = SimpleNamespace(trellis=_FakeTrellis(branches), hole_bridge_ids=[(1, 2)])
-    monkeypatch.setattr(family_module, "_image_chain", lambda trellis, bid: [(10, 11), (11, 12)])
-    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.PartitionFamily"):
-        empty = family_module.IteratedHomotopyPartition._empty_stretches(
-            minimal, _hole_homotopy(1, 2, own)
-        )
-    assert set(empty) == {1, 2}  # only the hole itself
-    assert_logged(caplog, logging.WARNING, "tanglepack.topology.PartitionFamily")
 
 
 # --------------------------------------------------------------------------- #

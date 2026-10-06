@@ -7,7 +7,8 @@ non-regions, open faces refuse geometric questions, and the lookups agree with
 the regions.
 
 **The regions** (6.5, 6.6): a region whose mapped corner cycle is carried by a
-proper sub-face of its true image is rejected by area preservation, a region's
+proper sub-face of its true image is rejected by area preservation (on a
+deterministic hand-built lobe-in-a-lobe and on the k=10 fixture), a region's
 preimage is checked against a hand-derived backward image, and a blast (arcs
 on iterated bridges) still builds.
 
@@ -23,6 +24,7 @@ import numpy as np
 import pytest
 
 from helpers.fakes import bare_fixed_point
+from helpers.laws import REGION_AREA_RTOL
 from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
@@ -343,6 +345,107 @@ def test_k10_rejects_an_image_that_is_only_a_sub_face(k10_session):
             if other is not carrier
         ), "the sub-face plus one neighbour should recover the source area"
     assert carriers >= 1, "the fixture must exercise the sub-face rejection"
+
+
+def _nested_lobe_trellis() -> tuple[Trellis, dict[str, int]]:
+    """A stable line crossed four times by one unstable branch: a lobe in a lobe.
+
+    The stable branch runs up the line ``x = 0`` through ``p0 .. p3`` (stable
+    cdist = ``y``). The unstable branch visits them in the order ``p0, p3, p2,
+    p1``: a big lobe ``p0 -> p3`` to the right, a lobe ``p3 -> p2`` to the left,
+    and a small lobe ``p2 -> p1`` to the right INSIDE the big one, which splits
+    it into the face ``(p0, p1, p2, p3)`` and the little face ``(p1, p2)``.
+    Signs alternate along the stable line. The iterate table sends the left
+    lobe's corners ``(p2, p3)`` to ``(p0, p3)``, a cycle carried only by the
+    big split face; the left lobe's area equals the split face plus the
+    little one, so the carrier is a proper sub-face of the image.
+
+    Returns:
+        ``(trellis, ids)`` with ``ids`` naming the crossings ``"p0" .. "p3"``.
+    """
+    fp = bare_fixed_point(beta=0.5, coordinates=[(0.0, 0.0)])
+    u_key = (fp, "unstable", 0, 0)
+    s_key = (fp, "stable", 0, 0)
+    registry = IntersectionRegistry()
+    spec = {  # name: (unstable cdist, y = stable cdist, crossing sign)
+        "p0": (0.0, 0.0, +1),
+        "p1": (30.0, 1.0, -1),
+        "p2": (20.0, 2.0, +1),
+        "p3": (10.0, 3.0, -1),
+    }
+    ids = {
+        name: registry.add(
+            Intersection.synthetic(
+                coords=(0.0, y),
+                unstable_cdist=u,
+                stable_cdist=y,
+                manifold_a_key=u_key,
+                manifold_b_key=s_key,
+                crossing_sign=sign,
+            )
+        )
+        for name, (u, y, sign) in spec.items()
+    }
+
+    def lobe(points: list[tuple[float, float]], first: str, second: str) -> Bridge:
+        """A bridge through ``points`` between two named crossings."""
+        u0 = spec[first][0] - 0.5
+        nodes = [Point(x, y, u0 + i) for i, (x, y) in enumerate(points)]
+        for node, following in zip(nodes, nodes[1:]):
+            node.forward, following.backward = following, node
+        return Bridge(
+            root=nodes[0],
+            stability="unstable",
+            stretch_param=1.0,
+            fixed_point=fp,
+            tail=nodes[-1],
+            branch_index=0,
+            manifold_key=u_key,
+            first_intersection=ids[first],
+            second_intersection=ids[second],
+        )
+
+    bridges = [
+        lobe([(0.0, -0.1), (4.0, 1.5), (0.0, 3.1)], "p0", "p3"),
+        lobe([(0.0, 3.1), (-11.3, 2.5), (0.0, 1.9)], "p3", "p2"),
+        lobe([(0.0, 2.1), (1.0, 1.5), (0.0, 0.9)], "p2", "p1"),
+    ]
+    branches = {
+        u_key: TrellisBranch(
+            key=u_key, fixed_point=fp, stability="unstable", orbit_index=0,
+            branch_index=0, intersection_ids=[ids[n] for n in ("p0", "p3", "p2", "p1")],
+        ),
+        s_key: TrellisBranch(
+            key=s_key, fixed_point=fp, stability="stable", orbit_index=0,
+            branch_index=0, intersection_ids=[ids[n] for n in ("p0", "p1", "p2", "p3")],
+        ),
+    }
+    registry.register_iterate(ids["p2"], 1, ids["p0"])
+    registry.register_iterate(ids["p3"], 1, ids["p3"])
+    trellis = Trellis(fixed_points=[fp], registry=registry, branches=branches, bridges=bridges)
+    return trellis, ids
+
+
+def test_hand_built_sub_face_is_rejected_by_area():
+    """The one face carrying a region's mapped corner cycle is a proper sub-face of
+    the image (an inner lobe splits it), so its area falls short of the source's
+    and ``image_of`` returns None instead of the piece."""
+    trellis, ids = _nested_lobe_trellis()
+    arrangement = Arrangement.from_trellis(trellis)
+    source = arrangement.region((ids["p2"], ids["p3"]))
+    carrier = arrangement.region((ids["p0"], ids["p1"], ids["p2"], ids["p3"]))
+    piece = arrangement.region((ids["p1"], ids["p2"]))
+    assert source is not None and carrier is not None and piece is not None
+    assert len(arrangement.regions) == 3
+
+    images = [trellis.iterate(corner, 1) for corner in source.corners]
+    carriers = [face for face in arrangement.regions if set(images) <= set(face.corners)]
+    assert carriers == [carrier]
+    assert abs(source.area) - abs(carrier.area) > REGION_AREA_RTOL * abs(source.area)
+    assert abs(carrier.area) + abs(piece.area) == pytest.approx(
+        abs(source.area), rel=REGION_AREA_RTOL
+    )
+    assert arrangement.image_of(source, 1) is None
 
 
 @pytest.mark.slow

@@ -1750,3 +1750,142 @@ kept.
    test).
 6. `test_session_strong_pips.py` and `test_session_pseudoneighbors.py` are
    deleted outright: every test in them was a plot helper.
+
+---
+
+## §9 Phase 9: production-check wiring, gap tests, open deep-p3 runs, GPU, perf
+
+### What landed
+
+- **`tests/unit/topology/test_production_checks.py`** (decision 12): spies on
+  `StablePartition.check_bridge_rows_consistent` / `check_holes_share_bridge_side`
+  (module-attribute patches; both are imported inside `Trellis.punch_holes`).
+  One `punch_holes` call on p3 runs I2 exactly once per hole-bearing bridge
+  (9 bridges for 12 holes) on that trellis and I1 once on all holes with
+  `orientation_preserving=trellis.orientation_preserving`. Negative test: a
+  propagated hole's side flipped inside `propagate_reference_holes` makes
+  `punch_holes` raise `AssertionError` (type only). `DualGraph` construction
+  runs its self-check (`_check`) exactly once. The Arrangement's
+  consecutive-bridge guard keeps its existing test
+  (`test_arrangement::test_every_bridge_must_be_consecutive_on_its_branch`).
+- **`tests/regression/test_open_p3_deep_runs.py`** (decision 10, P3), runs
+  `p3_15`, `p3_16`, `p3_6_blasts` (fresh builds, ~0.2 s each):
+  `test_deep_p3_holes_share_bridge_side` (I1 holds, holes non-empty, the
+  symbolic dynamics runs; passes), `test_deep_p3_every_class_resolves_without_virtual_symbols`
+  (`xfail(strict=True)` through `issue_marks("open_p3_deep_runs", ...)`, the
+  `KNOWN_ISSUES` entries Phase 1 registered), and
+  `test_virtual_symbols_are_transition_sinks` (real data on `p3_15`: a virtual
+  node has out-degree 0, in-degree > 0 and a zero matrix row; skips if the
+  run ever stops producing one).
+- **Gap tests:**
+  - `unit/numerics/test_same_stability_discard.py` (u×u and s×s): two
+    near-tangent same-stability polylines straddling each other plus a
+    transversal curve of the other stability; `Tangle.resolve_crossings`
+    returns only the two unstable × stable crossings and logs DEBUG on
+    `tanglepack.numerics.Tangle` (level and logger only).
+  - `test_bridge_class::test_a_cross_branch_class_runs_from_the_anchor_nearer_element`
+    (hand-built `ElementRef`s on two orbit branches: smaller element id is the
+    source whichever branch, a tie falls back to the run-stable order) and
+    `::test_classes_group_by_tangle_with_connecting_classes_last` (a duck
+    trellis with two fixed points: tangle 0, tangle 1, then the connecting
+    class with `tangle is None`, even though it has the smallest cdist). The
+    nested law half already runs (`class_table_order`,
+    `classes_do_not_mix_tangles` on nested); nested has no connecting class,
+    hence the hand-built case.
+  - `unit/topology/test_iterated_cut.py`: the two synthetic 09-30 rules
+    (chords only on the base branch; a chain ending on another branch marks
+    nothing) MOVED from `test_higher_period_cartoon.py`, plus the new
+    `test_a_far_end_on_another_branch_is_no_flank` (nested, public
+    `from_minimal`; one foreign far end injected per image crossing: more
+    WARNINGs than the unpatched run, identical partition signature, every
+    applied cut's partner on its own branch). Covers `PartitionFamily` 746.
+  - `test_arrangement::test_hand_built_sub_face_is_rejected_by_area` (gap 12):
+    a deterministic lobe-in-a-lobe (`_nested_lobe_trellis`): the one face
+    carrying the mapped cycle falls short of the source area by more than
+    `REGION_AREA_RTOL`, the sub-face plus the little face recover it, and
+    `image_of` returns None. The k=10 fixture test stays.
+- **GPU** (`unit/numerics/test_gpu.py`, replaces `numerics/test_gpu.py`):
+  parity runs by default (`importorskip("cupy")`, skips with no CUDA device;
+  here CuPy 14.1.1 with one device, so it RUNS), now through
+  `enable_gpu(session)` and checks `disable_gpu` restores the CPU map;
+  `test_enable_gpu_without_cupy_raises_clearly` hides CuPy with
+  `monkeypatch.setitem(sys.modules, "cupy", None)` and RUNS (ImportError, map
+  unchanged), retiring the suite's one non-NOT_APPLICABLE skip; new
+  `test_enable_gpu_rejects_a_target_without_a_system` (TypeError). `gpu.py`
+  70.9 % -> 92.7 %.
+- **Perf:** `test_registry_insert_is_near_linear` moved to
+  `unit/numerics/test_registry_perf.py` under `@pytest.mark.perf`;
+  `pytest -m perf` selects exactly it, the default run deselects it.
+- **Regression tier (left over from Phase 7a):**
+  `regression/test_cdist_collision_growth.py` and
+  `test_high_stretch_period3_growth.py` merged into
+  `regression/test_high_stretch_growth.py` (two functions, same assertions;
+  the vacuity of the period-3 run is recorded in its Dev Notes);
+  `test_blast_monotonicity` strengthened: after the blast every manifold and
+  every bridge has non-decreasing cdist and no geometric spike.
+
+### Deletion ledger, Phase 9
+
+9 node ids removed, 24 added (1113 -> 1128 collected, 1 of them perf,
+deselected by default). Lists: `p9_deleted.txt`, `p9_added.txt`
+(`nodeids_p9.txt`).
+
+| Node id(s) | New home | Guard checked |
+|---|---|---|
+| `test_stable_partition_period3.py::test_deep_p3_holes_share_bridge_side_through_symbolic_dynamics[15_steps]`, `[6_blasts]` (file now empty, deleted) | `regression/test_open_p3_deep_runs.py::test_deep_p3_holes_share_bridge_side[p3_15\|p3_16\|p3_6_blasts]` (16 steps added) | hole-side-own-blast-2026-10-02: I1 on the deep runs kept |
+| `test_higher_period_cartoon.py::test_chords_pair_only_the_base_branchs_crossings`, `::test_a_lobe_ending_on_another_branch_marks_nothing` | `unit/topology/test_iterated_cut.py` (same assertions) | higher-period 09-30 rules kept |
+| `numerics/test_gpu.py::test_gpu_growth_matches_cpu`, `::test_enable_gpu_without_cupy_raises_clearly` | `unit/numerics/test_gpu.py` (the no-CuPy test now runs) | numerics-speedups: GPU parity kept |
+| `numerics/test_generation_and_caches.py::test_registry_insert_is_near_linear` | `unit/numerics/test_registry_perf.py` (`@pytest.mark.perf`, body unchanged incl. the `gc.collect()` flake fix) | none |
+| `regression/test_cdist_collision_growth.py::test_growth_keeps_geometry_smooth`, `regression/test_high_stretch_period3_growth.py::test_period3_high_stretch_growth_is_not_scrambled` | `regression/test_high_stretch_growth.py::test_k10_growth_keeps_geometry_smooth`, `::test_period3_high_stretch_growth_is_not_scrambled` | cdist-strict-monotonicity-fix: same geometric no-spike + non-strict checks |
+
+The planned deletions of the I1/I2 re-check tests
+(`test_topology_invariants::test_henon_holes_share_bridge_side`,
+`test_stable_partition_period3::test_p3_holes_share_bridge_side`,
+`::test_p3_bridge_rows_consistent`) were already done in Phase 4 (deviation
+4.3); nothing left to delete there.
+
+### Verification
+
+- Collected **1128** (1127 by default + 1 perf).
+- `1085 passed, 31 skipped, 1 deselected, 11 xfailed` in 172 s with coverage
+  (`p9_run.txt`). `-rxX` lists exactly the `KNOWN_ISSUES`: the 8 law-tier
+  xfails plus the 3 `open_p3_deep_runs`; no XPASS. Skips: the 31
+  `NOT_APPLICABLE` cases only.
+- Coverage guard vs `cov_base.json`: OK (`cov_p9.json`).
+- `pytest -m perf`: 1 selected, passes (0.4 s).
+- Isolation (each alone): `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `unit/topology/test_iterated_cut.py::test_a_far_end_on_another_branch_is_no_flank`,
+  `regression/test_open_p3_deep_runs.py::test_virtual_symbols_are_transition_sinks`,
+  `unit/numerics/test_gpu.py::test_enable_gpu_without_cupy_raises_clearly`,
+  `test_bridge_class.py::test_classes_group_by_tangle_with_connecting_classes_last`,
+  `regression/test_blast_monotonicity.py::test_blast_completes_without_monotonicity_failure`,
+  `test_fixed_point.py::test_advance_key_rejects_a_foreign_fixed_point`: all pass.
+- `ruff check --select F` on every new/touched file: clean (one pre-existing
+  F841 in `test_bridge_class.py::test_table_lookups_symbols_and_report`, not
+  touched).
+
+### Deviations, Phase 9
+
+1. **Gaps already covered, no new test:** `preserve_ids` / idempotent
+   recompute and area preservation (laws since Phase 4); `min_separation`
+   (`numerics/test_blast_proximity_guard::test_min_separation_drops_close_bridges`);
+   refined cdist strictly between its neighbours (`numerics/test_refinement.py`);
+   ambiguous walks / unmatched members / evidence (synthetic tests in
+   `test_dual_walk.py` and `test_symbolic_dynamics.py`; P3 found none on real
+   data).
+2. **Tangle grouping with connecting classes is hand-built only:** no law case
+   (nested included) has a class with `tangle is None`, so the nested law
+   cannot exercise the "connecting last" half; the duck trellis
+   (`_ClassTrellis`, crossings only, no iterates) is local to the test.
+3. **Cross-branch flank on real data, not synthetic:** the flank rule lives in
+   `from_minimal`, so the test runs the public path on nested with a wrapped
+   `_empty_stretches` (allowed kernel) injecting foreign far ends.
+4. **The DualGraph self-check spy wraps the private `DualGraph._check`**: it
+   is the production-wiring assertion the plan asks for (that construction
+   runs it), not a test of the method's internals.
+5. **New files created in their final directories** (`unit/`, `regression/`),
+   as Phases 4-8 did; the regression merge and blast strengthening (Phase 7a
+   deviation 4) are done here. The period-3 high-stretch run is still vacuous
+   (AUTHOR ITEM from Phase 7a: re-derive its parameters); recorded in the
+   merged file's Dev Notes instead of a failing non-vacuity check.
+6. No new `slow` / `regression` markers on new tests (Phase 10 drops both).
