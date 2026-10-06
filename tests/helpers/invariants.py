@@ -10,6 +10,8 @@ The fundamental invariants (see CLAUDE.md):
                     densely; no node juts off it (``assert_no_geometric_spikes``).
                     This is the *observable* correctness property -- a scrambled
                     manifold shows it as a spike even when cdist looks fine.
+                    A short scramble (two near points swapped) shows instead as a
+                    hairpin reversal of the polyline (``assert_no_reversals``).
 1. Monotonicity   - along a manifold's geometric ordering, cdist is
                     non-decreasing (``assert_cdist_monotonic``). It is *not*
                     guaranteed strictly increasing: at a high-stretch fold the
@@ -201,6 +203,60 @@ def assert_no_geometric_spikes(
             f"{worst[1] / median_seg:.1f}x the median segment {median_seg:.3e} "
             f"(threshold {length_ratio:g}x; a misplaced point the polyline "
             f"darts out to and back)."
+        )
+
+
+def find_reversals(
+    manifold: BaseManifold, *, max_cos: float = -0.5
+) -> list[tuple[int, float]]:
+    """Find the hairpin turns that mark two adjacent points stored out of order.
+
+    A refined manifold turns gently from one segment to the next (refinement
+    subdivides wherever the curvature area exceeds ``area_cutoff``). When two
+    nearby points are spliced in the wrong order -- their cdists collapsed to
+    within a float ULP and could no longer order them -- the polyline steps past
+    the second point, doubles back to it, and doubles back again: a zig-zag of
+    consecutive segments pointing almost opposite ways. This flags every joint
+    whose turning cosine is below ``max_cos`` (the default -0.5 is a turn sharper
+    than 120 degrees).
+
+    Args:
+        manifold: The manifold (or bridge) to inspect.
+        max_cos: A joint whose cosine between consecutive segments is below this
+            is a reversal.
+
+    Returns:
+        A list of ``(joint_index, cosine)`` for each flagged joint (the joint at
+        node ``joint_index + 1``).
+    """
+    pts = np.asarray(
+        [n.get_point() for n in walk_nodes(manifold)], dtype=float
+    ).reshape(-1, 2)
+    if len(pts) < 3:
+        return []
+    seg = np.diff(pts, axis=0)
+    length = np.hypot(seg[:, 0], seg[:, 1])
+    keep = (length[1:] > 0) & (length[:-1] > 0)
+    cos = np.full(len(seg) - 1, 1.0)
+    cos[keep] = np.sum(seg[1:][keep] * seg[:-1][keep], axis=1) / (
+        length[1:][keep] * length[:-1][keep]
+    )
+    return [(int(i), float(cos[i])) for i in np.flatnonzero(cos < max_cos)]
+
+
+def assert_no_reversals(manifold: BaseManifold, *, max_cos: float = -0.5) -> None:
+    """Assert the manifold polyline never doubles back (see :func:`find_reversals`).
+
+    Raises:
+        AssertionError: Reporting how many reversals were found and the sharpest.
+    """
+    reversals = find_reversals(manifold, max_cos=max_cos)
+    if reversals:
+        joint, cos = min(reversals, key=lambda r: r[1])
+        raise AssertionError(
+            f"{len(reversals)} hairpin reversal(s) on the {manifold.stability!r} "
+            f"manifold; the sharpest at joint {joint} has turning cosine {cos:.3f} "
+            f"(threshold {max_cos:g}: two nearby points stored out of order)."
         )
 
 

@@ -2471,3 +2471,83 @@ checks that a stale cache would also pass; `add_resonance_zones`, `restore`
    and a trim at an inner pip + re-partition tripped
    `check_bridge_rows_consistent` (both test-recipe problems, not pursued);
    the `iterate_bridge` event was kept and documented as unobservable.
+
+## Author follow-up (2026-10-06): the period-3 high-stretch test made non-vacuous
+
+`regression/test_high_stretch_growth.py::test_period3_high_stretch_growth_is_not_scrambled`
+was vacuous (Phase 7a finding): four unstable steps from the default seed left
+7 nodes per branch with adjacent relative cdist gaps of ~3e15 eps, nowhere near
+the one-ULP collisions it guards (cdist-strict-monotonicity-fix memory).
+
+### Re-deriving the parameters
+
+Measured on k=2.1, `P3_ORBIT_SEED`, `area_cutoff = 1e-7` (minimum over branches
+of `gap / cdist` between adjacent nodes, in units of `np.finfo(float).eps`):
+
+- Default seed (`max(fixed_point.accuracy, 5e-6)`; the fsolve orbit makes
+  `accuracy` tiny): unstable 9 steps -> 2.5e11 eps (8451 nodes); step 10 is
+  the escape (~1.5e6 nodes); stable 11 steps -> 3.9e13 eps. Unreachable:
+  growth scales a gap and its cdist by the same factor, so only refinement
+  halves the relative gap, and the arm escapes long before ~52 halvings.
+- Coarser seed via `fp3.accuracy` (the documented dynamic seed term):
+  `2e-3`/`3e-3` reach it only on some branches; `5e-3` and `7e-3` reach
+  0.5-0.8 eps (adjacent cdists one ULP apart) on every stable branch in
+  5 steps, 0.01-0.03 s, with zero hairpins on the current code; `1e-2`
+  reaches it too but the current code already shows 4-15 hairpins there
+  (near-duplicate seam points), so it was not used.
+- Mechanism: with a 5e-3 seed the fundamental segment is curved enough that
+  the images of its two ends land ~1e-5 apart in space while their cdists
+  agree to one ULP: the same "two distinct points the cdist cannot order"
+  collision, produced at the seed seam rather than at a high-stretch fold.
+
+### What changed
+
+- `test_period3_high_stretch_growth_is_not_scrambled` ->
+  `test_period3_near_ulp_growth_is_not_scrambled`: k=2.1 period 3,
+  `fp3.accuracy = 5e-3`, `area_cutoff = 1e-7`, 5 STABLE steps (was 4
+  unstable steps from the default seed). New non-vacuity assertion per branch:
+  `min(gap / cdist) < 4 * eps` (`NEAR_ULP_EPS`). Kept: no spike, cdist
+  non-decreasing; added: no hairpin reversal. Runtime 0.02 s.
+- `helpers/invariants.py`: new `find_reversals` / `assert_no_reversals`
+  (a joint whose consecutive segments have turning cosine below -0.5, i.e.
+  two nearby points stored out of order). The spike check alone has no
+  teeth here: a seam scramble swaps points ~1e-5 apart, far below the
+  30x-median segment threshold.
+- `test_k10_growth_keeps_geometry_smooth` also asserts `assert_no_reversals`
+  (passes; zero hairpins on k=10).
+
+### Teeth (scratch worktree at HEAD, src edited there only)
+
+Re-introduced the old strict tie-breaking in `ManifoldMachine.py` (the
+strictify code was never committed, so it was re-written from the memory note):
+(1) nudge tied image cdists up by `nextafter` in `iterate_manifold`;
+(2) in `merge_manifolds`, a collision of two distinct points nudges the second
+up by `nextafter` and keeps both instead of deduplicating; (3) the
+`representable` guard in `_refine_layer` (refine only where `c0 < mid < c1`).
+
+| build | old test (4 unstable steps) | new test |
+|---|---|---|
+| all three edits | passes (vacuous) | FAILS: "22 hairpin reversal(s) on the 'stable' manifold ... turning cosine -1.000" |
+| (1) image strictify only | - | passes |
+| (2) merge nudge only | - | FAILS (same 22 reversals) |
+| (3) representable guard only | - | passes |
+| current code | passes | passes |
+
+So the test guards the merge's exact-tie dedup (the part of the fix that
+matters in this regime); edits (1) and (3) produce no observable scramble in
+5 steps from this seed (the scan above showed 20-30 hairpins per branch for
+the full broken build at `accuracy` 3e-3..7e-3, all from the merge nudge).
+
+### Deletion / change ledger
+
+| old | new | why |
+|---|---|---|
+| `regression/test_high_stretch_growth.py::test_period3_high_stretch_growth_is_not_scrambled` | `::test_period3_near_ulp_growth_is_not_scrambled` | re-derived parameters reach one-ULP adjacent cdists; non-vacuity + no-hairpin assertions; fails on the strictify build |
+| `::test_k10_growth_keeps_geometry_smooth` | unchanged name | + `assert_no_reversals` |
+
+### Verification
+
+- `env/bin/python -m pytest -q -rxX`: 729 passed, 1 deselected, 11 xfailed in
+  85.7 s; the 11 xfails are exactly `KNOWN_ISSUES`, no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_followup.json`); total
+  90.24 % (unchanged; src untouched).
