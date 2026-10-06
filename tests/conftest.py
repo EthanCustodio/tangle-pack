@@ -44,13 +44,15 @@ Layout (tiers; every test basename is unique, no ``__init__.py``):
 * ``unit/numerics``, ``unit/topology``, ``unit/loom`` -- rules and kernels of
   each layer, public API first (private access only for the pure kernels the
   2026-10-05 policy allows).
-* ``facade/`` -- ``TangleSession``: the one cache-contract table, session =
-  direct build, fan-outs, delegates and reports.
+* ``facade/`` -- ``TangleSession``: cache freshness (every product x event equals a
+  direct build; reuse only on no change), session = direct build, fan-outs,
+  delegates and reports.
 * ``regression/`` -- fixed bugs that need their own build, and the open deep
   period-3 runs.
 * ``plotting/`` -- smoke plus topological properties of the drawings.
 * ``helpers/`` (checks, fakes, letter-free name spellers for comparing two
-  builds, log assertion),
+  builds, the cache-free direct build of every session product, log
+  assertion),
   ``cases.py`` (frozen builders, ``KNOWN_ISSUES``, ``NOT_APPLICABLE``) and
   ``_tools/coverage_guard.py`` are not collected.
 

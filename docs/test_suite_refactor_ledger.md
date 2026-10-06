@@ -2408,3 +2408,66 @@ removed); `cases.CaseExpect.has_image_bridges` removed.
    the previous follow-up).
 2. The colour-family-per-tangle test (`TANGLE_COLOR_FAMILIES` /
    `HETEROCLINIC_COLORS` as a rule) is not part of this change.
+
+## Author follow-up (2026-10-05): cache freshness, not hit/miss policy
+
+`tests/facade/test_session_caches.py` no longer pins whether an event is
+served from the cache or rebuilt. For every product (`trellis`,
+`arrangement`, `bridge_classes`, `minimal_trellis`, `iterated_partition`,
+`dual_graph`, `symbolic_dynamics`) x every event (`no_change`, `rebuild`,
+`generation_bump`, `partition_signature`, `pip_change`) it asserts FRESHNESS:
+after the event the session's product equals, through a structural
+letter-free view, a direct cache-free build from the current state. Object
+identity is asserted only for `no_change` (same object) and `rebuild=True`
+(the product itself is a new object). Every product is asked for once before
+the event, so every cache holds an entry the event could make stale.
+
+### What changed
+
+- New `tests/helpers/direct.py`: `DirectBuild` (moved from
+  `test_session_equivalence._Direct`, now with a fixed-point selection and
+  its classes lettered from a FRESH `BridgeAlphabet` instead of the session's
+  table, so the direct dynamics reads no session cache), the structural views
+  (moved unchanged), `view_of`, `direct_view`, `PRODUCT_NAMES`.
+- `tests/facade/test_session_equivalence.py` uses the helper; same 16 cases,
+  same assertions.
+- `tests/conftest.py` layout docstring updated (facade = cache freshness;
+  helpers include the direct build).
+
+### Deletion / change ledger
+
+| Old | New | Note |
+|---|---|---|
+| `test_session_caches::test_expected_table_is_complete` | deleted | the `EXPECTED` hit/miss table is gone |
+| `::test_session_cache_table[<product>-<event>]` (35) | `::test_session_product_is_fresh_after_every_event[<product>-<event>]` (35) | event `hit` renamed `no_change`; HIT/MISS pins replaced by freshness; reuse only on `no_change`, new object only on `rebuild`. The `generation_bump` / `pip_change` events no longer assert the partition signature stays put (they assert only that the generation moved / the pip changed) |
+| `::test_trellis_misses_after_every_mutation_path[*]` (5) | `::test_trellis_is_fresh_after_every_mutation_path[*]` (5) | `fresh is not first` replaced by trellis view = `Trellis.from_workbench` view |
+| `::test_trellis_misses_after_a_recompute_on_the_nested_session` | `::test_trellis_is_fresh_after_a_recompute_on_the_nested_session` | registry identity kept, plus view = direct build |
+| `::test_cache_is_kept_per_fixed_point_selection[*]` (7) | `::test_every_fixed_point_selection_is_fresh[*]` (7) | identity pins replaced by: interleaved selections each equal a direct build of that selection |
+| `::test_bridge_class_letters_survive_rebuilds_and_repartitions` | unchanged | the alphabet rule, not cache policy |
+
+Observability (measured on `k10`, recorded here, not asserted):
+`partition_signature` changes every view from `bridge_classes` on and
+`pip_change` changes `dual_graph` and `symbolic_dynamics`, so a stale cache
+there fails the test (checked by monkeypatching the session to ignore the
+partition signature and the pips: 6 cells fail). `generation_bump`
+(`iterate_bridge`) and the growth / `iterate_bridge` / `rebuild_bridges`
+mutation paths register no crossing on `k10`, so their cells are consistency
+checks that a stale cache would also pass; `add_resonance_zones`, `restore`
+(the 2026-07 regression) and the nested recompute do change the trellis.
+
+### Verification
+
+- `env/bin/python -m pytest -q -rxX`: 729 passed, 1 deselected, 11 xfailed in
+  87.5 s (730 -> 729: the deleted table-completeness test). The 11 xfails are
+  exactly `KNOWN_ISSUES`, no XPASS.
+- `test_session_caches.py` alone: 49 passed in 3.95 s (was 50 in 3.72 s).
+- Coverage guard vs `cov_base.json`: OK (`cov_followup.json`); total 90.24 %
+  -> 90.24 %.
+
+### Deviations
+
+1. A view-changing cheap generation bump was not found: one more unstable
+   growth step + recompute broke the arrangement's bridge/branch agreement
+   and a trim at an inner pip + re-partition tripped
+   `check_bridge_rows_consistent` (both test-recipe problems, not pursued);
+   the `iterate_bridge` event was kept and documented as unobservable.
