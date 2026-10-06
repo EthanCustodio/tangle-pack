@@ -1605,3 +1605,148 @@ every rewritten `build_pieces` caller.
    `_empty_stretches` and `_resolve_inertness` uses are allowed kernels.
 6. `test_k10_stable_node_label_joins_the_names` and the plot-delegate mocks
    stay for Phase 8 (they are on its delete list).
+
+## §8 Phase 8: the plotting tier (`tests/plotting/`)
+
+### What landed
+
+- **`tests/plotting/test_plot_smoke.py`**: every plotter and session delegate
+  runs on Agg and returns its type: the five `Trellis.plot_*` on real k=10
+  data; the session `plot_*` fan-outs on the two-fixed-point nested session
+  (one handle per fixed point, one for a single fixed point); the
+  compute-on-demand `plot_pseudoneighbors`; `plot_stable_partition` with row
+  labels and one element label per interval; `plot_dual_graph` under every
+  label/clip option (canvas drawn, so the mathtext must parse);
+  `plot_minimal_trellis`, `plot_walk` (style overrides), `plot_transition_graph`
+  and `plot_bridges_by_class` (refined / unrefined); `plot_itinerary_table`
+  (one row per class; plain, unrefined, a column subset on a wide axes, the
+  font-shrink path on a 2.5 in axes); `itinerary_table_rows` column subset in
+  the caller's order; the cartoon under every option (anchor left, recoloured,
+  outside labels, uniform width, class-coloured, circle); every legend helper
+  returns a non-empty list of artists; the session delegates (forwarded
+  keywords checked by their EFFECT, e.g. `refined=False` gives the unrefined
+  graph's nodes, not by a monkeypatched spy); the cartoon toggles; and one
+  `ValueError` table (type only) for reserved style keywords and unknown
+  option values (12 rows).
+- **`tests/plotting/test_plot_topology.py`**: face point inside its region;
+  face-point copy (regression); unbounded node outside the midpoint bbox; side
+  nodes on their side through public `stable_node_point` + the arc polyline +
+  the allowed `_side_of` kernel (the private `_anchorward_look` is gone);
+  every stable node drawn at its point; a REAL walk threads face -> node ->
+  face and ends in one arrowhead; trivial / empty walks (public `Walk`
+  dataclass instead of the `_FakeWalk` shim); every kept minimal-trellis bridge
+  drawn; transition-graph nodes/edges = the dynamics' own, all active;
+  `plot_bridges_by_class` draws every classed bridge (and drops exactly the
+  inert ones with `show_inert=False`); an unmatched member is still drawn and
+  keeps a colour of its own; `bridge_ids` restricts to the minimal trellis
+  (nested); `class_colors` never repeats (k10 and nested, refined and not);
+  cartoon one node per element per side, ordinal coordinate strictly
+  increasing, brackets = closedness, kept bridges drawn and walks element to
+  element; circle interior side inside the circle (k10 default and flipped);
+  p3 circle keeps the zone's ring order and direction (cyclic order of the
+  arc anchors, no angle pins); nested inner circle inside the outer one and
+  its keep-out disc, with the enclosing lobes reported by
+  `cartoon_enclosures`.
+- **Moved**: `test_name_mathtext` (11 -> 8, one canonical case per notation
+  form: sub+superscript, inverse symbol, plain word, tagged label, branch code,
+  fixed-point letter, already-mathtext, empty) and
+  `test_name_mathtext_agrees_with_element_name_mathtext` ->
+  `tests/test_element_naming.py`; the `test_verbose_*` tests (5) ->
+  `tests/unit/numerics/test_logging_policy.py` (level, logger, non-empty only).
+
+### Deletion ledger, Phase 8
+
+78 collected node ids removed, 80 added: 1111 -> 1113 (`nodeids_p8.txt`,
+`p8_deleted.txt`, `p8_added.txt`). Every deleted subject was grepped in the
+regression-guard notes (codebase-audit-2026-09, pseudoneighbor-collision-fragility,
+pseudoneighbor-partition, numerics-test-suite, regions-refactor-2026-09,
+cdist-strict-monotonicity-fix, hole-side-own-blast-2026-10-02,
+audit-polish-2026-07): the only plotting hits are design notes (hole marker
+per orbit, plot placement), no fixed bug; the face-point copy regression is
+kept.
+
+| Node id | New home / reason | Guard checked |
+|---|---|---|
+| `test_topology_plotting::test_trellis_plotters_delegate_to_plotting` | monkeypatch delegate; behaviour in `P/test_plot_smoke::test_trellis_plotters_draw_on_a_real_tangle` | none |
+| `test_topology_plotting::test_plotters_draw_on_a_real_tangle` | `P/test_plot_smoke::test_trellis_plotters_draw_on_a_real_tangle` | none |
+| `test_topology_plotting::test_verbose_logs_and_never_prints[*]` ×3, `::test_verbose_prints_when_logging_is_unconfigured`, `::test_verbose_survives_an_application_level_above_info` | `unit/numerics/test_logging_policy.py` (same names; the level-restored check now runs before the test's own restore, so it is no longer tautological) | pseudoneighbor-partition (verbose flags: design only) |
+| `test_topology_plotting::test_session_plot_fanouts_go_through_fanout_plot[*]` ×5 | monkeypatch of `_fanout_plot`; behaviour: `P/test_plot_smoke::test_session_plot_fanouts_draw_every_fixed_point` | none |
+| `test_topology_plotting::test_session_call_fanouts_go_through_fanout_call[*]` ×4 | monkeypatch of `_fanout_call`; shapes already in `facade/test_session_fanouts.py` | none |
+| `test_topology_plotting::test_plot_dual_graph_scatters_exactly_the_stable_nodes` | collection-order + facecolor pin; property `P/test_plot_topology::test_plot_dual_graph_draws_every_stable_node_at_its_point` | none |
+| `test_topology_plotting::test_side_nodes_sit_on_their_side_and_solid_nodes_on_the_edge` | `P/test_plot_topology::test_side_nodes_sit_on_their_side_and_unified_nodes_on_the_edge` (no private `_anchorward_look`) | none |
+| `test_topology_plotting::test_face_point_of_unbounded_node_is_outside_the_edge_bbox`, `::test_face_point_of_a_region_is_inside_it`, `::test_face_point_of_a_region_returns_a_copy_not_the_cached_array` | `P/test_plot_topology` (same names) | face-point copy: kept as regression |
+| `test_topology_plotting::test_scatter_kwargs_reject_facecolors_and_c` | `P/test_plot_smoke::test_plotters_reject_bad_arguments[dual_graph_facecolors|dual_graph_c]` + `test_plot_dual_graph_draws[unclipped_restyled]` | none |
+| `test_topology_plotting::test_clip_to_arcs_true_keeps_the_axes_within_the_padded_edge_bbox`, `::test_clip_to_arcs_false_leaves_the_axes_to_autoscale` | deleted: reimplemented the padding (planner §A Phase 8); both options smoke-run in `test_plot_dual_graph_draws` | none |
+| `test_topology_plotting::test_show_labels_annotates_every_stable_and_face_node`, `::test_show_labels_ref_style_keeps_the_element_labels`, `::test_stable_node_label_falls_back_to_the_element_label_without_a_name` | deleted: label-separator / wording pins; both label styles smoke-run with the canvas drawn (`test_plot_dual_graph_draws[names|refs]`), `label_style="bogus"` in the ValueError table | none |
+| `test_topology_plotting::test_name_mathtext[*]` ×11, `::test_name_mathtext_agrees_with_element_name_mathtext` | `test_element_naming.py::test_name_mathtext[*]` ×8 (one per form; `R_3`, `a_2^-1`, `u` were repeats of a form), `::test_name_mathtext_agrees_with_element_name_mathtext` | none |
+| `test_topology_plotting::test_dual_graph_legend_handles_match_the_plotter`, `::test_walk_legend_handles_match_the_plotter`, `::test_cartoon_legend_handles_match_the_plotter` | deleted: legend wording / colour pins; `P/test_plot_smoke::test_legend_handles_are_artists` | none |
+| `test_topology_plotting::test_walk_zorder_sits_between_dual_graph_edges_and_nodes` | deleted: z-order pin | none |
+| `test_topology_plotting::test_plot_minimal_trellis_draws_every_kept_bridge` | `P/test_plot_topology` (same name; legend labels dropped) | none |
+| `test_topology_plotting::test_plot_stable_partition_accepts_row_labels`, `::test_plot_stable_partition_draws_element_labels_at_midpoints` | `P/test_plot_smoke::test_plot_stable_partition_rows_and_element_labels` (one label per interval; the tick-text and midpoint-placement pins dropped); mismatched labels -> ValueError table | none |
+| `test_topology_plotting::test_plot_walk_threads_face_node_face`, `::test_plot_walk_honours_overrides_and_trivial_walks` | `P/test_plot_topology::test_plot_walk_threads_face_node_face` (a real walk), `::test_plot_walk_of_a_trivial_or_empty_walk`; overrides smoke `P/test_plot_smoke::test_plot_walk_accepts_style_overrides` (colour/zorder pins dropped) | none |
+| `test_topology_plotting::test_class_colors_are_assigned_in_fixed_order` | palette order deleted; no-repeat half -> `P/test_plot_topology::test_class_colors_never_repeat[*]` | none |
+| `test_topology_plotting::test_plot_bridges_by_class_draws_every_classed_bridge` | `P/test_plot_topology` (same name; linestyle/legend-text pins dropped; reserved kwargs -> ValueError table) | none |
+| `test_topology_plotting::test_unmatched_member_gets_its_parent_letter_slot` | palette-slot pin deleted; property `P/test_plot_topology::test_an_unmatched_member_is_still_drawn_under_its_own_colour` | none |
+| `test_topology_plotting::test_plot_transition_graph_draws_every_symbol[*]` | `P/test_plot_topology::test_transition_graph_nodes_are_the_active_symbols[*]` (title/axis/linestyle/label-text pins dropped) | none |
+| `test_topology_plotting::test_plot_itinerary_table_lists_every_class`, `::test_plot_itinerary_table_columns_font_and_rows` | width/font/row-height/cell-text pins deleted; `P/test_plot_smoke::test_plot_itinerary_table_draws_one_row_per_class[*]`, `::test_itinerary_table_rows_follow_the_requested_columns`; bad columns -> ValueError table | none |
+| `test_topology_plotting::test_cartoon_layout_has_one_node_per_element_per_side`, `::test_cartoon_ordinal_coordinate_is_strictly_increasing`, `::test_cartoon_brackets_match_closedness`, `::test_cartoon_draws_every_kept_bridge_and_walks_element_to_element` | `P/test_plot_topology` (same names; collection-count, colour and gid-format pins dropped; `anchor="top"` -> ValueError table) | none |
+| `test_topology_plotting::test_cartoon_toggles_and_session_delegate` | `P/test_plot_smoke::test_session_cartoon_delegate_honours_its_toggles` | none |
+| `test_topology_plotting::test_cartoon_bridge_colour_labels_and_walkless_legend` | colour/alpha/label-alignment/font/legend pins deleted; options smoke-run in `P/test_plot_smoke::test_plot_dual_graph_cartoon_draws[*]`; `label_position="above"` -> ValueError table | none |
+| `test_higher_period_cartoon::test_circle_layout_puts_every_node_on_its_sides_circle`, `::test_circle_layout_honours_interior_side_and_rejects_bad_shapes` | angle/sweep/radius/legend pins deleted; `P/test_plot_topology::test_circle_interior_side_lies_inside_the_circle`; bad shape / label position -> ValueError table | none |
+| `test_higher_period_cartoon::test_line_cartoon_labels_every_row_with_its_branch_code` | deleted: label wording | none |
+| `test_higher_period_cartoon::test_p3_circle_follows_the_zone_boundary` | `P/test_plot_topology` (same name; the `cartoon_zones` facts kept, the sweep/gap/anchor-miss angle pins replaced by the cyclic order of the arc anchors) | none |
+| `test_higher_period_cartoon::test_nested_inner_circle_sits_inside_the_outer_one`, `::test_nested_outer_arcs_go_around_the_inner_circle` | `P/test_plot_topology::test_nested_inner_circle_sits_inside_the_outer_one` (containment; the enclosure + keep-out facts merged in, gid parsing and polar-route sweep deleted: `ZoneLayout` exposes no routed paths; label texts dropped) | hole-side-own-blast (nested blasts): unrelated to drawing; the blast guards stay in `test_higher_period_cartoon` |
+| `test_higher_period_cartoon::test_bridges_by_class_can_be_restricted_to_the_minimal_trellis` | `P/test_plot_topology` (same name) | none |
+| `test_higher_period_cartoon::test_nested_classes_are_lettered_and_coloured_tangle_by_tangle` | grouping/cdist order = law `check_class_table_order`; active letters in table order = `test_symbolic_dynamics` (letters a, b, … test); no-repeat -> `test_class_colors_never_repeat[*-nested]`; `TANGLE_COLOR_FAMILIES` membership deleted (colour pin) | none |
+| `test_session_dual_graph::test_session_plot_delegates_to_plotting`, `test_session_symbolic_dynamics::test_session_plot_delegates_forward_to_plotting` | monkeypatch delegates; `P/test_plot_smoke::test_session_plot_delegates_return_their_types` (forwarding checked by effect) | none |
+| `test_session_dual_graph::test_session_plot_dual_graph_returns_axes`, `test_session_symbolic_dynamics::test_session_plot_delegates_draw_on_the_given_axes` | `P/test_plot_smoke::test_session_plot_delegates_return_their_types` | none |
+| `test_session_pseudoneighbors::test_plot_helpers_draw_pairs_and_holes` | `P/test_plot_smoke::test_session_plot_pseudoneighbors_computes_on_demand` (file deleted, empty) | none |
+| `test_session_pseudoneighbors::test_plot_stable_partition_fans_out`, `test_session_strong_pips::test_plot_helpers_cover_every_tangle` | `P/test_plot_smoke::test_session_plot_fanouts_draw_every_fixed_point` (both files deleted, empty) | none |
+| `test_stable_partition::test_plot_stable_partition_smoke` | tick-count pin dropped; smoke on real data in `P/test_plot_smoke::test_plot_stable_partition_rows_and_element_labels`; its non-plot half (the trellis stores a one-branch partition) -> `test_stable_partition::test_trellis_partition_of_one_branch_is_stored` | none |
+| `test_stable_partition::test_henon_plot_helpers_smoke` | same recipe (`build_k10(through="bridges")`) as `P/test_plot_smoke::test_trellis_plotters_draw_on_a_real_tangle` | none |
+
+### Verification
+
+- Collected **1113** (`nodeids_p8.txt`).
+- `1073 passed, 32 skipped, 8 xfailed` in 166 s with coverage (`p8_run.txt`);
+  `-rxX` lists exactly the 8 `KNOWN_ISSUES` xfails; no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_p8.json`); `plotting.py`
+  91.39% -> 91.86%.
+- Isolation (each alone): `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `plotting/test_plot_topology.py::test_nested_inner_circle_sits_inside_the_outer_one`,
+  `plotting/test_plot_smoke.py::test_plotters_reject_bad_arguments[circle_label_position]`,
+  `unit/numerics/test_logging_policy.py::test_verbose_prints_when_logging_is_unconfigured`,
+  `test_element_naming.py::test_name_mathtext[fixed_point_letter]`,
+  `test_stable_partition.py::test_trellis_partition_of_one_branch_is_stored`,
+  `test_image_cdist.py::test_the_snap_window_is_tighter_than_the_agreement_bound`,
+  `invariants/test_law_iterated.py::test_iterated_unique_owner[p3]`: all pass.
+- `ruff check --select F` on every touched test file: clean.
+
+### Deviations, Phase 8
+
+1. **Case count above the planner's estimate**: the plotting tier collects 65
+   cases (41 smoke, 24 property) against ≈ 28, because option sweeps and the
+   `ValueError` table are parametrized (one id per option, each build ≈ 0.05 s)
+   rather than folded into loops. Same assertions either way; the run is still
+   green in ≈ 8 s for the whole directory.
+2. **New files created in their final directories** (`tests/plotting/`,
+   `tests/unit/numerics/test_logging_policy.py`), as Phases 4–6 did; Phase 10
+   moves only the survivors of the old flat layout. The logging-policy file
+   sits under `unit/numerics/` as planned although the verbose reports it
+   checks are the topology `Trellis`'s (the policy is cross-cutting).
+3. **`test_nested_outer_arcs_go_around_the_inner_circle` not rewritten as a
+   keep-out property**: `ZoneLayout` exposes no routed paths, so per the
+   planner it is deleted; its public half (`cartoon_enclosures` reports the
+   enclosing lobes, and `keepout` encloses the inner circle) is merged into
+   the containment test. `_polar_route` stays covered by the nested circle
+   draw.
+4. **The p3 ring-order fact** ("0.0 -> 1.0 -> 2.0 clockwise, interior on the
+   right", CLAUDE.md) stays in the plotting tier as a cyclic-order property;
+   it is a fixture fact not in `tests/golden/`. Author item: move it to
+   `golden/test_golden_period3.py` (needs sign-off) or leave it here.
+5. **Non-plot half of `test_plot_stable_partition_smoke` kept** as
+   `test_stable_partition::test_trellis_partition_of_one_branch_is_stored`
+   (the one-branch `Trellis.partition_stable_manifold` store had no other
+   test).
+6. `test_session_strong_pips.py` and `test_session_pseudoneighbors.py` are
+   deleted outright: every test in them was a plot helper.

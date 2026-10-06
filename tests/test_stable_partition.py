@@ -13,10 +13,6 @@ from __future__ import annotations
 
 import logging
 
-import matplotlib
-
-matplotlib.use("Agg")  # headless: exercise the plot helpers without a display
-import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
@@ -25,7 +21,6 @@ from helpers.logs import assert_logged
 from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
-from tanglepack.topology.plotting import plot_stable_partition
 from tanglepack.topology.StablePartition import (
     _bridge_side_of,
     _side_of,
@@ -330,21 +325,14 @@ def test_partition_requires_a_stable_branch(stable_line):
         )
 
 
-def test_plot_stable_partition_smoke(stable_line):
-    """The number-line plot draws one row per partition and returns the axes."""
+def test_trellis_partition_of_one_branch_is_stored(stable_line):
+    """``Trellis.partition_stable_manifold(branch)`` returns one result per side and keeps them."""
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
     trellis.holes.append(_hole(ids[0], ids[1], "right"))
     results = trellis.partition_stable_manifold(branch_key)
 
-    fig, ax = plt.subplots()
-    try:
-        drawn = plot_stable_partition(results, ax=ax)
-        assert drawn is ax
-        assert len(ax.get_yticklabels()) == 2  # left and right rows
-    finally:
-        plt.close(fig)
-
+    assert sorted(result.side for result in results) == ["left", "right"]
     assert trellis.stable_partitions == results
 
 
@@ -394,19 +382,6 @@ def test_describe_reports(henon_with_holes):
     assert trellis.describe_pseudoneighbors()
     assert trellis.describe_holes()
     assert trellis.describe_stable_partitions()
-
-
-def test_henon_plot_helpers_smoke(henon_with_holes):
-    """plot_pseudoneighbors and plot_holes draw on a real tangle."""
-    trellis, _references = henon_with_holes
-
-    fig, ax = plt.subplots()
-    try:
-        assert trellis.plot_pseudoneighbors(ax=ax) is not None
-        handles = trellis.plot_holes(ax=ax)
-        assert handles
-    finally:
-        plt.close(fig)
 
 
 # --------------------------------------------------------------------------- #

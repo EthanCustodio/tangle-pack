@@ -1,6 +1,7 @@
 """
 Tests for ``tanglepack.topology.ElementNaming``: the ``L_i`` / ``R_i^j`` names
-of the homotopy and iterated partition elements.
+of the homotopy and iterated partition elements, and their mathtext
+(``plotting.name_mathtext``).
 
 The synthetic tests build partition families by hand (over bare fixed points); one fixture test reads the names over two
 fixed points. The k=10 rows are pinned in ``tests/golden/test_golden_k10.py``.
@@ -11,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from helpers.fakes import bare_fixed_point
+from tanglepack.topology import plotting
 from tanglepack.topology.ElementNaming import ElementName, ElementNaming
 from tanglepack.topology.PartitionFamily import (
     HomotopyPartition,
@@ -109,6 +111,36 @@ def test_element_name_is_hashable_and_compares_by_value():
     assert a == b and hash(a) == hash(b)
     assert len({a, b, ElementName(key, "right", 1, 3, 3)}) == 2
     assert repr(a) and repr(a) == repr(b)
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("R_1^2", "$R_{1}^{2}$"),
+        ("u^-1", "$u^{-1}$"),
+        ("new1", "$new1$"),
+        ("p3@1.0:R_2^1", "p3@1.0:$R_{2}^{1}$"),
+        ("R_(0.0;1)^2", "$R_{0.0;1}^{2}$"),
+        ("A:R_(1.0;2)", "${}^{A}R_{1.0;2}$"),
+        ("$a_{1}$", "$a_{1}$"),
+        ("", ""),
+    ],
+    ids=["sub_and_superscript", "inverse_symbol", "plain_word", "tagged_label",
+         "branch_code", "fixed_point_letter", "already_mathtext", "empty"],
+)
+def test_name_mathtext(text, expected):
+    """``plotting.name_mathtext``: one canonical case per notation form."""
+    assert plotting.name_mathtext(text) == expected
+
+
+def test_name_mathtext_agrees_with_element_name_mathtext(k10_partitioned):
+    """Compiling a name's text gives the name's own mathtext."""
+    session, _fp = k10_partitioned
+    names = [name for node in session.dual_graph().stable_nodes.values()
+             for name in node.names.values()]
+    assert names
+    for name in names:
+        assert plotting.name_mathtext(name.text) == name.mathtext
 
 
 # --------------------------------------------------------------------------- #

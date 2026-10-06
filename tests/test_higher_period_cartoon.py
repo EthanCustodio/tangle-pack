@@ -1,6 +1,7 @@
 """
-Higher-period and nested tangles: the shared case builders, the cross-branch
-fixes they need, and the circular-zone dual-graph cartoon.
+Higher-period and nested tangles: the shared case builders and the
+cross-branch fixes they need. The circular-zone dual-graph cartoon is
+``tests/plotting/``.
 
 The period-3 and nested cases come from the tests-only :mod:`cases` builders
 (parameters frozen there), built fresh per test.
@@ -12,17 +13,10 @@ import importlib
 import logging
 from types import SimpleNamespace
 
-import matplotlib
-
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
-import numpy as np
 import pytest
 
 from helpers.logs import assert_logged
 from cases import Case, build_nested, build_period3
-from tanglepack.topology import plotting
 from tanglepack.topology.ElementNaming import ElementNaming
 from tanglepack.topology.TopologyResults import PartitionInterval
 
@@ -42,12 +36,6 @@ def p3_built() -> Case:
 def nested_built() -> Case:
     """The nested period-1 + period-3 tangle, outer zone blasted twice."""
     return build_nested()
-
-
-def _k10_dynamics(k10_partitioned) -> tuple:
-    """``(session, dual graph, symbolic dynamics)`` of the k=10 fixture."""
-    session, _fp = k10_partitioned
-    return session, session.dual_graph(), session.symbolic_dynamics()
 
 
 # --------------------------------------------------------------------------- #
@@ -104,74 +92,6 @@ def test_a_lobe_ending_on_another_branch_marks_nothing(monkeypatch, caplog):
 
 
 # --------------------------------------------------------------------------- #
-# Circular-zone cartoon, k=10 (one branch)
-# --------------------------------------------------------------------------- #
-def test_circle_layout_puts_every_node_on_its_sides_circle(k10_partitioned):
-    _session, dual, dynamics = _k10_dynamics(k10_partitioned)
-    fig, ax = plt.subplots()
-    try:
-        layout = plotting.plot_dual_graph_cartoon(dual, dynamics, ax=ax, shape="circle")
-        assert isinstance(layout, plotting.ZoneLayout)
-        ((fp_id, (cx, cy, radius)),) = layout.circles.items()
-        (branch_key,) = layout.arcs
-        _fp, alpha, sweep = layout.arcs[branch_key]
-        assert alpha == 0.0 and sweep == pytest.approx(np.pi)  # period 1: upper half
-        assert set(layout.nodes) == set(layout.normals) == set(layout.segments)
-        for ref, (x, y) in layout.nodes.items():
-            sigma = layout.side_sign(branch_key, ref.side)
-            offset = (
-                plotting.CARTOON_SEGMENT_OFFSET if ref in layout.singletons
-                else plotting.CARTOON_NODE_OFFSET
-            )
-            assert np.hypot(x - cx, y - cy) == pytest.approx(radius + sigma * offset)
-            normal = np.array(layout.normals[ref])
-            radial = np.array([x - cx, y - cy]) / np.hypot(x - cx, y - cy)
-            assert normal @ radial == pytest.approx(sigma)
-        # Anchorward ends sit at smaller angles: the anchor is the clockwise end.
-        for ref, (t_lo, t_hi, _r) in layout.segments.items():
-            assert t_lo <= t_hi
-            assert alpha <= t_lo and t_hi <= alpha + sweep
-        # The same bridges and the default sides (right inside) as without zones.
-        bridge_gids = {p.get_gid() for p in ax.patches if (p.get_gid() or "").startswith("bridge:")}
-        assert len(bridge_gids) == layout.bridges_drawn == len(dual.minimal.kept_bridge_ids)
-        assert layout.outside[branch_key] == "left"
-        assert "0.0" in {t.get_text() for t in ax.texts}
-    finally:
-        plt.close(fig)
-
-
-def test_circle_layout_honours_interior_side_and_rejects_bad_shapes(k10_partitioned):
-    _session, dual, dynamics = _k10_dynamics(k10_partitioned)
-    (branch_key,) = dual.partition.branch_keys
-    layout = plotting.dual_graph_zone_layout(dual, interior_side={branch_key: "left"})
-    assert layout.outside[branch_key] == "right"
-    fig, ax = plt.subplots()
-    try:
-        with pytest.raises(ValueError):
-            plotting.plot_dual_graph_cartoon(dual, dynamics, ax=ax, shape="hexagon")
-        with pytest.raises(ValueError):
-            plotting.plot_dual_graph_cartoon(
-                dual, dynamics, ax=ax, shape="circle", label_position="nowhere"
-            )
-    finally:
-        plt.close(fig)
-    labels = [h.get_label() for h in plotting.dual_graph_cartoon_legend_handles(
-        walks=False, empty_side=True
-    )]
-    assert labels[-1] == "empty (unstable) side"
-
-
-def test_line_cartoon_labels_every_row_with_its_branch_code(k10_partitioned):
-    _session, dual, dynamics = _k10_dynamics(k10_partitioned)
-    fig, ax = plt.subplots()
-    try:
-        plotting.plot_dual_graph_cartoon(dual, dynamics, ax=ax)
-        assert "anchor  0.0" in {t.get_text() for t in ax.texts}
-    finally:
-        plt.close(fig)
-
-
-# --------------------------------------------------------------------------- #
 # Period 3
 # --------------------------------------------------------------------------- #
 @pytest.mark.slow
@@ -180,45 +100,6 @@ def test_p3_names_carry_orbit_codes_without_a_letter(p3_built):
     assert not naming.letters
     codes = {name.branch_code for name in naming.names}
     assert codes == {"0.0", "1.0", "2.0"}
-
-
-@pytest.mark.slow
-def test_p3_circle_follows_the_zone_boundary(p3_built):
-    """Ring order, direction and anchor positions are the zone's own."""
-    session = p3_built.session
-    (fp,) = p3_built.fixed_points
-    interior, parents, arc_order = session.cartoon_zones()
-    assert parents == {}
-    assert set(interior) == set(fp.branch_cycle("stable"))
-    order = arc_order[id(fp)]
-    # The map sends z0 -> z1 -> z2 clockwise in the plane, and the boundary
-    # runs pip_j -> z_j -> pip_{j+1} clockwise (its interior on the right).
-    assert order.clockwise
-    assert set(interior.values()) == {"right"}
-    ring = [key[2] for key in order.order]
-    assert ring in ([0, 1, 2], [1, 2, 0], [2, 0, 1])
-    fig, ax = plt.subplots()
-    try:
-        layout = session.plot_dual_graph_cartoon(ax=ax, shape="circle")
-        sweep = np.pi / 3
-        keys = order.order
-        for this, following in zip(keys, keys[1:] + keys[:1]):
-            _fp, alpha, signed = layout.arcs[this]
-            _fp, alpha_next, signed_next = layout.arcs[following]
-            # Elements run counter-clockwise from the anchor (the clockwise
-            # end), and going clockwise the empty arc leaves the anchor for
-            # the NEXT branch's pip end.
-            assert signed == pytest.approx(sweep)
-            pip_end_next = alpha_next + signed_next
-            gap = (alpha - pip_end_next) % (2 * np.pi)
-            assert gap == pytest.approx(sweep)
-            # Each anchor sits within half a slot of its orbit point.
-            real = order.anchor_angles[this]
-            miss = abs((alpha - real + np.pi) % (2 * np.pi) - np.pi)
-            assert miss < sweep
-        assert {"0.0", "1.0", "2.0"} <= {t.get_text() for t in ax.texts}
-    finally:
-        plt.close(fig)
 
 
 # --------------------------------------------------------------------------- #
@@ -235,124 +116,6 @@ def test_nested_names_carry_fixed_point_letters(nested_built):
         assert name.mathtext.startswith(f"${{}}^{{{ref.fixed_point.label}}}")
         assert ref.label.startswith(f"{ref.fixed_point.label}:")
     assert isinstance(naming, ElementNaming)
-
-
-@pytest.mark.slow
-def test_nested_inner_circle_sits_inside_the_outer_one(nested_built):
-    session = nested_built.session
-    outer, inner = nested_built.fixed_points
-    _interior, parents, _arc_order = session.cartoon_zones()
-    assert parents == {id(inner): id(outer)}
-    fig, ax = plt.subplots()
-    try:
-        layout = session.plot_dual_graph_cartoon(ax=ax, shape="circle")
-        ox, oy, o_radius = layout.circles[id(outer)]
-        ix, iy, i_radius = layout.circles[id(inner)]
-        assert (ix, iy) == (ox, oy)
-        assert i_radius < o_radius
-        assert layout.parents == {id(inner): id(outer)}
-        texts = {t.get_text() for t in ax.texts}
-        assert {f"{inner.label} 0.0", f"{inner.label} 1.0", f"{outer.label} 0.0"} <= texts
-    finally:
-        plt.close(fig)
-
-
-# --------------------------------------------------------------------------- #
-# The trellis panel draws the minimal trellis only
-# --------------------------------------------------------------------------- #
-@pytest.mark.slow
-def test_bridges_by_class_can_be_restricted_to_the_minimal_trellis(nested_built):
-    session = nested_built.session
-    dynamics = session.symbolic_dynamics()
-    minimal = session.minimal_trellis()
-    members = {
-        member.bridge_id
-        for cd in dynamics.classes.values()
-        for member in cd.entry.members
-    }
-    kept = set(minimal.kept_bridge_ids)
-    assert members - kept, "the blasts add class members outside the minimal trellis"
-    trellis = session.trellis()
-    fig, ax = plt.subplots()
-    try:
-        before = len(ax.lines)
-        plotting.plot_bridges_by_class(trellis, dynamics, ax=ax, bridge_ids=kept)
-        drawn = len(ax.lines) - before
-        expected = sum(
-            1 for bid in members & kept if trellis.bridge_between(*bid) is not None
-        )
-        assert drawn == expected
-    finally:
-        plt.close(fig)
-
-
-@pytest.mark.slow
-def test_nested_classes_are_lettered_and_coloured_tangle_by_tangle(nested_built):
-    session = nested_built.session
-    dynamics = session.symbolic_dynamics()
-    table = session.bridge_classes()
-    groups = [entry.tangle for entry in table]
-    ranks = [len(table.entries) if g is None else g for g in groups]
-    assert ranks == sorted(ranks), "one tangle's classes, then the next, then connecting ones"
-    assert len({g for g in groups if g is not None}) == 2
-    # Within a tangle, by smallest member cdist.
-    for tangle in {g for g in groups}:
-        cdists = [e.min_unstable_cdist for e in table if e.tangle == tangle]
-        assert cdists == sorted(cdists)
-    # Active letters run a, b, c, ... tangle by tangle.
-    active = [e.letter for e in table if e.letter is not None]
-    assert active == sorted(active, key=lambda letter: (len(letter), letter))
-    for refined in (False, True):
-        palette = plotting.class_colors(dynamics, refined=refined)
-        assert len(set(palette.values())) == len(palette), "no colour used twice"
-    palette = plotting.class_colors(dynamics, refined=False)
-    by_tangle = {}
-    for cd in dynamics.classes.values():
-        by_tangle.setdefault(cd.entry.tangle, set()).add(palette[cd.letter])
-    families = [set(family) for family in plotting.TANGLE_COLOR_FAMILIES]
-    for tangle, colours in by_tangle.items():
-        if tangle is not None:
-            assert any(colours <= family for family in families)
-
-
-@pytest.mark.slow
-def test_nested_outer_arcs_go_around_the_inner_circle(nested_built):
-    """No inward arc of the outer circle enters the inner one; a bridge whose
-    lobe encloses the inner tangle goes around its far side."""
-    session = nested_built.session
-    outer, inner = nested_built.fixed_points
-    _interior, parents, _arcs = session.cartoon_zones()
-    minimal = session.minimal_trellis()
-    enclosures = session.cartoon_enclosures(minimal.kept_bridge_ids, parents)
-    assert enclosures, "the outer anchor lobes enclose the period-3 tangle"
-    assert all(ids == frozenset({id(inner)}) for ids in enclosures.values())
-    fig, ax = plt.subplots()
-    try:
-        layout = session.plot_dual_graph_cartoon(ax=ax, shape="circle")
-        cx, cy, _r = layout.circles[id(outer)]
-        keepout = layout.keepout[id(outer)]
-        assert keepout > layout.circles[id(inner)][2]
-        routed = 0
-        for patch in ax.patches:
-            gid = patch.get_gid() or ""
-            if not gid.startswith("bridge:"):
-                continue
-            first, second = (int(v) for v in gid.split(":")[1].split("-"))
-            registry = session.workbench.intersection_registry
-            if registry[first].manifold_b_key[0] is not outer:
-                continue
-            vertices = np.asarray(patch.get_path().vertices)
-            radii = np.hypot(vertices[:, 0] - cx, vertices[:, 1] - cy)
-            if len(vertices) > 4:  # a routed (polyline) arc
-                routed += 1
-                assert radii.min() >= keepout - 1e-9
-                # The long way round sweeps more than half the circle.
-                angles = np.unwrap(np.arctan2(vertices[:, 1] - cy, vertices[:, 0] - cx))
-                swept = abs(angles[-1] - angles[0])
-                assert (swept > np.pi) == ((first, second) in enclosures)
-        assert routed >= len(enclosures)
-    finally:
-        plt.close(fig)
 
 
 # --------------------------------------------------------------------------- #
