@@ -10,9 +10,13 @@ stored ``parent``/``children`` links, and the segment-ownership release that
 
 from __future__ import annotations
 
+import gc
 import logging
+import weakref
 
 import pytest
+
+from helpers.logs import assert_logged
 
 
 # --------------------------------------------------------------------------- #
@@ -78,17 +82,20 @@ def test_partial_pieces_are_held_outside_the_id_registry(henon_tangle_with_bridg
             break
     assert partials, "iterating the k=10 bridges must produce a partial piece"
 
-    identified = set(map(id, workbench._bridges.values()))
+    registered = workbench.bridges
+    identified = {id(workbench.bridge(b.id)) for b in registered if b.id is not None}
     for piece in partials:
         assert piece.id is None
-        assert piece in workbench.bridges, "a partial is still a registered bridge"
-        assert id(piece) not in identified, "a partial must stay out of _bridges"
-        assert piece in workbench._partial_bridges
+        assert any(piece is b for b in registered), (
+            "a partial is still a registered bridge"
+        )
+        assert id(piece) not in identified, "no id may look a partial up"
 
-    # Every id-carrying bridge is in the dict and every dict entry has an id.
-    for bridge in workbench.bridges:
+    # Every id-carrying bridge is the one copy its id looks up; only partials lack one.
+    for bridge in registered:
         assert (bridge.id is None) == bridge.partial
-    assert all(bid == b.id for bid, b in workbench._bridges.items())
+        if bridge.id is not None:
+            assert workbench.bridge(bridge.id) is bridge
 
 
 # --------------------------------------------------------------------------- #
@@ -301,32 +308,33 @@ def test_preimage_bridges_equals_the_backward_chain(henon_p3_session):
 # clear_bridges releases the segments it claimed
 # --------------------------------------------------------------------------- #
 def test_clear_bridges_releases_segment_ownership(grown_both):
-    """No Bridge owns segments in the Tangle index after ``clear_bridges``."""
-    from tanglepack.numerics.Bridge import Bridge
+    """``clear_bridges`` lets the discarded bridges go, and a recut reproduces them.
 
+    A bridge shares its segments with the unstable manifold it was cut from, and
+    the Tangle index records that claim. The bug was that ``clear_bridges`` left
+    the claim in place, so every discarded bridge stayed reachable from the index
+    and was never collected. Observed publicly: after the clear no weak reference
+    to an old bridge survives garbage collection, and a fresh ``create_bridges``
+    cuts the same id set again.
+    """
     workbench, fp = grown_both
     workbench.compute_intersections([fp])
     workbench.trim_stable_manifolds(fp)
     bridges = workbench.create_bridges(fp)
     assert bridges
-
-    tangle = workbench.Tangle
-    assert any(
-        isinstance(m, Bridge)
-        for owners in tangle._seg_manifolds.values()
-        for m in owners
-    ), "bridges must own segments before the clear"
+    ids_before = {b.id for b in bridges if b.id is not None}
+    refs = [weakref.ref(b) for b in bridges]
+    del bridges
 
     workbench.clear_bridges()
+    gc.collect()
 
-    leaked = {
-        m
-        for owners in tangle._seg_manifolds.values()
-        for m in owners
-        if isinstance(m, Bridge)
-    }
-    assert not leaked, f"{len(leaked)} discarded bridge(s) still own segments"
-    assert not any(isinstance(m, Bridge) for m in tangle._manifold_segs)
+    assert not workbench.bridges
+    leaked = [ref for ref in refs if ref() is not None]
+    assert not leaked, f"{len(leaked)} discarded bridge(s) are still reachable"
+
+    recut = workbench.create_bridges(fp)
+    assert {b.id for b in recut if b.id is not None} == ids_before
 
 
 # --------------------------------------------------------------------------- #
@@ -371,10 +379,8 @@ def test_rebuild_drops_metadata_after_an_unpreserved_recompute(
     ):
         workbench.rebuild_bridges(fp)
 
-    assert any(
-        "no longer name the same crossings" in record.getMessage()
-        for record in caplog.records
-    ), "rebuild_bridges must report that it dropped the stale metadata carry"
+    # rebuild_bridges reports the dropped carry (level and logger only)
+    assert_logged(caplog, logging.DEBUG, "tanglepack.numerics.TangleWorkbench")
 
     wrongly_marked = [b.id for b in workbench.bridges if b.iterated]
     assert not wrongly_marked, (

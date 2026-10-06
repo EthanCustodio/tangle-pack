@@ -23,6 +23,7 @@ from invariants import (
 )
 from tanglepack import TangleWorkbench
 from tanglepack.examples import henon_jacobian, henon_map, henon_map_inverse
+from tanglepack.numerics.ManifoldInitializer import _MIN_SEED_STEP
 
 
 # --------------------------------------------------------------------------- #
@@ -147,13 +148,16 @@ def test_one_map_step_scales_cdist_by_per_step_beta(henon_inversion, branch_inde
 
     # The points carry the MEASURED stretch (per_step_factor of the ratio over
     # k_value real map applications), which trails the analytic eigenvalue by the
-    # linearization error of the seed step -- ~5e-6 relative here. The wrong
-    # k_value-th root is off by 110%, so this tolerance still pins the formula.
+    # linearization error of the seed step. The seed step is
+    # max(accuracy, _MIN_SEED_STEP), so that error is of order _MIN_SEED_STEP
+    # relative (~5e-6 here); the tolerance allows 20x that. The wrong k_value-th
+    # root is off by 110%, so this tolerance still pins the formula.
+    rel = 20 * _MIN_SEED_STEP
     wrong = float(np.abs(np.asarray(fp.unstable_eigenvalues[0]).ravel()[0])) ** (
         1.0 / fp.k_value
     )
     for ratio in ratios:
-        assert ratio == pytest.approx(beta, rel=1e-4)
+        assert ratio == pytest.approx(beta, rel=rel)
         assert ratio != pytest.approx(wrong, rel=0.5)
 
 
@@ -165,7 +169,7 @@ def test_forward_iterates_are_registered_on_the_inversion_tangle(henon_inversion
     a wrong beta finds nothing at all on an inversion tangle.
     """
     workbench, fp = henon_inversion
-    registry = workbench._intersection_registry
+    registry = workbench.intersection_registry
     beta = fp.per_step_beta("unstable")
 
     transverse = [
@@ -192,7 +196,7 @@ def test_forward_iterates_are_registered_on_the_inversion_tangle(henon_inversion
 # --------------------------------------------------------------------------- #
 def test_intersections_carry_keys_on_both_branches(henon_inversion):
     workbench, fp = henon_inversion
-    registry = workbench._intersection_registry
+    registry = workbench.intersection_registry
 
     assert len(registry) > 0, "the inversion tangle produced no crossings"
 
@@ -243,5 +247,5 @@ def test_mixed_eigenvalue_signs_are_rejected():
     workbench = TangleWorkbench(
         _henon_b_negative, _henon_b_negative_inverse, _henon_b_negative_jacobian
     )
-    with pytest.raises(ValueError, match="sign"):
+    with pytest.raises(ValueError):
         workbench.construct_fixed_point([3.1623, 3.1623])

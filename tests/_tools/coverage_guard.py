@@ -36,7 +36,14 @@ WHITELIST: dict[str, tuple[str, ...]] = {
         "IntersectionRegistry.on_interval",
         "IntersectionRegistry._get_lambda_u",
     ),
-    "src/tanglepack/numerics/ManifoldMachine.py": ("ManifoldMachine._curvature_area",),
+    # the scalar curvature area and the three helpers only it calls (Phase 3a
+    # moved the last tests onto the vectorized kernel ``_curvature_area_batch``)
+    "src/tanglepack/numerics/ManifoldMachine.py": (
+        "ManifoldMachine._curvature_area",
+        "ManifoldMachine._chord_frame",
+        "ManifoldMachine._linear_fit",
+        "ManifoldMachine._compute_single_area",
+    ),
     "src/tanglepack/loom/TangleSession.py": ("TangleSession.invalidate_trellises",),
     "src/tanglepack/topology/Pseudoneighbor.py": ("forward_unstable_branch_cycle",),
     "src/tanglepack/topology/StrongPip.py": ("forward_stable_branch_cycle",),

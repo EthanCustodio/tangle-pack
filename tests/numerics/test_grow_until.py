@@ -38,9 +38,12 @@ Note:
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pytest
 
+from helpers.logs import assert_logged
 from tanglepack.topology.Trellis import Trellis
 
 
@@ -94,7 +97,7 @@ def test_grow_until_raises_at_the_cap(small_tangle):
     workbench, fp = small_tangle
     before = _point_counts(workbench)
 
-    with pytest.raises(ValueError, match="[Mm]ax iterations"):
+    with pytest.raises(ValueError):
         workbench.grow_until(fp, lambda wb: False, max_iterations=1)
 
     after = _point_counts(workbench)
@@ -122,13 +125,17 @@ def test_grow_until_grows_only_the_requested_stabilities(small_tangle):
 
 def test_grow_until_rejects_an_empty_grow_set(small_tangle):
     workbench, fp = small_tangle
-    with pytest.raises(ValueError, match="at least one"):
+    before = _point_counts(workbench)
+    with pytest.raises(ValueError):
         workbench.grow_until(fp, lambda wb: False, grow=())
+    assert _point_counts(workbench) == before, (
+        "the request must be refused before any growth"
+    )
 
 
 def test_grow_until_requires_an_initialized_manifold(fixed_point):
     workbench, fp = fixed_point  # no manifolds seeded yet
-    with pytest.raises(ValueError, match="has not been initialized"):
+    with pytest.raises(ValueError):
         workbench.grow_until(fp, lambda wb: True)
 
 
@@ -226,15 +233,23 @@ def test_iterates_closed_is_a_no_op_when_already_closed(small_tangle):
 
 def test_iterates_closed_rejects_an_unknown_id(small_tangle):
     workbench, fp = small_tangle
+    before = _point_counts(workbench)
     unknown = max(iid for iid, _ix in workbench.intersection_registry) + 100
-    with pytest.raises(ValueError, match="not in the registry"):
+    with pytest.raises(ValueError):
         workbench.grow_until_iterates_closed(fp, ids=[unknown])
+    assert _point_counts(workbench) == before, (
+        "the request must be refused before any growth"
+    )
 
 
 def test_iterates_closed_rejects_an_unknown_direction(small_tangle):
     workbench, fp = small_tangle
-    with pytest.raises(ValueError, match="direction"):
+    before = _point_counts(workbench)
+    with pytest.raises(ValueError):
         workbench.grow_until_iterates_closed(fp, direction="sideways")
+    assert _point_counts(workbench) == before, (
+        "the request must be refused before any growth"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -270,14 +285,18 @@ def test_faces_closed_raises_at_the_cap_for_the_anchor(small_tangle):
     assert anchors, "compute_intersections must have registered the anchor"
     assert anchors[0] not in _interior_ids(workbench)
 
-    with pytest.raises(ValueError, match="[Mm]ax iterations"):
+    with pytest.raises(ValueError):
         workbench.grow_until_faces_closed(fp, ids=anchors, max_iterations=2)
 
 
 def test_faces_closed_rejects_an_empty_id_set(small_tangle):
     workbench, fp = small_tangle
-    with pytest.raises(ValueError, match="at least one"):
+    before = _point_counts(workbench)
+    with pytest.raises(ValueError):
         workbench.grow_until_faces_closed(fp, ids=[])
+    assert _point_counts(workbench) == before, (
+        "the request must be refused before any growth"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -330,7 +349,7 @@ def test_grow_until_recuts_existing_bridges(small_tangle):
     # the STABLE side is the one that does it: growing the stable manifold drops
     # new crossings BETWEEN the endpoints of bridges already cut on the unstable
     # branch, while growing the unstable manifold only extends past the last one.
-    with pytest.raises(ValueError, match="[Mm]ax iterations"):
+    with pytest.raises(ValueError):
         workbench.grow_until(fp, lambda wb: False, grow=("stable",), max_iterations=1)
 
     # builds at all == every bridge is still consecutive on its branch
@@ -405,18 +424,25 @@ def test_iterates_closed_all_is_scoped_to_the_grown_fixed_point(
         "each saddle must own a crossing the other does not for this to bite"
     )
 
-    frozen = set(workbench._frozen_ids("all", fixed_point=simple, allow_all=True))
+    assert mine != every, "the whole-registry resolution is the bug being pinned"
 
-    assert frozen == mine
-    assert not (frozen & (theirs - mine))
-    assert frozen != every, "the whole-registry resolution is the bug being pinned"
+    # Observed through the driver. Closing `simple`'s own crossings by hand (a
+    # stand-in +1 link for each open one; the predicate reads only the table)
+    # must satisfy "all" before any growth, although the other saddle's crossings
+    # are still open. A set resolved against the whole registry would include
+    # those and grow (here: run to the cap and raise ValueError).
+    registry = workbench.intersection_registry
+    for iid in mine:
+        if (iid, 1) not in registry.iterate_table:
+            registry.register_iterate(iid, 1, iid)
+    table = registry.iterate_table
+    assert any((iid, 1) not in table for iid in theirs - mine), (
+        "the other saddle's crossings must still lack an image for this to bite"
+    )
+    before = _point_counts(workbench)
 
-    # and the excluded ids really are unreachable from this call: growing only
-    # `simple` leaves them without a forward image, so the loop would have capped.
-    workbench.grow_n_times(simple, "unstable", num_iterations=1)
-    workbench.compute_intersections([simple, other], preserve_ids=True)
-    table = workbench.intersection_registry.iterate_table
-    assert any((iid, 1) not in table for iid in theirs - mine)
+    assert workbench.grow_until_iterates_closed(simple, max_iterations=1) == 0
+    assert _point_counts(workbench) == before
 
 
 # --------------------------------------------------------------------------- #
@@ -430,8 +456,6 @@ def test_grow_until_clears_the_iterated_flag_it_invalidates(small_tangle, caplog
     left marked ``iterated`` with no derivable image is invisible to
     ``uniiterated_bridges``, so a later blast silently skips it forever.
     """
-    import logging
-
     workbench, fp = small_tangle
     workbench.grow_n_times(fp, "unstable", num_iterations=2)
     workbench.compute_intersections([fp])
@@ -442,20 +466,21 @@ def test_grow_until_clears_the_iterated_flag_it_invalidates(small_tangle, caplog
     )
 
     with caplog.at_level(logging.WARNING, logger="tanglepack.numerics.TangleWorkbench"):
-        with pytest.raises(ValueError, match="[Mm]ax iterations"):
+        with pytest.raises(ValueError):
             workbench.grow_until(
                 fp, lambda wb: False, grow=("stable",), max_iterations=1
             )
 
     stranded = [
-        bid
-        for bid, bridge in workbench._bridges.items()
-        if bridge.iterated and workbench.image_bridges(bid) is None
+        bridge.id
+        for bridge in workbench.bridges
+        if bridge.id is not None
+        and bridge.iterated
+        and workbench.image_bridges(bridge.id) is None
     ]
     assert not stranded, (
         f"bridges {stranded} are marked iterated but their image cannot be "
         "derived: a later blast will never re-iterate them"
     )
-    assert any("recut the bridge set" in record.message for record in caplog.records), (
-        "losing a blast frontier must be logged, not silent"
-    )
+    # losing a blast frontier must be logged, not silent (level and logger only)
+    assert_logged(caplog, logging.WARNING, "tanglepack.numerics.TangleWorkbench")

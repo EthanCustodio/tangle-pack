@@ -11,6 +11,7 @@ import pytest
 from invariants import (
     assert_cdist_monotonic,
     assert_iterate_relation,
+    assert_no_geometric_spikes,
     assert_one_to_one,
 )
 
@@ -21,7 +22,8 @@ def test_unstable_growth_preserves_invariants(initialized, n_iter):
     workbench.grow_n_times(fp, "unstable", num_iterations=n_iter)
     manifold = workbench.manifolds[(fp, "unstable", 0, 0)]
 
-    assert_cdist_monotonic(manifold, strict=True)
+    assert_cdist_monotonic(manifold)
+    assert_no_geometric_spikes(manifold)
     assert_iterate_relation(manifold, rtol=1e-6)
     assert_one_to_one(manifold)
 
@@ -32,7 +34,8 @@ def test_stable_growth_preserves_invariants(initialized, n_iter):
     workbench.grow_n_times(fp, "stable", num_iterations=n_iter)
     manifold = workbench.manifolds[(fp, "stable", 0, 0)]
 
-    assert_cdist_monotonic(manifold, strict=True)
+    assert_cdist_monotonic(manifold)
+    assert_no_geometric_spikes(manifold)
     assert_iterate_relation(manifold, rtol=1e-6)
     assert_one_to_one(manifold)
 

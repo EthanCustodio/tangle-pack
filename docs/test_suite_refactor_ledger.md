@@ -542,3 +542,112 @@ scripts) deleted too.
 4. Not touched (later phases): `test_p3_forward_holes_stop_at_the_branch_return`
    still asserts the provisional `+1, +2` forward holes on p3 (decision 3);
    flagged for Phase 3b/4.
+
+---
+
+## §3a Phase 3a: loosen in place (`tests/numerics/`, `tests/regression/`)
+
+### Deletion ledger, Phase 3a
+
+None. No test function is deleted; only assertions change. 2 node ids added
+(`test_walk_back_inverts_walk_fwd_through_the_root[unstable|stable]`, see
+below), 724 → 726.
+
+### What changed
+
+- **Exceptions, type only (decision 5).** Every `match=` dropped in
+  `test_cleanup_walkers_and_examples` (`collect_rejects_a_broken_iterate_link`,
+  `first_node_needs_a_branch_index`, `saddle_guesses_refuses_unknown_parameters`),
+  `test_grow_until` (×9), `test_workbench_bugfixes` (×3), `test_map_step_and_graph`
+  (×2), `test_minimal_solver` (×2), `test_inversion_fixture` (mixed-sign) and
+  `test_gpu` (no-CuPy). `test_collect_is_the_only_traversal` now raises a local
+  sentinel exception class from the sabotaged `_collect` instead of matching its
+  text. Where the message was what told a validation error from the cap error
+  (`grow_until_intersection_honours_branch_index`, the empty-grow-set /
+  unknown-id / unknown-direction / empty-id-set rejections), the test now also
+  asserts that no manifold grew, so the type-only check keeps its meaning.
+- **Logs, level and logger only.** `test_rebuild_drops_metadata_after_an_unpreserved_recompute`
+  (DEBUG, `tanglepack.numerics.TangleWorkbench`) and
+  `test_grow_until_clears_the_iterated_flag_it_invalidates` (WARNING, same
+  logger) go through `helpers.logs.assert_logged`.
+- **Tolerances (decision 5).** `per_step_beta` `rel=0, abs=0` → default
+  `pytest.approx`; the area-preserving reciprocal and the dissipative
+  non-reciprocal checks compare with `approx` instead of exact `==`/`!=`;
+  `test_one_map_step_scales_cdist_by_per_step_beta` states its tolerance as
+  `20 * _MIN_SEED_STEP` (= the old 1e-4); `test_refinement_essentially_converges_to_cutoff`
+  measures with `_curvature_area_batch` against the machine's `area_cutoff`.
+- **Strictness.** `test_machine_iterate_invariants` (both tests) and
+  `test_growth_integration` use the default `strict=False` and now also run
+  `assert_no_geometric_spikes` (decision 5: the no-spike check runs
+  everywhere); the only strict cdist test left is
+  `test_low_stretch_growth_keeps_cdist_injective`.
+- **Private → public.**
+  - `_intersection_registry` → `intersection_registry` everywhere in
+    `numerics/` and `regression/`.
+  - `test_batched_map` (×3): `_map_batchable` replaced by a recording wrapper
+    around the map — a batch-capable map is called once per batch on `(2, N)`,
+    a scalar-only map once per `(2,)` point, and the two growths really took
+    those two paths.
+  - `test_partial_pieces_are_held_outside_the_id_registry`: `_bridges` /
+    `_partial_bridges` → `workbench.bridges`, `workbench.bridge(id)`,
+    `id is None`.
+  - `test_clear_bridges_releases_segment_ownership`: the Tangle's segment
+    ownership tables → weak references (no discarded bridge survives
+    `gc.collect()` after `clear_bridges`) plus a fresh `create_bridges`
+    reproducing the same id set. Checked to bite: with
+    `Tangle.release_manifold` monkeypatched to a no-op the test fails.
+  - `test_grow_until_clears_the_iterated_flag_it_invalidates`: `_bridges` →
+    `workbench.bridges`.
+  - `test_iterates_closed_all_is_scoped_to_the_grown_fixed_point`:
+    `_frozen_ids` → observed through the driver (see deviation 1).
+  - `test_grow_until_intersection_stops_once_a_crossing_exists`:
+    `Tangle._intersecting_segments` → the registry holds a non-anchor crossing.
+  - `regression/test_near_vertical_refinement`: scalar `_curvature_area` (dead
+    API) → the `_curvature_area_batch` kernel; it now also asserts the area is
+    positive (a degenerate row returns 0, which would pass vacuously).
+- `test_closed_form_curvature` module docstring no longer describes the
+  scalar-vs-batch test deleted in Phase 2.
+
+### Verification
+
+- Collected **726** (`nodeids_p3a.txt`).
+- `725 passed, 1 skipped` in 108 s with coverage; `-rxX`: no xfail, no xpass.
+- Coverage guard vs `cov_base.json`: OK (`cov_p3a.json`), after deviations 2
+  and 3.
+- Isolation: `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `numerics/test_invariant_helpers.py::test_fundamental_segments_have_injective_cdist`,
+  `numerics/test_geometry.py::test_interior_point_is_inside[square]`,
+  `numerics/test_closed_form_curvature.py::test_parabolic_fit_matches_vandermonde[4]`,
+  `numerics/test_geometry.py::test_polyline_midpoint_of_an_empty_polyline_is_none`
+  pass alone, as does every rewritten test above.
+
+### Deviations, Phase 3a
+
+1. **`test_iterates_closed_all_is_scoped_to_the_grown_fixed_point` is not
+   observed by a full driver run.** The two-saddle workbench cannot close the
+   k=10 saddle's own crossings within any affordable budget (one of them never
+   gets a forward image in 3 rounds; the stable growth makes each round cost
+   seconds). The test instead closes them by hand through the public
+   `IntersectionRegistry.register_iterate` (stand-in `+1` links; the predicate
+   reads only the table) and asserts that `grow_until_iterates_closed(simple)`
+   with `ids="all"` returns 0 without growing, while the other saddle's
+   crossing is still open. Checked to bite: passing the whole registry's ids
+   instead runs to the cap and raises.
+2. **Coverage-guard whitelist extended** with `ManifoldMachine._chord_frame`,
+   `_linear_fit` and `_compute_single_area`: they are called only by the scalar
+   `_curvature_area` (dead API, decision 4), which the near-vertical
+   regression test no longer reaches.
+3. **New test `test_walk_back_inverts_walk_fwd_through_the_root`** (numerics,
+   parametrized unstable/stable): the scalar curvature path was the only
+   caller covering `BaseManifold.walk_back` through a root `BranchPoint`
+   (`_branch_backward`), which is live public API. The test asserts the
+   structural inverse `walk_back(walk_fwd(prev, node), node) is prev`, at the
+   root slots and along the ordinary nodes; it pins no slot semantics.
+4. **Out of 3a scope, left for later phases:** private access not named by
+   the plan's Phase 3 list (`Tangle._seg_lookup` / `_manifold_segs` in the trim
+   test and `test_tangle_index_and_orientation`, `_iter_manifolds`,
+   `_man_machine.area_cutoff`) stays for Phase 4 (twins deleted) / Phase 7
+   (trim oracle, strengthening); `test_workbench_has_no_private_key_advance`
+   is upgraded to the advance_key spy in Phase 7 per planner §A. The
+   numerics-layer files at the top level (`test_fixed_point.py`, …) belong to
+   Phase 3b by directory.

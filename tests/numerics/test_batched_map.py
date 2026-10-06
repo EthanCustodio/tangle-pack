@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 
 import tanglepack
-from tanglepack import DynamicalSystem, ManifoldView
+from tanglepack import DynamicalSystem, ManifoldMachine
 from tanglepack.examples import (
     HENON_K10,
     henon_jacobian,
@@ -38,30 +38,54 @@ def _scalar_only(fn):
     return wrapped
 
 
+def _recording(fn, shapes: list):
+    """Wrap a map so every call that SUCCEEDS appends its argument's shape to ``shapes``."""
+
+    def wrapped(point):
+        image = fn(point)
+        shapes.append(np.shape(point))
+        return image
+
+    return wrapped
+
+
 def test_map_batch_detects_and_matches_loop():
-    system = DynamicalSystem(_batch_map, _batch_imap)
+    shapes: list = []
+    system = DynamicalSystem(_recording(_batch_map, shapes), _batch_imap)
     coords = np.array([[0.1, 0.2], [4.0, -4.0], [-3.0, 1.5], [2.2, 2.2]])
 
     batched = system.map_batch(coords)
     expected = np.vstack([_batch_map(p) for p in coords])
 
-    assert system._map_batchable is True
     assert np.allclose(batched, expected, rtol=1e-12, atol=1e-15)
     assert batched.shape == coords.shape
 
+    # once detected, a batch-capable map is called ONCE per batch, on (2, N)
+    shapes.clear()
+    system.map_batch(coords)
+    assert shapes == [(2, len(coords))]
+
 
 def test_scalar_only_map_falls_back():
-    system = DynamicalSystem(_scalar_only(_batch_map), _scalar_only(_batch_imap))
+    shapes: list = []
+    system = DynamicalSystem(
+        _recording(_scalar_only(_batch_map), shapes), _scalar_only(_batch_imap)
+    )
     coords = np.array([[0.1, 0.2], [4.0, -4.0], [-3.0, 1.5]])
 
     batched = system.map_batch(coords)
     expected = np.vstack([_scalar_only(_batch_map)(p) for p in coords])
 
-    assert system._map_batchable is False  # detection fell back
     assert np.allclose(batched, expected, rtol=1e-12, atol=1e-15)
+
+    # detection fell back: every later batch is one call per (2,) point
+    shapes.clear()
+    system.map_batch(coords)
+    assert shapes == [(2,)] * len(coords)
 
 
 def _grow(m, im):
+    """Seed the k=10 saddle with maps ``m``/``im`` and grow its unstable branch 5 times."""
     wb = tanglepack.TangleWorkbench(m, im, _jac)
     fp = wb.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
     wb.orient_eigenvectors(
@@ -73,11 +97,17 @@ def _grow(m, im):
 
 
 def test_batch_and_fallback_growth_agree():
-    wb_b, fp_b, man_b = _grow(_batch_map, _batch_imap)
-    wb_s, fp_s, man_s = _grow(_scalar_only(_batch_map), _scalar_only(_batch_imap))
+    shapes_b: list = []
+    shapes_s: list = []
+    wb_b, fp_b, man_b = _grow(_recording(_batch_map, shapes_b), _batch_imap)
+    wb_s, fp_s, man_s = _grow(
+        _recording(_scalar_only(_batch_map), shapes_s), _scalar_only(_batch_imap)
+    )
 
-    assert wb_b._man_machine.system._map_batchable is True
-    assert wb_s._man_machine.system._map_batchable is False
+    # growth really took the two different paths: column-batch (2, N) calls on
+    # one side, only single (2,) points on the scalar-only side
+    assert any(len(shape) == 2 and shape[0] == 2 for shape in shapes_b)
+    assert shapes_s and all(shape == (2,) for shape in shapes_s)
 
     cd_b = np.asarray(man_b.get_cdist_array()).ravel()
     cd_s = np.asarray(man_s.get_cdist_array()).ravel()
@@ -89,33 +119,29 @@ def test_batch_and_fallback_growth_agree():
 
 
 def test_refinement_essentially_converges_to_cutoff():
-    """The refiner drives nearly every pair below the cutoff.
+    """The refiner drives nearly every pair below ``area_cutoff``.
 
     A pair below the cutoff when it is evaluated is not re-checked if a later
     insertion in an *adjacent* segment changes its neighbour (true of both the
     breadth-first refiner and the old depth-first one), so a small boundary
     fraction can end just above the cutoff. We pin that this slack stays tiny:
-    only a sliver of pairs exceed the cutoff and none by a large factor.
+    only a sliver of pairs exceed the cutoff and none by a large factor. The
+    areas come from the vectorized kernel the refiner itself flags with.
     """
     wb, fp, man = _grow(_batch_map, _batch_imap)
-    machine = wb._man_machine
-    viewer = ManifoldView(man, machine.system)
-    cutoff = machine.area_cutoff
+    cutoff = wb._man_machine.area_cutoff
 
-    total = over = 0
-    max_ratio = 0.0
-    prev = man.root
-    cur = man.walk_fwd(None, prev)
-    while cur is not None:
-        area = machine._curvature_area((prev, cur), viewer)
-        total += 1
-        if area >= cutoff:
-            over += 1
-            max_ratio = max(max_ratio, area / cutoff)
-        if cur is man.tail:
-            break
-        nxt = man.walk_fwd(prev, cur)
-        prev, cur = cur, nxt
+    points = np.asarray(man.get_point_array(), dtype=float).reshape(-1, 2)
+    nan = np.full((1, 2), np.nan)
+    p0, p1 = points[:-1], points[1:]
+    left = np.vstack((nan, points[:-2]))
+    right = np.vstack((points[2:], nan))
+    areas = ManifoldMachine._curvature_area_batch(p0, p1, left, right)
 
+    total = len(areas)
+    over = int(np.count_nonzero(areas >= cutoff))
+    max_ratio = float(areas.max() / cutoff)
+
+    assert total > 0
     assert over / total < 0.02, f"{over}/{total} pairs above cutoff"
     assert max_ratio < 5.0, f"a pair exceeded the cutoff by {max_ratio:.1f}x"

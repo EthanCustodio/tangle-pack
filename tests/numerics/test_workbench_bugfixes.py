@@ -20,7 +20,7 @@ def test_bridge_endpoints_stay_on_the_bridges_own_branch(henon_p3_session):
     bridge of one branch an endpoint belonging to another."""
     session, _fp3, _fp1, _zone = henon_p3_session
     workbench = session.workbench
-    registry = workbench._intersection_registry
+    registry = workbench.intersection_registry
 
     keyed = [b for b in workbench.bridges if b.manifold_key is not None]
     assert keyed, "expected at least one keyed bridge on the period-3 tangle"
@@ -69,7 +69,7 @@ def test_trim_stable_manifolds_without_crossings(fixed_point):
     workbench.grow_until_turnaround(fp, "stable")
     workbench.compute_intersections([fp], infer_iterates=False)
 
-    assert len(workbench._intersection_registry) == 0
+    assert len(workbench.intersection_registry) == 0
 
     manifolds = list(workbench._iter_manifolds(fp, "stable"))
     assert manifolds
@@ -103,7 +103,7 @@ def test_trim_stable_manifolds_cuts_just_past_the_outermost_crossing(small_tangl
 
         assert manifold.tail is expected
         outermost = max(
-            ix.stable_cdist for _id, ix in workbench._intersection_registry
+            ix.stable_cdist for _id, ix in workbench.intersection_registry
         )
         assert manifold.tail.get_cdist("stable") >= outermost
         return
@@ -115,18 +115,22 @@ def test_trim_stable_manifolds_cuts_just_past_the_outermost_crossing(small_tangl
 # 1.12 -- growth loop caps and the grow_until_intersection rename
 # --------------------------------------------------------------------------- #
 def test_grow_until_intersection_stops_once_a_crossing_exists(initialized):
+    """The driver returns as soon as the registry holds a crossing it did not before."""
     workbench, fp = initialized
     workbench.grow_until_turnaround(fp, "stable")
 
     workbench.grow_until_intersection(fp, "unstable", max_iterations=10)
 
-    assert len(workbench.Tangle._intersecting_segments) > 0
+    registry = workbench.intersection_registry
+    assert any(not ix.is_synthetic for _iid, ix in registry), (
+        "the driver returned without a detected (non-anchor) crossing"
+    )
 
 
 def test_grow_until_intersection_raises_at_the_cap(initialized):
     workbench, fp = initialized
 
-    with pytest.raises(ValueError, match="Max iterations"):
+    with pytest.raises(ValueError):
         workbench.grow_until_intersection(fp, "unstable", max_iterations=1)
 
 
@@ -134,15 +138,25 @@ def test_grow_until_intersection_honours_branch_index(initialized):
     """branch_index must reach the manifold lookup: an uninitialized branch is
     reported as such rather than silently growing branch 0."""
     workbench, fp = initialized
+    before = {
+        key: len(manifold.get_point_array())
+        for key, manifold in workbench.manifolds.items()
+    }
 
-    with pytest.raises(ValueError, match="has not been initialized"):
+    with pytest.raises(ValueError):
         workbench.grow_until_intersection(fp, "unstable", branch_index=1)
+
+    # refused up front, not after growing branch 0 to the cap
+    assert {
+        key: len(manifold.get_point_array())
+        for key, manifold in workbench.manifolds.items()
+    } == before
 
 
 def test_grow_until_arclength_raises_at_the_cap(initialized):
     workbench, fp = initialized
 
-    with pytest.raises(ValueError, match="Max iterations"):
+    with pytest.raises(ValueError):
         workbench.grow_until_arclength(
             fp, "unstable", length=1e9, max_iterations=2
         )

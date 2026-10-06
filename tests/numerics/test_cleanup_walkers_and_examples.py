@@ -121,8 +121,11 @@ def test_collect_is_the_only_traversal(grown_unstable):
     """The getters delegate: break ``_collect`` and every one of them breaks."""
     workbench, fp, manifold = grown_unstable
 
+    class _CollectReached(RuntimeError):
+        """Raised only by the sabotaged ``_collect``: the getter went through it."""
+
     def _boom(*args, **kwargs):
-        raise RuntimeError("_collect was bypassed")
+        raise _CollectReached
 
     manifold._collect = _boom
     for call in (
@@ -132,7 +135,7 @@ def test_collect_is_the_only_traversal(grown_unstable):
         manifold.get_non_iterated_cdist_array,
         manifold.get_iterated_point_array,
     ):
-        with pytest.raises(RuntimeError, match="_collect was bypassed"):
+        with pytest.raises(_CollectReached):
             call()
 
 
@@ -150,7 +153,7 @@ def test_collect_rejects_a_broken_iterate_link(grown_unstable):
 
     node.__class__ = type("LyingPoint", (_Liar, type(node)), {})
     try:
-        with pytest.raises(ValueError, match="NoneType"):
+        with pytest.raises(ValueError):
             manifold.get_iterated_point_array()
     finally:
         node.__class__ = type(node).__mro__[2]
@@ -178,6 +181,36 @@ def test_first_node_steps_past_the_root_branch_point(initialized):
     assert view.first_node() is view.walk_fwd(None, root, 0)
     assert view.first_node() is root.forward_branches[0]
     assert view.first_node(1) is root.forward_branches[1]
+
+
+@pytest.mark.parametrize("stability", ["unstable", "stable"])
+def test_walk_back_inverts_walk_fwd_through_the_root(initialized, stability):
+    """``walk_back(walk_fwd(prev, node), node) is prev`` everywhere, the root too.
+
+    At an ordinary node this is the linked list read both ways; at the root
+    BranchPoint the walk enters on one slot and leaves on the matching slot, and
+    walking back must undo exactly that toggle.
+    """
+    workbench, fp = initialized
+    manifold = workbench.manifolds[(fp, stability, 0, 0)]
+    root = fp.branch_points[0]
+    slots = root.backward_branches if stability == "unstable" else root.forward_branches
+    entries = [node for node in slots if node is not None]  # unseeded slots are None
+    assert entries, "the seeded root must have an entry slot"
+
+    checked = 0
+    for prev in entries:
+        out = manifold.walk_fwd(prev, root)
+        assert manifold.walk_back(out, root) is prev
+        checked += 1
+
+    prev, cur = root, manifold.first_node()
+    while cur is not None and cur is not manifold.tail:
+        nxt = manifold.walk_fwd(prev, cur)
+        assert manifold.walk_back(nxt, cur) is prev
+        prev, cur = cur, nxt
+        checked += 1
+    assert checked > len(entries), "the walk must cover ordinary nodes too"
 
 
 def test_first_node_on_an_ordinary_root_is_the_root(initialized):
@@ -209,7 +242,7 @@ def test_first_node_needs_a_branch_index(initialized):
         manifold_key=(fp, "unstable", 0, 0),
     )
     view.branch_index = None
-    with pytest.raises(ValueError, match="branch_index"):
+    with pytest.raises(ValueError):
         view.first_node()
 
 
@@ -264,7 +297,7 @@ def test_saddle_guesses_returns_a_fresh_copy():
 
 
 def test_saddle_guesses_refuses_unknown_parameters():
-    with pytest.raises(KeyError, match="no recorded saddle guesses"):
+    with pytest.raises(KeyError):
         saddle_guesses(3.7, 1)
 
 

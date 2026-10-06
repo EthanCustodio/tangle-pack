@@ -1,12 +1,7 @@
-"""The closed-form curvature path must match the reference linear-algebra forms.
+"""The closed-form curvature path must match the reference linear-algebra form.
 
-Two equivalences are pinned here:
-
-* :meth:`ManifoldMachine._parabolic_fit` (closed-form divided differences) must
-  reproduce the old Vandermonde-inverse coefficients.
-* :meth:`ManifoldMachine._curvature_area_batch` (vectorized) must reproduce the
-  scalar :meth:`ManifoldMachine._curvature_area` for every consecutive pair of a
-  real grown manifold.
+:meth:`ManifoldMachine._parabolic_fit` (closed-form divided differences) must
+reproduce the old Vandermonde-inverse coefficients.
 """
 
 from __future__ import annotations

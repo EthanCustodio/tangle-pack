@@ -54,7 +54,7 @@ def test_per_step_beta_unstable_is_the_period_th_root_of_the_eigenvalue():
         _bare_fixed_point(3, inversion=True),
     ):
         beta = fp.per_step_beta("unstable")
-        assert beta == pytest.approx(4.0 ** (1.0 / fp.period), rel=0, abs=0)
+        assert beta == pytest.approx(4.0 ** (1.0 / fp.period))
         assert beta > 1.0
         # a branch return is k_value steps and costs lambda ** num_branches
         assert beta ** fp.k_value == pytest.approx(4.0 ** fp.num_branches)
@@ -77,10 +77,13 @@ def test_per_step_beta_stable_is_the_reciprocal_on_an_area_preserving_map():
     """det J = 1 means lambda_u * lambda_s = 1, so the two factors are reciprocal.
 
     Every call site before this row wrote the stable contraction as
-    ``stable_cdist / beta_unstable``; the method must reproduce that exactly.
+    ``stable_cdist / beta_unstable``; the method must reproduce that (to
+    floating-point rounding).
     """
     fp = _bare_fixed_point(3, lambda_u=4.0, lambda_s=0.25)
-    assert fp.per_step_beta("stable") == 1.0 / fp.per_step_beta("unstable")
+    assert fp.per_step_beta("stable") == pytest.approx(
+        1.0 / fp.per_step_beta("unstable")
+    )
     assert 0.0 < fp.per_step_beta("stable") < 1.0
 
 
@@ -89,12 +92,14 @@ def test_per_step_beta_stable_uses_the_stable_eigenvalue_when_the_product_is_not
     fp = _bare_fixed_point(2, lambda_u=4.0, lambda_s=0.1)
     assert fp.unstable_eigenvalues[0] * fp.stable_eigenvalues[0] != pytest.approx(1.0)
     assert fp.per_step_beta("stable") == pytest.approx(0.1 ** (1.0 / fp.period))
-    assert fp.per_step_beta("stable") != 1.0 / fp.per_step_beta("unstable")
+    assert fp.per_step_beta("stable") != pytest.approx(
+        1.0 / fp.per_step_beta("unstable")
+    )
 
 
 def test_per_step_beta_rejects_an_unknown_stability():
     fp = _bare_fixed_point(1)
-    with pytest.raises(ValueError, match="stability"):
+    with pytest.raises(ValueError):
         fp.per_step_beta("sideways")
 
 
@@ -125,7 +130,7 @@ def test_branch_cycle_is_the_advance_key_chain(fp, stability):
 
 def test_branch_cycle_rejects_an_unknown_stability():
     fp = _bare_fixed_point(3)
-    with pytest.raises(ValueError, match="stability"):
+    with pytest.raises(ValueError):
         fp.branch_cycle("sideways")
 
 
@@ -190,7 +195,7 @@ def test_stable_edges_join_consecutive_crossings_on_one_branch(henon_p3_session)
     """A stable edge is a stable ARC: same branch, adjacent in that branch's order."""
     session, _fp3, _fp1, _zone = henon_p3_session
     workbench = session.workbench
-    registry = workbench._intersection_registry
+    registry = workbench.intersection_registry
     graph = workbench.build_intersection_graph()
 
     per_branch: dict[tuple, list[int]] = {}
@@ -235,7 +240,7 @@ def test_unstable_edges_are_exactly_the_bridges(henon_p3_session):
 def test_registry_graph_falls_back_to_per_branch_unstable_order(henon_p3_session):
     """Without bridges the registry orders the unstable side by its own branch."""
     session, _fp3, _fp1, _zone = henon_p3_session
-    registry = session.workbench._intersection_registry
+    registry = session.workbench.intersection_registry
     graph = registry.graph()
 
     per_branch: dict[tuple, list[int]] = {}
@@ -253,7 +258,7 @@ def test_registry_graph_falls_back_to_per_branch_unstable_order(henon_p3_session
 
 def test_registry_graph_takes_the_bridges_it_is_given(henon_p3_session):
     session, _fp3, _fp1, _zone = henon_p3_session
-    registry = session.workbench._intersection_registry
+    registry = session.workbench.intersection_registry
     ids = registry.all_ids()[:4]
     bridges = [(ids[0], ids[1]), (ids[2], ids[3])]
 
@@ -266,7 +271,7 @@ def test_build_intersection_graph_does_not_mutate_the_registry_graph(
 ):
     """The workbench decorates a COPY: its extra attributes stay out of the registry."""
     workbench, _fp = henon_tangle_with_bridges
-    registry = workbench._intersection_registry
+    registry = workbench.intersection_registry
 
     decorated = workbench.build_intersection_graph()
     decorated.add_node("sentinel")
