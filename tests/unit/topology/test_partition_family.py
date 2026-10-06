@@ -120,7 +120,6 @@ def test_marks_round_trip_reproduces_every_result(k10_partitioned):
             assert mine.hi_cdist == pytest.approx(theirs.hi_cdist)
 
 
-@pytest.mark.slow
 def test_marks_round_trip_on_the_nested_fixture(p3_partitioned):
     session, fp3, fp1 = p3_partitioned
     for fp in (fp3, fp1):

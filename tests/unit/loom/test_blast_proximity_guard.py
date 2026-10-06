@@ -11,7 +11,6 @@ so far).
 from __future__ import annotations
 
 import numpy as np
-import pytest
 from scipy.spatial import cKDTree
 
 MIN_SEPARATION = 0.02
@@ -53,7 +52,6 @@ def _distance(points: np.ndarray, cloud: list[np.ndarray]) -> float:
     return float(cKDTree(np.vstack(cloud)).query(points)[0].min())
 
 
-@pytest.mark.slow
 def test_min_separation_drops_close_bridges(henon_p3_session):
     """Kept children keep their distance; dropped ones really were too close.
 

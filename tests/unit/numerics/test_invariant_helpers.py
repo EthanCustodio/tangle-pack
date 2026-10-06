@@ -1,12 +1,12 @@
 """Exercise the shared invariant helpers on real manifolds and a real registry.
 
-Two of the checks in ``tests/invariants.py`` had no consumer, so nothing pinned
+Two of the checks in ``tests/helpers/invariants.py`` had no consumer, so nothing pinned
 the invariants they encode:
 
 * ``assert_no_cdist_collision`` — on low-stretch growth the canonical distance is
   injective, so no two distinct nodes may share a cdist. (Ties are legitimate only
   at a high-stretch fold, which the k=10 binary horseshoe never reaches at these
-  depths; see ``tests/regression/test_high_stretch_period3_growth.py``.)
+  depths; see ``tests/regression/test_high_stretch_growth.py``.)
 * ``assert_area_preserved_along_chain`` — the map is area preserving, so one
   forward step scales the unstable canonical distance up and the stable one down
   by the same per-step factor and the product ``unstable_cdist * stable_cdist`` is
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pytest
 
-from invariants import assert_area_preserved_along_chain, assert_no_cdist_collision
+from helpers.invariants import assert_area_preserved_along_chain, assert_no_cdist_collision
 
 
 def _manifold(workbench, fp, stability: str, branch_index: int = 0):

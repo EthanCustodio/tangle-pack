@@ -9,7 +9,6 @@ run on the period-3 and nested cases where it once broke.
 
 from __future__ import annotations
 
-import pytest
 
 
 # --------------------------------------------------------------------------- #

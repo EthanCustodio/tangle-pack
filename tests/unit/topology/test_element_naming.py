@@ -3,14 +3,16 @@ Tests for ``tanglepack.topology.ElementNaming``: the ``L_i`` / ``R_i^j`` names
 of the homotopy and iterated partition elements, and their mathtext
 (``plotting.name_mathtext``).
 
-The synthetic tests build partition families by hand (over bare fixed points); one fixture test reads the names over two
-fixed points. The k=10 rows are pinned in ``tests/golden/test_golden_k10.py``.
+The synthetic tests build partition families by hand (over bare fixed points);
+the fixture tests read the names on the period-3 orbit alone (codes, no
+letter) and over two fixed points (codes and letters). The k=10 rows are pinned in ``tests/golden/test_golden_k10.py``.
 """
 
 from __future__ import annotations
 
 import pytest
 
+from cases import build_nested, build_period3
 from helpers.fakes import bare_fixed_point
 from tanglepack.topology import plotting
 from tanglepack.topology.ElementNaming import ElementName, ElementNaming
@@ -343,7 +345,6 @@ def test_bad_parent_raises_value_error():
 # --------------------------------------------------------------------------- #
 # Fixture test: names over two fixed points
 # --------------------------------------------------------------------------- #
-@pytest.mark.slow
 def test_p3_names_carry_branch_codes_and_letters(p3_partitioned):
     """Two fixed points are partitioned, so every name carries its letter and code."""
     session, fp3, fp1 = p3_partitioned
@@ -359,3 +360,24 @@ def test_p3_names_carry_branch_codes_and_letters(p3_partitioned):
         assert ref.label.startswith(f"{name.fixed_point_letter}:{name.tag}")
         assert naming.ref_of(name) == ref
         assert naming.lookup(name.text) == ref
+
+
+def test_p3_names_carry_orbit_codes_without_a_letter():
+    """The period-3 orbit alone: every name has its orbit code, none a letter."""
+    naming = build_period3().session.symbolic_dynamics().naming
+    assert not naming.letters
+    codes = {name.branch_code for name in naming.names}
+    assert codes == {"0.0", "1.0", "2.0"}
+
+
+def test_nested_names_carry_fixed_point_letters():
+    """Nested (blasted): every name and ref label carries its fixed point's letter."""
+    build = build_nested()
+    outer, inner = build.fixed_points
+    naming = build.session.symbolic_dynamics().naming
+    assert naming.letters == {id(outer): outer.label, id(inner): inner.label}
+    assert {outer.label, inner.label} == {"A", "B"}
+    for ref, name in naming.items():
+        assert name.fixed_point_letter == ref.fixed_point.label
+        assert name.mathtext.startswith(f"${{}}^{{{ref.fixed_point.label}}}")
+        assert ref.label.startswith(f"{ref.fixed_point.label}:")

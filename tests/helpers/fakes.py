@@ -10,9 +10,6 @@ the production rules), and :class:`FakeTrellis` borrows
 ``Trellis.image_cdist`` (table first, else ``advance_key`` /
 ``per_step_beta``) instead of reimplementing it. :func:`make_result` takes the
 crossing owners explicitly; nothing derives them.
-
-Moved from ``tests/walk_helpers.py`` (a re-export shim stays there until
-Phase 10 of the 2026-10-05 test-suite refactor).
 """
 
 from __future__ import annotations

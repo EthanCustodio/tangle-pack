@@ -51,7 +51,6 @@ def test_describe_reports_letters_and_inertness(k10_partitioned):
         assert entry.name in report
 
 
-@pytest.mark.slow
 def test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip():
     """Trimming at f(q0) makes the zone-side lobes interior and the exterior
     lobes exterior; the classes record that.

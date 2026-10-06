@@ -1,0 +1,2 @@
+tests/regression/test_nested_own_blast.py::test_nested_names_carry_fixed_point_letters
+tests/regression/test_nested_own_blast.py::test_p3_names_carry_orbit_codes_without_a_letter

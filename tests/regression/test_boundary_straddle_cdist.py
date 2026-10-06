@@ -35,7 +35,6 @@ Note:
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from tanglepack import Tangle
 
@@ -44,7 +43,6 @@ def _node_index_map(nodes) -> dict[int, int]:
     return {id(node): i for i, node in enumerate(nodes)}
 
 
-@pytest.mark.regression
 def test_bridge_endpoints_are_bracketing_manifold_nodes(henon_tangle_with_bridges):
     workbench, fp = henon_tangle_with_bridges
     registry = workbench.intersection_registry

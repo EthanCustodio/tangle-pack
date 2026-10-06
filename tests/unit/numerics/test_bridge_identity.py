@@ -132,7 +132,6 @@ def test_bridge_ids_survive_rebuild_with_metadata(henon_tangle_with_bridges):
 # --------------------------------------------------------------------------- #
 # derived genealogy
 # --------------------------------------------------------------------------- #
-@pytest.mark.slow
 def test_image_bridges_matches_iterate_bridge(henon_p3_session):
     """``image_bridges`` reproduces the children ``iterate_bridge`` returned."""
     session, fp3, _fp1, zone = henon_p3_session
@@ -199,7 +198,6 @@ def _walk_bridge_chain(workbench, start_id, end_id, manifold_key):
     return chain
 
 
-@pytest.mark.slow
 def test_preimage_bridges_equals_the_backward_chain(henon_p3_session):
     """``preimage_bridges`` is the bridge chain between the endpoints' preimages."""
     session, _fp3, _fp1, _zone = henon_p3_session
@@ -265,7 +263,6 @@ def test_clear_bridges_releases_segment_ownership(grown_both):
 # --------------------------------------------------------------------------- #
 # session delegation
 # --------------------------------------------------------------------------- #
-@pytest.mark.slow
 def test_session_exposes_the_identity_api(henon_p3_session):
     """The facade reaches the workbench's bridge-identity methods."""
     session, _fp3, _fp1, _zone = henon_p3_session

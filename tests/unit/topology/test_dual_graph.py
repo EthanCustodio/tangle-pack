@@ -100,7 +100,6 @@ def test_iterate_returns_none_as_soon_as_a_link_is_missing(k10_partitioned):
     assert trellis.iterate(q0, steps) is None
 
 
-@pytest.mark.slow
 def test_p3_iterate_composes_three_steps(p3_partitioned):
     """On the period-3 tangle ``iterate(q0, 3)`` walks the whole orbit and back."""
     session, fp3, _fp1 = p3_partitioned
@@ -144,7 +143,6 @@ def test_k10_face_nodes_are_one_per_face_with_a_single_outer(k10_partitioned):
         dual.face_of(session.arrangement().faces[0])
 
 
-@pytest.mark.slow
 def test_p3_merges_the_inner_outer_face_into_the_containing_face(p3_partitioned):
     """One outer node per level of nesting: the inner tangle's outer face is glued
     onto the face of the outer tangle that swallows it."""

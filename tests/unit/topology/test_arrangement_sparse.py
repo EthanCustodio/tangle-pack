@@ -11,7 +11,6 @@ merge. These tests pin that on a hand-built line crossed by three lobes.
 
 from __future__ import annotations
 
-import numpy as np
 
 from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.Bridge import Bridge

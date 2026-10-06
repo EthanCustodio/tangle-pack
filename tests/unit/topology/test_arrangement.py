@@ -210,7 +210,6 @@ def test_arc_reverse_round_trips():
 # --------------------------------------------------------------------------- #
 # 6.4/6.5 -- the real fixtures
 # --------------------------------------------------------------------------- #
-@pytest.mark.slow
 def test_p3_has_a_closed_face_that_swallows_the_inner_tangle(henon_p3_session):
     """The outer tangle's enclosing face is closed but is NOT a region.
 
@@ -448,7 +447,6 @@ def test_hand_built_sub_face_is_rejected_by_area():
     assert arrangement.image_of(source, 1) is None
 
 
-@pytest.mark.slow
 def test_preimage_of_a_region_is_its_hand_derived_backward_image(henon_p3_session):
     """A worked example: take one region, map its corners BACK by hand, look up.
 

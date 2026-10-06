@@ -112,7 +112,6 @@ def test_register_manifold_rejects_a_mismatched_key(initialized):
         workbench.register_manifold((fp, "stable", 0, 0), manifold)
 
 
-@pytest.mark.slow
 def test_iterated_bridge_crossings_carry_the_advanced_key(henon_p3_session):
     """Every crossing born on an image bridge names the image's own branch."""
     session, fp3, _fp1, _zone = henon_p3_session

@@ -15,7 +15,7 @@ of every crossing, positional ids and singletons are laws of
 * an element maps forward to the element(s) covering its image arc
   (:meth:`Trellis.image_of_element`), and to ``None`` only when one of its ends
   is unbounded — an endpoint that is a crossing without a registered iterate is
-  mapped by canonical-distance scaling instead (see ``tests/test_image_cdist.py``).
+  mapped by canonical-distance scaling instead (see ``tests/unit/topology/test_image_cdist.py``).
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ import matplotlib
 matplotlib.use("Agg")  # headless: the session fixtures touch the plotting stack
 import pytest
 
-from tanglepack.topology.Trellis import Trellis
 
 
 # --------------------------------------------------------------------------- #

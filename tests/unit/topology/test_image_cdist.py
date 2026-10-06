@@ -66,7 +66,6 @@ def _bounded_elements(trellis):
 # --------------------------------------------------------------------------- #
 # C.1 -- image_cdist against the iterate table
 # --------------------------------------------------------------------------- #
-@pytest.mark.slow
 def test_scaling_law_reproduces_the_iterate_table(p3_partitioned):
     """Where the table has the image, ``advance_key``/``per_step_beta`` find it too.
 
@@ -132,7 +131,6 @@ def test_scaling_law_reproduces_the_iterate_table(p3_partitioned):
     assert steps_seen - {1}, "at least one n other than +1 must be exercised"
 
 
-@pytest.mark.slow
 def test_from_table_reports_which_branch_answered(p3_partitioned):
     """``from_table`` is True exactly when the iterate table holds the entry."""
     session, _fp3, _fp1 = p3_partitioned
@@ -161,7 +159,6 @@ def test_from_table_reports_which_branch_answered(p3_partitioned):
     assert derived, "some crossings do not, which is what the fallback is for"
 
 
-@pytest.mark.slow
 def test_image_cdist_at_zero_steps_is_the_identity(p3_partitioned):
     """``n = 0`` answers with the crossing's own key and distance, from the table."""
     session, _fp3, _fp1 = p3_partitioned
@@ -217,7 +214,6 @@ def test_image_cdist_rejects_an_unknown_stability():
 # --------------------------------------------------------------------------- #
 # C.2 -- the image_of_element fallback
 # --------------------------------------------------------------------------- #
-@pytest.mark.slow
 def test_element_images_agree_whether_or_not_the_table_is_used(p3_partitioned):
     """The scaling fallback names the same elements the iterate table does.
 
@@ -252,7 +248,6 @@ def test_element_images_agree_whether_or_not_the_table_is_used(p3_partitioned):
     assert checked, "the p3 partitions must have elements with registered iterates"
 
 
-@pytest.mark.slow
 def test_image_of_element_accepts_partitions_from_another_trellis(p3_partitioned):
     """The all-fixed-points trellis can map elements it holds no partition for.
 
@@ -280,12 +275,11 @@ def test_image_of_element_accepts_partitions_from_another_trellis(p3_partitioned
         combined.image_of_element(result, interval.element_id, 1)
 
 
-@pytest.mark.slow
 def test_image_of_element_covers_both_endpoint_images(p3_partitioned):
     """The covering elements span both endpoint images, table or fallback.
 
-    The same invariant ``test_image_of_element_lands_on_the_advanced_branch``
-    pins for tabled elements, extended to the ones the fallback now answers for.
+    Holds for tabled elements and for the ones the fallback answers for alike
+    (the tabled-only twin was deleted in Phase 2 of the 2026-10-05 refactor).
     """
     session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)
@@ -313,7 +307,6 @@ def test_image_of_element_covers_both_endpoint_images(p3_partitioned):
     assert checked
 
 
-@pytest.mark.slow
 def test_element_image_endpoints_scale_by_the_stable_factor(p3_partitioned):
     """The image arc of an element is its own arc contracted by ``per_step_beta``.
 

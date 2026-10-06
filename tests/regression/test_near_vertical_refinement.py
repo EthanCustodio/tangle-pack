@@ -19,7 +19,6 @@ degrees.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from tanglepack import ManifoldMachine
 
@@ -30,7 +29,6 @@ def _area_for(coords: list[tuple[float, float]]) -> float:
     return float(ManifoldMachine._curvature_area_batch(p0, p1, pa, pb)[0])
 
 
-@pytest.mark.regression
 def test_curvature_area_is_rotation_invariant():
     horizontal = [(0.0, 0.0), (1.0, 1.0), (2.0, 1.0), (3.0, 0.0)]
     # rotate 90 degrees: (x, y) -> (-y, x); p0, p1 now share an x (vertical segment)

@@ -1,0 +1,90 @@
+ base -> p2    removed   74 (deleted   74, moved    0), added    2, collected   724
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_get_lambda_u_falls_back_to_the_other_key
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_get_lambda_u_honours_the_stability_argument
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_get_lambda_u_returns_a_python_float
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_get_lambda_u_returns_none_without_keys
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_collaborators_are_wired_to_their_workbench
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[build_intersection_graph-params6]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[image_bridges-params2]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[infer_iterate_table-params5]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[infer_iterates-params4]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[iterate_all_bridges-params1]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[iterate_bridge-params0]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[preimage_bridges-params3]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_iterate_bridge_still_patchable_on_the_workbench
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[build_intersection_graph-graphviz]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[image_bridges-BridgeIterator]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[infer_iterate_table-IterateInference]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[infer_iterates-IterateInference]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[iterate_all_bridges-BridgeIterator]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[iterate_bridge-BridgeIterator]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[preimage_bridges-BridgeIterator]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[visualize_intersection_graph-graphviz]
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_top_level_import_still_works
+    NOT IN LEDGER tests/numerics/test_workbench_split.py::test_visualize_signature_unchanged
+    NOT IN LEDGER tests/test_manifold_machine.py::test_machine_initialization
+    NOT IN LEDGER tests/test_manifold_machine.py::test_new_grow_manifold_matches_old_period_one
+    NOT IN LEDGER tests/test_manifold_machine.py::test_new_grow_manifold_matches_old_period_three
+   p2 -> p3a   removed    0 (deleted    0, moved    0), added    2, collected   726
+  p3a -> p3b   removed    0 (deleted    0, moved    0), added    0, collected   726
+  p3b -> p4    removed   95 (deleted   95, moved    0), added  449, collected  1080
+    NOT IN LEDGER tests/numerics/test_machine_iterate_invariants.py::test_stable_growth_preserves_invariants[1]
+    NOT IN LEDGER tests/numerics/test_machine_iterate_invariants.py::test_stable_growth_preserves_invariants[2]
+    NOT IN LEDGER tests/numerics/test_machine_iterate_invariants.py::test_stable_growth_preserves_invariants[4]
+    NOT IN LEDGER tests/numerics/test_machine_iterate_invariants.py::test_unstable_growth_preserves_invariants[1]
+    NOT IN LEDGER tests/numerics/test_machine_iterate_invariants.py::test_unstable_growth_preserves_invariants[2]
+    NOT IN LEDGER tests/numerics/test_machine_iterate_invariants.py::test_unstable_growth_preserves_invariants[4]
+    NOT IN LEDGER tests/numerics/test_machine_iterate_invariants.py::test_unstable_growth_preserves_invariants[5]
+    NOT IN LEDGER tests/numerics/test_no_same_stability_crossing.py::test_period3_unstable_manifolds_do_not_self_cross
+    NOT IN LEDGER tests/numerics/test_tangle_intersection_cdist.py::test_crossing_cdist_lies_between_segment_endpoints
+    NOT IN LEDGER tests/numerics/test_tangle_intersection_cdist.py::test_each_crossing_is_one_unstable_one_stable
+    NOT IN LEDGER tests/numerics/test_tangle_intersection_cdist.py::test_intersections_have_both_cdists
+    NOT IN LEDGER tests/test_arrangement.py::test_k10_arrangement_is_one_component_and_euler_holds
+    NOT IN LEDGER tests/test_arrangement.py::test_k10_arrangement_regions_are_geometrically_sound
+    NOT IN LEDGER tests/test_arrangement.py::test_k10_region_images_agree_with_the_dynamics
+    NOT IN LEDGER tests/test_arrangement.py::test_k10_regions_are_pairwise_disjoint
+    NOT IN LEDGER tests/test_arrangement.py::test_p3_arrangement_is_two_components_and_euler_holds
+    NOT IN LEDGER tests/test_bridge_class.py::test_row_of_end_agrees_with_the_geometry_on_p3
+    NOT IN LEDGER tests/test_bridge_class.py::test_same_branch_bridges_never_mismatch_on_p3
+    NOT IN LEDGER tests/test_dual_graph.py::test_k10_face_side_agrees_with_the_geometry
+    NOT IN LEDGER tests/test_dual_graph.py::test_k10_node_structure
+    NOT IN LEDGER tests/test_dual_graph.py::test_k10_payload
+    NOT IN LEDGER tests/test_dual_graph.py::test_k10_unified_nodes_are_the_edges_between_the_pip_and_its_image
+    NOT IN LEDGER tests/test_dual_graph.py::test_p3_unifies_the_pip_segment_on_each_pips_own_branch
+    NOT IN LEDGER tests/test_iterated_partition.py::test_k10_iterated_partition_invariants
+    NOT IN LEDGER tests/test_iterated_partition.py::test_k28_iterated_partition_invariants
+    NOT IN LEDGER tests/test_iterated_partition.py::test_p3_iterated_partition_invariants
+    NOT IN LEDGER tests/test_minimal_trellis.py::test_k10_minimal_trellis_invariants
+    NOT IN LEDGER tests/test_minimal_trellis.py::test_k28_minimal_trellis_invariants
+    NOT IN LEDGER tests/test_minimal_trellis.py::test_p3_minimal_trellis_invariants
+    NOT IN LEDGER tests/test_partition_elements.py::test_element_ids_are_positional_and_carry_their_branch
+    NOT IN LEDGER tests/test_partition_elements.py::test_element_of_intersection_covers_every_crossing_on_the_branch
+    NOT IN LEDGER tests/test_partition_elements.py::test_simple_tangle_elements_own_every_crossing_once
+    NOT IN LEDGER tests/test_partition_elements.py::test_singleton_elements_own_exactly_their_own_point
+   p4 -> p5    removed   19 (deleted   19, moved    0), added   21, collected  1082
+   p5 -> p6    removed   40 (deleted   40, moved    0), added   70, collected  1112
+    NOT IN LEDGER tests/test_session_trellis_cache.py::test_add_resonance_zones_invalidates_the_cache
+    NOT IN LEDGER tests/test_session_trellis_cache.py::test_iterate_bridge_invalidates_the_cache
+    NOT IN LEDGER tests/test_session_trellis_cache.py::test_rebuild_bridges_invalidates_the_cache
+   p6 -> p7a   removed   54 (deleted   54, moved    0), added   50, collected  1108
+    NOT IN LEDGER tests/numerics/test_generation_and_caches.py::test_registry_generation_bumps_on_add
+    NOT IN LEDGER tests/numerics/test_generation_and_caches.py::test_registry_generation_bumps_on_add_synthetic
+    NOT IN LEDGER tests/numerics/test_generation_and_caches.py::test_registry_generation_bumps_on_register_iterate
+    NOT IN LEDGER tests/numerics/test_generation_and_caches.py::test_registry_generation_bumps_on_reindex_from
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_distinct_fixed_points_in_ab_order
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_same_fixed_point_is_deduped
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_with_no_keys_is_empty
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_with_only_a_key
+    NOT IN LEDGER tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_with_only_b_key
+    NOT IN LEDGER tests/test_branch_point.py::test_insert_point_backward
+    NOT IN LEDGER tests/test_branch_point.py::test_insert_point_backward_connected
+    NOT IN LEDGER tests/test_branch_point.py::test_insert_point_forward
+    NOT IN LEDGER tests/test_branch_point.py::test_insert_point_forward_connected
+  p7a -> p7b   removed   24 (deleted   24, moved    0), added   27, collected  1111
+  p7b -> p8    removed   78 (deleted   78, moved    0), added   80, collected  1113
+   p8 -> p9    removed    9 (deleted    9, moved    0), added   24, collected  1128
+   p9 -> p10a  removed  497 (deleted    0, moved  497), added  497, collected  1128
+ p10a -> p10   removed    2 (deleted    2, moved    0), added    2, collected  1128
+    NOT IN LEDGER tests/regression/test_nested_own_blast.py::test_nested_names_carry_fixed_point_letters
+    NOT IN LEDGER tests/regression/test_nested_own_blast.py::test_p3_names_carry_orbit_codes_without_a_letter
+baseline 796 -> final 1128 (p10); 793 baseline ids gone, 892 removals walked, 77 problem(s)

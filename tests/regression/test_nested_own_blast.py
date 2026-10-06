@@ -1,70 +1,30 @@
 """
-Higher-period and nested tangles: the shared case builders and the
-cross-branch fixes they need. The circular-zone dual-graph cartoon is
-``tests/plotting/``.
+Regression (2026-10-02, hole-side-own-blast): each nested resonance zone
+blasts only its own tangle.
 
-The period-3 and nested cases come from the tests-only :mod:`cases` builders
-(parameters frozen there), built fresh per test. The cross-branch chord rules
-of the iterated cut are ``tests/unit/topology/test_iterated_cut.py``.
+The outer zone's blasts must leave the inner period-3 tangle exactly as it is
+alone, and the order of the two zones' blasts must not matter. Classes are
+spelled by their homotopy elements, never by letters (letters differ between
+sessions). The period-3 and nested cases come from the tests-only
+:mod:`cases` builders (parameters frozen there), built fresh per test. The
+names on these cases are ``tests/unit/topology/test_element_naming.py``; the
+cross-branch chord rules of the iterated cut are
+``tests/unit/topology/test_iterated_cut.py``.
 """
 
 from __future__ import annotations
 
 import logging
 
-import pytest
 
 from helpers.logs import assert_logged
 from cases import Case, build_nested, build_period3
-from tanglepack.topology.ElementNaming import ElementNaming
-
-
-# --------------------------------------------------------------------------- #
-# Fixtures
-# --------------------------------------------------------------------------- #
-@pytest.fixture
-def p3_built() -> Case:
-    """The period-3 orbit alone."""
-    return build_period3()
-
-
-@pytest.fixture
-def nested_built() -> Case:
-    """The nested period-1 + period-3 tangle, outer zone blasted twice."""
-    return build_nested()
-
-
-# --------------------------------------------------------------------------- #
-# Period 3
-# --------------------------------------------------------------------------- #
-@pytest.mark.slow
-def test_p3_names_carry_orbit_codes_without_a_letter(p3_built):
-    naming = p3_built.session.symbolic_dynamics().naming
-    assert not naming.letters
-    codes = {name.branch_code for name in naming.names}
-    assert codes == {"0.0", "1.0", "2.0"}
-
-
-# --------------------------------------------------------------------------- #
-# Nested
-# --------------------------------------------------------------------------- #
-@pytest.mark.slow
-def test_nested_names_carry_fixed_point_letters(nested_built):
-    outer, inner = nested_built.fixed_points
-    naming = nested_built.session.symbolic_dynamics().naming
-    assert naming.letters == {id(outer): outer.label, id(inner): inner.label}
-    assert {outer.label, inner.label} == {"A", "B"}
-    for ref, name in naming.items():
-        assert name.fixed_point_letter == ref.fixed_point.label
-        assert name.mathtext.startswith(f"${{}}^{{{ref.fixed_point.label}}}")
-        assert ref.label.startswith(f"{ref.fixed_point.label}:")
-    assert isinstance(naming, ElementNaming)
 
 
 # --------------------------------------------------------------------------- #
 # Nested blasts: each zone blasts only its own tangle
 # --------------------------------------------------------------------------- #
-def _tangle_words(build, fixed_point) -> dict:
+def _tangle_words(build: Case, fixed_point: object) -> dict:
     """Every class of one tangle mapped to its word, letters spelled out.
 
     Letters differ between sessions, so a class is named by its two homotopy
@@ -85,8 +45,6 @@ def _tangle_words(build, fixed_point) -> dict:
     }
 
 
-@pytest.mark.slow
-@pytest.mark.regression
 def test_nested_inner_words_are_the_period3_words():
     """The outer blasts leave the inner tangle exactly as it is alone: the same
     words and the same bridges (2026-10-02: the outer zone's blasts no longer
@@ -102,8 +60,6 @@ def test_nested_inner_words_are_the_period3_words():
     )
 
 
-@pytest.mark.slow
-@pytest.mark.regression
 def test_nested_blast_order_does_not_matter(caplog):
     with caplog.at_level(logging.WARNING, logger="tanglepack.loom.Blast"):
         inner_first = build_nested(outer_blasts=4, inner_blasts=4)

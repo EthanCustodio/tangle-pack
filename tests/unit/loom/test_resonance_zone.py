@@ -154,7 +154,6 @@ def test_k10_anchor_ids_survive_a_trim_and_recompute(k10_zone_session):
     assert _anchor_ids(workbench) == before
 
 
-@pytest.mark.slow
 def test_p3_anchor_ids_survive_a_trim_and_recompute(henon_p3_session):
     """Same, on the nested period-3 fixture: four anchors across two orbits."""
     session, fp3, fp1, _zone = henon_p3_session

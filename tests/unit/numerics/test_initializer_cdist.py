@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from invariants import assert_iterate_relation
+from helpers.invariants import assert_iterate_relation
 from tanglepack import FixedPoint, Point, TangleSession, TangleWorkbench
 from tanglepack.examples import (
     HENON_P3,

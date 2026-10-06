@@ -13,7 +13,6 @@ single-copy and no-overlap laws on every law case, blasted ones included, run in
 
 from __future__ import annotations
 
-import pytest
 
 
 def _fixed_point_bridge(workbench, fp):
@@ -22,7 +21,6 @@ def _fixed_point_bridge(workbench, fp):
     return min(bridges, key=lambda b: b.root.get_cdist("unstable"))
 
 
-@pytest.mark.slow
 def test_iterating_fixed_point_bridge_returns_existing_copies(henon_p3_session):
     session, _fp3, fp1, _zone = henon_p3_session
     workbench = session.workbench
@@ -38,7 +36,6 @@ def test_iterating_fixed_point_bridge_returns_existing_copies(henon_p3_session):
     assert len(workbench.bridges) == len(before)
 
 
-@pytest.mark.slow
 def test_blast_recognizes_already_known_bridges(henon_p3_session):
     """Already-known children are counted once and never re-iterated.
 

@@ -1889,3 +1889,298 @@ The planned deletions of the I1/I2 re-check tests
    (AUTHOR ITEM from Phase 7a: re-derive its parameters); recorded in the
    merged file's Dev Notes instead of a failing non-vacuity check.
 6. No new `slow` / `regression` markers on new tests (Phase 10 drops both).
+
+## §10 Phase 10: move once, finalize
+
+Two commits: `117dfb3` (move only) and the finalize commit that carries this
+section.
+
+### Commit 1: move only (`git mv`, 48 renames, zero content change)
+
+Every survivor outside the tiered layout moved into it; git records each as a
+100 % rename. Basenames stay unique (pytest's default import mode needs that,
+since no directory gets an `__init__.py`). Four files were renamed on the way
+to their planned names: `test_point` → `test_linked_list`,
+`test_strong_pip_periodic_point` → `test_strong_pip`, `test_loom_blast_restore`
+→ `test_blast_restore`, `test_resonance_zone_region` → `test_resonance_zone`;
+`test_higher_period_cartoon` → `regression/test_nested_own_blast`. Map
+(`p10a_moves.tsv`):
+
+| Old path | New path |
+|---|---|
+| `tests/test_report_smoke.py` | `tests/facade/test_report_smoke.py` |
+| `tests/test_session_bridge_classes.py` | `tests/facade/test_session_bridge_classes.py` |
+| `tests/test_session_dual_graph.py` | `tests/facade/test_session_dual_graph.py` |
+| `tests/test_session_symbolic_dynamics.py` | `tests/facade/test_session_symbolic_dynamics.py` |
+| `tests/test_higher_period_cartoon.py` | `tests/regression/test_nested_own_blast.py` |
+| `tests/numerics/test_blast_no_overlap.py` | `tests/unit/loom/test_blast_no_overlap.py` |
+| `tests/numerics/test_blast_proximity_guard.py` | `tests/unit/loom/test_blast_proximity_guard.py` |
+| `tests/test_loom_blast_restore.py` | `tests/unit/loom/test_blast_restore.py` |
+| `tests/test_resonance_zone_region.py` | `tests/unit/loom/test_resonance_zone.py` |
+| `tests/numerics/test_batched_map.py` | `tests/unit/numerics/test_batched_map.py` |
+| `tests/numerics/test_bridge_identity.py` | `tests/unit/numerics/test_bridge_identity.py` |
+| `tests/numerics/test_cleanup_walkers_and_examples.py` | `tests/unit/numerics/test_cleanup_walkers_and_examples.py` |
+| `tests/numerics/test_closed_form_curvature.py` | `tests/unit/numerics/test_closed_form_curvature.py` |
+| `tests/test_fixed_point.py` | `tests/unit/numerics/test_fixed_point.py` |
+| `tests/numerics/test_generation_and_caches.py` | `tests/unit/numerics/test_generation_and_caches.py` |
+| `tests/numerics/test_geometry.py` | `tests/unit/numerics/test_geometry.py` |
+| `tests/numerics/test_grow_until.py` | `tests/unit/numerics/test_grow_until.py` |
+| `tests/numerics/test_growth_integration.py` | `tests/unit/numerics/test_growth_integration.py` |
+| `tests/numerics/test_initializer_cdist.py` | `tests/unit/numerics/test_initializer_cdist.py` |
+| `tests/numerics/test_intersection_registry_fixes.py` | `tests/unit/numerics/test_intersection_registry_fixes.py` |
+| `tests/numerics/test_invariant_helpers.py` | `tests/unit/numerics/test_invariant_helpers.py` |
+| `tests/numerics/test_inversion_fixture.py` | `tests/unit/numerics/test_inversion_fixture.py` |
+| `tests/test_point.py` | `tests/unit/numerics/test_linked_list.py` |
+| `tests/test_manifold_initializer.py` | `tests/unit/numerics/test_manifold_initializer.py` |
+| `tests/numerics/test_map_step_and_graph.py` | `tests/unit/numerics/test_map_step_and_graph.py` |
+| `tests/numerics/test_minimal_solver.py` | `tests/unit/numerics/test_minimal_solver.py` |
+| `tests/numerics/test_noise_crossing_collapse.py` | `tests/unit/numerics/test_noise_crossing_collapse.py` |
+| `tests/numerics/test_refinement.py` | `tests/unit/numerics/test_refinement.py` |
+| `tests/numerics/test_segment_index_bookkeeping.py` | `tests/unit/numerics/test_segment_index_bookkeeping.py` |
+| `tests/numerics/test_single_source_of_truth.py` | `tests/unit/numerics/test_single_source_of_truth.py` |
+| `tests/numerics/test_tangle_index_and_orientation.py` | `tests/unit/numerics/test_tangle_index_and_orientation.py` |
+| `tests/numerics/test_workbench_bugfixes.py` | `tests/unit/numerics/test_workbench_bugfixes.py` |
+| `tests/test_arrangement.py` | `tests/unit/topology/test_arrangement.py` |
+| `tests/test_arrangement_sparse.py` | `tests/unit/topology/test_arrangement_sparse.py` |
+| `tests/test_bridge_class.py` | `tests/unit/topology/test_bridge_class.py` |
+| `tests/test_dual_graph.py` | `tests/unit/topology/test_dual_graph.py` |
+| `tests/test_dual_walk.py` | `tests/unit/topology/test_dual_walk.py` |
+| `tests/test_element_naming.py` | `tests/unit/topology/test_element_naming.py` |
+| `tests/test_image_cdist.py` | `tests/unit/topology/test_image_cdist.py` |
+| `tests/test_iterated_partition.py` | `tests/unit/topology/test_iterated_partition.py` |
+| `tests/test_minimal_trellis.py` | `tests/unit/topology/test_minimal_trellis.py` |
+| `tests/test_partition_elements.py` | `tests/unit/topology/test_partition_elements.py` |
+| `tests/test_partition_family.py` | `tests/unit/topology/test_partition_family.py` |
+| `tests/test_pseudoneighbor.py` | `tests/unit/topology/test_pseudoneighbor.py` |
+| `tests/test_stable_partition.py` | `tests/unit/topology/test_stable_partition.py` |
+| `tests/test_strong_pip_periodic_point.py` | `tests/unit/topology/test_strong_pip.py` |
+| `tests/test_symbolic_dynamics.py` | `tests/unit/topology/test_symbolic_dynamics.py` |
+| `tests/test_topology_invariants.py` | `tests/unit/topology/test_topology_invariants.py` |
+
+1128 collected before and after; `nodeids_p10a.txt` is `nodeids_p9.txt` with
+the paths renamed (497 ids moved, none added or removed).
+
+### Commit 2: finalize
+
+- **Markers:** `@pytest.mark.slow` (24 uses) and `@pytest.mark.regression`
+  (5 uses) removed from 16 files; their registrations removed from
+  `pyproject.toml`. Only `golden` and `perf` remain (`--strict-markers`).
+  The `import pytest` lines left unused were removed (ruff F401, which also
+  dropped three pre-existing unused imports: `numpy` in
+  `test_arrangement_sparse`, `Trellis` in `test_partition_elements`, `pytest`
+  in `test_workbench_bugfixes`).
+- **Shims deleted:** `tests/invariants.py` and `tests/walk_helpers.py`; the
+  three remaining `from invariants import` lines now import
+  `helpers.invariants`. `tests/minimal_helpers.py` was already gone (Phase 7b,
+  deviation 1).
+- **Split finished:** the two naming tests of
+  `regression/test_nested_own_blast.py` moved to
+  `unit/topology/test_element_naming.py` (planner §B: names →
+  `test_element_naming`, words/blast order → `R/test_nested_own_blast`); same
+  assertions, built inline from `build_period3()` / `build_nested()`. The
+  regression module docstring now states the 2026-10-02 bug it guards.
+- **Docstrings:** `tests/conftest.py` gained the tier layout, the markers and
+  the **Dev Notes** (author decision 14 / E3): the untested provisional rules
+  (the `+1..+(k-1)` exemption, the mean-of-neighbours refined cdist, the
+  anchor faces-closed limitation, each with where its firm part is tested),
+  the dead API kept without tests (whitelisted in `coverage_guard.py`), and
+  the `KNOWN_ISSUES` index. The stale `p3_partitioned` fixture docstring
+  (`henon_cases.build_nested` → `cases.build_nested`), `helpers/fakes.py`
+  ("shim stays until Phase 10"), and five stale test-path references
+  (`tests/invariants.py`, `test_high_stretch_period3_growth.py`,
+  `tests/test_image_cdist.py`, a deleted test named in `test_image_cdist`)
+  fixed.
+- **CLAUDE.md** "Run tests": `env/bin/python -m pytest` commands for the
+  default run, `-rxX`, one tier, one test, `-m golden`, `-m perf`, the
+  coverage guard, and one paragraph on the tier layout. Nothing else in
+  CLAUDE.md changed.
+- **`tests/_tools/nodeid_ledger.py`** (new, not collected): walks
+  `nodeids_base.txt → p2 → … → p9 → p10a → p10` in the run folder and
+  requires every removed id to be in that phase's `<phase>_deleted.txt` or
+  carried by its `<phase>_moves.tsv`, and every listed deletion to name its
+  test function verbatim in this ledger. The appendix below lists verbatim
+  the 75 ids earlier phases recorded only in grouped form.
+
+### Deletion ledger, Phase 10
+
+2 node ids removed, 2 added (1128 → 1128; `p10_deleted.txt`,
+`p10_added.txt`, `nodeids_p10.txt`). Commit 1 removed none (moves only).
+
+| Node id | New home | Guard checked |
+|---|---|---|
+| `tests/regression/test_nested_own_blast.py::test_p3_names_carry_orbit_codes_without_a_letter` | `tests/unit/topology/test_element_naming.py::test_p3_names_carry_orbit_codes_without_a_letter` (same assertions) | higher-period-figures-2026-09-30: branch codes on every name, kept |
+| `tests/regression/test_nested_own_blast.py::test_nested_names_carry_fixed_point_letters` | `tests/unit/topology/test_element_naming.py::test_nested_names_carry_fixed_point_letters` (same assertions) | higher-period-figures-2026-09-30: fixed-point letters, kept |
+
+### Node-id accounting (end-to-end check)
+
+`env/bin/python tests/_tools/nodeid_ledger.py .refactor/runs/2026-10-05-test-suite docs/test_suite_refactor_ledger.md`:
+
+| Transition | Removed | Deleted (listed) | Moved | Added | Collected |
+|---|---|---|---|---|---|
+| base → p2 | 74 | 74 | 0 | 2 | 724 |
+| p2 → p3a | 0 | 0 | 0 | 2 | 726 |
+| p3a → p3b | 0 | 0 | 0 | 0 | 726 |
+| p3b → p4 | 95 | 95 | 0 | 449 | 1080 |
+| p4 → p5 | 19 | 19 | 0 | 21 | 1082 |
+| p5 → p6 | 40 | 40 | 0 | 70 | 1112 |
+| p6 → p7a | 54 | 54 | 0 | 50 | 1108 |
+| p7a → p7b | 24 | 24 | 0 | 27 | 1111 |
+| p7b → p8 | 78 | 78 | 0 | 80 | 1113 |
+| p8 → p9 | 9 | 9 | 0 | 24 | 1128 |
+| p9 → p10a | 497 | 0 | 497 | 497 | 1128 |
+| p10a → p10 | 2 | 2 | 0 | 2 | 1128 |
+
+Of the 796 baseline ids, 3 survive at their original path and 793 are gone:
+each is either deleted (listed in a phase's deletion list and in this ledger)
+or carried, renamed, by the Phase 10 move. 0 unaccounted, 0 unexplained.
+(Phase 1 kept every id and has no snapshot; Phases 3a/3b removed none.)
+
+#### Appendix: ids earlier phases recorded in grouped form
+
+Each id below is covered by a grouped row of its phase's deletion table
+(whole-file rows, `×N`, `*`, `k10_/p3_` twins, `{a,b}` sets); listed here
+verbatim so the accounting is mechanical.
+
+**§2** (26 ids; `p2_deleted.txt`):
+
+- `tests/numerics/test_intersection_registry_fixes.py::test_get_lambda_u_falls_back_to_the_other_key`
+- `tests/numerics/test_intersection_registry_fixes.py::test_get_lambda_u_honours_the_stability_argument`
+- `tests/numerics/test_intersection_registry_fixes.py::test_get_lambda_u_returns_a_python_float`
+- `tests/numerics/test_intersection_registry_fixes.py::test_get_lambda_u_returns_none_without_keys`
+- `tests/numerics/test_workbench_split.py::test_collaborators_are_wired_to_their_workbench`
+- `tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[build_intersection_graph-params6]`
+- `tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[image_bridges-params2]`
+- `tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[infer_iterate_table-params5]`
+- `tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[infer_iterates-params4]`
+- `tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[iterate_all_bridges-params1]`
+- `tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[iterate_bridge-params0]`
+- `tests/numerics/test_workbench_split.py::test_delegating_signatures_unchanged[preimage_bridges-params3]`
+- `tests/numerics/test_workbench_split.py::test_iterate_bridge_still_patchable_on_the_workbench`
+- `tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[build_intersection_graph-graphviz]`
+- `tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[image_bridges-BridgeIterator]`
+- `tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[infer_iterate_table-IterateInference]`
+- `tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[infer_iterates-IterateInference]`
+- `tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[iterate_all_bridges-BridgeIterator]`
+- `tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[iterate_bridge-BridgeIterator]`
+- `tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[preimage_bridges-BridgeIterator]`
+- `tests/numerics/test_workbench_split.py::test_moved_bodies_live_in_their_new_module[visualize_intersection_graph-graphviz]`
+- `tests/numerics/test_workbench_split.py::test_top_level_import_still_works`
+- `tests/numerics/test_workbench_split.py::test_visualize_signature_unchanged`
+- `tests/test_manifold_machine.py::test_machine_initialization`
+- `tests/test_manifold_machine.py::test_new_grow_manifold_matches_old_period_one`
+- `tests/test_manifold_machine.py::test_new_grow_manifold_matches_old_period_three`
+
+**§4** (33 ids; `p4_deleted.txt`):
+
+- `tests/numerics/test_machine_iterate_invariants.py::test_stable_growth_preserves_invariants[1]`
+- `tests/numerics/test_machine_iterate_invariants.py::test_stable_growth_preserves_invariants[2]`
+- `tests/numerics/test_machine_iterate_invariants.py::test_stable_growth_preserves_invariants[4]`
+- `tests/numerics/test_machine_iterate_invariants.py::test_unstable_growth_preserves_invariants[1]`
+- `tests/numerics/test_machine_iterate_invariants.py::test_unstable_growth_preserves_invariants[2]`
+- `tests/numerics/test_machine_iterate_invariants.py::test_unstable_growth_preserves_invariants[4]`
+- `tests/numerics/test_machine_iterate_invariants.py::test_unstable_growth_preserves_invariants[5]`
+- `tests/numerics/test_no_same_stability_crossing.py::test_period3_unstable_manifolds_do_not_self_cross`
+- `tests/numerics/test_tangle_intersection_cdist.py::test_crossing_cdist_lies_between_segment_endpoints`
+- `tests/numerics/test_tangle_intersection_cdist.py::test_each_crossing_is_one_unstable_one_stable`
+- `tests/numerics/test_tangle_intersection_cdist.py::test_intersections_have_both_cdists`
+- `tests/test_arrangement.py::test_k10_arrangement_is_one_component_and_euler_holds`
+- `tests/test_arrangement.py::test_k10_arrangement_regions_are_geometrically_sound`
+- `tests/test_arrangement.py::test_k10_region_images_agree_with_the_dynamics`
+- `tests/test_arrangement.py::test_k10_regions_are_pairwise_disjoint`
+- `tests/test_arrangement.py::test_p3_arrangement_is_two_components_and_euler_holds`
+- `tests/test_bridge_class.py::test_row_of_end_agrees_with_the_geometry_on_p3`
+- `tests/test_bridge_class.py::test_same_branch_bridges_never_mismatch_on_p3`
+- `tests/test_dual_graph.py::test_k10_face_side_agrees_with_the_geometry`
+- `tests/test_dual_graph.py::test_k10_node_structure`
+- `tests/test_dual_graph.py::test_k10_payload`
+- `tests/test_dual_graph.py::test_k10_unified_nodes_are_the_edges_between_the_pip_and_its_image`
+- `tests/test_dual_graph.py::test_p3_unifies_the_pip_segment_on_each_pips_own_branch`
+- `tests/test_iterated_partition.py::test_k10_iterated_partition_invariants`
+- `tests/test_iterated_partition.py::test_k28_iterated_partition_invariants`
+- `tests/test_iterated_partition.py::test_p3_iterated_partition_invariants`
+- `tests/test_minimal_trellis.py::test_k10_minimal_trellis_invariants`
+- `tests/test_minimal_trellis.py::test_k28_minimal_trellis_invariants`
+- `tests/test_minimal_trellis.py::test_p3_minimal_trellis_invariants`
+- `tests/test_partition_elements.py::test_element_ids_are_positional_and_carry_their_branch`
+- `tests/test_partition_elements.py::test_element_of_intersection_covers_every_crossing_on_the_branch`
+- `tests/test_partition_elements.py::test_simple_tangle_elements_own_every_crossing_once`
+- `tests/test_partition_elements.py::test_singleton_elements_own_exactly_their_own_point`
+
+**§6** (3 ids; `p6_deleted.txt`):
+
+- `tests/test_session_trellis_cache.py::test_add_resonance_zones_invalidates_the_cache`
+- `tests/test_session_trellis_cache.py::test_iterate_bridge_invalidates_the_cache`
+- `tests/test_session_trellis_cache.py::test_rebuild_bridges_invalidates_the_cache`
+
+**§7a** (13 ids; `p7a_deleted.txt`):
+
+- `tests/numerics/test_generation_and_caches.py::test_registry_generation_bumps_on_add`
+- `tests/numerics/test_generation_and_caches.py::test_registry_generation_bumps_on_add_synthetic`
+- `tests/numerics/test_generation_and_caches.py::test_registry_generation_bumps_on_register_iterate`
+- `tests/numerics/test_generation_and_caches.py::test_registry_generation_bumps_on_reindex_from`
+- `tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_distinct_fixed_points_in_ab_order`
+- `tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_same_fixed_point_is_deduped`
+- `tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_with_no_keys_is_empty`
+- `tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_with_only_a_key`
+- `tests/numerics/test_intersection_registry_fixes.py::test_fixed_points_with_only_b_key`
+- `tests/test_branch_point.py::test_insert_point_backward`
+- `tests/test_branch_point.py::test_insert_point_backward_connected`
+- `tests/test_branch_point.py::test_insert_point_forward`
+- `tests/test_branch_point.py::test_insert_point_forward_connected`
+
+### Verification
+
+- Collected **1128** (1127 by default + 1 `perf`), unchanged by Phase 10.
+- `env/bin/python -m pytest -q -rxX --durations=15 --cov=tanglepack`:
+  `1085 passed, 31 skipped, 1 deselected, 11 xfailed` in 159 s with coverage
+  (93 s without; `p10_run.txt`). `-rxX` lists exactly the 11 `KNOWN_ISSUES`
+  (8 law tier + 3 `open_p3_deep_runs`); no XPASS. Skips: the 31
+  `NOT_APPLICABLE` cases only.
+- Coverage guard vs `cov_base.json`: OK (`cov_p10.json`).
+- `-m golden` selects exactly the three golden files (7 + 9 + 5 = 21 cases);
+  `-m perf` selects exactly `unit/numerics/test_registry_perf.py::test_registry_insert_is_near_linear`
+  (passes); the default run deselects it.
+- Each tier alone: invariants 407 passed / 31 skipped / 8 xfailed (36.5 s);
+  unit/numerics 233; unit/topology 249; unit/loom 20; facade 79; golden 21;
+  regression 11 + 3 xfailed; plotting 65 — together the 1127 default cases.
+- Isolation (each alone): `unit/topology/test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `unit/topology/test_element_naming.py::test_nested_names_carry_fixed_point_letters`,
+  `plotting/test_plot_smoke.py::test_plotters_reject_bad_arguments[bridges_by_class_color]`,
+  `facade/test_session_caches.py::test_trellis_misses_after_every_mutation_path[add_resonance_zones]`,
+  `unit/numerics/test_generation_and_caches.py::test_workbench_generation_bumps_on_every_mutation[create_bridges]`,
+  `unit/topology/test_production_checks.py::test_dual_graph_construction_runs_its_self_check`;
+  `invariants/test_law_bridges.py` alone: all pass.
+- `ruff check --select F tests`: only the four pre-existing F841 unused
+  locals remain (not touched).
+
+### Deviations, Phase 10
+
+1. **No file merges in the move.** Planner §C names consolidated targets
+   (`unit/numerics/test_growth.py`, `test_registry.py`, `test_bridges.py`,
+   `unit/loom/test_blast.py`, …) that would each merge several survivors.
+   Merging is a content change, which a move-only commit cannot carry and
+   which would break git's rename detection, so each survivor moved whole
+   under its own basename (four renamed to their planned 1:1 names). The
+   tier of every file matches §B; the per-test splits across tiers were
+   already done in Phases 4–9.
+2. **Session report/delegate tests in `facade/`:** `test_report_smoke`,
+   `test_session_bridge_classes`, `test_session_dual_graph`,
+   `test_session_symbolic_dynamics` (§B sends their surviving halves to
+   F/ and U/t; what is left after Phases 5–8 is session-level).
+3. **Final size and wall time over the plan's target.** 1128 cases (plan:
+   ~550–650) and 93 s without coverage (plan: ≤ ~90 s): the law tier is one
+   test per (law × case), 446 cases in ~37 s, the "per-check" option
+   planner finding 1 / E1 priced at ~860 total; Phase 4 chose it so each
+   `KNOWN_ISSUES` xfail stays precise. Not reduced here (out of a move
+   phase's scope); flagged for the author.
+4. **`tests/_tools/nodeid_ledger.py` added** as the diff script the plan's
+   end-to-end verification asks for; its ledger-name check needed the
+   appendix above because earlier phases recorded 75 ids in grouped form
+   (all checked by hand against their grouped rows: `_get_lambda_u ×4`,
+   `test_workbench_split.py` whole file, `test_manifold_machine.py` whole
+   file, `test_machine_iterate_invariants.py` whole file, the k10/p3 twins of
+   Phase 4, `test_session_trellis_cache` mutation rows, the registry-bump and
+   `test_fixed_points_*` merges, `test_branch_point::*`).
+5. **Mutation sanity check (plan "Verification")** not run in this phase: it
+   needs a scratch branch with a `src/` edit, which this phase's rules
+   forbid on the working branch. Left for the author or a follow-up.

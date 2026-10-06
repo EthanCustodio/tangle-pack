@@ -18,13 +18,10 @@ still has non-decreasing cdist and no geometric spike.
 
 from __future__ import annotations
 
-import pytest
 
 from helpers.invariants import assert_cdist_monotonic, assert_no_geometric_spikes
 
 
-@pytest.mark.slow
-@pytest.mark.regression
 def test_blast_completes_without_monotonicity_failure(henon_p3_session):
     session, _fp3, fp1, inner_zone = henon_p3_session
     result = session.blast_zone(

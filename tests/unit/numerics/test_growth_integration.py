@@ -9,9 +9,8 @@ every finished law case, bridges included, run in
 
 from __future__ import annotations
 
-import pytest
 
-from invariants import (
+from helpers.invariants import (
     assert_cdist_monotonic,
     assert_iterate_relation,
     assert_no_geometric_spikes,
@@ -19,7 +18,6 @@ from invariants import (
 )
 
 
-@pytest.mark.slow
 def test_unstable_invariants_hold_at_every_step(initialized):
     workbench, fp = initialized
     for step in range(1, 6):

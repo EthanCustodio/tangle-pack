@@ -56,11 +56,16 @@ pip install -e .
 
 **Run tests:**
 ```bash
-pytest
-pytest tests/test_manifold_machine.py          # single test file
-pytest tests/test_manifold_machine.py::test_fn # single test
-pytest --cov=tanglepack                        # with coverage
+env/bin/python -m pytest                                   # everything except perf (golden included)
+env/bin/python -m pytest -q -rxX                           # also lists the xfails: only cases.KNOWN_ISSUES may appear
+env/bin/python -m pytest tests/invariants                  # one tier: invariants | unit/{numerics,topology,loom} | facade | golden | regression | plotting
+env/bin/python -m pytest tests/unit/numerics/test_geometry.py::test_fn   # single test
+env/bin/python -m pytest -m golden                         # the author-gated CLAUDE.md fixture facts only
+env/bin/python -m pytest -m perf                           # the opt-in timing test(s), deselected by default
+env/bin/python -m pytest --cov=tanglepack --cov-report=json:cov.json && env/bin/python tests/_tools/coverage_guard.py BASE.json cov.json
 ```
+
+Test tiers (`tests/`, unique basenames, no `__init__.py`): `invariants/` (physical laws, one test per law × case over `cases.LAW_CASES`), `unit/{numerics,topology,loom}/`, `facade/` (`TangleSession` caches, equivalence, fan-outs), `golden/` (each fixture fact below pinned ONCE, spelled in element names, never letters; changes need the author's sign-off), `regression/`, `plotting/` (smoke + topological properties). Builders are the tests-only `tests/cases.py` (frozen parameters, `KNOWN_ISSUES` → `xfail(strict=True)`, `NOT_APPLICABLE` → skip); the test policy and the untested provisional rules / dead API are in the `tests/conftest.py` docstring.
 
 **Run a scripted example:**
 ```bash
