@@ -40,8 +40,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests"]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers -m 'not perf'"
 markers = [
   "slow: long-running growth/blast integration tests",
   "regression: pins a previously fixed bug",
+  "golden: an author-gated fixture fact (CLAUDE.md); runs by default, changes only with the author's sign-off",
+  "perf: a timing/scaling test; opt-in (pytest -m perf), excluded by default",
 ]

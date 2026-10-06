@@ -333,3 +333,111 @@ None. Phase 0 makes no test edits.
    cause of the known isolation failure. Recorded for Phase 1/7.
 4. The coverage-guard whitelist also includes the two `forward_*_branch_cycle`
    wrappers (dead API under decision 4) beyond the four planner entries.
+
+---
+
+## §1 Phase 1: infrastructure (additions only)
+
+### What landed
+
+- **`tests/cases.py`** (tests only, parameters frozen there): `Case`
+  (session, fixed points outermost first, pips, zones, stage, `CaseExpect`),
+  `Stage` (`empty` … `partitioned`), builders `build_k10`, `build_k28(blasts=)`,
+  `build_period3`, `build_nested(through=)`, `build_inversion`,
+  `build_orientation_reversing`; `LAW_CASES`, frozen `BUILDERS` (the six law
+  cases plus `nested_unblasted`, `orientation_reversing`, `p3_15`, `p3_16`,
+  `p3_6_blasts`), `KNOWN_ISSUES` (`KnownIssue(reason, raises)`),
+  `NOT_APPLICABLE`, `law_params(law_id)` (xfail strict / skip marks).
+  k10, k28 and inversion are reimplemented; p3 and the partitioned nested build
+  delegate to `henon_cases` with every keyword explicit (E4 default).
+- **`tests/helpers/`**: `invariants.py` (moved from `tests/invariants.py`;
+  `assert_cdist_monotonic` now defaults to `strict=False`; the spike message
+  prints the real median segment and ratio), `fakes.py` (moved from
+  `tests/walk_helpers.py`, plus `bare_fixed_point()` returning a REAL
+  `FixedPoint`), `laws.py` (manifold, crossing, anchor and bridge checks, each
+  returning its item count; `LAYERS`, `run_layer`), `names.py` (letter-free
+  spellers: `class_pair`, `homotopy_pair`, `word_in_names`,
+  `refined_children`, `itinerary_pairs`, `brackets`, `matrix_by_classes`),
+  `logs.py` (`assert_logged(caplog, level, logger, count=)`).
+  `tests/invariants.py` and `tests/walk_helpers.py` are one-line re-export
+  shims until Phase 10.
+- **`tests/conftest.py`**: `matplotlib.use("Agg")`; every fixture is a thin,
+  function-scoped builder call (`k28_partitioned`,
+  `k28_two_blasts_partitioned` lose session scope, `henon_inversion` loses
+  module scope); a new indirect `law_case` fixture. Fixture names and return
+  shapes are unchanged.
+- **`pyproject.toml`**: `golden` and `perf` markers registered;
+  `addopts = "-ra --strict-markers -m 'not perf'"`. `slow` and `regression`
+  stay registered until Phase 10.
+
+### Builder parameters kept (from P6)
+
+| Fixture | Builder call | Why |
+|---|---|---|
+| `grown_unstable` / `grown_both` / `small_tangle` | `build_k10(unstable_steps=7, through=…)` | the 7-step numerics stages are what those tests were written for |
+| `henon_tangle_with_bridges`, `k10_session` | `build_k10(through="bridges")` (9 steps, infer on) | P6 variant A: interchangeable with the old 7 + 2 recipe |
+| `henon_p3_session` | `build_nested(outer_blasts=0, p1_area_cutoff=1e-4, through="zones")` | P6 B4/B7: the unpartitioned stage and the 1e-4 outer cutoff both matter |
+| `p3_partitioned` | `build_nested(outer_blasts=0, p1_area_cutoff=1e-4)` | P6 B4 (delegated, repin included; equivalent) |
+| `k28_*` | `build_k28(blasts=1|2)` function-scoped | P6 variant C |
+
+The k10 builder keeps the historical recipe without an analytic Jacobian
+(checked: seed `[4,-4]` vs `saddle_guesses` give identical crossings without
+the Jacobian; WITH the Jacobian the crossing cdists differ at the bit level).
+
+### Verification
+
+- Collected **796**, node ids identical to `nodeids_base.txt`.
+- `795 passed, 1 skipped` in 111 s with coverage (baseline 84 s). The +27 s
+  is the inversion fixture going function-scoped (about 2.3 s per user under
+  coverage, 10 users), above the planner's +15 s estimate; Phase 4 (law-tier
+  module build) and Phase 7 consolidation remove most of those users.
+- `-rxX`: no xfail, no xpass.
+- Coverage guard vs `cov_base.json`: OK (`cov_p1.json`). A first run missed
+  `TangleSession.partition_element_for`'s stale-trellis `continue`: it was
+  covered only through the ORDER of the session's trellis cache, which the old
+  `henon_p3_session` filled outermost first (`T1` then `T3`). The local nested
+  recipe classifies per trellis in that order (not via the fan-out, which
+  goes in construction order, fp3 first), restoring the coverage.
+- Isolation (5 node ids): `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`
+  FAILS alone (known, P6 root cause; fixed in Phase 7);
+  `test_session_bridge_classes.py::test_k28_letters_only_the_anchor_class`,
+  `test_partition_elements.py::test_element_for_resolves_a_bridge_missing_from_the_snapshot`,
+  `numerics/test_geometry.py::test_arc_polyline_clips_to_the_cdist_window`,
+  `numerics/test_map_step_and_graph.py::test_branch_cycle_is_the_advance_key_chain[stable-fp3]`
+  pass.
+- Scratch check of `helpers.laws` on the six law cases: every layer passes
+  except `check_one_anchor_per_unstable_branch` on inversion (2 anchors per
+  branch, the KNOWN_ISSUE); `build_orientation_reversing()` raises
+  `ValueError`. `helpers.names` on k10 reproduces the CLAUDE.md rows, words,
+  refinement and `[[1,1],[1,1]]` matrix in element names.
+
+### Deletion ledger, Phase 1
+
+None. Phase 1 deletes no test. (`tests/invariants.py` and
+`tests/walk_helpers.py` were moved into `tests/helpers/` and replaced by
+re-export shims; no node id changed.)
+
+### Deviations, Phase 1
+
+1. **`build_nested(through=…)` is not a pure delegation.** `henon_cases` has
+   no stage parameter and `src/` is out of scope, so a build stopped before
+   the partition (`through` ≤ `"zones"`, no blasts) runs a local copy of the
+   recipe; `"partitioned"` delegates. The local copy classifies per trellis,
+   outermost first (see the coverage note).
+2. **Stages beyond the plan's list:** `empty`, `fixed_point`,
+   `grown_unstable` were added so the k10 numerics fixtures (`workbench`,
+   `fixed_point`, `grown_unstable`) are builder calls too.
+3. **`KNOWN_ISSUES` values are `KnownIssue(reason, raises)`**, not bare
+   strings, so the b = -1 placeholder carries `raises=ValueError`.
+4. **Area law is checked link by link** in `helpers.laws` with
+   `AREA_LINK_RTOL = 1e-2` (the `collision_rtol` default of `StrongPip` /
+   `Pseudoneighbor`). Comparing every chain member against the head with
+   `rtol = 1e-3` (the `assert_area_preserved_along_chain` default) FAILS on
+   p3 and nested: one link reaches 1.4e-3 (k10 1.8e-4, k28 two blasts
+   2.3e-4). Phase 4 decides the final tolerance.
+5. **`helpers.fakes` is moved, not yet rewired** (planner §A Phase 1:
+   "Phase 7 rewires it"): `FakeFixedPoint`, the hand-written
+   `FakeTrellis.image_cdist` and the derived-owner default of `make_result`
+   stay until Phase 7; `bare_fixed_point()` is added now.
+6. **`laws.py` covers the numerics layers only**; the topology layers land
+   with the law-tier modules in Phase 4 (the task allowed a scaffold).
