@@ -73,10 +73,11 @@ def _define_zone(session, fp):
 def test_same_generation_is_a_cache_hit(k10_session):
     session, fp = k10_session
 
+    generation = session.workbench.generation
     first = session.trellis(fp)
 
     assert session.trellis(fp) is first
-    assert first._built_generation == session.workbench.generation
+    assert session.workbench.generation == generation
 
 
 def test_reads_do_not_invalidate_the_cache(k10_session):

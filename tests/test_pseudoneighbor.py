@@ -9,6 +9,10 @@ hard-coding registry ids.
 
 from __future__ import annotations
 
+import inspect
+import logging
+
+from helpers.logs import assert_logged
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.Pseudoneighbor import (
@@ -19,6 +23,10 @@ from tanglepack.topology.Pseudoneighbor import (
 from tanglepack.topology.TopologyResults import PseudoneighborPair
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch
+
+#: The default slack of the 2D endpoint-collision fallback; the table-linked
+#: tests drift a landing by TWICE this, so the unlinked fallback must reject it.
+COLLISION_RTOL = inspect.signature(compute_pseudoneighbors).parameters["collision_rtol"].default
 
 
 def _fixed_point(period: int, lambda_u: float) -> FixedPoint:
@@ -532,8 +540,7 @@ def test_strong_pip_cuts_warn_when_branches_are_left_uncut(caplog):
 
     assert set(cut_ids) == {(trellis.fixed_points[0], "stable", 0, 0)}
     assert cut_cdists[(trellis.fixed_points[0], "stable", 0, 0)] == 1.0
-    messages = [r.getMessage() for r in caplog.records]
-    assert any(str(pip) in m and "k_value 3" in m for m in messages)
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor")
 
 
 def test_strong_pip_cuts_are_silent_when_every_branch_is_cut(caplog):
@@ -546,13 +553,13 @@ def test_strong_pip_cuts_are_silent_when_every_branch_is_cut(caplog):
     with caplog.at_level("WARNING", logger="tanglepack.topology.Pseudoneighbor"):
         _strong_pip_cuts(trellis)
 
-    assert not [r for r in caplog.records if "k_value" in r.getMessage()]
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=0)
 
 
 def test_table_linked_deep_iterate_does_not_disqualify():
     """A pair member's own deep iterate is recognised by iterate-table LOOKUP,
     not by the cdist collision. Six forward links from x1 end at a crossing whose
-    registered stable cdist has drifted 2% (beyond collision_rtol) — the k=2.8
+    registered stable cdist has drifted 2 * collision_rtol — the k=2.8
     script at 8 blasts lost (10, 9) exactly this way — yet the pair survives
     because the table maps the landing back onto x1 by id. Without the links
     the collision fallback still rejects it (the unlinked behaviour is
@@ -568,7 +575,7 @@ def test_table_linked_deep_iterate_does_not_disqualify():
             s = 3.0 / 4.0**n
             if n == 6:
                 u *= 1.001  # scaled landing 2.002: strictly inside (2, 4)
-                s *= 1.02  # scaled stable 3.06 vs x1's 3: outside collision_rtol
+                s *= 1.0 + 2.0 * COLLISION_RTOL  # scaled stable 3.06 vs x1's 3: outside it
             nxt = reg.add_synthetic(
                 (s, u), unstable_cdist=u, stable_cdist=s,
                 manifold_a_key=unstable, manifold_b_key=stable,

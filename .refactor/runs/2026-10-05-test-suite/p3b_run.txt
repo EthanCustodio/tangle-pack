@@ -1,0 +1,32 @@
+........................................................................ [  9%]
+...........................s............................................ [ 19%]
+........................................................................ [ 29%]
+........................................................................ [ 39%]
+........................................................................ [ 49%]
+........................................................................ [ 59%]
+........................................................................ [ 69%]
+........................................................................ [ 79%]
+........................................................................ [ 89%]
+........................................................................ [ 99%]
+......                                                                   [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.10.12-final-0 _______________
+
+Coverage JSON written to file .refactor/runs/2026-10-05-test-suite/cov_p3b.json
+============================= slowest 15 durations =============================
+3.58s call     tests/test_session_bridge_classes.py::test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip
+3.12s call     tests/test_higher_period_cartoon.py::test_nested_blast_order_does_not_matter
+2.50s call     tests/numerics/test_grow_until.py::test_faces_closed_raises_at_the_cap_for_the_anchor
+2.46s call     tests/numerics/test_bridge_identity.py::test_bridge_identity_on_the_inversion_saddle
+2.44s call     tests/test_session_symbolic_dynamics.py::test_workbench_mutation_invalidates_the_cache
+2.40s call     tests/test_session_bridge_classes.py::test_workbench_mutation_invalidates_the_cache
+2.39s setup    tests/numerics/test_inversion_fixture.py::test_advance_key_flips_the_branch_and_returns_after_k_value_steps[unstable]
+2.32s setup    tests/numerics/test_inversion_fixture.py::test_one_map_step_scales_cdist_by_per_step_beta[1]
+2.32s setup    tests/numerics/test_inversion_fixture.py::test_intersections_carry_keys_on_both_branches
+2.32s setup    tests/numerics/test_inversion_fixture.py::test_one_map_step_scales_cdist_by_per_step_beta[0]
+2.32s call     tests/test_session_dual_graph.py::test_workbench_mutation_invalidates_the_caches
+2.32s setup    tests/numerics/test_inversion_fixture.py::test_growth_preserves_the_invariants_on_both_branches[1-stable]
+2.32s setup    tests/numerics/test_inversion_fixture.py::test_forward_iterates_are_registered_on_the_inversion_tangle
+2.32s setup    tests/numerics/test_inversion_fixture.py::test_growth_preserves_the_invariants_on_both_branches[0-stable]
+2.32s setup    tests/numerics/test_inversion_fixture.py::test_growth_preserves_the_invariants_on_both_branches[1-unstable]
+725 passed, 1 skipped in 108.34s (0:01:48)

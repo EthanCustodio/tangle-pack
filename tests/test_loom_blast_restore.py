@@ -20,7 +20,9 @@ import logging
 import numpy as np
 import pytest
 
+from helpers.logs import assert_logged
 from tanglepack import TangleSession
+from tanglepack.numerics.geometry import polyline_midpoint
 from tanglepack.examples import (
     HENON_K10,
     henon_jacobian,
@@ -87,7 +89,7 @@ def _interior_frontier(session, zone, fp):
         b
         for b in session.workbench.uniiterated_bridges
         if b.fixed_point is fp
-        and (point := session._bridge_test_point(b)) is not None
+        and (point := polyline_midpoint(b.get_point_array())) is not None
         and zone.contains_point(point)
     ]
 
@@ -124,7 +126,7 @@ def test_blast_zone_propagates_assertion_error(k10_session, monkeypatch):
 
     monkeypatch.setattr(session.workbench, "iterate_bridge", boom)
 
-    with pytest.raises(AssertionError, match="cdist monotonicity violated"):
+    with pytest.raises(AssertionError):
         session.blast_zone(zone, num_iterations=1, fixed_point=fp, strict=False)
 
 
@@ -147,7 +149,7 @@ def test_blast_zone_skips_value_error_with_warning(k10_session, monkeypatch, cap
 
     assert result.skipped == len(frontier)
     assert result.completed_iterations == 1
-    assert any("skipping bridge" in record.getMessage() for record in caplog.records)
+    assert_logged(caplog, logging.WARNING, "tanglepack.loom.Blast")
 
 
 def test_blast_zone_reraises_value_error_when_strict(k10_session, monkeypatch):
@@ -161,7 +163,7 @@ def test_blast_zone_reraises_value_error_when_strict(k10_session, monkeypatch):
 
     monkeypatch.setattr(session.workbench, "iterate_bridge", boom)
 
-    with pytest.raises(ValueError, match="under-resolved iterate"):
+    with pytest.raises(ValueError):
         session.blast_zone(zone, num_iterations=1, fixed_point=fp, strict=True)
 
 

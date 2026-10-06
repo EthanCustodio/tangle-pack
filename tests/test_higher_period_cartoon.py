@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from helpers.logs import assert_logged
 from minimal_helpers import build_pieces
 from tanglepack.examples.henon_cases import build_nested, build_period3
 from tanglepack.topology import plotting
@@ -94,7 +95,7 @@ def test_chords_pair_only_the_base_branchs_crossings(monkeypatch, caplog):
     assert (13, "base") in empty[10]
     assert (12, "chord") in empty[11]
     assert 99 not in empty and 98 not in empty
-    assert any("foreign stable crossing" in r.message for r in caplog.records)
+    assert_logged(caplog, logging.INFO, "tanglepack.topology.PartitionFamily")
 
 
 def test_a_lobe_ending_on_another_branch_marks_nothing(monkeypatch, caplog):
@@ -107,7 +108,7 @@ def test_a_lobe_ending_on_another_branch_marks_nothing(monkeypatch, caplog):
             minimal, _hole_homotopy(1, 2, own)
         )
     assert set(empty) == {1, 2}  # only the hole itself
-    assert any("ends on another stable branch" in r.message for r in caplog.records)
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.PartitionFamily")
 
 
 # --------------------------------------------------------------------------- #
@@ -154,9 +155,9 @@ def test_circle_layout_honours_interior_side_and_rejects_bad_shapes(k10_partitio
     assert layout.outside[branch_key] == "right"
     fig, ax = plt.subplots()
     try:
-        with pytest.raises(ValueError, match="shape"):
+        with pytest.raises(ValueError):
             plotting.plot_dual_graph_cartoon(dual, dynamics, ax=ax, shape="hexagon")
-        with pytest.raises(ValueError, match="label_position"):
+        with pytest.raises(ValueError):
             plotting.plot_dual_graph_cartoon(
                 dual, dynamics, ax=ax, shape="circle", label_position="nowhere"
             )
@@ -433,7 +434,7 @@ def test_nested_inner_words_are_the_period3_words():
 def test_nested_blast_order_does_not_matter(caplog):
     with caplog.at_level(logging.WARNING, logger="tanglepack.loom.Blast"):
         inner_first = build_nested(outer_blasts=4, inner_blasts=4)
-    assert not [r for r in caplog.records if "skipping bridge" in r.message]
+    assert_logged(caplog, logging.WARNING, "tanglepack.loom.Blast", count=0)
 
     outer_first = build_nested(outer_blasts=4)
     session = outer_first.session

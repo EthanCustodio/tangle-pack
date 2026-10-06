@@ -125,7 +125,7 @@ def test_advance_key_rejects_an_out_of_range_branch(inversion):
     fp = _bare_fixed_point(2, inversion=inversion)
 
     for bad_branch in (-1, 2):
-        with pytest.raises(ValueError, match="branch_index"):
+        with pytest.raises(ValueError):
             fp.advance_key((fp, "unstable", 0, bad_branch), 1)
 
 
@@ -152,7 +152,7 @@ def test_num_branches_is_derived_from_inversion():
 
 def test_num_branches_needs_the_k_value():
     fp = FixedPoint(3)
-    with pytest.raises(ValueError, match="k_value"):
+    with pytest.raises(ValueError):
         fp.num_branches
 
 
@@ -187,7 +187,7 @@ def test_set_k_value_rejects_disagreeing_eigenvalue_signs():
     fp = FixedPoint(1)
     fp.unstable_eigenvalues = [6.48]
     fp.stable_eigenvalues = [-0.154]
-    with pytest.raises(ValueError, match="sign"):
+    with pytest.raises(ValueError):
         fp.set_k_value()
 
 

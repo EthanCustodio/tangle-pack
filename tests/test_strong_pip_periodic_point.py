@@ -11,10 +11,15 @@ Henon fixture happens to grow no such crossing).
 
 from __future__ import annotations
 
+import inspect
+
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.StrongPip import is_strong_pip
 from tanglepack.topology.Trellis import Trellis
+
+#: The default slack of the strong-pip cdist-collision fallback.
+COLLISION_RTOL = inspect.signature(is_strong_pip).parameters["collision_rtol"].default
 
 
 def _fixed_point(period: int, lambda_u: float) -> FixedPoint:
@@ -114,8 +119,8 @@ def test_missing_unstable_key_disqualifier_is_kept():
 
 def test_table_linked_own_iterate_does_not_disqualify_strong_pip():
     """q0's own forward image on the next stable branch is recognised by
-    iterate-table lookup, not by the cdist collision: registered 2% short on
-    the stable side (beyond collision_rtol) and slightly short on the unstable
+    iterate-table lookup, not by the cdist collision: registered
+    2 * collision_rtol short on the stable side and slightly short on the unstable
     side, it maps back strictly inside q0's box by scaling and would block q0
     — unless the table says it IS q0's image. Unlinked, the collision fallback
     still blocks (unchanged behaviour)."""
@@ -130,7 +135,9 @@ def test_table_linked_own_iterate_does_not_disqualify_strong_pip():
             manifold_b_key=(fp3, "stable", 0, 0),
         )
         image = reg.add_synthetic(
-            (0.1, 0.1), unstable_cdist=0.995 * beta, stable_cdist=0.98 / beta,
+            (0.1, 0.1),
+            unstable_cdist=0.995 * beta,
+            stable_cdist=(1.0 - 2.0 * COLLISION_RTOL) / beta,
             manifold_a_key=(fp3, "unstable", 1, 0),
             manifold_b_key=(fp3, "stable", 1, 0),
         )

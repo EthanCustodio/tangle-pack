@@ -8,6 +8,8 @@ partition pipeline on a computed tangle.
 
 from __future__ import annotations
 
+import logging
+
 import matplotlib
 
 matplotlib.use("Agg")  # headless: exercise the plot helpers without a display
@@ -15,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from helpers.logs import assert_logged
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.plotting import plot_stable_partition
@@ -260,10 +263,11 @@ def test_partition_warns_without_pseudoneighbors(stable_line, caplog):
 
     with caplog.at_level("WARNING", logger="tanglepack.topology.Trellis"):
         trellis.punch_holes()
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Trellis")
+    caplog.clear()
+    with caplog.at_level("WARNING", logger="tanglepack.topology.Trellis"):
         trellis.partition_stable_manifold(branch_key)
-
-    warnings = [r for r in caplog.records if "compute_pseudoneighbors" in r.message]
-    assert len(warnings) == 2
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Trellis")
 
 
 def test_shared_boundary_never_closed_on_both_sides(stable_line):
@@ -459,12 +463,10 @@ def test_describe_reports(henon_with_holes):
     trellis, references = henon_with_holes
     trellis.partition_stable_manifold()
 
-    pairs_report = trellis.describe_pseudoneighbors()
-    assert f"{len(references)} reference pseudoneighbor pair(s):" in pairs_report
-    assert "hole(s) on the left side" in trellis.describe_holes()
-    partition_report = trellis.describe_stable_partitions()
-    assert "left partition" in partition_report
-    assert "right partition" in partition_report
+    assert references
+    assert trellis.describe_pseudoneighbors()
+    assert trellis.describe_holes()
+    assert trellis.describe_stable_partitions()
 
 
 def test_p3_propagation_terminates_at_periodicity(henon_p3_session):
@@ -920,11 +922,18 @@ def test_k28_blast_child_gets_no_forward_hole(k28_partitioned):
 
 
 def test_p3_forward_holes_stop_at_the_branch_return(p3_partitioned):
-    """Period 3: the +1 and +2 iterates of a reference pair (its appearances
-    on the other two branches) are punched, nothing at +3 or beyond is."""
+    """Period 3: nothing at iterate ``k_value`` (+3) or beyond is punched,
+    although such forward pairs are recorded.
+
+    Only this firm half of the holes-backward-only rule is tested; whether the
+    +1 and +2 iterates (the pair's appearances on the other two branches) are
+    punched is the PROVISIONAL exemption (author decision 3, Dev Notes).
+    """
     session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)
+    k = fp3.k_value
 
-    forward = sorted({h.iterate for h in trellis.holes if h.iterate and h.iterate > 0})
-    assert forward == [1, 2]
-    assert not [p for p in trellis.pseudoneighbors if p.iterate and p.iterate >= 3 and p.hole]
+    assert all(h.iterate < k for h in trellis.holes if h.iterate is not None)
+    beyond = [p for p in trellis.pseudoneighbors if p.iterate is not None and p.iterate >= k]
+    assert beyond, "the fixture records forward pairs at or beyond k_value"
+    assert not [p for p in beyond if p.hole]

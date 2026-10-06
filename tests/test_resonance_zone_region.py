@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from tanglepack import TangleSession
+from tanglepack.numerics.geometry import polyline_midpoint
 from tanglepack.topology.TopologyResults import Arc
 
 
@@ -125,7 +126,7 @@ def test_bridge_classification_uses_the_memoised_midpoint(k10_zone_session):
     inside = [b for b, z in classified.items() if z is zone]
     assert inside, "some bridge must lie in the zone"
     for bridge in inside:
-        point = session._bridge_test_point(bridge)
+        point = polyline_midpoint(bridge.get_point_array())
         assert zone.contains_point(point)
 
 

@@ -651,3 +651,138 @@ below), 724 → 726.
    is upgraded to the advance_key spy in Phase 7 per planner §A. The
    numerics-layer files at the top level (`test_fixed_point.py`, …) belong to
    Phase 3b by directory.
+
+---
+
+## §3b Phase 3b: loosen in place (top-level topology, loom, session files)
+
+### Deletion ledger, Phase 3b
+
+None. No test function is deleted and no node id changes (726 → 726,
+`nodeids_p3b.txt` identical to `nodeids_p3a.txt`); only assertions change.
+Every rewritten assertion was checked against the regression-guard notes: the
+guards keep their bite (collision-rtol unlinked halves unchanged in value;
+blast `AssertionError` still propagates; restore, repunching, own-key and
+backward-endpoint guards untouched).
+
+### What changed
+
+- **Exceptions, type only (decision 5).** All 42 `match=` arguments dropped in
+  `test_arrangement` (2), `test_bridge_class` (6), `test_dual_graph` (6),
+  `test_dual_walk` (4), `test_element_naming` (4), `test_fixed_point` (3),
+  `test_higher_period_cartoon` (2), `test_loom_blast_restore` (2),
+  `test_partition_family` (5), `test_session_bridge_classes` (1),
+  `test_topology_plotting` (8). `excinfo` message checks replaced by
+  structure: `test_split_origin_sides_raise` → one entry in
+  `bridge_side_violations`; `test_orientation_reversing_requires_alternating_sides`
+  → `bridge_side_violations(..., orientation_preserving=False)` non-empty;
+  `test_bridge_rows_inconsistent_raise` → `bridge_row_violation(...) is not None`;
+  `test_a_missing_partition_names_the_branch` → the same call succeeds once
+  the missing partition is back.
+- **Logs, level and logger only**, through `helpers.logs.assert_logged`:
+  `test_dual_walk` (11 checks; "no warning" checks become `count=0`, the
+  start/goal pair `count=2`), `test_minimal_trellis` (3),
+  `test_dual_graph::test_no_pips_warns_and_unifies_nothing`,
+  `test_iterated_partition` (row invariant, no empty stretch),
+  `test_pseudoneighbor` (uncut-branch pip warning, E6; silent case `count=0`),
+  `test_higher_period_cartoon` (foreign crossing INFO, other-branch lobe
+  WARNING, blast-order `count=0`), `test_session_bridge_classes` (zone
+  straddle, missing partition), `test_symbolic_dynamics` (virtual class, warns
+  no more → `count=0`, cross side, inert-with-word, no evidence),
+  `test_stable_partition::test_partition_warns_without_pseudoneighbors` (exact
+  count dropped: each of the two calls warns), `test_bridge_class` (unresolved
+  loop), `test_topology_plotting` verbose tests (INFO from
+  `tanglepack.topology.Trellis`; the print fallback asserts non-empty stdout,
+  E6), `test_loom_blast_restore` (skipped bridge).
+- **Reason strings and reprs.** `ElementLanding.reason` is asserted present,
+  not worded; landing / `Cut` / `ElementName` / partition reprs non-empty.
+- **`describe()` / `summary()` (decision 5): non-empty and mentions.**
+  `test_describe_reports` (stable partition), `test_describe_mentions_parents_and_cuts`,
+  `test_describe_has_one_line_per_element`, `test_table_lookups_symbols_and_report`
+  and `test_describe_reports_letters_and_inertness` (every class's `name`),
+  `test_homotopy_only_naming_is_its_own_parent` and
+  `test_branch_codes_always_and_letters_only_with_two_fixed_points` (every
+  element name), `test_is_reliable_and_describe` and
+  `test_describe_symbolic_dynamics` (every class letter),
+  `test_active_class_lies_in_the_zone…` (`active.describe()` non-empty),
+  `test_k28_letters_only_the_anchor_class` (counts from the table, not the
+  report), the minimal-trellis summary/describe, the sparse-arrangement
+  summary (`"sparse"` dropped; the `+2` / `+4 dangling ends` pins become
+  virtual-node counts). `ElementRef` labels: only "equal refs share a label,
+  different refs differ" (`test_element_ref_hashes_compares_and_labels`,
+  `test_fixed_point_label_wins_…`). Delegation equalities
+  (`session.describe_* == product.describe()`) are kept: they pin no wording.
+- **Evidence (decision 2).** `source ==` removed everywhere
+  (`test_k10_active_class_word`, `test_k28_one_blast_singleton_path` — its
+  `search is None` twin too — and `test_k28_two_blasts_structure`).
+  `is_reliable` / `verified` removed from the synthetic tests:
+  `test_is_reliable_and_describe` now checks the unresolved listing and the
+  report, `test_ambiguous_class_is_unreliable` checks
+  `ClassDynamics.status == "ambiguous"`. The fact tests (k10 word, k28 one
+  and two blasts, p3 equivariance, k10 session word) keep them until Phase 5.
+- **Cache identity in fact tests (decision 6).** Removed
+  `dyn is session.symbolic_dynamics([fp])` (`test_k28_two_blasts_structure`),
+  the `dyn.table is …` / `dyn.naming.iterated is …` half of
+  `test_k10_symbolic_dynamics_is_built_over_the_cached_pieces`, and
+  `len(session._bridge_classes) == 2` (`test_cache_is_kept_per_fixed_point_selection`).
+- **Tolerances.** `min_unstable_cdist == 0.0` → `approx(0, abs=cdist_tol)`
+  (`test_classes_and_members_come_out_in_the_documented_order`,
+  `test_k28_two_blasts_structure`). The table-linked tests state their drift as
+  `2 * collision_rtol`, read from the `compute_pseudoneighbors` /
+  `is_strong_pip` signature defaults (values unchanged: the unlinked halves are
+  NOT loosened, critic note 7).
+- **Private → public.** `_built_generation` (cache-hit test: the hit does not
+  move the workbench generation; minimal-trellis check dropped, registry and
+  manifold sharing kept); `TangleSession._bridge_test_point` →
+  `geometry.polyline_midpoint(bridge.get_point_array())` (zone midpoint test,
+  blast frontier helper).
+- **Provisional rule (decision 3).** `test_p3_forward_holes_stop_at_the_branch_return`
+  no longer asserts that the +1 and +2 forward holes exist; it asserts the
+  firm half (no hole at iterate ≥ `k_value`, while such pairs are recorded)
+  and names the exemption as untested (flagged in Phase 2 deviation 4).
+
+### Verification
+
+- Collected **726** (`nodeids_p3b.txt`, identical to 3a).
+- `725 passed, 1 skipped` in 108 s with coverage (`p3b_run.txt`); `-rxX`: no
+  xfail, no xpass.
+- Coverage guard vs `cov_base.json`: OK (`cov_p3b.json`), after deviation 2.
+- Isolation: `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `test_bridge_class.py::test_p3_classes_cover_both_tangles_and_mix_neither`,
+  `test_session_trellis_cache.py::test_same_generation_is_a_cache_hit`,
+  `test_stable_partition.py::test_p3_forward_holes_stop_at_the_branch_return`,
+  `test_dual_walk.py::test_no_start_node_and_no_goal_node`,
+  `test_pseudoneighbor.py::test_table_linked_deep_iterate_does_not_disqualify`,
+  `test_stable_partition.py::test_partition_warns_without_pseudoneighbors`:
+  all pass alone.
+
+### Deviations, Phase 3b
+
+1. **Private access not on the Phase 3 list is left for later phases**, where
+   the tests holding it are deleted, moved or rewritten: `build_pieces` /
+   `_gathered_partitions` / `_partition_signature` (Phase 6/7), the
+   arrangement `_nodes` / `_half_edges` tables (including the new
+   `_dangling_ends` helper that replaces the summary pin) and
+   `DualGraph._nodes_of_edge` (Phase 4/7), `_row_at`, `_row_polyline`,
+   `_image_chain`, `_scaled_image_cdist`, `_snap_to_partition_boundary`,
+   `_strong_pip_cuts` (E6), `_inert_letter` / `_active_letter`,
+   `_bridge_side_of`, `_region_key`, `_is_forward_beyond_fundamental`,
+   `_intervals_from_marks` / `_marks_of` / `_build_intervals`, plotting
+   `_cartoon_name` / `_anchorward_look` (Phases 7/8). The allowed kernels
+   (`_side_of`, `_resolve_inertness`, `_backward_endpoint`,
+   `_bridge_unstable_span`, `_containing_bridge`, `_near_far`, the chord
+   kernel `_empty_stretches`) stay.
+2. **One repr kept for coverage.** Dropping `"toward {partner}" in repr(cut)`
+   left `Cut.__repr__`'s partner branch (`PartitionFamily.py:574`) uncovered;
+   `test_cuts_record_the_far_end_of_the_empty_stretch` now asserts each
+   partnered cut's repr is non-empty.
+3. **Kept as specifications, not wording:** element-name texts
+   (`R_(1.0;1)^2`, mathtext), symbol texts (`a^-1`, `a_2`), the inert letter
+   series and cut `reason` codes are author-defined formats in CLAUDE.md; the
+   `StableNode.label` join (`"L | R"`) is left for Phase 8 (label-separator
+   tests). The session-vs-direct `_same_dynamics` helper still compares
+   `is_reliable` between the two builds (an equivalence, not a reliability
+   pin); Phase 6 rewrites it.
+4. Test names describing the old wording checks (`test_describe_mentions_parents_and_cuts`,
+   `test_is_reliable_and_describe`, `test_a_missing_partition_names_the_branch`,
+   …) are kept so no node id moves; Phases 4–10 rename or delete them.

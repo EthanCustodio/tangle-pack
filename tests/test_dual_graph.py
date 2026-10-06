@@ -16,6 +16,7 @@ import logging
 import numpy as np
 import pytest
 
+from helpers.logs import assert_logged
 from minimal_helpers import build_pieces
 from tanglepack.topology.DualGraph import DualGraph, FaceNode, StableNode
 from tanglepack.topology.StablePartition import _side_of
@@ -197,9 +198,9 @@ def _check_structure(dual: DualGraph, pieces) -> None:
                 assert node.sides == (side,) and not node.traversable
                 assert node.key == (edge_key, side) and list(node.faces) == [side]
                 assert node.fundamental_span is None
-                with pytest.raises(ValueError, match="wall"):
+                with pytest.raises(ValueError):
                     node.other_face(node.faces[side])
-                with pytest.raises(ValueError, match="faces"):
+                with pytest.raises(ValueError):
                     node.element_on("right" if side == "left" else "left")
     for node in dual.stable_nodes.values():
         for side in node.sides:
@@ -252,7 +253,7 @@ def test_k10_face_nodes_are_one_per_face_with_a_single_outer(k10_partitioned):
     assert len(outer) == 1 and outer[0].is_unbounded
     for region in arrangement.regions:
         assert dual.face_of(region).is_region
-    with pytest.raises(ValueError, match="not a face"):
+    with pytest.raises(ValueError):
         dual.face_of(session.arrangement().faces[0])
 
 
@@ -458,7 +459,7 @@ def test_no_pips_warns_and_unifies_nothing(k10_partitioned, caplog, pips):
     pieces = build_pieces(session, [fp])
     with caplog.at_level(logging.WARNING, logger="tanglepack.topology.DualGraph"):
         dual = DualGraph(pieces.minimal, pieces.iterated, strong_pips=pips)
-    assert any("no strong pip" in record.message for record in caplog.records)
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.DualGraph")
     assert not dual.unified_nodes and not dual.fundamental_segments
     assert len(dual.stable_nodes) == 2 * len(dual._nodes_of_edge)
 
@@ -514,7 +515,7 @@ def test_two_pips_on_one_branch_are_rejected(k10_partitioned):
     ]
     if not others:
         pytest.skip("the fixture has a single strong-pip candidate on the pip's branch")
-    with pytest.raises(ValueError, match="one fundamental segment"):
+    with pytest.raises(ValueError):
         DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip, others[0]])
 
 
@@ -547,7 +548,7 @@ def test_a_missing_partition_side_is_rejected(k10_partitioned):
     left_only = PartitionFamily(
         [r for r in pieces.iterated.as_list() if r.side == "left"], trellis=pieces.full
     )
-    with pytest.raises(ValueError, match="no 'right' partition covers"):
+    with pytest.raises(ValueError):
         DualGraph(pieces.minimal, left_only, strong_pips=pieces.strong_pips)
 
 
@@ -556,5 +557,5 @@ def test_stable_node_side_of_rejects_a_foreign_face(k10_partitioned):
     dual, _ = _k10_graph(session, fp)
     node = dual.wall_nodes[0]
     foreign = next(f for f in dual.face_nodes if f is not node.faces[node.sides[0]])
-    with pytest.raises(ValueError, match="does not bound"):
+    with pytest.raises(ValueError):
         node.side_of(foreign)

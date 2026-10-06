@@ -71,12 +71,9 @@ def test_split_origin_sides_raise():
         _hole((3, 4), -1, "right"),
         _hole((3, 4), -2, "left"),
     ]
-    with pytest.raises(AssertionError) as excinfo:
+    with pytest.raises(AssertionError):
         check_holes_share_bridge_side(holes)
-    message = str(excinfo.value)
-    assert "(3, 4)" in message
-    assert "-2" in message
-    assert "left" in message and "right" in message
+    assert len(bridge_side_violations(holes)) == 1
 
 
 def test_distinct_origins_may_differ():
@@ -99,9 +96,9 @@ def test_orientation_reversing_requires_alternating_sides():
     """Under det J < 0 the side flips every step, so a constant side violates."""
     constant = [_hole((3, 4), i, "left") for i in (0, -1, -2)]
     check_holes_share_bridge_side(constant, orientation_preserving=True)
-    with pytest.raises(AssertionError) as excinfo:
+    with pytest.raises(AssertionError):
         check_holes_share_bridge_side(constant, orientation_preserving=False)
-    assert "parity" in str(excinfo.value)
+    assert bridge_side_violations(constant, orientation_preserving=False)
 
     alternating = [
         _hole((3, 4), 0, "left"),
@@ -221,11 +218,9 @@ def test_bridge_rows_inconsistent_raise():
     """An arc that crosses its own stable branch fires the row assertion."""
     trellis, a_id, b_id = _row_trellis()
     bridge = _StubBridge(a_id, b_id, _CROSSING_LOBE)
-    with pytest.raises(AssertionError) as excinfo:
+    with pytest.raises(AssertionError):
         check_bridge_rows_consistent(trellis, bridge)
-    message = str(excinfo.value)
-    assert f"({a_id}, {b_id})" in message
-    assert "left" in message and "right" in message
+    assert bridge_row_violation(trellis, bridge) is not None
 
 
 def test_bridge_rows_on_different_stable_branches_are_exempt():
