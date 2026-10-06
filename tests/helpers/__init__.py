@@ -11,4 +11,6 @@
 * :mod:`helpers.names` -- letter-free spellers of classes, words, brackets and
   transition matrices.
 * :mod:`helpers.logs` -- ``assert_logged`` (level and logger only).
+* :mod:`helpers.zones` -- ``define_inner_zone`` (a zone whose trim really
+  shortens the stable branch).
 """

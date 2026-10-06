@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
@@ -20,15 +21,6 @@ from tanglepack.numerics.Point import Point
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch
-
-
-class _FakeFixedPoint:
-    """The bare minimum a TrellisBranch reads off a fixed point."""
-
-    period = 1
-    k_value = 1
-    coordinates = np.array([[0.0, 0.0]])
-    unstable_eigenvalues = [2.0]
 
 
 def _lobe(fp, u_key, first, second, y0, bulge):
@@ -60,7 +52,7 @@ def _three_lobes(keep):
     three lobes ``(a,b), (b,c), (c,d)`` are handed to the trellis as bridges;
     every crossing stays on both branches regardless.
     """
-    fp = _FakeFixedPoint()
+    fp = bare_fixed_point(beta=0.5, coordinates=[(0.0, 0.0)])
     u_key = (fp, "unstable", 0, 0)
     s_key = (fp, "stable", 0, 0)
     registry = IntersectionRegistry()
@@ -150,26 +142,6 @@ def test_dense_build_over_the_subset_manufactures_the_missing_arc():
     assert (b, c) in _unstable_pairs(arrangement)
 
 
-def test_sparse_kept_endpoints_are_degree_three_without_unstable_stubs():
-    trellis, (a, b, c, d) = _three_lobes(("ab", "cd"))
-    arrangement = Arrangement.from_trellis(trellis, sparse=True)
-    assert set(arrangement._nodes[b].slots) == {"s+", "s-", "u-"}
-    assert set(arrangement._nodes[c].slots) == {"s+", "s-", "u+"}
-    # The stable ends of the line still dangle.
-    assert set(arrangement._nodes[a].slots) == {"s+", "s-", "u+"}
-    assert arrangement._nodes[arrangement._half_edges[arrangement._nodes[a].slots["s-"]].head].virtual
-    assert set(arrangement._nodes[d].slots) == {"s+", "s-", "u-"}
-    assert arrangement._nodes[arrangement._half_edges[arrangement._nodes[d].slots["s+"]].head].virtual
-    # Nothing virtual hangs off an unstable slot anywhere.
-    for node in arrangement._nodes.values():
-        if node.virtual:
-            continue
-        for slot in ("u+", "u-"):
-            if slot in node.slots:
-                head = arrangement._half_edges[node.slots[slot]].head
-                assert not arrangement._nodes[head].virtual
-
-
 def test_sparse_faces_close_and_euler_holds():
     trellis, (a, b, c, d) = _three_lobes(("ab", "cd"))
     arrangement = Arrangement.from_trellis(trellis, sparse=True)
@@ -177,6 +149,8 @@ def test_sparse_faces_close_and_euler_holds():
     # part of the outer face, not a slit.
     assert len(arrangement.regions) == 2
     assert len(arrangement.faces) == 3
+    # Only the two stable ends of the line dangle: no unstable stub anywhere.
+    assert _dangling_ends(arrangement) == 2
     assert arrangement.component_count == 1
     assert arrangement.euler_characteristic == 2
     corners = {region.corners for region in arrangement.regions}

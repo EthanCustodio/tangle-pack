@@ -17,72 +17,17 @@ from __future__ import annotations
 
 import logging
 
-import numpy as np
 import pytest
 
 from helpers.logs import assert_logged
-from tanglepack import TangleSession
+from helpers.zones import define_inner_zone
 from tanglepack.numerics.geometry import polyline_midpoint
-from tanglepack.examples import (
-    HENON_K10,
-    henon_jacobian,
-    henon_map,
-    henon_map_inverse,
-    saddle_guesses,
-)
 
 
 # --------------------------------------------------------------------------- #
-# Fixture: the cheapest flow that yields a resonance zone with interior bridges
+# Helpers (the session is the shared ``k10_session`` fixture: function scoped,
+# since both blasting and zone definition mutate it)
 # --------------------------------------------------------------------------- #
-_k10_map = henon_map(*HENON_K10)
-_k10_map_inverse = henon_map_inverse(*HENON_K10)
-_k10_jacobian = henon_jacobian(*HENON_K10)
-
-
-@pytest.fixture
-def k10_session():
-    """``(session, fp)`` — the k=10 saddle with intersections and bridges built.
-
-    Function-scoped: both blasting and zone definition mutate the session.
-    """
-    session = TangleSession(_k10_map, _k10_map_inverse, _k10_jacobian)
-    fp = session.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
-    session.orient_eigenvectors(
-        fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
-    )
-    session.initialize_both_manifolds(fp)
-    session.grow_n_times(fp, "unstable", num_iterations=9)
-    session.grow_until_turnaround(fp, "stable")
-    session.compute_intersections([fp])
-    session.trim_stable_manifolds(fp)
-    session.create_bridges(fp)
-    return session, fp
-
-
-def _define_zone(session, fp):
-    """Trim at a strong pip that genuinely shortens the stable branch.
-
-    The trellis' default strong pip on this flow happens to sit at the largest stable
-    canonical distance, so trimming there is a geometric no-op. Pick instead the
-    outermost candidate strictly inside the current stable extent, so the trim really
-    removes crossings and the restore really has something to rebuild.
-    """
-    registry = session.workbench.intersection_registry
-    trellis = session.trellis(fp)
-    trellis.classify_strong_pips()
-    outermost = max(registry[i].stable_cdist for i in registry.all_ids())
-    inner = [
-        c for c in trellis.strong_pip_candidates
-        if registry[c].stable_cdist < outermost
-    ]
-    assert inner, "expected a strong-pip candidate inside the stable extent"
-    pip = max(inner, key=lambda c: registry[c].stable_cdist)
-    trellis.set_strong_pip(pip)
-    session.add_resonance_zones([pip])
-    return session.resonance_zones[(fp, 0)]
-
-
 def _interior_frontier(session, zone, fp):
     """The un-iterated bridges the blast would feed into its first step."""
     return [
@@ -115,56 +60,41 @@ def _bridge_endpoint_cdists(workbench):
 # --------------------------------------------------------------------------- #
 # 1.5 — blast_zone must not swallow AssertionError
 # --------------------------------------------------------------------------- #
-def test_blast_zone_propagates_assertion_error(k10_session, monkeypatch):
-    """An AssertionError from a bridge's forward map escapes even at strict=False."""
+@pytest.mark.parametrize(
+    "error, strict, escapes",
+    [
+        (AssertionError, False, True),
+        (ValueError, False, False),
+        (ValueError, True, True),
+    ],
+    ids=["assertion_escapes_lenient", "value_error_skipped_lenient", "value_error_raised_strict"],
+)
+def test_blast_zone_error_handling(
+    k10_session, monkeypatch, caplog, error: type, strict: bool, escapes: bool
+):
+    """An AssertionError from a bridge's forward map always escapes; a ValueError
+    is a per-bridge skip (with a warning) at ``strict=False`` and raised at
+    ``strict=True``."""
     session, fp = k10_session
-    zone = _define_zone(session, fp)
-    assert _interior_frontier(session, zone, fp), "need a non-empty blast frontier"
-
-    def boom(bridge):
-        raise AssertionError("cdist monotonicity violated")
-
-    monkeypatch.setattr(session.workbench, "iterate_bridge", boom)
-
-    with pytest.raises(AssertionError):
-        session.blast_zone(zone, num_iterations=1, fixed_point=fp, strict=False)
-
-
-def test_blast_zone_skips_value_error_with_warning(k10_session, monkeypatch, caplog):
-    """A ValueError is still a per-bridge skip (with a warning) at strict=False."""
-    session, fp = k10_session
-    zone = _define_zone(session, fp)
+    zone = define_inner_zone(session, fp)
     frontier = _interior_frontier(session, zone, fp)
     assert frontier, "need a non-empty blast frontier"
 
     def boom(bridge):
-        raise ValueError("under-resolved iterate")
+        raise error("the forward map failed")
 
     monkeypatch.setattr(session.workbench, "iterate_bridge", boom)
 
-    with caplog.at_level(logging.WARNING, logger="tanglepack.loom.Blast"):
-        result = session.blast_zone(
-            zone, num_iterations=1, fixed_point=fp, strict=False
-        )
+    if escapes:
+        with pytest.raises(error):
+            session.blast_zone(zone, num_iterations=1, fixed_point=fp, strict=strict)
+        return
 
+    with caplog.at_level(logging.WARNING, logger="tanglepack.loom.Blast"):
+        result = session.blast_zone(zone, num_iterations=1, fixed_point=fp, strict=strict)
     assert result.skipped == len(frontier)
     assert result.completed_iterations == 1
     assert_logged(caplog, logging.WARNING, "tanglepack.loom.Blast")
-
-
-def test_blast_zone_reraises_value_error_when_strict(k10_session, monkeypatch):
-    """strict=True still surfaces the tolerated failures."""
-    session, fp = k10_session
-    zone = _define_zone(session, fp)
-    assert _interior_frontier(session, zone, fp), "need a non-empty blast frontier"
-
-    def boom(bridge):
-        raise ValueError("under-resolved iterate")
-
-    monkeypatch.setattr(session.workbench, "iterate_bridge", boom)
-
-    with pytest.raises(ValueError):
-        session.blast_zone(zone, num_iterations=1, fixed_point=fp, strict=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -178,7 +108,7 @@ def test_restore_rebuilds_bridges(k10_session):
     before = _bridge_endpoint_cdists(workbench)
     assert before, "the fixture must produce bridges"
 
-    zone = _define_zone(session, fp)
+    zone = define_inner_zone(session, fp)
     trimmed = _bridge_endpoint_cdists(workbench)
     assert trimmed != before, "the trim must actually change the bridge set"
 
@@ -201,7 +131,7 @@ def test_restore_preserves_intersection_ids(k10_session):
     session, fp = k10_session
     workbench = session.workbench
 
-    zone = _define_zone(session, fp)
+    zone = define_inner_zone(session, fp)
     before = {
         iid: (
             round(ix.unstable_cdist, 9),
@@ -227,7 +157,7 @@ def test_restore_keeps_bridges_within_restored_manifolds(k10_session):
     session, fp = k10_session
     workbench = session.workbench
 
-    zone = _define_zone(session, fp)
+    zone = define_inner_zone(session, fp)
     zone.restore(workbench)
 
     for bridge in workbench.bridges:
@@ -243,7 +173,7 @@ def test_restore_without_recompute_leaves_bridges_stale(k10_session):
     session, fp = k10_session
     workbench = session.workbench
 
-    zone = _define_zone(session, fp)
+    zone = define_inner_zone(session, fp)
     trimmed = [id(b) for b in workbench.bridges]
     zone.restore(workbench, recompute=False)
 

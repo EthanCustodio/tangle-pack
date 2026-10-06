@@ -12,6 +12,7 @@ itinerary. The real k=10 walk is pinned in ``tests/golden/test_golden_k10.py``.
 from __future__ import annotations
 
 import logging
+from typing import Callable, Optional
 
 import pytest
 
@@ -28,10 +29,11 @@ from tanglepack.topology.PartitionFamily import (
     HomotopyPartition,
     IteratedHomotopyPartition,
 )
-from walk_helpers import (
+from helpers.fakes import (
     FakeDual,
-    FakeFixedPoint,
     FakeTrellis,
+    IntervalSpec,
+    bare_fixed_point,
     make_result,
     ref,
     stable_key,
@@ -45,7 +47,7 @@ LOGGER = "tanglepack.topology.DualWalk"
 # --------------------------------------------------------------------------- #
 @pytest.fixture
 def key():
-    return stable_key(FakeFixedPoint())
+    return stable_key(bare_fixed_point())
 
 
 def L(key, index):
@@ -63,64 +65,61 @@ def _pairs(itinerary):
 # --------------------------------------------------------------------------- #
 # shortest_walks: synthetic
 # --------------------------------------------------------------------------- #
-def test_start_equals_goal_is_trivial(key):
+@pytest.mark.parametrize(
+    "goal_index, faces",
+    [(0, "start"), (1, "shared")],
+    ids=["start_is_goal", "start_face_is_goal_face"],
+)
+def test_trivial_walks_stay_on_the_start_face(key, goal_index, faces):
+    """A goal equal to the start, or one on the start's face, needs no crossing."""
     dual = FakeDual()
-    f0, f1 = dual.face(), dual.face()
+    f0, f1, f2 = dual.face(), dual.face(), dual.face()
     dual.unified(f0, f1, L(key, 0), R(key, 0))
-    search = shortest_walks(dual, L(key, 0), L(key, 0))
+    if faces == "shared":
+        dual.unified(f0, f2, L(key, 1), R(key, 1))
+    search = shortest_walks(dual, L(key, 0), L(key, goal_index))
     assert search.status == "trivial"
     assert search.walk is not None
-    assert search.walk.itinerary == (L(key, 0), L(key, 0))
+    assert search.walk.itinerary == (L(key, 0), L(key, goal_index))
+    assert search.itinerary == search.walk.itinerary
     assert search.walk.steps == [] and search.walk.length == 0
     assert search.walk.faces == [f0]
     assert search.start_faces == [f0]
 
 
-def test_start_face_equal_to_goal_face_is_trivial(key):
-    dual = FakeDual()
-    f0, f1, f2 = dual.face(), dual.face(), dual.face()
-    dual.unified(f0, f1, L(key, 0), R(key, 0))
-    dual.unified(f0, f2, L(key, 1), R(key, 1))
-    search = shortest_walks(dual, L(key, 0), L(key, 1))
-    assert search.status == "trivial"
-    assert search.walk.itinerary == (L(key, 0), L(key, 1))
-    assert search.walk.faces == [f0]
-    assert search.itinerary == search.walk.itinerary
+@pytest.mark.parametrize("entry_side", ["left", "right"])
+def test_single_crossing_records_entry_then_exit(key, entry_side):
+    """One unified node crossed from either side: entry element, then exit element.
 
-
-def test_single_crossing_records_entry_then_exit(key):
+    The ``right`` case is the mirror image of the ``left`` one (every face
+    pair swapped), so the itinerary reads the right row, then the left.
+    """
+    near, far = (L, R) if entry_side == "left" else (R, L)
     dual = FakeDual()
     f0, f1, fx, fy = dual.face(), dual.face(), dual.face(), dual.face()
-    dual.wall(f0, fx, L(key, 0), R(key, 0))
-    node = dual.unified(f0, f1, L(key, 1), R(key, 1))
-    dual.wall(f1, fy, L(key, 2), R(key, 2))
-    search = shortest_walks(dual, L(key, 0), L(key, 2))
+
+    def edge(kind, start_face, other_face, index):
+        faces = (start_face, other_face) if entry_side == "left" else (other_face, start_face)
+        return getattr(dual, kind)(*faces, L(key, index), R(key, index))
+
+    edge("wall", f0, fx, 0)
+    node = edge("unified", f0, f1, 1)
+    edge("wall", f1, fy, 2)
+    search = shortest_walks(dual, near(key, 0), near(key, 2))
     assert search.status == "unique" and not search.truncated
     walk = search.walk
     assert isinstance(walk, Walk)
-    assert walk.itinerary == (L(key, 0), L(key, 1), R(key, 1), L(key, 2))
+    assert walk.itinerary == (near(key, 0), near(key, 1), far(key, 1), near(key, 2))
     assert len(walk.itinerary) % 2 == 0
     assert walk.faces == [f0, f1]
     (step,) = walk.steps
     assert isinstance(step, WalkStep)
     assert step.node is node
-    assert step.entry_side == "left" and step.exit_side == "right"
+    assert step.entry_side == entry_side and step.exit_side != entry_side
     assert step.from_face is f0 and step.to_face is f1
-    assert step.entry_element == L(key, 1) and step.exit_element == R(key, 1)
-    assert walk.pairs == [(L(key, 0), L(key, 1)), (R(key, 1), L(key, 2))]
+    assert step.entry_element == near(key, 1) and step.exit_element == far(key, 1)
+    assert walk.pairs == [(near(key, 0), near(key, 1)), (far(key, 1), near(key, 2))]
     assert walk.multiplicity == 1
-
-
-def test_crossing_from_the_right_side_records_right_then_left(key):
-    dual = FakeDual()
-    f0, f1, fx, fy = dual.face(), dual.face(), dual.face(), dual.face()
-    dual.wall(fx, f0, L(key, 0), R(key, 0))
-    dual.unified(f1, f0, L(key, 1), R(key, 1))
-    dual.wall(fy, f1, L(key, 2), R(key, 2))
-    search = shortest_walks(dual, R(key, 0), R(key, 2))
-    assert search.status == "unique"
-    assert search.walk.itinerary == (R(key, 0), R(key, 1), L(key, 1), R(key, 2))
-    assert search.walk.steps[0].entry_side == "right"
 
 
 def test_walls_are_never_crossed(key, caplog):
@@ -280,80 +279,118 @@ CDISTS = {11: 0.25, 12: 0.5, 1: 1.0, 2: 2.0, 3: 4.0, 14: 0.375}
 #: The +1 iterates (per_step_beta("stable") = 0.25).
 ITERATES = {1: 11, 2: 12, 3: 1}
 
-HOMOTOPY = [
-    (None, 1, 0.0, 1.0, True, False),
-    (1, 2, 1.0, 2.0, True, True),
-    (2, 3, 2.0, 4.0, False, True),
-]
-ITERATED = [
-    (None, 11, 0.0, 0.25, True, False),
-    (11, 12, 0.25, 0.5, True, True),
-    (12, 1, 0.5, 1.0, False, False),
-    (1, 2, 1.0, 2.0, True, True),
-    (2, 3, 2.0, 4.0, False, True),
-]
+#: One family's intervals (anchor outward) and its crossing owners, spelled out.
+Family = tuple[list[IntervalSpec], dict[int, int]]
+
+HOMOTOPY: Family = (
+    [
+        (None, 1, 0.0, 1.0, True, False),
+        (1, 2, 1.0, 2.0, True, True),
+        (2, 3, 2.0, 4.0, False, True),
+    ],
+    {1: 1, 2: 1, 3: 2},
+)
+ITERATED: Family = (
+    [
+        (None, 11, 0.0, 0.25, True, False),
+        (11, 12, 0.25, 0.5, True, True),
+        (12, 1, 0.5, 1.0, False, False),
+        (1, 2, 1.0, 2.0, True, True),
+        (2, 3, 2.0, 4.0, False, True),
+    ],
+    {11: 1, 12: 1, 1: 3, 2: 3, 3: 4},
+)
 ITERATED_PARENTS = [0, 0, 0, 1, 2]
+#: A homotopy family with a singleton pinched at crossing 2.
+PINCHED_HOMOTOPY: Family = (
+    [
+        (None, 1, 0.0, 1.0, True, False),
+        (1, 2, 1.0, 2.0, True, False),
+        (2, 2, 2.0, 2.0, True, True),
+        (2, 3, 2.0, 4.0, False, True),
+    ],
+    {1: 1, 2: 2, 3: 3},
+)
 
 
-def _families(trellis, key, homotopy_specs=HOMOTOPY, iterated_specs=ITERATED, parents=None):
+def _families(
+    trellis: FakeTrellis,
+    key: tuple,
+    homotopy: Family = HOMOTOPY,
+    iterated: Family = ITERATED,
+    parents: Optional[list[int]] = None,
+) -> tuple[HomotopyPartition, IteratedHomotopyPartition]:
     """Both families on both sides of one branch (mirrored)."""
-    homotopy = HomotopyPartition.from_results(
-        [make_result(key, side, homotopy_specs) for side in ("left", "right")],
+    homotopy_family = HomotopyPartition.from_results(
+        [make_result(key, side, *homotopy) for side in ("left", "right")],
         trellis=trellis,
     )
-    iterated = IteratedHomotopyPartition(
-        [make_result(key, side, iterated_specs, parents=parents) for side in ("left", "right")],
+    iterated_family = IteratedHomotopyPartition(
+        [make_result(key, side, *iterated, parents=parents) for side in ("left", "right")],
         trellis=trellis,
-        homotopy=homotopy,
+        homotopy=homotopy_family,
     )
-    return homotopy, iterated
+    return homotopy_family, iterated_family
+
+
+def _trellis(
+    cdists: dict[int, float] = CDISTS,
+    iterates: dict[int, int] = ITERATES,
+    keys: "tuple | Callable[[tuple], dict[int, tuple]]" = (),
+    **kwargs,
+) -> tuple[FakeTrellis, tuple]:
+    """A fake trellis on one stable branch of a real ``beta = 0.25`` fixed point.
+
+    Args:
+        cdists: Stable cdist per crossing id.
+        iterates: ``+1`` iterate per crossing id.
+        keys: The branch key of every crossing (the fixed point's own branch
+            when empty), or a function of that branch key returning the
+            per-crossing keys.
+        **kwargs: Passed to :class:`FakeTrellis`.
+
+    Returns:
+        ``(trellis, the fixed point's stable branch key)``.
+    """
+    fixed_point = bare_fixed_point(beta=0.25)
+    key = stable_key(fixed_point)
+    if callable(keys):
+        keys = keys(key)
+    return FakeTrellis(cdists, iterates, keys or key, fixed_points=[fixed_point], **kwargs), key
 
 
 @pytest.fixture
 def landing_setup():
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    trellis = FakeTrellis(CDISTS, ITERATES, key, fixed_points=[fixed_point])
+    trellis, key = _trellis()
     homotopy, iterated = _families(trellis, key, parents=ITERATED_PARENTS)
     return trellis, key, homotopy, iterated
 
 
-def test_contained_landing_from_the_table(landing_setup):
+@pytest.mark.parametrize(
+    "element, span",
+    [(0, (0.0, 0.25)), (1, (0.25, 0.5)), (2, (0.5, 1.0))],
+    ids=["unbounded_low_end_maps_to_zero", "interior", "outermost"],
+)
+def test_landing_from_the_table_is_contained(landing_setup, element, span):
+    """Every homotopy element lands, by the table alone, inside one iterated element."""
     trellis, key, homotopy, iterated = landing_setup
-    landing = land_element(trellis, homotopy, iterated, L(key, 1))
+    landing = land_element(trellis, homotopy, iterated, L(key, element))
     assert isinstance(landing, ElementLanding)
     assert landing.resolved and landing.contained and not landing.singleton
-    assert landing.source == L(key, 1)
+    assert landing.source == L(key, element)
     assert landing.image_key == key and landing.image_side == "left"
-    assert landing.span == (0.25, 0.5)
+    assert landing.span == span
     assert landing.from_table == (True, True)
-    assert landing.target == L(key, 1)
-    assert landing.covering == (L(key, 1),)
+    assert landing.target == L(key, element)
+    assert landing.covering == (L(key, element),)
     assert landing.reason is None
     assert repr(landing)
 
 
-def test_unbounded_low_end_maps_to_zero(landing_setup):
-    trellis, key, homotopy, iterated = landing_setup
-    landing = land_element(trellis, homotopy, iterated, L(key, 0))
-    assert landing.span == (0.0, 0.25)
-    assert landing.from_table == (True, True)
-    assert landing.target == L(key, 0) and landing.contained
-
-
-def test_outermost_element_lands_by_the_table(landing_setup):
-    trellis, key, homotopy, iterated = landing_setup
-    landing = land_element(trellis, homotopy, iterated, L(key, 2))
-    assert landing.span == (0.5, 1.0)
-    assert landing.target == L(key, 2) and landing.contained
-
-
 def test_unbounded_high_end_is_scaled():
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    trellis = FakeTrellis(CDISTS, ITERATES, key, fixed_points=[fixed_point])
-    open_ended = HOMOTOPY[:2] + [(2, None, 2.0, 4.0, False, True)]
-    homotopy, iterated = _families(trellis, key, homotopy_specs=open_ended)
+    trellis, key = _trellis()
+    open_ended: Family = (HOMOTOPY[0][:2] + [(2, None, 2.0, 4.0, False, True)], {1: 1, 2: 1})
+    homotopy, iterated = _families(trellis, key, homotopy=open_ended)
     landing = land_element(trellis, homotopy, iterated, L(key, 2))
     assert landing.span == (0.5, 1.0)
     assert landing.from_table == (True, False)  # 2 -> 12 registered; hi = 4.0 * 0.25 scaled
@@ -361,41 +398,37 @@ def test_unbounded_high_end_is_scaled():
 
 
 def test_scaled_end_tolerance_is_relative():
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
     # The unregistered crossing 4 sits at 4.004: its scaled image 1.001 overshoots
     # the iterated element (0.5, 1.0) by 1e-3 -- inside SCALING_RTOL, so contained.
-    cdists = {**CDISTS, 4: 4.004}
-    trellis = FakeTrellis(cdists, ITERATES, key, fixed_points=[fixed_point])
-    open_ended = HOMOTOPY[:2] + [(2, 4, 2.0, 4.004, False, True)]
-    homotopy, iterated = _families(trellis, key, homotopy_specs=open_ended)
+    trellis, key = _trellis(cdists={**CDISTS, 4: 4.004})
+    open_ended: Family = (
+        HOMOTOPY[0][:2] + [(2, 4, 2.0, 4.004, False, True)],
+        {1: 1, 2: 1, 4: 2},
+    )
+    homotopy, iterated = _families(trellis, key, homotopy=open_ended)
     landing = land_element(trellis, homotopy, iterated, L(key, 2))
     assert landing.from_table == (True, False)
     assert landing.target == L(key, 2) and landing.contained
 
 
 def test_orientation_reversing_map_flips_the_side():
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    trellis = FakeTrellis(
-        CDISTS, ITERATES, key, orientation_preserving=False, fixed_points=[fixed_point]
-    )
+    trellis, key = _trellis(orientation_preserving=False)
     homotopy, iterated = _families(trellis, key)
     landing = land_element(trellis, homotopy, iterated, L(key, 1))
     assert landing.image_side == "right"
     assert landing.target == R(key, 1) and landing.contained
-    preserving = FakeTrellis(CDISTS, ITERATES, key, fixed_points=[fixed_point])
+    preserving, key = _trellis()
     assert land_element(preserving, *_families(preserving, key), L(key, 1)).target == L(key, 1)
 
 
 def test_zero_width_span_probes_its_low_end():
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    cdists = {**CDISTS, 9: 1.0, 19: 0.25}
-    trellis = FakeTrellis(cdists, {**ITERATES, 9: 19}, key, fixed_points=[fixed_point])
+    trellis, key = _trellis(cdists={**CDISTS, 9: 1.0, 19: 0.25}, iterates={**ITERATES, 9: 19})
     # A hand-made non-singleton element whose two ends coincide in cdist.
-    degenerate = [(None, 1, 0.0, 1.0, True, False), (1, 9, 1.0, 1.0, True, True)]
-    homotopy, iterated = _families(trellis, key, homotopy_specs=degenerate)
+    degenerate: Family = (
+        [(None, 1, 0.0, 1.0, True, False), (1, 9, 1.0, 1.0, True, True)],
+        {1: 1, 9: 1},
+    )
+    homotopy, iterated = _families(trellis, key, homotopy=degenerate)
     landing = land_element(trellis, homotopy, iterated, L(key, 1))
     assert landing.span == (0.25, 0.25)
     assert not landing.singleton
@@ -403,25 +436,20 @@ def test_zero_width_span_probes_its_low_end():
 
 
 def test_singleton_lands_on_the_registered_iterate():
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    trellis = FakeTrellis(CDISTS, ITERATES, key, fixed_points=[fixed_point])
-    homotopy_specs = [
-        (None, 1, 0.0, 1.0, True, False),
-        (1, 2, 1.0, 2.0, True, False),
-        (2, 2, 2.0, 2.0, True, True),
-        (2, 3, 2.0, 4.0, False, True),
-    ]
-    iterated_specs = [
-        (None, 11, 0.0, 0.25, True, False),
-        (11, 12, 0.25, 0.5, True, False),
-        (12, 12, 0.5, 0.5, True, True),
-        (12, 1, 0.5, 1.0, False, False),
-        (1, 2, 1.0, 2.0, True, False),
-        (2, 2, 2.0, 2.0, True, True),
-        (2, 3, 2.0, 4.0, False, True),
-    ]
-    homotopy, iterated = _families(trellis, key, homotopy_specs, iterated_specs)
+    trellis, key = _trellis()
+    pinched_iterated: Family = (
+        [
+            (None, 11, 0.0, 0.25, True, False),
+            (11, 12, 0.25, 0.5, True, False),
+            (12, 12, 0.5, 0.5, True, True),
+            (12, 1, 0.5, 1.0, False, False),
+            (1, 2, 1.0, 2.0, True, False),
+            (2, 2, 2.0, 2.0, True, True),
+            (2, 3, 2.0, 4.0, False, True),
+        ],
+        {11: 1, 12: 2, 1: 4, 2: 5, 3: 6},
+    )
+    homotopy, iterated = _families(trellis, key, PINCHED_HOMOTOPY, pinched_iterated)
     landing = land_element(trellis, homotopy, iterated, L(key, 2))
     assert landing.singleton and landing.resolved and landing.contained
     assert landing.target == L(key, 2)
@@ -431,16 +459,8 @@ def test_singleton_lands_on_the_registered_iterate():
 
 
 def test_singleton_with_unregistered_image_is_unresolved(caplog):
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    trellis = FakeTrellis(CDISTS, {1: 11, 3: 1}, key, fixed_points=[fixed_point])  # no 2 -> 12
-    homotopy_specs = [
-        (None, 1, 0.0, 1.0, True, False),
-        (1, 2, 1.0, 2.0, True, False),
-        (2, 2, 2.0, 2.0, True, True),
-        (2, 3, 2.0, 4.0, False, True),
-    ]
-    homotopy, iterated = _families(trellis, key, homotopy_specs)
+    trellis, key = _trellis(iterates={1: 11, 3: 1})  # no 2 -> 12
+    homotopy, iterated = _families(trellis, key, PINCHED_HOMOTOPY)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         landing = land_element(trellis, homotopy, iterated, L(key, 2))
     assert landing.singleton and not landing.resolved
@@ -455,17 +475,9 @@ def test_singleton_owned_by_a_non_singleton_is_info_not_warning(caplog):
     """A singleton whose image is not pinched is the backward-only-holes rule at
     work (the forward hole is never punched), so it is reported at INFO and the
     landing is resolved normally."""
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    trellis = FakeTrellis(CDISTS, ITERATES, key, fixed_points=[fixed_point])
-    homotopy_specs = [
-        (None, 1, 0.0, 1.0, True, False),
-        (1, 2, 1.0, 2.0, True, False),
-        (2, 2, 2.0, 2.0, True, True),
-        (2, 3, 2.0, 4.0, False, True),
-    ]
+    trellis, key = _trellis()
     # The iterated partition does not pinch 12: element #1 owns it.
-    homotopy, iterated = _families(trellis, key, homotopy_specs, ITERATED)
+    homotopy, iterated = _families(trellis, key, PINCHED_HOMOTOPY, ITERATED)
     with caplog.at_level(logging.INFO, logger=LOGGER):
         landing = land_element(trellis, homotopy, iterated, L(key, 2))
     assert landing.singleton and landing.resolved and landing.contained
@@ -475,18 +487,19 @@ def test_singleton_owned_by_a_non_singleton_is_info_not_warning(caplog):
 
 
 def test_span_straddling_two_elements_fills_covering(caplog):
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    trellis = FakeTrellis(CDISTS, ITERATES, key, fixed_points=[fixed_point])
-    finer = [
-        (None, 11, 0.0, 0.25, True, False),
-        (11, 14, 0.25, 0.375, True, True),
-        (14, 12, 0.375, 0.5, False, True),
-        (12, 1, 0.5, 1.0, False, False),
-        (1, 2, 1.0, 2.0, True, True),
-        (2, 3, 2.0, 4.0, False, True),
-    ]
-    homotopy, iterated = _families(trellis, key, iterated_specs=finer)
+    trellis, key = _trellis()
+    finer: Family = (
+        [
+            (None, 11, 0.0, 0.25, True, False),
+            (11, 14, 0.25, 0.375, True, True),
+            (14, 12, 0.375, 0.5, False, True),
+            (12, 1, 0.5, 1.0, False, False),
+            (1, 2, 1.0, 2.0, True, True),
+            (2, 3, 2.0, 4.0, False, True),
+        ],
+        {11: 1, 14: 1, 12: 2, 1: 4, 2: 4, 3: 5},
+    )
+    homotopy, iterated = _families(trellis, key, iterated=finer)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         landing = land_element(trellis, homotopy, iterated, L(key, 1))
     assert landing.resolved and not landing.contained
@@ -499,12 +512,13 @@ def test_span_straddling_two_elements_fills_covering(caplog):
 
 
 def test_image_on_an_unexpected_branch_is_unresolved(caplog):
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    other = stable_key(FakeFixedPoint(period=2))
-    keys = {iid: key for iid in CDISTS}
-    keys[12] = other  # the image of crossing 2 sits on a foreign branch
-    trellis = FakeTrellis(CDISTS, ITERATES, keys, fixed_points=[fixed_point])
+    other = stable_key(bare_fixed_point(2))
+
+    def keys(key: tuple) -> dict[int, tuple]:
+        # The image of crossing 2 sits on a foreign branch.
+        return {**{iid: key for iid in CDISTS}, 12: other}
+
+    trellis, key = _trellis(keys=keys)
     homotopy, iterated = _families(trellis, key)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         landing = land_element(trellis, homotopy, iterated, L(key, 1))
@@ -514,11 +528,9 @@ def test_image_on_an_unexpected_branch_is_unresolved(caplog):
 
 
 def test_probe_outside_the_iterated_partition_is_unresolved(caplog):
-    fixed_point = FakeFixedPoint(beta=0.25)
-    key = stable_key(fixed_point)
-    trellis = FakeTrellis(CDISTS, ITERATES, key, fixed_points=[fixed_point])
-    short = ITERATED[:2]  # the iterated partition stops at 0.5
-    homotopy, iterated = _families(trellis, key, iterated_specs=short)
+    trellis, key = _trellis()
+    short: Family = (ITERATED[0][:2], {11: 1, 12: 1})  # the iterated partition stops at 0.5
+    homotopy, iterated = _families(trellis, key, iterated=short)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         landing = land_element(trellis, homotopy, iterated, L(key, 2))
     assert not landing.resolved and landing.target is None

@@ -42,9 +42,7 @@ def test_build_reproduces_the_trellis_partition(k10_partitioned):
 
 def test_element_at_owns_every_arc_midpoint_exactly_once(k10_partitioned):
     session, fp = k10_partitioned
-    family = HomotopyPartition.from_results(
-        session._gathered_partitions(), trellis=session.trellis()
-    )
+    family = session.homotopy_partition()
     arrangement = session.arrangement()
     seen = 0
     for face in arrangement.faces:

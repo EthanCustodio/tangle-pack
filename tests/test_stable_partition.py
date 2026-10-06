@@ -20,7 +20,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from cases import build_k28, build_period3
 from helpers.logs import assert_logged
+from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.plotting import plot_stable_partition
@@ -35,11 +37,8 @@ from tanglepack.topology.TrellisBranch import TrellisBranch
 
 
 def _fixed_point(period: int, lambda_u: float) -> FixedPoint:
-    """A minimal no-inversion fixed point with a positive unstable eigenvalue."""
-    fp = FixedPoint(period)
-    fp.unstable_eigenvalues = [lambda_u] * period
-    fp.set_k_value()
-    return fp
+    """A bare no-inversion fixed point whose full-cycle unstable eigenvalue is ``lambda_u``."""
+    return bare_fixed_point(period, beta=lambda_u ** (-1.0 / period))
 
 
 @pytest.fixture
@@ -479,27 +478,29 @@ def test_anchorward_opening_at_the_first_boundary_is_inert(stable_line):
 # --------------------------------------------------------------------------- #
 # Propagation region identity (plan row 1.15)
 # --------------------------------------------------------------------------- #
-def test_region_key_separates_the_two_sides_of_one_bridge():
-    """Two holes of one orbit flanking the same bridge are distinct regions.
+@pytest.mark.parametrize(
+    "builder", [lambda: build_k28(blasts=1), build_period3], ids=["k28_one_blast", "p3"]
+)
+def test_both_holes_of_a_singleton_bridge_survive_propagation(builder):
+    """A bridge can bound a propagated hole on EACH of its sides (the author's
+    "singleton bridge with a hole on either side"): propagation keeps both.
 
-    A bridge bounds a region on each of its sides, so the pair of defining
-    crossings alone does not name a region; without the side in the key the
-    second of the two ("singleton bridge with a hole on either side") is
-    dropped as a duplicate.
+    A bridge bounds a region on each side, so the two defining crossings alone
+    do not name a region; a de-duplication keyed on them would drop the second
+    of the two. On these cases two orbits land on opposite sides of one bridge.
     """
-    from tanglepack.topology.StablePartition import _region_key
-
-    def hole(side):
-        return Hole(
-            coords=(0.0, 0.0), near_intersection_id=1,
-            bridge_side=side, bounding_ids=(2, 1), openings=[],
-        )
-
-    origin = (3, 4)
-    assert _region_key(origin, hole("left")) != _region_key(origin, hole("right"))
-    # The bounding ids are order-insensitive and the key is stable per side.
-    assert _region_key(origin, hole("left")) == _region_key(origin, hole("left"))
-    assert _region_key(origin, hole("left")) != _region_key((9, 9), hole("left"))
+    case = builder()
+    found = 0
+    for fp in case.fixed_points:
+        by_bridge: dict[tuple, list] = {}
+        for hole in case.session.trellis(fp).holes:
+            if hole.bounding_ids is not None:
+                by_bridge.setdefault(tuple(sorted(hole.bounding_ids)), []).append(hole)
+        for holes in by_bridge.values():
+            if {hole.bridge_side for hole in holes} == {"left", "right"}:
+                found += 1
+                assert all(hole.iterate is not None and hole.iterate < 0 for hole in holes)
+    assert found, "the case must hold a bridge with a propagated hole on either side"
 
 
 # --------------------------------------------------------------------------- #

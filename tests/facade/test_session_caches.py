@@ -40,6 +40,7 @@ from typing import Any, Callable
 import pytest
 
 from cases import Case, build_k10, build_nested
+from helpers.zones import define_inner_zone
 from tanglepack import TangleSession
 
 HIT, MISS = True, False
@@ -197,21 +198,6 @@ def test_session_cache_table(product: str, event: str, expected_hit: bool) -> No
 # --------------------------------------------------------------------------- #
 # every workbench mutation path drops the cached trellis
 # --------------------------------------------------------------------------- #
-def _define_zone(case: Case) -> Any:
-    """A resonance zone trimmed at a strong-pip candidate inside the stable extent."""
-    session, fp = case.session, case.fixed_point
-    registry = case.registry
-    trellis = session.trellis(fp)
-    trellis.classify_strong_pips()
-    outermost = max(registry[i].stable_cdist for i in registry.all_ids())
-    inner = [c for c in trellis.strong_pip_candidates if registry[c].stable_cdist < outermost]
-    assert inner, "expected a strong-pip candidate inside the stable extent"
-    pip = max(inner, key=lambda c: registry[c].stable_cdist)
-    trellis.set_strong_pip(pip)
-    session.add_resonance_zones([pip])
-    return session.resonance_zones[(fp, 0)]
-
-
 def _grow(case: Case) -> None:
     case.session.grow_n_times(case.fixed_point, "unstable", num_iterations=1)
 
@@ -254,7 +240,7 @@ def test_trellis_misses_after_every_mutation_path(mutation: str) -> None:
     """
     case = build_k10(through="bridges")
     if mutation in _NEEDS_ZONE:
-        case.zones.append(_define_zone(case))
+        case.zones.append(define_inner_zone(case.session, case.fixed_point))
     session, fp = case.session, case.fixed_point
     first = session.trellis(fp)
 

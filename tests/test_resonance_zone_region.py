@@ -11,30 +11,18 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tanglepack import TangleSession
+from cases import build_k10
 from tanglepack.numerics.geometry import polyline_midpoint
 from tanglepack.topology.TopologyResults import Arc
 
 
 @pytest.fixture
-def k10_zone_session(henon_map, henon_map_inverse):
-    """A k=10 session with its single resonance zone defined."""
-    session = TangleSession(henon_map, henon_map_inverse)
-    fp = session.construct_fixed_point([4, -4])
-    session.orient_eigenvectors(
-        fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
-    )
-    session.initialize_both_manifolds(fp)
-    session.grow_n_times(fp, "unstable", num_iterations=9)
-    session.grow_until_turnaround(fp, "stable")
-    session.compute_intersections([fp])
-    session.trim_stable_manifolds(fp)
-    session.create_bridges(fp)
-    session.infer_iterate_table()
-    trellis = session.trellis(fp)
-    trellis.classify_strong_pips()
-    session.add_resonance_zones([trellis.strong_pip])
-    return session, fp
+def k10_zone_session() -> tuple:
+    """``(session, fp)``: the k=10 tangle with its single resonance zone,
+    trimmed at the default strong pip."""
+    case = build_k10(through="pips")
+    case.session.add_resonance_zones(case.pips)
+    return case.session, case.fixed_point
 
 
 # --------------------------------------------------------------------------- #
@@ -101,11 +89,10 @@ def test_boundary_arcs_run_from_the_anchor_to_the_pip(k10_zone_session):
 
 
 def test_boundary_intersection_id_resolves_on_demand(k10_zone_session):
-    """The stored id is gone; the pip is resolved against the live registry."""
+    """The pip is resolved against the live registry, on demand."""
     session, _fp = k10_zone_session
     (zone,) = session.resonance_zones.values()
 
-    assert not hasattr(zone, "boundary_intersection_id")
     resolved = zone.resolve_boundary_intersection_id(session.workbench)
     assert resolved is not None
     registry = session.workbench.intersection_registry
@@ -128,6 +115,7 @@ def test_bridge_classification_uses_the_memoised_midpoint(k10_zone_session):
     for bridge in inside:
         point = polyline_midpoint(bridge.get_point_array())
         assert zone.contains_point(point)
+        assert session.classify_bridge(bridge) is zone
 
 
 # --------------------------------------------------------------------------- #

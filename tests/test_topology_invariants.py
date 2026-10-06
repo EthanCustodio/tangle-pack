@@ -23,12 +23,16 @@ violations); both invariants run on every law case in
 
 from __future__ import annotations
 
+import logging
+
 import matplotlib
 
 matplotlib.use("Agg")  # headless: the fixtures touch the plotting stack
 import numpy as np
 import pytest
 
+from helpers.fakes import bare_fixed_point
+from helpers.logs import assert_logged
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.StablePartition import (
@@ -109,6 +113,28 @@ def test_orientation_reversing_requires_alternating_sides():
     check_holes_share_bridge_side(alternating, orientation_preserving=False)
     with pytest.raises(AssertionError):
         check_holes_share_bridge_side(alternating, orientation_preserving=True)
+
+
+@pytest.mark.parametrize(
+    "periods, defaulted",
+    [((1,), False), ((2,), True), ((), True)],
+    ids=["odd_period_eigenvalues_decide", "even_period_only", "no_fixed_point"],
+)
+def test_orientation_without_a_jacobian(caplog, periods, defaulted):
+    """With no jacobian an odd-period eigenvalue pair decides the orientation
+    (det > 0 for a bare saddle); with only even periods, or no fixed point, the
+    trellis assumes the map preserves orientation and says so at DEBUG."""
+    from tanglepack.topology.Trellis import Trellis
+
+    trellis = Trellis(
+        fixed_points=[bare_fixed_point(period) for period in periods],
+        registry=IntersectionRegistry(),
+        branches={},
+        bridges=[],
+    )
+    with caplog.at_level(logging.DEBUG, logger="tanglepack.topology.Trellis"):
+        assert trellis.orientation_preserving is True
+    assert_logged(caplog, logging.DEBUG, "tanglepack.topology.Trellis", count=int(defaulted))
 
 
 def test_orientation_reversing_skips_holes_without_iterate():

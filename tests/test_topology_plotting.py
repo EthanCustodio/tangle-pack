@@ -18,29 +18,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from cases import build_k10
 from helpers.logs import assert_logged
-from tanglepack import TangleSession
 from tanglepack.loom.TangleSession import TangleSession as _SessionClass
 from tanglepack.topology import plotting
-from minimal_helpers import build_pieces
 from tanglepack.topology.DualGraph import DualGraph
 
 
 @pytest.fixture
-def henon_session(henon_map, henon_map_inverse):
-    """A single-saddle k=10 session with bridges cut."""
-    session = TangleSession(henon_map, henon_map_inverse)
-    fp = session.construct_fixed_point([4, -4])
-    session.orient_eigenvectors(
-        fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
-    )
-    session.initialize_both_manifolds(fp)
-    session.grow_n_times(fp, "unstable", num_iterations=9)
-    session.grow_until_turnaround(fp, "stable")
-    session.compute_intersections([fp])
-    session.trim_stable_manifolds(fp)
-    session.create_bridges(fp)
-    return session, fp
+def henon_session():
+    """``(session, fp)``: the k=10 saddle with bridges cut."""
+    case = build_k10(through="bridges")
+    return case.session, case.fixed_point
 
 
 @pytest.fixture
@@ -204,9 +193,8 @@ def test_session_call_fanouts_go_through_fanout_call(henon_session, monkeypatch,
 # --------------------------------------------------------------------------- #
 def _k10_dual_graph(k10_partitioned) -> DualGraph:
     """The dual graph of the k10_partitioned fixture, with its strong pip."""
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    return DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips)
+    session, _fp = k10_partitioned
+    return session.dual_graph()
 
 
 def test_plot_dual_graph_scatters_exactly_the_stable_nodes(k10_partitioned):
@@ -404,9 +392,8 @@ def test_dual_graph_legend_handles_match_the_plotter():
 
 
 def test_plot_minimal_trellis_draws_every_kept_bridge(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    minimal = pieces.minimal
+    session, _fp = k10_partitioned
+    minimal = session.minimal_trellis()
     fig, ax = plt.subplots()
     try:
         assert plotting.plot_minimal_trellis(minimal, ax=ax) is ax
@@ -421,9 +408,8 @@ def test_plot_minimal_trellis_draws_every_kept_bridge(k10_partitioned):
 
 
 def test_plot_stable_partition_accepts_row_labels(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    results = pieces.homotopy.as_list() + pieces.iterated.as_list()
+    session, _fp = k10_partitioned
+    results = session.homotopy_partition().as_list() + session.iterated_partition().as_list()
     labels = [f"{r.side} {i}" for i, r in enumerate(results)]
     fig, ax = plt.subplots()
     try:
@@ -436,13 +422,13 @@ def test_plot_stable_partition_accepts_row_labels(k10_partitioned):
 
 
 def test_plot_stable_partition_draws_element_labels_at_midpoints(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    results = pieces.iterated.as_list()
+    session, _fp = k10_partitioned
+    iterated = session.iterated_partition()
+    results = iterated.as_list()
     naming = _k10_dual_graph(k10_partitioned).naming
 
     def label(result, interval):
-        ref = pieces.iterated.ref(result.branch_key, result.side, interval.element_id)
+        ref = iterated.ref(result.branch_key, result.side, interval.element_id)
         return naming.name(ref).mathtext
 
     fig, ax = plt.subplots()
@@ -570,14 +556,9 @@ def test_walk_zorder_sits_between_dual_graph_edges_and_nodes():
 # symbolic dynamics
 # --------------------------------------------------------------------------- #
 def _k10_dynamics(k10_partitioned):
-    """``(pieces, dual graph, symbolic dynamics)`` of the k=10 fixture."""
-    module = pytest.importorskip("tanglepack.topology.SymbolicDynamics")
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    if any(entry.letter is None for entry in pieces.table.active):
-        pieces.table = session.bridge_classes([fp])
-    dual = DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips)
-    return pieces, dual, module.symbolic_dynamics(dual, pieces.table)
+    """``(full trellis, dual graph, symbolic dynamics)`` of the k=10 fixture."""
+    session, _fp = k10_partitioned
+    return session.trellis(), session.dual_graph(), session.symbolic_dynamics()
 
 
 def _symbol_names(dynamics, *, refined: bool) -> set[str]:
@@ -589,7 +570,7 @@ def _symbol_names(dynamics, *, refined: bool) -> set[str]:
 
 
 def test_class_colors_are_assigned_in_fixed_order(k10_partitioned):
-    _pieces, _dual, dynamics = _k10_dynamics(k10_partitioned)
+    _trellis, _dual, dynamics = _k10_dynamics(k10_partitioned)
     refined = plotting.class_colors(dynamics, refined=True)
     plain = plotting.class_colors(dynamics, refined=False)
     assert set(refined) == _symbol_names(dynamics, refined=True)
@@ -601,18 +582,18 @@ def test_class_colors_are_assigned_in_fixed_order(k10_partitioned):
 
 
 def test_plot_bridges_by_class_draws_every_classed_bridge(k10_partitioned):
-    pieces, _dual, dynamics = _k10_dynamics(k10_partitioned)
+    trellis, _dual, dynamics = _k10_dynamics(k10_partitioned)
     members = [
         m.bridge_id for cd in dynamics.classes.values() for m in cd.entry.members
-        if pieces.full.bridge_between(*m.bridge_id) is not None
+        if trellis.bridge_between(*m.bridge_id) is not None
     ]
     inert_members = [
         m.bridge_id for cd in dynamics.classes.values() if cd.kind != "active"
-        for m in cd.entry.members if pieces.full.bridge_between(*m.bridge_id) is not None
+        for m in cd.entry.members if trellis.bridge_between(*m.bridge_id) is not None
     ]
     fig, ax = plt.subplots()
     try:
-        colors = plotting.plot_bridges_by_class(pieces.full, dynamics, ax=ax)
+        colors = plotting.plot_bridges_by_class(trellis, dynamics, ax=ax)
         assert len(ax.lines) == len(members)
         palette = plotting.class_colors(dynamics, refined=True)
         for name, color in colors.items():
@@ -620,7 +601,7 @@ def test_plot_bridges_by_class_draws_every_classed_bridge(k10_partitioned):
         assert set(colors) & _symbol_names(dynamics, refined=True)
         # An unmatched member of a split class is drawn under its parent letter.
         unmatched = {
-            dynamics.classes[pieces.table.entry_of(bid).bridge_class].letter
+            dynamics.classes[dynamics.table.entry_of(bid).bridge_class].letter
             for bid, child in dynamics.member_refinement.items()
             if child is None
         }
@@ -634,22 +615,22 @@ def test_plot_bridges_by_class_draws_every_classed_bridge(k10_partitioned):
         fig.canvas.draw()
 
         ax.cla()
-        plotting.plot_bridges_by_class(pieces.full, dynamics, ax=ax, show_inert=False)
+        plotting.plot_bridges_by_class(trellis, dynamics, ax=ax, show_inert=False)
         assert len(ax.lines) == len(members) - len(inert_members)
         ax.cla()
-        colors = plotting.plot_bridges_by_class(pieces.full, dynamics, ax=ax, refined=False)
+        colors = plotting.plot_bridges_by_class(trellis, dynamics, ax=ax, refined=False)
         assert set(colors) == _symbol_names(dynamics, refined=False)
         with pytest.raises(ValueError):
-            plotting.plot_bridges_by_class(pieces.full, dynamics, ax=ax, color="red")
+            plotting.plot_bridges_by_class(trellis, dynamics, ax=ax, color="red")
         with pytest.raises(ValueError):
-            plotting.plot_bridges_by_class(pieces.full, dynamics, ax=ax, linestyle=":")
+            plotting.plot_bridges_by_class(trellis, dynamics, ax=ax, linestyle=":")
     finally:
         plt.close(fig)
 
 
 @pytest.mark.parametrize("refined", [True, False])
 def test_plot_transition_graph_draws_every_symbol(k10_partitioned, refined):
-    _pieces, _dual, dynamics = _k10_dynamics(k10_partitioned)
+    _trellis, _dual, dynamics = _k10_dynamics(k10_partitioned)
     expected = dynamics.transition_graph(refined=refined)
     fig, ax = plt.subplots()
     try:
@@ -677,7 +658,7 @@ def test_plot_transition_graph_draws_every_symbol(k10_partitioned, refined):
 
 
 def test_plot_itinerary_table_lists_every_class(k10_partitioned):
-    _pieces, _dual, dynamics = _k10_dynamics(k10_partitioned)
+    _trellis, _dual, dynamics = _k10_dynamics(k10_partitioned)
     fig, ax = plt.subplots()
     try:
         table = plotting.plot_itinerary_table(dynamics, ax=ax)
@@ -746,7 +727,7 @@ def test_plot_itinerary_table_lists_every_class(k10_partitioned):
 def test_plot_itinerary_table_columns_font_and_rows(k10_partitioned):
     """``columns`` picks a subset in the caller's order; the font grows to
     its cap on a wide axes and the rows grow with it; a narrow axes shrinks it."""
-    _pieces, _dual, dynamics = _k10_dynamics(k10_partitioned)
+    _trellis, _dual, dynamics = _k10_dynamics(k10_partitioned)
     columns = ("word", "class", "refined word")
     rows = plotting.itinerary_table_rows(dynamics, mathtext=False, columns=columns)
     full = plotting.itinerary_table_rows(dynamics, mathtext=False)
@@ -783,7 +764,7 @@ def test_plot_itinerary_table_columns_font_and_rows(k10_partitioned):
 
 
 def test_unmatched_member_gets_its_parent_letter_slot(k10_partitioned):
-    pieces, _dual, dynamics = _k10_dynamics(k10_partitioned)
+    trellis, _dual, dynamics = _k10_dynamics(k10_partitioned)
     cd = next(c for c in dynamics.classes.values() if c.kind == "active")
     letter = cd.letter
     children = dynamics.refined[cd.bridge_class]
@@ -806,9 +787,9 @@ def test_unmatched_member_gets_its_parent_letter_slot(k10_partitioned):
 
     fig, ax = plt.subplots()
     try:
-        colors = plotting.plot_bridges_by_class(pieces.full, dynamics, ax=ax)
+        colors = plotting.plot_bridges_by_class(trellis, dynamics, ax=ax)
         assert colors[letter] == refined[letter]
-        bridge = pieces.full.bridge_between(*bid)
+        bridge = trellis.bridge_between(*bid)
         points = bridge.get_point_array()
         drawn = [
             line for line in ax.lines
@@ -824,15 +805,15 @@ def test_unmatched_member_gets_its_parent_letter_slot(k10_partitioned):
 # dual-graph cartoon
 # --------------------------------------------------------------------------- #
 def _cartoon(k10_partitioned):
-    """``(pieces, dual, dynamics, fig, ax, layout)`` of the k=10 cartoon."""
-    pieces, dual, dynamics = _k10_dynamics(k10_partitioned)
+    """``(trellis, dual, dynamics, fig, ax, layout)`` of the k=10 cartoon."""
+    trellis, dual, dynamics = _k10_dynamics(k10_partitioned)
     fig, ax = plt.subplots()
     layout = plotting.plot_dual_graph_cartoon(dual, dynamics, ax=ax)
-    return pieces, dual, dynamics, fig, ax, layout
+    return trellis, dual, dynamics, fig, ax, layout
 
 
 def test_cartoon_layout_has_one_node_per_element_per_side(k10_partitioned):
-    _pieces, dual, _dynamics, fig, ax, layout = _cartoon(k10_partitioned)
+    _trellis, dual, _dynamics, fig, ax, layout = _cartoon(k10_partitioned)
     try:
         elements = sum(len(result.intervals) for result in dual.partition)
         assert len(layout.nodes) == elements == len(layout.segments) == len(layout.unified)
@@ -863,7 +844,7 @@ def test_cartoon_layout_has_one_node_per_element_per_side(k10_partitioned):
 
 
 def test_cartoon_ordinal_coordinate_is_strictly_increasing(k10_partitioned):
-    _pieces, dual, _dynamics, fig, _ax, layout = _cartoon(k10_partitioned)
+    _trellis, dual, _dynamics, fig, _ax, layout = _cartoon(k10_partitioned)
     try:
         for branch_key, reps in layout.ranks.items():
             assert reps == sorted(reps) and len(set(reps)) == len(reps)
@@ -896,7 +877,7 @@ def test_cartoon_ordinal_coordinate_is_strictly_increasing(k10_partitioned):
 
 
 def test_cartoon_brackets_match_closedness(k10_partitioned):
-    _pieces, dual, _dynamics, fig, ax, layout = _cartoon(k10_partitioned)
+    _trellis, dual, _dynamics, fig, ax, layout = _cartoon(k10_partitioned)
     try:
         glyphs = {}
         for text in ax.texts:
@@ -915,7 +896,7 @@ def test_cartoon_brackets_match_closedness(k10_partitioned):
 
 
 def test_cartoon_draws_every_kept_bridge_and_walks_element_to_element(k10_partitioned):
-    _pieces, dual, dynamics, fig, ax, layout = _cartoon(k10_partitioned)
+    _trellis, dual, dynamics, fig, ax, layout = _cartoon(k10_partitioned)
     try:
         gids = [patch.get_gid() for patch in ax.patches]
         bridge_gids = [g for g in gids if g and g.startswith("bridge:")]
@@ -958,7 +939,7 @@ def test_cartoon_draws_every_kept_bridge_and_walks_element_to_element(k10_partit
 
 
 def test_cartoon_legend_handles_match_the_plotter(k10_partitioned):
-    _pieces, _dual, dynamics, fig, _ax, _layout = _cartoon(k10_partitioned)
+    _trellis, _dual, dynamics, fig, _ax, _layout = _cartoon(k10_partitioned)
     try:
         fixed = [h.get_label() for h in plotting.dual_graph_cartoon_legend_handles()]
         assert fixed == [
@@ -998,7 +979,7 @@ def test_cartoon_bridge_colour_labels_and_walkless_legend(k10_partitioned):
     node on request) and the legend drops the walk entries with ``walks=False``."""
     from matplotlib.colors import to_hex
 
-    _pieces, dual, dynamics, fig, ax, layout = _cartoon(k10_partitioned)
+    _trellis, dual, dynamics, fig, ax, layout = _cartoon(k10_partitioned)
     plt.close(fig)
     purple = to_hex("tab:purple")
     fig, ax = plt.subplots()

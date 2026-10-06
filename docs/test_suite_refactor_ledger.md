@@ -1448,3 +1448,160 @@ kevin-way, `Intersection.fixed_points`, label slot) are all kept as noted.
    phase.
 5. **Dissipative `per_step_beta` test kept** (E6 lists it as a deletion
    candidate pending the author's answer; until then current behaviour stays).
+
+## §7b Phase 7b: unit consolidation, topology and loom
+
+### What changed
+
+- **Fakes delegate to the real rules** (`tests/helpers/fakes.py`):
+  `FakeFixedPoint` is gone; every synthetic fixed point is
+  `bare_fixed_point(...)`, a real `FixedPoint` (new `coordinates=` keyword for
+  hand-built `TrellisBranch` anchors). `FakeTrellis` now borrows
+  `Trellis.image_cdist`, `_scaled_image_cdist` and `_keyed_cdist` and supplies
+  data only (a `_FakeRegistry` for `registry[id]` / `cdist_tol`; crossings carry
+  no unstable key, so an unstable lookup raises as the real trellis does).
+  `make_result` requires explicit `owners` (the derived-ownership default is
+  removed); `test_dual_walk.py` spells every family's owners next to its
+  intervals (`Family = (specs, owners)`).
+- **Local fake fixed points retired** in `test_bridge_class`, `test_arrangement`,
+  `test_arrangement_sparse`, `test_symbolic_dynamics`, `test_element_naming`
+  (`_FakeFixedPoint` → `bare_fixed_point`), and the three real-but-duplicated
+  `_fixed_point(period, lambda_u)` helpers in `test_pseudoneighbor`,
+  `test_strong_pip_periodic_point`, `test_stable_partition` now delegate to it.
+- **`minimal_helpers.build_pieces` retired** (all call sites in
+  `test_dual_graph`, `test_iterated_partition`, `test_minimal_trellis`,
+  `test_element_naming`, `test_higher_period_cartoon`, `test_topology_plotting`)
+  in favour of `session.minimal_trellis()`, `homotopy_partition()`,
+  `iterated_partition()`, `bridge_classes()`, `dual_graph()`,
+  `symbolic_dynamics()`; `session._gathered_partitions()` in
+  `test_partition_family` → `session.homotopy_partition()`.
+  `tests/minimal_helpers.py` is deleted now (it had no users left, and the
+  phase's grep for `build_pieces|_gathered_partitions` must be empty).
+  `grep -rn "build_pieces\|_gathered_partitions" tests/` → empty.
+- **Dual-graph assembly copies retired**: `_k10_graph` / `_p3_graph`
+  (`test_dual_graph`), `_k10_dynamics` (`test_higher_period_cartoon`),
+  `_k10_dual_graph` / `_k10_dynamics` (`test_topology_plotting`) all read the
+  session's own products. Direct `DualGraph(...)` / `from_minimal(...)` /
+  `minimal_trellis(...)` construction stays only where the test varies an
+  input (other pips, a homotopy-only family, a patched table).
+  `test_dual_graph` no longer reads `dual._nodes_of_edge` (edges are grouped
+  from the public `stable_nodes`).
+- **Session shadows retired**: the local `k10_session` of
+  `test_loom_blast_restore` (→ the conftest fixture), `henon_session` in
+  `test_session_pseudoneighbors` (→ `k10_session`) and `test_topology_plotting`
+  (→ `build_k10(through="bridges")`), `k10_zone_session` in
+  `test_resonance_zone_region` (→ `build_k10(through="pips")` + the zone), the
+  hand-grown 10-step session in `test_session_bridge_classes`
+  (→ `build_k10(unstable_steps=10, through="pips")`), `p3_partitioned_c` in
+  `test_image_cdist` (→ conftest `p3_partitioned`), and the session-scoped
+  `p3_built` / `nested_built` fixtures plus the direct `henon_cases` imports of
+  `test_higher_period_cartoon` and `test_stable_partition_period3`
+  (→ function-scoped `cases.build_period3` / `cases.build_nested`).
+- **`_define_zone` ×2 retired** (`test_loom_blast_restore`,
+  `facade/test_session_caches`) → `tests/helpers/zones.py::define_inner_zone`.
+- **Merges / parametrizations**: dual-walk trivial cases (×2 → 1 ×2), the
+  entry-then-exit crossing and its mirror (×2 → 1 ×2), the three table landings
+  (×3 → 1 ×3); strong-pip disqualifier ownership (heteroclinic / homoclinic /
+  no unstable key, ×3 → 1 ×3; the table-linked collision guard untouched);
+  blast error handling (×3 → 1 ×3, **guard** "assertions never swallowed"
+  kept as the `assertion_escapes_lenient` row);
+  `test_nested_outer_blasts_leave_the_inner_bridges_alone` merged into
+  `test_nested_inner_words_are_the_period3_words` (same words AND same inner
+  bridge count; **guard** hole-side-own-blast-2026-10-02).
+- **Strengthened**: `test_pair_on_different_unstable_branches_rejected` uses a
+  clean fixture (the standard window, middle crossing on the saddle's other
+  unstable branch, plus a same-branch control); trajectory extension split
+  into `…forward_stops_at_the_end_of_the_chain` (asserts iterates 1, 2) and
+  `test_trajectory_extension_deduplicates[against_a_reference|against_another_trajectory]`
+  (REAL duplicates: two references on one trajectory).
+- **Private access rewritten through the public API**: the strong-pip
+  uncut-branch warning through `compute_pseudoneighbors` (was
+  `_strong_pip_cuts`; E6 Q13: level/logger/count only); the inert letter
+  series through `inert_letters` (was `SD._inert_letter` / `_active_letter`);
+  `test_image_cdist` drops its `trellis._scaled_image_cdist` equality (the test
+  recomputes the law itself); the `not hasattr(zone, "boundary_intersection_id")`
+  tombstone line is dropped; the zone midpoint classification additionally
+  asserts the public `session.classify_bridge(bridge) is zone`.
+- **Coverage-gap tests added in the same commit** (the deleted tests were the
+  only route to these lines): `test_unlettered_active_classes_get_fallback_letters`
+  (`_active_letter` via `symbolic_dynamics` over an unlettered table),
+  `test_unresolved_class_carries_a_reason_and_warns` (the singleton landing
+  with no registered member chain, on the unblasted nested tangle; replaces the
+  p3 smoke test), `test_orientation_without_a_jacobian[*]` (the E6 orientation
+  default, DEBUG count only; it was covered by the old duck-typed fake fixed
+  points that lacked stable eigenvalues).
+
+### Deletion ledger, Phase 7b
+
+24 collected node ids removed, 27 added: 1108 → 1111 (`nodeids_p7b.txt`,
+`p7b_deleted.txt`, `p7b_added.txt`). Every deleted subject was grepped in the
+regression-guard notes; hits are noted.
+
+| Node id | New home / reason | Guard checked |
+|---|---|---|
+| `test_dual_walk::test_start_equals_goal_is_trivial`, `::test_start_face_equal_to_goal_face_is_trivial` | `::test_trivial_walks_stay_on_the_start_face[start_is_goal|start_face_is_goal_face]` | none |
+| `test_dual_walk::test_single_crossing_records_entry_then_exit`, `::test_crossing_from_the_right_side_records_right_then_left` | `::test_single_crossing_records_entry_then_exit[left|right]` (the mirror now asserts every step field) | none |
+| `test_dual_walk::test_contained_landing_from_the_table`, `::test_unbounded_low_end_maps_to_zero`, `::test_outermost_element_lands_by_the_table` | `::test_landing_from_the_table_is_contained[interior|unbounded_low_end_maps_to_zero|outermost]` | none |
+| `test_strong_pip_periodic_point::test_heteroclinic_crossing_does_not_disqualify_strong_pip`, `::test_homoclinic_crossing_still_disqualifies_strong_pip`, `::test_missing_unstable_key_disqualifier_is_kept` | `::test_only_the_own_tangle_disqualifies_a_strong_pip[*]` | regions-refactor (heteroclinic): kept as a row |
+| `test_loom_blast_restore::test_blast_zone_propagates_assertion_error`, `::test_blast_zone_skips_value_error_with_warning`, `::test_blast_zone_reraises_value_error_when_strict` | `::test_blast_zone_error_handling[*]` | pseudoneighbor-partition "swallowed" hit is about cdist slack, not this; the assertion-escape guard is the first row |
+| `test_higher_period_cartoon::test_nested_outer_blasts_leave_the_inner_bridges_alone` | merged into `::test_nested_inner_words_are_the_period3_words` | hole-side-own-blast-2026-10-02: kept (bridge-count assertion) |
+| `test_pseudoneighbor::test_pair_on_different_unstable_branches_rejected` | `::…rejected[same_branch|other_branch]` (clean fixture) | none |
+| `test_pseudoneighbor::test_trajectory_extension_forward_with_dedup` | `::test_trajectory_extension_forward_stops_at_the_end_of_the_chain` + `::test_trajectory_extension_deduplicates[*]` | dedup hits (codebase-audit `_edge_seen`, pseudoneighbor-partition region dedup) are other code; nothing lost |
+| `test_pseudoneighbor::test_strong_pip_cuts_warn_when_branches_are_left_uncut`, `::test_strong_pip_cuts_are_silent_when_every_branch_is_cut` | `::test_strong_pip_cuts_warn_when_branches_are_left_uncut[period_1_cut|period_3_uncut]` (public `compute_pseudoneighbors`) | none |
+| `test_pseudoneighbor::test_forward_unstable_branch_cycle_matches_orbit_order` | deleted (decision 13: dead-API wrapper; `branch_cycle` is tested in numerics) | pseudoneighbor-partition / regions-refactor mention `branch_cycle` as a feature only |
+| `test_stable_partition::test_region_key_separates_the_two_sides_of_one_bridge` | `::test_both_holes_of_a_singleton_bridge_survive_propagation[k28_one_blast|p3]` (real data: a bridge with a propagated hole on either side keeps both) | pseudoneighbor-partition "SINGLETON BRIDGE" (user-confirmed): kept as the property |
+| `test_arrangement_sparse::test_sparse_kept_endpoints_are_degree_three_without_unstable_stubs` | deleted (private half-edges; no public degree query); "no unstable stub" → `_dangling_ends == 2` in `::test_sparse_faces_close_and_euler_holds` | regions-refactor mentions half-edges as design only |
+| `test_image_cdist::test_the_snap_does_not_fire_on_the_default_path` | deleted (E6: private fixture tripwire on `_snap_to_partition_boundary`); module docstring says it is deliberately unpinned | none ("snap" hits are "snapshot") |
+| `test_session_symbolic_dynamics::test_p3_symbolic_dynamics_smoke` | deleted (planner §B); its laws run on nested in `invariants/test_law_symbolic.py`; the unresolved path → `test_symbolic_dynamics::test_unresolved_class_carries_a_reason_and_warns` | none |
+| `test_dual_graph::test_k10_stable_node_names_are_the_expected_iterated_names` | deleted (planner §B: scattered fact pin of the k10 names; pinned once in `golden/test_golden_k10.py::test_k10_iterated_rows`) | none |
+
+Unchanged ids whose body changed: `test_symbolic_dynamics::test_inert_letter_series`
+(public `inert_letters`), `test_image_cdist::*` (fixture `p3_partitioned`),
+every rewritten `build_pieces` caller.
+
+### Verification
+
+- Collected **1111** (`nodeids_p7b.txt`).
+- `1071 passed, 32 skipped, 8 xfailed` in 169 s with coverage (`p7b_run.txt`);
+  `-rxX` lists exactly the 8 `KNOWN_ISSUES` xfails; no XPASS.
+- Coverage guard vs `cov_base.json`: OK (`cov_p7b.json`). The first run
+  flagged `SymbolicDynamics` 337 / 1122 / 1144 / 1148–1149 and `Trellis`
+  316 / 320; the three gap tests above close them.
+- `grep -rn "build_pieces\|_gathered_partitions" tests/` → empty.
+- Isolation (each alone): `test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set`,
+  `test_dual_walk.py::test_single_crossing_records_entry_then_exit[right]`,
+  `test_loom_blast_restore.py::test_blast_zone_error_handling[value_error_skipped_lenient]`,
+  `test_pseudoneighbor.py::test_trajectory_extension_deduplicates[against_another_trajectory]`,
+  `test_stable_partition.py::test_both_holes_of_a_singleton_bridge_survive_propagation[p3]`,
+  `test_symbolic_dynamics.py::test_unresolved_class_carries_a_reason_and_warns`,
+  `test_higher_period_cartoon.py::test_nested_inner_words_are_the_period3_words`,
+  `test_topology_plotting.py::test_plot_minimal_trellis_draws_every_kept_bridge`:
+  all pass.
+
+### Deviations, Phase 7b
+
+1. **`tests/minimal_helpers.py` deleted in this phase** instead of Phase 10:
+   it had no users left, and the phase's grep gate covers the file itself.
+   Phase 10 still deletes the two remaining shims.
+2. **`_region_key` rewrite is on real data**, not synthetic. On k28 one blast
+   and p3 the both-sided bridges carry holes of two DIFFERENT origins (one
+   origin on both sides would break I1), so the test pins the public outcome
+   (both holes survive propagation) rather than the private key.
+3. **More shadows retired than the plan named** (`henon_session` ×2,
+   `k10_zone_session`, the 10-step session, `p3_partitioned_c`, the
+   session-scoped `p3_built`/`nested_built`, two direct `henon_cases`
+   imports): all were the same recipes as `cases.py` builders (decision 7).
+   `test_session_pseudoneighbors` and `test_topology_plotting` now run on the
+   recipe with the iterate table inferred (P6: interchangeable).
+4. **Gap tests added** (fallback letters, unresolved class, orientation
+   default) because the deleted / rewritten tests were the only route to those
+   lines; each asserts behaviour, levels and loggers only.
+5. **Private access left for later phases**: `_bridge_side_of`
+   (`test_stable_partition`, no public single-bridge route; candidate for a
+   kernel exception or a Phase 9 rewrite), `_dangling_ends` reading
+   `arrangement._nodes` (no public dangling-end count; Phase 3b kept it),
+   `_is_forward_beyond_fundamental` (firm-only since Phase 2), and the plotting
+   privates (`_side_of`, `_anchorward_look`, `_cartoon_name`: Phase 8). The
+   `_empty_stretches` and `_resolve_inertness` uses are allowed kernels.
+6. `test_k10_stable_node_label_joins_the_names` and the plot-delegate mocks
+   stay for Phase 8 (they are on its delete list).

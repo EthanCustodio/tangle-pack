@@ -22,6 +22,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
@@ -35,15 +36,6 @@ from tanglepack.topology.TrellisBranch import TrellisBranch
 # --------------------------------------------------------------------------- #
 # 6.4 -- a hand-built arrangement whose faces can be counted by hand
 # --------------------------------------------------------------------------- #
-class _FakeFixedPoint:
-    """The bare minimum a TrellisBranch reads off a fixed point."""
-
-    period = 1
-    k_value = 1
-    coordinates = np.array([[0.0, 0.0]])
-    unstable_eigenvalues = [2.0]
-
-
 def _hand_built_trellis():
     """One stable line crossed twice by one unstable lobe.
 
@@ -54,7 +46,7 @@ def _hand_built_trellis():
     ``F = E - V + 2 = 6 - 6 + 2 = 2`` faces, of which exactly one -- the lobe -- is
     bounded entirely by manifold.
     """
-    fp = _FakeFixedPoint()
+    fp = bare_fixed_point(beta=0.5, coordinates=[(0.0, 0.0)])
     u_key = (fp, "unstable", 0, 0)
     s_key = (fp, "stable", 0, 0)
 

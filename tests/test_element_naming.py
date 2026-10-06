@@ -2,8 +2,7 @@
 Tests for ``tanglepack.topology.ElementNaming``: the ``L_i`` / ``R_i^j`` names
 of the homotopy and iterated partition elements.
 
-The synthetic tests build partition families by hand (a fake fixed point is
-all an ``ElementRef`` asks for); one fixture test reads the names over two
+The synthetic tests build partition families by hand (over bare fixed points); one fixture test reads the names over two
 fixed points. The k=10 rows are pinned in ``tests/golden/test_golden_k10.py``.
 """
 
@@ -11,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from minimal_helpers import build_pieces
+from helpers.fakes import bare_fixed_point
 from tanglepack.topology.ElementNaming import ElementName, ElementNaming
 from tanglepack.topology.PartitionFamily import (
     HomotopyPartition,
@@ -27,13 +26,6 @@ from tanglepack.topology.TopologyResults import (
 # --------------------------------------------------------------------------- #
 # Synthetic builders
 # --------------------------------------------------------------------------- #
-class _FakeFixedPoint:
-    """The only thing a name asks of a fixed point is its period."""
-
-    def __init__(self, period: int = 1) -> None:
-        self.period = period
-
-
 def _key(fp, orbit: int = 0, branch: int = 0):
     return (fp, "stable", orbit, branch)
 
@@ -63,7 +55,7 @@ def _result(branch_key, side, bounds, parents=None) -> StablePartitionResult:
 def _one_branch_families():
     """One branch, both sides: homotopy L has 3 elements, R has 3; the
     iterated family splits L_1 in two and R_3 in three."""
-    fp = _FakeFixedPoint()
+    fp = bare_fixed_point()
     key = _key(fp)
     homotopy = HomotopyPartition.from_results(
         [
@@ -85,7 +77,7 @@ def _one_branch_families():
 # ElementName
 # --------------------------------------------------------------------------- #
 def test_element_name_text_and_mathtext():
-    key = _key(_FakeFixedPoint(3), orbit=1, branch=0)
+    key = _key(bare_fixed_point(3), orbit=1, branch=0)
     split = ElementName(key, "right", 1, 2, 3)
     assert split.side_letter == "R"
     assert split.is_split
@@ -111,7 +103,7 @@ def test_element_name_text_and_mathtext():
 
 
 def test_element_name_is_hashable_and_compares_by_value():
-    key = _key(_FakeFixedPoint())
+    key = _key(bare_fixed_point())
     a = ElementName(key, "right", 1, 2, 3)
     b = ElementName(key, "right", 1, 2, 3)
     assert a == b and hash(a) == hash(b)
@@ -232,7 +224,7 @@ def test_homotopy_only_naming_is_its_own_parent():
 
 
 def test_branch_codes_always_and_letters_only_with_two_fixed_points():
-    fp = _FakeFixedPoint(period=3)
+    fp = bare_fixed_point(period=3)
     key_a = _key(fp, orbit=0)
     key_b = _key(fp, orbit=1)
     single = ElementNaming(
@@ -258,7 +250,7 @@ def test_branch_codes_always_and_letters_only_with_two_fixed_points():
     # The tag matches the branch text of ElementRef.label.
     assert ElementRef(key_b, "left", 0).label.startswith(two.names[2].tag)
 
-    other = _FakeFixedPoint(period=1)
+    other = bare_fixed_point(period=1)
     key_c = _key(other, orbit=0)
     nested = ElementNaming(
         HomotopyPartition.from_results(
@@ -274,7 +266,7 @@ def test_branch_codes_always_and_letters_only_with_two_fixed_points():
 
 
 def test_fixed_point_label_wins_over_position_and_disambiguates_ref_labels():
-    first, second = _FakeFixedPoint(period=1), _FakeFixedPoint(period=1)
+    first, second = bare_fixed_point(period=1), bare_fixed_point(period=1)
     first.label, second.label = "Q", "P"
     key_1, key_2 = _key(first), _key(second)
     naming = ElementNaming(
@@ -288,7 +280,7 @@ def test_fixed_point_label_wins_over_position_and_disambiguates_ref_labels():
 
 
 def test_missing_parent_id_reads_as_own_parent():
-    fp = _FakeFixedPoint()
+    fp = bare_fixed_point()
     key = _key(fp)
     homotopy = HomotopyPartition.from_results([_result(key, "left", [0, 1, 2])])
     iterated = IteratedHomotopyPartition(
@@ -300,7 +292,7 @@ def test_missing_parent_id_reads_as_own_parent():
 
 
 def test_bad_parent_raises_value_error():
-    fp = _FakeFixedPoint()
+    fp = bare_fixed_point()
     key = _key(fp)
     homotopy = HomotopyPartition.from_results([_result(key, "left", [0, 1, 2])])
     bad_parent = IteratedHomotopyPartition(
@@ -323,13 +315,13 @@ def test_bad_parent_raises_value_error():
 def test_p3_names_carry_branch_codes_and_letters(p3_partitioned):
     """Two fixed points are partitioned, so every name carries its letter and code."""
     session, fp3, fp1 = p3_partitioned
-    pieces = build_pieces(session, [fp3, fp1])
-    naming = ElementNaming(pieces.homotopy, pieces.iterated)
+    homotopy = session.homotopy_partition()
+    naming = ElementNaming(homotopy, session.iterated_partition())
     assert naming.letters == {id(fp3): fp3.label, id(fp1): fp1.label}
     assert fp3.label != fp1.label
-    assert len(pieces.homotopy.branch_keys) > 1
+    assert len(homotopy.branch_keys) > 1
     codes = {name.branch_code for name in naming.names}
-    assert len(codes) == len(pieces.homotopy.branch_keys)
+    assert len(codes) == len(homotopy.branch_keys)
     for ref, name in naming.items():
         assert name.text.startswith(f"{name.fixed_point_letter}:")
         assert ref.label.startswith(f"{name.fixed_point_letter}:{name.tag}")

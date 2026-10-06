@@ -17,7 +17,6 @@ import matplotlib.pyplot as plt
 import pytest
 
 from tanglepack.topology import plotting
-from tanglepack.topology.SymbolicDynamics import SymbolicDynamics
 
 
 # --------------------------------------------------------------------------- #
@@ -117,30 +116,3 @@ def test_session_plot_delegates_forward_to_plotting(k10_partitioned, monkeypatch
     assert calls[3][1] is dyn and calls[3][3] == {"refined": True}
     assert session.plot_dual_graph_cartoon(show_walks=False) == "cartoon"
     assert calls[4][1] == (session.dual_graph(), dyn) and calls[4][3] == {"show_walks": False}
-
-
-# --------------------------------------------------------------------------- #
-# nested period-3: smoke only (no pinned words; the trellis is not grown far
-# enough for every class to resolve)
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.slow
-def test_p3_symbolic_dynamics_smoke(p3_partitioned):
-    """Over both fixed points the dynamics builds and every itinerary is well formed."""
-    session, _fp3, _fp1 = p3_partitioned
-    dyn = session.symbolic_dynamics()
-    assert isinstance(dyn, SymbolicDynamics)
-    assert len(dyn.naming.letters) == 2  # two fixed points are partitioned
-    assert len(dyn.classes) > 0
-    for cd in dyn.classes.values():
-        if cd.itinerary is None:
-            assert cd.unresolved_reason is not None
-            continue
-        assert len(cd.itinerary) % 2 == 0
-        for first, second in zip(cd.itinerary[0::2], cd.itinerary[1::2]):
-            assert first.side == second.side
-        assert not any(symbol.cross_side for symbol in cd.symbols)
-    names, matrix = dyn.transition_matrix()
-    assert matrix.shape == (len(names), len(names))
-    assert dyn.describe()

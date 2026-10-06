@@ -17,23 +17,27 @@ import logging
 import pytest
 
 from helpers.logs import assert_logged
-from minimal_helpers import build_pieces
+from tanglepack import TangleSession
 from tanglepack.topology.DualGraph import DualGraph
 
 
 # --------------------------------------------------------------------------- #
 # Builders
 # --------------------------------------------------------------------------- #
-def _k10_graph(session, fp) -> tuple[DualGraph, object]:
-    """The dual graph of the k=10 fixture, with its one strong pip."""
-    pieces = build_pieces(session, [fp])
-    return DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips), pieces
+def _graph_with_pips(session: TangleSession, strong_pips) -> DualGraph:
+    """A dual graph over the session's minimal trellis and iterated partition,
+    with the strong pips given here instead of the session's own."""
+    return DualGraph(
+        session.minimal_trellis(), session.iterated_partition(), strong_pips=strong_pips
+    )
 
 
-def _p3_graph(session, fp3, fp1) -> tuple[DualGraph, object]:
-    """The dual graph of the nested period-3 fixture, with both pips."""
-    pieces = build_pieces(session, [fp3, fp1])
-    return DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips), pieces
+def _edge_keys(dual: DualGraph) -> dict[tuple, list]:
+    """Every stable edge's nodes, keyed by edge (public ``stable_nodes`` only)."""
+    edges: dict[tuple, list] = {}
+    for node in dual.stable_nodes.values():
+        edges.setdefault(node.edge_key, []).append(node)
+    return edges
 
 
 def _expected_unified_keys(dual: DualGraph, trellis, pip=None) -> set[tuple]:
@@ -50,10 +54,10 @@ def _expected_unified_keys(dual: DualGraph, trellis, pip=None) -> set[tuple]:
     tol = dual.trellis.registry.cdist_tol
     return {
         edge_key
-        for edge_key, by_side in dual._nodes_of_edge.items()
-        if by_side["left"].branch_key == branch_key
-        and by_side["left"].hi_cdist > boundary + tol
-        and by_side["left"].lo_cdist < top - tol
+        for edge_key, (node, *_rest) in _edge_keys(dual).items()
+        if node.branch_key == branch_key
+        and node.hi_cdist > boundary + tol
+        and node.lo_cdist < top - tol
     }
 
 
@@ -129,7 +133,7 @@ def test_p3_iterate_composes_three_steps(p3_partitioned):
 def test_k10_face_nodes_are_one_per_face_with_a_single_outer(k10_partitioned):
     """The flat fixture has one component, so nothing merges: every face is a node."""
     session, fp = k10_partitioned
-    dual, _ = _k10_graph(session, fp)
+    dual = session.dual_graph()
     arrangement = dual.arrangement
     assert len(dual.face_nodes) == len(arrangement.faces)
     outer = [face for face in dual.face_nodes if face.kind == "outer"]
@@ -145,7 +149,7 @@ def test_p3_merges_the_inner_outer_face_into_the_containing_face(p3_partitioned)
     """One outer node per level of nesting: the inner tangle's outer face is glued
     onto the face of the outer tangle that swallows it."""
     session, fp3, fp1 = p3_partitioned
-    dual, _ = _p3_graph(session, fp3, fp1)
+    dual = session.dual_graph()
     merged = [face for face in dual.face_nodes if len(face.faces) > 1]
     assert dual.arrangement.component_count >= 2
     assert merged, "the nested fixture must merge at least one pair of faces"
@@ -156,20 +160,12 @@ def test_p3_merges_the_inner_outer_face_into_the_containing_face(p3_partitioned)
 # --------------------------------------------------------------------------- #
 # Payload: element names
 # --------------------------------------------------------------------------- #
-#: The iterated-element names of the k=10 fixture (planning prototype, pinned
-#: by the symbolic-dynamics plan): three children of R_1 and R_3, two of L_1.
-K10_ITERATED_NAMES = {
-    "L_1^1", "L_1^2", "L_2", "L_3",
-    "R_1^1", "R_1^2", "R_1^3", "R_2", "R_3^1", "R_3^2", "R_3^3",
-}
-
-
 def test_k10_every_stable_node_side_is_named(k10_partitioned):
     """Each faced side carries an ElementName agreeing with the graph's naming."""
     from tanglepack.topology.ElementNaming import ElementName, ElementNaming
 
-    session, fp = k10_partitioned
-    dual, pieces = _k10_graph(session, fp)
+    session, _fp = k10_partitioned
+    dual = session.dual_graph()
     assert isinstance(dual.naming, ElementNaming)
     for node in dual.stable_nodes.values():
         assert set(node.names) == set(node.sides)
@@ -181,19 +177,9 @@ def test_k10_every_stable_node_side_is_named(k10_partitioned):
             assert dual.naming.ref_of(name) == node.elements[side]
 
 
-def test_k10_stable_node_names_are_the_expected_iterated_names(k10_partitioned):
-    session, fp = k10_partitioned
-    dual, _ = _k10_graph(session, fp)
-    seen = {name.short_text for node in dual.stable_nodes.values() for name in node.names.values()}
-    assert seen <= K10_ITERATED_NAMES
-    # Every split element with an edge in the sparse arrangement shows up.
-    assert any(name.is_split for node in dual.stable_nodes.values() for name in node.names.values())
-    assert any("^" not in text for text in seen)
-
-
 def test_k10_stable_node_label_joins_the_names(k10_partitioned):
     session, fp = k10_partitioned
-    dual, _ = _k10_graph(session, fp)
+    dual = session.dual_graph()
     for node in dual.unified_nodes:
         assert node.label == f"{node.names['left'].text} | {node.names['right'].text}"
         assert " | " in node.label
@@ -215,12 +201,15 @@ def test_k10_homotopy_only_partition_names_plain(k10_partitioned):
     from tanglepack.topology.PartitionFamily import IteratedHomotopyPartition
 
     session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    over_homotopy = DualGraph(pieces.minimal, pieces.homotopy, strong_pips=pieces.strong_pips)
+    minimal = session.minimal_trellis()
+    pips = [session.trellis(fp).strong_pip]
+    over_homotopy = DualGraph(minimal, session.homotopy_partition(), strong_pips=pips)
     parentless = DualGraph(
-        pieces.minimal,
-        IteratedHomotopyPartition(pieces.iterated.as_list(), trellis=pieces.full),
-        strong_pips=pieces.strong_pips,
+        minimal,
+        IteratedHomotopyPartition(
+            session.iterated_partition().as_list(), trellis=session.trellis()
+        ),
+        strong_pips=pips,
     )
     for dual in (over_homotopy, parentless):
         for node in dual.stable_nodes.values():
@@ -236,13 +225,12 @@ def test_k10_homotopy_only_partition_names_plain(k10_partitioned):
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("pips", [None, [], [None]])
 def test_no_pips_warns_and_unifies_nothing(k10_partitioned, caplog, pips):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
+    session, _fp = k10_partitioned
     with caplog.at_level(logging.WARNING, logger="tanglepack.topology.DualGraph"):
-        dual = DualGraph(pieces.minimal, pieces.iterated, strong_pips=pips)
+        dual = _graph_with_pips(session, pips)
     assert_logged(caplog, logging.WARNING, "tanglepack.topology.DualGraph")
     assert not dual.unified_nodes and not dual.fundamental_segments
-    assert len(dual.stable_nodes) == 2 * len(dual._nodes_of_edge)
+    assert all(len(nodes) == 2 for nodes in _edge_keys(dual).values())
 
 
 def test_k10_a_different_pip_moves_the_unified_set(k10_partitioned):
@@ -262,9 +250,8 @@ def test_k10_a_different_pip_moves_the_unified_set(k10_partitioned):
     )
     if not alternatives:
         pytest.skip("the fixture has no other strong-pip candidate with a registered iterate")
-    pieces = build_pieces(session, [fp])
-    before = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[default])
-    after = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[alternatives[0]])
+    before = _graph_with_pips(session, [default])
+    after = _graph_with_pips(session, [alternatives[0]])
     assert {n.edge_key for n in after.unified_nodes} == _expected_unified_keys(
         after, trellis, pip=alternatives[0]
     )
@@ -276,17 +263,15 @@ def test_k10_a_different_pip_moves_the_unified_set(k10_partitioned):
 def test_the_same_pip_twice_counts_once(k10_partitioned):
     """``trellis(fp)`` and ``trellis([fp])`` can both hand in the same pip."""
     session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
     pip = session.trellis(fp).strong_pip
-    once = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip])
-    twice = DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip, pip])
+    once = _graph_with_pips(session, [pip])
+    twice = _graph_with_pips(session, [pip, pip])
     assert twice.fundamental_segments == once.fundamental_segments
     assert {n.edge_key for n in twice.unified_nodes} == {n.edge_key for n in once.unified_nodes}
 
 
 def test_two_pips_on_one_branch_are_rejected(k10_partitioned):
     session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
     trellis = session.trellis(fp)
     pip = trellis.strong_pip
     branch = trellis.intersection(pip).manifold_b_key
@@ -297,7 +282,7 @@ def test_two_pips_on_one_branch_are_rejected(k10_partitioned):
     if not others:
         pytest.skip("the fixture has a single strong-pip candidate on the pip's branch")
     with pytest.raises(ValueError):
-        DualGraph(pieces.minimal, pieces.iterated, strong_pips=[pip, others[0]])
+        _graph_with_pips(session, [pip, others[0]])
 
 
 # --------------------------------------------------------------------------- #
@@ -307,17 +292,19 @@ def test_a_missing_partition_side_is_rejected(k10_partitioned):
     from tanglepack.topology.PartitionFamily import PartitionFamily
 
     session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
     left_only = PartitionFamily(
-        [r for r in pieces.iterated.as_list() if r.side == "left"], trellis=pieces.full
+        [r for r in session.iterated_partition().as_list() if r.side == "left"],
+        trellis=session.trellis(),
     )
     with pytest.raises(ValueError):
-        DualGraph(pieces.minimal, left_only, strong_pips=pieces.strong_pips)
+        DualGraph(
+            session.minimal_trellis(), left_only, strong_pips=[session.trellis(fp).strong_pip]
+        )
 
 
 def test_stable_node_side_of_rejects_a_foreign_face(k10_partitioned):
     session, fp = k10_partitioned
-    dual, _ = _k10_graph(session, fp)
+    dual = session.dual_graph()
     node = dual.wall_nodes[0]
     foreign = next(f for f in dual.face_nodes if f is not node.faces[node.sides[0]])
     with pytest.raises(ValueError):

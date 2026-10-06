@@ -12,13 +12,15 @@ from __future__ import annotations
 import inspect
 import logging
 
+import pytest
+
 from helpers.logs import assert_logged
+from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.Pseudoneighbor import (
     compute_pseudoneighbors,
     extend_pseudoneighbor_trajectories,
-    forward_unstable_branch_cycle,
 )
 from tanglepack.topology.TopologyResults import PseudoneighborPair
 from tanglepack.topology.Trellis import Trellis
@@ -30,11 +32,8 @@ COLLISION_RTOL = inspect.signature(compute_pseudoneighbors).parameters["collisio
 
 
 def _fixed_point(period: int, lambda_u: float) -> FixedPoint:
-    """A minimal no-inversion fixed point with a positive unstable eigenvalue."""
-    fp = FixedPoint(period)
-    fp.unstable_eigenvalues = [lambda_u] * period
-    fp.set_k_value()
-    return fp
+    """A bare no-inversion fixed point whose full-cycle unstable eigenvalue is ``lambda_u``."""
+    return bare_fixed_point(period, beta=lambda_u ** (-1.0 / period))
 
 
 def _trellis(registry: IntersectionRegistry, *fixed_points: FixedPoint) -> Trellis:
@@ -172,40 +171,40 @@ def test_endpoint_iterates_do_not_disqualify():
     assert (x1, r_end) not in [(p.intersection_a, p.intersection_b) for p in pairs]
 
 
-def test_pair_on_different_unstable_branches_rejected():
+@pytest.mark.parametrize("middle_branch", [0, 1], ids=["same_branch", "other_branch"])
+def test_pair_on_different_unstable_branches_rejected(middle_branch: int):
     """Consecutive stable-branch points on two different unstable branches are
-    never a pair — no single unstable arc connects them."""
-    fp = _fixed_point(3, 8.0)
+    never a pair -- no single unstable arc connects them.
+
+    The standard window, with the middle crossing's unstable side on the
+    saddle's OTHER unstable branch (branch index 1, an independent chain of a
+    point without inversion); ``same_branch`` is the control.
+    """
+    fp = _fixed_point(1, 4.0)
     reg = IntersectionRegistry()
     stable = (fp, "stable", 0, 0)
+    unstable = (fp, "unstable", 0, 0)
     r_n = reg.add_synthetic(
         (4.0, 1.0), unstable_cdist=1.0, stable_cdist=4.0,
-        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=stable,
+        manifold_a_key=unstable, manifold_b_key=stable,
     )
     x1 = reg.add_synthetic(
         (3.0, 2.0), unstable_cdist=2.0, stable_cdist=3.0,
-        manifold_a_key=(fp, "unstable", 1, 0), manifold_b_key=stable,
+        manifold_a_key=(fp, "unstable", 0, middle_branch), manifold_b_key=stable,
     )
     r_end = reg.add_synthetic(
-        (2.0, 4.0), unstable_cdist=2.0, stable_cdist=2.0,
-        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=stable,
+        (1.0, 4.0), unstable_cdist=4.0, stable_cdist=1.0,
+        manifold_a_key=unstable, manifold_b_key=stable,
     )
-    reg.register_iterate(r_n, 1, reg.add_synthetic(
-        (3.5, 1.5), unstable_cdist=1.26, stable_cdist=2.0 * (2.0 / 2.0),
-        manifold_a_key=(fp, "unstable", 1, 0), manifold_b_key=(fp, "stable", 1, 0),
-    ))
-    # Chase M^3(r_n) back onto this branch: register the remaining two links.
-    mid = reg.iterate_table[r_n, 1]
-    mid2 = reg.add_synthetic(
-        (3.2, 1.8), unstable_cdist=1.59, stable_cdist=2.5,
-        manifold_a_key=(fp, "unstable", 2, 0), manifold_b_key=(fp, "stable", 2, 0),
-    )
-    reg.register_iterate(mid, 1, mid2)
-    reg.register_iterate(mid2, 1, r_end)
+    reg.register_iterate(r_n, 1, r_end)
 
     pairs = compute_pseudoneighbors(_trellis(reg, fp))
+    found = [(p.intersection_a, p.intersection_b) for p in pairs]
 
-    assert (r_n, x1) not in [(p.intersection_a, p.intersection_b) for p in pairs]
+    if middle_branch == 0:
+        assert found == [(r_n, x1), (x1, r_end)]
+    else:
+        assert (r_n, x1) not in found and (x1, r_end) not in found
 
 
 def test_branch_residue_gates_iterates():
@@ -423,11 +422,8 @@ def test_backward_iterate_punctures_interval():
     assert (r_n, x1) not in [(p.intersection_a, p.intersection_b) for p in pairs]
 
 
-def test_trajectory_extension_forward_with_dedup():
-    """References map forward through the iterate table into non-reference
-    pairs, stopping at the end of a chain, without duplicates."""
-    fp = _fixed_point(1, 4.0)
-    reg = IntersectionRegistry()
+def _three_step_chain(fp, reg):
+    """Two crossings and their first two forward images, the table linked."""
     stable = (fp, "stable", 0, 0)
     unstable = (fp, "unstable", 0, 0)
 
@@ -442,28 +438,52 @@ def test_trajectory_extension_forward_with_dedup():
     a2, b2 = _point(16.0, 0.25), _point(32.0, 0.1875)
     for src, dst in ((a0, a1), (a1, a2), (b0, b1), (b1, b2)):
         reg.register_iterate(src, 1, dst)
+    return (a0, b0), (a1, b1), (a2, b2)
+
+
+def test_trajectory_extension_forward_stops_at_the_end_of_the_chain():
+    """A reference maps forward through the iterate table into non-reference
+    pairs, stopping at the end of a chain."""
+    fp = _fixed_point(1, 4.0)
+    reg = IntersectionRegistry()
+    first, second, third = _three_step_chain(fp, reg)
+    stable = (fp, "stable", 0, 0)
 
     trellis = _trellis(reg, fp)
-    ref = PseudoneighborPair(a0, b0, branch_key=stable, is_reference=True)
+    ref = PseudoneighborPair(*first, branch_key=stable, is_reference=True)
     out = extend_pseudoneighbor_trajectories(trellis, [ref])
 
-    assert [(p.intersection_a, p.intersection_b) for p in out] == [
-        (a1, b1),
-        (a2, b2),
-    ]
+    assert [(p.intersection_a, p.intersection_b) for p in out] == [second, third]
     assert all(not p.is_reference for p in out)
     assert all(p.branch_key == stable for p in out)
+    assert [p.iterate for p in out] == [1, 2]
 
 
-def test_forward_unstable_branch_cycle_matches_orbit_order():
-    """The unstable cycle runs the orbit in M-forward order, length k_value."""
-    fp = _fixed_point(3, 8.0)
-    cycle = forward_unstable_branch_cycle(fp)
-    assert cycle == [
-        (fp, "unstable", 0, 0),
-        (fp, "unstable", 1, 0),
-        (fp, "unstable", 2, 0),
+@pytest.mark.parametrize(
+    "references, expected",
+    [((0, 1), [2]), ((0, 2), [1])],
+    ids=["against_a_reference", "against_another_trajectory"],
+)
+def test_trajectory_extension_deduplicates(references, expected):
+    """Two references on ONE trajectory: the forward chain of one runs into the
+    other reference (never re-emitted), and the gap between two references is
+    emitted once although both walk into it."""
+    fp = _fixed_point(1, 4.0)
+    reg = IntersectionRegistry()
+    chain = _three_step_chain(fp, reg)
+    stable = (fp, "stable", 0, 0)
+
+    trellis = _trellis(reg, fp)
+    refs = [
+        PseudoneighborPair(*chain[i], branch_key=stable, is_reference=True)
+        for i in references
     ]
+    out = extend_pseudoneighbor_trajectories(trellis, refs)
+
+    emitted = [(p.intersection_a, p.intersection_b) for p in out]
+    assert emitted == [chain[i] for i in expected]
+    assert len(set(emitted)) == len(emitted)
+    assert not set(emitted) & {chain[i] for i in references}
 
 
 def test_trellis_wrapper_populates_and_clears_slots():
@@ -485,49 +505,44 @@ def test_trellis_wrapper_populates_and_clears_slots():
 # --------------------------------------------------------------------------- #
 # Strong-pip cut coverage (plan row 1.18)
 # --------------------------------------------------------------------------- #
-def _pip_trellis(period: int) -> tuple[Trellis, int]:
-    """``(trellis, pip_id)``: one crossing on one stable branch, chosen as the
-    strong pip, with no iterate table — so only the pip itself cuts."""
-    fp = _fixed_point(period, 4.0)
+@pytest.mark.parametrize(
+    "period, uncut_warnings", [(1, 0), (3, 1)], ids=["period_1_cut", "period_3_uncut"]
+)
+def test_strong_pip_cuts_warn_when_branches_are_left_uncut(caplog, period, uncut_warnings):
+    """A period-3 anchor needs one cut per stable branch; with no iterate table
+    only the pip itself cuts, and the other two branches are left running to
+    the manifold end -- which must be reported. A period-1 anchor has one
+    stable branch, which the pip alone cuts: nothing to report.
+
+    The window ``(4, 1) -> (3, 2) -> M^k = (4 / lambda, lambda)`` sits on orbit
+    point 0 with the pip at its outer end, so the reference search itself
+    succeeds silently in both cases.
+    """
+    lambda_u = 4.0 if period == 1 else 8.0
+    fp = _fixed_point(period, lambda_u)
     reg = IntersectionRegistry()
-    pip = reg.add_synthetic(
-        (1.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0,
-        manifold_a_key=(fp, "unstable", 0, 0),
-        manifold_b_key=(fp, "stable", 0, 0),
-    )
+
+    def _point(stable_cdist, unstable_cdist):
+        return reg.add_synthetic(
+            (stable_cdist, unstable_cdist),
+            unstable_cdist=unstable_cdist, stable_cdist=stable_cdist,
+            manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+        )
+
+    pip = _point(4.0, 1.0)
+    _point(3.0, 2.0)
+    _point(4.0 / lambda_u, lambda_u)
     trellis = _trellis(reg, fp)
     trellis.strong_pip = pip
-    return trellis, pip
+    assert fp.k_value == period
 
+    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.Pseudoneighbor"):
+        pairs = compute_pseudoneighbors(trellis)
 
-def test_strong_pip_cuts_warn_when_branches_are_left_uncut(caplog):
-    """A period-3 anchor needs one cut per stable branch; with no iterate table
-    only the pip itself cuts, and the other two branches are silently left
-    running to the manifold end — which must be reported."""
-    from tanglepack.topology.Pseudoneighbor import _strong_pip_cuts
-
-    trellis, pip = _pip_trellis(3)
-    assert trellis.fixed_points[0].k_value == 3
-
-    with caplog.at_level("WARNING", logger="tanglepack.topology.Pseudoneighbor"):
-        cut_ids, cut_cdists = _strong_pip_cuts(trellis)
-
-    assert set(cut_ids) == {(trellis.fixed_points[0], "stable", 0, 0)}
-    assert cut_cdists[(trellis.fixed_points[0], "stable", 0, 0)] == 1.0
-    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor")
-
-
-def test_strong_pip_cuts_are_silent_when_every_branch_is_cut(caplog):
-    """A period-1 anchor has one stable branch, which the pip alone cuts."""
-    from tanglepack.topology.Pseudoneighbor import _strong_pip_cuts
-
-    trellis, _pip = _pip_trellis(1)
-    assert trellis.fixed_points[0].k_value == 1
-
-    with caplog.at_level("WARNING", logger="tanglepack.topology.Pseudoneighbor"):
-        _strong_pip_cuts(trellis)
-
-    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=0)
+    assert len(pairs) == 2
+    assert_logged(
+        caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=uncut_warnings
+    )
 
 
 def test_table_linked_deep_iterate_does_not_disqualify():

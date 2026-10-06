@@ -2,9 +2,8 @@
 Higher-period and nested tangles: the shared case builders, the cross-branch
 fixes they need, and the circular-zone dual-graph cartoon.
 
-The period-3 and nested sessions come from
-``tanglepack.examples.henon_cases`` -- the same builders the figure scripts
-use -- and are session-scoped (the tests only read them).
+The period-3 and nested cases come from the tests-only :mod:`cases` builders
+(parameters frozen there), built fresh per test.
 """
 
 from __future__ import annotations
@@ -22,12 +21,9 @@ import numpy as np
 import pytest
 
 from helpers.logs import assert_logged
-from minimal_helpers import build_pieces
-from tanglepack.examples.henon_cases import build_nested, build_period3
+from cases import Case, build_nested, build_period3
 from tanglepack.topology import plotting
-from tanglepack.topology.DualGraph import DualGraph
 from tanglepack.topology.ElementNaming import ElementNaming
-from tanglepack.topology.SymbolicDynamics import symbolic_dynamics
 from tanglepack.topology.TopologyResults import PartitionInterval
 
 family_module = importlib.import_module("tanglepack.topology.PartitionFamily")
@@ -36,26 +32,22 @@ family_module = importlib.import_module("tanglepack.topology.PartitionFamily")
 # --------------------------------------------------------------------------- #
 # Fixtures
 # --------------------------------------------------------------------------- #
-@pytest.fixture(scope="session")
-def p3_built():
-    """The period-3 orbit alone (read only)."""
+@pytest.fixture
+def p3_built() -> Case:
+    """The period-3 orbit alone."""
     return build_period3()
 
 
-@pytest.fixture(scope="session")
-def nested_built():
-    """The nested period-1 + period-3 tangle, outer zone blasted twice (read only)."""
+@pytest.fixture
+def nested_built() -> Case:
+    """The nested period-1 + period-3 tangle, outer zone blasted twice."""
     return build_nested()
 
 
-def _k10_dynamics(k10_partitioned):
-    """``(pieces, dual graph, symbolic dynamics)`` of the k=10 fixture."""
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    if any(entry.letter is None for entry in pieces.table.active):
-        pieces.table = session.bridge_classes([fp])
-    dual = DualGraph(pieces.minimal, pieces.iterated, strong_pips=pieces.strong_pips)
-    return pieces, dual, symbolic_dynamics(dual, pieces.table)
+def _k10_dynamics(k10_partitioned) -> tuple:
+    """``(session, dual graph, symbolic dynamics)`` of the k=10 fixture."""
+    session, _fp = k10_partitioned
+    return session, session.dual_graph(), session.symbolic_dynamics()
 
 
 # --------------------------------------------------------------------------- #
@@ -115,7 +107,7 @@ def test_a_lobe_ending_on_another_branch_marks_nothing(monkeypatch, caplog):
 # Circular-zone cartoon, k=10 (one branch)
 # --------------------------------------------------------------------------- #
 def test_circle_layout_puts_every_node_on_its_sides_circle(k10_partitioned):
-    _pieces, dual, dynamics = _k10_dynamics(k10_partitioned)
+    _session, dual, dynamics = _k10_dynamics(k10_partitioned)
     fig, ax = plt.subplots()
     try:
         layout = plotting.plot_dual_graph_cartoon(dual, dynamics, ax=ax, shape="circle")
@@ -149,7 +141,7 @@ def test_circle_layout_puts_every_node_on_its_sides_circle(k10_partitioned):
 
 
 def test_circle_layout_honours_interior_side_and_rejects_bad_shapes(k10_partitioned):
-    _pieces, dual, dynamics = _k10_dynamics(k10_partitioned)
+    _session, dual, dynamics = _k10_dynamics(k10_partitioned)
     (branch_key,) = dual.partition.branch_keys
     layout = plotting.dual_graph_zone_layout(dual, interior_side={branch_key: "left"})
     assert layout.outside[branch_key] == "right"
@@ -170,7 +162,7 @@ def test_circle_layout_honours_interior_side_and_rejects_bad_shapes(k10_partitio
 
 
 def test_line_cartoon_labels_every_row_with_its_branch_code(k10_partitioned):
-    _pieces, dual, dynamics = _k10_dynamics(k10_partitioned)
+    _session, dual, dynamics = _k10_dynamics(k10_partitioned)
     fig, ax = plt.subplots()
     try:
         plotting.plot_dual_graph_cartoon(dual, dynamics, ax=ax)
@@ -390,12 +382,18 @@ def _tangle_words(build, fixed_point) -> dict:
 @pytest.mark.slow
 @pytest.mark.regression
 def test_nested_inner_words_are_the_period3_words():
-    """The outer blasts leave the inner tangle exactly as it is alone."""
+    """The outer blasts leave the inner tangle exactly as it is alone: the same
+    words and the same bridges (2026-10-02: the outer zone's blasts no longer
+    iterate the period-3 bridges)."""
     alone = build_period3(blasts=4)
     nested = build_nested(outer_blasts=2, inner_blasts=4)
     _outer, inner = nested.fixed_points
-    words = _tangle_words(alone, alone.fixed_points[0])
+    (fp3,) = alone.fixed_points
+    words = _tangle_words(alone, fp3)
     assert words and _tangle_words(nested, inner) == words
+    assert len(nested.session.trellis(inner).bridges) == len(
+        alone.session.trellis(fp3).bridges
+    )
 
 
 @pytest.mark.slow
@@ -425,13 +423,3 @@ def test_nested_blast_order_does_not_matter(caplog):
         assert len(inner_first.session.trellis(one).bridges) == len(
             session.trellis(other).bridges
         )
-
-
-@pytest.mark.slow
-@pytest.mark.regression
-def test_nested_outer_blasts_leave_the_inner_bridges_alone(p3_built, nested_built):
-    """The outer zone's blasts no longer iterate the period-3 bridges (2026-10-02)."""
-    _outer, inner = nested_built.fixed_points
-    (fp3,) = p3_built.fixed_points
-    inner_bridges = nested_built.session.trellis(inner).bridges
-    assert len(inner_bridges) == len(p3_built.session.trellis(fp3).bridges)

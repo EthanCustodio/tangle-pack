@@ -21,7 +21,7 @@ import matplotlib
 matplotlib.use("Agg")  # headless: the session fixture touches the plotting stack
 import pytest
 
-from tanglepack.examples.henon_cases import build_period3
+from cases import build_period3
 from tanglepack.topology import check_holes_share_bridge_side
 
 

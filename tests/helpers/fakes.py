@@ -1,26 +1,30 @@
 """
-Synthetic builders for dual-walk tests: fake fixed points, stable branches,
-partition results, a duck-typed trellis, and real ``StableNode`` /
-``FaceNode`` objects wired into a tiny ``FakeDual``.
+Synthetic builders for the walk, naming and class kernels: bare fixed points,
+stable branches, partition results, a duck-typed trellis, and real
+``StableNode`` / ``FaceNode`` objects wired into a tiny ``FakeDual``.
 
-Nothing here touches the map or the registry; every builder produces the
-same dataclasses the real :class:`~tanglepack.topology.DualGraph.DualGraph`
-produces, with ``arc=None`` where the geometry is irrelevant.
+Nothing here touches the map. The fakes supply DATA only and delegate every
+RULE to the library: :func:`bare_fixed_point` is a real ``FixedPoint`` (so
+``advance_key``, ``per_step_beta``, ``num_branches`` and ``branch_cycle`` are
+the production rules), and :class:`FakeTrellis` borrows
+``Trellis.image_cdist`` (table first, else ``advance_key`` /
+``per_step_beta``) instead of reimplementing it. :func:`make_result` takes the
+crossing owners explicitly; nothing derives them.
 
 Moved from ``tests/walk_helpers.py`` (a re-export shim stays there until
-Phase 10 of the 2026-10-05 test-suite refactor). :func:`bare_fixed_point`
-builds a REAL ``FixedPoint``; Phase 7 replaces ``FakeFixedPoint`` with it,
-lets ``FakeTrellis`` borrow ``Trellis.image_cdist`` and makes ``make_result``
-require explicit owners.
+Phase 10 of the 2026-10-05 test-suite refactor).
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence
+
+import numpy as np
 
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.topology.DualGraph import FaceNode, StableNode
+from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TopologyResults import (
     ElementRef,
     PartitionInterval,
@@ -32,57 +36,19 @@ from tanglepack.topology.TopologyResults import (
 # --------------------------------------------------------------------------- #
 # Fixed points and branch keys
 # --------------------------------------------------------------------------- #
-class FakeFixedPoint:
-    """
-    A stand-in for :class:`~tanglepack.numerics.FixedPoint.FixedPoint`.
-
-    Attributes:
-        period: The orbit period (used by ``ElementRef.label``).
-        k_value: Steps of a branch return.
-        beta: The per-step STABLE canonical-distance factor (< 1); the
-            unstable factor is its reciprocal.
-    """
-
-    def __init__(self, period: int = 1, k_value: int = 1, beta: float = 0.25) -> None:
-        self.period = period
-        self.k_value = k_value
-        self.beta = beta
-        self.name = f"fp(p{period})"
-
-    @property
-    def num_branches(self) -> int:
-        return 2 if self.k_value == 2 * self.period else 1
-
-    def per_step_beta(self, stability: str) -> float:
-        return self.beta if stability == "stable" else 1.0 / self.beta
-
-    def advance_key(self, key: tuple, n: int = 1) -> tuple:
-        """One orbit index step per map step; branch flips on a wrap with inversion."""
-        fixed_point, stability, orbit, branch = key
-        total = orbit + n
-        wraps = total // self.period
-        new_orbit = total % self.period
-        if self.num_branches == 2 and wraps % 2:
-            branch = 1 - branch
-        return (fixed_point, stability, new_orbit, branch)
-
-    def __repr__(self) -> str:
-        return self.name
-
-
 def bare_fixed_point(
     period: int = 1,
     *,
     inversion: bool = False,
     beta: float = 0.25,
     label: Optional[str] = None,
+    coordinates: Optional[Sequence[Sequence[float]]] = None,
 ) -> FixedPoint:
     """
     A REAL :class:`~tanglepack.numerics.FixedPoint.FixedPoint` with eigenvalues only.
 
     The production ``advance_key``, ``per_step_beta``, ``num_branches`` and
-    ``branch_cycle`` rules then apply unchanged (``FakeFixedPoint``
-    reimplements them; Phase 7 retires it in favour of this).
+    ``branch_cycle`` rules then apply unchanged.
 
     Args:
         period: The orbit period.
@@ -90,6 +56,8 @@ def bare_fixed_point(
         beta: The per-map-step STABLE canonical-distance factor (< 1); the
             full-cycle unstable eigenvalue is ``(1 / beta) ** period``.
         label: The display letter, as the workbench would stamp it.
+        coordinates: One ``(x, y)`` per orbit point (the anchors a hand-built
+            ``TrellisBranch`` places); left as constructed when omitted.
 
     Returns:
         The fixed point, ``set_k_value()`` already called.
@@ -101,11 +69,13 @@ def bare_fixed_point(
     fixed_point.stable_eigenvalues = [sign / lambda_u] * period
     fixed_point.set_k_value()
     fixed_point.label = label
+    if coordinates is not None:
+        fixed_point.coordinates = [np.asarray(point, dtype=np.float64) for point in coordinates]
     return fixed_point
 
 
-def stable_key(fixed_point: FakeFixedPoint, orbit: int = 0, branch: int = 0) -> tuple:
-    """A stable manifold key on a fake fixed point."""
+def stable_key(fixed_point: FixedPoint, orbit: int = 0, branch: int = 0) -> tuple:
+    """A stable manifold key on a (bare) fixed point."""
     return (fixed_point, "stable", orbit, branch)
 
 
@@ -125,7 +95,7 @@ def make_result(
     branch_key: tuple,
     side: Side,
     intervals: Iterable[IntervalSpec],
-    owners: Optional[dict[int, int]] = None,
+    owners: dict[int, int],
     parents: Optional[Iterable[Optional[int]]] = None,
 ) -> StablePartitionResult:
     """
@@ -135,9 +105,8 @@ def make_result(
         branch_key: The stable branch.
         side: The side.
         intervals: Anchor-outward interval specs.
-        owners: ``element_of_intersection`` (crossing id -> element id). When
-            omitted it is derived: every registered end of every interval is
-            owned by the interval closed there (a singleton owns itself).
+        owners: ``element_of_intersection`` (crossing id -> element id),
+            spelled out by the test (nothing derives it).
         parents: Optional ``parent_element_id`` per interval.
 
     Returns:
@@ -153,13 +122,6 @@ def make_result(
         if parent_list is not None:
             interval.parent_element_id = parent_list[index]
         built.append(interval)
-    if owners is None:
-        owners = {}
-        for interval in built:
-            if interval.lo_id is not None and interval.closed_lo:
-                owners.setdefault(interval.lo_id, interval.element_id)
-            if interval.hi_id is not None and interval.closed_hi:
-                owners.setdefault(interval.hi_id, interval.element_id)
     return StablePartitionResult(
         branch_key=branch_key,
         side=side,
@@ -171,9 +133,25 @@ def make_result(
 # --------------------------------------------------------------------------- #
 # A duck-typed trellis
 # --------------------------------------------------------------------------- #
+class _FakeRegistry:
+    """The registry slice ``Trellis.image_cdist`` reads: crossings by id and ``cdist_tol``."""
+
+    def __init__(self, trellis: "FakeTrellis", cdist_tol: float) -> None:
+        self._trellis = trellis
+        self.cdist_tol = cdist_tol
+
+    def __getitem__(self, crossing_id: int) -> SimpleNamespace:
+        return self._trellis.intersection(crossing_id)
+
+
 class FakeTrellis:
     """
     The slice of :class:`~tanglepack.topology.Trellis.Trellis` the walk layer reads.
+
+    Data only: the crossings live on stable branches (no unstable key, so an
+    unstable lookup raises exactly as the real trellis does), and
+    :meth:`image_cdist` IS ``Trellis.image_cdist`` -- the iterate table first,
+    else ``FixedPoint.advance_key`` and ``per_step_beta``.
 
     Attributes:
         cdists: Stable canonical distance per crossing id.
@@ -183,8 +161,13 @@ class FakeTrellis:
         signs: ``crossing_sign`` per crossing id (default +1).
         orientation_preserving: The map's orientation.
         fixed_points: The ordering context.
-        registry: Carries ``cdist_tol``.
+        registry: Crossings by id, and ``cdist_tol``.
     """
+
+    #: The production rules, borrowed rather than reimplemented.
+    image_cdist = Trellis.image_cdist
+    _scaled_image_cdist = Trellis._scaled_image_cdist
+    _keyed_cdist = Trellis._keyed_cdist
 
     def __init__(
         self,
@@ -203,23 +186,28 @@ class FakeTrellis:
         self.keys = keys
         self.signs = dict(signs or {})
         self.orientation_preserving = orientation_preserving
-        self.registry = SimpleNamespace(cdist_tol=cdist_tol)
+        self.registry = _FakeRegistry(self, cdist_tol)
         self.fixed_points = list(fixed_points)
 
     def key_of(self, crossing_id: int) -> tuple:
+        """The stable branch key of one crossing."""
         if isinstance(self.keys, dict):
             return self.keys[crossing_id]
         return self.keys
 
     def intersection(self, crossing_id: int) -> SimpleNamespace:
+        """One crossing, as the registry would hand it out (stable side only)."""
         return SimpleNamespace(
             id=crossing_id,
             stable_cdist=self.cdists[crossing_id],
+            unstable_cdist=None,
             crossing_sign=self.signs.get(crossing_id, 1),
+            manifold_a_key=None,
             manifold_b_key=self.key_of(crossing_id),
         )
 
     def iterate(self, crossing_id: int, n: int) -> Optional[int]:
+        """``M^n`` of one crossing, composed link by link; None at a missing link."""
         current: Optional[int] = crossing_id
         table = self.iterates if n > 0 else self.preimages
         for _ in range(abs(n)):
@@ -227,19 +215,6 @@ class FakeTrellis:
                 return None
             current = table.get(current)
         return current
-
-    def image_cdist(self, crossing_id: int, n: int = 1, stability: str = "stable"):
-        assert stability == "stable", "the fake only follows the stable side"
-        key = self.key_of(crossing_id)
-        fixed_point = key[0]
-        image = self.iterate(crossing_id, n)
-        if image is not None:
-            return self.key_of(image), self.cdists[image], True
-        return (
-            fixed_point.advance_key(key, n),
-            self.cdists[crossing_id] * fixed_point.per_step_beta("stable") ** n,
-            False,
-        )
 
 
 # --------------------------------------------------------------------------- #

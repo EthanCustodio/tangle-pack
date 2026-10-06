@@ -21,10 +21,10 @@ before computing the cover.
 What that buys, precisely: forcing the scaling branch (``use_table=False``) on an
 element the table CAN answer reproduces the table's elements exactly, which pins
 the scaling law. It says nothing about the genuine fallback — an unregistered
-iterate has no ground truth to compare against, and on these fixtures the snap
-never fires on the default path at all. The real fallback is pinned here by
-coverage only: every bounded element gets a non-empty cover on the advanced
-branch, spanning both of its endpoint images.
+iterate has no ground truth to compare against. The real fallback is pinned here
+by coverage only: every bounded element gets a non-empty cover on the advanced
+branch, spanning both of its endpoint images. Whether the snap ever fires on the
+default path is deliberately NOT pinned (a fixture tripwire, removed 2026-10-05).
 """
 
 from __future__ import annotations
@@ -42,7 +42,6 @@ from tanglepack.topology.Trellis import (
     SCALING_RTOL,
     SNAP_RTOL,
     Trellis,
-    _snap_to_partition_boundary,
 )
 
 
@@ -55,22 +54,6 @@ _STEPS = (1, -1, 2, -2, 3, -3)
 # --------------------------------------------------------------------------- #
 # fixtures
 # --------------------------------------------------------------------------- #
-@pytest.fixture
-def p3_partitioned_c(henon_p3_session):
-    """``(session, fp3, fp1)`` with every trellis classified, punched, partitioned.
-
-    A local twin of ``tests/test_partition_elements.py``'s ``p3_partitioned``:
-    the same session fan-outs, kept here so this file owns its own fixture.
-    """
-    session, fp3, fp1, _zone = henon_p3_session
-    session.classify_strong_pips()
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-    assert session.trellis(fp3).stable_partitions
-    return session, fp3, fp1
-
-
 def _bounded_elements(trellis):
     """Yield ``(result, interval)`` for every element with two real endpoints."""
     for result in trellis.stable_partitions:
@@ -84,17 +67,17 @@ def _bounded_elements(trellis):
 # C.1 -- image_cdist against the iterate table
 # --------------------------------------------------------------------------- #
 @pytest.mark.slow
-def test_scaling_law_reproduces_the_iterate_table(p3_partitioned_c):
+def test_scaling_law_reproduces_the_iterate_table(p3_partitioned):
     """Where the table has the image, ``advance_key``/``per_step_beta`` find it too.
 
     The scaled answer is recomputed here from the fixed point alone — the branch
     from :meth:`FixedPoint.advance_key`, the distance from
-    ``cdist * per_step_beta(stability) ** n`` — so this checks the law and
-    :meth:`Trellis._scaled_image_cdist` together against the recorded iterate.
+    ``cdist * per_step_beta(stability) ** n`` — so this checks the law against
+    the recorded iterate.
     The branch key must agree exactly; the distance agrees to
     :data:`SCALING_RTOL`, the polyline accuracy of a canonical distance.
     """
-    session, _fp3, _fp1 = p3_partitioned_c
+    session, _fp3, _fp1 = p3_partitioned
     trellis = session.trellis()
 
     checked = 0
@@ -133,10 +116,6 @@ def test_scaling_law_reproduces_the_iterate_table(p3_partitioned_c):
                         f"crossing {iid} after {n} steps: the scaling law puts it "
                         f"on {scaled_key[1:]}, the table on {table_key[1:]}"
                     )
-                    assert trellis._scaled_image_cdist(iid, n, stability) == (
-                        scaled_key,
-                        scaled_cdist,
-                    )
                     # An anchor sits at cdist 0 on both sides and stays there,
                     # so the denominator is floored at the registry tolerance.
                     error = abs(scaled_cdist - table_cdist) / max(
@@ -154,9 +133,9 @@ def test_scaling_law_reproduces_the_iterate_table(p3_partitioned_c):
 
 
 @pytest.mark.slow
-def test_from_table_reports_which_branch_answered(p3_partitioned_c):
+def test_from_table_reports_which_branch_answered(p3_partitioned):
     """``from_table`` is True exactly when the iterate table holds the entry."""
-    session, _fp3, _fp1 = p3_partitioned_c
+    session, _fp3, _fp1 = p3_partitioned
     trellis = session.trellis()
 
     tabled = derived = 0
@@ -183,9 +162,9 @@ def test_from_table_reports_which_branch_answered(p3_partitioned_c):
 
 
 @pytest.mark.slow
-def test_image_cdist_at_zero_steps_is_the_identity(p3_partitioned_c):
+def test_image_cdist_at_zero_steps_is_the_identity(p3_partitioned):
     """``n = 0`` answers with the crossing's own key and distance, from the table."""
-    session, _fp3, _fp1 = p3_partitioned_c
+    session, _fp3, _fp1 = p3_partitioned
     trellis = session.trellis()
 
     checked = 0
@@ -239,7 +218,7 @@ def test_image_cdist_rejects_an_unknown_stability():
 # C.2 -- the image_of_element fallback
 # --------------------------------------------------------------------------- #
 @pytest.mark.slow
-def test_element_images_agree_whether_or_not_the_table_is_used(p3_partitioned_c):
+def test_element_images_agree_whether_or_not_the_table_is_used(p3_partitioned):
     """The scaling fallback names the same elements the iterate table does.
 
     This is what licenses C.2: on every element whose two endpoint iterates ARE
@@ -248,11 +227,9 @@ def test_element_images_agree_whether_or_not_the_table_is_used(p3_partitioned_c)
     the partition boundary it lands within :data:`SNAP_RTOL` of.
 
     Read it as a test of the scaling LAW, not of the fallback in production: the
-    elements swept here are exactly the ones the table already answers, and the
-    snap that makes them agree does not fire on the default path at all (see
-    ``test_the_snap_does_not_fire_on_the_default_path``).
+    elements swept here are exactly the ones the table already answers.
     """
-    session, fp3, fp1 = p3_partitioned_c
+    session, fp3, fp1 = p3_partitioned
 
     checked = 0
     for fixed_point in (fp3, fp1):
@@ -276,14 +253,14 @@ def test_element_images_agree_whether_or_not_the_table_is_used(p3_partitioned_c)
 
 
 @pytest.mark.slow
-def test_image_of_element_accepts_partitions_from_another_trellis(p3_partitioned_c):
+def test_image_of_element_accepts_partitions_from_another_trellis(p3_partitioned):
     """The all-fixed-points trellis can map elements it holds no partition for.
 
     It carries every branch and every crossing but no partitions of its own, so
     the caller (the dual graph) hands it the per-fixed-point results it was built
     from. The answer must be the one that trellis gives itself.
     """
-    session, fp3, fp1 = p3_partitioned_c
+    session, fp3, fp1 = p3_partitioned
     combined = session.trellis()
 
     checked = 0
@@ -304,13 +281,13 @@ def test_image_of_element_accepts_partitions_from_another_trellis(p3_partitioned
 
 
 @pytest.mark.slow
-def test_image_of_element_covers_both_endpoint_images(p3_partitioned_c):
+def test_image_of_element_covers_both_endpoint_images(p3_partitioned):
     """The covering elements span both endpoint images, table or fallback.
 
     The same invariant ``test_image_of_element_lands_on_the_advanced_branch``
     pins for tabled elements, extended to the ones the fallback now answers for.
     """
-    session, fp3, _fp1 = p3_partitioned_c
+    session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)
     tol = trellis.registry.cdist_tol
 
@@ -337,14 +314,14 @@ def test_image_of_element_covers_both_endpoint_images(p3_partitioned_c):
 
 
 @pytest.mark.slow
-def test_element_image_endpoints_scale_by_the_stable_factor(p3_partitioned_c):
+def test_element_image_endpoints_scale_by_the_stable_factor(p3_partitioned):
     """The image arc of an element is its own arc contracted by ``per_step_beta``.
 
     A direct check that the stable factor — not the unstable one
     :meth:`Trellis.scale_cdist` would use for both — is what moves an element's
     endpoints one step forward.
     """
-    session, fp3, _fp1 = p3_partitioned_c
+    session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)
     beta = fp3.per_step_beta("stable")
     assert beta < 1.0
@@ -359,50 +336,6 @@ def test_element_image_endpoints_scale_by_the_stable_factor(p3_partitioned_c):
             assert image == pytest.approx(cdist * beta, rel=SCALING_RTOL)
             checked += 1
     assert checked
-
-
-@pytest.mark.slow
-def test_the_snap_does_not_fire_on_the_default_path(p3_partitioned_c):
-    """No endpoint the table cannot answer lands within SNAP_RTOL of a boundary.
-
-    The snap exists so that FORCED scaling (``use_table=False``) reproduces the
-    table; on these fixtures it is never reached by the production path, so the
-    genuine fallback returns the raw scaled span. Pinning that keeps the two
-    claims apart: if a future fixture does start snapping real fallbacks, this
-    test fails and the reasoning above has to be revisited rather than quietly
-    inherited.
-    """
-    session, fp3, fp1 = p3_partitioned_c
-
-    untabled = 0
-    for fixed_point in (fp3, fp1):
-        trellis = session.trellis(fixed_point)
-        for result, interval in _bounded_elements(trellis):
-            image_key = fixed_point.advance_key(result.branch_key, 1)
-            image_result = next(
-                (
-                    r
-                    for r in trellis.stable_partitions
-                    if r.branch_key == image_key and r.side == result.side
-                ),
-                None,
-            )
-            if image_result is None:
-                continue
-            for end_id in (interval.lo_id, interval.hi_id):
-                if trellis.iterate(end_id, 1) is not None:
-                    continue
-                _key, cdist, from_table = trellis.image_cdist(end_id, 1, "stable")
-                assert not from_table
-                snapped = _snap_to_partition_boundary(
-                    cdist, image_result, trellis.registry.cdist_tol
-                )
-                assert snapped == cdist, (
-                    f"crossing {end_id} has no registered iterate yet its scaled "
-                    f"image {cdist!r} snapped to {snapped!r}"
-                )
-                untabled += 1
-    assert untabled, "the p3 partitions must have endpoints the table cannot map"
 
 
 def test_the_snap_window_is_tighter_than_the_agreement_bound():

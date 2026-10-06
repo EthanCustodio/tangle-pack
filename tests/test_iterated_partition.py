@@ -17,7 +17,6 @@ import importlib
 import logging
 
 from helpers.logs import assert_logged
-from minimal_helpers import build_pieces
 from tanglepack.topology.PartitionFamily import IteratedHomotopyPartition
 
 #: The module (the package attribute of the same name is the class).
@@ -25,11 +24,11 @@ family_module = importlib.import_module("tanglepack.topology.PartitionFamily")
 
 
 def test_no_image_bridges_reproduces_the_homotopy_family(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    bare = dataclasses.replace(pieces.minimal, image_bridge_ids=[], image_chains={})
-    iterated = IteratedHomotopyPartition.from_minimal(bare, pieces.homotopy)
-    assert iterated.signature() == pieces.homotopy.signature()
+    session, _fp = k10_partitioned
+    homotopy = session.homotopy_partition()
+    bare = dataclasses.replace(session.minimal_trellis(), image_bridge_ids=[], image_chains={})
+    iterated = IteratedHomotopyPartition.from_minimal(bare, homotopy)
+    assert iterated.signature() == homotopy.signature()
     assert not iterated.cuts
     for result in iterated:
         for iv in result.intervals:
@@ -39,9 +38,10 @@ def test_no_image_bridges_reproduces_the_homotopy_family(k10_partitioned):
 def test_a_row_invariant_violation_is_warned_and_skipped(
     k10_partitioned, monkeypatch, caplog
 ):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    victim = pieces.minimal.image_bridge_ids[0]
+    session, _fp = k10_partitioned
+    minimal, homotopy = session.minimal_trellis(), session.homotopy_partition()
+    unpatched = session.iterated_partition()
+    victim = minimal.image_bridge_ids[0]
     original = family_module.row_of_end
 
     def twisted(trellis, bridge_id, endpoint):
@@ -52,27 +52,29 @@ def test_a_row_invariant_violation_is_warned_and_skipped(
 
     monkeypatch.setattr(family_module, "row_of_end", twisted)
     with caplog.at_level(logging.WARNING, logger="tanglepack.topology.PartitionFamily"):
-        iterated = IteratedHomotopyPartition.from_minimal(pieces.minimal, pieces.homotopy)
+        iterated = IteratedHomotopyPartition.from_minimal(minimal, homotopy)
     skipped = [cut for cut in iterated.cuts if cut.bridge_id == victim]
     assert skipped and all(cut.reason == "row invariant" for cut in skipped)
     assert_logged(caplog, logging.WARNING, "tanglepack.topology.PartitionFamily")
     assert sum(len(r.intervals) for r in iterated) < sum(
-        len(r.intervals) for r in pieces.iterated
+        len(r.intervals) for r in unpatched
     )
 
 
 def test_cuts_record_the_far_end_of_the_empty_stretch(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
+    session, _fp = k10_partitioned
+    iterated = session.iterated_partition()
     # The empty-stretch kernel (an allowed private kernel) names, per crossing,
     # the far ends of the stretches it abuts; a cut's partner is one of them.
-    empty = IteratedHomotopyPartition._empty_stretches(pieces.minimal, pieces.homotopy)
-    applied = [cut for cut in pieces.iterated.cuts if cut.opened is not None]
+    empty = IteratedHomotopyPartition._empty_stretches(
+        session.minimal_trellis(), session.homotopy_partition()
+    )
+    applied = [cut for cut in iterated.cuts if cut.opened is not None]
     assert applied
     for cut in applied:
         assert cut.partner in {other for other, _kind in empty[cut.intersection_id]}
         assert repr(cut)
-    for cut in pieces.iterated.cuts:
+    for cut in iterated.cuts:
         if cut.opened is None:
             assert cut.reason in {
                 "existing boundary", "row invariant", "no partition",
@@ -81,8 +83,9 @@ def test_cuts_record_the_far_end_of_the_empty_stretch(k10_partitioned):
 
 
 def test_a_crossing_abutting_no_empty_stretch_is_not_cut(k10_partitioned, monkeypatch, caplog):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
+    session, _fp = k10_partitioned
+    minimal, homotopy = session.minimal_trellis(), session.homotopy_partition()
+    unpatched = session.iterated_partition()
     original = family_module.IteratedHomotopyPartition._empty_stretches
 
     def without_bases(minimal, homotopy):
@@ -96,17 +99,17 @@ def test_a_crossing_abutting_no_empty_stretch_is_not_cut(k10_partitioned, monkey
         family_module.IteratedHomotopyPartition, "_empty_stretches", staticmethod(without_bases)
     )
     with caplog.at_level(logging.WARNING, logger="tanglepack.topology.PartitionFamily"):
-        iterated = IteratedHomotopyPartition.from_minimal(pieces.minimal, pieces.homotopy)
+        iterated = IteratedHomotopyPartition.from_minimal(minimal, homotopy)
     skipped = [cut for cut in iterated.cuts if cut.reason == "no empty stretch"]
     assert skipped, "the base ends of the mapped hole's lobe abut nothing else"
     assert_logged(caplog, logging.WARNING, "tanglepack.topology.PartitionFamily")
     assert sum(len(r.intervals) for r in iterated) < sum(
-        len(r.intervals) for r in pieces.iterated
+        len(r.intervals) for r in unpatched
     )
 
 
 def test_describe_mentions_parents_and_cuts(k10_partitioned):
-    session, fp = k10_partitioned
-    pieces = build_pieces(session, [fp])
-    assert pieces.iterated.describe()
-    assert repr(pieces.iterated.cuts[0])
+    session, _fp = k10_partitioned
+    iterated = session.iterated_partition()
+    assert iterated.describe()
+    assert repr(iterated.cuts[0])

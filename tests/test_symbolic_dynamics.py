@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from helpers.logs import assert_logged
+from helpers.fakes import bare_fixed_point
 from tanglepack.topology.BridgeClass import (
     BridgeClass,
     BridgeClassEntry,
@@ -35,13 +36,6 @@ symbolic_dynamics = SD.symbolic_dynamics
 # --------------------------------------------------------------------------- #
 # Synthetic scaffolding: the k=10 element layout, by hand
 # --------------------------------------------------------------------------- #
-class _FakeFixedPoint:
-    period = 1
-
-    def __repr__(self) -> str:
-        return "<fp>"
-
-
 class _FakeName:
     def __init__(self, text: str) -> None:
         self.text = text
@@ -71,7 +65,7 @@ class _Layout:
     """The k=10 layout: homotopy L_1..L_3 / R_1..R_3, iterated as in the plan."""
 
     def __init__(self) -> None:
-        self.fp = _FakeFixedPoint()
+        self.fp = bare_fixed_point()
         self.key = (self.fp, "stable", 0, 0)
         self.fixed_points = [self.fp]
         # homotopy
@@ -163,10 +157,16 @@ def test_symbol_texts(layout):
     assert inert.text == "u^-1" and str(inert) == "u^-1"
 
 
-def test_inert_letter_series():
-    series = [SD._inert_letter(i) for i in range(9)]
-    assert series == ["u", "v", "w", "x", "y", "z", "uu", "uv", "uw"]
-    assert SD._active_letter(0) == "a" and SD._active_letter(26) == "aa"
+def test_inert_letter_series(layout):
+    """Inert classes are lettered ``u, v, w, x, y, z, uu, ...`` in table order."""
+    key = layout.key
+    inert = [
+        BridgeClass(ElementRef(key, "left", 0), ElementRef(key, "left", i))
+        for i in range(1, 10)
+    ]
+    table = BridgeClassTable([BridgeClassEntry(cls, inert=True) for cls in inert])
+    letters = inert_letters(table)
+    assert [letters[cls] for cls in inert] == ["u", "v", "w", "x", "y", "z", "uu", "uv", "uw"]
 
 
 def test_inert_letters_skip_active_letters(layout):
@@ -381,3 +381,45 @@ def test_unreadable_image_chain_is_skipped_as_evidence(layout, monkeypatch, capl
     assert [e.bridge_id for e in evidence] == [(0, 5)]
     assert evidence[0].itinerary == good
     assert_logged(caplog, logging.WARNING, SD.__name__)
+
+
+# --------------------------------------------------------------------------- #
+# Real data: fallback letters and an unresolved class
+# --------------------------------------------------------------------------- #
+def test_unlettered_active_classes_get_fallback_letters(k10_partitioned):
+    """A table built outside the session carries no letters: its active classes
+    are lettered ``a, b, ...`` in table order, its inert ones ``u, v, ...``."""
+    from tanglepack.loom.BridgeAlphabet import letter
+    from tanglepack.topology.BridgeClass import bridge_classes
+
+    session, _fp = k10_partitioned
+    table = bridge_classes(session.trellis(), session.homotopy_partition().as_list())
+    assert table.active and all(entry.letter is None for entry in table)
+
+    dyn = symbolic_dynamics(session.dual_graph(), table)
+
+    active = [dyn.classes[entry.bridge_class].letter for entry in table.active]
+    assert active == [letter(i) for i in range(len(active))]
+    inert = [dyn.classes[entry.bridge_class].letter for entry in table.inert]
+    assert set(inert) == set(dyn.inert_letters.values())
+
+
+def test_unresolved_class_carries_a_reason_and_warns(caplog):
+    """The unblasted nested tangle is not grown far enough for every class: a
+    class whose landing is a singleton and none of whose members has a
+    registered image chain stays unresolved, says why, and warns; every other
+    class still reads an even itinerary."""
+    from cases import build_nested
+
+    case = build_nested(outer_blasts=0, p1_area_cutoff=1e-4)
+    with caplog.at_level(logging.WARNING, logger=SD.__name__):
+        dyn = case.session.symbolic_dynamics()
+
+    unresolved = [cd for cd in dyn.classes.values() if cd.itinerary is None]
+    assert unresolved, "the unblasted nested tangle has an unresolved class"
+    assert all(cd.unresolved_reason for cd in unresolved)
+    assert any(landing.singleton for cd in unresolved for landing in cd.landings if landing)
+    assert_logged(caplog, logging.WARNING, SD.__name__)
+    for cd in dyn.classes.values():
+        if cd.itinerary is not None:
+            assert len(cd.itinerary) % 2 == 0

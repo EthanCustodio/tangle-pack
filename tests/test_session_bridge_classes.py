@@ -17,11 +17,10 @@ import logging
 import matplotlib
 
 matplotlib.use("Agg")  # headless: the session fixtures touch the plotting stack
-import numpy as np
 import pytest
 
+from cases import build_k10
 from helpers.logs import assert_logged
-from tanglepack import TangleSession
 from tanglepack.loom.BridgeAlphabet import BridgeAlphabet, letter
 
 
@@ -53,9 +52,7 @@ def test_describe_reports_letters_and_inertness(k10_partitioned):
 
 
 @pytest.mark.slow
-def test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip(
-    henon_map, henon_map_inverse
-):
+def test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip():
     """Trimming at f(q0) makes the zone-side lobes interior and the exterior
     lobes exterior; the classes record that.
 
@@ -64,19 +61,8 @@ def test_active_class_lies_in_the_zone_after_trimming_at_the_image_pip(
     crossings and the partition collapses to singletons, so the two-class
     picture does not exist there.
     """
-    session = TangleSession(henon_map, henon_map_inverse)
-    fp = session.construct_fixed_point([4, -4])
-    session.orient_eigenvectors(
-        fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
-    )
-    session.initialize_both_manifolds(fp)
-    session.grow_n_times(fp, "unstable", num_iterations=10)
-    session.grow_until_turnaround(fp, "stable")
-    session.compute_intersections([fp])
-    session.trim_stable_manifolds(fp)
-    session.create_bridges(fp)
-    session.infer_iterate_table()
-    session.classify_strong_pips()
+    case = build_k10(unstable_steps=10, through="pips")
+    session, fp = case.session, case.fixed_point
     trellis = session.trellis(fp)
     pip = trellis.iterate(trellis.strong_pip, 1)
     assert pip is not None and pip in trellis.strong_pip_candidates

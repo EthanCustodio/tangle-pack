@@ -35,6 +35,7 @@ matplotlib.use("Agg")  # headless: the session fixtures touch the plotting stack
 import pytest
 
 from helpers.logs import assert_logged
+from helpers.fakes import bare_fixed_point
 from tanglepack.topology.BridgeClass import (
     BridgeClass,
     bridge_classes,
@@ -55,11 +56,13 @@ def _classable_bridges(trellis):
 
 
 def _all_partitions(session, fixed_points):
-    """The stable partitions of every per-fixed-point trellis, concatenated."""
-    partitions = []
-    for fixed_point in fixed_points:
-        partitions.extend(session.trellis(fixed_point).stable_partitions)
-    return partitions
+    """The stable partitions of the selected fixed points, gathered by the session."""
+    selected = {id(fixed_point) for fixed_point in fixed_points}
+    return [
+        result
+        for result in session.homotopy_partition(list(fixed_points)).as_list()
+        if id(result.branch_key[0]) in selected
+    ]
 
 
 def _anchor_bridge_id(trellis):
@@ -73,14 +76,8 @@ def _anchor_bridge_id(trellis):
 # --------------------------------------------------------------------------- #
 # A.1 -- ElementRef
 # --------------------------------------------------------------------------- #
-class _FakeFixedPoint:
-    """The only thing an ElementRef asks of a fixed point is its period."""
-
-    period = 3
-
-
 def test_element_ref_hashes_compares_and_labels():
-    fp = _FakeFixedPoint()
+    fp = bare_fixed_point(3)
     key = (fp, "stable", 1, 0)
     a = ElementRef(key, "left", 2)
     b = ElementRef(key, "left", 2)
@@ -320,7 +317,7 @@ from tanglepack.topology.BridgeClass import (  # noqa: E402  (section import)
 )
 
 
-_INERT_FP = _FakeFixedPoint()  # one fixed point, so refs compare by identity
+_INERT_FP = bare_fixed_point(3)  # one fixed point, so refs compare by identity
 
 
 def _ref(element_id: int, side: str = "left") -> ElementRef:
