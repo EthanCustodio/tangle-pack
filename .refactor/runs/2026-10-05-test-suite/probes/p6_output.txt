@@ -1,0 +1,13 @@
+
+== variant A: 795 passed, 1 skipped in 44.82s (wall 46s)
+
+== variant B4: 1 failed, 794 passed, 1 skipped in 45.54s (wall 47s)
+   tests/test_partition_elements.py::test_image_of_element_requires_the_image_branchs_partition
+
+== variant B7: 4 failed, 791 passed, 1 skipped in 71.17s (0:01:11) (wall 72s)
+   tests/numerics/test_single_source_of_truth.py::test_bridge_cutting_pin_period_3
+   tests/test_dual_graph.py::test_k10_a_different_pip_moves_the_unified_set
+   tests/test_partition_elements.py::test_image_of_element_requires_the_image_branchs_partition
+   tests/test_resonance_zone_region.py::test_p3_zone_areas_and_containment_are_unchanged
+
+== variant C: 795 passed, 1 skipped in 46.72s (wall 48s)

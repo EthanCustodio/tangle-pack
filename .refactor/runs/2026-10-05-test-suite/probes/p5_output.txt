@@ -1,0 +1,138 @@
+
+## visualizations/: 2 hit(s)
+    numerics-test-suite.md:91: in the period-3 blast. Visualizations live in
+    numerics-test-suite.md:92: `tests/visualizations/viz_nested_bridges.py` and `viz_unstable_artifacts.py` (not
+
+## test_workbench_split.py: 1 hit(s)
+    regions-refactor-2026-09.md:38: - Phase 8: `_collect` walker, `tanglepack.examples.henon`, TangleWorkbench split (BridgeIterator, IterateInference,
+
+## test_manifold_machine.py: 0 hit(s)
+
+## test_deleted_genealogy_attributes_are_gone: 0 hit(s)
+
+## test_grown_until_intersection_is_gone: 0 hit(s)
+
+## test_advance_key_returns_the_next_orbit_point: 5 hit(s)
+    codebase-audit-2026-09.md:13: **Other confirmed bugs:** `ManifoldInitializer` calls nonexistent `fixed_point.has_inversion()` (should be `check_inversion`) so num_branches=2 crashes; `Intersection.fix
+    numerics-test-suite.md:60: (`_advance_key_forward`), not the same manifold — required for period-3 (image lives
+    regions-refactor-2026-09.md:22: - `FixedPoint.advance_key(key, n)` is the ONE (orbit, branch) rule; `per_step_beta` = |λ|^(1/period) of the
+    topology-layer.md:72: (_advance_key_forward: oi->(oi+1)%period, bi flips on wrap if inversion), unstable
+    topology-layer.md:76: iterated.manifold_key = _advance_key_forward(bridge.manifold_key) (the image is one
+
+## test_per_step_beta_matches_the_expression_it_replaces: 2 hit(s)
+    regions-refactor-2026-09.md:22: - `FixedPoint.advance_key(key, n)` is the ONE (orbit, branch) rule; `per_step_beta` = |λ|^(1/period) of the
+    regions-refactor-2026-09.md:23: full-cycle eigenvalue (a branch return is k_value steps = λ^num_branches — the k_value root was a real bug);
+
+## test_k10_intersection_graph_is_unchanged: 0 hit(s)
+
+## test_branch_cycle_reproduces_the_topology_branch_orders: 2 hit(s)
+    pseudoneighbor-partition.md:13: forward_unstable_branch_cycle) and `topology/StablePartition.py` (punch_holes,
+    regions-refactor-2026-09.md:24: `branch_cycle` forward-map order for both stabilities; `num_branches` derived; `set_k_value` raises on mixed signs.
+
+## test_bridge_cutting_pin_k10/_period_3: 0 hit(s)
+
+## test_tangle_keeps_only_index_state: 1 hit(s)
+    regions-refactor-2026-09.md:17: - Crossings live ONLY in `IntersectionRegistry`; `Tangle` keeps index state; `Intersection` carries `unstable_manifold`
+
+## test_string_dispatched_iter_method_is_gone: 0 hit(s)
+
+## test_stability_alias_is_defined_once_in_numerics: 0 hit(s)
+
+## test_no_test_or_script_defines_its_own_henon: 0 hit(s)
+
+## test_small_tangle_crossing_count_is_unchanged: 0 hit(s)
+
+## test_fixed_point_takes_no_branch_count: 3 hit(s)
+    codebase-audit-2026-09.md:13: **Other confirmed bugs:** `ManifoldInitializer` calls nonexistent `fixed_point.has_inversion()` (should be `check_inversion`) so num_branches=2 crashes; `Intersection.fix
+    regions-refactor-2026-09.md:23: full-cycle eigenvalue (a branch return is k_value steps = λ^num_branches — the k_value root was a real bug);
+    regions-refactor-2026-09.md:24: `branch_cycle` forward-map order for both stabilities; `num_branches` derived; `set_k_value` raises on mixed signs.
+
+## test_get_lambda_u_* / test_on_interval_*: 2 hit(s)
+    pseudoneighbor-collision-fragility.md:38: Inversion `lambda_u`-vs-`beta` items in the Pseudoneighbor Dev Notes: untouched
+    topology-layer.md:73: cdist *= beta, stable cdist /= beta, beta=lambda_u**(1/k_value). Bridges now carry
+
+## test_curvature_area_batch_matches_scalar: 2 hit(s)
+    numerics-test-suite.md:22: - **Near-vertical / wavy lobes**: `ManifoldMachine._curvature_area` rotates local
+    cdist-strict-monotonicity-fix.md:41: `map_fwd_batch`, closed-form `_curvature_area_batch`, breadth-first `_refine_layer`,
+
+## test_invalidate_trellises_is_a_deprecated_no_op: 1 hit(s)
+    regions-refactor-2026-09.md:29: `invalidate_trellises()` deprecated no-op. Bridge point arrays memoised read-only. Registry sorted arrays + bisect.
+
+## test_boundary_arc_dataclass_is_gone / test_shapely_is_not_a_dependency: 0 hit(s)
+
+## test_k10/p3_zone_area(s)_and_containment_are_unchanged: 0 hit(s)
+
+## test_initialization_unstable/stable: 0 hit(s)
+
+## test_cdists_are_positive_and_increasing: 0 hit(s)
+
+## test_image_chain_is_the_bridge_class_function: 0 hit(s)
+
+## test_kinds_are_distinct: 0 hit(s)
+
+## test_names_are_deterministic_across_builds: 1 hit(s)
+    regions-refactor-2026-09.md:48: dual-graph decision; (3) p3 registry ids are non-deterministic across two builds in one process (no test pins ids).
+
+## plotting layout tests (4): 0 hit(s)
+
+## test_henon_partition_still_built_after_wiring: 0 hit(s)
+
+## test_image_cdist (3: additive / scaled-element / every-bounded): 1 hit(s)
+    cdist-strict-monotonicity-fix.md:21: It grows ~exponentially with iteration (`image_cdist = stretch_param * parent_cdist`,
+
+## test_image_of_element_lands_on_the_advanced_branch: 1 hit(s)
+    regions-refactor-2026-09.md:31: `Trellis.element_for` falls back to the endpoint id (that is how heteroclinic bridges resolve), `image_of_element`.
+
+## test_session_result_matches_gathered_partitions_helper / test_p3_no_class_mixes_fixed_points: 0 hit(s)
+
+## test_describe_reports_the_image_evidence: 2 hit(s)
+    pseudoneighbor-partition.md:269: flags backed by describe_pseudoneighbors/describe_holes/
+    pseudoneighbor-partition.md:270: describe_stable_partitions string builders.
+
+## test_henon_reference_holes_hug_the_stable_manifold / _stable_arc_midpoint x2: 10 hit(s)
+    pseudoneighbor-partition.md:21: manifold (pair chord midpoint); iterated/propagated holes plot between the
+    pseudoneighbor-partition.md:25: sub-arcs). Nudge into the region by epsilon·chord-length. Each reference
+    pseudoneighbor-partition.md:56: - Left/right side = sign of cross(stable chord toward anchor, displacement into
+    pseudoneighbor-partition.md:84: luck — the sub-arcs hug the zone's own boundary bridge). The fixed point and
+    pseudoneighbor-partition.md:215: measures (bridge node-count midpoint, max chord offset) get fooled by long
+    pseudoneighbor-partition.md:221: _stable_arc_midpoint (returns midpoint AND local tangent).
+    pseudoneighbor-partition.md:229: ref; from_workbench passes it) — because a narrow curved lobe's chord
+    pseudoneighbor-partition.md:231: ε·min(pair chord, arc-to-arc distance) (chord cap for huge lobes whose
+
+## test_forward_pairs_beyond_the_fundamental_segment_get_no_hole[1..k-1]: 11 hit(s)
+    codebase-audit-2026-09.md:15: **Inversion path (k_value=2*period) is unvalidated everywhere and broken in at least 3 places.** No inversion test fixture exists; building one closes caveats in StablePa
+    pseudoneighbor-partition.md:243: the +1..+(k-1) forward iterates via extend_pseudoneighbor_trajectories, which
+    pseudoneighbor-partition.md:272: Key design facts: p = branch return_period (k_value); the all-iterates unstable
+    regions-refactor-2026-09.md:23: full-cycle eigenvalue (a branch return is k_value steps = λ^num_branches — the k_value root was a real bug);
+    regions-refactor-2026-09.md:24: `branch_cycle` forward-map order for both stabilities; `num_branches` derived; `set_k_value` raises on mixed signs.
+    regions-refactor-2026-09.md:27: manifold, which one k_value cannot represent. Odd-period orbits of det<0 maps are rejected outright.
+    topology-layer.md:27: forward branch cycle, scaling stable cdist by λ_u^(i_r/k_value) and unstable cdist
+    topology-layer.md:28: by λ_u^(-i_r/k_value) (BOTH map-free — the PDF's c^S formula is just an example of
+
+## summary/repr/describe string pins (3): 0 hit(s)
+
+## P7: test_trim_stable_manifolds_cuts_just_past_the_outermost_crossing: 1 hit(s)
+    pseudoneighbor-partition.md:74: stable manifold at the pip via loom.trim_stable_at_intersection (tail-pointer
+
+## P7: test_forward_unstable_branch_cycle_matches_orbit_order: 1 hit(s)
+    pseudoneighbor-partition.md:13: forward_unstable_branch_cycle) and `topology/StablePartition.py` (punch_holes,
+
+## P7: mixed-sign rejection x2: 2 hit(s)
+    codebase-audit-2026-09.md:13: **Other confirmed bugs:** `ManifoldInitializer` calls nonexistent `fixed_point.has_inversion()` (should be `check_inversion`) so num_branches=2 crashes; `Intersection.fix
+    regions-refactor-2026-09.md:24: `branch_cycle` forward-map order for both stabilities; `num_branches` derived; `set_k_value` raises on mixed signs.
+
+## P7: test_faces_closed_raises_at_the_cap_for_the_anchor: 1 hit(s)
+    regions-refactor-2026-09.md:36: - `grow_until(predicate)`, `grow_until_iterates_closed` (ids scoped to the fixed point), `grow_until_faces_closed`
+
+## P7: test_refined_cdist_is_mean_of_neighbours: 0 hit(s)
+
+## P7: _region_key test: 1 hit(s)
+    pseudoneighbor-partition.md:108: - SINGLETON BRIDGE (PDF note "singleton bridges with a hole on either
+
+## P7: test_sparse_kept_endpoints_are_degree_three_without_unstable_stubs: 2 hit(s)
+    regions-refactor-2026-09.md:32: - `numerics/geometry.py`; `topology/Arrangement.py` (half-edges, rotation from crossing_sign, virtual tails,
+    regions-refactor-2026-09.md:46: **Least confident:** (1) the inversion arrangement has four coincident anchor nodes instead of one degree-4 node
+
+## P7: test_the_snap_does_not_fire_on_the_default_path: 2 hit(s)
+    numerics-test-suite.md:77: WHOLE accumulated manifold (a per-generation KDTree snapshot of all existing bridge
+    topology-layer.md:22: It is intentionally a snapshot — rebuild after growing manifolds / recomputing

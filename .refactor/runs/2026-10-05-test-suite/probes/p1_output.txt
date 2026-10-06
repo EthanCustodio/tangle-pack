@@ -1,0 +1,73 @@
+
+===== p3 (build_period3 defaults): 12 holes, orientation_preserving=True
+origin=(17, 18) it=+2 direct=True side=left bounds near=3(s=0.165,label=None,b=(0, 0)) far=7(s=0.32,b=(0, 0)) bridge_u=(2, 0)
+     openings=[(3, 'outward', 'right'), (7, 'anchorward', 'right')]
+     row@bound geo={3: 'right', 7: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 1.44e-03, branch (0, 0))
+origin=(17, 18) it=+1 direct=True side=left bounds near=8(s=0.256,label=None,b=(2, 0)) far=15(s=0.497,b=(2, 0)) bridge_u=(1, 0)
+     openings=[(8, 'outward', 'right'), (15, 'anchorward', 'right')]
+     row@bound geo={8: 'right', 15: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 9.15e-04, branch (2, 0))
+origin=(17, 18) it=+0 direct=True side=left bounds near=17(s=0.397,label=None,b=(1, 0)) far=18(s=0.77,b=(1, 0)) bridge_u=(0, 0)
+     openings=[(17, 'outward', 'right'), (18, 'anchorward', 'right')]
+     row@bound geo={17: 'right', 18: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 3.38e-05, branch (1, 0))
+origin=(17, 18) it=-1 direct=False side=left bounds near=2(s=0,label=anchor,b=(2, 0)) far=28(s=0.615,b=(0, 0)) bridge_u=(2, 0)
+     openings=[(28, 'outward', 'right')]
+     row@bound geo={2: 'right', 28: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 8.04e-02, branch (0, 0))
+     missing=[(2, 'anchor(no node below)')]
+origin=(17, 18) it=-2 direct=False side=left bounds near=1(s=0,label=anchor,b=(1, 0)) far=23(s=0.955,b=(2, 0)) bridge_u=(1, 0)
+     openings=[(23, 'outward', 'right')]
+     row@bound geo={1: 'right', 23: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 7.14e-02, branch (2, 0))
+     missing=[(1, 'anchor(no node below)')]
+origin=(17, 18) it=-3 direct=False side=left bounds near=0(s=0,label=anchor,b=(0, 0)) far=29(s=1.48,b=(1, 0)) bridge_u=(0, 0)
+     openings=[(29, 'outward', 'right')]
+     row@bound geo={0: 'right', 29: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=left (dist 8.92e-02, branch (1, 0))
+     missing=[(0, 'anchor(no node below)')]
+origin=(18, 29) it=+2 direct=True side=right bounds near=7(s=0.32,label=None,b=(0, 0)) far=28(s=0.615,b=(0, 0)) bridge_u=(2, 0)
+     openings=[(7, 'outward', 'left'), (28, 'anchorward', 'left')]
+     row@bound geo={7: 'left', 28: 'left'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=left (dist 1.06e-03, branch (0, 0))
+origin=(18, 29) it=+1 direct=True side=right bounds near=15(s=0.497,label=None,b=(2, 0)) far=23(s=0.955,b=(2, 0)) bridge_u=(1, 0)
+     openings=[(15, 'outward', 'left'), (23, 'anchorward', 'left')]
+     row@bound geo={15: 'left', 23: 'left'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=left (dist 8.52e-04, branch (2, 0))
+origin=(18, 29) it=+0 direct=True side=right bounds near=18(s=0.77,label=None,b=(1, 0)) far=29(s=1.48,b=(1, 0)) bridge_u=(0, 0)
+     openings=[(18, 'outward', 'left'), (29, 'anchorward', 'left')]
+     row@bound geo={18: 'left', 29: 'left'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=left (dist 3.31e-05, branch (1, 0))
+origin=(18, 29) it=-1 direct=False side=right bounds near=2(s=0,label=anchor,b=(2, 0)) far=28(s=0.615,b=(0, 0)) bridge_u=(2, 0)
+     openings=[(2, 'outward', 'right'), (28, 'anchorward', 'right')]
+     row@bound geo={2: 'right', 28: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 2.62e-01, branch (0, 0))
+origin=(18, 29) it=-2 direct=False side=right bounds near=1(s=0,label=anchor,b=(1, 0)) far=23(s=0.955,b=(2, 0)) bridge_u=(1, 0)
+     openings=[(1, 'outward', 'right'), (23, 'anchorward', 'right')]
+     row@bound geo={1: 'right', 23: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 1.61e-01, branch (1, 0))
+origin=(18, 29) it=-3 direct=False side=right bounds near=0(s=0,label=anchor,b=(0, 0)) far=29(s=1.48,b=(1, 0)) bridge_u=(0, 0)
+     openings=[(0, 'outward', 'right'), (29, 'anchorward', 'right')]
+     row@bound geo={0: 'right', 29: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 1.77e-01, branch (0, 0))
+
+===== k28 two blasts: 4 holes, orientation_preserving=True
+origin=(9, 10) it=+0 direct=True side=left bounds near=9(s=6.52,label=None,b=(0, 0)) far=10(s=7.22,b=(0, 0)) bridge_u=(0, 0)
+     openings=[(9, 'outward', 'left'), (10, 'anchorward', 'left')]
+     row@bound geo={9: 'left', 10: 'left'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=left (dist 8.28e-04, branch (0, 0))
+origin=(9, 10) it=-1 direct=False side=left bounds near=7(s=0.225,label=None,b=(0, 0)) far=6(s=1.05,b=(0, 0)) bridge_u=(0, 0)
+     openings=[(7, 'outward', 'right'), (6, 'anchorward', 'right')]
+     row@bound geo={7: 'right', 6: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 5.10e+00, branch (0, 0))
+origin=(9, 10) it=-2 direct=False side=left bounds near=5(s=1.29,label=None,b=(0, 0)) far=3(s=5.99,b=(0, 0)) bridge_u=(0, 0)
+     openings=[(5, 'outward', 'right'), (3, 'anchorward', 'right')]
+     row@bound geo={5: 'right', 3: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 2.71e+00, branch (0, 0))
+origin=(9, 10) it=-3 direct=False side=left bounds near=0(s=0,label=anchor,b=(0, 0)) far=4(s=7.38,b=(0, 0)) bridge_u=(0, 0)
+     openings=[(4, 'outward', 'right')]
+     row@bound geo={0: 'right', 4: 'right'} comb=err TypeError("'Bridge' object is not subscriptable")  hole geometric stable-side=right (dist 1.38e+00, branch (0, 0))
+     missing=[(0, 'anchor(no node below)')]
+
+p3 row flips (origin, iterate, origin rows, image rows, image geometric side):
+    ((18, 29), -1, ['left'], ['right'], 'right')
+    ((18, 29), -2, ['left'], ['right'], 'right')
+    ((18, 29), -3, ['left'], ['right'], 'right')
+
+k28_two_blasts row flips (origin, iterate, origin rows, image rows, image geometric side):
+    ((9, 10), -1, ['left'], ['right'], 'right')
+    ((9, 10), -2, ['left'], ['right'], 'right')
+    ((9, 10), -3, ['left'], ['right'], 'right')
+
+linked-bound law (propagated hole at a registered iterate of its origin's bound keeps (which,row)):
+   k10: checked=0 violations=[] unlinked_bounds=4
+   k28_one_blast: checked=1 violations=[] unlinked_bounds=3
+   k28_two_blasts: checked=0 violations=[] unlinked_bounds=6
+   p3: checked=3 violations=[] unlinked_bounds=9
+   nested: checked=3 violations=[] unlinked_bounds=15

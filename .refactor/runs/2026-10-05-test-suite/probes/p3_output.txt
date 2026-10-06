@@ -1,0 +1,24 @@
+15_steps {'unstable_steps': 15}: build 0.1s, dyn 0.01s, holes=42, I1 holds
+   classes=23 (inert 1), virtual=['new1'], is_reliable=False
+   walk statuses: ['(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '
+   unresolved: [('A:p3@2.0/R#2 <-> A:p3@2.0/R#3', 'dual-graph walk unreachable')]
+16_steps {'unstable_steps': 16}: build 0.3s, dyn 0.02s, holes=46, I1 holds
+   classes=30 (inert 6), virtual=['new1'], is_reliable=False
+   walk statuses: ['(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '
+   unresolved: [('A:p3@2.0/R#2 <-> A:p3@2.0/R#3', 'dual-graph walk unreachable')]
+6_blasts {'blasts': 6}: build 0.1s, dyn 0.01s, holes=42, I1 holds
+   classes=23 (inert 1), virtual=['new1'], is_reliable=False
+   walk statuses: ['(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '
+   unresolved: [('A:p3@2.0/R#2 <-> A:p3@2.0/R#3', 'dual-graph walk unreachable')]
+default_13 {}: build 0.1s, dyn 0.00s, holes=12, I1 holds
+   classes=9 (inert 6), virtual=[], is_reliable=True
+   walk statuses: ['(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', 'trivial', 'trivial', 'trivial']
+   unresolved: []
+4_blasts {'blasts': 4}: build 0.1s, dyn 0.01s, holes=12, I1 holds
+   classes=9 (inert 6), virtual=[], is_reliable=True
+   walk statuses: ['(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', 'trivial', 'trivial', 'trivial']
+   unresolved: []
+5_blasts {'blasts': 5}: build 0.1s, dyn 0.01s, holes=12, I1 holds
+   classes=9 (inert 6), virtual=[], is_reliable=True
+   walk statuses: ['(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', '(source trellis)', 'trivial', 'trivial', 'trivial']
+   unresolved: []

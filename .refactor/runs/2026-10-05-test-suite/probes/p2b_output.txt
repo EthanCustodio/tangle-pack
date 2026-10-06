@@ -1,0 +1,2 @@
+unstable=6: 1.14s crossings=11 bridges=7 pn=0 holes=0 classes=4 virtual=['new1'] reliable=False anchors/branch={(0, 0): 2, (0, 1): 2}
+unstable=7: did not finish within 240 s (timeout rc=124)

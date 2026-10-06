@@ -1,0 +1,4 @@
+k=4, b=-1, guess=[2.0, 2.0], eigenvalues=[-0.2361, 4.2361] (det=-1.000): raises ValueError from set_k_value (FixedPoint.py:212)
+k=4, b=-1, guess=[-2.0, -2.0], eigenvalues=[-4.2361, 0.2361] (det=-1.000): raises ValueError from set_k_value (FixedPoint.py:212)
+k=10, b=-1, guess=[3.1623, 3.1623], eigenvalues=[-0.1543, 6.4789] (det=-1.000): raises ValueError from set_k_value (FixedPoint.py:212)
+k=10, b=-1, guess=[-3.1623, -3.1623], eigenvalues=[-6.4789, 0.1543] (det=-1.000): raises ValueError from set_k_value (FixedPoint.py:212)

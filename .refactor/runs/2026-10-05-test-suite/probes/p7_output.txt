@@ -1,0 +1,99 @@
+
+--- build 1: holes [(0, (9, 10)), (-1, (7, 6)), (-2, (5, 2)), (-3, (0, 1))]
+   L_1^1    L_(0.0;1)^1    [ )  lo=None hi=2  [0, 5.9935]
+   L_1^2    L_(0.0;1)^2    [ ]  lo=2 hi=9  [5.993, 6.5174]
+   L_2      L_(0.0;2)      ( )  lo=9 hi=10  [6.517, 7.2169]
+   L_3      L_(0.0;3)      [ ]  lo=10 hi=1  [7.217, 7.3812]
+   R_1^1    R_(0.0;1)^1    [ ]  lo=None hi=11  [0, 0.0393]
+   R_1^2    R_(0.0;1)^2    ( )  lo=11 hi=8  [0.03934, 0.1829]
+   R_1^3    R_(0.0;1)^3    [ ]  lo=8 hi=7  [0.1829, 0.2253]
+   R_2      R_(0.0;2)      ( )  lo=7 hi=6  [0.2253, 1.0471]
+   R_3      R_(0.0;3)      [ ]  lo=6 hi=5  [1.047, 1.2895]
+   R_4      R_(0.0;4)      ( )  lo=5 hi=2  [1.29, 5.9935]
+   R_5^1    R_(0.0;5)^1    [ ]  lo=2 hi=9  [5.993, 6.5174]
+   R_5^2    R_(0.0;5)^2    ( )  lo=9 hi=10  [6.517, 7.2169]
+   R_5^3    R_(0.0;5)^3    [ ]  lo=10 hi=1  [7.217, 7.3812]
+   OK  R_1^1 begins at the anchor (lo cdist 0, closed)
+   OK  R_1^1.hi == R_1^2.lo
+   OK  R_1^2.hi == R_1^3.lo
+   OK  R_1^2 is open both ends (lobe base)
+   OK  R_1^1, R_1^3 closed both ends
+   OK  R_5^1.hi == R_5^2.lo
+   OK  R_5^2.hi == R_5^3.lo
+   OK  R_5^2 is open both ends (chord)
+   OK  R_5^1, R_5^3 closed both ends
+   OK  L_1^2 has the same two ends as R_5^1
+   OK  L_1^1/L_1^2 boundary is R_5^1.lo
+   OK  L_1^1 = [ ) and L_1^2 = [ ]
+   OK  holes at iterates exactly {0,-1,-2,-3}
+   OK  R_2 ends == hole(-1) bounds (the hole whose lobe is cut)
+   OK  R_1^2 ends == images of hole(-1) bounds (lobe base)
+   OK  R_5^2 ends == hole(0) bounds (the chord is the reference hole's stretch)
+   OK  L_2 ends == hole(0) bounds
+   OK  L_1^1.hi in hole(-2) bounds (anchor-lobe fold abuts that hole)
+
+--- build 2: holes [(0, (9, 10)), (-1, (7, 6)), (-2, (3, 2)), (-3, (0, 5))]
+   L_1^1    L_(0.0;1)^1    [ )  lo=None hi=2  [0, 5.9935]
+   L_1^2    L_(0.0;1)^2    [ ]  lo=2 hi=9  [5.993, 6.5174]
+   L_2      L_(0.0;2)      ( )  lo=9 hi=10  [6.517, 7.2169]
+   L_3      L_(0.0;3)      [ ]  lo=10 hi=5  [7.217, 7.3812]
+   R_1^1    R_(0.0;1)^1    [ ]  lo=None hi=11  [0, 0.0393]
+   R_1^2    R_(0.0;1)^2    ( )  lo=11 hi=8  [0.03934, 0.1829]
+   R_1^3    R_(0.0;1)^3    [ ]  lo=8 hi=7  [0.1829, 0.2253]
+   R_2      R_(0.0;2)      ( )  lo=7 hi=6  [0.2253, 1.0471]
+   R_3      R_(0.0;3)      [ ]  lo=6 hi=3  [1.047, 1.2895]
+   R_4      R_(0.0;4)      ( )  lo=3 hi=2  [1.29, 5.9935]
+   R_5^1    R_(0.0;5)^1    [ ]  lo=2 hi=9  [5.993, 6.5174]
+   R_5^2    R_(0.0;5)^2    ( )  lo=9 hi=10  [6.517, 7.2169]
+   R_5^3    R_(0.0;5)^3    [ ]  lo=10 hi=5  [7.217, 7.3812]
+   OK  R_1^1 begins at the anchor (lo cdist 0, closed)
+   OK  R_1^1.hi == R_1^2.lo
+   OK  R_1^2.hi == R_1^3.lo
+   OK  R_1^2 is open both ends (lobe base)
+   OK  R_1^1, R_1^3 closed both ends
+   OK  R_5^1.hi == R_5^2.lo
+   OK  R_5^2.hi == R_5^3.lo
+   OK  R_5^2 is open both ends (chord)
+   OK  R_5^1, R_5^3 closed both ends
+   OK  L_1^2 has the same two ends as R_5^1
+   OK  L_1^1/L_1^2 boundary is R_5^1.lo
+   OK  L_1^1 = [ ) and L_1^2 = [ ]
+   OK  holes at iterates exactly {0,-1,-2,-3}
+   OK  R_2 ends == hole(-1) bounds (the hole whose lobe is cut)
+   OK  R_1^2 ends == images of hole(-1) bounds (lobe base)
+   OK  R_5^2 ends == hole(0) bounds (the chord is the reference hole's stretch)
+   OK  L_2 ends == hole(0) bounds
+   OK  L_1^1.hi in hole(-2) bounds (anchor-lobe fold abuts that hole)
+
+--- build 3: holes [(0, (9, 10)), (-1, (7, 6)), (-2, (2, 3)), (-3, (0, 5))]
+   L_1^1    L_(0.0;1)^1    [ )  lo=None hi=3  [0, 5.9935]
+   L_1^2    L_(0.0;1)^2    [ ]  lo=3 hi=9  [5.993, 6.5174]
+   L_2      L_(0.0;2)      ( )  lo=9 hi=10  [6.517, 7.2169]
+   L_3      L_(0.0;3)      [ ]  lo=10 hi=5  [7.217, 7.3812]
+   R_1^1    R_(0.0;1)^1    [ ]  lo=None hi=11  [0, 0.0393]
+   R_1^2    R_(0.0;1)^2    ( )  lo=11 hi=8  [0.03934, 0.1829]
+   R_1^3    R_(0.0;1)^3    [ ]  lo=8 hi=7  [0.1829, 0.2253]
+   R_2      R_(0.0;2)      ( )  lo=7 hi=6  [0.2253, 1.0471]
+   R_3      R_(0.0;3)      [ ]  lo=6 hi=2  [1.047, 1.2895]
+   R_4      R_(0.0;4)      ( )  lo=2 hi=3  [1.29, 5.9935]
+   R_5^1    R_(0.0;5)^1    [ ]  lo=3 hi=9  [5.993, 6.5174]
+   R_5^2    R_(0.0;5)^2    ( )  lo=9 hi=10  [6.517, 7.2169]
+   R_5^3    R_(0.0;5)^3    [ ]  lo=10 hi=5  [7.217, 7.3812]
+   OK  R_1^1 begins at the anchor (lo cdist 0, closed)
+   OK  R_1^1.hi == R_1^2.lo
+   OK  R_1^2.hi == R_1^3.lo
+   OK  R_1^2 is open both ends (lobe base)
+   OK  R_1^1, R_1^3 closed both ends
+   OK  R_5^1.hi == R_5^2.lo
+   OK  R_5^2.hi == R_5^3.lo
+   OK  R_5^2 is open both ends (chord)
+   OK  R_5^1, R_5^3 closed both ends
+   OK  L_1^2 has the same two ends as R_5^1
+   OK  L_1^1/L_1^2 boundary is R_5^1.lo
+   OK  L_1^1 = [ ) and L_1^2 = [ ]
+   OK  holes at iterates exactly {0,-1,-2,-3}
+   OK  R_2 ends == hole(-1) bounds (the hole whose lobe is cut)
+   OK  R_1^2 ends == images of hole(-1) bounds (lobe base)
+   OK  R_5^2 ends == hole(0) bounds (the chord is the reference hole's stretch)
+   OK  L_2 ends == hole(0) bounds
+   OK  L_1^1.hi in hole(-2) bounds (anchor-lobe fold abuts that hole)

@@ -1,0 +1,87 @@
+fixed point [-2.31662479  2.31662479], period=1, k_value=2, inversion=True, lambda_u=[-4.4063019], lambda_s=[-0.22694768]
+stage initialize_both_manifolds                        ok (0.00s)
+stage grow_n_times unstable 6                          ok (0.50s)
+stage grow_n_times stable 5                            ok (0.00s)
+stage compute_intersections                            ok (0.64s)
+stage trim_stable_manifolds                            ok (0.00s)
+stage create_bridges                                   ok (0.00s)
+stage infer_iterate_table                              ok (0.00s)
+stage classify_strong_pips                             ok (0.00s)
+stage compute_pseudoneighbors                          ok (0.00s)
+stage punch_holes                                      ok (0.00s)
+stage partition_stable_manifold                        ok (0.00s)
+stage arrangement                                      ok (0.00s)
+stage bridge_classes                                   ok (0.00s)
+stage minimal_trellis                                  ok (0.00s)
+stage iterated_partition                               ok (0.00s)
+stage dual_graph                                       ok (0.00s)
+stage symbolic_dynamics                                ok (0.00s)
+
+counts: crossings=11, bridges=7, holes=0, pips=7, pseudoneighbors=0, partitions=4
+
+anchors: total=4 per unstable branch={(0, 0): 2, (0, 1): 2} per (u,s) pair={((0, 0), (0, 0)): 1, ((0, 0), (0, 1)): 1, ((0, 1), (0, 0)): 1, ((0, 1), (0, 1)): 1}
+law   one anchor per unstable branch                   FAIL: per branch {(0, 0): 2, (0, 1): 2}
+law   manifold cdist monotone (non-strict)             PASS (4 items)
+law   manifold cdist strictly monotone (info)          PASS (4 items)
+law   manifold no geometric spikes                     PASS (4 items)
+law   manifold iterate law                             PASS (4 items)
+law   manifold one-to-one                              PASS (4 items)
+law   every crossing is unstable x stable              PASS (11 items)
+law   area product preserved along iterate chains      PASS (3 items)
+law   BridgeId in unstable order / partial <=> id None PASS (7 items)
+law   bridge endpoints on the bridge's own unstable branch PASS (14 items)
+law   bridges_at exact                                 PASS (11 items)
+law   single copy per BridgeId                         PASS (7 items)
+law   I1 holes of one origin share bridge_side         VACUOUS (0 items)
+law   I2 bridge rows consistent                        PASS (7 items)
+law   partition: one owner per crossing per side       PASS (22 items)
+law   direct hole at iterate >= k_value absent         VACUOUS (0 items)
+arrangement: 4 bounded regions
+law   arrangement image_of preserves area              VACUOUS (0 items)
+law   every bridge in exactly one class                PASS (7 items)
+law   itineraries even                                 PASS (4 items)
+law   no virtual symbols (every class spanned)         FAIL: virtual ['new1']
+law   is_reliable                                      FAIL: is_reliable False
+is_reliable: False
+element naming: 4 homotopy element(s), 4 iterated element(s)
+left partition of 0.0 (p1@0.0):
+  L_(0.0;1)  (#0) -> L_(0.0;1)
+right partition of 0.0 (p1@0.0):
+  R_(0.0;1)  (#0) -> R_(0.0;1)
+left partition of 0.1 (p1@0.1):
+  L_(0.1;1)  (#0) -> L_(0.1;1)
+right partition of 0.1 (p1@0.1):
+  R_(0.1;1)  (#0) -> R_(0.1;1)
+
+4 bridge class(es): 2 active, 2 inert, 1 virtual (NOT reliable)
+  a: A:p1@0.0/L#0 <-> A:p1@0.1/R#0 [active] lands in (L_(0.1;1), R_(0.0;1)); source walk; resolved
+    iterated itinerary: L_(0.1;1) R_(0.0;1)
+    word: a -> b^-1
+    refined: b^-1
+    verified: False; itinerary verified: False; evidence: 1
+  u: A:p1@0.1/L#0 loop [inert] lands in (L_(0.0;1), L_(0.0;1)); source walk; trivial
+    iterated itinerary: L_(0.0;1) L_(0.0;1)
+    word: u -> (empty)
+    refined: (empty)
+    loops: (L_(0.0;1), L_(0.0;1))
+    verified: None; itinerary verified: None; evidence: 0
+  v: A:p1@0.1/R#0 loop [inert] lands in (R_(0.0;1), R_(0.0;1)); source walk; trivial
+    iterated itinerary: R_(0.0;1) R_(0.0;1)
+    word: v -> (empty)
+    refined: (empty)
+    loops: (R_(0.0;1), R_(0.0;1))
+    verified: None; itinerary verified: None; evidence: 0
+  b: A:p1@0.0/R#0 <-> A:p1@0.1/L#0 [active] lands in (R_(0.1;1), L_(0.0;1)); source walk; resolved
+    iterated itinerary: R_(0.1;1) L_(0.0;1)
+    word: b -> a^-1
+    refined: a^-1
+    verified: True; itinerary verified: True; evidence: 1
+virtual classes:
+  new1: A:p1@0.0/R#0 <-> A:p1@0.1/R#0
+transition matrix (rows = source symbol):
+           a    b new1
+     a     0    1    0
+     b     1    0    0
+  new1     0    0    0
+
+wall 1.3s
