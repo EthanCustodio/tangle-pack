@@ -1,0 +1,11 @@
+% E10: do the sha256 hashes agree across repeats (exact bytes, and rounded to 1e-12)?
+% suggested column spec: {lcccccc}
+\toprule
+array & exact CPU--CPU & exact GPU--GPU & exact CPU--GPU & $10^{-12}$ CPU--CPU & $10^{-12}$ GPU--GPU & $10^{-12}$ CPU--GPU \\
+\midrule
+unstable & yes & yes & \textbf{no} & yes & yes & \textbf{no} \\
+stable & yes & yes & \textbf{no} & yes & yes & \textbf{no} \\
+crossing & yes & yes & \textbf{no} & yes & yes & yes \\
+cdist & yes & yes & \textbf{no} & yes & yes & yes \\
+bridge & yes & yes & \textbf{no} & yes & yes & \textbf{no} \\
+\bottomrule

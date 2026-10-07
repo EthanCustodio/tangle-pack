@@ -1,0 +1,1195 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{siunitx}
+\usepackage[table]{xcolor}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+
+\captionsetup{font=small,labelfont=bf,margin=0.5em}
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\emergencystretch}{3em}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{totalnumber}{5}
+\renewcommand{\arraystretch}{1.12}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\definecolor{okgreen}{HTML}{1B7F3B}
+\definecolor{limamber}{HTML}{B36B00}
+\definecolor{failred}{HTML}{B3261E}
+\newcommand{\works}{\textcolor{okgreen}{\textbf{works}}}
+\newcommand{\limited}{\textcolor{limamber}{\textbf{limited}}}
+\newcommand{\fails}{\textcolor{failred}{\textbf{fails}}}
+
+\newcommand{\claim}{\par\smallskip\noindent\textbf{Claim.}~}
+\newcommand{\evidence}{\par\smallskip\noindent\textbf{Evidence.}~}
+\newcommand{\reading}{\par\smallskip\noindent\textbf{Interpretation.}~}
+\newcommand{\caveat}{\par\smallskip\noindent\textbf{Caveat.}~}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\fig}[1]{figures/#1.pdf}
+\makeatletter\let\tablebody\@@input\makeatother % expandable input for tabular bodies
+
+\input{numbers.tex}
+\input{numbers_extra.tex}
+
+\title{\textbf{Stress-testing the \texttt{tanglepack} numerics layer}\\[0.6em]
+\large What the manifold-growth engine can and cannot do, with evidence}
+\author{tanglepack numerics stress campaign}
+\date{2026-10-07}
+
+\begin{document}
+
+\pagenumbering{roman}
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\maketitle
+\thispagestyle{empty}
+\vfill
+\begin{center}
+\begin{minipage}{0.82\textwidth}
+\small
+\noindent This report presents a \NumCampaignFullMin-minute stress campaign of
+\NumConfigsTotal{} isolated runs (ten experiments, E1--E10) against
+\code{tanglepack.numerics}, the layer that grows the stable and unstable
+manifolds of saddle orbits of area-preserving maps, detects their crossings
+and builds bridges. Each section follows the same pattern: a claim, the figure
+or table that supports it, an interpretation, and a caveat. Negative results
+count as findings. Every measured number in the text is generated from the raw
+result files (\code{numbers.tex}, \code{numbers\_extra.tex}); none is typed by
+hand.
+
+\medskip
+\noindent Branch \code{numerics-stress}, library commit \code{e963893}. The
+library itself was not modified.
+\end{minipage}
+\end{center}
+\vfill
+\end{titlepage}
+\hypersetup{pageanchor=true}
+
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+%======================================================================
+\section{Executive summary}
+\label{sec:summary}
+
+\paragraph{Five headline findings.}
+\begin{enumerate}[leftmargin=*]
+\item \textbf{The GPU does not help, and cannot help in the current design.}
+  The end-to-end speed-up is \NumGpuTotalSpeedupMedianKTwoEight{} (k28),
+  \NumGpuTotalSpeedupMedianPThree{} (p3) and \NumGpuTotalSpeedupMedianKTen{}
+  (k10). The map takes at most \NumMapFractionMax{} of growth time, so
+  Amdahl's law caps the gain at \NumAmdahlBoundMax{}
+  (\cref{sec:gpu}).
+\item \textbf{Cost is linear in the point count, but the point count is not
+  set by the dynamics.} Step time scales as $N^{\NumStepTimeExponent}$ and
+  memory as \NumBytesPerPoint{}\,B/point. However, once the unstable arm
+  escapes to infinity a single step multiplies the points by up to
+  \NumLastGrowthFactorKSix{}, against $\lambda_u = \NumLambdaUKSix$
+  (\cref{sec:scaling}).
+\item \textbf{\code{area\_cutoff} is a well-behaved accuracy knob.} The
+  invariance error falls as $\text{cutoff}^{\NumInvSlopeKTwoEightTen}$ and the
+  point count grows as $\text{cutoff}^{\NumPointsCutoffExponentKTwoEight}$
+  (k28), close to the $2/3$ and $-1/3$ that chord geometry predicts. At $10^{-7}$ the median invariance error on k28 is
+  \NumInvPFiftyKTwoEightCutoffSeven{} for \NumTimeKTwoEightCutoffSeven\,s of
+  pipeline time. The library default, $10^{-4}$, is too coarse for the
+  period-3 case: it invents and drops crossings (\cref{sec:accuracy}).
+\item \textbf{Transverse crossings are found exactly, and the physical
+  invariants hold.} An independent brute force matches all
+  \NumIsectMatchedTotal{}/\NumIsectBruteTotal{} crossings with
+  \NumIsectMissedTotal{} missed and \NumIsectExtraTotal{} extra. Lobe areas
+  are preserved to \NumLobeRatioMax{}, and \NumCdistDecreasingManifolds{}
+  cdist decreases occur in \NumCdistStepsManifolds{} steps
+  (\cref{sec:invariants,sec:intersections}).
+\item \textbf{Two failures are silent.} (a) Near the saddle-centre
+  bifurcation the number of registered crossings at $k+1=10^{-4}$ grows from
+  \NumTangencyCrossingsNearCutoffSeven{} to
+  \NumTangencyCrossingsNearCutoffTwelve{} as the resolution is refined, with
+  \NumTangencyWarningsTotal{} warnings. These are artefacts of the polygons,
+  not dynamics. (b) The fixed-point solver hands back lower-period orbits:
+  \NumSolverLowerAccepted{} of them were accepted as saddles of the requested
+  period (\cref{sec:breaking,sec:solver}).
+\end{enumerate}
+
+\noindent \Cref{fig:overview} puts one panel per theme side by side, and
+\cref{tab:scorecard} grades each capability with a pointer to its
+evidence. \Cref{sec:taxonomy} catalogues the failures, and
+\cref{sec:recs} expands the recommendations below.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{\fig{overview}}
+  \caption{Campaign overview. (a)~Map throughput: NumPy beats the end-to-end
+  CuPy path at every batch size, and the \code{map\_batch} GPU path only
+  catches up at the largest batches (\cref{sec:gpu}). (b)~End-to-end speed-up per case:
+  every bar is at or below 1. (c)~Invariance error falls steadily as
+  \code{area\_cutoff} is refined; solid is the median, dotted the 99th
+  percentile. (d)~Pass fractions of the main checks. The
+  short bars are the solver's requested-period rate and the CPU/GPU hash
+  agreement; both are explained in \cref{sec:solver,sec:repro}.}
+  \label{fig:overview}
+\end{figure}
+
+\begin{table}[H]
+\centering\small
+\caption{Scorecard. Status: \works{} = does what it should over the tested
+range; \limited{} = works with a documented restriction; \fails{} = does not
+deliver.}
+\label{tab:scorecard}
+\begin{tabularx}{\textwidth}{@{}l l Y@{}}
+\toprule
+capability & status & evidence \\
+\midrule
+Manifold growth, stop-condition driven & \works & escape case stops at \NumEscapeStopArclengthPoints{} points (\cref{sec:escape}) \\
+Manifold growth, fixed step count & \fails & killed at the 20\,GB cap after \NumEscapeStepsDone{} steps (\cref{sec:escape}) \\
+Cost scaling & \works & time $\propto N^{\NumStepTimeExponent}$, \NumBytesPerPoint{}\,B/point (\cref{sec:scaling}) \\
+Accuracy control (\code{area\_cutoff}) & \works & error $\propto$ cutoff$^{\NumInvSlopeKTwoEightTen}$ (\cref{sec:accuracy}) \\
+Transverse crossing detection & \works & \NumIsectMatchedTotal/\NumIsectBruteTotal{} matched, \NumIsectExtraTotal{} extra (\cref{sec:intersections}) \\
+Crossings near tangency & \fails & count tracks resolution, \NumTangencyWarningsTotal{} warnings (\cref{sec:tangency}) \\
+Self-crossing detection & \limited & \NumIsectUUTotal{} u$\times$u crossings exist, none reported (\cref{sec:intersections}) \\
+Area preservation, invariants & \works & lobe $|A'/A-1|\le\NumLobeRatioMax$ (\cref{sec:invariants}) \\
+Arrangement \code{image\_of} & \limited & \NumArrImageFound{} images found, \NumArrImageMissing{} missing (\cref{sec:invariants}) \\
+Blasting & \limited & \NumMaxBlastsKTwoEight{} blasts run, topology unreliable after them on k28 and p3 (\cref{sec:blasts}) \\
+Inversion saddle & \limited & topology asserts at \NumInversionAssertSteps{} steps; OOM at \NumInversionOomSteps{} (\cref{sec:depth}) \\
+Parameter robustness (b = 1 saddle) & \limited & \NumSaddleSuccessFraction{} complete; \NumSweepZeroCrossings{} trivial tangles (\cref{sec:robustness}) \\
+Fixed-point solver & \limited & converges \NumSolverConvergedRate{}, but accepts lower periods (\cref{sec:solver}) \\
+GPU acceleration & \fails & \NumGpuTotalSpeedupMedianKTen{}--\NumGpuTotalSpeedupMedianKTwoEight{} end to end (\cref{sec:gpu}) \\
+Determinism & \works & CPU--CPU and GPU--GPU bit-identical (\cref{sec:repro}) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{What I would do next, in priority order.}
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Guard the crossing registration near tangency.} Warn when a
+  crossing's $|\sin\theta|$ is not large compared to the local invariance
+  error, and add a cheap u$\times$u self-crossing check as a resolution
+  diagnostic. Both failures are currently silent.
+\item \textbf{Make the solver check the minimal period} before
+  \code{construct\_fixed\_point} accepts an orbit.
+\item \textbf{Put a point/memory budget into growth.} Predict the next step's
+  points from the last growth factor, as the E3 harness already does, and
+  make stop-condition growth the documented default.
+\item \textbf{Raise the default \code{area\_cutoff} to $10^{-7}$}, which is
+  what the k28, p3 and nested test cases already use.
+\item \textbf{Leave the GPU off.} Revisit it only if refinement and the
+  linked list move to arrays that live on the device.
+\end{enumerate}
+
+%======================================================================
+\section{Setup and methods}
+\label{sec:setup}
+
+\paragraph{The map and the pipeline.} All runs use the Hénon family
+(parameters $k$, $b$; $b=1$ is area preserving) defined in the module
+\code{tanglepack.examples.henon}, via the frozen recipes of \code{tests/cases.py}. These
+recipes are: k10, the $k=10$ binary horseshoe at the default cutoff
+$10^{-4}$; k28, $k=2.8$ at $10^{-7}$, optionally blasted; p3, the period-3
+orbit of the nested map; nested, period 1 plus period 3; and inversion, the
+other saddle of $k=10$, with both eigenvalues negative. The pipeline under
+test is \code{TangleWorkbench}: find the fixed point, then initialise the
+fundamental segments, grow the manifolds (\code{grow\_n\_times},
+\code{grow\_until\_*}), and finally run \code{compute\_intersections}, trim,
+\code{create\_bridges} and the iterate table. Where an experiment touches
+topology (E5, E7), it is only as a downstream consumer of the numerics.
+
+\paragraph{Harness.} \code{stress/numerics/harness.py} runs every
+configuration in a fresh subprocess with a hard timeout. A psutil watchdog
+samples the worker's resident set every 50\,ms and kills the worker above an
+RSS cap. \code{RLIMIT\_AS} is not used because CUDA reserves huge virtual
+ranges. Each configuration writes one JSON line with its parameters,
+per-stage wall times (with a device synchronise before the clock on the
+GPU), per-step checkpoints, metrics, captured \code{logging} warnings by
+template, peak RSS and git SHA. The outcome is one of \code{ok},
+\code{exception}, \code{invariant\_assert}, \code{oom}, \code{timeout} or
+\code{crash}. \emph{Failures are data}: a sweep never stops on one, and the
+per-step checkpoints keep everything up to the failure. The per-experiment
+caps are in \cref{tab:counts}. Timing experiments (E1--E4, E10) ran serially
+with the GPU never shared; the robustness sweeps (E5--E9) ran in worker
+pools.
+
+\paragraph{Hardware and software.} One host (\code{pop-os}): Intel Core
+i9-14900K (24 cores, 8P + 16E, 32 threads, 32\,MB L2, 36\,MB L3), 125\,GB
+RAM; NVIDIA GeForce RTX 5060 Ti, 16\,GB, driver 580.173.02; Linux 7.1.1.
+Python 3.10.12, NumPy 2.2.5, SciPy 1.15.1, CuPy 14.1.1, rtree 1.4.0. Every
+record carries library commit \code{e963893}. The full campaign took
+\NumCampaignFullMin\,min of wall-clock, after a \NumCampaignQuickMin-minute
+\code{--quick} pilot.
+
+\paragraph{Experiments.}
+\begin{description}[leftmargin=1.2em,style=nextline]
+\item[E1 Raw map throughput] NumPy against CuPy (end to end, compute only,
+  transfer only) and the real \code{map\_batch} path, $N=10^2$--$10^7$.
+\item[E2 End-to-end GPU] k28, p3 and k10, CPU against GPU, three repeats;
+  also a cProfile breakdown, a sweep of \code{min\_batch\_points} and a
+  lockstep CPU/GPU comparison.
+\item[E3 Scaling] Growth step by step to $\sim2\times10^6$ points for
+  $k\in\{2.8,4,6,10\}$, and downstream stages as a function of the segment
+  count.
+\item[E4 Accuracy against cost] \code{area\_cutoff} $10^{-3}$--$10^{-9}$ on
+  k28 and p3 at two depths, against the finest run.
+\item[E5 Invariants] Fixed point, manifold invariance, iterate links, lobe
+  areas, cdist monotonicity and \code{image\_of}, on every frozen case.
+\item[E6 Robustness] One fixed recipe over $k\in[0.3,15]$ for $b=1$ (both
+  period-1 points), $b=-1$ and dissipative $b$.
+\item[E7 Breaking it] Escape to infinity, 0--10 blasts, deep growth, and
+  near-tangency at $k\to-1$.
+\item[E8 Solver] 200 random seeds $\times$ 2 guess styles, periods 1--6, four
+  maps.
+\item[E9 Crossing correctness] The library's crossings against an exact
+  O($NM$) brute force.
+\item[E10 Determinism] Five fresh-process repeats on the CPU and five on the
+  GPU.
+\end{description}
+
+%======================================================================
+\section{Performance and scaling (E3)}
+\label{sec:scaling}
+
+\claim Growth, crossing detection and bridge construction all cost
+essentially linear time in the number of points, and memory costs about
+\NumBytesPerPoint\,B per point. The binding constraint is not the algorithm but the number
+of points the escaping unstable arm generates.
+
+\evidence \Cref{fig:e03cost}(a) shows the time of one growth step against
+the points it produces, for four values of $k$ and two cutoffs. Above
+$10^3$ points the fitted slopes run from \NumStepTimeExponentKSix{} to
+\NumStepTimeExponentKTwoEightCoarse{} (median \NumStepTimeExponent). The
+downstream stages in \cref{fig:e03cost}(b) scale with the segment count with
+slopes \NumIntersectionsExponent{} (\code{compute\_intersections}) and
+\NumTrimBridgesExponent{} (trim and bridges). The iterate table is flat
+(\NumIterateTableExponent) because it depends on the crossings, not on the
+points. Resident memory (\cref{fig:e03mem}) grows by \NumBytesPerPoint\,B per
+point (median over runs; maximum \NumBytesPerPointMax).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e03_cost}}
+  \caption{E3 cost. (a)~Growth-step time against unstable points: all $k$
+  and both cutoffs collapse onto one line with slope near 1 (legend), so cost
+  depends on the point count alone. (b)~Downstream stages against segments:
+  intersections and trim/bridges are linear; the iterate table does not
+  depend on the point count.}
+  \label{fig:e03cost}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e03_memory}}
+  \caption{E3 memory. (a)~RSS above the interpreter baseline: linear over the
+  top two decades, with nearly the same slope for every $k$ (legend).
+  (b)~Bytes per point: fixed interpreter overhead dominates small manifolds;
+  the curve flattens onto the per-point slope for large ones.}
+  \label{fig:e03mem}
+\end{figure}
+
+\Cref{fig:e03growth} explains why the point count is the real problem. For
+the first steps the points grow roughly like $|\lambda_u|^n$. Then, at step
+\NumEscapeStepKTen{} ($k=10$) to \NumEscapeStepKTwoEight{} ($k=2.8$), the
+largest coordinate passes 100 and the growth factor departs from
+$\lambda_u$. On its last completed step the $k=6$ manifold grew by a factor
+\NumLastGrowthFactorKSix{} ($\lambda_u=\NumLambdaUKSix$), $k=10$ by
+\NumLastGrowthFactorKTen{} ($\lambda_u=\NumLambdaUKTen$) and $k=2.8$ by
+\NumLastGrowthFactorKTwoEight{} ($\lambda_u=\NumLambdaUKTwoEight$). Meanwhile
+the largest coordinate reached \NumLastMaxCoordKSix{} and
+\NumLastMaxCoordKTen.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e03_growth}}
+  \caption{E3 growth. (a)~Unstable points per step against the
+  $|\lambda_u|^n$ guide (dotted). The curves follow it for a few steps and
+  then shoot above it; crosses mark runs killed at the 24\,GB cap. (b)~The
+  largest coordinate: the take-off in (a) coincides with the arm leaving for
+  infinity.}
+  \label{fig:e03growth}
+\end{figure}
+
+\reading The refinement places points to keep a fixed chord area, so the
+point count follows the arclength and curvature of the image, not the
+eigenvalue. Once the tip of the arm is at $|x|\sim10^3$, one step of a
+quadratic map sends it to $\sim10^6$, and the refinement faithfully resolves
+an arc that is irrelevant to the tangle. ``More steps'' therefore mostly
+buys points far outside the tangle. \NumScalingOomConfigs{} growth runs
+were killed at the 24\,GB cap. At that moment they held only
+\NumScalingOomMinPointsHeld--\NumScalingOomMaxPointsHeld{} points after their
+last completed step, but they had spent
+\NumScalingOomKilledStepMinS--\NumScalingOomKilledStepMaxS\,s inside the
+step that was killed.
+
+\caveat The \NumBytesPerPoint\,B/point slope gives a ceiling of roughly
+\NumPointCeilingTwentyFourGB{} points in a 24\,GB budget. This is an
+\emph{estimate}: it extrapolates the steady-state slope, and a step's
+transient working set comes on top of it. The exponents are fitted over
+$\le$3 decades on one machine.
+
+%======================================================================
+\section{GPU acceleration (E1, E2)}
+\label{sec:gpu}
+
+\claim Enabling the GPU (\code{enable\_gpu}) does not speed up growth.
+Today it is neutral at best and slower at worst, and it cannot pay off while
+the map is a negligible share of the work.
+
+\subsection{Raw throughput}
+\evidence \Cref{fig:e01}(a): NumPy peaks at \NumMapPeakNumpy\,points/s near
+$N=\NumMapPeakNumpyN$, then drops by \NumMapPeakOverPlateauNumpy{} to
+\NumMapPlateauNumpy\,points/s. This is consistent with a cache effect: the
+working set leaves the per-core L2. CuPy on data already on the device
+reaches \NumMapPeakCupyCompute\,points/s, but the end-to-end path (host
+$\to$ device $\to$ host, which is what \code{gpu.py} does) peaks at
+\NumMapPeakCupyEndToEnd. At $N=10^7$, transfer is
+\NumGpuTransferFractionAtMaxN{} of the GPU time (\cref{fig:e01}(b)). The raw
+crossover: \NumGpuCrossoverNRaw{} (end-to-end CuPy reaches
+\NumRawGpuOverCpuMaxN{} of NumPy at the largest $N$). Through
+\code{map\_batch}, whose CPU path pays for transposes and copies, the GPU
+breaks even somewhere between \NumGpuCrossoverNSweepMapBatch{} (interpolated
+from the sweep) and \NumGpuCrossoverNMapBatch{} (bisection). At $10^7$ it is
+ahead by only \NumMapBatchGpuOverCpuMaxN.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e01_map_throughput}}
+  \caption{E1. (a)~Throughput against batch size. Device-only compute (dotted
+  triangles) is fastest, but every path that includes the transfer sits on
+  the transfer-only line (grey crosses). The dashed line marks the bisected
+  \code{map\_batch} crossover; read it as the upper edge of a band, not a
+  sharp threshold. (b)~Share of GPU end-to-end time: transfer dominates
+  from mid-size batches on.}
+  \label{fig:e01}
+\end{figure}
+
+\subsection{End to end}
+\evidence \Cref{fig:e02} and \cref{tab:e02}: the summed pipeline time on
+the GPU is \NumGpuTotalSpeedupMedianKTwoEight{} (k28),
+\NumGpuTotalSpeedupMedianPThree{} (p3) and \NumGpuTotalSpeedupMedianKTen{}
+(k10) of the CPU speed (median of three repeats; best repeats
+\NumGpuTotalSpeedupBestKTwoEight, \NumGpuTotalSpeedupBestPThree,
+\NumGpuTotalSpeedupBestKTen). The best single growth step, k28 at
+\NumGpuTimedMaxPointsKTwoEight{} points, gains \NumGpuStepSpeedupBestKTwoEight.
+On the E10 case the GPU is clearly slower: \NumDetGpuSpeedup{}
+(\cref{sec:repro}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e02_end_to_end}}
+  \caption{E2. (a)~Per-step growth time; CPU (filled) and GPU (open) markers
+  lie on top of each other up to \NumGpuTimedMaxPointsKTwoEight{} points. (b)~Per-stage
+  speed-up. Everything sits within a few percent of 1 except tiny stages,
+  where sub-millisecond noise dominates (p3 iterate table, k28 stable
+  growth).}
+  \label{fig:e02}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E2: median CPU time / median GPU time per stage, the CPU map share
+$f_{\rm map}$ (cProfile) and the Amdahl bound $1/(1-f_{\rm map})$.}
+\label{tab:e02}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrrr}
+\tablebody tables/e02_speedup.tex 
+\end{tabular}
+\end{table}
+
+\subsection{Why: Amdahl's law}
+\evidence \Cref{fig:e02prof}: in the cProfile of unstable growth the map is
+\NumMapFractionKTwoEight{} (k28), \NumMapFractionPThree{} (p3) and
+\NumMapFractionKTen{} (k10) of the CPU time. The bounds are
+\NumAmdahlBoundKTwoEight, \NumAmdahlBoundPThree{} and \NumAmdahlBoundKTen.
+Refinement plus linked-list work is \NumProfRefPlusListKTwoEight{} (k28),
+\NumProfRefPlusListPThree{} (p3) and \NumProfRefPlusListKTen{} (k10). In the
+k28 profile (\NumProfTotalSKTwoEight\,s), \code{\_refine\_layer} alone takes
+\NumProfRefineLayerShareKTwoEight{} of the self time. \code{Point.\_\_init\_\_}
+runs \NumProfPointInitCallsKTwoEight{} times (\NumProfPointInitShareKTwoEight{}
+cumulative), each paired with a \code{numpy.array} call
+(\NumProfNpArrayCallsKTwoEight). The \code{min\_batch\_points} sweep
+(\cref{fig:e02mbp}) is flat: the best setting (\NumMinBatchBest) is
+\NumMinBatchBestGain{} faster than ``never'', which is inside the run-to-run
+noise of \cref{sec:repro}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.92\textwidth]{\fig{e02_profile}}
+  \caption{E2 cProfile breakdown of unstable growth (self time by category).
+  The map (orange) is invisible at this scale; refinement and the
+  linked list (Python objects, pointer walks) take
+  \NumProfRefPlusListPThree--\NumProfRefPlusListKTwoEight{} of it.
+  The Amdahl bound on the right is the most any map accelerator could give.}
+  \label{fig:e02prof}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.6\textwidth]{\fig{e02_min_batch}}
+  \caption{E2 \code{min\_batch\_points} sweep on k28 (12 unstable steps). The
+  GPU session is flat across the threshold and matches the CPU median
+  (dashed): the threshold has nothing to tune.}
+  \label{fig:e02mbp}
+\end{figure}
+
+\reading The GPU path accelerates the only part of growth that was already
+fast. Growth is a Python object graph: one \code{Point} per vertex, two
+doubly linked lists, and refinement that walks them layer by layer. For the
+GPU to pay, refinement and the linked list must become arrays (coordinates,
+cdists, iterate indices), with the whole growth loop resident on the device.
+Only then would $f_{\rm map}$ become the GPU-friendly bulk of the work.
+Short of that, the measured ceiling is \NumAmdahlBoundMax.
+
+\caveat cProfile inflates the per-call overhead of Python functions relative
+to NumPy kernels, so the true $f_{\rm map}$ is probably a little larger than
+measured. Even ten times the measured share would keep the bound close to 1.
+Three repeats per configuration resolve differences of a few percent, not
+less.
+
+%======================================================================
+\section{Accuracy versus cost (E4)}
+\label{sec:accuracy}
+
+\claim \code{area\_cutoff} trades accuracy for points along a predictable
+power law. The default $10^{-4}$ is adequate for the period-1 cases but not
+for p3.
+
+\evidence \Cref{fig:e04pareto}(a) plots invariance error against pipeline
+time. The invariance error is the distance from the image of a point inside
+a polyline segment to the polyline of the image branch; the probe samples
+segment interiors because a vertex's image is, by construction, often a
+vertex. On k28 (10 steps), going from $10^{-4}$ to $10^{-7}$ moves the median
+error from \NumInvPFiftyKTwoEightCutoffFour{} to
+\NumInvPFiftyKTwoEightCutoffSeven{} and the 99th percentile from
+\NumInvPNinetyNineKTwoEightCutoffFour{} to
+\NumInvPNinetyNineKTwoEightCutoffSeven. The cost goes from
+\NumTimeKTwoEightCutoffFour\,s to \NumTimeKTwoEightCutoffSeven\,s and from
+\NumPointsKTwoEightCutoffFour{} to \NumPointsKTwoEightCutoffSeven{} points.
+Over cutoffs $10^{-6}$--$10^{-9}$ the median error has slopes
+\NumInvSlopeKTwoEightTen{} and \NumInvSlopeKTwoEightTwelve{} (k28, 10 and
+12 steps), and \NumInvSlopePThreeThirteen{} and
+\NumInvSlopePThreeSeventeen{} (p3, 13 and 17 steps). The point count has
+slope \NumPointsCutoffExponentKTwoEight{} (k28) and
+\NumPointsCutoffExponentPThree{} (p3) (\cref{fig:e04conv}(b)). Crossing
+positions converge to the finest run with slopes \NumCrossDevSlopeKTwoEightTen,
+\NumCrossDevSlopeKTwoEightTwelve, \NumCrossDevSlopePThreeThirteen{} and
+\NumCrossDevSlopePThreeSeventeen{} (\cref{fig:e04conv}(a)). The full grid is
+in \cref{tab:e04}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e04_pareto}}
+  \caption{E4. (a)~Accuracy against cost; labels are $\log_{10}$ of the
+  cutoff. Every case traces a straight Pareto front, so there is no knee and
+  no cheap win. (b)~Registered crossings per cutoff. k28 is stable at every
+  cutoff; p3 needs $\le10^{-5}$ (13 steps) or $\le10^{-7}$ (17 steps) before
+  the count settles.}
+  \label{fig:e04pareto}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e04_convergence}}
+  \caption{E4 convergence. (a)~Distance of each finest-run crossing to the
+  nearest crossing of the coarser run: steady power-law convergence; p3 at
+  17 steps is the slowest. (b)~Cost in points: slopes \NumPointsCutoffExponentKTwoEight{} and
+  \NumPointsCutoffExponentPThree, close to the predicted $-1/3$.}
+  \label{fig:e04conv}
+\end{figure}
+
+\reading The exponents are what chord geometry predicts. A chord of length
+$\ell$ on a curve of curvature $\kappa$ deviates by $h\approx\kappa\ell^2/8$
+and encloses an area $\propto\kappa\ell^3$. A fixed area cutoff $A$ therefore
+gives $\ell\propto A^{1/3}$, so points $\propto A^{-1/3}$ and a geometric
+error $h\propto A^{2/3}$. The crossing \emph{count} is what matters for
+topology. For p3 at 13 steps the default $10^{-4}$ registers
+\NumCrossingsPThreeThirteenCutoffFour{} crossings and $10^{-3}$ registers
+\NumCrossingsPThreeThirteenCutoffThree, while every cutoff from $10^{-5}$ on
+gives \NumCrossingsPThreeThirteenRef. At 17 steps, $10^{-4}$ gives
+\NumCrossingsPThreeSeventeenCutoffFour{} and $10^{-5}$ gives
+\NumCrossingsPThreeSeventeenCutoffFive, against \NumCrossingsPThreeSeventeenRef{}
+from $10^{-7}$ on. A coarse polygon both misses true crossings and creates
+spurious ones. $10^{-7}$ is the cheapest setting that is converged in every
+case tested.
+
+\caveat The reference is the finest run ($10^{-9}$), not an exact manifold,
+so the convergence plots measure self-consistency. The invariance error is a
+reference-free proxy, but it measures one-step consistency, not distance to
+the true manifold. p3 at 17 steps and $10^{-3}$ ran out of memory (16\,GB
+cap): a coarse polygon of the escaping arm is not cheaper.
+
+%======================================================================
+\section{Physical invariants (E5)}
+\label{sec:invariants}
+
+\claim On every frozen case the numerics respect what the dynamics requires:
+fixed points to machine precision, monotone cdists, manifolds mapped onto
+themselves to within the refinement tolerance, and lobe areas preserved.
+
+\evidence \Cref{tab:e05} summarises the cases. The fixed-point residual is
+at most \NumFpResidualMax{} and the eigenvector residual at most
+\NumEvecResidualMax. Along the manifolds, \NumCdistStepsManifolds{} cdist
+steps (and \NumCdistStepsBridges{} along bridges) contain
+\NumCdistDecreasingManifolds{} decreases and \NumCdistTiesManifolds{} ties.
+No sampled image lands beyond the tail of its image branch
+(\NumInvarianceBeyond{} such images). The largest invariance error,
+\NumInvarianceMax, belongs to k10, one of the two cases (with inversion) grown at the default
+$10^{-4}$ (\cref{fig:e05inv}). The \NumIterLinks{} registered iterate links
+agree with the map to a median \NumIterLinkErrMedian{} (maximum
+\NumIterLinkErrMax{}, again k10), so the error tracks each case's cutoff
+(\cref{fig:e05lobes}(a)). The \NumLobePairs{} lobe/image-lobe pairs have
+$|A'/A-1|\le\NumLobeRatioMax$ with \NumLobeSignFlips{} sign flips
+(\cref{fig:e05lobes}(b)). The k28 lobes measure $\pm\NumLobeAreaKTwoEight$,
+and their images agree to \NumLobeAreaAbsErrKTwoEight{} in absolute terms.
+The p3 lobes are tiny (median \NumLobeAreaPThreeMedian), so their larger
+\emph{relative} error corresponds to an absolute error of at most
+\NumLobeAbsErrPThreeMax, a few times the cutoff.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E5 per-case invariants (maxima over orbit points and branches).
+``arr.\ image'' counts the arrangement regions whose \code{image\_of} was
+found/missing.}
+\label{tab:e05}
+\setlength{\tabcolsep}{3pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrrccc}
+\tablebody tables/e05_invariants.tex 
+\end{tabular}}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e05_invariance}}
+  \caption{E5 invariance error, one cumulative distribution per branch. The
+  curves to the right are k10 and the inversion saddle, the two cases grown at
+  the default cutoff $10^{-4}$; the $10^{-7}$ cases sit well to the left.}
+  \label{fig:e05inv}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e05_iterates_lobes}}
+  \caption{E5. (a)~Error of each registered iterate link: the links of the
+  default-cutoff cases (k10, inversion) sit highest, those of the $10^{-7}$
+  cases lower. (b)~Relative area change of each lobe under one map step
+  (filled) and of each arrangement region with a found image (open). All are
+  $\le\NumLobeRatioMax$; the largest values belong to the tiny p3 lobes. (The
+  legend overlaps a few points; it hides no outlier.)}
+  \label{fig:e05lobes}
+\end{figure}
+
+\reading The area check is the strongest of these results. It compares
+polygons built from independently refined arcs, so a systematic drift
+would show up as a ratio that grows with depth, and none does.
+
+\caveat (i) $||\lambda_u\lambda_s|-1|$ is \emph{weak} evidence: the
+eigenvalues come from \code{np.linalg.eig} of the analytic Jacobian, whose
+determinant is exactly 1, so the defect is
+\NumDetDefectMaxAnalytic{} by construction. The exception confirms the
+point: k10 passes no analytic Jacobian, its stored Jacobian deviates from
+the analytic one by \NumJacDevKTen, and its defect is \NumDetDefectKTen.
+(ii) The arrangement's \code{image\_of} found an image for
+\NumArrImageFound{} regions and none for \NumArrImageMissing. It found them
+for most of p3 and nested, for one region of each blasted k28 case, and for
+none of k10, unblasted k28 or inversion (\cref{tab:e05}). The data does not
+say whether this is a gap in \code{image\_of} or an expected consequence of
+image crossings that are not registered. I list it as an open question
+(\cref{sec:recs}), not as a bug.
+
+%======================================================================
+\section{Correctness of crossing detection (E9)}
+\label{sec:intersections}
+
+\claim For transverse crossings the R-tree path finds exactly the crossings
+of the polygons, no more and no less.
+
+\evidence Over \NumIsectConfigs{} configurations (\cref{tab:e09},
+\cref{fig:e09}), an exact orientation-test brute force found
+\NumIsectBruteTotal{} proper u$\times$s crossings. The registry matched
+\NumIsectMatchedTotal{}, with \NumIsectMissedTotal{} missed (none needed the
+near-parallel, zigzag or collision explanations) and \NumIsectExtraTotal{}
+extra.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E9: crossings against brute force, summed per case. $^*$Some
+configurations were too large for the u$\times$u check.}
+\label{tab:e09}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrrrrrr}
+\tablebody tables/e09_intersections.tex 
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e09_intersections}}
+  \caption{E9. (a)~Detection time against segments. The library is
+  linear; the vectorised brute force is steeper but faster on all but the
+  largest configurations. (b)~Library against brute-force counts: every point
+  lies on the diagonal.}
+  \label{fig:e09}
+\end{figure}
+
+\reading Speed is not where the R-tree path shines at these sizes: its
+slope is \NumIsectLibraryExponent{} against \NumIsectBruteExponent{} for the
+brute force, but the brute force was faster in
+\NumIsectBruteFasterConfigs{} of \NumIsectConfigs{} configurations. On the
+largest (\NumIsectLargestSegments{} segments) the library took
+\NumIsectLargestLibraryS\,s and the brute force \NumIsectLargestBruteS\,s
+(the largest brute/library ratio was \NumIsectBruteOverLibraryMax). This is
+not a problem: the stable side is short, so the brute force is effectively
+linear here, and the library time includes registration and bookkeeping.
+The asymptotic advantage remains with the library.
+
+\caveat Two gaps. First, the polygons \emph{can} cross themselves:
+\NumIsectUUTotal{} proper u$\times$u crossings appeared in
+\NumIsectUUConfigs{} configurations, all at cutoff \NumIsectUUCutoff, and
+\NumIsectUUSkipped{} large configurations were not checked. A manifold
+cannot cross itself (CLAUDE.md), so these are discretisation artefacts. The
+library never tests u$\times$u pairs, so nobody is told. A cheap self-crossing
+check would make a good resolution diagnostic. Second, an API trap:
+\code{compute\_intersections} (\code{reset=True}) \emph{replaces} the
+\code{IntersectionRegistry} object, so a caller that cached
+\code{workbench.intersection\_registry} beforehand holds a stale, empty
+registry. This is documented in the docstring, but easy to trip over (the E6
+script carries a comment about it).
+
+%======================================================================
+\section{Robustness across parameters (E6)}
+\label{sec:robustness}
+
+\claim One fixed recipe runs end to end over most of the area-preserving
+$b=1$ family. It fails cleanly where it should, but at small $k$ it produces
+tangles that are numerically fine and topologically empty.
+
+\evidence \Cref{fig:e06out} and \cref{tab:e06}: \NumSweepComplete{} of
+\NumSweepConfigs{} configurations (\NumSweepSuccessFraction) reached the
+trellis, and \NumSaddleSuccessFraction{} of the $b=1$ saddles did. The
+failure classes are:
+\begin{itemize}[leftmargin=*]
+\item \textbf{Small $k$:} \NumSweepMaxIterFails{} saddles with
+  $k\in[\NumSweepMaxIterKMin,\NumSweepMaxIterKMax]$ grew the unstable side
+  and then raised ``Max iterations reached'' in \code{grow\_until\_turnaround}
+  on the stable side. The smallest completed $k$ is \NumSaddleMinKComplete.
+\item \textbf{Elliptic point:} \NumSweepOtherElliptic{} configurations
+  ($k\le\NumSweepOtherEllipticKMax$) were rejected as ``not a saddle'', by
+  design.
+\item \textbf{Inversion saddle:} \NumSweepOtherOom{} runs with
+  $k\ge\NumSweepOtherOomKMin$ hit the 4\,GB cap during growth, the same
+  blow-up as in \cref{sec:depth}.
+\item \textbf{Orientation reversing $b=-1$:} all \NumSweepBMinusOneFails{}
+  were rejected (``eigenvalues of disagreeing sign''), by design.
+\item \textbf{Dissipative $b$:} \NumSweepDissipativeOk{} completed. Nothing
+  in the pipeline checks area preservation, so completion here says nothing
+  about correctness.
+\end{itemize}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e06_sweep_outcomes}}
+  \caption{E6. Last stage completed per configuration (height) and outcome
+  (colour). Read the $b=1$ saddle panel left to right: a block of small-$k$
+  exceptions, then complete runs. The other point fails as elliptic below
+  $k=3$ and runs out of memory as the inversion saddle at large $k$.}
+  \label{fig:e06out}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E6: configurations per family by last stage completed.}
+\label{tab:e06}
+\setlength{\tabcolsep}{3.5pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrrrrr}
+\tablebody tables/e06_stages.tex 
+\end{tabular}}
+\end{table}
+
+\reading ``Complete'' is not ``useful''. Of the \NumSweepSaddleOk{}
+completed $b=1$ saddles, \NumSweepZeroCrossings{} have \emph{no} crossing
+at all (up to $k=\NumSweepZeroCrossingsKMax$). The first crossing appears at
+$k=\NumSweepFirstCrossingK$, and no configuration has more than
+\NumSweepMaxCrossings{} (\cref{fig:e06saddle}). With a fixed 8-step recipe
+the manifolds at small $k$ are simply too short to meet, because
+$\lambda_u$ is small. A recipe has to scale its depth with
+$1/\ln\lambda_u$, as E7's tangency study does.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e06_saddle_sweep}}
+  \caption{E6 $b=1$ saddle. (a)~Crossings and bridges found by the fixed
+  recipe: none below $k=\NumSweepFirstCrossingK$ and intermittent up to
+  $k=\NumSweepZeroCrossingsKMax$. (b)~Stage times across $k$: cheap
+  everywhere; cost is not what limits this sweep.}
+  \label{fig:e06saddle}
+\end{figure}
+
+\caveat The ``Max iterations'' failures are a limit of the stable-side stop
+condition with this recipe, not necessarily of the map. A larger cap or a
+different stop condition might rescue them; I did not try either. Note also
+that the 4\,GB cap of E6 is lower than elsewhere.
+
+%======================================================================
+\section{Failure modes and breaking points (E7)}
+\label{sec:breaking}
+
+\subsection{Escape to infinity}
+\label{sec:escape}
+\claim The documented escape reproduces, and the documented mitigation
+works.
+
+\evidence \Cref{fig:e07escape}: on the $k=2.1$ period-3 orbit with a fixed
+step count, the run completed \NumEscapeStepsDone{} steps holding
+\NumEscapePeakPoints{} points, with $\max|x|=\NumEscapeMaxCoord$. It was then
+killed at the 20\,GB cap (peak \NumEscapePeakRssMb\,MB) after
+\NumEscapeKilledStepS\,s inside the next step. The same arm grown with a stop
+condition (arclength 0.5, or $\max|x|>2.5$) stopped safely at
+\NumEscapeStopArclengthPoints{} points; arclength 3 stopped at
+\NumEscapeStopArclengthThreePoints.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e07_escape}}
+  \caption{E7 escape ($k=2.1$, period 3). (a)~Points per step: the fixed
+  count dies one step after the curve turns up; the stop conditions
+  (open markers) end before the take-off. (b)~The largest coordinate jumps
+  in the last completed step, which is what the $\max|x|$ stop condition
+  catches.}
+  \label{fig:e07escape}
+\end{figure}
+
+\reading \code{grow\_n\_times} has no notion of budget. A single step can go
+from harmless to tens of gigabytes, so stop-condition growth should be the
+recommended interface.
+
+\subsection{Depth}
+\label{sec:depth}
+\claim p3 is numerically robust up to \NumDepthNumericsMaxPThree{} unstable
+steps, but its topology stops being reliable earlier. The inversion saddle
+is fragile at both ends.
+
+\evidence \Cref{fig:e07depth}: p3 completes the numerics through
+\NumDepthNumericsMaxPThree{} steps (\NumPThreePointsSeventeen{} points);
+\NumDepthOomPThree{} steps hit the 20\,GB cap. Its topology reports
+\code{is\_reliable} up to \NumDepthReliableMaxPThree{} steps and
+\code{is\_reliable=False} from \NumDepthUnreliableMinPThree{} on. The
+inversion saddle completes the numerics only up to
+\NumDepthNumericsMaxInversion{} steps. At \NumInversionOomSteps{} steps it is
+killed at the cap after reaching \NumInversionPointsSixSteps{} points at
+step \NumDepthNumericsMaxInversion. So the documented ``7 steps does not finish'' is a memory blow-up,
+not a hang. At \NumInversionAssertSteps{} steps the numerics succeed, but the
+topology stack trips its own invariant: ``crossing 0 at stable cdist 0.0
+\ldots{} is owned by 0 partition elements''.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e07_depth}}
+  \caption{E7 depth. (a)~Pipeline time against unstable steps; p3 climbs steeply
+  past 15 steps. (b)~Outcome by layer. The numerics fail
+  only by memory; open circles are topology runs that finished with
+  \code{is\_reliable=False}.}
+  \label{fig:e07depth}
+\end{figure}
+
+\caveat The inversion assertion lives in the topology layer and is recorded
+here because the stress test reached it. Whether the shallow inversion
+trellis is too thin to partition or the assertion is too strict is for the
+topology owner to decide.
+
+\subsection{Blasts}
+\label{sec:blasts}
+\evidence \Cref{fig:e07blasts}: k28 and p3 survive
+\NumMaxBlastsKTwoEight{} and \NumMaxBlastsPThree{} blasts and nested survives
+\NumMaxBlastsNested{}, all without numerical failure. k28's crossings grow
+from \NumBlastCrossingsStartKTwoEight{} to \NumBlastCrossingsEndKTwoEight, and
+its last blast took \NumBlastLastSKTwoEight\,s. Afterwards the topology
+reports k28 as \NumBlastTopologyKTwoEight{} (classes:
+\NumBlastClassesKTwoEight, unresolved: \NumBlastUnresolvedKTwoEight,
+virtual: \NumBlastVirtualKTwoEight) and p3 as \NumBlastTopologyPThree{}
+(classes: \NumBlastClassesPThree, unresolved: \NumBlastUnresolvedPThree,
+virtual: \NumBlastVirtualPThree). Nested stays \NumBlastTopologyNested{}
+(classes: \NumBlastClassesNested, none unresolved or virtual).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e07_blasts}}
+  \caption{E7 blasts. (a)~Time per blast grows geometrically for k28 and
+  nested and stays at milliseconds for p3. (b,c)~Crossings and bridges grow
+  geometrically. Nothing breaks numerically within 8--10 blasts.}
+  \label{fig:e07blasts}
+\end{figure}
+
+\reading Blasting is numerically sound to the depth tested. The limit is
+downstream: past a few blasts the topology cannot classify everything it
+is given.
+
+\subsection{Near tangency: artefact crossings}
+\label{sec:tangency}
+\claim This is the most important limitation found. As $k\to-1$ (the
+saddle-centre bifurcation) the true separatrix splitting becomes
+exponentially small. The numerics then register polygon-on-polygon crossings
+as if they were transverse, their number is set by the resolution, and no
+warning fires.
+
+\evidence \Cref{fig:e07tang}: \NumTangencyConfigs{} configurations, with $k+1$
+log-spaced from $10^{-4}$ to 2.5 and three cutoffs. At $k+1=10^{-4}$ the
+registered crossings are \NumTangencyCrossingsNearCutoffSeven,
+\NumTangencyCrossingsNearCutoffTen{} and \NumTangencyCrossingsNearCutoffTwelve{}
+for cutoffs $10^{-7}$, $10^{-10}$ and $10^{-12}$. The peaks over $k$ are
+\NumTangencyCrossingsPeakCutoffSeven, \NumTangencyCrossingsPeakCutoffTen{}
+and \NumTangencyCrossingsPeakCutoffTwelve. From $k+1\ge\NumTangencyAgreeKPlusOne$
+on, all three cutoffs agree (e.g.\ \NumTangencyCrossingsFar{} crossings at
+$k+1=1$). At the finest cutoff and $k+1\le0.025$, the smallest $|\sin|$ per
+configuration lies between \NumTangencyMinSinFineLo{} and
+\NumTangencyMinSinFineHi{} (median of the medians \NumTangencyMedianSinFine).
+The heuristic splitting $e^{-\pi^2/\ln\lambda}$ over the same range is
+\NumTangencyRefNear{} to \NumTangencyRefMid. Across all of this, warnings of
+any kind: \NumTangencyWarningsTotal. The smallest angle anywhere,
+\NumTangencyMinSin, sits at the transition, not near $k=-1$.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e07_tangency}}
+  \caption{E7 tangency. (a)~Crossings against $k+1$: below $k+1\approx\NumTangencyAgreeKPlusOne$
+  the three cutoffs disagree strongly. That is the
+  signature of artefacts, since a true crossing cannot depend on the
+  polygon's resolution. (b)~Smallest crossing angle against the heuristic
+  splitting (dashed): the registered angles are many decades larger than the
+  true splitting, i.e.\ they measure polygon noise.}
+  \label{fig:e07tang}
+\end{figure}
+
+\reading When the true separation of the manifolds is far below the
+polygon's own geometric error (\cref{sec:accuracy}), the two polygons
+interleave at random. Each interleaving is a clean, well-conditioned segment
+crossing (median $|\sin|$ \NumTangencyMedianSinFine), far from the library's relative near-parallel
+threshold of $10^{-12}$, so it is registered as transverse. The crossing
+tests are correct about the \emph{polygons}; the polygons are not accurate
+enough to resolve the \emph{manifolds}.
+
+\caveat The splitting reference is a heuristic order of magnitude, not a
+computed splitting. Some of the near-tangent crossings may be real; the
+claim is that their \emph{count} is not trustworthy. A guard that compares
+each crossing's angle and position with the local invariance error would
+flag this regime.
+
+%======================================================================
+\section{Fixed-point solver (E8)}
+\label{sec:solver}
+
+\claim The solver is fast and accurate when it finds the orbit you asked
+for. It finds the full set of short orbits of the $k=10$ horseshoe. It does
+\emph{not} check the minimal period, so it regularly hands back a
+lower-period orbit as if it were period $p$.
+
+\evidence \NumSolverSolves{} solves (\cref{fig:e08out}, \cref{tab:e08} in
+the appendix): \NumSolverConvergedRate{} converged and
+\NumSolverNoConvergenceRate{} did not. \NumSolverSaddleRate{} of all solves
+gave a saddle of the requested minimal period. The maximum orbit residual is
+\NumSolverMaxResidual{}, and the median solve takes \NumSolverMedianMs\,ms
+(99th percentile \NumSolverPNinetyNineMs\,ms, \cref{fig:e08time}). At $k=10$
+the distinct orbits found equal the full 2-shift count for
+\NumHorseshoeMatched{} periods (\NumHorseshoeFound{} of
+\NumHorseshoeExpected{} orbits, \cref{fig:e08orb}(a)).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e08_solver_outcomes}}
+  \caption{E8 outcomes per map and requested period. Orange (``converged to
+  a lower period'') is the trap; the all-orange period-2 bars at $k<3$ are
+  maps with no period-2 orbit at all.}
+  \label{fig:e08out}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e08_orbits}}
+  \caption{E8. (a)~Distinct orbits found: at $k=10$ the curve lies exactly
+  on the 2-shift count. (b)~Fraction of converged solves with a lower
+  minimal period, per requested period.}
+  \label{fig:e08orb}
+\end{figure}
+
+\reading The headline wrong-period rate, \NumSolverWrongPeriodRate{} of
+converged solves, mixes two different things. \NumSolverLowerNoOrbit{}
+solves (\NumSolverLowerNoOrbitRate) asked for period 2 at $k<3$. There is
+no period-2 orbit there: none was found from any seed, consistent with its
+birth in the period doubling of the elliptic point at $k=3$. So falling
+back to a fixed point is the only thing a shooting solver can do. The other
+\NumSolverLowerSlide{} solves (\NumSolverLowerSlideRate) are genuine
+slides: the requested period exists, and the solver found a fixed point or
+a divisor-period orbit instead. At $k=10$, where every period exists, the
+rate is \NumSolverLowerSlideRateKTen. The real problem is downstream:
+\NumSolverLowerAccepted{} lower-period solves passed
+\code{construct\_fixed\_point}, which built a saddle with the
+\emph{requested} period (e.g.\ a period-1 point labelled period 2 with
+$k_{\rm value}=2$). The lower-period solves that were rejected were rejected
+for being elliptic, not for their period.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e08_solve_time}}
+  \caption{E8 solve time. (a)~Distribution: sub-millisecond for most
+  solves. (b)~Median and IQR by period: cost grows mildly with the period.}
+  \label{fig:e08time}
+\end{figure}
+
+\caveat Seeds are uniform in a box sized to each map. Basins elsewhere are
+not sampled, so the orbit counts at $k<3$ are lower bounds.
+
+%======================================================================
+\section{Reproducibility (E10)}
+\label{sec:repro}
+
+\claim Runs are deterministic on a given device, and CPU and GPU agree to
+floating-point rounding.
+
+\evidence \Cref{tab:e10} and \cref{fig:e10}: across \NumRepeatsCpu{}
+fresh-process repeats per device, CPU--CPU is \NumBitIdentCpuCpu{} and
+GPU--GPU is \NumBitIdentGpuGpu{} (sha256 of every point array). CPU--GPU
+\NumBitIdentCpuGpu, and still \NumBitIdentCpuGpuRounded{} after rounding to
+$10^{-12}$. The crossing coordinates agree to \NumCrossingDevCpuGpu. The CV
+of the summed stage time is \NumTimingCvCpuTotal{} (CPU) and
+\NumTimingCvGpuTotal{} (GPU); per stage it is at most \NumTimingCvCpuMax{}
+and \NumTimingCvGpuMax. In this case the GPU run is slower, at
+\NumDetGpuSpeedup{} of the CPU speed (\NumDetTotalCpuS\,s against
+\NumDetTotalGpuS\,s).
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E10: do the sha256 hashes agree across repeats (exact bytes, and
+rounded to $10^{-12}$)?}
+\label{tab:e10}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccc}
+\tablebody tables/e10_identity.tex 
+\end{tabular}}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e10_determinism}}
+  \caption{E10. (a)~Stage times over five repeats, labelled with their CV:
+  the spread is a few percent. (b)~Total time per repeat: no drift, and
+  the GPU is consistently slower on this mid-size case.}
+  \label{fig:e10}
+\end{figure}
+
+\reading The CPU--GPU differences are rounding differences in the map that
+scale with the coordinate magnitude. In the lockstep comparison
+(\cref{fig:e02dev}) they first appear at step
+\NumGpuFirstDivergentStepKTwoEight. At step 11 of k28 they reach
+\NumGpuVerifyDevStepElevenKTwoEight{} in absolute terms but only
+\NumGpuVerifyRelDevStepElevenKTwoEight{} relative to the largest coordinate.
+At step 12, with coordinates near \NumGpuVerifyMaxCoordKTwoEight, they flip
+refinement decisions: the CPU holds \NumGpuVerifyPointsCpuKTwoEight{} points
+and the GPU \NumGpuVerifyPointsGpuKTwoEight. The crossings, which live near
+the saddle, are unaffected.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\textwidth]{\fig{e02_deviation}}
+  \caption{E2 lockstep CPU/GPU deviation of the unstable manifolds.
+  (a)~Absolute: it grows once the arm escapes. (b)~Relative to the largest
+  coordinate: it stays at machine $\epsilon$. The cross marks the step where
+  the point counts differ.}
+  \label{fig:e02dev}
+\end{figure}
+
+\caveat Five repeats bound the CV loosely. A timing difference below
+$\sim$5\% between two configurations should not be read as real.
+
+%======================================================================
+\section{Failure taxonomy}
+\label{sec:taxonomy}
+
+\Cref{tab:taxonomy} collects every failure class the campaign hit.
+``By design'' means the library refuses the input on purpose; ``limitation''
+means correct behaviour within an unstated envelope; ``bug'' means behaviour
+the library's own contract rules out.
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Failure taxonomy.}
+\label{tab:taxonomy}
+\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.3cm} Y Y >{\raggedright\arraybackslash}p{1.6cm} Y@{}}
+\toprule
+failure class & trigger & symptom & kind & suggested fix \\
+\midrule
+Escape OOM & fixed step count past the tangle (\cref{sec:escape,sec:scaling}) & one step goes from MB to the RSS cap; OOM kill & limitation & point/memory budget in \code{grow\_n\_times}; stop-condition growth by default \\
+Inversion blow-up & inversion saddle at \NumInversionOomSteps{} unstable steps; $k\ge\NumSweepOtherOomKMin$ in E6 & OOM, documented as ``does not finish'' & limitation & same budget guard \\
+Artefact crossings & near tangency, $k+1<\NumTangencyAgreeKPlusOne$ (\cref{sec:tangency}) & crossing count set by cutoff; no warning & limitation (silent) & angle/invariance-error guard; resolution warning \\
+Self-crossing polygon & coarse cutoff, e.g.\ \NumIsectUUCutoff{} (\cref{sec:intersections}) & u$\times$u crossings undetected & limitation (silent) & cheap u$\times$u diagnostic \\
+Coarse-cutoff crossing errors & default $10^{-4}$ on p3 (\cref{sec:accuracy}) & crossings invented and missed & limitation & default $10^{-7}$ \\
+Wrong period & \code{compute\_fixed\_point} from an arbitrary seed (\cref{sec:solver}) & lower-period orbit accepted as period $p$ & bug & minimal-period check in \code{construct\_fixed\_point} \\
+Max iterations & $k\le\NumSweepMaxIterKMax$, \code{grow\_until\_turnaround} (\cref{sec:robustness}) & \code{ValueError} & limitation & raise cap or change stop condition at small $\lambda_u$ \\
+Trivial tangle & fixed recipe at small $k$ (\cref{sec:robustness}) & completes with 0 crossings & limitation & scale depth with $1/\ln\lambda_u$ \\
+Not a saddle & elliptic point & \code{ValueError} & by design & none \\
+Orientation reversing & $b=-1$ & \code{ValueError} & by design & none (out of scope) \\
+Partition assert & inversion at \NumInversionAssertSteps{} steps (\cref{sec:depth}) & ``owned by 0 partition elements'' & bug or too strict (topology) & topology owner to triage \\
+Unreliable topology & $\ge\NumDepthUnreliableMinPThree$ p3 steps; many blasts (\cref{sec:depth,sec:blasts}) & \code{is\_reliable=False} & limitation (topology) & known open issue \\
+Stale registry & caching \code{intersection\_registry} across \code{compute\_intersections} & empty/stale object & API trap & return or re-fetch; warn in docs \\
+\code{image\_of} misses & \NumArrImageMissing{} of the regions tried (\cref{sec:invariants}) & no image found & open question & investigate \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%======================================================================
+\section{Recommendations}
+\label{sec:recs}
+
+\paragraph{Defaults.}
+\begin{itemize}[leftmargin=*]
+\item \code{area\_cutoff}: $10^{-7}$. It is converged in every case tested,
+  and its cost over $10^{-4}$ is the point ratio
+  \NumPointsKTwoEightCutoffFour{} $\to$ \NumPointsKTwoEightCutoffSeven{} on
+  k28 (\cref{sec:accuracy}).
+\item Growth: stop-condition growth (\code{grow\_until\_*}) as the
+  documented default. \code{grow\_n\_times} only with a budget.
+\item GPU: off. The measured ceiling is \NumAmdahlBoundMax{}
+  (\cref{sec:gpu}).
+\end{itemize}
+
+\paragraph{Guards to add (cheap, numerics layer).}
+\begin{itemize}[leftmargin=*]
+\item \textbf{Self-crossing diagnostic}: test non-adjacent u$\times$u (and
+  s$\times$s) segment pairs through the existing R-tree after growth, and
+  warn with the cutoff that would remove them.
+\item \textbf{Angle/resolution warning}: for each registered crossing,
+  compare $|\sin\theta|$ times the local segment length with the local
+  invariance error, and warn when the crossing cannot be distinguished from
+  polygon noise.
+\item \textbf{Minimal-period check}: in \code{construct\_fixed\_point},
+  reject (or relabel) an orbit whose minimal period is a proper divisor of
+  the requested one.
+\item \textbf{Memory guard}: predict the next step's points from the last
+  growth factor, and refuse or warn above a budget. The E3 harness already
+  does this in a few lines.
+\end{itemize}
+
+\paragraph{Open questions for the advisor.}
+\begin{enumerate}[leftmargin=*]
+\item Near tangency, should we accept that crossings below a resolution
+  threshold are undecidable with polygons, or invest in a validated method
+  (interval arithmetic, or parameterisation-method manifolds)?
+\item Is \code{image\_of} expected to fail for regions whose image crossings
+  are not registered (\NumArrImageMissing{} of the regions tried), or is
+  this a gap?
+\item Should dissipative maps ($b\ne\pm1$) be in scope? They currently run
+  without complaint and without validation.
+\item Is the inversion partition assertion at shallow depth a real defect or
+  an over-strict invariant?
+\end{enumerate}
+
+%======================================================================
+\section{Threats to validity}
+\label{sec:threats}
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{One machine.} All timings are from a single host and one GPU.
+  The GPU conclusion rests on Amdahl's law, which transfers to other
+  hardware; the absolute crossover sizes do not.
+\item \textbf{Hénon only.} Every result is for the Hénon family. Maps with
+  more expensive evaluations would raise $f_{\rm map}$ and could change the
+  GPU verdict.
+\item \textbf{Quick calibration of grids.} The sweep grids and depths were
+  calibrated in a short pilot to fit the budget. Exponents rest on
+  $\le$3 decades, and some breaking points (depth, blasts) are only known to
+  the resolution of the grid.
+\item \textbf{cProfile overhead.} Profiling inflates Python call costs
+  relative to NumPy kernels, which biases $f_{\rm map}$ low (see the caveat
+  in \cref{sec:gpu}).
+\item \textbf{RSS sampling.} The watchdog samples every 50\,ms, so peak RSS
+  can be missed by a short spike, and OOM kills happen up to one sample
+  after the cap. Caps differ per experiment (\cref{tab:counts}).
+\item \textbf{Invariance probe design.} The probe maps points sampled inside
+  segments, because a vertex's image is often exactly a vertex, and measures
+  one-step consistency. It is not a distance to the true manifold.
+\item \textbf{References are finest runs.} Convergence in E4 is measured
+  against $10^{-9}$, and E9's ``truth'' is a brute force on the \emph{same}
+  polygons. E9 therefore validates the intersection code, not the manifold
+  approximation.
+\end{itemize}
+
+%======================================================================
+\clearpage
+\appendix
+\section{Tables}
+\label{app:tables}
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{E4: cost and accuracy per cutoff. ``crossing dev.'' is the median
+distance of the finest run's crossings to this run's.}
+\label{tab:e04}
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{llrlrrrrrr}
+\tablebody tables/e04_cutoff.tex 
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{E8: solver outcomes per map and requested period. ``orbits found''
+counts distinct orbits of exactly that minimal period over all solves (for
+$k=10$: found / full 2-shift count).}
+\label{tab:e08}
+\begin{tabular}{lrrrrrr}
+\tablebody tables/e08_solver.tex 
+\end{tabular}
+\end{table}
+
+\section{Reproduction}
+\label{app:repro}
+
+From the repository root, with the project's environment:
+\begin{verbatim}
+env/bin/python stress/numerics/run_campaign.py --quick   # pilot
+env/bin/python stress/numerics/run_campaign.py           # full run
+env/bin/python stress/numerics/report/make_figures.py
+env/bin/python stress/numerics/report/make_numbers.py
+env/bin/python stress/numerics/report/make_numbers_extra.py
+cd stress/numerics/report && ~/.local/bin/tectonic report.tex
+\end{verbatim}
+Results land in \code{stress/numerics/results/*.jsonl} (one record per
+configuration) with a running \code{progress.log}. A single experiment runs
+on its own as
+\begin{verbatim}
+env/bin/python stress/numerics/eNN_*.py [--quick] [--only I,J] \
+    [--rss-cap-gb G] [--timeout S] [--workers N]
+\end{verbatim}
+
+
+\section{Configuration and outcome counts}
+\label{app:counts}
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Records and outcomes per experiment in the full run, with each
+experiment's default per-configuration timeout and RSS cap (some E7 configs
+override the timeout). ``assert'' counts \code{invariant\_assert} outcomes of
+the numerics; the topology assertions of E7 are secondary results inside
+\code{ok} records.}
+\label{tab:counts}
+\begin{tabular}{lrrrrrrrr}
+\tablebody tables/campaign_counts.tex 
+\end{tabular}
+\end{table}
+
+\end{document}

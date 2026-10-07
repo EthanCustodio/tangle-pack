@@ -1,0 +1,18 @@
+% campaign: records and outcomes per experiment (full run); timeout / RSS cap = default per config
+% suggested column spec: {lrrrrrrrr}
+\toprule
+experiment & configs & ok & exception & assert & oom & timeout & timeout (s) & cap (GB) \\
+\midrule
+e01\_map\_throughput & 8 & 8 & 0 & 0 & 0 & 0 & 300 & 24 \\
+e02\_gpu\_end\_to\_end & 33 & 33 & 0 & 0 & 0 & 0 & 600 & 24 \\
+e03\_scaling & 22 & 19 & 0 & 0 & 3 & 0 & 900 & 24 \\
+e04\_area\_cutoff & 28 & 27 & 0 & 0 & 1 & 0 & 900 & 16 \\
+e05\_invariants & 8 & 8 & 0 & 0 & 0 & 0 & 600 & 12 \\
+e06\_parameter\_sweep & 98 & 71 & 24 & 0 & 3 & 0 & 240 & 4 \\
+e07\_breaking & 92 & 88 & 0 & 0 & 4 & 0 & 600 & 20 \\
+e08\_fixed\_point\_solver & 24 & 24 & 0 & 0 & 0 & 0 & 900 & 24 \\
+e09\_intersections & 26 & 26 & 0 & 0 & 0 & 0 & 600 & 16 \\
+e10\_determinism & 10 & 10 & 0 & 0 & 0 & 0 & 300 & 24 \\
+\midrule
+total & 349 & 314 & 24 & 0 & 11 & 0 & & \\
+\bottomrule

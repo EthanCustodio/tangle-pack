@@ -1,0 +1,9 @@
+% E2: median CPU time / median GPU time per stage, and the CPU map fraction with its Amdahl bound
+% suggested column spec: {lrrrrrrrr}
+\toprule
+case & grow unstable & grow stable & intersections & trim + bridges & iterate table & total & $f_{\rm map}$ & Amdahl \\
+\midrule
+k28 & \ensuremath{1.007\times} & \ensuremath{0.689\times} & \ensuremath{1.001\times} & \ensuremath{0.978\times} & \ensuremath{0.858\times} & \ensuremath{1.001\times} & 0.0171\% & \ensuremath{1.000\times} \\
+p3 & \ensuremath{0.962\times} & \ensuremath{1.017\times} & \ensuremath{0.985\times} & \ensuremath{1.006\times} & \ensuremath{1.462\times} & \ensuremath{0.970\times} & 0.505\% & \ensuremath{1.005\times} \\
+k10 & \ensuremath{0.939\times} & \ensuremath{0.895\times} & \ensuremath{0.991\times} & \ensuremath{1.006\times} & \ensuremath{1.060\times} & \ensuremath{0.958\times} & 0.84\% & \ensuremath{1.008\times} \\
+\bottomrule

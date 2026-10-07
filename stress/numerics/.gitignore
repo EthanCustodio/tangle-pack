@@ -1,0 +1,4 @@
+results/*.bak*
+results/raw/
+report/build/
+__pycache__/
