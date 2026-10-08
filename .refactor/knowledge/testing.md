@@ -347,16 +347,22 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   `anchor_bridge_class_leads_its_tangle` on `inversion` (D9: s(0.1) has no hole).
 - Laws: `alphabet_closed_under_words` replaces `no_virtual_class` (every rule symbol in
   `dyn.table`, `dyn.classes` in table order, seed iff `named_by is None`, a closure class is
-  named in its `named_by`'s word and has an itinerary; returns symbols + classes).
+  in `minimal_trellis().classes` and named in its `named_by`'s word, and any class without an
+  itinerary makes `is_reliable` False; returns symbols + classes).
   `matrix_is_token_counts` lost its virtual-sink branch (every active token is a node). NEW
-  `dual_unified_is_where_f_of_s_stops` (dual-graph layer; helper `helpers.laws.where_f_of_s_stops`
-  computes `S \ f(S)` per pip-owning branch from the branch ends). `anchor_bridge_class_leads_its_tangle`
+  `dual_unified_is_where_f_of_s_stops` (dual-graph layer; helper
+  `helpers.laws.misplaced_unified_crossings` reads `S \ f(S)` off the iterate table: a crossing
+  of a pip-owning branch is unified iff it has no registered preimage -- independent of
+  `DualGraph._check_where_f_of_s_stops`' cdist arithmetic, review fix). `anchor_bridge_class_leads_its_tangle`
   checks only tangles whose every stable branch carries a hole (`Hole.openings` branch keys,
   D9 / DEC-19), the rule the probe found (scoping by the anchor's own branch does not work:
   s(0.0) has the window hole and u(0.0)'s anchor class is still inert). All pass on the 10 law
   cases; the anchor law is non-vacuous on the 9 others.
 - Regression: `test_open_p3_deep_runs.py` has no xfail (`test_deep_p3_alphabet_is_closed`
-  x3: every rule symbol in the table, nothing unresolved, reliable; the sink test is deleted);
+  x3: every rule symbol in the table, every closure class spanned by a registered bridge, and
+  every class whose kept walk names a pair outside table + evidence (computed independently in
+  the test) is unresolved, warned, and the dynamics unreliable; `test_deep_p3_every_class_walks`:
+  every class has an itinerary or a kept walk; the sink test is deleted);
   NEW `test_closure_predicts_registered_images.py` (p3_16: a closure class with a registered
   member chain exists and every such class is verified), `test_evidence_diagnosis.py` (k28 at 6
   blasts, ~3 s: each disagreeing `ImageEvidence` has a diagnosis whose cause matches an

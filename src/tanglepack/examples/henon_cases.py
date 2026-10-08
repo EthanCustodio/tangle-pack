@@ -26,10 +26,11 @@ Dev Notes:
   propagated hole's side was read against the nearest vertex of its whole
   containing bridge, on another fold. Fixed 2026-10-02 (sides are read on the
   image sub-arc; since WP4 the signs decide the openings and every class
-  walks). Since WP7 they are reliable too: past the reference switch (BCG-4)
-  the words name the classes of images of image bridges, and the symbolic
-  dynamics closes the alphabet under the word map (43-49 classes instead of
-  9, PK-1). The default stays at 13, before the reference switch.
+  walks). They are NOT reliable: past the reference switch (BCG-4) the word
+  of an image-bridge class names the class of its image, a pair no computed
+  bridge spans, so that class is unresolved with a WARNING (PK-1, WP7; whether
+  the pair must get its bridge is DEC-21). The default stays at 13, before
+  the reference switch.
 * Each nested zone blasts only its own fixed point (2026-10-02): blasting
   both from either zone also iterated the other tangle's bridges, made the
   result depend on blast order and collapsed the period-3 pseudoneighbors at
