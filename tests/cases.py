@@ -36,6 +36,12 @@ Cases:
   eigenvalue (P4).
 * ``p3_15`` / ``p3_16`` / ``p3_6_blasts`` -- the deep period-3 runs that are
   known open problems (an unreachable class and a virtual ``new1``, P3).
+* ``near_tangency`` -- the period-1 ``b = 1`` saddle at ``k = -0.999``, close to
+  the saddle-centre bifurcation at ``k = -1`` where the splitting angle is
+  exponentially small, each arm grown to 20 fixed-point separations of
+  canonical distance at its own ``area_cutoff = 1e-10``, through
+  ``compute_intersections`` only. Its crossings are near-tangent polylines
+  straddling each other: the resolution guards' positive case. NOT a law case.
 
 Dev Notes:
 
@@ -111,6 +117,8 @@ _STAGES: tuple[str, ...] = (
 HENON_K28: tuple[float, float] = (2.8, 1)
 #: The ``b = -1`` orientation-reversing placeholder map (P4).
 HENON_ORIENTATION_REVERSING: tuple[float, float] = (4, -1)
+#: Close to the saddle-centre bifurcation at k = -1 (the near-tangency case).
+HENON_NEAR_TANGENCY: tuple[float, float] = (-0.999, 1)
 
 K10_SADDLE_SEED: tuple[float, float] = (4.0, -4.0)
 K10_INVERSION_SEED: tuple[float, float] = (-2.3166, 2.3166)
@@ -653,6 +661,48 @@ def build_orientation_reversing(*, through: Stage = "partitioned") -> Case:
 
 
 # --------------------------------------------------------------------------- #
+# Near tangency
+# --------------------------------------------------------------------------- #
+def build_near_tangency() -> Case:
+    """
+    The period-1 saddle at ``k = -0.999``, grown far into its near-tangent tangle.
+
+    Both arms grow one step at a time until their tail reaches 20 fixed-point
+    separations ``sqrt(4 + 4k)`` of canonical distance (lambda is close to 1, so
+    a step count would not say how far that is), at ``area_cutoff = 1e-10``
+    pinned here; then the crossings are computed. Nothing past
+    ``intersected``: the case exists for the resolution guards.
+
+    Returns:
+        The case, stage ``intersected``.
+    """
+    session = TangleSession(
+        henon_map(*HENON_NEAR_TANGENCY),
+        henon_map_inverse(*HENON_NEAR_TANGENCY),
+        henon_jacobian(*HENON_NEAR_TANGENCY),
+    )
+    session.workbench._man_machine.area_cutoff = 1e-10
+    k, _b = HENON_NEAR_TANGENCY
+    x = 1.0 + 0.5 * np.sqrt(4 + 4 * k)
+    fp = session.construct_fixed_point([x, -x])
+    session.orient_eigenvectors(fp, _orientation(PERIOD1_ORIENTATION))
+    session.initialize_both_manifolds(fp)
+    reach = 20 * np.sqrt(4 + 4 * k)
+    for stability in ("unstable", "stable"):
+        while session.manifolds[(fp, stability, 0, 0)].tail.cdist < reach:
+            session.grow_n_times(fp, stability, num_iterations=1)
+    session.compute_intersections([fp])
+    return Case(
+        name="near_tangency",
+        session=session,
+        fixed_points=[fp],
+        pips=[None],
+        expect=CaseExpect(periods=(1,)),
+        stage="intersected",
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Registries: law cases, known issues, not-applicable pairs
 # --------------------------------------------------------------------------- #
 #: The cases every physical law runs on (decision 9).
@@ -681,6 +731,7 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         "p3_15": lambda: build_period3(unstable_steps=15),
         "p3_16": lambda: build_period3(unstable_steps=16),
         "p3_6_blasts": lambda: build_period3(blasts=6),
+        "near_tangency": build_near_tangency,
     }
 )
 

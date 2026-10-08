@@ -45,7 +45,6 @@ from typing import TYPE_CHECKING, Iterable, Literal, Optional
 
 import numpy as np
 from numpy.typing import NDArray
-from rtree import index
 
 from .geometry import curvature_area_batch
 from .Intersection import Stability
@@ -63,6 +62,8 @@ logger.addHandler(logging.NullHandler())
 _MARGIN = 1e-9
 # Relative parallel threshold on sin(angle), as in Tangle.
 _EPS_REL = 1e-12
+# Candidate pairs generated at once by the sweep.
+_PAIR_BLOCK = 2_000_000
 
 
 @dataclass(frozen=True)
@@ -188,19 +189,19 @@ def _curves(
     workbench: "TangleWorkbench", fixed_points: list["FixedPoint"], stability: Stability
 ) -> list[tuple[str, list]]:
     """The named node lists of one stability's curves."""
-    curves = [
-        (_manifold_name(key), manifold.get_point_array(return_nodes=True))
+    nodes_of = {
+        key: manifold.get_point_array(return_nodes=True)
         for key, manifold in workbench.manifolds.items()
-        if key[1] == stability and any(key[0] is fp for fp in fixed_points)
+        if key[1] == stability
+    }
+    curves = [
+        (_manifold_name(key), nodes)
+        for key, nodes in nodes_of.items()
+        if any(key[0] is fp for fp in fixed_points)
     ]
     if stability == "stable":
         return curves
-    manifold_nodes = {
-        id(node)
-        for key, manifold in workbench.manifolds.items()
-        if key[1] == "unstable"
-        for node in manifold.get_point_array(return_nodes=True)
-    }
+    manifold_nodes = {id(node) for nodes in nodes_of.values() for node in nodes}
     for bridge in workbench.bridges:
         if not any(bridge.fixed_point is fp for fp in fixed_points):
             continue
@@ -316,23 +317,37 @@ def _segment_rows(owner: int, nodes: list) -> Optional[tuple[NDArray, ...]]:
 def _candidate_pairs(
     a: NDArray[np.float64], b: NDArray[np.float64]
 ) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
-    """Segment pairs ``i < j`` whose bounding boxes overlap (one rtree bulk load).
+    """Every pair of segments whose bounding boxes overlap, by sweep and prune.
 
-    One box query per segment, as in ``Tangle.add_manifolds``. (rtree's bulk
-    ``intersection_v`` would be the vectorised form, but 1.4.0 loses its result
-    buffer as soon as the results outgrow twice the query count, which every
-    polyline does -- each segment meets its two neighbours.)
+    The boxes are sorted along the axis on which fewer of them overlap, each is
+    paired with the boxes that start before it ends, and the pairs that also
+    overlap on the other axis are kept. A tangle's segments are short next to
+    their spacing, so this yields a few candidates per segment; it runs in
+    blocks of ``_PAIR_BLOCK`` pairs so a dense fold cannot exhaust memory.
+    (rtree's bulk ``intersection_v`` is not used: in 1.4.0 it loses its result
+    buffer once the results outgrow twice the query count, which every polyline
+    does -- each segment meets its two neighbours.)
     """
     mins, maxs = np.minimum(a, b), np.maximum(a, b)
-    boxes = np.hstack([mins, maxs])
-    properties = index.Property()
-    properties.dimension = 2
-    tree = index.Index(
-        ((k, tuple(box), None) for k, box in enumerate(boxes)), properties=properties
-    )
-    found = [np.fromiter(tree.intersection(tuple(box)), dtype=np.int64) for box in boxes]
-    counts = np.fromiter((len(ids) for ids in found), dtype=np.int64, count=len(found))
-    query = np.repeat(np.arange(len(boxes)), counts)
-    found = np.concatenate(found) if found else np.empty(0, dtype=np.int64)
-    lower = query < found
-    return query[lower], found[lower]
+    sweeps = []
+    for axis in (0, 1):
+        order = np.argsort(mins[:, axis], kind="stable")
+        ends = np.searchsorted(mins[order, axis], maxs[order, axis], side="right")
+        sweeps.append((axis, order, np.maximum(ends - np.arange(len(order)) - 1, 0)))
+    axis, order, counts = min(sweeps, key=lambda sweep: sweep[2].sum())
+    other = 1 - axis
+
+    totals = np.cumsum(counts)
+    cuts = np.searchsorted(totals, np.arange(_PAIR_BLOCK, totals[-1], _PAIR_BLOCK))
+    firsts, seconds = [], []
+    for block in np.split(np.arange(len(order)), cuts):
+        block_counts = counts[block]
+        first = np.repeat(block, block_counts)
+        offset = np.arange(block_counts.sum()) - np.repeat(
+            np.cumsum(block_counts) - block_counts, block_counts
+        )
+        i, j = order[first], order[first + offset + 1]
+        overlap = (mins[i, other] <= maxs[j, other]) & (mins[j, other] <= maxs[i, other])
+        firsts.append(i[overlap])
+        seconds.append(j[overlap])
+    return np.concatenate(firsts), np.concatenate(seconds)

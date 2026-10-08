@@ -1195,7 +1195,7 @@ class TangleWorkbench:
         """One WARNING for new same-stability hits in the tangle region, one INFO outside."""
 
         def key(hit: SameStabilityCrossing) -> tuple:
-            return (hit.stability, hit.curve_a, hit.curve_b, hit.seg_a, hit.seg_b)
+            return (hit.stability, hit.curve_a, hit.curve_b, hit.point)
 
         inside = [hit for hit in hits if hit.in_tangle_region]
         outside = [hit for hit in hits if not hit.in_tangle_region]
