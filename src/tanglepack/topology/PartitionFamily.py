@@ -67,6 +67,14 @@ Dev Notes:
   homotopy partition does between two holes (INFO). Two pieces sharing a
   crossing on one row ask for the same flanks (they depend on the crossing
   alone); the second is recorded as ``"already cut"``.
+* Parent by exact containment (2026-10-07). An iterated element's homotopy
+  parent is the homotopy span containing it, compared exactly
+  (:func:`_parent_interval`; a singleton by its crossing's id). It used to
+  be the owner of the element's midpoint under ``cdist_tol``, and a real
+  sliver ``(pip, outer]`` of width 1.1e-6 beyond the zone's pip (k=2.8, 9
+  blasts) had its midpoint within the tolerance of the closed pip singleton,
+  so the containment assertion fired. The ``cut_by`` covering test is exact
+  for the same reason; :meth:`PartitionFamily.interval_at` is exact first.
 * History. Commit ``2a2e35a`` closed the element under every image bridge at
   both crossings; the footprint rule of 2026-09-21 opened the base and the
   chords of every lobe, the anchor lobe's included, so the anchor lobe's fold
@@ -246,15 +254,26 @@ class PartitionFamily:
         return self.result(ref.branch_key, ref.side).element(ref.element_id)
 
     def interval_at(
-        self, branch_key: "ManifoldKey", side: Side, cdist: float
+        self,
+        branch_key: "ManifoldKey",
+        side: Side,
+        cdist: float,
+        *,
+        tol: Optional[float] = None,
     ) -> PartitionInterval:
         """
         The element owning one stable canonical distance on one side of a branch.
+
+        Exact first: the one element owning ``cdist`` with no tolerance is the
+        answer. Only when no element owns it exactly (an estimated cdist just
+        past the partitioned stretch) is the tolerant reading tried.
 
         Args:
             branch_key: Manifold key of the stable branch.
             side: Which side's partition to read.
             cdist: The stable canonical distance to locate.
+            tol: The fallback tolerance; the registry's ``cdist_tol`` by
+                default, ``0.0`` to force the exact reading.
 
         Returns:
             The owning :class:`~tanglepack.topology.TopologyResults.PartitionInterval`.
@@ -263,14 +282,25 @@ class PartitionFamily:
             ValueError: If no result covers ``(branch_key, side)``, if the
                 distance lies outside the partitioned stretch, or (a broken
                 partition) if more than one element owns it.
+
+        Note:
+            Partition boundaries ARE registry floats, so a registry cdist
+            resolves exactly, however close its neighbours sit; the tolerance
+            only absorbs ESTIMATED cdists (``land_element``'s image spans). A
+            tolerant reading near a boundary would hand a sliver narrower than
+            ``2 * tol`` to the closed element beside it.
         """
         result = self.result(branch_key, side)
-        tol = self.tol
         owners = [
-            interval
-            for interval in result.intervals
-            if owns_cdist(interval, cdist, tol)
+            interval for interval in result.intervals if owns_cdist(interval, cdist, 0.0)
         ]
+        tol = self.tol if tol is None else tol
+        if len(owners) != 1 and tol > 0.0:
+            owners = [
+                interval
+                for interval in result.intervals
+                if owns_cdist(interval, cdist, tol)
+            ]
         if len(owners) != 1:
             span = (
                 f"{result.intervals[0].lo_cdist:.6g}.."
@@ -528,6 +558,43 @@ def _intervals_from_marks(marks: Marks) -> list[PartitionInterval]:
     return with_singletons
 
 
+def _parent_interval(
+    child: PartitionInterval, parent_result: StablePartitionResult
+) -> PartitionInterval:
+    """
+    The homotopy element an iterated element refines, by exact containment.
+
+    A homotopy boundary is never re-cut, so the iterated boundaries are a
+    superset of the homotopy ones and a span lies inside exactly one homotopy
+    span, compared exactly (all boundaries are registry floats). A singleton
+    ``[x, x]`` — on a homotopy boundary, or pinched at a new one — belongs to
+    the element owning the crossing ``x`` (by id); the synthetic anchor's to
+    the element owning cdist 0.0.
+    """
+    if child.lo_id == child.hi_id:
+        element_id = parent_result.element_of_intersection.get(child.lo_id)
+        if element_id is not None:
+            return parent_result.element(element_id)
+        candidates = [
+            iv for iv in parent_result.intervals if owns_cdist(iv, child.lo_cdist, 0.0)
+        ]
+    else:
+        candidates = [
+            iv
+            for iv in parent_result.intervals
+            if iv.lo_id != iv.hi_id
+            and iv.lo_cdist <= child.lo_cdist
+            and child.hi_cdist <= iv.hi_cdist
+        ]
+    assert len(candidates) == 1, (
+        f"iterated element {child.branch_key[1:]}/{child.side}#{child.element_id} "
+        f"(ids {child.lo_id}, {child.hi_id}) [{child.lo_cdist!r}, {child.hi_cdist!r}] "
+        f"lies inside {len(candidates)} homotopy elements "
+        f"{[(iv.element_id, iv.lo_id, iv.hi_id) for iv in candidates]}, expected one"
+    )
+    return candidates[0]
+
+
 class Cut:
     """
     One audit record of the iterated cut: what one bridge end did to one row.
@@ -781,27 +848,23 @@ class IteratedHomotopyPartition(PartitionFamily):
                 interval.element_id = element_id
                 interval.branch_key = branch_key
                 interval.side = side
-                mid = (
-                    interval.lo_cdist
-                    if interval.lo_cdist == interval.hi_cdist
-                    else 0.5 * (interval.lo_cdist + interval.hi_cdist)
-                )
-                parent = homotopy.interval_at(branch_key, side, mid)
+                parent = _parent_interval(interval, homotopy.result(branch_key, side))
                 interval.parent_element_id = parent.element_id
                 assert (
-                    interval.lo_cdist >= parent.lo_cdist - homotopy.tol
-                    and interval.hi_cdist <= parent.hi_cdist + homotopy.tol
+                    parent.lo_cdist <= interval.lo_cdist
+                    and interval.hi_cdist <= parent.hi_cdist
                 ), (
                     f"iterated element {branch_key[1:]}/{side}#{element_id} "
-                    f"[{interval.lo_cdist:.6g}, {interval.hi_cdist:.6g}] is not "
-                    f"inside its parent #{parent.element_id} "
-                    f"[{parent.lo_cdist:.6g}, {parent.hi_cdist:.6g}]"
+                    f"(ids {interval.lo_id}, {interval.hi_id}) "
+                    f"[{interval.lo_cdist!r}, {interval.hi_cdist!r}] of width "
+                    f"{interval.hi_cdist - interval.lo_cdist!r} is not inside its "
+                    f"parent #{parent.element_id} (ids {parent.lo_id}, {parent.hi_id}) "
+                    f"[{parent.lo_cdist!r}, {parent.hi_cdist!r}]"
                 )
                 covering = [
                     (far_c - near_c, bid)
                     for near_c, far_c, bid in spans.get((branch_key, side), [])
-                    if near_c - homotopy.tol <= interval.lo_cdist
-                    and interval.hi_cdist <= far_c + homotopy.tol
+                    if near_c <= interval.lo_cdist and interval.hi_cdist <= far_c
                 ]
                 if covering:
                     interval.cut_by = min(covering, key=lambda item: item[0])[1]

@@ -42,6 +42,9 @@ Cases:
   canonical distance at its own ``area_cutoff = 1e-10``, through
   ``compute_intersections`` only. Its crossings are near-tangent polylines
   straddling each other: the resolution guards' positive case. NOT a law case.
+* ``k28_deep_blast_sliver`` -- ``k28`` from the analytic seed, blasted nine
+  times: a crossing sits a sliver narrower than ``2 * cdist_tol`` past the pip
+  (stress campaign E11, 2026-10-07; the exact-ownership regression).
 
 Dev Notes:
 
@@ -123,6 +126,12 @@ HENON_NEAR_TANGENCY: tuple[float, float] = (-0.999, 1)
 K10_SADDLE_SEED: tuple[float, float] = (4.0, -4.0)
 K10_INVERSION_SEED: tuple[float, float] = (-2.3166, 2.3166)
 K28_SADDLE_SEED: tuple[float, float] = (4.0, -4.0)
+#: The analytic ``k=2.8`` saddle ``x = (2 + sqrt(4 + 4k)) / 2`` (the stress
+#: campaign's seed). It converges to the same saddle as ``K28_SADDLE_SEED`` but
+#: not to the same last bits, and nine blasts of it leave a real crossing
+#: 1.1e-6 past the pip, a sliver whose midpoint lies within ``cdist_tol`` of the
+#: pip (the E11 sliver).
+K28_ANALYTIC_SADDLE_SEED: tuple[float, float] = (2.9493588689617924, -2.9493588689617924)
 ORIENTATION_REVERSING_SEED: tuple[float, float] = (2.0, 2.0)
 P3_ORBIT_SEED: tuple[tuple[float, float], ...] = ((0, 1), (-1, 0), (-1, 1))
 P3_OUTER_SADDLE_SEED: tuple[float, float] = (4.0, -4.0)
@@ -283,7 +292,12 @@ def build_k10(
 # --------------------------------------------------------------------------- #
 # k = 2.8
 # --------------------------------------------------------------------------- #
-def build_k28(*, blasts: Literal[0, 1, 2] = 1, through: Stage = "partitioned") -> Case:
+def build_k28(
+    *,
+    blasts: int = 1,
+    through: Stage = "partitioned",
+    seed: tuple[float, float] = K28_SADDLE_SEED,
+) -> Case:
     """
     The ``k=2.8`` saddle, its zone trimmed at ``f(q0)`` and blasted.
 
@@ -291,6 +305,8 @@ def build_k28(*, blasts: Literal[0, 1, 2] = 1, through: Stage = "partitioned") -
         blasts: Single-iteration blasts of the zone (1 or 2 for the law cases).
         through: The last stage to run; stages before ``bridges`` are not
             offered (nothing uses them).
+        seed: The saddle's solver seed (the deep-blast regression uses
+            ``K28_ANALYTIC_SADDLE_SEED``).
 
     Returns:
         The case, the pip ``f(q0)`` restored after every blast.
@@ -304,7 +320,7 @@ def build_k28(*, blasts: Literal[0, 1, 2] = 1, through: Stage = "partitioned") -
         henon_map(*HENON_K28), henon_map_inverse(*HENON_K28), henon_jacobian(*HENON_K28)
     )
     session.area_cutoff = 1e-7
-    fp = session.construct_fixed_point(list(K28_SADDLE_SEED))
+    fp = session.construct_fixed_point(list(seed))
     session.orient_eigenvectors(fp, _orientation(PERIOD1_ORIENTATION))
     session.initialize_both_manifolds(fp)
     session.grow_n_times(fp, "unstable", num_iterations=10)
@@ -732,6 +748,7 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         "p3_16": lambda: build_period3(unstable_steps=16),
         "p3_6_blasts": lambda: build_period3(blasts=6),
         "near_tangency": build_near_tangency,
+        "k28_deep_blast_sliver": lambda: build_k28(blasts=9, seed=K28_ANALYTIC_SADDLE_SEED),
     }
 )
 

@@ -74,3 +74,34 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   hole sides pinned by `test_p3_hole_sides_are_pinned`).
 - p1 alone (probe recipe, `min_separation=1e-4`): b0 class unresolved (singleton), b1
   `a -> a u^-1 v^-1`, b2/b4/b8 identical (verified).
+
+## Deferred / open
+
+- DEFERRED (author, 2026-10-07; stress campaign WP4 part B): a stable branch with ONLY anchors.
+  The k=10 inversion saddle grown 4 or 5 unstable steps (E7) registers no crossing past the
+  anchors of a stable branch. `_build_intervals` then gets a single boundary (the anchor is also
+  the outermost crossing) and yields zero intervals, and `_element_of_intersection` asserts
+  "crossing 0 at stable cdist 0.0 ... is owned by 0 partition elements" (reproduced on `main` at
+  `8148d48` via `cases.build_inversion(unstable_steps=4|5)`). Neither check is over-strict; what
+  such a branch partitions into is undecided. Candidates: (i) one closed singleton at the anchor
+  (consistent with the partition spanning anchor .. outermost crossing, but a singleton owns no
+  stable edge and no dual-graph node, so the branch drops out of the dual graph); (ii) one closed
+  element `[anchor, end]` to the branch's end, like an unbounded high end in `land_element`, which
+  gives the branch dual-graph nodes with no crossing to own. Either must work with ONE anchor per
+  branch: the inversion saddle's duplicate (0,0) anchors are the strict xfail
+  `one_anchor_per_unstable_branch` (`tests/cases.py` `KNOWN_ISSUES`) and must stay failing until
+  that is fixed. Evidence: the planning probe monkeypatched (i) and ran the full stack (4 steps:
+  0 classes; 5 steps: 1 unresolved class, provisional). When decided, log at INFO on the
+  `StablePartition` logger ("no crossing past its anchor(s); grow the unstable manifold"), never
+  on `PartitionFamily` (whose WARNING count `test_iterated_cut.py` watches), and add the
+  regression `test_inversion_before_the_tangle_forms` (4 and 5 steps run through
+  `symbolic_dynamics`). Recorded in the `StablePartition` Dev Notes too.
+- FIXED 2026-10-07 (WP4 part A): tolerance-based ownership of registry cdists. Partition
+  boundaries are registry floats, so crossings are owned by id / exact cdist, the iterated parent
+  by exact containment (`PartitionFamily._parent_interval`) and `interval_at` is exact first. The
+  E11 "zero-width iterated element" was a real sliver `(pip, outer]` of width 1.1e-6 beyond the
+  pip whose midpoint fell within `cdist_tol` of the closed pip singleton (regression
+  `tests/regression/test_deep_blast_sliver_beyond_pip.py`, builder `k28_deep_blast_sliver`:
+  the analytic seed reproduces it, the `(4,-4)` seed does not). Still tolerant by design:
+  `Trellis.image_of_element` and `DualWalk._end_tolerance` (estimated cdists). Open: a relative
+  `cdist_tol` for deduplication (a numerics question).
