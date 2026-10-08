@@ -1161,7 +1161,7 @@ class TangleSession:
 
         def prepare(trellis: Trellis) -> None:
             if classify and not trellis.strong_pip_candidates:
-                trellis.classify_strong_pips()
+                self.classify_strong_pips(*trellis.fixed_points)
 
         return self._fanout_plot(
             "plot_strong_pip_candidates",
@@ -1189,8 +1189,9 @@ class TangleSession:
         Args:
             fixed_point: Fixed point selector; None (default) plots every one.
             classify: If a trellis has no strong pip chosen yet, classify it first
-                (which also picks the default strong pip). Pass False to plot only
-                trellises that already have one.
+                through :meth:`classify_strong_pips` (the default pip, unless one
+                was chosen before: a lost chosen pip stays unset and is not drawn).
+                Pass False to plot only trellises that already have one.
             ax: Optional matplotlib Axes (defaults to the current axes).
             **scatter_kwargs: Forwarded to :meth:`Trellis.plot_strong_pip`.
 
@@ -1201,7 +1202,7 @@ class TangleSession:
 
         def prepare(trellis: Trellis) -> None:
             if classify and trellis.strong_pip is None:
-                trellis.classify_strong_pips()
+                self.classify_strong_pips(*trellis.fixed_points)
 
         return self._fanout_plot(
             "plot_strong_pip", fixed_point, ax, prepare=prepare, **scatter_kwargs
