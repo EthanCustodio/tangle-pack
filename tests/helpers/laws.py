@@ -1567,7 +1567,7 @@ def check_loops_fold_forward(case: "Case") -> int:
     """D2: a loop folds FORWARD. Up its image-chain parents (each pair's parent is the one
     bridge whose ``image_chain`` holds it), through loop bridges only, the first bridge
     that connects two elements is the loop's ``folded_from``, a non-loop member of the
-    loop's own class."""
+    loop's own class. An orphan is a loop whose climb never reaches such a bridge."""
     full = _full(case)
     table = _evidence(case)
     parent: dict = {}
@@ -1589,6 +1589,14 @@ def check_loops_fold_forward(case: "Case") -> int:
                 assert x == y, (loop.bridge_id, current)
                 current = parent[frozenset(current)]
             count += 1
+    for orphan in table.orphans:
+        current, seen = orphan, set()
+        while current is not None and frozenset(current) not in seen:
+            seen.add(frozenset(current))
+            x, y = _element_ends(case, current)
+            assert x == y, f"orphan {orphan} has the non-loop ancestor {current}"
+            current = parent.get(frozenset(current))
+        count += 1
     return count
 
 

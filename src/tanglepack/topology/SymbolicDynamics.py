@@ -578,7 +578,7 @@ def registered_evidence(
         left ``None`` (the driver fills them). Loop members and members without
         a registered chain contribute nothing.
     """
-    letters = dict(letters)  # evidence names a class outside the alphabet locally, never adds a symbol (D2)
+    letters = dict(letters)  # evidence never adds a symbol (D2)
     evidence: list[ImageEvidence] = []
     for member in entry.members:
         if member.is_loop:
