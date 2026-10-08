@@ -26,8 +26,9 @@ fixed in conversation with the author (July 2026):
   (smaller stable cdist) — the choice is arbitrary but must be consistent.
 * Partition elements (Phase 5): every interval is stamped with
   ``(branch_key, side, element_id)`` and two lookup tables are built beside it,
-  ``element_of_intersection`` (crossing -> owning element, the ownership rule
-  being :func:`owns_cdist`) and ``elements_at_bridge``. The latter is only a
+  ``element_of_intersection`` (crossing -> owning element, by id at a
+  boundary and by EXACT cdist elsewhere, see "Exact ownership" below) and
+  ``elements_at_bridge``. The latter is only a
   convenience index over the bridges the building trellis HELD: a trellis keeps a
   bridge under its unstable fixed point, so a heteroclinic bridge never appears
   in the trellis that owns its endpoints' stable branch. The authoritative
@@ -180,6 +181,44 @@ fixed in conversation with the author (July 2026):
   propagates — the backward chain continues from the orbit's most-backward
   directly-punched pair instead (author, 2026-07-09: the un-punchable pair
   itself is fine to skip, its deeper backward holes are not).
+* Exact ownership (2026-10-07, stress campaign E11). Every partition boundary
+  IS a registry float (asserted in :func:`_element_of_intersection`; the
+  synthetic ``(None, 0.0)`` anchor aside), so a registered crossing is owned
+  without any tolerance: a boundary crossing by the element closed at its id
+  (the singleton if it has one, else the closed neighbour), any other by its
+  exact stable cdist. The registry's absolute ``cdist_tol`` (1e-6) is a
+  DEDUPLICATION tolerance, not an ownership one: deep blasts put real
+  crossings closer than it (68% of consecutive k=2.8 gaps by blast 14), and
+  a sliver ``(pip, outer]`` of width 1.1e-6 beyond the zone's pip had its
+  midpoint swallowed by the closed pip singleton, which tripped the
+  child-inside-parent assertion of the iterated partition at 9 blasts. The
+  tolerance survives only where a cdist is ESTIMATED (``land_element``'s
+  image spans, ``Trellis.image_of_element``): ``PartitionFamily.interval_at``
+  tries exact first and falls back to it. The anchor is detected by its exact
+  cdist 0.0 (a registered anchor is synthetic at exactly 0.0); a boundary
+  within the tolerance of 0 but not on it is still taken as the anchor, at
+  INFO.
+* DEFERRED (author, 2026-10-07): a branch with ONLY anchors. The inversion
+  saddle (k=10) grown 4 or 5 unstable steps (E7) registers no crossing past
+  the anchors of a stable branch, so :func:`_build_intervals` gets a single
+  boundary (the anchor is also the outermost crossing) and yields ZERO
+  intervals; :func:`_element_of_intersection` then asserts "owned by 0
+  partition elements" for the anchor (the singleton rule needs a neighbouring
+  interval). Neither check is over-strict: what such a branch partitions into
+  is undecided. The two candidates: (i) one closed singleton at the anchor —
+  consistent with the partition spanning anchor .. outermost crossing, but a
+  singleton owns no stable edge and no dual-graph node, so the branch is
+  absent from the dual graph; (ii) one closed element ``[anchor, end]`` to
+  the branch's end, as ``land_element`` treats an unbounded high end, which
+  gives the branch dual-graph nodes with no crossing to own. Either must work
+  with ONE anchor per branch: the inversion saddle's duplicate (0, 0) anchors
+  are the strict xfail ``one_anchor_per_unstable_branch`` in
+  ``tests/cases.py`` ``KNOWN_ISSUES`` and must stay one. A monkeypatch of (i)
+  ran the full stack (4 steps: 0 classes; 5 steps: 1 unresolved class,
+  provisional). The log line, once decided, goes on THIS module's logger at
+  INFO ("no crossing past its anchor(s); grow the unstable manifold"), never
+  on ``PartitionFamily``'s, whose WARNING count a test watches. Until then
+  the remedy is to grow the unstable manifold further.
 
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
 StrongPip/Pseudoneighbor but is unvalidated. Containing-bridge lookup compares
@@ -1653,11 +1692,21 @@ def _build_intervals(
         boundaries.append((outer_id, trellis.intersection(outer_id).stable_cdist))
 
     # The partition starts at the anchor point (cdist 0). When a boundary
-    # already sits there (the anchor-artifact intersection), it plays that role
-    # itself; otherwise a synthetic anchor boundary is added.
-    tol = trellis.registry.cdist_tol
-    if not any(cdist <= tol for _, cdist in boundaries):
-        boundaries.append((None, 0.0))
+    # already sits there (the registered anchor, synthetic at exactly 0.0), it
+    # plays that role itself; otherwise a synthetic anchor boundary is added.
+    if not any(cdist == 0.0 for _, cdist in boundaries):
+        tol = trellis.registry.cdist_tol
+        near_anchor = [bid for bid, cdist in boundaries if cdist <= tol]
+        if near_anchor:
+            logger.info(
+                "branch %s: no boundary at the anchor's exact cdist 0, but %s lie(s) "
+                "within cdist_tol=%g of it; taken as the anchor",
+                branch.key[1:],
+                near_anchor,
+                tol,
+            )
+        else:
+            boundaries.append((None, 0.0))
 
     # Sort and deduplicate by id (the anchor and branch end keep their slots).
     unique: dict = {}
@@ -1764,26 +1813,55 @@ def _element_of_intersection(
     branch: "TrellisBranch",
     intervals: list[PartitionInterval],
 ) -> dict[int, int]:
-    """Map every crossing on the branch to the one element that owns it.
+    """Map every crossing on the branch to the one element that owns it, exactly.
 
-    The intervals tile the branch from the anchor to the outermost crossing, so
-    every crossing on it lands in exactly one — asserted here, since a crossing
-    owned twice (or not at all) means the openings did not alternate and the
-    result is not a partition.
+    A boundary crossing is owned by the element closed at its id (its singleton
+    if it has one, else the closed neighbour); any other crossing by its exact
+    stable cdist, no tolerance — every boundary is a registry float (asserted
+    here), so two crossings closer than ``cdist_tol`` still fall on their own
+    sides of a boundary (module Dev Notes, "Exact ownership"). The intervals
+    tile the branch from the anchor to the outermost crossing, so every
+    crossing lands in exactly one — asserted, since a crossing owned twice (or
+    not at all) means the openings did not alternate and the result is not a
+    partition.
     """
-    tol = trellis.registry.cdist_tol
+    closed_at: dict[int, list[int]] = {}
+    for interval in intervals:
+        for bid, cdist, closed in (
+            (interval.lo_id, interval.lo_cdist, interval.closed_lo),
+            (interval.hi_id, interval.hi_cdist, interval.closed_hi),
+        ):
+            if bid is None:
+                continue  # the synthetic anchor at 0.0
+            registered = float(trellis.intersection(bid).stable_cdist)
+            assert cdist == registered, (
+                f"boundary {bid} of element {interval.element_id} on {branch.key[1:]} "
+                f"sits at stable cdist {cdist!r}, not its registry cdist {registered!r}"
+            )
+            owned = closed_at.setdefault(bid, [])
+            if closed and interval.element_id not in owned:
+                owned.append(interval.element_id)
+
     owners: dict[int, int] = {}
     for intersection_id in branch.intersection_ids:
         cdist = float(trellis.intersection(intersection_id).stable_cdist)
-        matches = [
-            interval.element_id
-            for interval in intervals
-            if owns_cdist(interval, cdist, tol)
-        ]
+        matches = closed_at.get(intersection_id)
+        if matches is None:
+            matches = [
+                interval.element_id
+                for interval in intervals
+                if owns_cdist(interval, cdist, 0.0)
+            ]
         assert len(matches) == 1, (
-            f"crossing {intersection_id} at stable cdist {cdist} on "
+            f"crossing {intersection_id} at stable cdist {cdist!r} on "
             f"{branch.key[1:]} is owned by {len(matches)} partition elements "
-            f"{matches}, expected exactly one"
+            f"{matches}, expected exactly one; candidates "
+            + ", ".join(
+                f"#{iv.element_id} {'[' if iv.closed_lo else '('}{iv.lo_cdist!r}, "
+                f"{iv.hi_cdist!r}{']' if iv.closed_hi else ')'}"
+                for iv in intervals
+                if iv.lo_cdist <= cdist <= iv.hi_cdist
+            )
         )
         owners[intersection_id] = matches[0]
     return owners
