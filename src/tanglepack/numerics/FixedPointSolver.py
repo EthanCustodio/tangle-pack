@@ -51,6 +51,11 @@ OrientHook = Callable[
 # considered complex rather than a real pair with round-off.
 _IMAG_TOL = 1e-9
 
+# Relative tolerance under which two orbit points are the same point. A solve that
+# slid to a lower-period orbit repeats it to ~1e-14; genuine orbit points sit
+# >= 1e-2 apart across the Henon family, so anything in 1e-12..1e-4 separates.
+_PERIOD_RTOL = 1e-9
+
 
 class FixedPointSolver:
     """
@@ -115,14 +120,33 @@ class FixedPointSolver:
                 derived from the eigenvalues by ``FixedPoint.num_branches``.
 
         Raises:
-            ValueError: If the orbit does not converge, if the eigenvalues are
-                not a real saddle pair, or if the unstable and stable
+            ValueError: If the orbit does not converge, if it converged to an
+                orbit whose minimal period is a proper divisor of the requested
+                one (checked before the saddle test, so a slid orbit is reported
+                as a period problem and not as "elliptic"), if the eigenvalues
+                are not a real saddle pair, or if the unstable and stable
                 eigenvalues disagree in sign (``FixedPoint.set_k_value``).
+
+        Note:
+            ``period`` is the MINIMAL period of the orbit. A saddle with
+            inversion has ``k_value = 2 * period``, and ``k_value`` is never a
+            period to request: asking period 2 for a period-1 saddle with
+            inversion repeats the point and is rejected here.
         """
 
         period, _ = np.shape(np.atleast_2d(initial_guess))
 
         fixed_point = self.compute_fixed_point(initial_guess)
+
+        minimal = self.minimal_period(fixed_point)
+        if minimal < period:
+            raise ValueError(
+                f"the solve converged to an orbit of minimal period {minimal}, not "
+                f"the requested period {period}. Pass the {minimal}-point orbit "
+                f"{fixed_point[:minimal].tolist()} instead: period is the minimal "
+                f"period, and k_value (2 * period for a saddle with inversion) is "
+                f"never a period to request."
+            )
 
         difference = np.abs(self.multipoint_shoot(fixed_point) - fixed_point)
         accuracy = (np.average(np.linalg.norm(difference, axis=1))) ** (1 / 3)
@@ -160,6 +184,37 @@ class FixedPointSolver:
         point.set_k_value()
 
         return point
+
+    @staticmethod
+    def minimal_period(
+        orbit: NDArray[np.float64], rtol: float = _PERIOD_RTOL
+    ) -> int:
+        """
+        The smallest period ``d`` with which a converged orbit repeats itself.
+
+        Args:
+            orbit: A ``(p, 2)`` array, the points of a period-p cycle in map order.
+            rtol: Two points are the same when they differ by at most
+                ``rtol * max(1, max|orbit|)`` in every coordinate.
+
+        Returns:
+            int: The smallest divisor ``d`` of ``p`` with ``orbit`` invariant
+                under a shift by ``d``; ``p`` when no proper divisor works.
+
+        Note:
+            Only divisors of ``p`` need checking: on a cycle, ``x_i = x_j`` forces
+            ``x_{i+n} = x_{j+n}`` for every ``n``, so the orbit repeats with period
+            ``j - i`` as well as ``p``, hence with their gcd, which divides ``p``.
+        """
+
+        orbit = np.atleast_2d(orbit)
+        period = len(orbit)
+        tol = rtol * max(1.0, float(np.max(np.abs(orbit))))
+        return next(
+            d for d in range(1, period + 1)
+            if period % d == 0
+            and np.max(np.abs(np.roll(orbit, -d, axis=0) - orbit)) <= tol
+        )
 
     def compute_fixed_point(
         self, initial_guess: NDArray[np.float64]
