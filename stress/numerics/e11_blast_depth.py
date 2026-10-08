@@ -80,11 +80,32 @@ Calibration (2026-10-07, 11 cells, 5-6 workers)
   symbolic structure. A cutoff of 1e-5 already changes what blast 7
   uncovers (12 classes vs 4 at 1e-7). nested_outer's outer classes drop
   from 13 to 11 at blast 10. Genuine topology errors, recorded per blast:
-  ``iterated element ... is not inside its parent`` on a degenerate
-  ``[7.37881, 7.37881]`` element (k28 / k32, blasts 9-14), ``Holes of origin
-  ... disagree on bridge_side`` (k28 at 1e-5, blasts 16-18), ``Bridge ...
-  approaches its two defining crossings from opposite sides`` (nested_inner,
-  ``num_iterations = 2``, blasts 16-20). No law violation anywhere.
+  ``iterated element ... is not inside its parent`` (k28 / k32, blasts
+  9-14), ``Holes of origin ... disagree on bridge_side`` (k28 at 1e-5,
+  blasts 16-18), ``Bridge ... approaches its two defining crossings from
+  opposite sides`` (nested_inner, ``num_iterations = 2``, blasts 16-20). No
+  law violation anywhere. Re-investigated after the first campaign: the
+  "not inside its parent" element was a real sliver ``(pip, outer]`` of width
+  ~1e-6 beyond the zone's pip whose midpoint fell within the registry's
+  absolute ``cdist_tol`` of the closed pip singleton (fixed by exact
+  ownership of registry cdists, 2026-10-07); the opposite-sides bridges have
+  crossing signs that DIFFER (the combinatorial rows agree) and fail the
+  geometric row reading on 2-node polylines at ~0.2 degrees.
+
+Resolution flags (since 2026-10-07): every blast runs with ``diagnose=False``.
+The main grid reads only the registry's unresolved crossings after each blast
+(cheap); the five ``resolution_pass`` cells (the canonical cell of each case
+once more) call ``workbench.report_resolution`` per blast, exactly what
+``blast_zone``'s default end-of-call pass does, and keep its counts
+(``maps.resolution_metrics``). The split is deliberate: probes of the rerun
+showed the same-stability pass finding 1e5-1e6 polygon crossings of
+neighbouring image bridges near the saddle from blast ~7 on, costing more
+time than the blast itself and pushing the peak RSS (and so this harness's
+memory budget) ~4 blasts earlier than the first campaign; on every cell it
+would confound the depth study. The ``same_stability`` law series counts
+REGISTERED crossings, which the registry never holds, so it is zero by
+construction; the ``same_stability_*_in`` series are the polygon artifacts
+the library's diagnostic finds in the tangle region.
 
 Record schema
 -------------
@@ -98,7 +119,10 @@ series (index 0 = before any blast, one entry per blast after):
 numerics ``blast``, ``blast_s``, ``crossings``,
 ``new_crossings``, ``bridges``, ``new_bridges``, ``interior_bridges``,
 ``unstable_points``, ``stable_points``, ``bridge_points``, ``max_abs``,
-``rss_mb``; laws ``same_stability``, ``cdist_decreasing``,
+``rss_mb``; resolution flags ``resolution_s``, ``resolution_threshold``,
+``unresolved``, ``min_resolution_ratio``, ``same_stability_unstable_in``,
+``same_stability_stable_in``, ``same_stability_out``,
+``min_suggested_area_cutoff``; laws ``same_stability``, ``cdist_decreasing``,
 ``cdist_worst_drop``, ``lobe_n``, ``lobe_ratio_max``, ``lobe_ratio_p50``,
 ``lobe_sign_flips``; topology scalars ``repin_s`` (``classify_strong_pips`` +
 the pip restore, inside the topology guard; None when it raised),
@@ -154,17 +178,18 @@ def configs(quick: bool) -> list[dict]:
     if quick:
         return [
             {"case": "k28", "max_blasts": 3, "area_cutoff": 1e-7, "min_separation": 1e-5,
-             "num_iterations": 1},
+             "num_iterations": 1, "resolution_pass": True},
             {"case": "p3", "max_blasts": 2, "area_cutoff": 1e-7, "min_separation": 1e-5,
              "num_iterations": 1},
         ]
 
     def cell(case, *, area_cutoff=1e-7, min_separation="canonical", num_iterations=1,
-             repeat=0):
+             repeat=0, resolution_pass=False):
         separation = CANONICAL_SEPARATION[case] if min_separation == "canonical" else min_separation
         return {"case": case, "max_blasts": 20, "area_cutoff": area_cutoff,
                 "min_separation": separation, "num_iterations": num_iterations,
-                "repeat": repeat, "_timeout": TIMEOUT, "_budget": TIMEOUT - 120,
+                "repeat": repeat, "resolution_pass": resolution_pass,
+                "_timeout": TIMEOUT, "_budget": TIMEOUT - 120,
                 "_rss_budget_gb": 0.9 * RSS_CAP_GB}
 
     grid = []
@@ -174,6 +199,9 @@ def configs(quick: bool) -> list[dict]:
         grid += [cell(case, area_cutoff=c) for c in (1e-5, 1e-6, 1e-8)]
         grid += [cell(case, num_iterations=2)]
     grid += [cell(case, repeat=r) for case in ("k28", "p3", "nested_inner") for r in (1, 2)]
+    # The library's end-of-blast same-stability pass, once per case at the canonical cell
+    # (it is the blast_zone default; the other cells skip it, see the module docstring).
+    grid += [cell(case, resolution_pass=True) for case in CANONICAL_SEPARATION]
     # Longest first (the budget-bound coarse cutoffs, then the OOM-bound cases),
     # so the many second-long cells fill in behind them.
     return sorted(grid, key=lambda c: (c["case"] in ("p3", "nested_inner"),
@@ -453,6 +481,30 @@ def record_topology(rec, session, fixed_points, pips, previous):
     return snapshot, delta
 
 
+def resolution_step(wb, fixed_points, full: bool) -> dict:
+    """The resolution flags after a blast, and what they cost.
+
+    ``full`` runs what ``blast_zone``'s default end-of-call pass runs
+    (``report_resolution``: unresolved crossings AND the same-stability
+    polyline pass, logging its WARNINGs); otherwise only the registry's
+    unresolved crossings are read (a table scan) and the same-stability counts
+    are None.
+    """
+    t0 = time.perf_counter()
+    registry = wb.intersection_registry
+    if full:
+        flags = resolution_metrics(wb.report_resolution(fixed_points), registry)
+    else:
+        threshold = wb.resolution_ratio_threshold
+        ratios = [ix.resolution_ratio for _id, ix in registry if ix.resolution_ratio is not None]
+        flags = {"resolution_threshold": threshold,
+                 "unresolved": len(registry.unresolved_crossings(threshold)),
+                 "min_resolution_ratio": min(ratios) if ratios else None,
+                 "same_stability_unstable_in": None, "same_stability_stable_in": None,
+                 "same_stability_out": None, "min_suggested_area_cutoff": None}
+    return {"resolution_s": time.perf_counter() - t0, **flags}
+
+
 # --------------------------------------------------------------------------- #
 # The run
 # --------------------------------------------------------------------------- #
@@ -460,6 +512,7 @@ def run(config: dict, rec: harness.Recorder) -> None:
     t_start = time.perf_counter()
     for name in ("case", "area_cutoff", "min_separation", "num_iterations"):
         rec.metric(name, config[name])
+    rec.metric("resolution_pass", bool(config.get("resolution_pass")))
     with rec.stage("build"):
         session, fixed_points, pips, zone = build(config["case"])
     rec.metric("build_s", rec.stages["build"])
@@ -471,9 +524,9 @@ def run(config: dict, rec: harness.Recorder) -> None:
     curves, curve_size = curve_arrays(session), total_points(session)
     max_abs = max_abs_coord(session)
     previous, _ = record_topology(rec, session, fixed_points, pips, None)
+    full_pass = bool(config.get("resolution_pass"))
     blast_step = dict(blast=0, blast_s=0.0, new_crossings=0, interior_bridges=0,
-                      resolution_s=0.0, **resolution_metrics(
-                          wb.report_resolution(fixed_points), wb.intersection_registry))
+                      **resolution_step(wb, fixed_points, full_pass))
     totals = dict(topology_errors=0, law_violations=0, topology_changes=0, structure_changes=0)
     first_change, stop_reason, last_cost = None, "max_blasts", 0.0
 
@@ -505,10 +558,9 @@ def run(config: dict, rec: harness.Recorder) -> None:
                                     fixed_point=[zone.fixed_point],
                                     min_separation=config["min_separation"], diagnose=False)
         t1 = time.perf_counter()
-        # What blast_zone's own end-of-call pass would log (it WARNs the same way),
-        # kept per blast: the registered same_stability law above is tautological.
-        report = wb.report_resolution(fixed_points)
-        resolution_s = time.perf_counter() - t1
+        # What blast_zone's own end-of-call pass would log, kept per blast (only in
+        # the resolution_pass cells: the pass outgrows the blast at depth).
+        flags = resolution_step(wb, fixed_points, full_pass)
         new_bridges = [b for b in wb.bridges if id(b) not in known]
         known |= {id(b) for b in new_bridges}
         if total_points(session) != curve_size:
@@ -519,9 +571,7 @@ def run(config: dict, rec: harness.Recorder) -> None:
                 max_abs = max(max_abs, float(np.nanmax(np.abs(points))))
         blast_step = dict(blast=blast, blast_s=t1 - t_blast,
                           new_crossings=len(wb.intersection_registry) - crossings_before,
-                          interior_bridges=len(result.all_interior_bridges()),
-                          resolution_s=resolution_s,
-                          **resolution_metrics(report, wb.intersection_registry))
+                          interior_bridges=len(result.all_interior_bridges()), **flags)
         append_numerics(new_bridges)
         snapshot, delta = record_topology(rec, session, fixed_points, pips, previous)
         changed = any(bool(v) for v in delta.values())

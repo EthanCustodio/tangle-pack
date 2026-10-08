@@ -25,7 +25,15 @@ Four sub-studies, one ``"study"`` key per config:
   when the arms are grown to ``20 * |x+ - x-|`` of canonical distance; there
   is no onset inside the existence range, so the scan is log-spaced in
   ``k + 1`` and asks how many of the near-``-1`` crossings are polygon
-  artifacts.
+  artifacts. Since 2026-10-07 the library flags them itself: each record
+  keeps the ``workbench.check_resolution`` counts (``unresolved`` = crossings
+  whose resolution ratio is below the threshold, ``same_stability_*``) and
+  the sorted ``resolution_ratios``.
+
+The library's per-step point budget (2,000,000 points, 2026-10-07) stops a
+runaway growth step with ``PointBudgetExceeded``, an ``exception`` record
+whose ``metrics["point_budget"]`` says where; the inversion depth cells pin
+``area_cutoff = 1e-4``, the default the first campaign ran at.
 
 Expected failures are data: an ``oom``/``timeout`` escape config, an
 ``exception`` or ``invariant_assert`` at a deep blast or depth.
