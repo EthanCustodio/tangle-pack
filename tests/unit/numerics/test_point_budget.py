@@ -4,21 +4,26 @@ Rules pinned here (WP3 of the 2026-10-07 stress-report plan):
 
 * a growth step (one ``k_value`` chain) or one bridge image that would create
   more points than ``max_points_per_step`` raises ``PointBudgetExceeded``
-  before the overrunning map call (``points_created <= budget``), with the
-  generation advanced and the partly grown curve still ordered; ``None``
+  before the overrunning map call (``points_created <= budget``, nothing
+  evaluated or added past it), with the generation advanced, every bridge's
+  memoised walk dropped and the partly grown curve still ordered; ``None``
   disables the budget;
 * the count is per top-level call: consecutive steps or blasts that each fit
   never raise, however much they add up to;
 * a bridge abandoned half-refined by an overrun refuses a second iterate
   instead of handing back its half-built image;
 * every ``grow_until_*`` driver propagates the overrun;
-* ``growth_stats``, the prediction hint and ``escape_radius`` WARNINGs, and
+* ``growth_stats`` (per branch), the prediction hint and ``escape_radius`` WARNINGs, and
   ``grow_until_bounded``;
 * ``area_cutoff`` reaches the ONE shared machine from the workbench and the
   session, constructor and setter alike.
 
 Budgets are derived from a probe build of the same case, never hard-coded
-counts (tests/conftest.py policy).
+counts (tests/conftest.py policy), and the probe measures INDEPENDENTLY of the
+counter under test: the change in the manifold's own point count for a growth
+step, and the points the dynamical system evaluates for a bridge image (every
+created point is one map evaluation). A broken counter therefore cannot skew
+the budget a test sets.
 """
 
 from __future__ import annotations
@@ -52,16 +57,6 @@ def _seeded():
     return case.workbench, case.fixed_point
 
 
-def _created_per_step(steps: int) -> list[int]:
-    """Points each unstable growth step creates on a fresh k=10 build."""
-    workbench, fp = _seeded()
-    created = []
-    for _ in range(steps):
-        workbench.grow_n_times(fp, "unstable", 1)
-        created.append(workbench.growth_stats(fp, "unstable").points_created)
-    return created
-
-
 def _point_count(workbench, fp, stability: str = "unstable") -> int:
     """Points over every branch of one manifold."""
     return sum(
@@ -71,25 +66,69 @@ def _point_count(workbench, fp, stability: str = "unstable") -> int:
     )
 
 
+def _awaiting_map(workbench, fp) -> int:
+    """Unstable points without an image yet: what the next step's map stage maps."""
+    return sum(
+        len(manifold.get_non_iterated_point_array())
+        for key, manifold in workbench.manifolds.items()
+        if key[0] is fp and key[1] == "unstable"
+    )
+
+
+def _created_per_step(steps: int) -> list[int]:
+    """Points each unstable growth step adds to a fresh k=10 build."""
+    workbench, fp = _seeded()
+    created = []
+    for _ in range(steps):
+        before = _point_count(workbench, fp)
+        workbench.grow_n_times(fp, "unstable", 1)
+        created.append(_point_count(workbench, fp) - before)
+    return created
+
+
+def _count_evaluations(workbench) -> list[int]:
+    """Spy on the system's batched maps; returns the list of batch sizes."""
+    batches: list[int] = []
+    system = workbench.dynamical_system
+    for name in ("map_batch", "map_inv_batch"):
+        batched = getattr(system, name)
+
+        def counted(coords, batched=batched):
+            batches.append(len(coords))
+            return batched(coords)
+
+        setattr(system, name, counted)
+    return batches
+
+
 # --------------------------------------------------------------------------- #
 # growth
 # --------------------------------------------------------------------------- #
-def test_overrunning_step_raises_with_state_consistent() -> None:
-    """A step over budget raises before allocating past it; the generation moves
-    and the partly grown manifold is still an ordered, acyclic curve."""
+def test_overrunning_step_raises_in_refinement_with_state_consistent() -> None:
+    """A budget that covers the last step's map stage but not its refinement
+    raises in ``refine``, before evaluating or adding a point past the budget;
+    the generation moves and the partly grown manifold is still an ordered,
+    acyclic curve."""
     created = _created_per_step(STEPS)
     assert created[-1] > max(created[:-1]), "the probe needs a step bigger than all before"
-    budget = created[-1] - 1
 
     workbench, fp = _seeded()
+    workbench.grow_n_times(fp, "unstable", STEPS - 1)
+    budget = _awaiting_map(workbench, fp)
+    assert max(created[:-1]) <= budget < created[-1], "the map stage must fit, the step not"
     workbench.max_points_per_step = budget
+    evaluated = _count_evaluations(workbench)
+    before = _point_count(workbench, fp)
     generation = workbench.generation
+
     with pytest.raises(PointBudgetExceeded) as raised:
-        workbench.grow_n_times(fp, "unstable", STEPS)
+        workbench.grow_n_times(fp, "unstable", 1)
 
     assert raised.value.budget == budget
+    assert raised.value.stage == "refine"
     assert raised.value.points_created <= budget
-    assert raised.value.stage in ("map", "refine")
+    assert sum(evaluated) <= budget
+    assert _point_count(workbench, fp) - before <= budget
     assert workbench.generation != generation
     for key, manifold in workbench.manifolds.items():
         if key[1] == "unstable":
@@ -97,12 +136,43 @@ def test_overrunning_step_raises_with_state_consistent() -> None:
             assert_one_to_one(manifold)
 
 
+def test_map_stage_refuses_before_evaluating() -> None:
+    """A budget below the map stage refuses the step before a single map
+    evaluation."""
+    workbench, fp = _seeded()
+    workbench.max_points_per_step = 0
+    evaluated = _count_evaluations(workbench)
+
+    with pytest.raises(PointBudgetExceeded) as raised:
+        workbench.grow_n_times(fp, "unstable", 1)
+
+    assert raised.value.stage == "map"
+    assert not evaluated
+
+
+def test_overrun_drops_every_bridge_walk() -> None:
+    """Refinement lays points inside already-cut bridges before it overruns,
+    so the overrun still invalidates every bridge's memoised point array."""
+    case = build_k10(through="bridges")
+    workbench, fp = case.workbench, case.fixed_point
+    assert workbench.bridges, "the probe needs cut bridges"
+    versions = [bridge.version for bridge in workbench.bridges]
+    workbench.max_points_per_step = _awaiting_map(workbench, fp)
+
+    with pytest.raises(PointBudgetExceeded) as raised:
+        workbench.grow_n_times(fp, "unstable", 1)
+
+    assert raised.value.stage == "refine"
+    assert all(b.version > v for b, v in zip(workbench.bridges, versions))
+
+
 def test_no_budget_never_raises() -> None:
     """``max_points_per_step = None`` grows what a tiny budget refuses."""
     workbench, fp = _seeded()
     workbench.max_points_per_step = None
+    before = _point_count(workbench, fp)
     workbench.grow_n_times(fp, "unstable", STEPS)
-    assert workbench.growth_stats(fp, "unstable").points_created > 0
+    assert _point_count(workbench, fp) > before
 
 
 def test_consecutive_steps_each_within_budget_never_raise() -> None:
@@ -150,15 +220,18 @@ def test_every_driver_propagates_the_overrun(drive) -> None:
 
 
 def test_growth_stats_record_the_last_step() -> None:
-    """None before growth; after two steps a positive factor and a finite
-    ``max|x|``."""
+    """None before growth; afterwards the last step's own point count, a
+    positive factor and a finite ``max|x|``; another branch has no stats."""
     workbench, fp = _seeded()
     assert workbench.growth_stats(fp, "unstable") is None
-    workbench.grow_n_times(fp, "unstable", STEPS)
+    workbench.grow_n_times(fp, "unstable", STEPS - 1)
+    before = _point_count(workbench, fp)
+    workbench.grow_n_times(fp, "unstable", 1)
     stats = workbench.growth_stats(fp, "unstable")
-    assert stats.points_created > 0
+    assert stats.points_created == _point_count(workbench, fp) - before
     assert stats.growth_factor > 0
     assert np.isfinite(stats.max_abs_coord) and stats.max_abs_coord > 0
+    assert workbench.growth_stats(fp, "unstable", branch_index=1) is None
 
 
 def test_prediction_hint_warns_before_the_step(caplog) -> None:
@@ -221,21 +294,32 @@ def _k28_zone():
     return case.session, case.zones[0]
 
 
-def _largest_image(session, zone, blasts: int) -> int:
-    """Points the largest single bridge image of ``blasts`` blasts creates."""
-    machine = session.workbench._man_machine
-    iterate_bridge = machine.iterate_bridge
-    created = [0]
+def _spy_bridge_images(workbench) -> tuple[list, list[int]]:
+    """Record every bridge the workbench iterates and the map evaluations each
+    image cost (the last bridge is the one being iterated when a call raised)."""
+    evaluated = _count_evaluations(workbench)
+    iterate_bridge = workbench.iterate_bridge
+    bridges: list = []
+    costs: list[int] = []
 
     def spy(bridge):
-        image = iterate_bridge(bridge)
-        created.append(machine.points_created)
-        return image
+        bridges.append(bridge)
+        evaluated.clear()
+        try:
+            return iterate_bridge(bridge)
+        finally:
+            costs.append(sum(evaluated))
 
-    machine.iterate_bridge = spy
+    workbench.iterate_bridge = spy
+    return bridges, costs
+
+
+def _largest_image(session, zone, blasts: int) -> int:
+    """Points the largest single bridge image of ``blasts`` blasts creates."""
+    _, costs = _spy_bridge_images(session.workbench)
     for _ in range(blasts):
         session.blast_zone(zone, 1)
-    return max(created)
+    return max(costs, default=0)
 
 
 def test_consecutive_blasts_each_within_budget_never_raise() -> None:
@@ -257,20 +341,24 @@ def test_overrunning_blast_raises_and_never_resumes_half_built() -> None:
     probe, probe_zone = _k28_zone()
     session, zone = _k28_zone()
     workbench = session.workbench
-    session.max_points_per_step = _largest_image(probe, probe_zone, blasts=1) - 1
+    budget = _largest_image(probe, probe_zone, blasts=1) - 1
+    session.max_points_per_step = budget
+    bridges, costs = _spy_bridge_images(workbench)
     generation = workbench.generation
 
     with pytest.raises(PointBudgetExceeded) as raised:
         session.blast_zone(zone, 1)
-    assert raised.value.points_created <= raised.value.budget
+    assert raised.value.points_created <= budget
+    assert costs[-1] <= budget
     assert workbench.generation != generation
+    abandoned = bridges[-1]
 
     session.max_points_per_step = None
     with pytest.raises(RuntimeError) as again:
         session.blast_zone(zone, 1)
     assert not isinstance(again.value, PointBudgetExceeded)
 
-    (abandoned,) = workbench._half_iterated_bridges
+    assert bridges[-1] is abandoned
     assert not abandoned.iterated
     if abandoned.id is not None:
         assert not workbench.image_bridges(abandoned.id)
