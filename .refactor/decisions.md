@@ -31,3 +31,31 @@ What the author has decided. Binding on every later run. Newest last.
   `figures/refactor_proof/hole-side-and-own-blast/` in the branch worktree) and the auditor
   re-audited (`outcome_auditor_human_2.md`, second pass). The proof scripts are outside the
   plan's five-file list by instruction; rubric 5 is judged against `3b33baa`.
+
+## 2026-10-07 — open-issues round (catalog `docs/open_issues.md`, base `684d70b`)
+
+- **Said** (planning session answers, 2026-10-07), recorded as D1-D8 in `docs/open_issues.md`:
+  - **D1 full recompute.** "We only start doing the topology after all the numerics is done …
+    any growth that happens requires entirely recomputing the topology." Planned loop: blast,
+    compute the topology, blast again, recompute, look for topological changes. The class
+    count "may increase multiple times, strictly increasing, never decreasing. Linear growth
+    over many iterates is a clear bug though."
+  - **D2** the alphabet is the minimal trellis's bridges only.
+  - **D3** "the shortest walk on the dual graph gives the word, that is the algorithm" and a
+    walk must always exist; the virtual `new1` class is "a very clear bug"; f(bridge) makes the
+    word for singleton bridges that cannot walk. The period-3 path "seems buggy".
+  - **D4** "Each anchor point should have two stable branches and two unstable branches …
+    Each of those individual branches of course have a left side and right side." The left of
+    one inversion branch is the right of the other; zones break the space up and must be kept
+    in mind; cross-side is a flag only for the SAME branch, never for a bridge between two
+    branches.
+  - **D5** keep the period-k +1..+(k-1) iterate rule, fix the gap where table links are missing.
+  - **D6** signs decide hole openings and rows; geometry only checks.
+  - **D7** heteroclinic pairs give holes in B's partition.
+  - **D8** simplify freely ("make as many choices as you'd like to make the design simpler …
+    robust and professional"); public-API alignment is a later, separate plan.
+- **Consequence:** WP0-WP12 in `docs/open_issues.md`, each run analyst -> planner ->
+  test-engineer -> coder -> code-reviewer on its own branch. Claude's calls C1-C6 under D8
+  (anchor-only branch = one element, element identity by bounding holes, det<0 out of scope,
+  innermost-zone blasting, new-image-only same-stability count, per-call `max_points`) are
+  revisable by the author.
