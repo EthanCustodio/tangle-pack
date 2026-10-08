@@ -51,9 +51,10 @@ Dev Notes:
 * A pair whose class is in no table entry is a VIRTUAL class (an arc no bridge
   spans yet); it is named ``new1, new2, ...`` in first-seen order with a
   WARNING and enters the graph as a sink. A pair whose two elements sit on
-  different sides is flagged on the symbol (``cross_side``) with a WARNING and
-  not asserted: merged outer faces or several stable branches could produce
-  one.
+  different sides of ONE stable branch is flagged on the symbol
+  (``cross_side``) with a WARNING and not asserted. Across two branches there
+  is no side relation (D4: the left of an inversion point's branch 0.0 is the
+  right of 0.1), so such a pair is never flagged.
 * Ambiguous classes (several shortest walks with different itineraries) feed
   the first candidate, in the walk search's deterministic order, into the
   refinement and the graph; :attr:`SymbolicDynamics.is_reliable` is False.
@@ -85,7 +86,6 @@ from .BridgeClass import (
 )
 from .DualWalk import ElementLanding, WalkSearch, land_element, shortest_walks, trellis_itinerary
 from .ElementNaming import ElementNaming
-from .StablePartition import row_of_end
 from .TopologyResults import ElementRef
 
 if TYPE_CHECKING:
@@ -130,7 +130,7 @@ class Symbol:
             occurrence belongs to, ``None`` when the class is unrefined or the
             token has not been refined yet.
         cross_side: True when the pair's two elements sit on different sides
-            of the stable manifold — flagged, never asserted.
+            of ONE stable branch (D4) — flagged, never asserted.
     """
 
     bridge_class: BridgeClass
@@ -471,11 +471,11 @@ def translate_itinerary(
         if direction == 0:
             loops.append((first, second))
             continue
-        cross_side = first.side != second.side
+        cross_side = first.branch_key == second.branch_key and first.side != second.side
         if cross_side:
             logger.warning(
                 "itinerary pair (%s, %s) connects elements on different sides of "
-                "the stable manifold; flagged, not asserted",
+                "one stable branch; flagged, not asserted",
                 first.label,
                 second.label,
             )
@@ -634,10 +634,8 @@ def _member_pair(
     trellis: "Trellis", iterated: "PartitionFamily", bridge_id: "BridgeId", direction: int
 ) -> tuple[ElementRef, ElementRef]:
     """A member's own endpoint pair in iterated owners, class-source end first."""
-    first = iterated.owner_of_intersection(bridge_id[0], row_of_end(trellis, bridge_id, "first"))
-    second = iterated.owner_of_intersection(
-        bridge_id[1], row_of_end(trellis, bridge_id, "second")
-    )
+    first = iterated.owner_at_end(trellis, bridge_id, "first")
+    second = iterated.owner_at_end(trellis, bridge_id, "second")
     return (first, second) if direction > 0 else (second, first)
 
 

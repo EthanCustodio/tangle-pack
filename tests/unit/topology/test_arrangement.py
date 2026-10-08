@@ -23,6 +23,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from cases import build_inversion
 from helpers.fakes import bare_fixed_point
 from helpers.laws import REGION_AREA_RTOL
 from tanglepack.numerics.Bridge import Bridge
@@ -521,3 +522,34 @@ def test_arrangement_survives_a_blast(k10_session):
         )
         representable += 1
     assert representable > 0, "the blast closed no representable face"
+
+
+# --------------------------------------------------------------------------- #
+# WP3 -- the inversion anchor is one degree-4 node (D4, INV-1)
+# --------------------------------------------------------------------------- #
+def test_the_inversion_anchor_is_one_node_with_four_real_rays():
+    """One periodic point, one node: its four rays are the four branches (branch 1 in
+    the ``u-`` / ``s-`` slots), so no face reflects off a virtual stub there."""
+    case = build_inversion(through="zones")
+    arrangement = case.session.arrangement()
+    registry = case.registry
+    (anchor,) = [
+        iid for iid, ix in registry if ix.seg_ids is None and ix.unstable_cdist == 0.0
+    ]
+
+    rays = {
+        (arc.kind, arc.branch_key)
+        for face in arrangement.faces
+        for arc in face.arcs
+        if arc is not None and anchor in (arc.lo_id, arc.hi_id)
+    }
+    assert {key for _kind, key in rays} == {
+        key for key in case.workbench.manifolds if key[0] is case.fixed_point
+    }
+    for face in arrangement.faces:
+        corners = face.corners
+        for position, corner in enumerate(corners):
+            if corner == anchor:
+                neighbours = corners[position - 1], corners[(position + 1) % len(corners)]
+                assert min(neighbours) >= 0, face.corners
+    assert arrangement.euler_characteristic == 2 * arrangement.component_count

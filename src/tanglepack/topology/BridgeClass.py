@@ -203,8 +203,8 @@ class BridgeClassEntry:
             They contribute no evidence either way.
         letter: The class's symbol letter (``"a"``, ``"b"``, ...), set by the
             session alphabet for active classes; ``None`` when unlettered.
-        zone_key: The ``(fixed_point, branch_index)`` key of the resonance zone
-            the class lies in, set by the session; ``None`` when it lies outside
+        zone_key: The key of the resonance zone the class lies in (its fixed
+            point, one zone per fixed point), set by the session; ``None`` when it lies outside
             every zone or no zones are defined.
         min_unstable_cdist: The smallest unstable canonical distance of a
             member's first crossing — the table's sort key within a tangle
@@ -222,7 +222,7 @@ class BridgeClassEntry:
     image_loops: list[tuple["BridgeId", ElementRef]] = field(default_factory=list)
     unresolved: list["BridgeId"] = field(default_factory=list)
     letter: Optional[str] = None
-    zone_key: Optional[tuple] = None
+    zone_key: Optional["FixedPoint"] = None
     min_unstable_cdist: float = float("inf")
     tangle: Optional[int] = None
 
@@ -447,19 +447,17 @@ class BridgeClassTable:
         return self.entries == other.entries
 
 
-def zone_label(zone_key: tuple) -> str:
+def zone_label(zone_key: "FixedPoint") -> str:
     """
-    A readable name for a ``(fixed_point, branch_index)`` resonance-zone key.
+    A readable name for a resonance-zone key (its fixed point, C8).
 
     Args:
         zone_key: The key, as stored on :attr:`BridgeClassEntry.zone_key`.
 
     Returns:
-        ``"zone p{period} branch {index}"``.
+        ``"zone p{period}"``.
     """
-    fixed_point, branch_index = zone_key
-    period = getattr(fixed_point, "period", "?")
-    return f"zone p{period} branch {branch_index}"
+    return f"zone p{getattr(zone_key, 'period', '?')}"
 
 
 def element_sort_key(
@@ -709,9 +707,10 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
 
     The image of the arc between crossings ``a`` and ``b`` is the arc between
     ``f(a)`` and ``f(b)``, read from the iterate table
-    (:meth:`~.Trellis.Trellis.iterate`); the crossings on it are every
-    registered crossing of the image's unstable branch whose unstable
-    canonical distance lies between the two. No ``Bridge`` object is required:
+    (:meth:`~.Trellis.Trellis.iterate`), on the unstable branch one map step
+    after the arc's own (an anchor end is on every branch of its point); the
+    crossings on it are every registered crossing of that branch whose
+    unstable canonical distance lies between the two. No ``Bridge`` object is required:
     an image pair the trellis never cut (the grown manifold stops short of it)
     is returned all the same, because its class is readable from its ids.
 
@@ -723,24 +722,25 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
         The image's consecutive pairs in increasing unstable canonical
         distance (each ordered like a
         :data:`~tanglepack.numerics.Bridge.BridgeId`), or ``None`` when an
-        endpoint has no registered ``+1`` iterate, the two images carry no
-        common unstable branch key, or that branch is not in the trellis.
+        endpoint has no registered ``+1`` iterate, an image end lies off the
+        advanced branch (WARNING), or that branch is not in the trellis.
     """
     images = [trellis.iterate(endpoint, 1) for endpoint in bridge_id]
     if any(image is None for image in images):
         return None
     ia, ib = (trellis.intersection(image) for image in images)
-    key = ia.manifold_a_key
-    if ib.manifold_a_key != key:
-        logger.warning(
-            "image of bridge %s has endpoints %s on unstable branches %s and %s; "
-            "cannot place its image arc",
-            bridge_id,
-            tuple(images),
-            key[1:],
-            ib.manifold_a_key[1:],
-        )
-        return None
+    own_key = trellis.unstable_key_of(bridge_id)
+    key = own_key[0].advance_key(own_key, 1)
+    for image in (ia, ib):
+        if not image.is_anchor and image.manifold_a_key != key:
+            logger.warning(
+                "image of bridge %s has endpoints %s off its image branch %s; "
+                "cannot place its image arc",
+                bridge_id,
+                tuple(images),
+                key[1:],
+            )
+            return None
     branch = trellis.branch(key)
     if branch is None:
         return None
@@ -900,7 +900,7 @@ def _element_at_end(
     """The element a bridge sits against at one of its ends, on that end's row."""
     row = row_of_end(trellis, bridge_id, endpoint)
     intersection_id = bridge_id[endpoint_index(endpoint)]
-    branch_key = trellis.intersection(intersection_id).manifold_b_key
+    branch_key = trellis.stable_key_at(intersection_id, trellis.unstable_key_of(bridge_id))
     if branch_key is None:
         raise ValueError(
             f"crossing {intersection_id} of bridge {bridge_id} carries no "

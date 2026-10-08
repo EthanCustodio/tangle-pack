@@ -29,6 +29,7 @@ from tanglepack.topology.DualWalk import (
 from tanglepack.topology.PartitionFamily import (
     HomotopyPartition,
     IteratedHomotopyPartition,
+    PartitionFamily,
 )
 from helpers.fakes import (
     FakeDual,
@@ -551,11 +552,15 @@ def test_land_element_refuses_an_unknown_ref(landing_setup):
 class _OwnerFamily:
     """Owner of crossing ``c`` on side ``s`` is element ``c`` on that side."""
 
+    #: The production rule: the owner on the end's row, on the branch it meets.
+    owner_at_end = PartitionFamily.owner_at_end
+
     def __init__(self, key, missing=()):
         self.key = key
         self.missing = set(missing)
 
-    def owner_of_intersection(self, crossing_id, side):
+    def owner_of_intersection(self, crossing_id, side, branch_key=None):
+        assert branch_key in (None, self.key)
         if crossing_id in self.missing:
             raise ValueError(f"crossing {crossing_id} is on no {side!r}-partitioned branch")
         return ref(self.key, side, crossing_id)

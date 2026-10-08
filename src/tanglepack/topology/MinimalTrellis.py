@@ -235,8 +235,11 @@ class MinimalTrellis:
 def _bridge_sort_key(trellis: Trellis, bridge_id: "BridgeId") -> tuple:
     """Order bridges by unstable branch (trellis order) then unstable cdist."""
     order = {branch.key: index for index, branch in enumerate(trellis.unstable_branches)}
-    lo = trellis.intersection(bridge_id[0])
-    return (order.get(lo.manifold_a_key, len(order)), float(lo.unstable_cdist))
+    unstable_key = trellis.unstable_key_of(bridge_id)
+    return (
+        order.get(unstable_key, len(order)),
+        float(trellis.intersection(bridge_id[0]).unstable_cdist),
+    )
 
 
 def minimal_trellis(

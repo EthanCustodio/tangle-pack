@@ -65,6 +65,7 @@ def stable_line():
 
 
 def _hole(
+    trellis,
     near: int,
     far: int,
     row: str,
@@ -78,12 +79,13 @@ def _hole(
     Openings default to the inward pair (outward of the near bound,
     anchorward of the far bound) on ``row`` — the direct-hole case; pass
     ``near_which``/``far_which`` to fabricate a hole on the other side of
-    its bridge.
+    its bridge. Each opening names its crossing's own stable branch.
     """
+    branch = trellis.intersection(near).manifold_b_key
     return Hole(
         coords=(0.0, 0.0), near_intersection_id=near,
         bridge_side=bridge_side, bounding_ids=(near, far),
-        openings=[(near, near_which, row), (far, far_which, row)],
+        openings=[(near, near_which, row, branch), (far, far_which, row, branch)],
     )
 
 
@@ -143,7 +145,7 @@ def test_bridge_side_orientation_normalization(stable_line):
 def test_partition_opens_hole_intervals(stable_line):
     """An interval bounding a hole is open; every other interval is closed."""
     trellis, ids = stable_line
-    trellis.holes.append(_hole(ids[0], ids[1], "right"))
+    trellis.holes.append(_hole(trellis, ids[0], ids[1], "right"))
 
     result = partition_stable_manifold(trellis, (trellis.fixed_points[0], "stable", 0, 0), "right")
 
@@ -157,7 +159,7 @@ def test_partition_opens_hole_intervals(stable_line):
 def test_partition_side_without_holes_is_one_closed_interval(stable_line):
     """The side with no holes partitions into a single closed interval."""
     trellis, ids = stable_line
-    trellis.holes.append(_hole(ids[0], ids[1], "right"))
+    trellis.holes.append(_hole(trellis, ids[0], ids[1], "right"))
 
     result = partition_stable_manifold(trellis, (trellis.fixed_points[0], "stable", 0, 0), "left")
 
@@ -167,8 +169,8 @@ def test_partition_side_without_holes_is_one_closed_interval(stable_line):
 def test_point_between_two_holes_is_closed_singleton(stable_line):
     """A boundary flanked by hole regions on both sides becomes [x, x]."""
     trellis, ids = stable_line
-    trellis.holes.append(_hole(ids[0], ids[1], "right"))
-    trellis.holes.append(_hole(ids[1], ids[2], "right"))
+    trellis.holes.append(_hole(trellis, ids[0], ids[1], "right"))
+    trellis.holes.append(_hole(trellis, ids[1], ids[2], "right"))
 
     result = partition_stable_manifold(trellis, (trellis.fixed_points[0], "stable", 0, 0), "right")
 
@@ -197,9 +199,9 @@ def test_partition_ignores_strong_pip_cut(stable_line):
     trellis.branch(branch_key).intersection_ids.insert(2, cut)
     trellis.strong_pip = cut
 
-    trellis.holes.append(_hole(ids[0], ids[1], "right"))
-    trellis.holes.append(_hole(ids[2], ids[3], "right"))
-    trellis.holes.append(_hole(ids[4], ids[5], "right"))  # outermost
+    trellis.holes.append(_hole(trellis, ids[0], ids[1], "right"))
+    trellis.holes.append(_hole(trellis, ids[2], ids[3], "right"))
+    trellis.holes.append(_hole(trellis, ids[4], ids[5], "right"))  # outermost
 
     result = partition_stable_manifold(trellis, branch_key, "right")
 
@@ -222,7 +224,7 @@ def test_hole_at_branch_end_pinches_endpoint_singleton(stable_line):
     and leaves the branch-end point as a closed singleton."""
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
-    trellis.holes.append(_hole(ids[4], ids[5], "left"))
+    trellis.holes.append(_hole(trellis, ids[4], ids[5], "left"))
 
     result = partition_stable_manifold(trellis, branch_key, "left")
 
@@ -239,7 +241,7 @@ def test_all_holes_participate_regardless_of_flags(stable_line):
     identical holes by nudge luck and was removed)."""
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
-    deep = _hole(ids[0], ids[1], "left")
+    deep = _hole(trellis, ids[0], ids[1], "left")
     deep.iterate = -9
     trellis.holes.append(deep)
 
@@ -275,8 +277,8 @@ def test_shared_boundary_never_closed_on_both_sides(stable_line):
     and every shared point is owned by exactly one piece."""
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
-    trellis.holes.append(_hole(ids[0], ids[3], "left"))
-    trellis.holes.append(_hole(ids[1], ids[4], "left"))
+    trellis.holes.append(_hole(trellis, ids[0], ids[3], "left"))
+    trellis.holes.append(_hole(trellis, ids[1], ids[4], "left"))
 
     result = partition_stable_manifold(trellis, branch_key, "left")
 
@@ -297,10 +299,10 @@ def test_two_holes_flanking_one_bridge_pinch_singletons(stable_line):
     into a closed singleton with open intervals on both of its sides."""
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
-    trellis.holes.append(_hole(ids[1], ids[2], "left", bridge_side="left"))
+    trellis.holes.append(_hole(trellis, ids[1], ids[2], "left", bridge_side="left"))
     trellis.holes.append(
         _hole(
-            ids[1], ids[2], "left",
+            trellis, ids[1], ids[2], "left",
             near_which="anchorward", far_which="outward", bridge_side="right",
         )
     )
@@ -329,7 +331,7 @@ def test_trellis_partition_of_one_branch_is_stored(stable_line):
     """``Trellis.partition_stable_manifold(branch)`` returns one result per side and keeps them."""
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
-    trellis.holes.append(_hole(ids[0], ids[1], "right"))
+    trellis.holes.append(_hole(trellis, ids[0], ids[1], "right"))
     results = trellis.partition_stable_manifold(branch_key)
 
     assert sorted(result.side for result in results) == ["left", "right"]
@@ -387,12 +389,12 @@ def test_describe_reports(henon_with_holes):
 # --------------------------------------------------------------------------- #
 # Openings at the two ends of a branch (plan row 1.14)
 # --------------------------------------------------------------------------- #
-def _end_hole(iid: int, which: str, row: str) -> Hole:
+def _end_hole(trellis, iid: int, which: str, row: str) -> Hole:
     """A hole recording a single opening, at one end of the branch."""
     return Hole(
         coords=(0.0, 0.0), near_intersection_id=iid,
         bridge_side="left", bounding_ids=(iid, iid),
-        openings=[(iid, which, row)],
+        openings=[(iid, which, row, trellis.intersection(iid).manifold_b_key)],
     )
 
 
@@ -411,7 +413,7 @@ def test_outward_opening_at_the_last_boundary_is_inert(stable_line):
     """
     trellis, ids = stable_line
     branch_key = (trellis.fixed_points[0], "stable", 0, 0)
-    trellis.holes.append(_end_hole(ids[5], "outward", "left"))
+    trellis.holes.append(_end_hole(trellis, ids[5], "outward", "left"))
 
     result = partition_stable_manifold(trellis, branch_key, "left")
 
@@ -435,14 +437,14 @@ def test_anchorward_opening_at_the_first_boundary_is_inert(stable_line):
         manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=branch_key,
     )
     trellis.branch(branch_key).intersection_ids.insert(0, anchor)
-    trellis.holes.append(_end_hole(anchor, "anchorward", "left"))
+    trellis.holes.append(_end_hole(trellis, anchor, "anchorward", "left"))
 
     result = partition_stable_manifold(trellis, branch_key, "left")
 
     assert _spans(result.intervals) == [(0.0, 6.0, True, True)]
 
     # ...whereas an outward opening at the same point does pinch it.
-    trellis.holes[:] = [_end_hole(anchor, "outward", "left")]
+    trellis.holes[:] = [_end_hole(trellis, anchor, "outward", "left")]
     pinched = partition_stable_manifold(trellis, branch_key, "left")
     assert _spans(pinched.intervals) == [
         (0.0, 0.0, True, True),

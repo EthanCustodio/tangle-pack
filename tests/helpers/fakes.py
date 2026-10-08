@@ -8,7 +8,8 @@ RULE to the library: :func:`bare_fixed_point` is a real ``FixedPoint`` (so
 ``advance_key``, ``per_step_beta``, ``num_branches`` and ``branch_cycle`` are
 the production rules), and :class:`FakeTrellis` borrows
 ``Trellis.image_cdist`` (table first, else ``advance_key`` /
-``per_step_beta``) instead of reimplementing it. :func:`make_result` takes the
+``per_step_beta``) and the anchor rules ``unstable_key_of`` / ``stable_key_at``
+instead of reimplementing them. :func:`make_result` takes the
 crossing owners explicitly; nothing derives them.
 """
 
@@ -165,6 +166,8 @@ class FakeTrellis:
     image_cdist = Trellis.image_cdist
     _scaled_image_cdist = Trellis._scaled_image_cdist
     _keyed_cdist = Trellis._keyed_cdist
+    unstable_key_of = Trellis.unstable_key_of
+    stable_key_at = Trellis.stable_key_at
 
     def __init__(
         self,
@@ -201,6 +204,7 @@ class FakeTrellis:
             crossing_sign=self.signs.get(crossing_id, 1),
             manifold_a_key=None,
             manifold_b_key=self.key_of(crossing_id),
+            is_anchor=False,
         )
 
     def iterate(self, crossing_id: int, n: int) -> Optional[int]:

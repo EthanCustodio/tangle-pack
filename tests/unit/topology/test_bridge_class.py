@@ -50,6 +50,7 @@ from tanglepack.topology.StablePartition import (
     rows_of_bridge,
 )
 from tanglepack.topology.TopologyResults import ElementRef, PartitionInterval
+from tanglepack.topology.Trellis import Trellis
 
 
 # --------------------------------------------------------------------------- #
@@ -414,9 +415,14 @@ class _ClassTrellis:
     and no loop occurs.
     """
 
+    #: The production anchor rules (no crossing here is an anchor).
+    unstable_key_of = Trellis.unstable_key_of
+    stable_key_at = Trellis.stable_key_at
+
     def __init__(self, crossings: dict, fixed_points: list) -> None:
         self._crossings = crossings
         self.fixed_points = list(fixed_points)
+        self.registry = {iid: self.intersection(iid) for iid in crossings}
 
     def intersection(self, iid: int) -> SimpleNamespace:
         """One crossing as the registry would hand it out."""
@@ -428,6 +434,7 @@ class _ClassTrellis:
             manifold_a_key=unstable,
             manifold_b_key=stable,
             crossing_sign=sign,
+            is_anchor=False,
         )
 
     def iterate(self, iid: int, n: int) -> None:

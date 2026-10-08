@@ -211,30 +211,18 @@ fixed in conversation with the author (July 2026):
   cdist 0.0 (a registered anchor is synthetic at exactly 0.0); a boundary
   within the tolerance of 0 but not on it is still taken as the anchor, at
   INFO.
-* DEFERRED (author, 2026-10-07): a branch with ONLY anchors. The inversion
-  saddle (k=10) grown 4 or 5 unstable steps (E7) registers no crossing past
-  the anchors of a stable branch, so :func:`_build_intervals` gets a single
-  boundary (the anchor is also the outermost crossing) and yields ZERO
-  intervals; :func:`_element_of_intersection` then asserts "owned by 0
-  partition elements" for the anchor (the singleton rule needs a neighbouring
-  interval). Neither check is over-strict: what such a branch partitions into
-  is undecided. The two candidates: (i) one closed singleton at the anchor —
-  consistent with the partition spanning anchor .. outermost crossing, but a
-  singleton owns no stable edge and no dual-graph node, so the branch is
-  absent from the dual graph; (ii) one closed element ``[anchor, end]`` to
-  the branch's end, as ``land_element`` treats an unbounded high end, which
-  gives the branch dual-graph nodes with no crossing to own. Either must work
-  with ONE anchor per branch: the inversion saddle's duplicate (0, 0) anchors
-  are the strict xfail ``one_anchor_per_unstable_branch`` in
-  ``tests/cases.py`` ``KNOWN_ISSUES`` and must stay one. A monkeypatch of (i)
-  ran the full stack (4 steps: 0 classes; 5 steps: 1 unresolved class,
-  provisional). The log line, once decided, goes on THIS module's logger at
-  INFO ("no crossing past its anchor(s); grow the unstable manifold"), never
-  on ``PartitionFamily``'s, whose WARNING count a test watches. Until then
-  the remedy is to grow the unstable manifold further.
+* The anchor (WP3, 2026-10-08). A periodic point is ONE crossing on every
+  branch attached to it (D4). Its geometry cannot say which stable branch a
+  hole at it faces (both leave it), so an anchor opening is read off the
+  signs (D6, :func:`_anchor_branch`) and every opening record names the
+  branch it opens; :func:`_approach` has no frame there. A stable branch with
+  NO crossing past its anchor (an inversion saddle grown 4-5 steps) is ONE
+  element ``[anchor, end]`` to the end of the computed branch (C1), logged at
+  INFO on this module's logger; grow the unstable manifold to resolve it.
 
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
-StrongPip/Pseudoneighbor but is unvalidated. Containing-bridge lookup compares
+StrongPip/Pseudoneighbor and is exercised by the inversion law cases (the k=4
+saddle at 0/1/2 blasts and the k=4.1 period-2 orbit). Containing-bridge lookup compares
 unstable cdists, which are only comparable on the same unstable branch, so it
 is filtered by ``Bridge.manifold_key``, which every bridge carries. A
 ``partial`` piece (an image arc bounded by fewer than two crossings) has no
@@ -958,9 +946,13 @@ def _approach(
     """(approach displacement into the arc, stable look direction) at a bridge end.
 
     The look direction is the unit stable tangent toward the anchor; None when
-    the arc end or the local stable frame is unavailable.
+    the arc end or the local stable frame is unavailable, and always at an
+    anchor: both stable branches leave it, so it has no stable frame of its
+    own and its row is the sign rule's alone (D6).
     """
     ix = trellis.intersection(intersection_id)
+    if ix.is_anchor:
+        return None
     end = _bridge_end_geometry(poly, np.asarray(ix.get_point(), dtype=np.float64))
     if end is None:
         return None
@@ -1061,8 +1053,9 @@ def _row_mismatch_message(
     first, second = bridge.first_intersection, bridge.second_intersection
     if first is None or second is None:
         return None
-    branch_first = trellis.branch_containing(first, "stable")
-    branch_second = trellis.branch_containing(second, "stable")
+    unstable_key = trellis.unstable_key_of((first, second))
+    branch_first = trellis.branch(trellis.stable_key_at(first, unstable_key))
+    branch_second = trellis.branch(trellis.stable_key_at(second, unstable_key))
     if branch_first is None or branch_first is not branch_second:
         return None  # different stable branches (heteroclinic / period > 1)
     row_first, row_second = rows.get(first), rows.get(second)
@@ -1475,7 +1468,7 @@ def _hole_openings(
     bridge_side: Optional[Side],
     *,
     inward: bool = False,
-) -> list[tuple[int, str, Side]]:
+) -> list[tuple[int, str, Side, "ManifoldKey"]]:
     """The opening records of a hole on ``bridge_side`` of ``bridge``.
 
     Implements the author's rule (2026-07-16): follow the bridge arc to each
@@ -1497,8 +1490,14 @@ def _hole_openings(
 
     At a trimmed branch end whose outward half is removed, a hole facing that
     half still records an ``"outward"`` opening (it participates in the
-    singleton pinch test); at the anchor artifact a hole facing the far half
-    faces the OTHER stable branch and opens nothing here.
+    singleton pinch test); a hole whose side holds neither half there opens
+    nothing at that end.
+
+    At the ANCHOR both stable branches leave the point, so its geometry
+    cannot say which half the hole faces; the signs do (D6). The hole's side
+    of the bridge holds the outward half of exactly one of the two stable
+    branches, the one on which the bridge's row is ``bridge_side``
+    (:func:`_anchor_branch`); that half opens, on that row.
 
     A direct hole needs no side test at all: it sits in the region bounded
     by its pair's own stable segment and the bridge, so it opens the inward
@@ -1518,9 +1517,11 @@ def _hole_openings(
             where they hold by construction). No warning.
 
     Returns:
-        The ``Hole.openings`` records, one per defining intersection. Empty for a
-        ``partial`` piece: it is bounded by fewer than two crossings, so it has no
-        defining intersections to open intervals at.
+        The ``Hole.openings`` records ``(intersection_id, which, row,
+        branch_key)``, one per defining intersection, each naming the stable
+        branch it opens. Empty for a ``partial`` piece: it is bounded by fewer
+        than two crossings, so it has no defining intersections to open
+        intervals at.
     """
     if bridge.partial:
         return []
@@ -1541,11 +1542,17 @@ def _hole_openings(
             bridge.second_intersection,
         )
 
-    openings: list[tuple[int, str, Side]] = []
+    openings: list[tuple[int, str, Side, "ManifoldKey"]] = []
     for iid in (near_id, far_id):
+        ix = trellis.intersection(iid)
+        if ix.is_anchor:
+            key = None if bridge_side is None else _anchor_branch(trellis, bridge.id, bridge_side)
+            if key is not None:
+                openings.append((iid, "outward", bridge_side, key))
+            continue
         # One stable-frame walk per end: _row_at reads the tangent directions
         # from it and the side test below reads the two flanking nodes.
-        frame = _stable_frame(trellis, trellis.intersection(iid))
+        frame = _stable_frame(trellis, ix)
         row = _row_at(trellis, poly, iid, frame=frame)
         if row is None:
             continue
@@ -1567,14 +1574,31 @@ def _hole_openings(
                 # Trimmed branch end: the hole's side holds the removed tail.
                 which = "outward"
             else:
-                # Anchor artifact: the hole's side holds the OTHER branch.
                 logger.debug(
-                    "Hole faces the opposite stable branch at intersection %d",
-                    iid,
+                    "Hole faces neither stable half at intersection %d", iid
                 )
                 continue
-        openings.append((iid, which, row))
+        openings.append((iid, which, row, ix.manifold_b_key))
     return openings
+
+
+def _anchor_branch(
+    trellis: "Trellis", bridge_id: "BridgeId", row: Side
+) -> Optional["ManifoldKey"]:
+    """The stable branch at a bridge's anchor end on which the bridge's row is ``row``.
+
+    The bridge of ``u(o, b)`` meets ``s(o, b)`` with the anchor's own sign
+    and ``s(o, 1 - b)``, which runs the other way, with the opposite one;
+    ``row(first)`` is left iff the sign is positive (:func:`row_of_end`).
+    None when that branch is not in the trellis (a point seeded on one
+    eigendirection: the hole faces the uncomputed half).
+    """
+    fp, _, orbit_index, branch_index = trellis.unstable_key_of(bridge_id)
+    home_sign = trellis.intersection(bridge_id[0]).crossing_sign
+    if (home_sign > 0) != (row == "left"):
+        branch_index = 1 - branch_index
+    key = (fp, "stable", orbit_index, branch_index)
+    return key if key in trellis.branches else None
 
 
 def _step_into(
@@ -1931,10 +1955,11 @@ def _hole_marks_on_branch(
     Boundary intersections and open-interval marks on one branch and row.
 
     Every punched hole participates — a hole is a hole, with no exceptions by
-    iterate or endpoint identity. Each opening record lands on the stable
-    branch of its own intersection, so a bridge whose two defining
-    intersections sit on different branches of a periodic orbit contributes
-    to each one. A hole without openings does not participate.
+    iterate or endpoint identity. Each opening record names the stable branch
+    it opens (its intersection's own, or at the anchor the one the signs pick),
+    so a bridge whose two defining intersections sit on different branches of
+    a periodic orbit contributes to each one. A hole without openings does not
+    participate.
 
     Returns:
         (boundaries, open_outward, open_anchorward): boundary intersection
@@ -1950,13 +1975,10 @@ def _hole_marks_on_branch(
                 "Hole at %s has no openings; it does not partition", hole.coords
             )
             continue
-        for iid, which, row in hole.openings:
-            if row != side:
+        for iid, which, row, opened in hole.openings:
+            if (row, opened) != (side, branch_key):
                 continue
-            ix = trellis.intersection(iid)
-            if ix.manifold_b_key != branch_key:
-                continue
-            boundaries[iid] = ix.stable_cdist
+            boundaries[iid] = trellis.intersection(iid).stable_cdist
             (open_outward if which == "outward" else open_anchorward).add(iid)
     return boundaries, open_outward, open_anchorward
 
@@ -2001,6 +2023,17 @@ def _build_intervals(
     for bid, cdist in boundaries:
         unique[bid if bid is not None else ("anchor", cdist)] = (bid, cdist)
     ordered = sorted(unique.values(), key=lambda b: b[1])
+    if len(ordered) == 1:
+        # C1: no crossing past the anchor yet -- one element to the end of the
+        # computed branch.
+        ((bid, cdist),) = ordered
+        end = float(trellis.manifolds[branch.key].tail.get_cdist("stable"))
+        logger.info(
+            "branch %s has no crossing past its anchor; one element to its end "
+            "(grow the unstable manifold)",
+            branch.key[1:],
+        )
+        return [PartitionInterval(bid, None, cdist, end, True, True)]
 
     intervals: list[PartitionInterval] = []
     for (lo_id, lo_c), (hi_id, hi_c) in zip(ordered, ordered[1:]):
@@ -2173,8 +2206,9 @@ def _elements_at_bridge(
         if bridge_id is None:
             continue  # a partial arc is not a bridge and has no identity
         ends: list[Optional[int]] = []
+        unstable_key = trellis.unstable_key_of(bridge_id)
         for endpoint in bridge_id:
-            if trellis.intersection(endpoint).manifold_b_key != branch_key:
+            if trellis.stable_key_at(endpoint, unstable_key) != branch_key:
                 ends.append(None)
                 continue
             element_id = element_of_intersection.get(endpoint)

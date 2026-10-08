@@ -72,7 +72,14 @@ from typing import Iterable, Literal, Optional, Sequence, TYPE_CHECKING
 
 from .BridgeClass import element_sort_key
 from .StablePartition import owns_cdist, row_of_end
-from .TopologyResults import ElementRef, OPPOSITE_SIDE, PartitionInterval, Side
+from .TopologyResults import (
+    ElementRef,
+    Endpoint,
+    OPPOSITE_SIDE,
+    PartitionInterval,
+    Side,
+    endpoint_index,
+)
 from .Trellis import SCALING_RTOL
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -210,7 +217,7 @@ def _land_singleton(
     crossing_id = interval.lo_id
     assert crossing_id is not None
     image_id = trellis.iterate(crossing_id, 1)
-    key, cdist, from_table = trellis.image_cdist(crossing_id, 1, "stable")
+    key, cdist, from_table = trellis.image_cdist(crossing_id, 1, "stable", branch=ref.branch_key)
     span = (float(cdist), float(cdist))
     flags = (bool(from_table), bool(from_table))
     if image_id is None:
@@ -228,7 +235,7 @@ def _land_singleton(
         logger.warning("%s", reason)
         return _unresolved(ref, image_key, image_side, span, flags, reason, singleton=True)
     try:
-        target = iterated.owner_of_intersection(image_id, image_side)
+        target = iterated.owner_of_intersection(image_id, image_side, image_key)
     except ValueError as error:
         reason = (
             f"image crossing {image_id} of singleton element {ref.label} has no "
@@ -331,7 +338,7 @@ def land_element(
             else:
                 ends.append((float(end_cdist) * fixed_point.per_step_beta("stable"), False))
             continue
-        key, cdist, from_table = trellis.image_cdist(end_id, 1, "stable")
+        key, cdist, from_table = trellis.image_cdist(end_id, 1, "stable", branch=ref.branch_key)
         if key != image_key:
             partial = (float(cdist), float(cdist))
             reason = (
@@ -416,7 +423,7 @@ def _debug_endpoint_owners(
         if image_id is None:
             continue
         try:
-            owner = iterated.owner_of_intersection(image_id, image_side)
+            owner = iterated.owner_of_intersection(image_id, image_side, target.branch_key)
         except ValueError:
             continue
         if owner != target:
@@ -874,30 +881,22 @@ def trellis_itinerary(
                 f"image chain is not consecutive: {previous} is followed by {following}"
             )
 
-    def owner(crossing_id: int, row: Side, role: str) -> ElementRef:
+    def owner(pair: tuple[int, int], endpoint: Endpoint, role: str) -> ElementRef:
         try:
-            return iterated.owner_of_intersection(crossing_id, row)
+            return iterated.owner_at_end(trellis, pair, endpoint)
         except ValueError as error:
             raise ValueError(
-                f"crossing {crossing_id} of the image chain has no owner on the "
-                f"{row} side of the iterated partition ({role}); the image is "
-                f"not partitioned there -- grow or blast. {error}"
+                f"crossing {pair[endpoint_index(endpoint)]} of the image chain has no "
+                f"owner on the {row_of_end(trellis, pair, endpoint)} side of the "
+                f"iterated partition ({role}); the image is not partitioned there "
+                f"-- grow or blast. {error}"
             ) from error
 
-    itinerary: list[ElementRef] = [
-        owner(pairs[0][0], row_of_end(trellis, pairs[0], "first"), "start of the chain")
-    ]
+    itinerary: list[ElementRef] = [owner(pairs[0], "first", "start of the chain")]
     for previous, following in zip(pairs, pairs[1:]):
-        crossing_id = previous[1]
-        itinerary.append(
-            owner(crossing_id, row_of_end(trellis, previous, "second"), "entry row")
-        )
-        itinerary.append(
-            owner(crossing_id, row_of_end(trellis, following, "first"), "exit row")
-        )
-    itinerary.append(
-        owner(pairs[-1][1], row_of_end(trellis, pairs[-1], "second"), "end of the chain")
-    )
+        itinerary.append(owner(previous, "second", "entry row"))
+        itinerary.append(owner(following, "first", "exit row"))
+    itinerary.append(owner(pairs[-1], "second", "end of the chain"))
     if direction < 0:
         itinerary.reverse()
     assert len(itinerary) == 2 * len(pairs)

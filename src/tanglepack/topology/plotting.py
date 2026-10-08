@@ -2117,13 +2117,9 @@ def _bridge_symbol(dynamics: "SymbolicDynamics", bridge_id) -> tuple[Optional[st
 
 def _bridge_end_elements(dual_graph: "DualGraph", bridge_id) -> tuple:
     """The iterated elements a bridge's two crossings are owned by on the bridge's rows."""
-    from .StablePartition import row_of_end
-
     return tuple(
-        dual_graph.partition.owner_of_intersection(
-            bridge_id[index], row_of_end(dual_graph.trellis, bridge_id, endpoint)
-        )
-        for index, endpoint in ((0, "first"), (1, "second"))
+        dual_graph.partition.owner_at_end(dual_graph.trellis, bridge_id, endpoint)
+        for endpoint in ("first", "second")
     )
 
 

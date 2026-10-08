@@ -27,6 +27,7 @@ from cases import Case, build_nested
 from helpers.logs import assert_logged
 from tanglepack.topology.PartitionFamily import IteratedHomotopyPartition
 from tanglepack.topology.TopologyResults import PartitionInterval
+from tanglepack.topology.Trellis import Trellis
 
 #: The module (the package attribute of the same name is the class).
 family_module = importlib.import_module("tanglepack.topology.PartitionFamily")
@@ -36,12 +37,19 @@ LOGGER = "tanglepack.topology.PartitionFamily"
 class _FakeTrellis:
     """Just enough trellis for ``_empty_stretches``: a crossing's stable branch."""
 
+    #: The production anchor rules (no crossing here is an anchor).
+    unstable_key_of = Trellis.unstable_key_of
+    stable_key_at = Trellis.stable_key_at
+
     def __init__(self, branches: dict[int, tuple]) -> None:
         self._branches = branches
+        self.registry = {iid: self.intersection(iid) for iid in branches}
 
     def intersection(self, iid: int) -> SimpleNamespace:
         """The crossing, carrying only its stable branch key."""
-        return SimpleNamespace(manifold_b_key=self._branches[iid])
+        return SimpleNamespace(
+            manifold_a_key=None, manifold_b_key=self._branches[iid], is_anchor=False
+        )
 
 
 def _hole_homotopy(lo_id: int, hi_id: int, branch: tuple) -> SimpleNamespace:

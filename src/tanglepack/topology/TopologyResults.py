@@ -123,12 +123,14 @@ class Hole:
             hole, the containing bridge for a propagated one. These are the
             partition boundaries of the Stable Manifold Partition Algorithm.
         openings: The partition intervals this hole opens, one record per
-            defining intersection: ``(intersection_id, which, row)`` where
-            ``which`` is ``"anchorward"``/``"outward"`` (which side of that
-            intersection along the stable manifold the hole abuts — derived
-            from ``bridge_side``) and ``row`` is the left/right partition the
-            opening acts on. A hole with no openings does not participate in
-            the partition.
+            defining intersection: ``(intersection_id, which, row,
+            branch_key)`` where ``which`` is ``"anchorward"``/``"outward"``
+            (which side of that intersection along the stable manifold the
+            hole abuts — derived from ``bridge_side``), ``row`` is the
+            left/right partition the opening acts on and ``branch_key`` the
+            stable branch it opens: the intersection's own, or at the anchor
+            (one point on every branch, D4) the one the signs pick. A hole
+            with no openings does not participate in the partition.
         iterate: Position of this hole along its reference orbit — 0 for the
             reference hole itself, negative for backward iterates, positive
             for forward ones. None when unknown.
@@ -142,7 +144,7 @@ class Hole:
     pair: Optional["PseudoneighborPair"] = None
     bridge_side: Optional[Side] = None
     bounding_ids: Optional[tuple[int, int]] = None
-    openings: Optional[list[tuple[int, str, str]]] = None
+    openings: Optional[list[tuple[int, str, str, "ManifoldKey"]]] = None
     iterate: Optional[int] = None
     origin: Optional[tuple[int, int]] = None
     measured_side: Optional[Side] = None

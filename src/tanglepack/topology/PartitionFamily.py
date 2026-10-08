@@ -118,9 +118,11 @@ from .StablePartition import (
 )
 from .TopologyResults import (
     ElementRef,
+    Endpoint,
     PartitionInterval,
     Side,
     StablePartitionResult,
+    endpoint_index,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -336,13 +338,47 @@ class PartitionFamily:
             self.interval_at(branch_key, side, cdist).element_id
         )
 
-    def owner_of_intersection(self, intersection_id: int, side: Side) -> ElementRef:
+    def owner_at_end(
+        self, trellis: "Trellis", bridge_id: "BridgeId", endpoint: Endpoint
+    ) -> ElementRef:
+        """
+        The element one end of an arc sits against: on its row, on its stable branch.
+
+        Args:
+            trellis: The trellis the arc's crossings are registered in.
+            bridge_id: The arc's two crossings, ordered like a
+                :data:`~tanglepack.numerics.Bridge.BridgeId`.
+            endpoint: ``"first"`` or ``"second"``.
+
+        Returns:
+            The owner on :func:`row_of_end`'s side of the branch
+            :meth:`~.Trellis.Trellis.stable_key_at` names (at an anchor, the
+            branch of the arc's own orbit point and branch index, C7).
+
+        Raises:
+            ValueError: As :meth:`owner_of_intersection`.
+        """
+        intersection_id = bridge_id[endpoint_index(endpoint)]
+        branch_key = trellis.stable_key_at(intersection_id, trellis.unstable_key_of(bridge_id))
+        return self.owner_of_intersection(
+            intersection_id, row_of_end(trellis, bridge_id, endpoint), branch_key
+        )
+
+    def owner_of_intersection(
+        self,
+        intersection_id: int,
+        side: Side,
+        branch_key: Optional["ManifoldKey"] = None,
+    ) -> ElementRef:
         """
         The element owning one registered crossing on one side.
 
         Args:
             intersection_id: Registry id of a crossing on a covered branch.
             side: Which side's partition to read.
+            branch_key: The stable branch to read it on. Needed for an anchor,
+                which lies on every branch of its point (D4); without it the
+                first covered result knowing the crossing answers.
 
         Returns:
             The owning element's reference, read from the result's
@@ -352,7 +388,7 @@ class PartitionFamily:
             ValueError: If no covered result on that side knows the crossing.
         """
         for (key, result_side), result in self.results.items():
-            if result_side != side:
+            if result_side != side or branch_key not in (None, key):
                 continue
             element_id = result.element_of_intersection.get(intersection_id)
             if element_id is not None:
@@ -764,7 +800,8 @@ class IteratedHomotopyPartition(PartitionFamily):
         empty = cls._empty_stretches(minimal, homotopy)
         for bid in minimal.image_bridge_ids:
             first, second = bid
-            branch = {iid: trellis.intersection(iid).manifold_b_key for iid in bid}
+            unstable_key = trellis.unstable_key_of(bid)
+            branch = {iid: trellis.stable_key_at(iid, unstable_key) for iid in bid}
             row = {
                 first: row_of_end(trellis, bid, "first"),
                 second: row_of_end(trellis, bid, "second"),
@@ -807,7 +844,7 @@ class IteratedHomotopyPartition(PartitionFamily):
                 own_c = float(trellis.intersection(iid).stable_cdist)
                 flanks: dict[str, int] = {}
                 for other, kind in abutting:
-                    if trellis.intersection(other).manifold_b_key != key[0]:
+                    if other not in trellis.branch(key[0]).intersection_ids:
                         # A far end on another stable branch has no flank here:
                         # the two cdists are measured along different curves.
                         logger.warning(
@@ -950,8 +987,9 @@ class IteratedHomotopyPartition(PartitionFamily):
             # image across ANOTHER stable branch (another orbit branch, another
             # fixed point) folds nothing on this one, so only the base branch's
             # crossings are paired into chords.
-            base_branch = trellis.intersection(crossings[0]).manifold_b_key
-            if trellis.intersection(crossings[-1]).manifold_b_key != base_branch:
+            unstable_key = trellis.unstable_key_of(chain[0])
+            base_branch = trellis.stable_key_at(crossings[0], unstable_key)
+            if trellis.stable_key_at(crossings[-1], unstable_key) != base_branch:
                 logger.warning(
                     "image chain of hole bridge %s ends on another stable branch "
                     "than it starts (%d vs %d); its lobe marks no empty stretch",

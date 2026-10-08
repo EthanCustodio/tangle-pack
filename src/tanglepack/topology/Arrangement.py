@@ -75,16 +75,15 @@ interior-disjoint, which is what a dual graph will need. Within a single compone
 the test is unnecessary (the faces of a connected planar subdivision are disjoint
 by construction) and is skipped.
 
-Inversion caveat
-----------------
-An inversion periodic point (``k_value == 2 * period``) has two branches of each
-manifold, all four rays leaving ONE point, and
-:meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench._register_anchors`
-registers one anchor per (unstable branch, stable branch) pair — four coincident
-nodes where the topology wants a single degree-four node whose ``u-`` and ``s-``
-slots are branch 1's ``u+`` and ``s+``. The arrangement is therefore not validated
-on inversion fixtures; the region layer is built and tested on the non-inversion
-ones.
+The anchor
+----------
+A periodic point is ONE node, the anchor, of every branch attached to it (D4).
+It is stored under its home pair ``(u(o, 0), s(o, 0))``, whose arcs fill its
+``u+`` / ``s+`` slots; branch 1 of either stability leaves it the opposite way
+and fills ``u-`` / ``s-``. The home sign then gives the rotation exactly
+(counter-clockwise ``u(o,0), s(o,0), u(o,1), s(o,1)`` for sign ``+1``), so an
+inversion anchor is one degree-4 node with no virtual stub; a point seeded on
+one eigendirection keeps its ``u-`` / ``s-`` stubs.
 """
 
 from __future__ import annotations
@@ -417,6 +416,8 @@ class Arrangement:
         """Register both half-edges of one arc, in the two slots it occupies."""
         forward_slot: Slot = "s+" if arc.kind == "stable" else "u+"
         backward_slot: Slot = _OPPOSITE_SLOT[forward_slot]
+        if arc.branch_key[3] == 1 and self.trellis.intersection(arc.lo_id).is_anchor:
+            forward_slot = _OPPOSITE_SLOT[forward_slot]  # branch 1 leaves the anchor backward
 
         forward = self._new_half_edge(arc.lo_id, arc.hi_id, forward_slot, arc)
         backward = self._new_half_edge(

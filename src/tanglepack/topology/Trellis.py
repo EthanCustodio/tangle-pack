@@ -40,16 +40,16 @@ available fixture:
   orientation-PRESERVING (b = 1), so that branch has never run against real
   data; the flip mirrors the rule ``bridge_side_violations`` applies to a hole's
   backward chain, and should be validated together with it on a det J < 0 map.
-* An element bounded by the anchor (``lo_id is None``) or by the end of the
-  computed branch (``hi_id is None``) has no image arc at all -- there is no
-  crossing whose image would bound it -- so ``image_of_element`` answers None
-  there. That is now the ONLY None it returns: an endpoint that IS a crossing
-  but has no registered iterate is mapped by ``image_cdist``, which falls back
-  from the iterate table to ``advance_key`` plus ``per_step_beta``. The
-  deliberate anchor registration of 6.3 would give the anchor-bounded case a
-  real id and close what is left. ``image_of_element(..., use_table=False)``
-  forces the scaling branch for both endpoints; it exists so a test can pin the
-  two answers as equal wherever the table has both iterates.
+* An element bounded by the end of the computed branch (``hi_id is None``)
+  has no image arc -- there is no crossing whose image would bound it -- so
+  ``image_of_element`` answers None there. That is the ONLY None it returns: an
+  endpoint that IS a crossing but has no registered iterate is mapped by
+  ``image_cdist``, which falls back from the iterate table to ``advance_key``
+  plus ``per_step_beta``, and an anchor end maps to the next point's anchor on
+  the advanced branch (``image_cdist(..., branch=)``: the anchor lies on every
+  branch of its point, D4). ``image_of_element(..., use_table=False)`` forces
+  the scaling branch for both endpoints; it exists so a test can pin the two
+  answers as equal wherever the table has both iterates.
 
   That equality is not free. A canonical distance is an arc length on a
   polyline, so ``c * per_step_beta ** n`` reproduces the registered image only
@@ -361,14 +361,17 @@ class Trellis:
                 intersection_ids=[],
             )
 
-        # Bucket each intersection onto the branch(es) it lies on. An
-        # intersection's unstable side is manifold_a_key, its stable side is
-        # manifold_b_key.
+        # Bucket each intersection onto the branch(es) it lies on: its unstable
+        # side is manifold_a_key, its stable side manifold_b_key, and an anchor
+        # is one point on every branch attached to it (D4).
         for ix_id, ix in registry:
-            if ix.manifold_a_key in branches:
-                branches[ix.manifold_a_key].intersection_ids.append(ix_id)
-            if ix.manifold_b_key in branches:
-                branches[ix.manifold_b_key].intersection_ids.append(ix_id)
+            if ix.is_anchor:
+                fp, _, orbit_index, _ = ix.manifold_a_key
+                on = [key for key in branches if key[0] is fp and key[2] == orbit_index]
+            else:
+                on = [key for key in (ix.manifold_a_key, ix.manifold_b_key) if key in branches]
+            for key in on:
+                branches[key].intersection_ids.append(ix_id)
 
         # Order each branch by canonical distance (anchor outward).
         for branch in branches.values():
@@ -578,6 +581,49 @@ class Trellis:
                 return None
         return current
 
+    # ── the anchor on every branch of its point (D4) ───────────────────────
+
+    def unstable_key_of(self, pair: "tuple[int, int]") -> ManifoldKey:
+        """
+        The unstable branch of the arc between two crossings of one unstable branch.
+
+        An anchor lies on every branch of its periodic point, so its own key
+        does not say which one the arc runs on; the other end does (an arc never
+        joins two anchors).
+
+        Args:
+            pair: The arc's two crossing ids, e.g. a :data:`~.Bridge.BridgeId`.
+
+        Returns:
+            The unstable branch key.
+        """
+        first, second = (self.registry[i] for i in pair)
+        return (second if first.is_anchor else first).manifold_a_key
+
+    def stable_key_at(self, intersection_id: int, unstable_key: ManifoldKey) -> ManifoldKey:
+        """
+        The stable branch an arc of ``unstable_key`` meets at one of its crossings.
+
+        A crossing's own stable branch; at an anchor, ``s(o, b)`` for an arc of
+        ``u(o, b)`` (C7): the same orbit point and branch index. The rule is
+        equivariant under the map (which advances both keys alike) and the pair
+        ``(u(o, b), s(o, b))`` carries the anchor's own crossing sign
+        (``cross(-u, -s) = cross(u, s)``), so :func:`row_of_end` reads the
+        anchor end unchanged.
+
+        Args:
+            intersection_id: Registry id of the crossing.
+            unstable_key: The unstable branch of the arc (:meth:`unstable_key_of`).
+
+        Returns:
+            The stable branch key.
+        """
+        ix = self.registry[intersection_id]
+        if not ix.is_anchor:
+            return ix.manifold_b_key
+        fp, _, orbit_index, branch_index = unstable_key
+        return (fp, "stable", orbit_index, branch_index)
+
     # ── branch access ───────────────────────────────────────────────────────
 
     def branch(self, key: ManifoldKey) -> Optional[TrellisBranch]:
@@ -625,7 +671,9 @@ class Trellis:
         Return the branch of the given stability that an intersection lies on.
 
         Reads the intersection's manifold_a_key (unstable) or manifold_b_key
-        (stable) and looks up the corresponding branch.
+        (stable) and looks up the corresponding branch. An anchor answers its
+        HOME branch (branch 0); it lies on every branch of its point, and the
+        one an arc meets it on is :meth:`stable_key_at`'s.
 
         Args:
             intersection_id: Registry ID of the intersection.
@@ -704,6 +752,8 @@ class Trellis:
         intersection_id: int,
         n: int = 1,
         stability: Stability = "stable",
+        *,
+        branch: Optional[ManifoldKey] = None,
     ) -> tuple[ManifoldKey, float, bool]:
         """
         Where one crossing lands after ``n`` map steps, on one side.
@@ -738,6 +788,10 @@ class Trellis:
                 ``"stable"`` (the default) reads ``manifold_b_key`` and the
                 stable cdist, ``"unstable"`` reads ``manifold_a_key`` and the
                 unstable cdist.
+            branch: The branch the crossing is read on, when it matters: an
+                ANCHOR lies on every branch of its periodic point (D4), so its
+                image is the next point's anchor on ``advance_key(branch, n)``
+                at cdist 0. Ignored for any other crossing.
 
         Returns:
             ``(branch_key, cdist, from_table)``: the image's manifold key, its
@@ -763,6 +817,8 @@ class Trellis:
             chains generally share that product. Compare the two sides
             individually (this method, once per stability).
         """
+        if branch is not None and self.registry[intersection_id].is_anchor:
+            return branch[0].advance_key(branch, n), 0.0, True
         key, cdist = self._keyed_cdist(intersection_id, stability)
         if n == 0:
             return key, cdist, True
@@ -1196,18 +1252,16 @@ class Trellis:
         """
         The partition element at one end of a bridge, on one side.
 
-        Scans this trellis's :attr:`stable_partitions` for the result whose
-        branch carries that endpoint. A bridge's two endpoints need not lie on
-        the same stable branch (on a period-q orbit the bridge spanning an
-        anchor has one end on each of two branches of the cycle), which is why
-        this is a scan over results rather than a lookup in one of them.
+        Reads the result of the stable branch the bridge meets at that end
+        (:meth:`stable_key_at`: the crossing's own branch, or at an anchor the
+        branch of the bridge's own orbit point and branch index, C7). A bridge's
+        two endpoints need not lie on the same stable branch (on a period-q
+        orbit the bridge spanning an anchor has one end on each of two branches
+        of the cycle).
 
         A :data:`~tanglepack.numerics.Bridge.BridgeId` IS the ordered pair of its
         endpoints' registry ids, so the answer never depends on this trellis
-        holding the bridge object: when
-        :attr:`StablePartitionResult.elements_at_bridge` has no entry for the id
-        — the bridge belongs to another fixed point, or was simply not in the
-        snapshot's bridge list — the endpoint id is looked up directly in
+        holding the bridge object: the endpoint id is looked up in
         :attr:`StablePartitionResult.element_of_intersection`. That is what makes
         a heteroclinic bridge resolvable: a bridge of W^u(fp1) crossing W^s(fp3)
         is filtered out of fp3's snapshot (``from_workbench`` keeps bridges by
@@ -1235,18 +1289,11 @@ class Trellis:
             :attr:`~.TopologyResults.PartitionInterval.branch_key`) to identify
             the element globally.
         """
-        index = endpoint_index(endpoint)
+        intersection_id = bridge_id[endpoint_index(endpoint)]
+        branch_key = self.stable_key_at(intersection_id, self.unstable_key_of(bridge_id))
         for result in self.stable_partitions:
-            if result.side != side:
-                continue
-            ends = result.elements_at_bridge.get(bridge_id)
-            if ends is not None and ends[index] is not None:
-                return ends[index]
-            # No entry: the bridge object is not in this snapshot. Its id still
-            # names the two crossings, so ask the branch that owns one of them.
-            direct = result.element_of_intersection.get(bridge_id[index])
-            if direct is not None:
-                return direct
+            if (result.branch_key, result.side) == (branch_key, side):
+                return result.element_of_intersection.get(intersection_id)
         return None
 
     def image_of_element(
@@ -1339,7 +1386,9 @@ class Trellis:
         image_ends: list[tuple[float, bool]] = []
         for end_id in (interval.lo_id, interval.hi_id):
             if use_table:
-                _key, cdist, from_table = self.image_cdist(end_id, n, "stable")
+                _key, cdist, from_table = self.image_cdist(
+                    end_id, n, "stable", branch=result.branch_key
+                )
                 if not from_table:
                     logger.debug(
                         "element %d of %s: crossing %d has no registered %d-iterate; "

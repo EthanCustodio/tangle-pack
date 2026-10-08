@@ -20,6 +20,7 @@ from tanglepack.topology.BridgeClass import (
     BridgeClassEntry,
     BridgeClassTable,
     BridgeMember,
+    oriented_class,
 )
 from tanglepack.topology.TopologyResults import ElementRef
 
@@ -239,6 +240,33 @@ def test_cross_side_pair_flagged_with_warning(layout, caplog):
         symbols, _loops = layout.translate(itinerary)
     assert len(symbols) == 1 and symbols[0].cross_side
     assert_logged(caplog, logging.WARNING, SD.__name__)
+
+
+def test_cross_side_is_flagged_only_within_one_branch(caplog):
+    """D4: the left of an inversion point's stable branch 0.0 is the right of 0.1, so a
+    pair across two branches is never cross-side; on one branch it is, with a WARNING."""
+    fp = bare_fixed_point(inversion=True)
+    left_00 = ElementRef((fp, "stable", 0, 0), "left", 0)
+    right_01 = ElementRef((fp, "stable", 0, 1), "right", 0)
+    right_00 = ElementRef((fp, "stable", 0, 0), "right", 1)
+    refs = (left_00, right_01, right_00)
+    naming = _FakeNaming({ref: ref for ref in refs}, {ref: ref.label for ref in refs})
+    across = oriented_class(left_00, right_01, [fp])[0]
+    within = oriented_class(left_00, right_00, [fp])[0]
+    table = BridgeClassTable(
+        [
+            BridgeClassEntry(across, [BridgeMember((0, 1), +1)], inert=False, letter="a"),
+            BridgeClassEntry(within, [BridgeMember((2, 3), +1)], inert=False, letter="b"),
+        ]
+    )
+    letters = {across: "a", within: "b"}
+    for pair, flagged in (((left_00, right_01), False), ((left_00, right_00), True)):
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=SD.__name__):
+            symbols, _loops = translate_itinerary(pair, naming, table, letters, [fp])
+        assert [symbol.cross_side for symbol in symbols] == [flagged]
+        assert [symbol.kind for symbol in symbols] == ["active"]
+        assert_logged(caplog, logging.WARNING, SD.__name__, count=int(flagged))
 
 
 # --------------------------------------------------------------------------- #
