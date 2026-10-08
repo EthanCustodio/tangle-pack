@@ -1,0 +1,11 @@
+% E11: per case at the reference cell (cutoff 1e-7, recipe separation, one iteration); the last two columns cover every config of the case
+% suggested column spec: {lllllrlllr}
+\toprule
+case & blasts (stop) & crossings & classes & first new words & new-word blasts & unres./virt./amb. at end & topology error from blast & configs w/ error & law viol. \\
+\midrule
+k28 & 15 (memory budget) & 4$\to$7\,792 & 3$\to$57 & 1 & 4 & 12 / 1 / 3 (prov.) & 9 (zero-width iterated element) & 11/12 & 0 \\
+k32 & 14 (memory budget) & 4$\to$6\,757 & 3$\to$37 (blast 8) & 1 & 8 & 2 / 1 / 0 (prov.) & 9 (zero-width iterated element) & 8/10 & 0 \\
+p3 & 20 (all blasts) & 30$\to$198 & 9$\to$51 & 6 & 15 & 1 / 1 / 0 (prov.) & none & 2/11 & 0 \\
+nested\_outer & 15 (memory budget) & 34$\to$9\,170 & 12$\to$11 & 1 & 3 & 0 / 0 / 0 & none & 0/9 & 0 \\
+nested\_inner & 20 (all blasts) & 40$\to$208 & 13$\to$55 & 6 & 15 & 1 / 1 / 0 (prov.) & none & 2/11 & 0 \\
+\bottomrule

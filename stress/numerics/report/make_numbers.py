@@ -425,7 +425,7 @@ def e07() -> None:
         put("e07", f"MaxBlasts{w}", mm.get("blasts_done", 0), f"blasts {case}: blasts completed of {r['config']['max_blasts']}", "int")
         put("e07", f"BlastOutcome{w}", r["outcome"], f"blasts {case}: record outcome")
         topo = mm.get("topology_outcome")
-        put("e07", f"BlastTopology{w}", None if topo is None else topo + ("" if mm.get("is_reliable", True) else " (unreliable)"),
+        put("e07", f"BlastTopology{w}", None if topo is None else topo + ("" if mm.get("is_reliable", True) else " (provisional)"),
             f"blasts {case}: topology stack on the final state")
         detail("e07", f"blasts_{case}", {"outcome": r["outcome"], "error": r.get("error"),
                                           **{k: mm.get(k) for k in ("blasts_done", "attempted_blast", "topology_outcome",
@@ -565,6 +565,303 @@ def e10() -> None:
                 "E10: do the sha256 hashes agree across repeats (exact bytes, and rounded to 1e-12)?")
 
 
+# --------------------------------------------------------------------------- #
+# E11
+# --------------------------------------------------------------------------- #
+DEEP_CASE_WORDS = {"k28": "KTwoEight", "k32": "KThreeTwo", "p3": "PThree", "nested_outer": "NestedOuter",
+                   "nested_inner": "NestedInner"}
+CUTOFF_WORDS = {1e-5: "Five", 1e-6: "Six", 1e-8: "Eight"}
+ERROR_WORDS = {"zero-width iterated element": "ZeroWidth", "holes disagree on bridge side": "HoleSide",
+               "several outer faces": "OuterFaces", "bridge rows disagree": "BridgeRows"}
+STOP_TEXT = {"max_blasts": "all blasts", "budget": "time budget", "memory_budget": "memory budget"}
+
+
+def blast_range(blasts: list[int]) -> str:
+    lo, hi = min(blasts), max(blasts)
+    return str(lo) if lo == hi else f"{lo}--{hi}"
+
+
+def cell_tex(record: dict) -> str:
+    kind, value = A.e11_kind(record)
+    if kind == "cutoff":
+        return f"cutoff ${sci_tex(value)}$"
+    if kind == "iterations":
+        return "2 iterations"
+    return tex(A.e11_label(record))
+
+
+def cells_text(cells: list[dict]) -> str:
+    """The configs of one case, compressed: 'every separation' when the reference and all its separations are in."""
+    labels = [cell_tex(r) for r in cells]
+    kinds = [A.e11_kind(r)[0] for r in cells]
+    case = cells[0]["config"]["case"]
+    all_seps = [r for r in A.e11_records() if r["config"]["case"] == case and A.e11_kind(r)[0] in ("canonical", "separation")]
+    if len([k for k in kinds if k in ("canonical", "separation")]) == len(all_seps):
+        labels = ["cutoff $10^{-7}$, every separation"] + [l for l, k in zip(labels, kinds) if k not in ("canonical", "separation")]
+    return ", ".join(labels)
+
+
+def e11() -> None:
+    records, refs = A.e11_records(), A.e11_reference()
+    src = "full records"
+    snapshots = sum(len(r["series"]["blast"]) for r in records)
+    ok_snaps = sum(sum(A.e11_ok(r)) for r in records)
+    put("e11", "DeepConfigs", len(records), "configs", "int")
+    put("e11", "DeepConfigsOk", sum(r["outcome"] == "ok" for r in records), "configs with outcome ok", "int")
+    put("e11", "DeepMaxBlasts", max(r["config"]["max_blasts"] for r in records), "max_blasts per config", "int")
+    put("e11", "DeepBlasts", sum(r["metrics"]["blasts_done"] for r in records), "blasts run, all configs", "int")
+    put("e11", "DeepSnapshots", snapshots, "topology snapshots (blast 0 included), all configs", "int")
+    put("e11", "DeepSnapshotsOk", ok_snaps, "topology snapshots that completed", "int")
+    for reason in STOP_TEXT:
+        word = "".join(w.title() for w in reason.split("_"))
+        put("e11", f"DeepStop{word}", sum(r["metrics"]["stop_reason"] == reason for r in records),
+            f"configs whose stop_reason is {reason}", "int")
+    started = [time.mktime(time.strptime(r["started"], "%Y-%m-%dT%H:%M:%S")) for r in records]
+    ended = [s + A.num(r.get("process_wall_s")) for s, r in zip(started, records)]
+    put("e11", "DeepWallMin", (max(ended) - min(started)) / 60, "wall clock from the first start to the last end (min)",
+        text=f"{(max(ended) - min(started)) / 60:.0f}")
+
+    # The laws (genuine errors if violated) and the polygon lobe probe (not a law).
+    same = sum(sum(r["series"]["same_stability"]) for r in records)
+    drops = sum(sum(r["series"]["cdist_decreasing"]) for r in records)
+    put("e11", "DeepSameStability", same, "same-stability crossings summed over every snapshot", "int")
+    put("e11", "DeepCdistDecreasing", drops, "decreasing cdist steps on new bridges, summed", "int")
+    put("e11", "DeepLawViolations", sum(r["metrics"]["law_violations"] for r in records), "metrics law_violations summed", "int")
+    p50 = [x for r in records for x in A.finite(r["series"]["lobe_ratio_p50"])]
+    put("e11", "DeepLobeCompared", sum(A.finite(r["series"]["lobe_n"]).sum() for r in records),
+        "lobe / preimage-lobe polygon pairs compared", "int")
+    put("e11", "DeepLobeRatioMedian", float(np.median(p50)) if p50 else None,
+        "median over blasts of the per-blast median |area ratio - 1|", "sci")
+    put("e11", "DeepLobeRatioMax", A.nanmax(x for r in records for x in r["series"]["lobe_ratio_max"]),
+        "largest per-blast |area ratio - 1| (polygonal probe, folds can self-intersect)", "sci")
+    worst = A.nanmax(x for r in records for x in r["series"]["lobe_ratio_max"])
+    put("e11", "DeepLobeRatioMaxWhere", None, "configs whose largest lobe ratio equals the overall largest",
+        text=", ".join(sorted({f"{r['config']['case']} {A.e11_label(r)}" for r in records
+                               if worst in r["series"]["lobe_ratio_max"]})).replace("_", " "))
+    put("e11", "DeepLobeRatioMaxReference", A.nanmax(x for r in refs.values() for x in r["series"]["lobe_ratio_max"]),
+        "largest per-blast |area ratio - 1| over the reference cells", "sci")
+    put("e11", "DeepLobeSignFlips", sum(sum(r["series"]["lobe_sign_flips"]) for r in records),
+        "lobe pairs whose polygon areas have opposite signs", "int")
+
+    # What the blasts uncovered.
+    events = [e for r in records for e in A.e11_events(r)]
+    put("e11", "DeepStructureSteps", events.count("structure"), "snapshots whose canonical words changed", "int")
+    put("e11", "DeepRelabelSteps", events.count("change"), "snapshots with a change flag but the same canonical words", "int")
+    put("e11", "DeepNoChangeSteps", events.count("none"), "snapshots after a blast with no change flag", "int")
+
+    # Topology errors (genuine).
+    errors = A.e11_errors()
+    put("e11", "DeepErrorSnapshots", snapshots - ok_snaps, "snapshots whose topology raised", "int")
+    put("e11", "DeepErrorConfigs", len({id(r) for e in errors.values() for r, _ in e["cells"]}),
+        "configs with at least one topology error", "int")
+    put("e11", "DeepErrorClasses", len(errors), "distinct topology error messages (classes)", "int")
+    put("e11", "DeepErrorAsserts", sum(o == "invariant_assert" for r in records for o in r["series"]["topology_outcome"]),
+        "snapshots that raised an AssertionError", "int")
+    put("e11", "DeepErrorExceptions", sum(o == "exception" for r in records for o in r["series"]["topology_outcome"]),
+        "snapshots that raised another exception", "int")
+    error_rows = []
+    for name, entry in errors.items():
+        word = ERROR_WORDS.get(name, "Other")
+        put("e11", f"DeepErr{word}Snapshots", entry["snapshots"], f"error '{name}': snapshots", "int")
+        put("e11", f"DeepErr{word}Configs", len(entry["cells"]), f"error '{name}': configs", "int")
+        put("e11", f"DeepErr{word}Blasts", None, f"error '{name}': blast range over every config",
+            text=blast_range([b for _, bl in entry["cells"] for b in bl]))
+        first = True
+        for case in A.E11_CASES:
+            mine = [(r, bl) for r, bl in entry["cells"] if r["config"]["case"] == case]
+            if not mine:
+                continue
+            error_rows.append([name if first else "", f"\\code{{{tex(entry['where'])}}}" if first else "",
+                               "/".join(sorted(o.replace("invariant_assert", "assert") for o in entry["outcomes"])) if first else "",
+                               case.replace("_", "\\_"), cells_text([r for r, _ in mine]),
+                               blast_range([b for _, bl in mine for b in bl]), str(sum(len(bl) for _, bl in mine))])
+            first = False
+    write_table("e11_errors", "lllllrr",
+                ["error", "raised in", "kind", "case", "configs", "blasts", "snapshots"], error_rows,
+                "E11: every distinct topology error (genuine errors; the blasting went on), per case")
+
+    # Per case, at the reference cell.
+    summary_rows = []
+    for case, r in refs.items():
+        w, s = DEEP_CASE_WORDS[case], r["series"]
+        last = A.e11_last_ok(r)
+        put("e11", f"DeepBlasts{w}", r["metrics"]["blasts_done"], f"{case} reference: blasts done", "int")
+        put("e11", f"DeepStop{w}", STOP_TEXT[r["metrics"]["stop_reason"]], f"{case} reference: stop reason")
+        put("e11", f"DeepCrossingsStart{w}", s["crossings"][0], f"{case} reference: crossings before blasting", "int")
+        put("e11", f"DeepCrossingsEnd{w}", s["crossings"][-1], f"{case} reference: crossings after the last blast", "int")
+        put("e11", f"DeepClassesStart{w}", s["n_classes"][0], f"{case} reference: bridge classes before blasting", "int")
+        put("e11", f"DeepClassesEnd{w}", s["n_classes"][last], f"{case} reference: classes at the last completed snapshot", "int")
+        put("e11", f"DeepClassesEndBlast{w}", s["blast"][last], f"{case} reference: blast of the last completed snapshot", "int")
+        put("e11", f"DeepActiveEnd{w}", s["n_active"][last], f"{case} reference: active classes there", "int")
+        put("e11", f"DeepInertEnd{w}", s["n_inert"][last], f"{case} reference: inert classes there", "int")
+        first_structure = A.e11_first(r, ["structure"])
+        put("e11", f"DeepFirstStructure{w}", first_structure, f"{case} reference: first blast whose canonical words changed", "int")
+        put("e11", f"DeepStructureChanges{w}", A.e11_events(r).count("structure"),
+            f"{case} reference: blasts whose canonical words changed", "int")
+        # The largest change of the class count in one blast (both snapshots completed).
+        ok_idx = [i for i, good in enumerate(A.e11_ok(r)) if good]
+        jumps = [(s["n_classes"][j] - s["n_classes"][i], i, j) for i, j in zip(ok_idx, ok_idx[1:]) if j == i + 1]
+        size, i, j = max(jumps)
+        put("e11", f"DeepJumpBlast{w}", s["blast"][j], f"{case} reference: blast of the largest class-count jump", "int")
+        put("e11", f"DeepJumpBefore{w}", s["n_classes"][i], f"{case} reference: classes before that jump (blast {s['blast'][i]})", "int")
+        put("e11", f"DeepJumpAfter{w}", s["n_classes"][j], f"{case} reference: classes after it", "int")
+        drops = [jump for jump in jumps if jump[0] < 0]
+        if drops:
+            size, i, j = min(drops)
+            put("e11", f"DeepDropBlast{w}", s["blast"][j], f"{case} reference: blast of the largest class-count drop", "int")
+            put("e11", f"DeepDropBefore{w}", s["n_classes"][i], f"{case} reference: classes before that drop", "int")
+            put("e11", f"DeepDropAfter{w}", s["n_classes"][j], f"{case} reference: classes after it", "int")
+        steps = np.diff([s["n_classes"][k] for k in ok_idx[-6:]]) if len(ok_idx) >= 6 and ok_idx[-6] == ok_idx[-1] - 5 else []
+        if len(steps) and len(set(steps)) == 1 and steps[0] > 0:
+            put("e11", f"DeepClassStep{w}", int(steps[0]), f"{case} reference: classes added per blast over the last 5 blasts (steady)", "int")
+        for key, name in (("crossings", "Crossing"), ("bridge_points", "Point"), ("blast_s", "Time")):
+            put("e11", f"Deep{name}Growth{w}", A.e11_growth(s[key]),
+                f"{case} reference: geometric-mean {key} factor per blast over the last 5 blasts",
+                text=None if A.e11_growth(s[key]) is None else f"{A.e11_growth(s[key]):.2f}")
+        put("e11", f"DeepLastBlastS{w}", s["blast_s"][-1], f"{case} reference: time of the last blast (s)",
+            text=f"{s['blast_s'][-1]:.2g}")
+        put("e11", f"DeepPeakRssGb{w}", A.nanmax(s["rss_mb"]) / 1024, f"{case} reference: peak RSS (GB)",
+            text=f"{A.nanmax(s['rss_mb']) / 1024:.1f}")
+        for key, name in (("n_unresolved", "Unresolved"), ("n_virtual", "Virtual"), ("n_ambiguous", "Ambiguous")):
+            put("e11", f"Deep{name}End{w}", s[key][last], f"{case} reference: {key} at the last completed snapshot", "int")
+        put("e11", f"DeepReliableEnd{w}", s["is_reliable"][last], f"{case} reference: is_reliable at the last completed snapshot")
+        put("e11", f"DeepProvisionalStart{w}", not s["is_reliable"][0], f"{case} reference: provisional before blasting")
+        provisional = A.e11_provisional(r)
+        put("e11", f"DeepFirstProvisional{w}", next((s["blast"][k] for k in range(1, len(provisional)) if provisional[k]), None),
+            f"{case} reference: first blast (> 0) whose symbolic result is provisional", "int")
+        bad = [b for b, good in zip(s["blast"], A.e11_ok(r)) if not good]
+        put("e11", f"DeepErrors{w}", len(bad), f"{case} reference: snapshots whose topology raised", "int")
+        put("e11", f"DeepErrorBlasts{w}", None, f"{case} reference: blasts whose topology raised",
+            text=blast_range(bad) if bad else "none")
+        cells = [x for x in records if x["config"]["case"] == case]
+        with_errors = sum(any(not good for good in A.e11_ok(x)) for x in cells)
+        put("e11", f"DeepErrorCells{w}", with_errors, f"{case}: configs with a topology error", "int")
+        put("e11", f"DeepCells{w}", len(cells), f"{case}: configs", "int")
+        # Parameters: separations and repeats against the reference, cutoffs and 2 iterations.
+        for kind, name in (("separation", "Separation"), ("repeat", "Repeat")):
+            mine = [x for x in cells if A.e11_kind(x)[0] == kind]
+            if mine:
+                put("e11", f"Deep{name}Identical{w}", None, f"{case}: {kind} cells identical to the reference at every blast "
+                    "(blasts, crossings, bridge points, topology outcome and exact topology hash)",
+                    text=f"{sum(A.e11_identical(x, r) for x in mine)}/{len(mine)}")
+        for x in cells:
+            kind, value = A.e11_kind(x)
+            if kind == "cutoff":
+                cw = CUTOFF_WORDS[value]
+                for key, what in (("canonical_hash", "Words"), ("crossings", "Crossings")):
+                    first = A.e11_divergence(x, r, key)
+                    where = "blasts where both snapshots completed" if key == "canonical_hash" else "every blast both ran"
+                    put("e11", f"DeepCutoff{cw}{what}{w}", first,
+                        f"{case} cutoff {value:g}: first blast whose {key} differs from the reference, compared over "
+                        f"{where}; 'never' if none", "int", text=None if first is not None else "never")
+                first = A.e11_outcome_divergence(x, r)
+                put("e11", f"DeepCutoff{cw}Outcome{w}", first,
+                    f"{case} cutoff {value:g}: first blast whose topology outcome (completed / raised) differs from "
+                    "the reference; 'never' if none", "int", text=None if first is not None else "never")
+                put("e11", f"DeepCutoff{cw}Classes{w}", x["series"]["n_classes"][A.e11_last_ok(x)],
+                    f"{case} cutoff {value:g}: classes at its last completed snapshot", "int")
+                put("e11", f"DeepCutoff{cw}Blasts{w}", x["metrics"]["blasts_done"], f"{case} cutoff {value:g}: blasts done", "int")
+            if kind == "iterations":
+                pairs = A.e11_double(x, r)
+                agree = next((p["n"] - 1 for p in pairs if not p["crossings"]), pairs[-1]["n"])
+                put("e11", f"DeepDoubleCrossingsAgree{w}", agree,
+                    f"{case} 2 iterations: last blast n with crossings equal to single blast 2n for every n' <= n", "int")
+                done = [p for p in pairs if p["n"] >= 1 and p["words"] in ("same", "different")]
+                put("e11", f"DeepDoubleWordsSame{w}", None,
+                    f"{case} 2 iterations: blasts n >= 1 whose canonical words equal single blast 2n / pairs n >= 1 "
+                    "both completed (n = 0 is the shared pre-blast build and is left out)",
+                    text=f"{sum(p['words'] == 'same' for p in done)}/{len(done)}")
+                differ = [p["n"] for p in done if p["words"] == "different"]
+                put("e11", f"DeepDoubleWordsDiffer{w}", None,
+                    f"{case} 2 iterations: blasts n >= 1 whose canonical words differ from single blast 2n",
+                    text=", ".join(map(str, differ)) if differ else "none")
+                put("e11", f"DeepDoubleCompared{w}", len(pairs), f"{case} 2 iterations: pairs (n, 2n) compared", "int")
+                put("e11", f"DeepDoubleBlasts{w}", x["metrics"]["blasts_done"], f"{case} 2 iterations: blasts done", "int")
+        bad_classes = sorted({A.e11_error_class(t["error"] or "") for t, good in zip(s["topology"], A.e11_ok(r)) if not good})
+        provisional_end = (f"{s['n_unresolved'][last]} / {s['n_virtual'][last]} / {s['n_ambiguous'][last]}"
+                           + ("" if s["is_reliable"][last] else " (prov.)"))
+        laws = sum(x["metrics"]["law_violations"] for x in cells)
+        summary_rows.append([
+            case.replace("_", "\\_"), f"{r['metrics']['blasts_done']} ({STOP_TEXT[r['metrics']['stop_reason']]})",
+            f"{s['crossings'][0]}$\\to${tex(s['crossings'][-1], 'int')}",
+            f"{s['n_classes'][0]}$\\to${s['n_classes'][last]}" + ("" if last == len(s["blast"]) - 1 else f" (blast {s['blast'][last]})"),
+            tex(first_structure, "int"), str(A.e11_events(r).count("structure")), provisional_end,
+            (f"{bad[0]} ({', '.join(bad_classes)})" if bad else "none"), f"{with_errors}/{len(cells)}", str(laws)])
+    # Cutoff cells: which key leaves the reference first (words compared where both completed).
+    cut = [(x, refs[x["config"]["case"]]) for x in records if A.e11_kind(x)[0] == "cutoff"]
+    def words_first(x, r):
+        wd, cr = A.e11_divergence(x, r), A.e11_divergence(x, r, "crossings")
+        return wd is not None and (cr is None or wd < cr)
+    put("e11", "DeepCutoffCells", len(cut), "cutoff cells (every case, cutoffs 1e-5, 1e-6, 1e-8)", "int")
+    put("e11", "DeepCutoffWordsFirst", sum(words_first(x, r) for x, r in cut),
+        "cutoff cells whose canonical words (where both completed) differ from the reference at an earlier blast "
+        "than their crossing counts", "int")
+    # Unresolved classes by the library's recorded reason, at the reference cells.
+    def reasons(after: bool, fragment: str) -> int:
+        return sum(fragment in reason for r in refs.values()
+                   for b, t, ok_ in zip(r["series"]["blast"], r["series"]["topology"], A.e11_ok(r))
+                   if ok_ and (b > 0) == after for _, reason in (t.get("unresolved") or []))
+    put("e11", "DeepUnresolvedUnreachable", reasons(True, "unreachable"),
+        "unresolved-class entries with reason 'dual-graph walk unreachable', summed over reference snapshots after blast 0", "int")
+    put("e11", "DeepUnresolvedSingleton", reasons(True, "singleton"),
+        "unresolved-class entries with reason 'a landing is a singleton ... no registered image chain', "
+        "summed over reference snapshots after blast 0", "int")
+    put("e11", "DeepUnresolvedSingletonStart", reasons(False, "singleton"),
+        "unresolved-class entries with the singleton / no-registered-chain reason at blast 0, reference cells", "int")
+    put("e11", "DeepUnresolvedOtherStart", sum(1 for r in refs.values() for _, reason in
+                                               (r["series"]["topology"][0].get("unresolved") or []) if "singleton" not in reason),
+        "unresolved-class entries with any other reason at blast 0, reference cells", "int")
+    s28 = refs["k28"]["series"]
+    last28 = A.e11_last_ok(refs["k28"])
+    for fragment, name in (("unreachable", "Unreachable"), ("singleton", "Singleton")):
+        put("e11", f"DeepUnresolved{name}EndKTwoEight",
+            sum(fragment in reason for _, reason in (s28["topology"][last28].get("unresolved") or [])),
+            f"k28 reference: unresolved classes with the '{fragment}' reason at the last completed snapshot", "int")
+    # Which guard stops the large zones, by blasting cutoff.
+    large = [x for x in records if x["config"]["case"] in ("k28", "k32", "nested_outer")]
+    coarse = [x for x in large if A.e11_kind(x)[0] == "cutoff" and x["config"]["area_cutoff"] > A.E11_CUTOFF]
+    put("e11", "DeepCoarseCells", len(coarse), "large-zone (k28, k32, nested_outer) cells at cutoff 1e-5 or 1e-6", "int")
+    put("e11", "DeepCoarseTimeStops", sum(x["metrics"]["stop_reason"] == "budget" for x in coarse),
+        "of those, stopped by the time budget", "int")
+    put("e11", "DeepCoarseBlasts", None, "of those, blasts done (range)",
+        text=blast_range([x["metrics"]["blasts_done"] for x in coarse]))
+    rss = [A.num(x.get("peak_rss_mb")) / 1024 for x in coarse]
+    put("e11", "DeepCoarseRss", None, "of those, process peak RSS range (GB)", text=f"{min(rss):.1f}--{max(rss):.1f}")
+    at7 = [x for x in large if x["config"]["area_cutoff"] == A.E11_CUTOFF and x["config"]["num_iterations"] == 1]
+    put("e11", "DeepRefCutoffCells", len(at7), "large-zone cells at cutoff 1e-7 with one iteration per blast", "int")
+    put("e11", "DeepRefCutoffTimeStops", sum(x["metrics"]["stop_reason"] == "budget" for x in at7),
+        "of those, stopped by the time budget (the rest by the memory budget)", "int")
+    put("e11", "DeepRefCutoffMemoryStops", sum(x["metrics"]["stop_reason"] == "memory_budget" for x in at7),
+        "of those, stopped by the memory budget", "int")
+    for case in ("p3", "nested_inner"):
+        w, s = DEEP_CASE_WORDS[case], refs[case]["series"]
+        times = A.finite(s["blast_s"][1:])
+        put("e11", f"DeepMeanBlastS{w}", float(np.mean(times)), f"{case} reference: mean time per blast (s)",
+            text=f"{np.mean(times):.2g}")
+        put("e11", f"DeepProcRssGb{w}", A.num(refs[case].get("peak_rss_mb")) / 1024,
+            f"{case} reference: process peak RSS from the watchdog (GiB)", text=f"{A.num(refs[case].get('peak_rss_mb')) / 1024:.2f}")
+        put("e11", f"DeepPointsStart{w}", s["bridge_points"][0], f"{case} reference: bridge points before blasting", "int")
+        put("e11", f"DeepPointsEnd{w}", s["bridge_points"][-1], f"{case} reference: bridge points after the last blast", "int")
+    # E11 k28 reference at E7's blast count (same recipe as E7's k28 blasts).
+    e7 = next((x for x in A.e07("blasts") if x["config"]["case"] == "k28"), None)
+    if e7 is not None:
+        n7 = e7["metrics"]["blasts_done"]
+        i7 = s28["blast"].index(n7)
+        put("e11", "DeepAtESevenCrossingsKTwoEight", s28["crossings"][i7],
+            f"k28 E11 reference: crossings at blast {n7} (E7's k28 blast count)", "int")
+        put("e11", "DeepAtESevenOutcomeKTwoEight", None, f"k28 E11 reference: topology outcome at blast {n7}",
+            text=s28["topology_outcome"][i7].replace("_", "\\_"))
+    write_table("e11_summary", "lllllrlllr",
+                ["case", "blasts (stop)", "crossings", "classes", "first new words", "new-word blasts",
+                 "unres./virt./amb. at end", "topology error from blast", "configs w/ error", "law viol."],
+                summary_rows,
+                "E11: per case at the reference cell (cutoff 1e-7, recipe separation, one iteration); "
+                "the last two columns cover every config of the case")
+    detail("e11", "errors", {name: {"where": e["where"], "outcomes": sorted(e["outcomes"]), "snapshots": e["snapshots"],
+                                    "cells": [[A.e11_label(r), r["config"]["case"], bl] for r, bl in e["cells"]]}
+                             for name, e in errors.items()})
+
+
 def clean(value: Any) -> Any:
     """JSON-safe: arrays to lists, numpy scalars to Python, nan/inf to None, tuple keys to strings."""
     if isinstance(value, dict):
@@ -595,7 +892,8 @@ def main() -> None:
     A.QUICK = args.quick
     TABLES.mkdir(parents=True, exist_ok=True)
     for exp, fn in (("e01", e01), ("e02", e02), ("e03", e03), ("e04", e04), ("e05", e05),
-                    ("e06", e06), ("e07", e07), ("e08", e08), ("e09", e09), ("e10", e10)):
+                    ("e06", e06), ("e07", e07), ("e08", e08), ("e09", e09), ("e10", e10),
+                    ("e11", e11)):
         print(exp)
         try:
             fn()

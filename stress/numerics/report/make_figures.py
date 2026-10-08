@@ -42,7 +42,8 @@ INK, INK2, GRID, LIGHT = "#0b0b0b", "#52514e", "#e6e5e1", "#c9c7c1"
 RAMP = LinearSegmentedColormap.from_list("blue_ramp", ["#cde2fb", "#0d366b"])
 
 CPU, GPU = BLUE, ORANGE
-CASE_COLORS = {"k28": BLUE, "p3": AQUA, "k10": VIOLET, "nested": MAGENTA, "inversion": YELLOW}
+CASE_COLORS = {"k28": BLUE, "p3": AQUA, "k10": VIOLET, "nested": MAGENTA, "inversion": YELLOW,
+               "k32": ORANGE, "nested_outer": MAGENTA, "nested_inner": GREEN}
 STATUS_COLORS = {"ok": GREEN, "exception": RED, "timeout": YELLOW, "oom": VIOLET,
                  "invariant_assert": MAGENTA, "crash": INK}
 STATUS_LABELS = {"ok": "ok", "exception": "exception", "timeout": "timeout", "oom": "out of memory",
@@ -813,9 +814,14 @@ def fig_e07_blasts() -> None:
         idx = np.arange(len(s["crossings"]))
         m = r["metrics"]
         topo = m.get("topology_outcome")
-        tag = "not run" if topo is None else topo.replace("_", " ") + ("" if m.get("is_reliable", True) else ", unreliable")
-        axes[0].plot(idx[1:], A.arr(s.get("blast_s", []))[1:], marker="o", ms=3, color=color,
-                     label=f"{case} (topology: {tag})")
+        if topo is None:
+            tag = "topology not run"
+        elif topo != "ok":
+            tag = f"topology {topo.replace('_', ' ')}"
+        else:
+            tag = f"{m.get('n_classes')} classes" + ("" if m.get("is_reliable", True) else
+                                                      f", {m.get('n_unresolved')} unresolved, {m.get('n_virtual')} virtual")
+        axes[0].plot(idx[1:], A.arr(s.get("blast_s", []))[1:], marker="o", ms=3, color=color, label=f"{case} ({tag})")
         axes[1].plot(idx, A.arr(s["crossings"]), marker="o", ms=3, color=color)
         axes[2].plot(idx, A.arr(s.get("bridges", [])), marker="o", ms=3, color=color)
         if r["outcome"] != "ok":
@@ -835,7 +841,7 @@ def fig_e07_blasts() -> None:
     failed = {r["outcome"] for r in records if r["outcome"] != "ok"}
     handles += [Line2D([], [], ls="", marker="X", color=STATUS_COLORS[o], label=f"stopped: {STATUS_LABELS[o]}")
                 for o in A.OUTCOMES if o in failed]
-    fig.legend(handles=handles, loc="outside lower center", ncol=min(len(handles), 3), fontsize=7)
+    fig.legend(handles=handles, loc="outside lower center", ncol=min(len(handles), 2), fontsize=7)
     save(fig, "e07_blasts")
 
 
@@ -885,9 +891,9 @@ def fig_e07_depth() -> None:
     bx.set_xlabel("unstable steps")
     bx.grid(axis="y", visible=False)
     fig.legend(handles=status_handles(seen) + [Line2D([], [], ls="", marker="o", mfc="white", color=INK2,
-                                                      label="topology unreliable")],
-               loc="outside right upper", fontsize=6.5)
-    panel(bx, "b", "how far each depth gets")
+                                                      label="symbolic result provisional (is_reliable=False)")],
+               loc="outside lower center", ncol=4, fontsize=6.5)
+    panel(bx, "b", "outcome per depth (numerics, topology)")
     save(fig, "e07_depth")
 
 
@@ -1116,6 +1122,301 @@ def fig_e10_determinism() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# E11 deep blasting
+# --------------------------------------------------------------------------- #
+# A changed class, word or matrix is what a blast is for (author, 2026-10-07), so
+# change is drawn in the blue ramp; red is kept for genuine errors only.
+EVENT_COLORS = {"not_run": "white", "start": LIGHT, "none": GRID, "change": "#7fb0ee",
+                "structure": "#0d366b", "error": RED}
+EVENT_LABELS = {"not_run": "not run (stopped by its budget)", "start": "before the first blast",
+                "none": "no change", "change": "change flags set, canonical words unchanged",
+                "structure": "canonical words changed (new structure)",
+                "error": "topology error (invariant assert / exception)"}
+
+
+def e11_cases(records) -> list[str]:
+    return [c for c in A.E11_CASES if any(r["config"]["case"] == c for r in records)]
+
+
+def provisional_handle(**kw) -> Line2D:
+    return Line2D([], [], ls="", marker="o", mfc="white", color=INK2,
+                  label="symbolic result provisional (is_reliable=False)", **kw)
+
+
+def error_ticks(ax, record, color=RED) -> None:
+    """Blasts whose topology raised, as crosses on the x axis."""
+    s = record["series"]
+    bad = [b for b, o in zip(s["blast"], s["topology_outcome"]) if o != "ok"]
+    ax.plot(bad, np.full(len(bad), 0.03), ls="", marker="x", ms=4, mew=1.0, color=color,
+            transform=ax.get_xaxis_transform())
+
+
+def growth_label(case: str, record: dict, keys: dict) -> str:
+    """'case (crossings x1.61, ...)': growth factor per blast over the last five blasts."""
+    parts = [f"{what} $\\times${f:.2f}" for what, key in keys.items()
+             if (f := A.e11_growth(record["series"][key]))]
+    return f"{case.replace('_', ' ')} ({', '.join(parts)} per blast)"
+
+
+def fig_e11_evolution() -> None:
+    refs = A.e11_reference()
+    if not refs:
+        raise Skip("no e11 reference cells")
+    fig, axes = plt.subplots(1, 3, figsize=(6.3, 2.7), sharex=True)
+    for case, r in refs.items():
+        s, color = r["series"], CASE_COLORS[case]
+        blast, events = A.arr(s["blast"]), A.e11_events(r)
+        for axis, key in ((axes[0], "n_active"), (axes[1], "n_inert")):
+            y = A.arr(s[key])
+            axis.plot(blast, y, color=color, lw=1.0)
+            for marker, kinds, fill in (("o", ("structure",), color), ("o", ("change",), "white")):
+                pick = np.array([e in kinds for e in events])
+                axis.plot(blast[pick], y[pick], ls="", marker=marker, ms=3.5, color=color, mfc=fill)
+            error_ticks(axis, r)
+        axes[2].plot(blast, A.arr(s["crossings"]), color=color, marker="o", ms=2.5, label=case)
+    axes[2].set_yscale("log")
+    axes[0].set_ylabel("active bridge classes")
+    axes[1].set_ylabel("inert bridge classes")
+    axes[2].set_ylabel("registered crossings")
+    for axis, letter, title in zip(axes, "abc", ("active classes", "inert classes", "crossings")):
+        axis.set_xlabel("blasts done")
+        axis.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        panel(axis, letter, title)
+    handles = [Line2D([], [], color=CASE_COLORS[c], marker="o", label=growth_label(c, r, {"crossings": "crossings"}))
+               for c, r in refs.items()] + [
+        Line2D([], [], ls="", marker="o", color=INK2, label="canonical words changed"),
+        Line2D([], [], ls="", marker="o", mfc="white", color=INK2, label="change flags set, canonical words unchanged"),
+        Line2D([], [], ls="", marker="x", color=RED, label="topology error (no snapshot)")]
+    fig.legend(handles=handles, loc="outside lower center", ncol=2, fontsize=6.5)
+    save(fig, "e11_evolution")
+
+
+def fig_e11_events() -> None:
+    records = A.e11_records()
+    if not records:
+        raise Skip("no e11 records")
+    width = max(len(r["series"]["blast"]) for r in records)
+    codes = np.zeros((len(records), width), dtype=int)
+    for i, r in enumerate(records):
+        events = A.e11_events(r)
+        codes[i, : len(events)] = [A.E11_EVENTS.index(e) for e in events]
+    fig, ax = plt.subplots(figsize=(6.3, 0.105 * len(records) + 1.25))
+    cmap = matplotlib.colors.ListedColormap([EVENT_COLORS[e] for e in A.E11_EVENTS])
+    ax.imshow(codes, cmap=cmap, vmin=-0.5, vmax=len(A.E11_EVENTS) - 0.5, aspect="auto", interpolation="none")
+    for i, r in enumerate(records):
+        for j, flag in enumerate(A.e11_provisional(r)):
+            if flag:
+                ax.plot(j, i, ls="", marker="o", ms=2.2, mfc="white", mec=INK, mew=0.5)
+        s = r["series"]
+        for j, outcome in enumerate(s["topology_outcome"]):
+            if outcome == "exception":
+                ax.plot(j, i, ls="", marker="x", ms=3, color=INK, mew=0.9)
+    ax.set_xticks(np.arange(width) - 0.5, minor=True)
+    ax.set_yticks(np.arange(len(records)) - 0.5, minor=True)
+    ax.grid(which="minor", color="white", lw=0.6)
+    ax.grid(which="major", visible=False)
+    ax.tick_params(which="minor", length=0)
+    ax.set_xticks(range(0, width, 2))
+    ax.set_yticks(range(len(records)), [A.e11_label(r) for r in records], fontsize=5.5)
+    ax.set_xlabel("blast (0 = before blasting)")
+    for case in e11_cases(records):
+        rows = [i for i, r in enumerate(records) if r["config"]["case"] == case]
+        ax.axhline(rows[-1] + 0.5, color=INK, lw=0.8)
+        ax.text(-0.31, (rows[0] + rows[-1]) / 2, case.replace("_", " "), transform=ax.get_yaxis_transform(),
+                ha="right", va="center", fontsize=7.5, color=CASE_COLORS[case], fontweight="bold")
+    handles = [Patch(facecolor=EVENT_COLORS[e], edgecolor=INK2, lw=0.4, label=EVENT_LABELS[e]) for e in A.E11_EVENTS]
+    handles += [provisional_handle(ms=3.5),
+                Line2D([], [], ls="", marker="x", color=INK, ms=4, label="the error is an exception (not an assert)")]
+    fig.legend(handles=handles, loc="outside lower center", ncol=2, fontsize=6.5)
+    ax.set_title("what each blast changed, per config", fontsize=9)
+    save(fig, "e11_events")
+
+
+def fig_e11_cost() -> None:
+    records = A.e11_records()
+    refs = A.e11_reference()
+    if not refs:
+        raise Skip("no e11 reference cells")
+    fig, axes = plt.subplots(1, 3, figsize=(6.3, 2.7), sharex=True)
+    for case, r in refs.items():
+        s, color = r["series"], CASE_COLORS[case]
+        blast = A.arr(s["blast"])
+        for axis, key, scale in ((axes[0], "bridge_points", 1), (axes[1], "blast_s", 1), (axes[2], "rss_mb", 1 / 1024)):
+            keep = blast > 0 if key == "blast_s" else blast >= 0
+            axis.plot(blast[keep], A.arr(s[key])[keep] * scale, color=color, marker="o", ms=2.5, label=case)
+        stop = r["metrics"].get("stop_reason")
+        if stop != "max_blasts":
+            axes[2].plot(blast[-1], A.num(s["rss_mb"][-1]) / 1024, ls="", marker="s", ms=5, mfc="white",
+                         color=color, mew=1.1)
+    budgets = {r["config"].get("_rss_budget_gb") for r in records} - {None}
+    for gb in budgets:
+        axes[2].axhline(gb, color=INK2, ls="--", lw=0.8)
+        axes[2].text(0.3, gb, f"memory budget {gb:g} GB", va="bottom", fontsize=6, color=INK2)
+    for axis in axes[:2]:
+        axis.set_yscale("log")
+    axes[0].set_ylabel("points on all bridges")
+    axes[1].set_ylabel("time of the blast (s)")
+    axes[2].set_ylabel("peak RSS (GB)")
+    for axis, letter, title in zip(axes, "abc", ("bridge points", "time per blast", "memory")):
+        axis.set_xlabel("blasts done")
+        axis.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        panel(axis, letter, title)
+    handles = [Line2D([], [], color=CASE_COLORS[c], marker="o",
+                      label=growth_label(c, r, {"points": "bridge_points", "time": "blast_s"})) for c, r in refs.items()]
+    handles += [Line2D([], [], ls="", marker="s", mfc="white", color=INK2,
+                       label="stopped by its budget (next blast would not fit)")]
+    fig.legend(handles=handles, loc="outside lower center", ncol=2, fontsize=6.5)
+    save(fig, "e11_cost")
+
+
+E11_COLUMNS = ([("separation", v) for v in (None, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2)]
+               + [("cutoff", v) for v in (1e-5, 1e-6, 1e-8)])
+
+
+def e11_divergence_cell(record, reference) -> tuple[str, str]:
+    """(text, colour) of one parameter cell: '=' identical, else first diverging blast of words / crossings."""
+    if record is reference:
+        return "ref", LIGHT
+    if A.e11_identical(record, reference):
+        return "=", GRID
+    words, crossings = A.e11_divergence(record, reference), A.e11_divergence(record, reference, "crossings")
+    text = f"{'–' if words is None else words} / {'–' if crossings is None else crossings}"
+    return text, "#7fb0ee" if words is not None else "#cde2fb"
+
+
+def fig_e11_parameters() -> None:
+    records, refs = A.e11_records(), A.e11_reference()
+    if not refs:
+        raise Skip("no e11 reference cells")
+    fig = plt.figure(figsize=(6.3, 4.6))
+    top, bottom = fig.subfigures(2, 1, height_ratios=[1, 1.2])
+    ax = top.subplots()
+    bx, cx = bottom.subplots(1, 2)
+    cases = [c for c in A.E11_CASES if c in refs]
+    for i, case in enumerate(cases):
+        ref = refs[case]
+        for j, (kind, value) in enumerate(E11_COLUMNS):
+            if kind == "separation" and value == A.E11_SEPARATION[case]:
+                record = ref
+            else:
+                record = next((r for r in records if r["config"]["case"] == case and A.e11_kind(r) == (kind, value)), None)
+            text, color = ("", "white") if record is None else e11_divergence_cell(record, ref)
+            ax.add_patch(matplotlib.patches.Rectangle((j - 0.5, i - 0.5), 1, 1, facecolor=color, edgecolor="white", lw=1))
+            ax.text(j, i, text, ha="center", va="center", fontsize=6.5,
+                    color="white" if color == "#0d366b" else INK)
+    ax.set_xlim(-0.5, len(E11_COLUMNS) - 0.5)
+    ax.set_ylim(len(cases) - 0.5, -0.5)
+    ax.set_xticks(range(len(E11_COLUMNS)), ["none" if v is None else f"{v:g}" for _, v in E11_COLUMNS],
+                  fontsize=6.5)
+    ax.set_yticks(range(len(cases)), [c.replace("_", " ") for c in cases], fontsize=7)
+    ax.axvline(5.5, color=INK, lw=0.8)
+    ax.set_xlabel("min_separation at cutoff $10^{-7}$" + " " * 30 + "area_cutoff while blasting", fontsize=7.5)
+    ax.grid(False)
+    panel(ax, "a", "first blast whose canonical words (both completed) / crossings differ from the reference "
+                   "(= identical at every blast, – never)")
+
+    for axis, case, letter in ((bx, "k28", "b"), (cx, "p3", "c")):
+        mine = [r for r in records if r["config"]["case"] == case and A.e11_kind(r)[0] in ("canonical", "cutoff")]
+        if not mine:
+            empty(axis, f"no {case} cutoff cells")
+            continue
+        cutoffs = sorted({r["config"]["area_cutoff"] for r in mine}, reverse=True)
+        colors = dict(zip(cutoffs, ramp(len(cutoffs))))
+        for r in sorted(mine, key=lambda r: -r["config"]["area_cutoff"]):
+            cutoff = r["config"]["area_cutoff"]
+            axis.plot(A.arr(r["series"]["blast"]), A.arr(r["series"]["n_classes"]), color=colors[cutoff],
+                      marker="o", ms=2.2, lw=1.0, label=f"{sci(cutoff)}" + (" (ref.)" if cutoff == A.E11_CUTOFF else ""))
+            error_ticks(axis, r, color=RED)
+        axis.set_xlabel("blasts done")
+        axis.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        axis.legend(title="area_cutoff", title_fontsize=6, fontsize=6, loc="upper left")
+        panel(axis, letter, f"{case}: bridge classes")
+    bx.set_ylabel("bridge classes")
+    save(fig, "e11_parameters")
+
+
+DOUBLE_STYLE = {"same": (INK, "o", INK), "different": (INK, "o", "white"),
+                "error both": (RED, "x", RED), "error one": (RED, "o", "white")}
+
+
+def fig_e11_agreement() -> None:
+    records, refs = A.e11_records(), A.e11_reference()
+    doubles = [r for r in records if A.e11_kind(r)[0] == "iterations" and r["config"]["case"] in refs]
+    if not doubles:
+        raise Skip("no e11 num_iterations=2 cells")
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=WIDE, width_ratios=[1.5, 1])
+    lanes = []
+    for r in doubles:
+        case = r["config"]["case"]
+        for row in A.e11_double(r, refs[case]):
+            y = len(lanes)
+            ax.plot(row["n"], y, ls="", marker="o", ms=4, color=INK, mfc=INK if row["crossings"] else "white")
+            color, marker, fill = DOUBLE_STYLE[row["words"]]
+            ax.plot(row["n"], y + 1, ls="", marker=marker, ms=4, color=color, mfc=fill)
+        lanes += [f"{case.replace('_', ' ')}: crossings", f"{case.replace('_', ' ')}: words"]
+    ax.set_yticks(range(len(lanes)), lanes, fontsize=6)
+    ax.set_ylim(len(lanes) - 0.5, -0.5)
+    ax.set_xlabel("blast $n$ with 2 iterations  (vs single-iteration blast $2n$)")
+    ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+    ax.grid(axis="y", visible=False)
+    for y in range(2, len(lanes), 2):
+        ax.axhline(y - 0.5, color=GRID, lw=0.6)
+    panel(ax, "a", "two iterations per blast")
+
+    rows = []
+    for case in [c for c in A.E11_CASES if c in refs]:
+        for kind, what in (("separation", "separations"), ("repeat", "repeats")):
+            mine = [r for r in records if r["config"]["case"] == case and A.e11_kind(r)[0] == kind]
+            if mine:
+                rows.append((f"{case.replace('_', ' ')}, {what}", sum(A.e11_identical(r, refs[case]) for r in mine), len(mine)))
+    for i, (label, same, total) in enumerate(rows):
+        bx.barh(i, total, color=GRID, height=0.62)
+        bx.barh(i, same, color=BLUE, height=0.62)
+        bx.text(total + 0.1, i, f"{same}/{total}", va="center", fontsize=6.5)
+    bx.set_yticks(range(len(rows)), [r[0] for r in rows], fontsize=6)
+    bx.set_ylim(len(rows) - 0.5, -0.5)
+    bx.set_xlim(0, max(r[2] for r in rows) + 1.2)
+    bx.set_xlabel("cells identical to the reference")
+    bx.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+    bx.grid(axis="y", visible=False)
+    panel(bx, "b", "determinism and min_separation")
+    handles = [Line2D([], [], ls="", marker="o", color=INK, label="same"),
+               Line2D([], [], ls="", marker="o", mfc="white", color=INK, label="different"),
+               Line2D([], [], ls="", marker="x", color=RED, label="topology error in both")]
+    fig.legend(handles=handles, loc="outside lower center", ncol=3, fontsize=6.5)
+    save(fig, "e11_agreement")
+
+
+def fig_e11_provisional() -> None:
+    refs = A.e11_reference()
+    if not refs:
+        raise Skip("no e11 reference cells")
+    fig, axes = plt.subplots(1, 3, figsize=(6.3, 2.6), sharex=True, sharey=True)
+    for i, (case, r) in enumerate(refs.items()):
+        s, color = r["series"], CASE_COLORS[case]
+        blast, provisional = A.arr(s["blast"]), np.array([bool(p) for p in A.e11_provisional(r)])
+        offset = 0.08 * (i - (len(refs) - 1) / 2)  # integer counts: cases side by side, not on top
+        for axis, key in zip(axes, ("n_unresolved", "n_virtual", "n_ambiguous")):
+            y = A.arr(s[key]) + offset
+            axis.plot(blast, y, color=color, lw=1.0, label=case)
+            axis.plot(blast[provisional], y[provisional], ls="", marker="o", ms=3, color=color, mfc="white")
+            axis.plot(blast[~provisional], y[~provisional], ls="", marker="o", ms=3, color=color)
+            error_ticks(axis, r)
+    axes[0].set_ylabel("classes (cases offset by $\\pm$0.16)")
+    for axis, letter, title in zip(axes, "abc", ("unresolved classes", "virtual classes (new1, ...)",
+                                                 "ambiguous walks")):
+        axis.set_xlabel("blasts done")
+        axis.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        axis.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        panel(axis, letter, title)
+    handles = case_handles(refs) + [Line2D([], [], ls="", marker="o", color=INK2, label="is_reliable=True"),
+                                    provisional_handle(),
+                                    Line2D([], [], ls="", marker="x", color=RED, label="topology error (no snapshot)")]
+    fig.legend(handles=handles, loc="outside lower center", ncol=4, fontsize=6.5)
+    save(fig, "e11_provisional")
+
+
+# --------------------------------------------------------------------------- #
 # Overview
 # --------------------------------------------------------------------------- #
 def scorecard() -> list[tuple[str, float, float]]:
@@ -1143,6 +1444,14 @@ def scorecard() -> list[tuple[str, float, float]]:
     if blasts:
         out.append(("E7 blasts completed", sum(A.num(r["metrics"].get("blasts_done", 0)) for r in blasts),
                     sum(r["config"].get("max_blasts", 0) for r in blasts)))
+    deep = A.e11_records()
+    if deep:
+        blasts = sum(len(r["series"]["blast"]) - 1 for r in deep)
+        laws = sum(s > 0 or c > 0 for r in deep for s, c in
+                   zip(r["series"]["same_stability"][1:], r["series"]["cdist_decreasing"][1:]))
+        out.append(("E11 blasts with no crossing/cdist violation", blasts - laws, blasts))
+        snapshots = sum(len(r["series"]["blast"]) for r in deep)
+        out.append(("E11 topology snapshots without error", sum(sum(A.e11_ok(r)) for r in deep), snapshots))
     ident = A.e10_identity(A.e10_by_device())
     pairs = [v["rounded"]["CPU-GPU"] for v in ident.values() if v["rounded"]["CPU-GPU"] is not None]
     if pairs:
@@ -1237,6 +1546,8 @@ FIGURE_FUNCTIONS = [
     fig_e08_solver_outcomes, fig_e08_orbits, fig_e08_solve_time,
     fig_e09_intersections,
     fig_e10_determinism,
+    fig_e11_evolution, fig_e11_events, fig_e11_cost, fig_e11_parameters, fig_e11_agreement,
+    fig_e11_provisional,
     fig_overview,
 ]
 

@@ -35,6 +35,7 @@ EXPERIMENTS = {
     "e08": "e08_fixed_point_solver",
     "e09": "e09_intersections",
     "e10": "e10_determinism",
+    "e11": "e11_blast_depth",
 }
 OUTCOMES = ("ok", "exception", "timeout", "oom", "invariant_assert", "crash")
 
@@ -646,3 +647,197 @@ def e10_crossing_deviation(by_device: dict) -> Optional[float]:
         return None
     devs = [float(np.abs(x - runs[0]).max()) for x in runs[1:] if x.shape == runs[0].shape]
     return max(devs) if devs else None
+
+
+# --------------------------------------------------------------------------- #
+# E11 deep blasting
+# --------------------------------------------------------------------------- #
+# Blasting exists to uncover new structure (author, 2026-10-07): a changed class,
+# word or matrix is a discovery, the library's provisional flags (is_reliable,
+# unresolved / virtual / ambiguous classes) say the symbolic computation still
+# needs growth, and only an exception, an invariant assert or a law violation is
+# an error. The derivations below keep the three apart.
+E11_CASES = ("k28", "k32", "p3", "nested_outer", "nested_inner")
+E11_CUTOFF = 1e-7
+E11_SEPARATION = {"k28": 1e-5, "k32": 1e-5, "p3": 1e-5, "nested_outer": 1e-4, "nested_inner": 1e-4}
+E11_KINDS = ("canonical", "separation", "cutoff", "iterations", "repeat")
+#: message fragment -> (short name, where it is raised); every topology error seen.
+E11_ERRORS = {
+    "is not inside its parent": ("zero-width iterated element", "PartitionFamily.from_minimal"),
+    "disagree on bridge_side": ("holes disagree on bridge side", "check_holes_share_bridge_side"),
+    "faces of positive traversal area": ("several outer faces", "DualGraph (arrangement component)"),
+    "approaches its two defining crossings": ("bridge rows disagree", "check_bridge_rows_consistent"),
+}
+#: per-blast event of one config, in drawing order
+E11_EVENTS = ("not_run", "start", "none", "change", "structure", "error")
+
+
+def e11_kind(record: dict) -> tuple[str, Any]:
+    """Which sweep a config belongs to, and its swept value."""
+    c = record["config"]
+    if c.get("repeat"):
+        return "repeat", c["repeat"]
+    if c["num_iterations"] != 1:
+        return "iterations", c["num_iterations"]
+    if c["area_cutoff"] != E11_CUTOFF:
+        return "cutoff", c["area_cutoff"]
+    if c["min_separation"] != E11_SEPARATION[c["case"]]:
+        return "separation", c["min_separation"]
+    return "canonical", None
+
+
+def e11_records() -> list[dict]:
+    """Every e11 record, by case, then sweep, then swept value (None first)."""
+    def key(r):
+        kind, value = e11_kind(r)
+        return (E11_CASES.index(r["config"]["case"]), E11_KINDS.index(kind),
+                -1 if value is None else num(value))
+    return sorted(load("e11"), key=key)
+
+
+def e11_reference() -> dict[str, dict]:
+    """case -> the canonical cell (cutoff 1e-7, the recipe's separation, one iteration, repeat 0)."""
+    return {r["config"]["case"]: r for r in e11_records() if e11_kind(r)[0] == "canonical"}
+
+
+def e11_ok(record: dict) -> list[bool]:
+    return [o == "ok" for o in record["series"].get("topology_outcome", [])]
+
+
+def e11_events(record: dict) -> list[str]:
+    """One of E11_EVENTS per snapshot (blast 0 = before blasting).
+
+    ``structure`` = the canonical words (letters renamed by table position)
+    changed; ``change`` = some class, letter, word or matrix flag changed but the
+    canonical words did not (mostly a relabelling); flags compare with the last
+    snapshot that completed.
+    """
+    s, out = record["series"], []
+    flags = ("classes_added", "classes_removed", "words_changed", "new_letters", "matrix_changed",
+             "reliability_changed")
+    for i, outcome in enumerate(s.get("topology_outcome", [])):
+        if outcome != "ok":
+            out.append("error")
+        elif i == 0:
+            out.append("start")
+        elif s["structure_changed"][i]:
+            out.append("structure")
+        else:
+            out.append("change" if any(s[f][i] for f in flags) else "none")
+    return out
+
+
+def e11_provisional(record: dict) -> list[Optional[bool]]:
+    """Per snapshot: is the symbolic result provisional (is_reliable False)? None on an error."""
+    s = record["series"]
+    return [None if not ok_ else not s["is_reliable"][i] for i, ok_ in enumerate(e11_ok(record))]
+
+
+def e11_error_class(message: str) -> str:
+    return next((name for fragment, (name, _) in E11_ERRORS.items() if fragment in message), "other")
+
+
+def e11_errors() -> dict[str, dict]:
+    """error class -> {where, outcome, snapshots, cells: [(record, [blasts])]} over every config."""
+    out: dict = {}
+    for r in e11_records():
+        s = r["series"]
+        mine: dict = defaultdict(list)
+        for i, (outcome, topo) in enumerate(zip(s["topology_outcome"], s["topology"])):
+            if outcome != "ok":
+                mine[(e11_error_class(topo["error"] or ""), outcome)].append(s["blast"][i])
+        for (name, outcome), blasts in mine.items():
+            entry = out.setdefault(name, {"where": next((w for n, w in E11_ERRORS.values() if n == name), "?"),
+                                          "outcomes": set(), "snapshots": 0, "cells": []})
+            entry["outcomes"].add(outcome)
+            entry["snapshots"] += len(blasts)
+            entry["cells"].append((r, blasts))
+    return out
+
+
+#: series keys measured by the numerics; recorded whether or not the topology raised
+E11_NUMERICS_KEYS = ("crossings", "bridges", "bridge_points")
+
+
+def e11_divergence(record: dict, reference: dict, key: str = "canonical_hash") -> Optional[int]:
+    """First blast at which ``key`` differs from the reference; None if never.
+
+    Compared over the blasts both configs ran. A numerics key (crossings,
+    bridges, points) is compared at every such blast; a topology key only where
+    both snapshots completed (a blast where one raised and the other did not is
+    an outcome difference, see :func:`e11_outcome_divergence`).
+    """
+    a, b = record["series"], reference["series"]
+    for i in range(min(len(a["blast"]), len(b["blast"]))):
+        if key not in E11_NUMERICS_KEYS and not (a["topology_outcome"][i] == "ok" == b["topology_outcome"][i]):
+            continue
+        if a[key][i] != b[key][i]:
+            return a["blast"][i]
+    return None
+
+
+def e11_outcome_divergence(record: dict, reference: dict) -> Optional[int]:
+    """First blast at which one config's topology completed and the other's raised (or both raised differently)."""
+    a, b = record["series"], reference["series"]
+    for i in range(min(len(a["blast"]), len(b["blast"]))):
+        if a["topology_outcome"][i] != b["topology_outcome"][i]:
+            return a["blast"][i]
+    return None
+
+
+def e11_identical(record: dict, reference: dict) -> bool:
+    """Same blasts, crossings, bridge points and exact topology hash at every blast."""
+    return all(record["series"][k] == reference["series"][k]
+               for k in ("blast", "crossings", "bridge_points", "topology_outcome", "topology_hash"))
+
+
+def e11_double(record: dict, reference: dict) -> list[dict]:
+    """A num_iterations=2 config's blast n against the reference's blast 2n.
+
+    ``words`` is 'same' / 'different' (canonical words, both snapshots
+    completed), 'error both' or 'error one'.
+    """
+    a, b = record["series"], reference["series"]
+    out = []
+    for n in range(len(a["blast"])):
+        if 2 * n >= len(b["blast"]):
+            break
+        oks = (a["topology_outcome"][n] == "ok", b["topology_outcome"][2 * n] == "ok")
+        words = ("same" if a["canonical_hash"][n] == b["canonical_hash"][2 * n] else "different") if all(oks) \
+            else "error both" if not any(oks) else "error one"
+        out.append({"n": n, "single": 2 * n, "crossings": a["crossings"][n] == b["crossings"][2 * n],
+                    "words": words})
+    return out
+
+
+def e11_growth(values: Iterable, last: int = 5) -> Optional[float]:
+    """Geometric-mean factor per blast over the last ``last`` blasts."""
+    v = finite(values)
+    if len(v) <= last or v[-last - 1] <= 0:
+        return None
+    return float((v[-1] / v[-last - 1]) ** (1 / last))
+
+
+def e11_first(record: dict, events: Iterable[str]) -> Optional[int]:
+    """First blast (> 0) whose event is one of ``events``."""
+    return next((record["series"]["blast"][i] for i, e in enumerate(e11_events(record))
+                 if i and e in set(events)), None)
+
+
+def e11_last_ok(record: dict) -> Optional[int]:
+    """Index of the last snapshot whose topology completed."""
+    return next((i for i in reversed(range(len(e11_ok(record)))) if e11_ok(record)[i]), None)
+
+
+def e11_label(record: dict) -> str:
+    """Short row label: the swept parameter and its value."""
+    kind, value = e11_kind(record)
+    if kind == "canonical":
+        return f"reference (sep {record['config']['min_separation']:g})"
+    if kind == "separation":
+        return "sep none" if value is None else f"sep {value:g}"
+    if kind == "cutoff":
+        return f"cutoff {value:g}"
+    if kind == "iterations":
+        return "2 iterations / blast"
+    return f"repeat {value}"

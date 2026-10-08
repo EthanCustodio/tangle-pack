@@ -431,7 +431,7 @@ def e10() -> None:
 def campaign() -> None:
     names = ["e01_map_throughput", "e02_gpu_end_to_end", "e03_scaling", "e04_area_cutoff", "e05_invariants",
              "e06_parameter_sweep", "e07_breaking", "e08_fixed_point_solver", "e09_intersections",
-             "e10_determinism"]
+             "e10_determinism", "e11_blast_depth"]
     out: Counter = Counter()
     n = 0
     for name in names:
@@ -439,13 +439,15 @@ def campaign() -> None:
         n += len(recs)
         out.update(r["outcome"] for r in recs)
         digits = {"01": "One", "02": "Two", "03": "Three", "04": "Four", "05": "Five", "06": "Six",
-                  "07": "Seven", "08": "Eight", "09": "Nine", "10": "Ten"}[name[1:3]]
+                  "07": "Seven", "08": "Eight", "09": "Nine", "10": "Ten", "11": "Eleven"}[name[1:3]]
         add(f"NumConfigsE{digits}", str(len(recs)), f"{name}.jsonl: records")
-    add("NumConfigsTotal", grp(n), "all full-run JSONL files: records")
+    add("NumConfigsTotal", grp(n), "all full-run JSONL files (e01-e11): records")
+    add("NumConfigsCampaign", grp(n - len(load("e11_blast_depth"))),
+        "e01-e10 full-run JSONL files: records of the scripted campaign (e11 ran on its own)")
     import re
     done = re.findall(r"campaign done in ([0-9.]+) min", (RESULTS / "progress.log").read_text())
     add("NumCampaignQuickMin", done[-2], "progress.log: wall-clock of the last --quick campaign (min)")
-    add("NumCampaignFullMin", done[-1], "progress.log: wall-clock of the full campaign (min)")
+    add("NumCampaignFullMin", done[-1], "progress.log: wall-clock of the full campaign e01-e10 (min; e11 ran on its own, see NumDeepWallMin)")
     for o in ("ok", "exception", "oom", "timeout", "invariant_assert"):
         add(f"NumOutcomeTotal{o.replace('_', ' ').title().replace(' ', '')}", str(out.get(o, 0)),
             f"all full-run JSONL files: outcome {o}")
@@ -455,7 +457,7 @@ CAPS = {  # (timeout s, RSS cap GB, workers): the scripts' TIMEOUT / RSS_CAP_GB 
     "e01_map_throughput": (300, 24), "e02_gpu_end_to_end": (600, 24), "e03_scaling": (900, 24),
     "e04_area_cutoff": (900, 16), "e05_invariants": (600, 12), "e06_parameter_sweep": (240, 4),
     "e07_breaking": (600, 20), "e08_fixed_point_solver": (900, 24), "e09_intersections": (600, 16),
-    "e10_determinism": (300, 24),
+    "e10_determinism": (300, 24), "e11_blast_depth": (900, 12),
 }
 
 

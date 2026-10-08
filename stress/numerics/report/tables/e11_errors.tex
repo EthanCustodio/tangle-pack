@@ -1,0 +1,12 @@
+% E11: every distinct topology error (genuine errors; the blasting went on), per case
+% suggested column spec: {lllllrr}
+\toprule
+error & raised in & kind & case & configs & blasts & snapshots \\
+\midrule
+zero-width iterated element & \code{PartitionFamily.from\_minimal} & assert & k28 & cutoff $10^{-7}$, every separation, 2 iterations, repeat 1, repeat 2 & 5--14 & 51 \\
+ &  &  & k32 & cutoff $10^{-7}$, every separation, cutoff $10^{-8}$, 2 iterations & 5--14 & 43 \\
+several outer faces & \code{DualGraph (arrangement component)} & exception & k28 & cutoff $10^{-6}$ & 16 & 1 \\
+holes disagree on bridge side & \code{check\_holes\_share\_bridge\_side} & assert & k28 & cutoff $10^{-6}$, cutoff $10^{-5}$ & 16--17 & 3 \\
+bridge rows disagree & \code{check\_bridge\_rows\_consistent} & assert & p3 & cutoff $10^{-5}$, 2 iterations & 6--20 & 20 \\
+ &  &  & nested\_inner & cutoff $10^{-5}$, 2 iterations & 6--20 & 19 \\
+\bottomrule

@@ -13,6 +13,7 @@
 \usepackage{subcaption}
 \usepackage{enumitem}
 \usepackage{float}
+\usepackage{adjustbox}
 \usepackage[hidelinks]{hyperref}
 \usepackage[capitalise,noabbrev]{cleveref}
 
@@ -64,7 +65,9 @@
 \begin{minipage}{0.82\textwidth}
 \small
 \noindent This report presents a \NumCampaignFullMin-minute stress campaign of
-\NumConfigsTotal{} isolated runs (ten experiments, E1--E10) against
+\NumConfigsCampaign{} isolated runs (ten experiments, E1--E10), followed by a
+\NumDeepWallMin-minute deep-blasting study of \NumConfigsEEleven{} runs (E11),
+\NumConfigsTotal{} runs in all, against
 \code{tanglepack.numerics}, the layer that grows the stable and unstable
 manifolds of saddle orbits of area-preserving maps, detects their crossings
 and builds bridges. Each section follows the same pattern: a claim, the figure
@@ -90,7 +93,7 @@ library itself was not modified.
 \section{Executive summary}
 \label{sec:summary}
 
-\paragraph{Five headline findings.}
+\paragraph{Six headline findings.}
 \begin{enumerate}[leftmargin=*]
 \item \textbf{The GPU does not help, and cannot help in the current design.}
   The end-to-end speed-up is \NumGpuTotalSpeedupMedianKTwoEight{} (k28),
@@ -119,13 +122,27 @@ library itself was not modified.
   cdist decreases occur in \NumCdistStepsManifolds{} steps
   (\cref{sec:invariants,sec:intersections}).
 \item \textbf{Two failures are silent.} (a) Near the saddle-centre
-  bifurcation the number of registered crossings at $k+1=10^{-4}$ grows from
+  bifurcation, at fixed $k+1=10^{-4}$ and a fixed manifold length, the number
+  of registered crossings grows from
   \NumTangencyCrossingsNearCutoffSeven{} to
   \NumTangencyCrossingsNearCutoffTwelve{} as the resolution is refined, with
   \NumTangencyWarningsTotal{} warnings. These are artefacts of the polygons,
   not dynamics. (b) The fixed-point solver hands back lower-period orbits:
   \NumSolverLowerAccepted{} of them were accepted as saddles of the requested
   period (\cref{sec:breaking,sec:solver}).
+\item \textbf{Deep blasting keeps uncovering structure, no crossing or cdist
+  law is broken, and the topology layer has four genuine errors to triage.}
+  Over \NumDeepBlasts{} blasts in \NumDeepConfigs{} configurations there were
+  \NumDeepLawViolations{} same-stability crossings or cdist decreases; the
+  lobe-area check is open in the two-iteration cells. The canonical words changed in
+  \NumDeepStructureSteps{} snapshots (k28: \NumDeepClassesStartKTwoEight{}
+  $\to$ \NumDeepClassesEndKTwoEight{} classes), and memory limits the large
+  zones to \NumDeepBlastsKThreeTwo--\NumDeepBlastsKTwoEight{} blasts at
+  $\times\NumDeepPointGrowthKTwoEight$ points per blast (k28). The topology
+  raised in \NumDeepErrorSnapshots{} of \NumDeepSnapshots{} snapshots
+  (\NumDeepErrorConfigs{} configurations), with \NumDeepErrorClasses{}
+  distinct errors, the most frequent being a zero-width iterated element
+  (\cref{sec:blastdepth}).
 \end{enumerate}
 
 \noindent \Cref{fig:overview} puts one panel per theme side by side, and
@@ -150,8 +167,10 @@ evidence. \Cref{sec:taxonomy} catalogues the failures, and
 \begin{table}[H]
 \centering\small
 \caption{Scorecard. Status: \works{} = does what it should over the tested
-range; \limited{} = works with a documented restriction; \fails{} = does not
-deliver.}
+range; \limited{} = works, with a documented restriction or with genuine
+errors~(iii) in a stated corner; \fails{} = does not deliver. Topology
+change~(i) and provisional flags~(ii) never count against a capability
+(\cref{sec:setup}).}
 \label{tab:scorecard}
 \begin{tabularx}{\textwidth}{@{}l l Y@{}}
 \toprule
@@ -165,9 +184,12 @@ Transverse crossing detection & \works & \NumIsectMatchedTotal/\NumIsectBruteTot
 Crossings near tangency & \fails & count tracks resolution, \NumTangencyWarningsTotal{} warnings (\cref{sec:tangency}) \\
 Self-crossing detection & \limited & \NumIsectUUTotal{} u$\times$u crossings exist, none reported (\cref{sec:intersections}) \\
 Area preservation, invariants & \works & lobe $|A'/A-1|\le\NumLobeRatioMax$ (\cref{sec:invariants}) \\
-Arrangement \code{image\_of} & \limited & \NumArrImageFound{} images found, \NumArrImageMissing{} missing (\cref{sec:invariants}) \\
-Blasting & \limited & \NumMaxBlastsKTwoEight{} blasts run, topology unreliable after them on k28 and p3 (\cref{sec:blasts}) \\
-Inversion saddle & \limited & topology asserts at \NumInversionAssertSteps{} steps; OOM at \NumInversionOomSteps{} (\cref{sec:depth}) \\
+Arrangement \code{image\_of} & -- & \NumArrImageFound{} images found, \NumArrImageMissing{} missing; open question, not graded (\cref{sec:invariants}) \\
+Blasting (numerics) & \works & \NumDeepBlasts{} blasts in \NumDeepConfigs{} configs, \NumDeepLawViolations{} crossing/cdist law violations (area probe open in the two-iteration cells), deterministic to the hash; crossings \NumDeepCrossingsStartKTwoEight{}$\to$\NumDeepCrossingsEndKTwoEight{} and classes \NumDeepClassesStartKTwoEight{}$\to$\NumDeepClassesEndKTwoEight{} (k28) (\cref{sec:blasts,sec:blastdepth}) \\
+Blast depth, large zones & \limited & points $\times\NumDeepPointGrowthKTwoEight$ per blast; at cutoff $10^{-7}$ the memory budget ends k28 at \NumDeepBlastsKTwoEight{} blasts (\NumDeepPeakRssGbKTwoEight\,GB), at coarser cutoffs the time budget; p3 runs all \NumDeepMaxBlasts{} in \NumDeepProcRssGbPThree\,GB (\cref{sec:blastdepth-cost}) \\
+Topology under deep blasting & \limited & \NumDeepErrorSnapshots/\NumDeepSnapshots{} snapshots raised (\NumDeepErrorClasses{} genuine errors, \NumDeepErrorConfigs/\NumDeepConfigs{} configs); the other snapshots completed, some with provisional symbolic results (open, needs more growth) (\cref{sec:blastdepth-errors}) \\
+Deep growth (p3) & \limited & works through \NumDepthNumericsMaxPThree{} steps, the tangle growing with each step; OOM (genuine error) at \NumDepthOomPThree{} (\cref{sec:depth}) \\
+Inversion saddle & \limited & topology \code{AssertionError} at \NumInversionAssertSteps{} steps and OOM at \NumInversionOomSteps{} (genuine errors); at \NumDepthNumericsMaxInversion{} steps it completes with a provisional symbolic result (\cref{sec:depth}) \\
 Parameter robustness (b = 1 saddle) & \limited & \NumSaddleSuccessFraction{} complete; \NumSweepZeroCrossings{} trivial tangles (\cref{sec:robustness}) \\
 Fixed-point solver & \limited & converges \NumSolverConvergedRate{}, but accepts lower periods (\cref{sec:solver}) \\
 GPU acceleration & \fails & \NumGpuTotalSpeedupMedianKTen{}--\NumGpuTotalSpeedupMedianKTwoEight{} end to end (\cref{sec:gpu}) \\
@@ -189,6 +211,9 @@ Determinism & \works & CPU--CPU and GPU--GPU bit-identical (\cref{sec:repro}) \\
   make stop-condition growth the documented default.
 \item \textbf{Raise the default \code{area\_cutoff} to $10^{-7}$}, which is
   what the k28, p3 and nested test cases already use.
+\item \textbf{Triage the four E11 topology errors} (\cref{sec:blastdepth-errors}),
+  starting with the zero-width iterated element, which hits every k28 and
+  k32 cell at cutoff $10^{-7}$.
 \item \textbf{Leave the GPU off.} Revisit it only if refinement and the
   linked list move to arrays that live on the device.
 \end{enumerate}
@@ -209,6 +234,29 @@ fundamental segments, grow the manifolds (\code{grow\_n\_times},
 \code{grow\_until\_*}), and finally run \code{compute\_intersections}, trim,
 \code{create\_bridges} and the iterate table. Where an experiment touches
 topology (E5, E7), it is only as a downstream consumer of the numerics.
+
+\paragraph{Topology change, provisional results and errors.} Blasting a zone
+or growing the manifolds further is \emph{meant} to change the topology:
+new crossings are registered, new bridges, holes and bridge classes appear,
+elements split, and words, letters and transition matrices change. This is
+new information about the tangle, and the report never counts it as a
+failure. The report keeps three things apart.
+(i)~\emph{Topology change}: the expected outcome of more growth or more
+blasts. (ii)~\emph{Provisional symbolic results}: the library's own flags
+(\code{is\_reliable=False}, ambiguous walks, unresolved classes, virtual
+classes \code{new1}, \ldots). They mean the symbolic computation at that
+stage is incomplete: some class images are not registered yet, or a
+dual-graph walk cannot yet be completed, and they call for more growth or
+blasting. They are open questions, not
+numerical errors. (iii)~\emph{Errors}: exceptions, invariant
+\code{AssertionError}s, memory or time exhaustion, and numerics that violate
+a physical law (a u$\times$u or s$\times$s crossing, area not preserved,
+cdist decreasing). Topology change~(i) and provisional flags~(ii) never
+count against a capability; only~(iii) does. The scorecard grade also
+reflects whether the capability delivers (e.g.\ the GPU). A crossing count that
+depends on \code{area\_cutoff} at \emph{fixed} depth is a resolution error
+(\cref{sec:accuracy,sec:tangency}); a count that grows with depth or blasts
+is~(i).
 
 \paragraph{Harness.} \code{stress/numerics/harness.py} runs every
 configuration in a fresh subprocess with a hard timeout. A psutil watchdog
@@ -231,7 +279,7 @@ RAM; NVIDIA GeForce RTX 5060 Ti, 16\,GB, driver 580.173.02; Linux 7.1.1.
 Python 3.10.12, NumPy 2.2.5, SciPy 1.15.1, CuPy 14.1.1, rtree 1.4.0. Every
 record carries library commit \code{e963893}. The full campaign took
 \NumCampaignFullMin\,min of wall-clock, after a \NumCampaignQuickMin-minute
-\code{--quick} pilot.
+\code{--quick} pilot; E11 ran on its own afterwards in \NumDeepWallMin\,min.
 
 \paragraph{Experiments.}
 \begin{description}[leftmargin=1.2em,style=nextline]
@@ -249,14 +297,19 @@ record carries library commit \code{e963893}. The full campaign took
   areas, cdist monotonicity and \code{image\_of}, on every frozen case.
 \item[E6 Robustness] One fixed recipe over $k\in[0.3,15]$ for $b=1$ (both
   period-1 points), $b=-1$ and dissipative $b$.
-\item[E7 Breaking it] Escape to infinity, 0--10 blasts, deep growth, and
-  near-tangency at $k\to-1$.
+\item[E7 Limits and deep exploration] Escape to infinity and near-tangency
+  at $k\to-1$, where the numerics are expected to struggle; 0--10 blasts and
+  deep growth, where the tangle is expected to reveal new structure.
 \item[E8 Solver] 200 random seeds $\times$ 2 guess styles, periods 1--6, four
   maps.
 \item[E9 Crossing correctness] The library's crossings against an exact
   O($NM$) brute force.
 \item[E10 Determinism] Five fresh-process repeats on the CPU and five on the
   GPU.
+\item[E11 Deep blasting] Five zones blasted up to \NumDeepMaxBlasts{} times,
+  with the full topology stack snapshotted after every blast, over
+  \code{min\_separation}, blasting \code{area\_cutoff}, iterations per blast
+  and repeats (\cref{sec:blastdepth}).
 \end{description}
 
 %======================================================================
@@ -496,7 +549,9 @@ in \cref{tab:e04}.
   cutoff. Every case traces a straight Pareto front, so there is no knee and
   no cheap win. (b)~Registered crossings per cutoff. k28 is stable at every
   cutoff; p3 needs $\le10^{-5}$ (13 steps) or $\le10^{-7}$ (17 steps) before
-  the count settles.}
+  the count settles. Counts are compared at fixed depth; more steps register
+  more crossings (k28: \NumCrossingsKTwoEightTenRef{} at 10 steps,
+  \NumCrossingsKTwoEightTwelveRef{} at 12), which is new tangle, not error.}
   \label{fig:e04pareto}
 \end{figure}
 
@@ -522,8 +577,10 @@ gives \NumCrossingsPThreeThirteenRef. At 17 steps, $10^{-4}$ gives
 \NumCrossingsPThreeSeventeenCutoffFour{} and $10^{-5}$ gives
 \NumCrossingsPThreeSeventeenCutoffFive, against \NumCrossingsPThreeSeventeenRef{}
 from $10^{-7}$ on. A coarse polygon both misses true crossings and creates
-spurious ones. $10^{-7}$ is the cheapest setting that is converged in every
-case tested.
+spurious ones. A count that depends on the cutoff at fixed depth is a
+resolution error; a count that grows with depth or blasts is the tangle
+growing. $10^{-7}$ is the cheapest setting that is converged in every case
+tested.
 
 \caveat The reference is the finest run ($10^{-9}$), not an exact manifold,
 so the convergence plots measure self-consistency. The invariance error is a
@@ -745,8 +802,12 @@ different stop condition might rescue them; I did not try either. Note also
 that the 4\,GB cap of E6 is lower than elsewhere.
 
 %======================================================================
-\section{Failure modes and breaking points (E7)}
+\section{Limits and deep exploration (E7)}
 \label{sec:breaking}
+
+Escape and tangency probe failure modes of the numerics; depth and blasts
+probe how far the pipeline carries a growing tangle, whose topology is
+expected to change along the way (\cref{sec:setup}).
 
 \subsection{Escape to infinity}
 \label{sec:escape}
@@ -779,72 +840,94 @@ recommended interface.
 
 \subsection{Depth}
 \label{sec:depth}
-\claim p3 is numerically robust up to \NumDepthNumericsMaxPThree{} unstable
-steps, but its topology stops being reliable earlier. The inversion saddle
-is fragile at both ends.
+\claim p3 is numerically sound through \NumDepthNumericsMaxPThree{} unstable
+steps, and each extra step uncovers more of the tangle. From
+\NumDepthUnreliableMinPThree{} steps on, the symbolic layer flags its result
+as provisional. The inversion saddle hits two genuine errors: a topology
+invariant assertion when shallow and memory exhaustion when deep.
 
 \evidence \Cref{fig:e07depth}: p3 completes the numerics through
 \NumDepthNumericsMaxPThree{} steps (\NumPThreePointsSeventeen{} points);
-\NumDepthOomPThree{} steps hit the 20\,GB cap. Its topology reports
-\code{is\_reliable} up to \NumDepthReliableMaxPThree{} steps and
-\code{is\_reliable=False} from \NumDepthUnreliableMinPThree{} on. The
+\NumDepthOomPThree{} steps hit the 20\,GB cap. The topology stack completes
+at every depth that finishes the numerics. The tangle it finds grows with
+depth: the bridge-class count is constant through
+\NumDepthReliableMaxPThree{} steps and then rises with every extra step.
+From \NumDepthUnreliableMinPThree{} steps on, unresolved and virtual classes
+appear (\code{is\_reliable=False}): some classes cannot be resolved yet
+(an image not registered, or a dual-graph walk that does not complete) and
+need more growth or blasting. It does not mean the numerics are wrong. The
 inversion saddle completes the numerics only up to
 \NumDepthNumericsMaxInversion{} steps. At \NumInversionOomSteps{} steps it is
 killed at the cap after reaching \NumInversionPointsSixSteps{} points at
 step \NumDepthNumericsMaxInversion. So the documented ``7 steps does not finish'' is a memory blow-up,
 not a hang. At \NumInversionAssertSteps{} steps the numerics succeed, but the
 topology stack trips its own invariant: ``crossing 0 at stable cdist 0.0
-\ldots{} is owned by 0 partition elements''.
+\ldots{} is owned by 0 partition elements''. This is a genuine error (an
+\code{AssertionError}), unlike the provisional flag at
+\NumDepthNumericsMaxInversion{} steps, where the stack completes with a
+virtual class.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.88\textwidth]{\fig{e07_depth}}
   \caption{E7 depth. (a)~Pipeline time against unstable steps; p3 climbs steeply
-  past 15 steps. (b)~Outcome by layer. The numerics fail
-  only by memory; open circles are topology runs that finished with
-  \code{is\_reliable=False}.}
+  at the deepest steps. (b)~Outcome by layer. The numerics fail only by memory,
+  and the inversion topology raises an assertion at shallow depth. Open
+  circles are topology runs that completed with a provisional symbolic
+  result (\code{is\_reliable=False}: some classes still need more growth).
+  They are not failures.}
   \label{fig:e07depth}
 \end{figure}
 
 \caveat The inversion assertion lives in the topology layer and is recorded
 here because the stress test reached it. Whether the shallow inversion
 trellis is too thin to partition or the assertion is too strict is for the
-topology owner to decide.
+topology owner to decide. Depth itself is not a fault: a deeper trellis
+has more crossings and classes by design.
 
 \subsection{Blasts}
 \label{sec:blasts}
-\evidence \Cref{fig:e07blasts}: k28 and p3 survive
-\NumMaxBlastsKTwoEight{} and \NumMaxBlastsPThree{} blasts and nested survives
-\NumMaxBlastsNested{}, all without numerical failure. k28's crossings grow
+\evidence \Cref{fig:e07blasts}: k28 and p3 ran
+\NumMaxBlastsKTwoEight{} and \NumMaxBlastsPThree{} blasts and nested ran
+\NumMaxBlastsNested{}, all without numerical error. k28's crossings grow
 from \NumBlastCrossingsStartKTwoEight{} to \NumBlastCrossingsEndKTwoEight, and
-its last blast took \NumBlastLastSKTwoEight\,s. Afterwards the topology
-reports k28 as \NumBlastTopologyKTwoEight{} (classes:
-\NumBlastClassesKTwoEight, unresolved: \NumBlastUnresolvedKTwoEight,
-virtual: \NumBlastVirtualKTwoEight) and p3 as \NumBlastTopologyPThree{}
-(classes: \NumBlastClassesPThree, unresolved: \NumBlastUnresolvedPThree,
-virtual: \NumBlastVirtualPThree). Nested stays \NumBlastTopologyNested{}
-(classes: \NumBlastClassesNested, none unresolved or virtual).
+its last blast took \NumBlastLastSKTwoEight\,s. Each blast uncovers new
+structure, which is the purpose of blasting. After the last blast, k28 has
+\NumBlastClassesKTwoEight{} bridge classes, \NumBlastUnresolvedKTwoEight{} of
+them still unresolved and \NumBlastVirtualKTwoEight{} virtual, so the
+symbolic layer marks its result provisional. p3 has
+\NumBlastClassesPThree{} classes (\NumBlastUnresolvedPThree{} unresolved,
+\NumBlastVirtualPThree{} virtual). Nested has \NumBlastClassesNested{}
+classes, all resolved. The topology stack completed in all three cases. No
+exception, assertion or memory failure occurred.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.88\textwidth]{\fig{e07_blasts}}
   \caption{E7 blasts. (a)~Time per blast grows geometrically for k28 and
   nested and stays at milliseconds for p3. (b,c)~Crossings and bridges grow
-  geometrically. Nothing breaks numerically within 8--10 blasts.}
+  geometrically. No numerical error within \NumMaxBlastsNested--\NumMaxBlastsKTwoEight{} blasts; the growing counts
+  are the new tangle structure each blast reveals.}
   \label{fig:e07blasts}
 \end{figure}
 
-\reading Blasting is numerically sound to the depth tested. The limit is
-downstream: past a few blasts the topology cannot classify everything it
-is given.
+\reading Blasting is numerically sound to the depth tested and does what it
+is for: it reveals new crossings, bridges and classes. Unresolved and
+virtual classes after many blasts are the symbolic layer saying that some
+classes cannot be resolved yet (E11 records why, \cref{sec:blastdepth-provisional}). They are open questions for more
+growth or blasting, not errors.
+
+\caveat The topology was probed only on the final state, so this
+experiment does not show how the classes and words changed blast by blast
+(see \cref{sec:blastdepth}).
 
 \subsection{Near tangency: artefact crossings}
 \label{sec:tangency}
 \claim This is the most important limitation found. As $k\to-1$ (the
 saddle-centre bifurcation) the true separatrix splitting becomes
 exponentially small. The numerics then register polygon-on-polygon crossings
-as if they were transverse, their number is set by the resolution, and no
-warning fires.
+as if they were transverse, their number at fixed $k$ and fixed manifold
+length is set by the resolution, and no warning fires.
 
 \evidence \Cref{fig:e07tang}: \NumTangencyConfigs{} configurations, with $k+1$
 log-spaced from $10^{-4}$ to 2.5 and three cutoffs. At $k+1=10^{-4}$ the
@@ -887,6 +970,506 @@ computed splitting. Some of the near-tangent crossings may be real; the
 claim is that their \emph{count} is not trustworthy. A guard that compares
 each crossing's angle and position with the local invariance error would
 flag this regime.
+
+%======================================================================
+\section{Deep blasting: how the topology evolves (E11)}
+\label{sec:blastdepth}
+
+\paragraph{Why this experiment.} A blast iterates the bridges inside a
+resonance zone, which registers crossings that the original growth did not
+reach. Its purpose is to change the topology: new crossings, bridges and
+holes, split elements, new bridge classes, new letters, new words and new
+transition matrices. In this section topology change is the quantity being
+measured, not a fault (\cref{sec:setup}). E7 blasted three zones and probed
+the topology once, after the last blast (\cref{sec:blasts}). E11 blasts five
+zones up to \NumDeepMaxBlasts{} times and snapshots the whole topology stack
+(trellis, partitions, minimal trellis, dual graph, symbolic dynamics) after
+\emph{every} blast. It asks five questions: how the symbolic description
+evolves, what each blast costs, which parameters change what is uncovered,
+how the library's provisional flags behave as the tangle grows, and whether
+any genuine error appears.
+
+\subsection{Design of the sweep}
+\label{sec:blastdepth-design}
+
+\paragraph{Cases.} k28 and p3 as in E7; k32, the $k=3.2$ saddle built by the
+k28 recipe, as a second single saddle; nested\_outer, the period-1 zone of
+the nested map; and nested\_inner, its period-3 zone, blasted after the outer
+zone has been blasted twice (the \code{build\_nested} recipe). Every case is
+built at \code{area\_cutoff} $10^{-7}$, so all cells of one case start from
+the same tangle; the swept \code{area\_cutoff} is the refinement threshold
+used \emph{while blasting}.
+
+\paragraph{Grid.} The \emph{reference cell} of a case is cutoff $10^{-7}$, the
+recipe's \code{min\_separation} ($10^{-5}$, or $10^{-4}$ for the nested cases)
+and one iteration per blast. Around it one parameter moves at a time:
+\code{min\_separation} $\in\{\text{none},10^{-6},10^{-5},10^{-4},10^{-3}\}$
+(plus $10^{-2}$ for k28 and k32), \code{area\_cutoff}
+$\in\{10^{-5},10^{-6},10^{-8}\}$, \code{num\_iterations} $=2$, and two repeats
+of the reference cell for k28, p3 and nested\_inner. That makes
+\NumDeepConfigs{} configurations, each in a fresh process (900\,s timeout,
+12\,GB RSS cap, 8 workers), which took \NumDeepWallMin\,min of wall-clock.
+The full cutoff $\times$ separation product was dropped for time
+(\cref{sec:threats}).
+
+\paragraph{Stopping.} A configuration ends after \NumDeepMaxBlasts{} blasts
+(\NumDeepStopMaxBlasts{} configs) or when its own guard declines the next
+blast: the time budget (timeout minus 120\,s, \NumDeepStopBudget{} configs)
+or the memory budget ($0.9\times$ the RSS cap, predicted from the last
+blast's growth, \NumDeepStopMemoryBudget{} configs). These budget stops are
+the experiment's resource guard. They keep the last snapshot intact and are
+not failures; all \NumDeepConfigsOk/\NumDeepConfigs{} configurations ended
+\code{ok} at the harness level. Topology errors raised inside them are
+recorded per blast (\cref{sec:blastdepth-errors}).
+
+\paragraph{What is recorded.} After each blast: the numerics counts
+(crossings, bridges, points, time, RSS), the two law checks (same-stability
+crossings; decreasing cdist along a new bridge), a lobe-area probe, the
+topology counts (classes, active, inert, holes, elements, unresolved,
+virtual, ambiguous, \code{is\_reliable}) and the topology outcome. A
+topology exception or \code{AssertionError} is recorded for that blast and
+the blasting goes on; such a snapshot has no counts, and the next one is
+compared with the last snapshot that completed.
+
+\paragraph{Canonical words.} The session alphabet never reuses a letter, so
+a class whose elements a blast has renumbered returns under a new letter
+even when its dynamics did not change. To tell a relabelling from new
+symbolic structure, E11 also records \emph{canonical words}: the unrefined
+words with every letter renamed by its class's position in the class table
+(active classes $A_0, A_1,\ldots$, inert ones $I_0, I_1,\ldots$). A snapshot
+is \emph{new structure} when its canonical words differ from the previous
+completed snapshot, a \emph{relabelling} when change flags are set but the
+canonical words are equal, and \emph{no change} otherwise.
+
+\subsection{How the topology evolves}
+\label{sec:blastdepth-evolution}
+
+\claim Blasting keeps uncovering new symbolic structure. On k28 and the
+period-3 zones it arrives in bursts; k32 changes its words at every
+completed blast. Nearly every change is a change of the words themselves,
+not a relabelling.
+
+\evidence \Cref{tab:e11summary,fig:e11evolution}. Over all configurations,
+\NumDeepStructureSteps{} post-blast snapshots changed the canonical words,
+only \NumDeepRelabelSteps{} were pure relabellings, and
+\NumDeepNoChangeSteps{} changed nothing.
+\begin{itemize}[leftmargin=*]
+\item \emph{k28} goes from \NumDeepClassesStartKTwoEight{} to
+  \NumDeepClassesEndKTwoEight{} classes (\NumDeepActiveEndKTwoEight{} active,
+  \NumDeepInertEndKTwoEight{} inert) and from
+  \NumDeepCrossingsStartKTwoEight{} to \NumDeepCrossingsEndKTwoEight{}
+  crossings. Its largest step is at blast \NumDeepJumpBlastKTwoEight, from
+  \NumDeepJumpBeforeKTwoEight{} to \NumDeepJumpAfterKTwoEight{} classes. The
+  first new words appear at blast \NumDeepFirstStructureKTwoEight.
+\item \emph{k32} changes its canonical words at
+  \NumDeepStructureChangesKThreeTwo{} completed blasts and reaches
+  \NumDeepClassesEndKThreeTwo{} classes at blast
+  \NumDeepClassesEndBlastKThreeTwo{} (its last completed snapshot), after a
+  step from \NumDeepJumpBeforeKThreeTwo{} to \NumDeepJumpAfterKThreeTwo{} at
+  blast \NumDeepJumpBlastKThreeTwo.
+\item \emph{p3 and nested\_inner} do not change at all until their first
+  new words (p3: blast \NumDeepFirstStructurePThree; nested\_inner: blast
+  \NumDeepFirstStructureNestedInner). There the
+  classes jump from \NumDeepJumpBeforePThree{} to \NumDeepJumpAfterPThree{}
+  and from \NumDeepJumpBeforeNestedInner{} to \NumDeepJumpAfterNestedInner,
+  and then grow by exactly \NumDeepClassStepPThree{} classes per blast to
+  \NumDeepClassesEndPThree{} and \NumDeepClassesEndNestedInner. From the
+  burst on, every blast changes the words (\NumDeepStructureChangesPThree{}
+  and \NumDeepStructureChangesNestedInner{} new-structure blasts).
+\item \emph{nested\_outer} rises from \NumDeepClassesStartNestedOuter{} to
+  \NumDeepJumpAfterNestedOuter{} classes at blast
+  \NumDeepJumpBlastNestedOuter, then falls from
+  \NumDeepDropBeforeNestedOuter{} to \NumDeepDropAfterNestedOuter{} at blast
+  \NumDeepDropBlastNestedOuter, while its crossings grow from
+  \NumDeepCrossingsStartNestedOuter{} to \NumDeepCrossingsEndNestedOuter.
+\end{itemize}
+
+\begin{table}[htbp]
+\centering
+\caption{E11 per case at the reference cell. ``first new words'' is the first
+blast whose canonical words changed; ``new-word blasts'' counts them;
+``prov.'' marks a provisional symbolic result (\code{is\_reliable=False}).
+The last two columns cover every configuration of the case.}
+\label{tab:e11summary}
+\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lllllrlllr}
+\tablebody tables/e11_summary.tex 
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{\fig{e11_evolution}}
+  \caption{E11 reference cells. (a)~Active and (b)~inert bridge classes, and
+  (c)~registered crossings (log scale), against blasts done. Filled markers:
+  the canonical words changed at that blast (new structure). Red $\times$:
+  the topology raised at that blast, so there is no snapshot. The class
+  counts move in bursts for k28 (blast \NumDeepJumpBlastKTwoEight) and for
+  p3 and nested\_inner (blast \NumDeepJumpBlastPThree); k32's words change
+  at every completed blast, with its largest class step at blast \NumDeepJumpBlastKThreeTwo; the crossings
+  grow geometrically for the period-1 zones and slowly for the period-3
+  ones.}
+  \label{fig:e11evolution}
+\end{figure}
+
+\reading This is blasting doing its job. Each burst is a blast after which
+the class table is rebuilt over a stable manifold with new holes and cuts,
+so the class count is recomputed, not appended to; this is also why
+nested\_outer can \emph{lose} classes. Why the bursts fall at those
+particular blasts (presumably the first blast whose images reach a new part
+of the stable manifold) I have not checked. The period-3 zones show a
+regular pattern after their burst, a fixed number of new classes per blast.
+The period-1 zones have no such pattern, and their crossings grow
+geometrically rather than slowly.
+
+\caveat Class counts at a given blast depend on the blasting cutoff
+(\cref{sec:blastdepth-params}), so these are counts at cutoff $10^{-7}$.
+Snapshots that raised leave gaps: k28 and k32 have none between blasts
+\NumDeepErrorBlastsKTwoEight, which is why k32's last count is at blast
+\NumDeepClassesEndBlastKThreeTwo{} and k28's jump to
+\NumDeepClassesEndKTwoEight{} is not resolved blast by blast.
+
+\subsection{Cost of blasting: the practical depth limit}
+\label{sec:blastdepth-cost}
+
+\claim For the large zones (k28, k32, nested\_outer) every blast costs a
+roughly constant factor more than the one before. At cutoff $10^{-7}$ memory
+sets how deep one can blast; at coarser cutoffs the time budget binds first.
+The period-3 zones cost almost nothing.
+
+\evidence \Cref{fig:e11cost}. Per blast, as geometric means over the last
+five blasts, k28 multiplies its crossings by \NumDeepCrossingGrowthKTwoEight,
+its bridge points by \NumDeepPointGrowthKTwoEight{} and its blast time by
+\NumDeepTimeGrowthKTwoEight; k32 by \NumDeepCrossingGrowthKThreeTwo,
+\NumDeepPointGrowthKThreeTwo{} and \NumDeepTimeGrowthKThreeTwo; nested\_outer
+by \NumDeepCrossingGrowthNestedOuter, \NumDeepPointGrowthNestedOuter{} and
+\NumDeepTimeGrowthNestedOuter. Their last blasts took
+\NumDeepLastBlastSKTwoEight, \NumDeepLastBlastSKThreeTwo{} and
+\NumDeepLastBlastSNestedOuter\,s and peaked at
+\NumDeepPeakRssGbKTwoEight, \NumDeepPeakRssGbKThreeTwo{} and
+\NumDeepPeakRssGbNestedOuter\,GB, and the memory budget stopped them after
+\NumDeepBlastsKTwoEight, \NumDeepBlastsKThreeTwo{} and
+\NumDeepBlastsNestedOuter{} blasts. Of the \NumDeepRefCutoffCells{}
+large-zone cells at cutoff $10^{-7}$ with one iteration per blast,
+\NumDeepRefCutoffMemoryStops{} were stopped by the memory budget and
+\NumDeepRefCutoffTimeStops{} by the time budget at the same blast count, so
+which guard binds first there depends on machine load. At the coarser
+blasting cutoffs $10^{-5}$ and $10^{-6}$ the time budget stopped all
+\NumDeepCoarseTimeStops/\NumDeepCoarseCells{} large-zone cells, after
+\NumDeepCoarseBlasts{} blasts at \NumDeepCoarseRss\,GB. p3 and nested\_inner
+grow their crossings by only \NumDeepCrossingGrowthPThree{} and
+\NumDeepCrossingGrowthNestedInner{} per blast, finish all
+\NumDeepMaxBlasts{} blasts at a mean of \NumDeepMeanBlastSPThree{} and
+\NumDeepMeanBlastSNestedInner\,s per blast, and peak at
+\NumDeepProcRssGbPThree{} and \NumDeepProcRssGbNestedInner\,GB.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{\fig{e11_cost}}
+  \caption{E11 cost at the reference cells. (a)~Points on all bridges and
+  (b)~time per blast (log scales): straight lines for the period-1 zones,
+  rising only slowly for the period-3 zones (p3's bridge points go from
+  \NumDeepPointsStartPThree{} to \NumDeepPointsEndPThree). (c)~Peak RSS against the memory budget
+  (dashed). Squares mark configurations that their own budget stopped
+  because the next blast would not fit. That is the experiment's guard,
+  not a failure.}
+  \label{fig:e11cost}
+\end{figure}
+
+\reading Each blast iterates every interior bridge, and the bridges of a
+large zone are stretched by the saddle at each step, so points, crossings
+and time all grow by about the same factor. Because each further blast
+needs that factor more memory, more hardware buys only a blast or two. This
+is the same geometric memory growth as unbudgeted growth (\cref{sec:escape});
+here the harness's budget stopped it before any OOM. The same cure applies: predict the next blast's cost from the last factor, as
+the harness does here, and refuse or warn above a budget. In the period-3
+zones the bridge points grow only by \NumDeepPointGrowthPThree{} (p3) and
+\NumDeepPointGrowthNestedInner{} (nested\_inner) per blast, so deep
+blasting is cheap.
+
+\caveat The growth factors are fitted on five blasts. p3's time factor
+(\NumDeepTimeGrowthPThree) is below one because its blasts take milliseconds
+and the timing is noise.
+
+\subsection{Dependence on parameters, and determinism}
+\label{sec:blastdepth-params}
+
+\claim \code{min\_separation} has no effect at any value tested, and the
+runs are deterministic. The blasting \code{area\_cutoff} changes what the
+blasts uncover. Two iterations per blast give the same canonical words as
+two single blasts wherever both completed, in every case but one
+nested\_outer pair.
+
+\evidence \Cref{fig:e11events,fig:e11parameters,fig:e11agreement}.
+\emph{Separation and repeats:} every separation cell matches its reference
+exactly at every blast, in crossings, bridge points, topology outcome and
+the exact topology hash: \NumDeepSeparationIdenticalKTwoEight{} (k28),
+\NumDeepSeparationIdenticalKThreeTwo{} (k32),
+\NumDeepSeparationIdenticalPThree{} (p3),
+\NumDeepSeparationIdenticalNestedOuter{} (nested\_outer) and
+\NumDeepSeparationIdenticalNestedInner{} (nested\_inner). So do the repeats
+(\NumDeepRepeatIdenticalKTwoEight, \NumDeepRepeatIdenticalPThree,
+\NumDeepRepeatIdenticalNestedInner).
+\emph{Cutoff:} words are compared only at blasts where both snapshots
+completed; a blast where one cell raised and the other did not is an
+outcome difference, counted apart. In \NumDeepCutoffWordsFirst{} of the
+\NumDeepCutoffCells{} cutoff cells the canonical words leave the reference
+before the crossing counts do. At $10^{-5}$ p3's words differ from blast
+\NumDeepCutoffFiveWordsPThree{} and its crossings from blast
+\NumDeepCutoffFiveCrossingsPThree; k28's from blasts
+\NumDeepCutoffFiveWordsKTwoEight{} and \NumDeepCutoffFiveCrossingsKTwoEight{}
+(its topology outcome first differs at blast
+\NumDeepCutoffFiveOutcomeKTwoEight, where the reference raises). The three
+exceptions: k28 at $10^{-6}$ (crossings from blast
+\NumDeepCutoffSixCrossingsKTwoEight, words from blast
+\NumDeepCutoffSixWordsKTwoEight), k28 at $10^{-8}$ (crossings from blast
+\NumDeepCutoffEightCrossingsKTwoEight, words \NumDeepCutoffEightWordsKTwoEight)
+and nested\_outer at $10^{-8}$ (crossings from blast
+\NumDeepCutoffEightCrossingsNestedOuter, words
+\NumDeepCutoffEightWordsNestedOuter). After
+\NumDeepBlastsPThree{} blasts, p3 holds \NumDeepCutoffFiveClassesPThree,
+\NumDeepCutoffSixClassesPThree, \NumDeepClassesEndPThree{} and
+\NumDeepCutoffEightClassesPThree{} classes at cutoffs $10^{-5}$, $10^{-6}$,
+$10^{-7}$ and $10^{-8}$.
+\emph{Two iterations:} for $n\ge1$ (blast 0 is the shared pre-blast build),
+blast $n$ with two iterations has the same canonical
+words as single blast $2n$ in \NumDeepDoubleWordsSameKTwoEight{} (k28),
+\NumDeepDoubleWordsSameKThreeTwo{} (k32), \NumDeepDoubleWordsSamePThree{}
+(p3) and \NumDeepDoubleWordsSameNestedInner{} (nested\_inner) of the pairs
+where both snapshots completed, and \NumDeepDoubleWordsSameNestedOuter{}
+for nested\_outer (they differ at $n=\NumDeepDoubleWordsDifferNestedOuter$). The crossing counts agree only up to
+$n=\NumDeepDoubleCrossingsAgreeKTwoEight$ (k28),
+\NumDeepDoubleCrossingsAgreeKThreeTwo{} (k32),
+\NumDeepDoubleCrossingsAgreeNestedOuter{} (nested\_outer) and
+\NumDeepDoubleCrossingsAgreeNestedInner{} (nested\_inner); for p3 they agree
+up to $n=\NumDeepDoubleCrossingsAgreePThree$, every pair compared.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{\fig{e11_events}}
+  \caption{E11: what each blast changed, one row per configuration, grouped
+  by case. Dark blue: new canonical words (new structure). Mid-blue: change
+  flags set but canonical words unchanged (relabelling). Grey: no change.
+  Red: the topology raised (genuine error; $\times$ marks the one
+  exception, the rest are assertions). White: not run, because the
+  configuration's budget stopped it. A white dot marks a provisional
+  symbolic result (\code{is\_reliable=False}). The separation and repeat
+  rows equal their reference row; the cutoff rows do not.}
+  \label{fig:e11events}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{\fig{e11_parameters}}
+  \caption{E11 parameters. (a)~First blast at which the canonical words /
+  the crossing counts differ from the reference cell, words compared only
+  where both snapshots completed (``='': identical at every blast; ``--'':
+  never). (b,c)~Bridge classes against blasts for each
+  blasting cutoff, k28 and p3; red $\times$: snapshots where the topology
+  raised (any cutoff).}
+  \label{fig:e11parameters}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{\fig{e11_agreement}}
+  \caption{E11 agreement. (a)~Blast $n$ with two iterations per blast
+  against single-iteration blast $2n$: crossing counts and canonical words.
+  (b)~Separation and repeat cells identical to the reference at every
+  blast.}
+  \label{fig:e11agreement}
+\end{figure}
+
+\reading In these zones \code{min\_separation}, even at $10^{-2}$,
+evidently never removes a blast child, so it is not a knob that matters
+here, and the whole pipeline (blast, repin, topology) is reproducible to the
+hash. The cutoff does matter: blasted bridges are refined at that cutoff, so
+a different cutoff can move a crossing from one element to another (new
+words, same count) before it adds or removes one. As in E4 and the tangency
+study (\cref{sec:accuracy,sec:tangency}), a count that depends on the
+cutoff at a \emph{fixed} blast reflects resolution, while growth with
+blasts at a fixed cutoff is discovery. On the two-iteration side, the
+numbers of crossings drift apart after a few blasts, probably because the
+two routes refine and repin at different moments, but the symbolic words
+agree wherever both completed, except in one nested\_outer pair. Along this
+route the words are more robust than the raw counts.
+
+\caveat No cutoff is a ground truth here: the finer $10^{-8}$ runs stopped
+earlier, so the cutoff spread at deep blasts is not settled. The
+nested\_outer two-iteration pair whose words differ has not been examined.
+
+\subsection{Provisional symbolic results as the tangle grows}
+\label{sec:blastdepth-provisional}
+
+\claim The library's provisional flags come and go as blasting proceeds. A
+blast can resolve them, and a burst of new classes opens new ones. They are
+open questions that call for more growth or blasting, not errors.
+
+\evidence \Cref{fig:e11provisional}. k28, k32 and nested\_outer start
+provisional (an unresolved class before any blast), and the first blast
+clears it. The result turns provisional again at blast
+\NumDeepFirstProvisionalKTwoEight{} (k28), \NumDeepFirstProvisionalKThreeTwo{}
+(k32), \NumDeepFirstProvisionalPThree{} (p3) and
+\NumDeepFirstProvisionalNestedInner{} (nested\_inner): at or before each
+case's class burst. At the end, k28 has \NumDeepUnresolvedEndKTwoEight{}
+unresolved, \NumDeepVirtualEndKTwoEight{} virtual and
+\NumDeepAmbiguousEndKTwoEight{} ambiguous classes; k32
+\NumDeepUnresolvedEndKThreeTwo, \NumDeepVirtualEndKThreeTwo{} and
+\NumDeepAmbiguousEndKThreeTwo; p3 \NumDeepUnresolvedEndPThree,
+\NumDeepVirtualEndPThree{} and \NumDeepAmbiguousEndPThree; nested\_inner
+\NumDeepUnresolvedEndNestedInner, \NumDeepVirtualEndNestedInner{} and
+\NumDeepAmbiguousEndNestedInner. nested\_outer ends with
+\NumDeepUnresolvedEndNestedOuter{} of each and a reliable result. In p3 and
+nested\_inner the counts stay flat from the burst to the last blast.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{\fig{e11_provisional}}
+  \caption{E11 provisional flags at the reference cells: (a)~unresolved
+  classes, (b)~virtual classes (\code{new1}, \ldots), (c)~ambiguous walks
+  against blasts. Open markers: provisional symbolic result
+  (\code{is\_reliable=False}); red $\times$: no snapshot (topology error).
+  Cases are offset vertically by $\pm0.16$ so that they do not overlap.}
+  \label{fig:e11provisional}
+\end{figure}
+
+\reading The library records why each class is unresolved, and the
+reasons differ before and after the bursts. Before any blast, the
+\NumDeepUnresolvedSingletonStart{} unresolved classes of the reference cells
+are all ``a landing is a singleton element and no member has a registered
+image chain; grow or blast'', and the first blast registers those images,
+which is exactly the library's ``grow or blast until the images are
+registered''. After the bursts the reason is mostly different: of the
+unresolved entries in the reference snapshots after blast 0,
+\NumDeepUnresolvedUnreachable{} are ``dual-graph walk unreachable'' and only
+\NumDeepUnresolvedSingleton{} the singleton reason (both in k28's last
+snapshot, next to \NumDeepUnresolvedUnreachableEndKTwoEight{} unreachable
+walks). In p3 and nested\_inner the one unresolved class is an unreachable
+walk at every blast after the burst. So the burst-era flags are mostly not
+missing images but walks the dual graph cannot complete. That is still a
+provisional result for the topology owner (an open question that more
+growth, or a further rule, may settle), not a numerics fault.
+
+\caveat The flags are counted per snapshot; I did not check whether the
+unresolved class is the same class from blast to blast.
+
+\subsection{Genuine errors}
+\label{sec:blastdepth-errors}
+
+\claim No same-stability crossing and no decreasing cdist appeared at any
+blast. The area check is inconclusive in the two-iteration cells (see
+below). The topology
+layer raised in \NumDeepErrorSnapshots{} of \NumDeepSnapshots{} snapshots,
+in \NumDeepErrorConfigs{} of \NumDeepConfigs{} configurations, with
+\NumDeepErrorClasses{} distinct errors. These are genuine errors for the
+topology owner to triage. The blasting itself never failed.
+
+\evidence Over \NumDeepBlasts{} blasts there were
+\NumDeepSameStability{} same-stability crossings and
+\NumDeepCdistDecreasing{} decreasing cdist steps
+(\NumDeepLawViolations{} crossing/cdist law violations). The lobe-area probe
+compared \NumDeepLobeCompared{} lobe pairs; the median of the per-snapshot
+median $|A'/A-1|$ is \NumDeepLobeRatioMedian{} (per-pair ratios are not
+stored), and the reference cells peak at \NumDeepLobeRatioMaxReference.
+In the two-iteration cells (\NumDeepLobeRatioMaxWhere) $|A'/A-1|$ reaches
+\NumDeepLobeRatioMax{} with \NumDeepLobeSignFlips{} sign flips. The probe
+compares polygons, which a fold can make self-intersecting, so this is
+either a self-intersecting probe polygon or a real area defect; I have not
+decided which, and the area check stays open there.
+\Cref{tab:e11errors} lists the topology errors
+(\NumDeepErrorAsserts{} assertions, \NumDeepErrorExceptions{} exception):
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Zero-width iterated element ``not inside its parent''}
+  (\code{PartitionFamily.\allowbreak from\_\allowbreak minimal}, assertion):
+  \NumDeepErrZeroWidthSnapshots{} snapshots in
+  \NumDeepErrZeroWidthConfigs{} configurations, blasts
+  \NumDeepErrZeroWidthBlasts. It is raised at blasts \NumDeepErrorBlastsKTwoEight{} in every k28
+  and k32 cell at cutoff $10^{-7}$ (all separations and repeats), earlier in blast count (though later in iterations) with two iterations per blast, and
+  in k32 at $10^{-8}$. On k28 the snapshot at blast
+  \NumDeepClassesEndBlastKTwoEight{} completes again, and k28 at the other
+  cutoffs never raises it.
+\item \textbf{Holes disagree on \code{bridge\_side}}
+  (\code{check\_holes\_\allowbreak share\_\allowbreak bridge\_side}, assertion):
+  \NumDeepErrHoleSideSnapshots{} snapshots in
+  \NumDeepErrHoleSideConfigs{} configurations (k28 at cutoffs $10^{-5}$ and
+  $10^{-6}$), blasts \NumDeepErrHoleSideBlasts.
+\item \textbf{Several outer faces} (\code{DualGraph}, a \code{ValueError}
+  ``component \ldots{} faces of positive traversal area''):
+  \NumDeepErrOuterFacesSnapshots{} snapshot, k28 at cutoff $10^{-6}$, blast
+  \NumDeepErrOuterFacesBlasts.
+\item \textbf{Bridge approaches its two crossings from opposite sides}
+  (\code{check\_bridge\_\allowbreak rows\_\allowbreak consistent}, assertion):
+  \NumDeepErrBridgeRowsSnapshots{} snapshots in
+  \NumDeepErrBridgeRowsConfigs{} configurations, blasts
+  \NumDeepErrBridgeRowsBlasts: p3 and nested\_inner at cutoff $10^{-5}$ from
+  blast \NumDeepCutoffFiveOutcomePThree{} on (the reference cell's burst;
+  these cells' own words had changed earlier), and with two iterations per
+  blast near the end of the run.
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E11 topology errors, per error and case. These are genuine errors;
+the blasting continued after each, and no crossing or cdist law was
+violated. ``snapshots''
+counts the blasts at which the error was raised.}
+\label{tab:e11errors}
+\setlength{\tabcolsep}{3pt}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lllllrr}
+\tablebody tables/e11_errors.tex 
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\reading All four errors live in the topology layer, appear only after
+several blasts, and none comes with a crossing or cdist violation, so they
+are not caused by the numerics producing impossible crossings. They depend on
+the blasting cutoff, but that alone does not show they are geometric. E7's
+k28 run, built by the same recipe, reached \NumBlastCrossingsEndKTwoEight{}
+crossings after \NumMaxBlastsKTwoEight{} blasts and its topology completed
+(\NumBlastClassesKTwoEight{} classes, provisional). The E11 k28 reference at
+the same blast also has \NumDeepAtESevenCrossingsKTwoEight{} crossings, yet
+it raises the zero-width assertion, as do all k28 cells at cutoff
+$10^{-7}$. So the zero-width error may depend on the E11 snapshot path (a
+topology stack after every blast, session state left by an assertion
+mid-stack, or the extra \code{bridge\_classes}/\code{minimal\_trellis}/\allowbreak
+\code{iterated\_partition} calls) rather than on the trellis; it has to be
+reproduced on a fresh session at that blast before it is attributed to
+geometry. My working hypotheses, to be checked by the topology owner:
+(1)~an image bridge's endpoint lands exactly on an existing element
+boundary, giving an element $[x,x]$, and the parent containment test does
+not accept a degenerate element at a boundary;
+(2)~the propagated-hole side rule, fixed on 2026-10-02 for the period-3
+case, has another corner case on deeply blasted trellises;
+(3)~the arrangement's outer-face detection meets a component with
+near-degenerate faces;
+(4)~the row check trips where two crossing signs come out equal, which the
+row rule reads as a bridge crossing its stable branch. At a coarse cutoff
+in a folded region that may be a resolution effect. In the two-iteration
+cells the lobe-area sign flips fall exactly on the first blasts at which
+this error is raised, which points at the geometry of those bridges rather
+than at the row rule.
+
+\caveat Each error's traceback is stored only at its first occurrence, and
+a snapshot that raised has no counts. Whether an assertion is a bug or an
+over-strict invariant is not decided here.
+
+\paragraph{What to investigate next.}
+\begin{itemize}[leftmargin=*]
+\item Reproduce the zero-width element at k28's first failing blast from the
+  stored configuration, on a fresh session that runs the topology stack only
+  once (E7's k28 run completes at the same crossing count); decide whether degenerate iterated elements are legal (as
+  singletons) and make the containment test closed at boundaries.
+\item Re-run the bridge-row and hole-side cells with the crossing signs and
+  the offending bridge dumped, to separate a resolution effect from a rule
+  defect.
+\item Make blasting memory-aware in the library, the way the harness is.
+\item Follow p3's persistent unresolved class: grow the stable manifold
+  instead of blasting again, and see whether it resolves.
+\end{itemize}
 
 %======================================================================
 \section{Fixed-point solver (E8)}
@@ -1021,9 +1604,12 @@ $\sim$5\% between two configurations should not be read as real.
 \Cref{tab:taxonomy} collects every failure class the campaign hit.
 ``By design'' means the library refuses the input on purpose; ``limitation''
 means correct behaviour within an unstated envelope; ``bug'' means behaviour
-the library's own contract rules out.
+the library's own contract rules out. Topology changing under blasting or
+deeper growth is not a failure and does not appear here. Neither do the
+symbolic layer's provisional flags (\cref{sec:setup}); both are listed
+after the table.
 
-\begin{table}[H]
+\begin{table}[p]
 \centering\footnotesize
 \caption{Failure taxonomy.}
 \label{tab:taxonomy}
@@ -1032,8 +1618,8 @@ the library's own contract rules out.
 \toprule
 failure class & trigger & symptom & kind & suggested fix \\
 \midrule
-Escape OOM & fixed step count past the tangle (\cref{sec:escape,sec:scaling}) & one step goes from MB to the RSS cap; OOM kill & limitation & point/memory budget in \code{grow\_n\_times}; stop-condition growth by default \\
-Inversion blow-up & inversion saddle at \NumInversionOomSteps{} unstable steps; $k\ge\NumSweepOtherOomKMin$ in E6 & OOM, documented as ``does not finish'' & limitation & same budget guard \\
+Escape OOM & fixed step count past the tangle (\cref{sec:escape,sec:scaling}) & unbudgeted growth: one step goes from MB to the RSS cap; OOM kill & genuine error (OOM) & point/memory budget in \code{grow\_n\_times}; stop-condition growth by default \\
+Inversion blow-up & inversion saddle at \NumInversionOomSteps{} unstable steps; $k\ge\NumSweepOtherOomKMin$ in E6 & unbudgeted growth: OOM, documented as ``does not finish'' & genuine error (OOM) & same budget guard \\
 Artefact crossings & near tangency, $k+1<\NumTangencyAgreeKPlusOne$ (\cref{sec:tangency}) & crossing count set by cutoff; no warning & limitation (silent) & angle/invariance-error guard; resolution warning \\
 Self-crossing polygon & coarse cutoff, e.g.\ \NumIsectUUCutoff{} (\cref{sec:intersections}) & u$\times$u crossings undetected & limitation (silent) & cheap u$\times$u diagnostic \\
 Coarse-cutoff crossing errors & default $10^{-4}$ on p3 (\cref{sec:accuracy}) & crossings invented and missed & limitation & default $10^{-7}$ \\
@@ -1042,13 +1628,42 @@ Max iterations & $k\le\NumSweepMaxIterKMax$, \code{grow\_until\_turnaround} (\cr
 Trivial tangle & fixed recipe at small $k$ (\cref{sec:robustness}) & completes with 0 crossings & limitation & scale depth with $1/\ln\lambda_u$ \\
 Not a saddle & elliptic point & \code{ValueError} & by design & none \\
 Orientation reversing & $b=-1$ & \code{ValueError} & by design & none (out of scope) \\
-Partition assert & inversion at \NumInversionAssertSteps{} steps (\cref{sec:depth}) & ``owned by 0 partition elements'' & bug or too strict (topology) & topology owner to triage \\
-Unreliable topology & $\ge\NumDepthUnreliableMinPThree$ p3 steps; many blasts (\cref{sec:depth,sec:blasts}) & \code{is\_reliable=False} & limitation (topology) & known open issue \\
+Partition assert & inversion at \NumInversionAssertSteps{} steps (\cref{sec:depth}) & \code{AssertionError} ``owned by 0 partition elements'' & genuine error; bug or too strict (topology) & topology owner to triage \\
+Zero-width iterated element & k28, k32 at blasts \NumDeepErrZeroWidthBlasts, cutoff dependent (\cref{sec:blastdepth-errors}) & \code{AssertionError} ``not inside its parent'' in \code{PartitionFamily.\allowbreak from\_\allowbreak minimal} & genuine error (topology) & decide whether $[x,x]$ elements are legal; closed containment test \\
+Hole side & k28 at cutoffs $10^{-5}$, $10^{-6}$, blasts \NumDeepErrHoleSideBlasts{} & \code{AssertionError} ``disagree on bridge\_side'' & genuine error (topology) & dump the hole pair; recheck the propagated-side rule \\
+Bridge rows & p3, nested\_inner at cutoff $10^{-5}$ or two iterations, blasts \NumDeepErrBridgeRowsBlasts{} & \code{AssertionError} ``opposite sides'' (\code{check\_bridge\_\allowbreak rows\_\allowbreak consistent}) & genuine error (topology) & dump the crossing signs; separate resolution effect from rule defect \\
+Several outer faces & k28 at cutoff $10^{-6}$, blast \NumDeepErrOuterFacesBlasts{} & \code{ValueError} in \code{DualGraph} & genuine error (topology) & inspect the arrangement component \\
 Stale registry & caching \code{intersection\_registry} across \code{compute\_intersections} & empty/stale object & API trap & return or re-fetch; warn in docs \\
-\code{image\_of} misses & \NumArrImageMissing{} of the regions tried (\cref{sec:invariants}) & no image found & open question & investigate \\
 \bottomrule
 \end{tabularx}
 \end{table}
+
+\paragraph{Expected behaviour (not failures).} Blasting and deeper growth
+change the topology: k28's crossings went from
+\NumBlastCrossingsStartKTwoEight{} to \NumBlastCrossingsEndKTwoEight{} over
+\NumMaxBlastsKTwoEight{} blasts, and p3's bridge classes rise with every
+step past \NumDepthReliableMaxPThree{} (\cref{sec:depth,sec:blasts}). In
+E11, \NumDeepStructureSteps{} snapshots brought new canonical words, and
+nested\_outer's classes even fell from \NumDeepDropBeforeNestedOuter{} to
+\NumDeepDropAfterNestedOuter{} (\cref{sec:blastdepth-evolution}). That is
+the tangle being uncovered. The memory and time budget stops of E11 are the
+experiment's own guard, not failures.
+
+\paragraph{Provisional symbolic results (open, not errors).} The
+library's \code{is\_reliable} flag is False for p3 from
+\NumDepthUnreliableMinPThree{} steps, for the inversion saddle at
+\NumDepthNumericsMaxInversion{} steps, and after the last blast on k28
+(\NumBlastUnresolvedKTwoEight{} unresolved, \NumBlastVirtualKTwoEight{}
+virtual classes) and p3 (\NumBlastUnresolvedPThree{} unresolved,
+\NumBlastVirtualPThree{} virtual). In E11 the flags come and go: the first
+blast clears them on k28, k32 and nested\_outer, and they return at the
+class burst on p3 and nested\_inner and at or before it on k28 and k32;
+nested\_outer's never returns (\cref{sec:blastdepth-provisional}). Before
+blasting the unresolved classes lack a registered image; after the bursts
+they are mostly dual-graph walks that cannot complete. Both call for more
+growth or a further rule. The arrangement's \code{image\_of} misses
+(\NumArrImageMissing{} of the regions tried, \cref{sec:invariants}) are an
+open question of the same kind, not a failure.
 
 %======================================================================
 \section{Recommendations}
@@ -1081,6 +1696,21 @@ Stale registry & caching \code{intersection\_registry} across \code{compute\_int
 \item \textbf{Memory guard}: predict the next step's points from the last
   growth factor, and refuse or warn above a budget. The E3 harness already
   does this in a few lines.
+\item \textbf{Memory-aware blasting}: the same guard for \code{blast\_zone},
+  since a large zone multiplies its points by about
+  \NumDeepPointGrowthKTwoEight{} per blast (\cref{sec:blastdepth-cost}). The
+  E11 harness's memory budget is a template.
+\end{itemize}
+
+\paragraph{Guards to add (topology layer, for its owner).}
+\begin{itemize}[leftmargin=*]
+\item \textbf{Zero-width iterated elements}: either admit a degenerate
+  element $[x,x]$ as a singleton or merge it into a neighbour before the
+  parent-containment assertion in \code{PartitionFamily.\allowbreak from\_\allowbreak minimal}
+  (\cref{sec:blastdepth-errors}).
+\item \textbf{Diagnostics on assertion}: have the row and hole-side checks
+  report the offending crossings and their signs, so that a resolution
+  effect can be told from a rule defect.
 \end{itemize}
 
 \paragraph{Open questions for the advisor.}
@@ -1095,6 +1725,17 @@ Stale registry & caching \code{intersection\_registry} across \code{compute\_int
   without complaint and without validation.
 \item Is the inversion partition assertion at shallow depth a real defect or
   an over-strict invariant?
+\item Do the unresolved and virtual classes after many blasts resolve with
+  further growth? In p3 and nested\_inner they persist through every blast
+  after the burst (\cref{sec:blastdepth-provisional}), so further blasting of
+  the same zone does not resolve them; stable growth is untested.
+\item Which blasting cutoff should define the symbolic result? In most
+  cutoff cells the words diverge before the crossing counts do
+  (\cref{sec:blastdepth-params}).
+\item Is the lobe-area excess in the two-iteration E11 cells
+  ($|A'/A-1|$ up to \NumDeepLobeRatioMax, \NumDeepLobeSignFlips{} sign
+  flips) a self-intersecting probe polygon or a real area defect
+  (\cref{sec:blastdepth-errors})?
 \end{enumerate}
 
 %======================================================================
@@ -1110,8 +1751,18 @@ Stale registry & caching \code{intersection\_registry} across \code{compute\_int
   GPU verdict.
 \item \textbf{Quick calibration of grids.} The sweep grids and depths were
   calibrated in a short pilot to fit the budget. Exponents rest on
-  $\le$3 decades, and some breaking points (depth, blasts) are only known to
-  the resolution of the grid.
+  $\le$3 decades, and some limits (escape and depth OOM, the tangency
+  transition) are only known to the resolution of the grid. The E7 blast
+  study ran one cutoff per case, with the topology probed only after the
+  last blast.
+\item \textbf{E11 grid thinned and budgets.} E11 moved one parameter at a
+  time around a reference cell; the full cutoff $\times$ separation product
+  and repeats of the heavy k32 and nested\_outer cells were dropped. Its
+  heavy cells were stopped by their own memory or time budget
+  (\NumDeepStopMemoryBudget{} and \NumDeepStopBudget{} configs), so the deep
+  behaviour of the large zones beyond \NumDeepBlastsKTwoEight{} blasts is unknown, and
+  cutoffs are compared at different final depths. Snapshots that raised
+  leave gaps in the series.
 \item \textbf{cProfile overhead.} Profiling inflates Python call costs
   relative to NumPy kernels, which biases $f_{\rm map}$ low (see the caveat
   in \cref{sec:gpu}).
@@ -1174,6 +1825,12 @@ on its own as
 env/bin/python stress/numerics/eNN_*.py [--quick] [--only I,J] \
     [--rss-cap-gb G] [--timeout S] [--workers N]
 \end{verbatim}
+E11 is not part of \code{run\_campaign.py}; it runs on its own (8 workers,
+up to 12\,GB each), before the report scripts above:
+\begin{verbatim}
+env/bin/python stress/numerics/e11_blast_depth.py           # full grid
+env/bin/python stress/numerics/e11_blast_depth.py --quick   # smoke test
+\end{verbatim}
 
 
 \section{Configuration and outcome counts}
@@ -1184,8 +1841,8 @@ env/bin/python stress/numerics/eNN_*.py [--quick] [--only I,J] \
 \caption{Records and outcomes per experiment in the full run, with each
 experiment's default per-configuration timeout and RSS cap (some E7 configs
 override the timeout). ``assert'' counts \code{invariant\_assert} outcomes of
-the numerics; the topology assertions of E7 are secondary results inside
-\code{ok} records.}
+the numerics; the topology assertions of E7 and E11 are genuine errors
+recorded inside \code{ok} records (E11's are in \cref{tab:e11errors}).}
 \label{tab:counts}
 \begin{tabular}{lrrrrrrrr}
 \tablebody tables/campaign_counts.tex 

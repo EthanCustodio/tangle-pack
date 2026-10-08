@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-07 15:46:50",
+ "generated": "2026-10-07 18:01:42",
  "mode": "full",
  "experiments": {
   "e01_map_throughput": {
@@ -2382,10 +2382,10 @@
     "EscapeStopPredicatePoints": 478,
     "MaxBlastsKTwoEight": 10,
     "BlastOutcomeKTwoEight": "ok",
-    "BlastTopologyKTwoEight": "ok (unreliable)",
+    "BlastTopologyKTwoEight": "ok (provisional)",
     "MaxBlastsPThree": 10,
     "BlastOutcomePThree": "ok",
-    "BlastTopologyPThree": "ok (unreliable)",
+    "BlastTopologyPThree": "ok (provisional)",
     "MaxBlastsNested": 8,
     "BlastOutcomeNested": "ok",
     "BlastTopologyNested": "ok",
@@ -2710,6 +2710,660 @@
    "records": 10,
    "outcomes": {
     "ok": 10
+   }
+  },
+  "e11_blast_depth": {
+   "findings": {
+    "DeepConfigs": 53,
+    "DeepConfigsOk": 53,
+    "DeepMaxBlasts": 20,
+    "DeepBlasts": 886,
+    "DeepSnapshots": 939,
+    "DeepSnapshotsOk": 802,
+    "DeepStopMaxBlasts": 22,
+    "DeepStopBudget": 8,
+    "DeepStopMemoryBudget": 23,
+    "DeepWallMin": 24.021361446380617,
+    "DeepSameStability": 0,
+    "DeepCdistDecreasing": 0,
+    "DeepLawViolations": 0,
+    "DeepLobeCompared": 5276.0,
+    "DeepLobeRatioMedian": 1.223937349426052e-05,
+    "DeepLobeRatioMax": 2.287466821619618,
+    "DeepLobeRatioMaxWhere": null,
+    "DeepLobeRatioMaxReference": 0.05143479811034157,
+    "DeepLobeSignFlips": 4,
+    "DeepStructureSteps": 490,
+    "DeepRelabelSteps": 3,
+    "DeepNoChangeSteps": 256,
+    "DeepErrorSnapshots": 137,
+    "DeepErrorConfigs": 23,
+    "DeepErrorClasses": 4,
+    "DeepErrorAsserts": 136,
+    "DeepErrorExceptions": 1,
+    "DeepErrZeroWidthSnapshots": 94,
+    "DeepErrZeroWidthConfigs": 17,
+    "DeepErrZeroWidthBlasts": null,
+    "DeepErrOuterFacesSnapshots": 1,
+    "DeepErrOuterFacesConfigs": 1,
+    "DeepErrOuterFacesBlasts": null,
+    "DeepErrHoleSideSnapshots": 3,
+    "DeepErrHoleSideConfigs": 2,
+    "DeepErrHoleSideBlasts": null,
+    "DeepErrBridgeRowsSnapshots": 39,
+    "DeepErrBridgeRowsConfigs": 4,
+    "DeepErrBridgeRowsBlasts": null,
+    "DeepBlastsKTwoEight": 15,
+    "DeepStopKTwoEight": "memory budget",
+    "DeepCrossingsStartKTwoEight": 4,
+    "DeepCrossingsEndKTwoEight": 7792,
+    "DeepClassesStartKTwoEight": 3,
+    "DeepClassesEndKTwoEight": 57,
+    "DeepClassesEndBlastKTwoEight": 15,
+    "DeepActiveEndKTwoEight": 52,
+    "DeepInertEndKTwoEight": 5,
+    "DeepFirstStructureKTwoEight": 1,
+    "DeepStructureChangesKTwoEight": 4,
+    "DeepJumpBlastKTwoEight": 8,
+    "DeepJumpBeforeKTwoEight": 4,
+    "DeepJumpAfterKTwoEight": 20,
+    "DeepCrossingGrowthKTwoEight": 1.6137408397409272,
+    "DeepPointGrowthKTwoEight": 1.648880837814118,
+    "DeepTimeGrowthKTwoEight": 1.6872091525459527,
+    "DeepLastBlastSKTwoEight": 74.44588124001166,
+    "DeepPeakRssGbKTwoEight": 9.014358520507812,
+    "DeepUnresolvedEndKTwoEight": 12,
+    "DeepVirtualEndKTwoEight": 1,
+    "DeepAmbiguousEndKTwoEight": 3,
+    "DeepReliableEndKTwoEight": false,
+    "DeepProvisionalStartKTwoEight": true,
+    "DeepFirstProvisionalKTwoEight": 8,
+    "DeepErrorsKTwoEight": 6,
+    "DeepErrorBlastsKTwoEight": null,
+    "DeepErrorCellsKTwoEight": 11,
+    "DeepCellsKTwoEight": 12,
+    "DeepSeparationIdenticalKTwoEight": null,
+    "DeepRepeatIdenticalKTwoEight": null,
+    "DeepCutoffEightWordsKTwoEight": null,
+    "DeepCutoffEightCrossingsKTwoEight": 9,
+    "DeepCutoffEightOutcomeKTwoEight": 9,
+    "DeepCutoffEightClassesKTwoEight": 39,
+    "DeepCutoffEightBlastsKTwoEight": 13,
+    "DeepCutoffSixWordsKTwoEight": 15,
+    "DeepCutoffSixCrossingsKTwoEight": 10,
+    "DeepCutoffSixOutcomeKTwoEight": 9,
+    "DeepCutoffSixClassesKTwoEight": 57,
+    "DeepCutoffSixBlastsKTwoEight": 17,
+    "DeepCutoffFiveWordsKTwoEight": 7,
+    "DeepCutoffFiveCrossingsKTwoEight": 11,
+    "DeepCutoffFiveOutcomeKTwoEight": 9,
+    "DeepCutoffFiveClassesKTwoEight": 69,
+    "DeepCutoffFiveBlastsKTwoEight": 17,
+    "DeepDoubleCrossingsAgreeKTwoEight": 4,
+    "DeepDoubleWordsSameKTwoEight": null,
+    "DeepDoubleWordsDifferKTwoEight": null,
+    "DeepDoubleComparedKTwoEight": 8,
+    "DeepDoubleBlastsKTwoEight": 9,
+    "DeepBlastsKThreeTwo": 14,
+    "DeepStopKThreeTwo": "memory budget",
+    "DeepCrossingsStartKThreeTwo": 4,
+    "DeepCrossingsEndKThreeTwo": 6757,
+    "DeepClassesStartKThreeTwo": 3,
+    "DeepClassesEndKThreeTwo": 37,
+    "DeepClassesEndBlastKThreeTwo": 8,
+    "DeepActiveEndKThreeTwo": 32,
+    "DeepInertEndKThreeTwo": 5,
+    "DeepFirstStructureKThreeTwo": 1,
+    "DeepStructureChangesKThreeTwo": 8,
+    "DeepJumpBlastKThreeTwo": 8,
+    "DeepJumpBeforeKThreeTwo": 15,
+    "DeepJumpAfterKThreeTwo": 37,
+    "DeepCrossingGrowthKThreeTwo": 1.6688476180008418,
+    "DeepPointGrowthKThreeTwo": 1.701570298257678,
+    "DeepTimeGrowthKThreeTwo": 1.7497346891156351,
+    "DeepLastBlastSKThreeTwo": 72.02438128896756,
+    "DeepPeakRssGbKThreeTwo": 7.589946746826172,
+    "DeepUnresolvedEndKThreeTwo": 2,
+    "DeepVirtualEndKThreeTwo": 1,
+    "DeepAmbiguousEndKThreeTwo": 0,
+    "DeepReliableEndKThreeTwo": false,
+    "DeepProvisionalStartKThreeTwo": true,
+    "DeepFirstProvisionalKThreeTwo": 6,
+    "DeepErrorsKThreeTwo": 6,
+    "DeepErrorBlastsKThreeTwo": null,
+    "DeepErrorCellsKThreeTwo": 8,
+    "DeepCellsKThreeTwo": 10,
+    "DeepSeparationIdenticalKThreeTwo": null,
+    "DeepCutoffEightWordsKThreeTwo": 6,
+    "DeepCutoffEightCrossingsKThreeTwo": 9,
+    "DeepCutoffEightOutcomeKThreeTwo": 9,
+    "DeepCutoffEightClassesKThreeTwo": 27,
+    "DeepCutoffEightBlastsKThreeTwo": 13,
+    "DeepCutoffSixWordsKThreeTwo": 6,
+    "DeepCutoffSixCrossingsKThreeTwo": 10,
+    "DeepCutoffSixOutcomeKThreeTwo": 9,
+    "DeepCutoffSixClassesKThreeTwo": 92,
+    "DeepCutoffSixBlastsKThreeTwo": 16,
+    "DeepCutoffFiveWordsKThreeTwo": 6,
+    "DeepCutoffFiveCrossingsKThreeTwo": 10,
+    "DeepCutoffFiveOutcomeKThreeTwo": 9,
+    "DeepCutoffFiveClassesKThreeTwo": 89,
+    "DeepCutoffFiveBlastsKThreeTwo": 16,
+    "DeepDoubleCrossingsAgreeKThreeTwo": 4,
+    "DeepDoubleWordsSameKThreeTwo": null,
+    "DeepDoubleWordsDifferKThreeTwo": null,
+    "DeepDoubleComparedKThreeTwo": 8,
+    "DeepDoubleBlastsKThreeTwo": 9,
+    "DeepBlastsPThree": 20,
+    "DeepStopPThree": "all blasts",
+    "DeepCrossingsStartPThree": 30,
+    "DeepCrossingsEndPThree": 198,
+    "DeepClassesStartPThree": 9,
+    "DeepClassesEndPThree": 51,
+    "DeepClassesEndBlastPThree": 20,
+    "DeepActiveEndPThree": 38,
+    "DeepInertEndPThree": 13,
+    "DeepFirstStructurePThree": 6,
+    "DeepStructureChangesPThree": 15,
+    "DeepJumpBlastPThree": 6,
+    "DeepJumpBeforePThree": 9,
+    "DeepJumpAfterPThree": 23,
+    "DeepClassStepPThree": 2,
+    "DeepCrossingGrowthPThree": 1.0828360597207556,
+    "DeepPointGrowthPThree": 1.059158650019204,
+    "DeepTimeGrowthPThree": 0.8015573150184666,
+    "DeepLastBlastSPThree": 0.01097774796653539,
+    "DeepPeakRssGbPThree": 0.38140106201171875,
+    "DeepUnresolvedEndPThree": 1,
+    "DeepVirtualEndPThree": 1,
+    "DeepAmbiguousEndPThree": 0,
+    "DeepReliableEndPThree": false,
+    "DeepProvisionalStartPThree": false,
+    "DeepFirstProvisionalPThree": 6,
+    "DeepErrorsPThree": 0,
+    "DeepErrorBlastsPThree": null,
+    "DeepErrorCellsPThree": 2,
+    "DeepCellsPThree": 11,
+    "DeepSeparationIdenticalPThree": null,
+    "DeepRepeatIdenticalPThree": null,
+    "DeepCutoffEightWordsPThree": 6,
+    "DeepCutoffEightCrossingsPThree": 9,
+    "DeepCutoffEightOutcomePThree": null,
+    "DeepCutoffEightClassesPThree": 51,
+    "DeepCutoffEightBlastsPThree": 20,
+    "DeepCutoffSixWordsPThree": 4,
+    "DeepCutoffSixCrossingsPThree": 7,
+    "DeepCutoffSixOutcomePThree": null,
+    "DeepCutoffSixClassesPThree": 41,
+    "DeepCutoffSixBlastsPThree": 20,
+    "DeepCutoffFiveWordsPThree": 3,
+    "DeepCutoffFiveCrossingsPThree": 6,
+    "DeepCutoffFiveOutcomePThree": 6,
+    "DeepCutoffFiveClassesPThree": 50,
+    "DeepCutoffFiveBlastsPThree": 20,
+    "DeepDoubleCrossingsAgreePThree": 10,
+    "DeepDoubleWordsSamePThree": null,
+    "DeepDoubleWordsDifferPThree": null,
+    "DeepDoubleComparedPThree": 11,
+    "DeepDoubleBlastsPThree": 20,
+    "DeepBlastsNestedOuter": 15,
+    "DeepStopNestedOuter": "memory budget",
+    "DeepCrossingsStartNestedOuter": 34,
+    "DeepCrossingsEndNestedOuter": 9170,
+    "DeepClassesStartNestedOuter": 12,
+    "DeepClassesEndNestedOuter": 11,
+    "DeepClassesEndBlastNestedOuter": 15,
+    "DeepActiveEndNestedOuter": 3,
+    "DeepInertEndNestedOuter": 8,
+    "DeepFirstStructureNestedOuter": 1,
+    "DeepStructureChangesNestedOuter": 3,
+    "DeepJumpBlastNestedOuter": 2,
+    "DeepJumpBeforeNestedOuter": 12,
+    "DeepJumpAfterNestedOuter": 13,
+    "DeepDropBlastNestedOuter": 10,
+    "DeepDropBeforeNestedOuter": 13,
+    "DeepDropAfterNestedOuter": 11,
+    "DeepCrossingGrowthNestedOuter": 1.656144795943029,
+    "DeepPointGrowthNestedOuter": 1.6800015696264867,
+    "DeepTimeGrowthNestedOuter": 1.7661769835401022,
+    "DeepLastBlastSNestedOuter": 76.24502856400795,
+    "DeepPeakRssGbNestedOuter": 7.494453430175781,
+    "DeepUnresolvedEndNestedOuter": 0,
+    "DeepVirtualEndNestedOuter": 0,
+    "DeepAmbiguousEndNestedOuter": 0,
+    "DeepReliableEndNestedOuter": true,
+    "DeepProvisionalStartNestedOuter": true,
+    "DeepFirstProvisionalNestedOuter": null,
+    "DeepErrorsNestedOuter": 0,
+    "DeepErrorBlastsNestedOuter": null,
+    "DeepErrorCellsNestedOuter": 0,
+    "DeepCellsNestedOuter": 9,
+    "DeepSeparationIdenticalNestedOuter": null,
+    "DeepCutoffEightWordsNestedOuter": null,
+    "DeepCutoffEightCrossingsNestedOuter": 12,
+    "DeepCutoffEightOutcomeNestedOuter": null,
+    "DeepCutoffEightClassesNestedOuter": 11,
+    "DeepCutoffEightBlastsNestedOuter": 14,
+    "DeepCutoffSixWordsNestedOuter": 9,
+    "DeepCutoffSixCrossingsNestedOuter": 10,
+    "DeepCutoffSixOutcomeNestedOuter": null,
+    "DeepCutoffSixClassesNestedOuter": 12,
+    "DeepCutoffSixBlastsNestedOuter": 16,
+    "DeepCutoffFiveWordsNestedOuter": 8,
+    "DeepCutoffFiveCrossingsNestedOuter": 10,
+    "DeepCutoffFiveOutcomeNestedOuter": null,
+    "DeepCutoffFiveClassesNestedOuter": 12,
+    "DeepCutoffFiveBlastsNestedOuter": 16,
+    "DeepDoubleCrossingsAgreeNestedOuter": 3,
+    "DeepDoubleWordsSameNestedOuter": null,
+    "DeepDoubleWordsDifferNestedOuter": null,
+    "DeepDoubleComparedNestedOuter": 8,
+    "DeepDoubleBlastsNestedOuter": 11,
+    "DeepBlastsNestedInner": 20,
+    "DeepStopNestedInner": "all blasts",
+    "DeepCrossingsStartNestedInner": 40,
+    "DeepCrossingsEndNestedInner": 208,
+    "DeepClassesStartNestedInner": 13,
+    "DeepClassesEndNestedInner": 55,
+    "DeepClassesEndBlastNestedInner": 20,
+    "DeepActiveEndNestedInner": 41,
+    "DeepInertEndNestedInner": 14,
+    "DeepFirstStructureNestedInner": 6,
+    "DeepStructureChangesNestedInner": 15,
+    "DeepJumpBlastNestedInner": 6,
+    "DeepJumpBeforeNestedInner": 13,
+    "DeepJumpAfterNestedInner": 27,
+    "DeepClassStepNestedInner": 2,
+    "DeepCrossingGrowthNestedInner": 1.0778180677127258,
+    "DeepPointGrowthNestedInner": 1.0243518475198192,
+    "DeepTimeGrowthNestedInner": 1.274554449019057,
+    "DeepLastBlastSNestedInner": 0.06005682295653969,
+    "DeepPeakRssGbNestedInner": 0.3985176086425781,
+    "DeepUnresolvedEndNestedInner": 1,
+    "DeepVirtualEndNestedInner": 1,
+    "DeepAmbiguousEndNestedInner": 0,
+    "DeepReliableEndNestedInner": false,
+    "DeepProvisionalStartNestedInner": false,
+    "DeepFirstProvisionalNestedInner": 6,
+    "DeepErrorsNestedInner": 0,
+    "DeepErrorBlastsNestedInner": null,
+    "DeepErrorCellsNestedInner": 2,
+    "DeepCellsNestedInner": 11,
+    "DeepSeparationIdenticalNestedInner": null,
+    "DeepRepeatIdenticalNestedInner": null,
+    "DeepCutoffEightWordsNestedInner": 6,
+    "DeepCutoffEightCrossingsNestedInner": 9,
+    "DeepCutoffEightOutcomeNestedInner": null,
+    "DeepCutoffEightClassesNestedInner": 55,
+    "DeepCutoffEightBlastsNestedInner": 20,
+    "DeepCutoffSixWordsNestedInner": 4,
+    "DeepCutoffSixCrossingsNestedInner": 7,
+    "DeepCutoffSixOutcomeNestedInner": null,
+    "DeepCutoffSixClassesNestedInner": 45,
+    "DeepCutoffSixBlastsNestedInner": 20,
+    "DeepCutoffFiveWordsNestedInner": 3,
+    "DeepCutoffFiveCrossingsNestedInner": 6,
+    "DeepCutoffFiveOutcomeNestedInner": 6,
+    "DeepCutoffFiveClassesNestedInner": 54,
+    "DeepCutoffFiveBlastsNestedInner": 20,
+    "DeepDoubleCrossingsAgreeNestedInner": 5,
+    "DeepDoubleWordsSameNestedInner": null,
+    "DeepDoubleWordsDifferNestedInner": null,
+    "DeepDoubleComparedNestedInner": 11,
+    "DeepDoubleBlastsNestedInner": 20,
+    "DeepCutoffCells": 15,
+    "DeepCutoffWordsFirst": 12,
+    "DeepUnresolvedUnreachable": 44,
+    "DeepUnresolvedSingleton": 2,
+    "DeepUnresolvedSingletonStart": 3,
+    "DeepUnresolvedOtherStart": 0,
+    "DeepUnresolvedUnreachableEndKTwoEight": 10,
+    "DeepUnresolvedSingletonEndKTwoEight": 2,
+    "DeepCoarseCells": 6,
+    "DeepCoarseTimeStops": 6,
+    "DeepCoarseBlasts": null,
+    "DeepCoarseRss": null,
+    "DeepRefCutoffCells": 19,
+    "DeepRefCutoffTimeStops": 2,
+    "DeepRefCutoffMemoryStops": 17,
+    "DeepMeanBlastSPThree": 0.01100974050059449,
+    "DeepProcRssGbPThree": 0.4220428466796875,
+    "DeepPointsStartPThree": 908,
+    "DeepPointsEndPThree": 4332,
+    "DeepMeanBlastSNestedInner": 0.013017684151418508,
+    "DeepProcRssGbNestedInner": 0.4670753479003906,
+    "DeepPointsStartNestedInner": 6122,
+    "DeepPointsEndNestedInner": 9546,
+    "DeepAtESevenCrossingsKTwoEight": 712,
+    "DeepAtESevenOutcomeKTwoEight": null
+   },
+   "details": {
+    "errors": {
+     "zero-width iterated element": {
+      "where": "PartitionFamily.from_minimal",
+      "outcomes": [
+       "invariant_assert"
+      ],
+      "snapshots": 94,
+      "cells": [
+       [
+        "reference (sep 1e-05)",
+        "k28",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep none",
+        "k28",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep 1e-06",
+        "k28",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep 0.0001",
+        "k28",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep 0.001",
+        "k28",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep 0.01",
+        "k28",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "2 iterations / blast",
+        "k28",
+        [
+         5,
+         6,
+         7
+        ]
+       ],
+       [
+        "repeat 1",
+        "k28",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "repeat 2",
+        "k28",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "reference (sep 1e-05)",
+        "k32",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep none",
+        "k32",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep 1e-06",
+        "k32",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep 0.0001",
+        "k32",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep 0.001",
+        "k32",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "sep 0.01",
+        "k32",
+        [
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ]
+       ],
+       [
+        "cutoff 1e-08",
+        "k32",
+        [
+         12,
+         13
+        ]
+       ],
+       [
+        "2 iterations / blast",
+        "k32",
+        [
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       ]
+      ]
+     },
+     "several outer faces": {
+      "where": "DualGraph (arrangement component)",
+      "outcomes": [
+       "exception"
+      ],
+      "snapshots": 1,
+      "cells": [
+       [
+        "cutoff 1e-06",
+        "k28",
+        [
+         16
+        ]
+       ]
+      ]
+     },
+     "holes disagree on bridge side": {
+      "where": "check_holes_share_bridge_side",
+      "outcomes": [
+       "invariant_assert"
+      ],
+      "snapshots": 3,
+      "cells": [
+       [
+        "cutoff 1e-06",
+        "k28",
+        [
+         17
+        ]
+       ],
+       [
+        "cutoff 1e-05",
+        "k28",
+        [
+         16,
+         17
+        ]
+       ]
+      ]
+     },
+     "bridge rows disagree": {
+      "where": "check_bridge_rows_consistent",
+      "outcomes": [
+       "invariant_assert"
+      ],
+      "snapshots": 39,
+      "cells": [
+       [
+        "cutoff 1e-05",
+        "p3",
+        [
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19
+        ]
+       ],
+       [
+        "2 iterations / blast",
+        "p3",
+        [
+         15,
+         16,
+         17,
+         18,
+         19,
+         20
+        ]
+       ],
+       [
+        "cutoff 1e-05",
+        "nested_inner",
+        [
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19
+        ]
+       ],
+       [
+        "2 iterations / blast",
+        "nested_inner",
+        [
+         16,
+         17,
+         18,
+         19,
+         20
+        ]
+       ]
+      ]
+     }
+    }
+   },
+   "notes": [],
+   "source": "full",
+   "file": "e11_blast_depth.jsonl",
+   "records": 53,
+   "outcomes": {
+    "ok": 53
    }
   }
  }
