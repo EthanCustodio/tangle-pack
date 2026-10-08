@@ -9,8 +9,12 @@ is registered explicitly rather than inferred.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pytest
+
+from helpers.logs import assert_logged
 
 from tanglepack.numerics.BaseManifold import BaseManifold
 from tanglepack.numerics.Bridge import Bridge
@@ -20,20 +24,25 @@ from tanglepack.numerics.Point import Point
 # --------------------------------------------------------------------------- #
 # 2.1 -- resolved crossings live in the registry only
 # --------------------------------------------------------------------------- #
-def test_compute_intersections_returns_one_coord_per_registered_crossing(grown_both):
-    """The returned coords are the registry's, read back independently.
+def test_compute_intersections_returns_the_registry_it_installs(grown_both, caplog):
+    """The return value is the workbench's NEW registry; the old one is stale.
 
-    Independently: the expected list is rebuilt from the registry BY ID rather than
-    by re-evaluating the comprehension the method returns, so the test would catch
-    a return value that dropped, duplicated, or reordered a crossing.
+    A reference taken before the call keeps the old object (that is the trap the
+    return value and the DEBUG record exist for), so the test holds one across
+    the recompute and checks it is not what the workbench now serves.
     """
     workbench, fp = grown_both
-    coords = workbench.compute_intersections([fp], infer_iterates=False)
-    registry = workbench.intersection_registry
+    caplog.set_level(logging.DEBUG, logger="tanglepack.numerics.TangleWorkbench")
+    first = workbench.compute_intersections([fp], infer_iterates=False)
+    assert first is workbench.intersection_registry
+    assert len(first) > 0
 
-    assert len(coords) == len(registry) > 0
-    for coord, iid in zip(coords, registry.all_ids()):
-        assert coord == registry[iid].coords
+    second = workbench.compute_intersections([fp], infer_iterates=False)
+
+    assert second is workbench.intersection_registry
+    assert second is not first
+    # one record: replacing the empty registry of the first call is not logged
+    assert_logged(caplog, "DEBUG", "tanglepack.numerics.TangleWorkbench", count=1)
 
 
 def test_trim_stable_manifolds_reads_the_registry(grown_both):

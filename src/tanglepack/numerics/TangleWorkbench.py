@@ -973,7 +973,7 @@ class TangleWorkbench:
         reset: bool = True,
         infer_iterates: bool = True,
         preserve_ids: bool = False,
-    ) -> list[tuple[float, float]]:
+    ) -> IntersectionRegistry:
         """
         Compute intersections among the manifolds of one or more fixed points.
 
@@ -1000,13 +1000,24 @@ class TangleWorkbench:
                 the growth loops renumber freely.
 
         Returns:
-            List of (x, y) coordinates, one per detected crossing.
+            The registry the workbench now holds. With ``reset`` (the default)
+            this is a NEW object: a reference to :attr:`intersection_registry`
+            taken before the call is stale (its crossings and ids belong to the
+            old manifolds), so re-fetch the registry after every call or use
+            this return value. Coordinates are ``[ix.coords for _, ix in
+            registry]``.
         """
         if isinstance(fixed_points, FixedPoint):
             fixed_points = [fixed_points]
 
         old_registry = self._intersection_registry
         if reset:
+            if len(old_registry) > 0:
+                logger.debug(
+                    "compute_intersections replaces a registry of %d crossings; "
+                    "references to the old one are stale",
+                    len(old_registry),
+                )
             self.Tangle.clear_all()
             self._intersection_registry = IntersectionRegistry()
             # The registry object itself changed; its own generation restarts at
@@ -1038,7 +1049,7 @@ class TangleWorkbench:
         if infer_iterates:
             self.infer_iterates()
 
-        return [ix.coords for _iid, ix in self._intersection_registry]
+        return self._intersection_registry
 
     def _register_anchors(self, fixed_points: Iterable[FixedPoint]) -> list[int]:
         """
@@ -1431,7 +1442,13 @@ class TangleWorkbench:
 
     @property
     def intersection_registry(self) -> IntersectionRegistry:
-        """The single source of truth for this workbench's crossings."""
+        """The single source of truth for this workbench's crossings.
+
+        Note:
+            :meth:`compute_intersections` replaces this object (unless
+            ``reset=False``), so re-fetch it after every call rather than
+            holding a reference across one.
+        """
         return self._intersection_registry
 
     def iterate_bridge(self, bridge: Bridge) -> list[Bridge]:
