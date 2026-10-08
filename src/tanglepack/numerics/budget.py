@@ -83,7 +83,8 @@ class PointBudgetExceeded(RuntimeError):
 @dataclass(frozen=True)
 class GrowthStats:
     """
-    What the last growth step of one manifold cost (``workbench.growth_stats``).
+    What the last growth step of one manifold branch cost
+    (``workbench.growth_stats``).
 
     Attributes:
         points_created: Points the step created over its whole ``k_value`` chain.

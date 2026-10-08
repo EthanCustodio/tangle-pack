@@ -165,7 +165,9 @@ class TangleWorkbench:
         )
         self._man_maker = ManifoldInitializer(self.dynamical_system, self._man_machine)
         self.escape_radius = escape_radius
-        self._growth_stats: dict[tuple[FixedPoint, Stability], GrowthStats] = {}
+        self._growth_stats: dict[
+            tuple[FixedPoint, Stability, Optional[int]], GrowthStats
+        ] = {}
 
         self.Tangle = Tangle()
 
@@ -236,21 +238,42 @@ class TangleWorkbench:
         self._man_machine.max_points_per_step = value
 
     def growth_stats(
-        self, fixed_point: FixedPoint, stability: Stability
+        self,
+        fixed_point: FixedPoint,
+        stability: Stability,
+        branch_index: Optional[int] = 0,
     ) -> Optional[GrowthStats]:
         """
-        What the last completed growth step of one manifold cost.
+        What the last completed growth step of one manifold branch cost.
 
         Args:
             fixed_point: The fixed point whose manifold grew.
             stability: Which manifold.
+            branch_index: The ``branch_index`` the step was grown with (None =
+                every branch at once). Ignored on an inversion point, whose one
+                chain covers both branches.
 
         Returns:
             The :class:`~.budget.GrowthStats` of the last step
-            :meth:`grow_n_times` completed (every branch of the manifold
-            together), or None before the first.
+            :meth:`grow_n_times` completed with that branch selection, or None
+            before the first. Steps of different branches are never compared,
+            so the growth factor always relates one branch to itself.
         """
-        return self._growth_stats.get((fixed_point, stability))
+        return self._growth_stats.get(
+            self._growth_key(fixed_point, stability, branch_index)
+        )
+
+    @staticmethod
+    def _growth_key(
+        fixed_point: FixedPoint, stability: Stability, branch_index: Optional[int]
+    ) -> tuple[FixedPoint, Stability, Optional[int]]:
+        """The ``growth_stats`` key: an inversion point grows one chain whatever
+        branch is asked for."""
+        return (
+            fixed_point,
+            stability,
+            None if fixed_point.check_inversion() else branch_index,
+        )
 
     # ── generation ───────────────────────────────────────────────────────────
 
@@ -417,6 +440,10 @@ class TangleWorkbench:
 
         Raises:
             ValueError: If ``num_branches`` is neither 1 nor 2.
+            PointBudgetExceeded: If refining the initial segments of a
+                ``k_value > 1`` orbit (which maps them along the chain) would
+                create more than :attr:`max_points_per_step` points. Nothing of
+                this manifold is registered then.
         """
 
         initial_segments = self._man_maker.construct_kevin_way(
@@ -445,6 +472,9 @@ class TangleWorkbench:
 
         Returns:
             ``(unstable_segments, stable_segments)``.
+
+        Raises:
+            PointBudgetExceeded: As :meth:`initialize_manifold`.
         """
 
         unstable_segments = self.initialize_manifold(
@@ -496,7 +526,7 @@ class TangleWorkbench:
         self._require_manifold(fixed_point, stability, branch_index)
 
         machine = self._man_machine
-        key = (fixed_point, stability)
+        key = self._growth_key(fixed_point, stability, branch_index)
         try:
             for _ in range(num_iterations):
                 last = self._growth_stats.get(key)
@@ -671,7 +701,8 @@ class TangleWorkbench:
 
         for step in range(1, max_iterations + 1):
             self.grow_n_times(fixed_point, stability, 1, growth_branch)
-            if self._growth_stats[(fixed_point, stability)].max_abs_coord > radius:
+            stats = self.growth_stats(fixed_point, stability, growth_branch)
+            if stats.max_abs_coord > radius:
                 return step
 
         raise ValueError(
