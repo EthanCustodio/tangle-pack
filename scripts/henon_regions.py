@@ -35,12 +35,15 @@ OUT_PATH = FIGURES_DIR / "henon_regions.png"
 
 K, B = 10, 1
 UNSTABLE_ITERATIONS = 10
+# Pinned, not the library default: at 1e-7 ten k=10 steps cost ~10x the points
+# for the same topology.
+AREA_CUTOFF = 1e-4
 
 
 def build_session() -> tuple[tanglepack.TangleSession, object]:
     """Grow the k=10 tangle far enough to enclose a handful of regions."""
     session = tanglepack.TangleSession(
-        henon_map(K, B), henon_map_inverse(K, B), henon_jacobian(K, B)
+        henon_map(K, B), henon_map_inverse(K, B), henon_jacobian(K, B), area_cutoff=AREA_CUTOFF
     )
     fp = session.construct_fixed_point(saddle_guesses(K, B)["saddle"])
     session.orient_eigenvectors(

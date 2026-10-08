@@ -39,7 +39,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import matplotlib
 
@@ -83,16 +83,18 @@ class Case:
         k: The Hénon ``k`` parameter (``b = 1`` throughout).
         unstable_steps: How many map steps to grow the unstable manifold.
         pip: ``"default"`` for the primary crossing q0, ``"image"`` for f(q0).
+        area_cutoff: The manifold machine's refinement area cutoff, always
+            explicit (k=10 at 1e-4: ten steps at the library's 1e-7 cost ~10x
+            the points for the same topology).
         blasts: How many single-iteration blasts of the zone to run after
             trimming.
-        area_cutoff: Optional refinement area cutoff for the manifold machine.
     """
 
     k: float
     unstable_steps: int
     pip: Literal["default", "image"]
+    area_cutoff: float
     blasts: int = 0
-    area_cutoff: Optional[float] = None
 
     @property
     def title(self) -> str:
@@ -102,7 +104,7 @@ class Case:
 
 
 CASES = [
-    Case(k=10, unstable_steps=10, pip="image"),
+    Case(k=10, unstable_steps=10, pip="image", area_cutoff=1e-4),
     Case(k=2.8, unstable_steps=10, pip="image", blasts=1, area_cutoff=1e-7),
     Case(k=2.8, unstable_steps=10, pip="image", blasts=2, area_cutoff=1e-7),
 ]
@@ -159,10 +161,11 @@ def build(case: Case) -> tuple[TangleSession, object, np.ndarray]:
         nodes captured BEFORE the trim at the pip, for framing.
     """
     session = TangleSession(
-        henon_map(case.k, 1), henon_map_inverse(case.k, 1), henon_jacobian(case.k, 1)
+        henon_map(case.k, 1),
+        henon_map_inverse(case.k, 1),
+        henon_jacobian(case.k, 1),
+        area_cutoff=case.area_cutoff,
     )
-    if case.area_cutoff is not None:
-        session.workbench._man_machine.area_cutoff = case.area_cutoff
     fp = session.construct_fixed_point(SADDLE_GUESS)
     session.orient_eigenvectors(
         fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}

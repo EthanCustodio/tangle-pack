@@ -44,6 +44,9 @@ OUT_PATH = FIGURES_DIR / "henon_k10_dual_graph.png"
 
 SADDLE_GUESS = [4, -4]
 UNSTABLE_STEPS = 10
+# Pinned, not the library default: at 1e-7 ten k=10 steps cost ~10x the points
+# for the same topology.
+AREA_CUTOFF = 1e-4
 
 # Which strong pip to cut at. "default" is the candidate with the smallest
 # unstable cdist (the primary crossing q0, outermost on the stable branch);
@@ -146,7 +149,9 @@ def _choose_pip(session: TangleSession, fp) -> int:
 def main() -> None:
     """Run the pipeline, log the dual graph, save the figure."""
     # 1. The map and the saddle.
-    session = TangleSession(henon_map(*HENON_K10), henon_map_inverse(*HENON_K10))
+    session = TangleSession(
+        henon_map(*HENON_K10), henon_map_inverse(*HENON_K10), area_cutoff=AREA_CUTOFF
+    )
     fp = session.construct_fixed_point(SADDLE_GUESS)
     session.orient_eigenvectors(
         fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}

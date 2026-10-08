@@ -22,7 +22,7 @@ henon_map_inverse = _henon_map_inverse_factory(*HENON_K10)
 henon = tanglepack.DynamicalSystem(henon_map, henon_map_inverse)
 fp_solver = tanglepack.FixedPointSolver(henon)
 man_maker = tanglepack.ManifoldInitializer(henon)
-man_machine = tanglepack.ManifoldMachine(henon)
+man_machine = tanglepack.ManifoldMachine(henon, area_cutoff=1e-4)
 
 initial_guess = [4, -4]
 

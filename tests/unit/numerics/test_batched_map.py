@@ -86,7 +86,7 @@ def test_scalar_only_map_falls_back():
 
 def _grow(m, im):
     """Seed the k=10 saddle with maps ``m``/``im`` and grow its unstable branch 5 times."""
-    wb = tanglepack.TangleWorkbench(m, im, _jac)
+    wb = tanglepack.TangleWorkbench(m, im, _jac, area_cutoff=1e-4)
     fp = wb.construct_fixed_point(saddle_guesses(*HENON_K10)["saddle"])
     wb.orient_eigenvectors(
         fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}

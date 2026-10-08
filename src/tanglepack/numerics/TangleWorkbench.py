@@ -207,7 +207,10 @@ class TangleWorkbench:
             dynamical_map_inverse (MapFunc): Its inverse.
             jacobian_function (Optional[JacFunc]): Analytic Jacobian; a
                 finite-difference one is used when it is omitted.
-            area_cutoff (float): Refinement threshold of the shared machine.
+            area_cutoff (float): Refinement threshold of the shared machine;
+                :data:`~.ManifoldMachine.DEFAULT_AREA_CUTOFF` (1e-7, converged)
+                by default. Pass a coarser one (1e-4: ~10x fewer points) only
+                for a recipe whose topology is known not to depend on it.
             max_points_per_step (Optional[int]): Its per-step point budget;
                 ``None`` disables it.
             escape_radius (Optional[float]): ``max|coordinate|`` above which a
@@ -614,7 +617,10 @@ class TangleWorkbench:
             a refusal: past escape it underestimates by an order of magnitude),
             and with :attr:`escape_radius` set a step reaching it warns too.
             Prefer the stop-condition drivers (:meth:`grow_until_bounded`,
-            :meth:`grow_until_turnaround`, :meth:`grow_until`).
+            :meth:`grow_until_turnaround`, :meth:`grow_until`). At the default
+            :attr:`area_cutoff` (1e-7) a step makes ~10x the points it made at
+            the old 1e-4, so a count tuned at 1e-4 can now run into the budget
+            (k=10: 11 steps at 1e-7 is ~2e7 points).
 
             One iteration stretches a branch by ``per_step_beta("unstable")``
             (``lambda_u`` per map step), so the depth a tangle needs scales with
@@ -778,7 +784,9 @@ class TangleWorkbench:
 
         The escape stop: an arm leaving the trapped region is caught on the step
         it crosses ``radius``, before the steps whose point count explodes (the
-        stress campaign's E7 found it the one stop condition that does).
+        stress campaign's E7 found it the one stop condition that does). The
+        driver to prefer at the default :attr:`area_cutoff` (1e-7), where a step
+        past escape costs ~10x the points it did at the old 1e-4.
 
         Args:
             fixed_point (FixedPoint): The fixed point whose manifold is grown.

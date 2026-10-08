@@ -24,7 +24,7 @@ henon_jacobian = _henon_jacobian_factory(*HENON_P3)
 henon = tanglepack.DynamicalSystem(henon_map, henon_map_inverse, henon_jacobian)
 fp_solver = tanglepack.FixedPointSolver(henon)
 man_maker = tanglepack.ManifoldInitializer(henon)
-man_machine = tanglepack.ManifoldMachine(henon)
+man_machine = tanglepack.ManifoldMachine(henon, area_cutoff=1e-4)
 
 man_machine.area_cutoff = 1e-7
 

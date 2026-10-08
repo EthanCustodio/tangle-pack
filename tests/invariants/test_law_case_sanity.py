@@ -1,6 +1,7 @@
 """Law tier: every law case really is the case it claims to be.
 
-Each case builds through the full pipeline (every product non-empty), its
+Each case builds through the full pipeline (every product non-empty) at the
+``area_cutoff`` its builder froze (never the library default), its
 ``k_value`` is ``2 * period`` exactly on an inversion point (the k=10 saddle
 at ``(-2.3166, 2.3166)``: both eigenvalues negative, det J = +1, NOT
 orientation reversing), the map is area preserving at every orbit point
