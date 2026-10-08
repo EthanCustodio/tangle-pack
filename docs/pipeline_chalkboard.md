@@ -25,7 +25,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
 1. **Trellis.** Input: finite pieces of the manifolds. Output: the finite crossing set N, each crossing = (unstable branch, c_u, stable branch, c_s, sign = sgn(u+ × s+)), plus the anchors.
    - Law: u×u, s×s and self-crossings cannot happen. When one shows up it is a numerical artifact, never a crossing.
    - The rotation at every node is fixed by `sign` alone.
-   - ★ Inversion: the anchor is ONE point with two stable and two unstable branches attached. Each branch has its own left and right side; the left of stable branch 0.0 is the same region as the right of 0.1.
+   - ★ Inversion: the anchor is ONE point with two stable and two unstable branches attached. Each branch has its own left and right side; the left of stable branch 0.0 is the same region as the right of 0.1. A bridge of u(o,b) leaving the anchor meets s(o,b) there (C7), whose sign is the anchor's own.
 
 2. **Iterate table.** M(crossing) is another crossing, or absent.
    - Topology only looks crossings up in the table. Where a link is absent, it predicts with `advance_key` and β-scaling; it never calls the map.
@@ -76,7 +76,7 @@ From the audit; the details and evidence are in `open_issues.md`.
 
 | Stage | Divergence | Issue | WP |
 |---|---|---|---|
-| 1 | Four coincident anchors at an inversion point | INV-1 | WP3 |
+| 1 | Four coincident anchors at an inversion point | INV-1 | fixed (WP3) |
 | 2 | Iterate table filled by a 5% cdist heuristic, never after a blast | INT-6, BCG-3 | fixed (WP2) |
 | 4 | Lap factor λ_u instead of β^k | INV-2 | fixed (WP2) |
 | 4 | Missing table links leave branches without holes | PK-3 | WP5 |

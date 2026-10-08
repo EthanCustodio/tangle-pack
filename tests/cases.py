@@ -669,8 +669,8 @@ def build_inversion(*, blasts: int = 0, through: Stage = "partitioned") -> Case:
 
     Both eigenvalues are negative (-1.96 and -0.51), so ``k_value = 2 *
     period`` and the two branches of each manifold are one chain; det J = +1,
-    so the map is orientation preserving. ``orient_eigenvectors`` is a no-op
-    under inversion (INV-8) and is not called. 11 unstable and 11 stable steps
+    so the map is orientation preserving. ``orient_eigenvectors`` is not called
+    (the solver's eigenvectors pick branch 0). 11 unstable and 11 stable steps
     at ``area_cutoff = 1e-5`` (step 12 escapes), then the k=2.8 zone recipe
     (:func:`_zone_at_image_pip`).
 

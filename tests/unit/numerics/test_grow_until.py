@@ -28,11 +28,10 @@ Note:
     available to test.
 
 Dev Notes:
-    The anchor never closes under the arrangement's current anchor model (one
-    anchor per (unstable branch, stable branch) pair, virtual stubs in the
-    ``u-``/``s-`` slots; the "Inversion caveat" Dev Note of
-    ``tanglepack.topology.Arrangement``). That is a provisional limitation, not
-    a rule, so it is not pinned (the old
+    A crossing on the outer envelope never closes, and a non-inversion anchor
+    seeded on one eigendirection keeps virtual ``u-``/``s-`` stubs (the other
+    half of each manifold is not computed); an inversion anchor is one
+    degree-4 node since WP3 (API-5). Neither is pinned (the old
     ``test_faces_closed_raises_at_the_cap_for_the_anchor`` was deleted in the
     2026-10-05 refactor); the cap itself is covered by
     ``test_driver_raises_at_the_cap_after_growing``.

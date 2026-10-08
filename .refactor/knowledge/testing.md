@@ -187,3 +187,40 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 - Series after WP2: inversion holes [1, 9, 9], classes [6, 11, 11]; p3 classes
   9 x6, 23, 25, 27, 28 (last step 29 -> 28); k28 unchanged. p3 at ten blasts: 62 detected
   forward links (+3 anchor links), 29 classes (31 on base).
+
+## Open-issues round WP3 (2026-10-08, branch `oi/wp03-inversion`, base `c16e75d`)
+
+- Suite: 905 passed, 25 skipped, 3 deselected, 21 xfailed, ~103 s (base on the same machine
+  877 passed / 19 skipped / 34 xfailed, 104 s). KNOWN_ISSUES 34 -> 21, no WP3 entry left: 13
+  pairs XPASSed and were removed; `anchor_bridge_class_leads_its_tangle` x `inversion` re-tagged
+  WP5 (PK-3) and `arrangement_euler` x `inversion_two_blasts` WP7 (INT-9).
+- New law case `inversion_period2` (`build_inversion_period2`: k=4.1, `HENON_K41`, frozen seed
+  `K41_INVERSION_PERIOD2_SEED`, 1e-5, 9/9 steps, no zone, default strong pip); in LAW_CASES and
+  BUILDERS; NOT_APPLICABLE `iterated_cut_provenance`, `refined_children_inherit_word`,
+  `member_matching_consistent`. Main fails 7 laws on it. At 10 steps it fails 11 laws on the
+  branch (all failing on main too): deep period-k, PK-1 evidence.
+- Laws: `one_anchor_per_unstable_branch` REPLACED by `one_anchor_per_periodic_point` (one anchor
+  per point, first on every trellis branch); new `anchor_rays_are_its_branches` (anchors layer)
+  and `anchor_opening_faces_its_hole` (partition layer; NA on k10, k28_two_blasts, inversion).
+  Adapted, not weakened: `bridge_id_in_unstable_order` (no two-anchor exemption),
+  `bridge_endpoints_on_own_branch` (an anchor end is the bridge's own point's anchor, still in
+  span), `_element_ends` / `bridge_rows_consistent` / iterated laws read an anchor end through
+  the independent `_stable_branch_at` (C7), opening laws check the record's branch
+  (`_opening_row`, `_anchor_row` from the home sign), `partition_covers_branch` matches row AND
+  branch.
+- New tests (all fail on base except the INV-7 characterization, which is behaviour-preserving):
+  regression `test_inversion_before_the_tangle_forms` (C1), `test_inversion_zone` (INV-5);
+  unit `test_a_periodic_point_is_one_anchor_of_all_its_branches`,
+  `test_iterating_an_anchor_rooted_inversion_bridge_cuts_identified_children` (INV-10),
+  `test_growing_an_inversion_point_logs_no_branch_index_warning` (INV-9),
+  `test_orient_eigenvectors_acts_on_an_inversion_point` (INV-8),
+  `test_kevin_way_seeds_one_chain_per_eigendirection` (INV-7, passes on base),
+  `ring_cycles` tests in `test_resonance_zone.py` (import fails on base),
+  `test_cross_side_is_flagged_only_within_one_branch` (INV-6),
+  `test_the_inversion_anchor_is_one_node_with_four_real_rays`.
+- Fakes borrow the new rules (`FakeTrellis` / `_ClassTrellis` / iterated-cut `_FakeTrellis`:
+  `unstable_key_of`, `stable_key_at`, `is_anchor=False`; `_OwnerFamily.owner_at_end`); hand-built
+  openings are 4-tuples naming the crossing's branch; `test_generation_and_caches` fake keys are
+  4-tuples. Deleted: `test_num_branches_agrees_with_get_branch_array` (API gone).
+- WP1 deferred (b): the `henon_inversion*` numerics fixtures STAY on k=10 (no tangle needed, or
+  bridges at 6 steps, which k=4 only reaches at 10-11; the k=4 saddle is already the law case).

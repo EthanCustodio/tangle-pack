@@ -70,3 +70,16 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
 - Cost: blasting dominates (p1 8 blasts ~4 s; nested 8+8 ~5 s); every topology stage after it is
   < 0.2 s even at 400 crossings. Inside `iterate_bridge`: `Tangle.add_manifold` segment
   bookkeeping + rtree queries ~50 %, `refine_manifold` ~30 % (cProfile, p1 8 blasts).
+
+## Open-issues round WP3 (2026-10-08, branch `oi/wp03-inversion`)
+
+- `ResonanceZone.ring_cycles(cuts)`: from a cut's stable branch `s(o,b)` to the cut on
+  `u(o,b)` (FULL key, not orbit index). A period-k orbit closes one cycle; an inversion point
+  one loop per branch pair, both through its anchor; a run reaching a branch with no cut stops
+  open. `_build_boundary` emits each cycle `u` arc out, `s` arc back; non-inversion polygons are
+  the same cycle (areas equal to 12 digits; the ring starts at an anchor instead of a pip).
+  `TangleSession._zone_ring_order` reuses it (empty when a cycle does not close).
+- One zone per fixed point (C8): `ResonanceZone.key` is the fixed point,
+  `session.resonance_zones[fp]`, `_blast_stats[fp]`, `zone_label` "zone p<period>";
+  `ResonanceZone.branch_index` deleted. Inversion zone area 1.412087 (was 1.232), which changes
+  the bridges the inversion blasts iterate (classes 4 / 10 / 10, was 6 / 11 / 11).

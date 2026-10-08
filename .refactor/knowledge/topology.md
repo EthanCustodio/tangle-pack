@@ -77,25 +77,9 @@ depth; the rest of the layer is described in `CLAUDE.md`.
 
 ## Deferred / open
 
-- DEFERRED (author, 2026-10-07; stress campaign WP4 part B): a stable branch with ONLY anchors.
-  The k=10 inversion saddle grown 4 or 5 unstable steps (E7) registers no crossing past the
-  anchors of a stable branch. `_build_intervals` then gets a single boundary (the anchor is also
-  the outermost crossing) and yields zero intervals, and `_element_of_intersection` asserts
-  "crossing 0 at stable cdist 0.0 ... is owned by 0 partition elements" (reproduced on `main` at
-  `8148d48` via `cases.build_inversion(unstable_steps=4|5)`). Neither check is over-strict; what
-  such a branch partitions into is undecided. Candidates: (i) one closed singleton at the anchor
-  (consistent with the partition spanning anchor .. outermost crossing, but a singleton owns no
-  stable edge and no dual-graph node, so the branch drops out of the dual graph); (ii) one closed
-  element `[anchor, end]` to the branch's end, like an unbounded high end in `land_element`, which
-  gives the branch dual-graph nodes with no crossing to own. Either must work with ONE anchor per
-  branch: the inversion saddle's duplicate (0,0) anchors are the strict xfail
-  `one_anchor_per_unstable_branch` (`tests/cases.py` `KNOWN_ISSUES`) and must stay failing until
-  that is fixed. Evidence: the planning probe monkeypatched (i) and ran the full stack (4 steps:
-  0 classes; 5 steps: 1 unresolved class, provisional). When decided, log at INFO on the
-  `StablePartition` logger ("no crossing past its anchor(s); grow the unstable manifold"), never
-  on `PartitionFamily` (whose WARNING count `test_iterated_cut.py` watches), and add the
-  regression `test_inversion_before_the_tangle_forms` (4 and 5 steps run through
-  `symbolic_dynamics`). Recorded in the `StablePartition` Dev Notes too.
+- CLOSED (WP3, 2026-10-08, C1): a stable branch with ONLY its anchor is one element
+  `[anchor, end]` (`_build_intervals`, INFO on the `StablePartition` logger); regression
+  `test_inversion_before_the_tangle_forms` (k10 inversion at 4 and 5 steps).
 - FIXED 2026-10-07 (WP4 part A): tolerance-based ownership of registry cdists. Partition
   boundaries are registry floats, so crossings are owned by id / exact cdist, the iterated parent
   by exact containment (`PartitionFamily._parent_interval`) and `interval_at` is exact first. The
@@ -125,3 +109,37 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   "unknown unstable branch, test every residue" path and the StrongPip / BridgeClass None-key
   branches are deleted.
 - Inversion law cases after WP2: holes 1 / 9 / 9 at 0 / 1 / 2 blasts (was 1 / 7 / 0).
+
+## Open-issues round WP3 (2026-10-08, branch `oi/wp03-inversion`, base `c16e75d`)
+
+- The anchor model (D4): a periodic point is ONE crossing, stored under its home pair
+  `(u(o,0), s(o,0))` with that pair's sign, and the trellis puts it FIRST on every branch of
+  its point (`Trellis.from_workbench`). Every bridge-end reader asks two helpers instead of
+  `crossing.manifold_b_key`: `Trellis.unstable_key_of(pair)` (the arc's own unstable branch,
+  read off the non-anchor end) and `Trellis.stable_key_at(id, unstable_key)` (C7: at an anchor
+  an arc of `u(o,b)` meets `s(o,b)`, equivariant under the map, sign = the anchor's own since
+  `cross(-u,-s) = cross(u,s)`). Users: `BridgeClass._element_at_end` / `_image_chain` (image
+  branch = `advance_key(unstable_key_of(bid), 1)`), `PartitionFamily.owner_at_end` (used by
+  `DualWalk.trellis_itinerary`, `SymbolicDynamics._member_pair`, `plotting._bridge_end_elements`),
+  the iterated cut, `StablePartition._elements_at_bridge` / `_row_mismatch_message`,
+  `Trellis.element_for`, `MinimalTrellis._bridge_sort_key`. `image_cdist(..., branch=)` maps an
+  anchor to the next point's anchor on the advanced branch (`land_element`, `_land_singleton`,
+  `image_of_element` pass it). `owner_of_intersection(..., branch_key=)` is needed at an anchor:
+  without it the first result knowing the id answers.
+- The arrangement: branch 1's arcs at an anchor fill `u-`/`s-` (`_add_edge`), so an inversion
+  anchor is one degree-4 node (law `anchor_rays_are_its_branches`).
+- Openings at the anchor by signs (D6): `Hole.openings` records are `(id, which, row,
+  branch_key)`; at an anchor the hole opens the OUTWARD half of the stable branch on which the
+  bridge's row is `bridge_side` (`_anchor_branch`: `s(o,b)` iff `(home_sign > 0) == (row ==
+  "left")`, else `s(o,1-b)`; None when that branch is not computed). At the anchor the record's
+  row is always `bridge_side`. `_approach` returns None at an anchor (no frame of its own), so the
+  geometric row check skips it. The geometry agrees on every case (law
+  `anchor_opening_faces_its_hole`). Non-anchor ends keep the geometric reading (WP4).
+- Cross-side is flagged only for a pair on ONE branch (`SymbolicDynamics.translate_itinerary`).
+  Elements are not glued across the point (C7; author may revisit, it would change `ElementRef`).
+- Re-tagged, not fixed: `anchor_bridge_class_leads_its_tangle` x `inversion` (PK-3: the
+  reference pair `(10,22)` has no `+1` link, so `s(0,1)` gets no hole and the anchor class is
+  inert; passes at 1 blast) and `arrangement_euler` x `inversion_two_blasts` (INT-9: dense arcs
+  between consecutive blast-image crossings no bridge spans).
+- Inversion law cases after WP3: anchors 1, holes 1 / 9 / 9, classes 4 / 10 / 10 at
+  0 / 1 / 2 blasts, no virtual class, `is_reliable` True throughout.

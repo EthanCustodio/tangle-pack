@@ -85,10 +85,11 @@ Dev Notes:
     * The refined-point cdist. Tested: a refined node's cdist lies strictly
       between its neighbours' (``unit/numerics/test_refinement.py``).
       Untested: that it is the mean of the neighbours.
-    * The anchor faces-closed limitation of ``grow_until_faces_closed`` (the
-      anchor's faces never close in the arrangement). Untested; noted in
-      ``unit/numerics/test_grow_until.py``. It goes with the anchor model
-      (INV-1/API-5, WP3).
+    * The faces-closed limitation of ``grow_until_faces_closed`` (a crossing on
+      the outer envelope, or a one-eigendirection anchor with its virtual
+      stubs, never closes). Untested; noted in
+      ``unit/numerics/test_grow_until.py``. The four-anchor cause is gone
+      (WP3, API-5); the check-with-a-cap semantics are WP11.
 
     Dead API: the code stays, its tests were dropped (author decision 4), and
     ``_tools/coverage_guard.py`` whitelists it:

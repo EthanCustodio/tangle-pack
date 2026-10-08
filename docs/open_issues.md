@@ -35,7 +35,9 @@ The most serious situations:
 ## Inversion end-to-end
 
 ### INV-1: Four coincident (0,0) anchors at an inversion point instead of one degree-4 node
-**Status:** open | **Severity:** high | **Related:** INV-3, INV-6, DEC-4, API-5, SIMP-12 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** high | **Related:** INV-3, INV-6, DEC-4, API-5, SIMP-12 | **WP:** WP3
+
+**WP3:** a periodic point is ONE anchor, registered under its home pair `(u(o,0), s(o,0))` with that pair's sign and put first on every branch of its point by the trellis and the registry's graph view; at exactly `(0, 0)` the registry matches any two keys of the same point, so the root segments of the other branch pairs resolve to it. `create_bridges` cuts every unstable branch rooted at the point at its root (`Tangle._both_anchors` is gone), and the arrangement draws one degree-4 node (branch 1 in the `u-`/`s-` slots). Bridge ends, image chains and the iterated cut ask `Trellis.stable_key_at` which branch an arc meets the anchor on (C7). Inversion: 1 anchor (was 4), no virtual class and `is_reliable` at 0/1/2 blasts, classes 4 / 10 / 10 (was 6 / 11 / 11), holes 1 / 9 / 9. Two of its old strict xfails had other roots and are re-tagged: `anchor_bridge_class_leads_its_tangle` x `inversion` (PK-3, WP5) and `arrangement_euler` x `inversion_two_blasts` (INT-9, WP7).
 
 `_register_anchors` registers one anchor per (unstable branch, stable branch) pair. The only filter is on orbit index, so an inversion point gets two anchors per unstable branch, four in all. The author's rule is one.
 
@@ -66,7 +68,9 @@ The current fixture never reaches this code because it has no pairs. `TrellisBra
 **Evidence:** `src/tanglepack/topology/Pseudoneighbor.py:51-60` (OPEN Dev Note), `:491-492`, `:551`, `:571-576`; `src/tanglepack/topology/TrellisBranch.py:79`; `src/tanglepack/numerics/IntersectionRegistry.py:656`; `docs/regions_bridge_identity_and_cleanup_plan.md:330`; probe `inv_probe.py`
 
 ### INV-3: An anchor-only stable branch at 4-5 steps raises AssertionError "owned by 0 partition elements" (WP4-B)
-**Status:** decided 2026-10-07 / deferred | **Severity:** high | **Related:** INV-1, DEC-5 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** high | **Related:** INV-1, DEC-5 | **WP:** WP3
+
+**WP3:** C1: a stable branch with no crossing past its anchor is one element `[anchor, end]` (closed at the anchor, `hi_id None`, to the end of the computed branch), logged at INFO on the `StablePartition` logger. `build_k10_inversion(unstable_steps=4|5)` runs through `symbolic_dynamics` (regression `test_inversion_before_the_tangle_forms`).
 
 `_build_intervals` gets a single boundary, so `_element_of_intersection` asserts. This reproduces at k=10 with 4-5 steps, and at k=3.5 and k=4 with 4-8 steps. There are two options: a closed singleton at the anchor, or one element `[anchor, end]`. Either one has to come after INV-1 and dedupe by point. Once decided, add `test_inversion_before_the_tangle_forms`.
 
@@ -88,7 +92,9 @@ The current fixture never reaches this code because it has no pairs. `TrellisBra
 **Evidence:** `tests/cases.py:568-636`, `:843-875` (`_NO_HOLES`); `src/tanglepack/topology/StrongPip.py:63-72`; `src/tanglepack/topology/Pseudoneighbor.py:37-40`; `src/tanglepack/topology/StablePartition.py:236-238`; `src/tanglepack/loom/ResonanceZone.py:37-39`; `stress/numerics/report/report.tex:210, 830-832, 940-991, 1150-1156`; `stress/numerics/report/numbers_extra.tex:219-221, 287, 301`; `stress/numerics/results/e06_parameter_sweep.jsonl` (which='other'); probes `inv.py`, `inv_probe.py`
 
 ### INV-5: Resonance-zone ring is matched by orbit index only, so the inversion zone polygon is wrong; the logic is duplicated in TangleSession
-**Status:** open, confirmed by probe | **Severity:** high | **Related:** INV-4, DEC-4, NEST-4 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** high | **Related:** INV-4, DEC-4, NEST-4 | **WP:** WP3
+
+**WP3:** `ResonanceZone.ring_cycles` follows a cut's stable branch `s(o,b)` in and `u(o,b)` out (the FULL key); `_build_boundary` and `TangleSession._zone_ring_order` both use it. The inversion zone is the union of its two loops through the anchor (area 1.412087 = 0.706 + 0.706, was 1.232); p3, k28 and nested zone areas are unchanged to 12 digits. One zone per fixed point (C8): `ResonanceZone.key` is the fixed point, `branch_index` is gone, `zone_label` reads "zone p<period>". The zone changes which bridges the inversion blasts iterate (classes 4 / 10 / 10).
 
 `_build_boundary` builds `by_u_orbit = {manifold_a_key[2]: i}`. Both inversion cuts have orbit 0, so u0.1 is used twice and u0.0[p,q0] is never used.
 
@@ -100,7 +106,9 @@ The current fixture never reaches this code because it has no pairs. `TrellisBra
 **Evidence:** `src/tanglepack/loom/ResonanceZone.py:223-252`, `:121-133`, `:37-39`; `src/tanglepack/loom/TangleSession.py:2052-2076`, `:155`; probe `inv_probe.py`
 
 ### INV-6: The same-side law and the partition are per branch, while L(0.0) and R(0.1) are one global half-plane through p
-**Status:** open | **Severity:** high | **Related:** INV-1, DEC-4, INT-8 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** high | **Related:** INV-1, DEC-4, INT-8 | **WP:** WP3
+
+**WP3:** `cross_side` is set only for a pair on one branch (D4). The elements next to p are NOT glued across branches: every branch keeps its own two sides (C7), and the zone boundary through p separates them. `landings_contained` passes on every inversion case.
 
 Both inversion stable branches are oriented anchorward, so they point in opposite directions along one curve. Several pieces have no inversion-aware side map:
 - `cross_side = first.side != second.side`
@@ -113,7 +121,9 @@ As a result, legitimate `(R(0.1), L(0.0))` pairs are flagged as cross-side, and 
 **Evidence:** `src/tanglepack/topology/SymbolicDynamics.py:474`; `tests/helpers/laws.py:1885`; `tests/cases.py:808-815`; `CLAUDE.md` "a bridge only connects same-side elements"; probes `inv.py`, `inv_probe.py`
 
 ### INV-7: `branch_index` means two things (inversion half-chain vs an independent second chain); the initializer duplicates branch ordering
-**Status:** open | **Severity:** medium | **Related:** INV-9, SIMP-9 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** medium | **Related:** INV-9, SIMP-9 | **WP:** WP3
+
+**WP3:** `construct_kevin_way` is one loop: a chain of `k_value` pieces per requested eigendirection, walked by `advance_key`, skipping a direction an earlier chain covers (branch 1 of an inversion point). `FixedPoint.get_iterable_array` and `get_branch_array` are deleted (`test_num_branches_agrees_with_get_branch_array` with them). A branch index names an eigendirection. Behaviour-preserving: `test_kevin_way_seeds_one_chain_per_eigendirection` passes on main too.
 
 - For inversion, branch 1 is the second half of one k_value chain.
 - Otherwise it is a separate chain seeded with `num_branches=2`.
@@ -123,21 +133,27 @@ Both use ManifoldKey slot 3, so every consumer special-cases `check_inversion`, 
 **Evidence:** `src/tanglepack/numerics/FixedPoint.py:151-183, 453-456, 484-492, 497`; `src/tanglepack/numerics/ManifoldMachine.py:286-298`; `src/tanglepack/numerics/ManifoldInitializer.py:25-30, 153, 432, 483-598, 527, 530-598`; `src/tanglepack/numerics/TangleWorkbench.py:352, 521-548, 810, 1000`
 
 ### INV-8: `orient_eigenvectors` is a no-op for inversion; per-orbit-point eigenvector propagation is skipped for period>1 inversion orbits
-**Status:** open | **Severity:** medium | **Related:** INV-7, TEST-1 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** medium | **Related:** INV-7, TEST-1 | **WP:** WP3
+
+**WP3:** the early return is gone: orienting an inversion point chooses which half of each manifold is branch 0, propagated along the orbit as without inversion. No law case orients an inversion point, so no case output moves.
 
 Period-1 inversion is fine. For a period>1 inversion orbit, the orientation along the orbit is never set.
 
 **Evidence:** `docs/regions_bridge_identity_and_cleanup_plan.md:331-332`; `src/tanglepack/numerics/TangleWorkbench.py:~529-536`; `src/tanglepack/numerics/FixedPoint.py:10-21` (inversion eigenvector storage Dev Note)
 
 ### INV-9: `grow_n_times(branch_index=0)` default logs "branch_index is ignored" on every inversion growth step
-**Status:** open | **Severity:** low | **Related:** INV-7 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** low | **Related:** INV-7 | **WP:** WP3
+
+**WP3:** the machine walks the one inversion chain from branch 0 whatever is asked, without a warning; the workbench's `growth_branch` special cases are gone. `build_inversion(blasts=1)` logs no WARNING from `ManifoldMachine` (was 22).
 
 This is log noise; the probe saw it three times. Fix by defaulting to `branch_index=None` or skipping the warning for inversion.
 
 **Evidence:** `src/tanglepack/numerics/TangleWorkbench.py:590`; `src/tanglepack/numerics/ManifoldMachine.py:286-289`
 
 ### INV-10: `iterate_bridge` on an anchor-rooted inversion bridge raised TypeError in `_insert_after` (branch_index None)
-**Status:** possibly stale — verify | **Severity:** medium | **Related:** INV-1 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** medium | **Related:** INV-1 | **WP:** WP3
+
+**WP3:** verified: no TypeError on main, but `iterate_bridge` on an anchor-rooted inversion bridge returned ONE PARTIAL child (its image starts at an anchor the image's crossing set did not name). With one anchor every child is identified and the first starts at the anchor (k10: `(0,1) -> [(0,7)]`, `(0,7) -> [(0,1), (1,3), (3,2)]`); regression `test_iterating_an_anchor_rooted_inversion_bridge_cuts_identified_children`.
 
 `create_bridges` now refuses the zero-span cut between two anchors (inversion bridges went 9→7). Nobody re-checked whether a non-degenerate anchor-rooted bridge still fails.
 
@@ -168,6 +184,8 @@ The anchor image chain `0→pip→4→20` then finds no hole at 20/4, so `Partit
 
 E11 has exactly 1 unresolved and 1 virtual class at every blast from 6 to 20 (p3 and nested_inner); blasting never resolves them. After the bursts, every unresolved class is "dual-graph walk unreachable" (127 entries, 0 singleton). k28 ends with 12 unresolved, 1 virtual and 3 ambiguous; k32 with 9/0/2. The report suggests stable growth instead of blasting (untested).
 
+**WP3 evidence (inversion x period 2):** the `inversion_period2` law case (k=4.1, 9/9 steps) passes every law. One step deeper (10/10 steps, 47 crossings) eleven laws fail on the WP3 branch, every one also failing on main (which fails sixteen): `bridge_endpoints_on_own_branch`, `bridge_rows_consistent`, `partition_covers_branch`, `backward_holes_keep_bridge_side`, `openings_missing_only_at_anchor_or_tail`, `alphabet_inside_minimal_trellis`, `iterated_cut_provenance`, `every_active_class_walks` (an unreachable walk), `no_virtual_class`, `landings_contained`, `refined_children_inherit_word`. Deep period-k evidence for WP5 / WP7 / WP10; the law case stays at 9 steps.
+
 **Evidence:** `tests/cases.py:831-839`; `tests/regression/test_open_p3_deep_runs.py:1-18, 58-67`; `src/tanglepack/examples/henon_cases.py:30-39`; `src/tanglepack/topology/PartitionFamily.py:800`; `src/tanglepack/topology/DualWalk.py:757-760`; `stress/numerics/report/report.tex:1477-1527, 1734-1735, 2025-2033`; `stress/numerics/report/numbers_extra.tex` (NumDeepUnresolvedUnreachable=127); `stress/numerics/report/numbers.tex:468-472, 576-580, 678-680`; `stress/numerics/results/e11_blast_depth.jsonl` (p3 1e-5 `invariant_assert` blasts 6-19); `.refactor/knowledge/topology.md` (OPEN p3 ≥6 blasts); `.refactor/decisions.md` 2026-10-02
 
 ### PK-2: The provisional rule that punches forward iterates +1..+(k_value−1) (`_is_forward_beyond_fundamental`)
@@ -183,6 +201,8 @@ A side effect on the baseline is the inert chain `u(1.0)→v(2.0)→x(0.0)→loo
 **Status:** open (suspected bug) | **Severity:** high | **Related:** PK-2, BCG-3, PK-1 | **WP:** WP5
 
 Probe p3 at 6 blasts: `pairs=2` and zero forward pairs, so rays 0.0 and 2.0 got no direct window holes (at 5 blasts they had +1/+2 holes). The partition becomes asymmetric across the orbit, and the provisional rule is never even applied.
+
+**WP3 evidence:** the `inversion` law case (0 blasts) is a second instance. Its one reference pair `(10, 22)` on `s(0,0)` has no registered `+1` iterate, so its `+1` appearance on `s(0,1)` is never punched; stable branch 0.1 has no hole, the anchor bridge's image `(0, 7)` on `u(0,1)` is a loop in `L_(0.1;1)` and the anchor class is inert. The strict xfail `anchor_bridge_class_leads_its_tangle` x `inversion` is re-tagged here (WP5); at 1 blast the `+1` pair exists and the law passes.
 
 **Evidence:** chalkboard review §4 probe (p3 6 blasts); `src/tanglepack/topology/StablePartition.py:1712`
 
@@ -465,6 +485,8 @@ After a blast there is no Bridge between a parent crossing and a blast-child cro
 - Zero-area regions form (NUM-16).
 
 `BridgeIterator` also creates partial or duplicate Bridge objects over one arc.
+
+**WP3 evidence:** on `inversion_two_blasts` the DENSE arrangement draws unstable arcs between consecutive blast-image crossings no bridge spans (the gaps between images of different parents are not computed manifold), and `V - E + F = 0`; dropping exactly those arcs gives 2 (probe `dbg6.py`, 1 and 2 blasts). The strict xfail `arrangement_euler` x `inversion_two_blasts` is re-tagged here (WP7). Dropping uncut arcs to stubs would also move the k28 blasted arrangements.
 
 **Evidence:** `src/tanglepack/topology/StablePartition.py:190-196, 239-244, 428`; `src/tanglepack/topology/MinimalTrellis.py:280, 323`; `src/tanglepack/topology/SymbolicDynamics.py:494`; `src/tanglepack/numerics/BridgeIterator.py:141-156`; `docs/regions_bridge_identity_and_cleanup_plan.md:196`
 
@@ -787,6 +809,8 @@ The map is at most 0.84% of growth time; refinement plus the linked list take 75
 
 **WP1:** the k=4 inversion cases and `nested_inner_blasts` (2 outer + 2 inner blasts) are law cases. Inversion × period-k waits for WP3: the period-2 orbits with both eigenvalues of DM² negative (k ≥ 4.1) cross only at their 8 anchors at 3-5 steps, so the partition raises INV-3, and they escape at about 6 steps for k=4.5. Heteroclinic is WP9 (NEST-1); det<0 is out of scope by C3.
 
+**WP3:** inversion x period-k is the law case `inversion_period2`: the k=4.1 period-2 orbit `(-2.0488, -0.0488) <-> (0.0488, 2.0488)` with both DM^2 eigenvalues negative (-1.863 / -0.537), `k_value = 4`, `area_cutoff = 1e-5`, 9/9 steps, no zone (8 crossings at 3-5 steps grew into a real tangle once INV-1/INV-3 were fixed). Every law passes; not applicable: `iterated_cut_provenance`, `refined_children_inherit_word`, `member_matching_consistent`. On main it fails seven laws.
+
 `LAW_CASES` are k10, k28_one_blast, k28_two_blasts, p3 (13 steps, unblasted), nested (2 outer, 0 inner) and inversion (no holes). Inner blasting goes untested even though E11 nested_inner grows 13→55. There is no inversion or det<0 case in E11 or in the deep sweep.
 
 **Evidence:** `tests/cases.py:385-388, 493-501, 745-752`
@@ -810,7 +834,7 @@ The 15+ laws switched off on inversion, and the k10/p3/k28 exclusions, never app
 **Evidence:** `tests/helpers/law_tier.py:186-202`; `tests/cases.py:849-889`
 
 ### TEST-4: Provisional, untested rules
-**Status:** provisional (WP1: no decision; anchor faces go with API-5 in WP3) | **Severity:** low | **Related:** API-5 | **WP:** WP1
+**Status:** provisional (WP1: no decision; anchor faces answered by WP3, see API-5) | **Severity:** low | **Related:** API-5 | **WP:** WP1
 
 - The refined-point cdist is the mean of its neighbours.
 - Anchor faces never close (the `grow_until_faces_closed` cap).
@@ -868,7 +892,9 @@ A rebuilt trellis starts with empty strong-pip slots. The session should carry t
 **Evidence:** `src/tanglepack/loom/TangleSession.py:1290-1306`
 
 ### API-5: `grow_until_faces_closed` never converges (it returns 0 immediately or hits the cap); anchors never close under the four-anchor model
-**Status:** open | **Severity:** low | **Related:** INV-1, TEST-4 | **WP:** WP3
+**Status:** closed (WP3) | **Severity:** low | **Related:** INV-1, TEST-4 | **WP:** WP3
+
+**WP3:** the four-anchor cause is gone: an inversion anchor is one degree-4 node with no virtual stub. What remains is a fact, not a bug: a crossing on the outer envelope never closes (the inversion anchor at 1 blast lies on the open outer face), and a non-inversion anchor seeded on one eigendirection keeps its `u-`/`s-` stubs. The Note is rewritten; the check-with-a-cap semantics are public API (WP11).
 
 **Evidence:** `src/tanglepack/numerics/TangleWorkbench.py:1204-1265`
 
@@ -919,6 +945,8 @@ Also: `partial_jacobians` is unexplained, and BranchPoint has a `_description_` 
 - ManifoldMachine has an old TODO.
 - StrongPip/Pseudoneighbor say the key is "legitimately None".
 - The topology-layer and loom memories say inversion is "not validated (no example)".
+
+**WP3:** the ResonanceZone "no inversion example", the StrongPip / Pseudoneighbor / StablePartition / Arrangement / Trellis / Tangle inversion and anchor notes and the ManifoldInitializer `branch_index` question are rewritten. The rest stays with WP12.
 
 **Evidence:** `src/tanglepack/topology/MinimalTrellis.py:36-40`; `src/tanglepack/topology/TrellisBranch.py:21-25`; `src/tanglepack/loom/ResonanceZone.py:37-39`; `src/tanglepack/topology/PartitionFamily.py:60-66`; `src/tanglepack/topology/TopologyResults.py:22-24`; memory `topology-layer:66`, `loom-and-subpackages:64`
 
@@ -987,6 +1015,8 @@ Taken under D8 (Claude's call, revisit if wrong):
 | C4 | A blast's `in_zone` classifies by innermost zone, so an outer blast never iterates an inner tangle's bridges. | DEC-11 |
 | C5 | The blast-end same-stability pass checks only the new image bridges and counts hits instead of storing them. | DEC-12 |
 | C6 | `blast_zone(max_points)` is a per-call budget. | DEC-13 |
+| C7 | At an anchor a bridge of `u(o, b)` meets `s(o, b)` (same orbit point and branch index: equivariant under the map, and the pair carries the anchor's own sign). Elements are NOT glued across the periodic point: every branch keeps its own two sides (WP3). | DEC-4 |
+| C8 | One resonance zone per fixed point: `ResonanceZone.key` is the fixed point; an inversion zone is the union of its two loops (WP3). | DEC-4 |
 
 Deferred: DEC-14 (which blasting cutoff defines the result; re-measured in WP12), DEC-15 (validated arithmetic), DEC-16 (dissipative maps), DEC-17 (union-valued `image_of`).
 
@@ -1017,9 +1047,9 @@ Each strict xfail below is a `cases.KNOWN_ISSUES` entry naming the WP that turns
 
 | Law | Cases that xfail | WP |
 |---|---|---|
-| `cross_side_only_within_a_branch` (D4; replaces `itinerary_pairs_same_side`) | inversion (inversion_two_blasts passes since WP2) | WP3 (INV-6) |
+| `cross_side_only_within_a_branch` (D4; replaces `itinerary_pairs_same_side`) | none (WP3) | — |
 | `every_active_class_walks` (D3) | none (not applicable on p3 and k28_one_blast: singleton words) | — |
-| `no_virtual_class` (D3) | inversion, inversion_one_blast, inversion_two_blasts | WP3 (INV-1/INV-6) |
+| `no_virtual_class` (D3) | none (WP3) | — |
 | `alphabet_inside_minimal_trellis` (D2) | inversion, inversion_one_blast, inversion_two_blasts | WP6 (BCG-1) |
 | `series_class_count_never_decreases` (D1) | none (WP2) | — |
 | `series_class_count_constant_while_holes_constant` (D1, D2) | k28_series, p3_series | WP6 (BCG-1/2) |
@@ -1029,5 +1059,7 @@ Each strict xfail below is a `cases.KNOWN_ISSUES` entry naming the WP that turns
 The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases `one_anchor_per_unstable_branch`, `arrangement_euler`, `anchor_bridge_class_leads_its_tangle`, `partition_singletons` and `stable_nodes_never_own_a_singleton` (WP3, INV-1), `arrangement_regions_disjoint` (WP10, NUM-16) and, on `inversion_two_blasts`, the 15 hole-dependent laws that are vacuous with 0 holes (WP2, INV-2); on `nested_inner_blasts` `arrangement_regions_sound` and `arrangement_regions_disjoint` (WP10, NUM-16). WP2 must add `stable_nodes_never_own_a_singleton` on `inversion_two_blasts` (WP3) once holes appear there.
 
 **WP2** (KNOWN_ISSUES 52 -> 34): with the β^k lap the 15 vacuous hole laws and the two `inversion_series` entries XPASSed and were removed, as were `anchor_bridge_class_leads_its_tangle` and `cross_side_only_within_a_branch` on `inversion_two_blasts` (WP3 tags; both still xfail on `inversion`). It added `stable_nodes_never_own_a_singleton` x `inversion_two_blasts` (INV-1, WP3); `partition_singletons` x `inversion_two_blasts` is no longer vacuous and shares that entry. WP2 also added the crossing-layer laws `iterate_table_partial_bijection`, `iterate_links_pass_the_map_gate` and `iterate_table_complete` (pass on every law case).
+
+**WP3** (KNOWN_ISSUES 34 -> 21): the inversion anchor is one point with four branches. The 15 WP3 entries were resolved: 13 pairs pass and were removed (`one_anchor_per_unstable_branch` x 3, replaced by the stronger `one_anchor_per_periodic_point`; `arrangement_euler` x `inversion`, `inversion_one_blast`; `no_virtual_class` x 3; `partition_singletons` and `stable_nodes_never_own_a_singleton` x `inversion_one_blast`, `inversion_two_blasts`; `cross_side_only_within_a_branch` x `inversion`), and two with other roots were re-tagged with evidence: `anchor_bridge_class_leads_its_tangle` x `inversion` -> WP5 (PK-3) and `arrangement_euler` x `inversion_two_blasts` -> WP7 (INT-9). New laws (pass on every law case): `one_anchor_per_periodic_point`, `anchor_rays_are_its_branches`, `anchor_opening_faces_its_hole` (not applicable where no hole touches an anchor: k10, k28_two_blasts, inversion). New law case `inversion_period2`. Hole opening records are 4-tuples `(id, which, row, branch_key)`.
 
 Verification of the "possibly stale" items (WP0): DOC-3 is confirmed open (the MinimalTrellis "definition is changing", TrellisBranch `return_period`, ResonanceZone "no inversion example", PartitionFamily "concurrent edit" and StrongPip "legitimately None" notes are all still present). PK-7 is confirmed dead code (WP2 deletes it). INV-10, NUM-19 and DOC-4 need a run; they are checked by the WP that owns them.

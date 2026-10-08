@@ -72,3 +72,25 @@ the crossing / iterate-table path is described; growth, refinement and budgets a
 - `_widest_stable_brackets` is an O(N) scan per inference pass (one per `iterate_bridge`); the
   suite time did not move (106 s vs 108 s base), but a deep blast series could feel it.
 - `IterateInference` is a stateless holder; module functions would read better (API pass, D8).
+
+## Open-issues round WP3 (2026-10-08, branch `oi/wp03-inversion`)
+
+- `TangleWorkbench._register_anchors` registers ONE `Intersection.synthetic` per
+  `(fixed point, orbit index)`, keyed `(u(o,0), s(o,0))`, sign from the two branch-0 root
+  segments, NO `unstable_manifold` / segments (`Intersection.is_anchor`: synthetic at exactly
+  (0, 0)). A point whose branch-0 manifolds are missing or have < 2 nodes gets none.
+- `IntersectionRegistry._find_collision`: at EXACTLY (0, 0) two keys match when they name the
+  same fixed point and orbit index, so the root segments of the other three branch pairs (which
+  ARE detected at exactly (0, 0)) and `find` probes with advanced keys resolve to the one anchor.
+  `IterateInference._register_anchor_iterate` needed no change. `_consecutive_on_branch` (graph
+  view) puts each anchor first on every branch group of its point.
+- `Tangle.create_bridges`: an anchor (no curve) cuts every unstable manifold ROOTED at its
+  periodic point (`manifold.root is fp.branch_points[orbit]`) at `(nodes[0], nodes[1])`.
+  `_both_anchors` is gone. In `iterate_bridge` the image's own (0, 0) detection carries the
+  anchor id (registry collision), so an anchor-rooted image is cut like any other (INV-10).
+- One chain rule: `ManifoldInitializer.construct_kevin_way` seeds a chain of `k_value` pieces per
+  requested eigendirection, walked by `advance_key`, skipping one an earlier chain covers;
+  `FixedPoint.get_iterable_array` / `get_branch_array` deleted. `orient_manifolds` no longer
+  returns early under inversion. `ManifoldMachine.new_grow_manifold` walks an inversion chain from
+  branch 0 without warning; the workbench's `growth_branch` special cases are gone
+  (`_growth_key` still maps an inversion point's stats to one key).
