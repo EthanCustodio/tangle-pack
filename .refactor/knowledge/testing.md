@@ -71,3 +71,40 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   taxonomy row "Unreliable topology", `make_numbers.py:428` "(unreliable)" macro suffix,
   `make_figures.py:816,888` legend strings "unreliable"/"topology unreliable", section
   "Failure modes and breaking points" holding blasts + depth.
+
+## Stress-report recommendations integrated (2026-10-07, WP1-WP10, main 12d5600)
+
+- Ten packages from `~/.claude/plans/great-okay-so-there-purrfect-turtle.md` ran as coder +
+  reviewer pairs on their own branches (`wp1-…` … `wp10-…`, worktrees under
+  `.claude/worktrees/wf_20fd0a4d-e33-*`, all KEPT) and were merged `--no-ff` onto main in the
+  plan's order, the full suite green after each: WP1 faf3940, WP2 cd22646, WP3 3ad5195,
+  WP4-A 1b3e0f4, WP7 958e552, WP8 a6b782d, WP9 0c9e702, WP5 ded56db, WP6 41e5c7d,
+  WP10 70222ee. Nothing pushed. Suite 738 -> 833 passed, 3 perf deselected (pass with
+  `-m perf`), 11 xfail = exactly `cases.KNOWN_ISSUES`, no XPASS, ~100 s (was ~85 s; the WP4
+  deep-blast regression costs ~7.5 s).
+- What the tests gained: unit `test_crossing_resolution`, `test_same_stability_diagnostic`
+  (+1 perf), `test_fixed_point_minimal_period`, `test_point_budget` (+1 perf),
+  `test_exact_ownership`, `test_api_traps`, `test_blast_budget`, production-check tests for
+  `RowDiagnosis`/`SideDiagnosis`/`OuterFaceError`; regression
+  `test_resolution_warning_follows_oracle` (WARNING iff the independent oracle finds a hit),
+  `test_deep_blast_sliver_beyond_pip` (k28, 9 blasts, ANALYTIC seed; asserts its own
+  precondition loudly); `case_sanity` laws `check_fixed_point_minimal_period`,
+  `check_map_is_area_preserving`, `check_case_area_cutoff`; `dual_graph` law
+  `check_stable_nodes_never_own_a_singleton`. Builders: `near_tangency` (k=-0.999, 1e-10) and
+  `k28_deep_blast_sliver` in BUILDERS, not LAW_CASES.
+- Rule extension (WP6): builders never read LIBRARY defaults either (`CaseExpect.area_cutoff`
+  is required; `build_k10`/`build_inversion`/`build_orientation_reversing` freeze 1e-4, k28 1e-7,
+  near_tangency 1e-10). `DEFAULT_AREA_CUTOFF` is 1e-7 now.
+- Review process lessons: pyproject sets `pythonpath=["src","tests"]`, so break-it mutants must
+  be run on a COPIED tree (src+tests+pyproject), never via PYTHONPATH; `coverage_guard.py`
+  compares raw line numbers and trips on every edited covered file (a content-mapped diff found
+  0 newly missed lines) -> rebase BASE.json after each merge or make it content-mapped.
+- Deferred / open after the round: WP4-B anchor-only stable branch (inversion 4-5 steps, see
+  topology.md); WP7-D1 minimum nodes per bridge (39 remaining E11 bridge-row snapshots);
+  the parity flip on carried hole sides is untested end to end (no det J < 0 case builds);
+  the blast-end same-stability pass does not scale past ~10 blasts (author decision, see the
+  campaign section above); `MaxIterationsReached`/`TURNAROUND_LOG_STRETCH` not exported from
+  the package `__init__`s; `PointBudgetExceeded.blast_context` set dynamically, undeclared on
+  the class; `max_points` on `blast_zone` is a PER-CALL budget (author to confirm);
+  `scripts/*.ipynb` now refine at 1e-7; committed `figures/.../nested_p1_p3/partitions.png`
+  was already stale at 8148d48 (crossing-id labels only).
