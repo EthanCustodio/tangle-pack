@@ -304,3 +304,120 @@ def polygon_interior_point(
             [0.5 * (xs[2 * best] + xs[2 * best + 1]), float(y)], dtype=np.float64
         )
     return None
+
+
+def curvature_area_batch(
+    p0: NDArray[np.float64],
+    p1: NDArray[np.float64],
+    left: NDArray[np.float64],
+    right: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """
+    The area between each chord ``p0 -> p1`` and the curve through its neighbours.
+
+    For each row the chord is rotated onto the x-axis, a left parabola through
+    ``(left, p0, p1)`` and a right parabola through ``(p0, p1, right)`` are fit
+    with the closed-form divided differences, the closed-form integral between
+    each parabola and the chord is taken, and the larger of the two areas is
+    returned. This is the refiner's kernel
+    (:meth:`~.ManifoldMachine.ManifoldMachine._refine_layer` inserts a point
+    wherever it reaches ``area_cutoff``), so it also measures how well a
+    finished polyline resolves the curve it stands for.
+
+    Args:
+        p0: ``(M, 2)`` first endpoints.
+        p1: ``(M, 2)`` second endpoints.
+        left: ``(M, 2)`` left neighbours; rows that are ``NaN`` (no
+            neighbour) contribute ``0`` on the left side.
+        right: ``(M, 2)`` right neighbours; ``NaN`` rows contribute ``0`` on
+            the right side.
+
+    Returns:
+        ``(M,)`` array of curvature areas. Degenerate rows (zero-length
+        chord, coincident x-values after rotation) yield ``0`` so they are
+        never flagged for refinement.
+    """
+    p0 = np.asarray(p0, dtype=float)
+    p1 = np.asarray(p1, dtype=float)
+    left = np.asarray(left, dtype=float)
+    right = np.asarray(right, dtype=float)
+
+    chord = p1 - p0
+    length = np.hypot(chord[:, 0], chord[:, 1])
+    safe_len = np.where(length == 0.0, 1.0, length)
+    ux = chord[:, 0] / safe_len
+    uy = chord[:, 1] / safe_len
+
+    def to_frame(pt):
+        rel = pt - p0
+        xf = ux * rel[:, 0] + uy * rel[:, 1]
+        yf = -uy * rel[:, 0] + ux * rel[:, 1]
+        return xf, yf
+
+    x0, y0 = to_frame(p0)  # ~ (0, 0)
+    x1, y1 = to_frame(p1)  # ~ (length, 0)
+
+    # line through the two endpoints (the chord, ~ the x-axis here)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        m = (y1 - y0) / (x1 - x0)
+    d = y0 - m * x0
+
+    def side_area(third):
+        xt, yt = to_frame(third)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            # parabola through (xt, yt), (x0, y0), (x1, y1)
+            s_ab = (y0 - yt) / (x0 - xt)
+            s_bc = (y1 - y0) / (x1 - x0)
+            a = (s_bc - s_ab) / (x1 - xt)
+            b = s_ab - a * (xt + x0)
+            c = yt - a * xt**2 - b * xt
+
+            # closed-form integral between parabola and chord (see
+            # ManifoldMachine._compute_single_area): coefficients of (quad - line)
+            aa = a / 3.0
+            bb = 0.5 * (b - m)
+            cc = c - d
+            area = np.abs(
+                aa * (x1**3 - x0**3)
+                + bb * (x1**2 - x0**2)
+                + cc * (x1 - x0)
+            )
+        return np.where(np.isfinite(area), area, 0.0)
+
+    left_area = side_area(left)
+    right_area = side_area(right)
+
+    area = np.maximum(left_area, right_area)
+    area = np.where(length == 0.0, 0.0, area)
+    return area
+
+
+def chord_deviation_batch(
+    p0: NDArray[np.float64],
+    p1: NDArray[np.float64],
+    left: NDArray[np.float64],
+    right: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """
+    How far the curve strays from each chord: ``h = 1.5 * area / length``.
+
+    The area between a parabolic arc and its chord is ``(2/3) * length * h``,
+    with ``h`` the arc's largest distance from the chord, so this inverts the
+    :func:`curvature_area_batch` area into a deviation in units of length. A
+    crossing found on a segment is only trustworthy when the two curves
+    separate by more than this within the segment (see
+    ``Tangle._resolution_ratio``).
+
+    Args:
+        p0: ``(M, 2)`` first endpoints.
+        p1: ``(M, 2)`` second endpoints.
+        left: ``(M, 2)`` left neighbours (``NaN`` rows: none).
+        right: ``(M, 2)`` right neighbours (``NaN`` rows: none).
+
+    Returns:
+        ``(M,)`` deviations; ``0`` for a zero-length chord.
+    """
+    area = curvature_area_batch(p0, p1, left, right)
+    length = np.hypot(*(np.asarray(p1, dtype=float) - np.asarray(p0, dtype=float)).T)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(length > 0.0, 1.5 * area / length, 0.0)
