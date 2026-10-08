@@ -224,3 +224,40 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   4-tuples. Deleted: `test_num_branches_agrees_with_get_branch_array` (API gone).
 - WP1 deferred (b): the `henon_inversion*` numerics fixtures STAY on k=10 (no tangle needed, or
   bridges at 6 steps, which k=4 only reaches at 10-11; the k=4 saddle is already the law case).
+
+## Open-issues round WP4 (2026-10-08, branch `oi/wp04-sign-rule`, base `dad72d2`)
+
+- Suite: 910 passed, 25 skipped, 3 deselected, 21 xfailed, ~103 s (base 905 passed / 25
+  skipped / 21 xfailed). KNOWN_ISSUES stays 21 (no entry was tagged WP4); the
+  `open_p3_deep_runs` reason now names only the virtual `new1`.
+- Law `openings_follow_signs` (partition layer) REPLACES `openings_missing_only_at_anchor_or_tail`:
+  exactly one opening per non-anchor bound, at most one at an anchor bound; a non-anchor
+  opening is on the crossing's own branch, on the row the sign gives (left iff
+  `(sign > 0) == (end == first)`, written in the law, not via `row_of_end`) and `outward` iff
+  `(sign > 0) == (bridge_side == "left")`. Fails on the base on `inversion_period2` (tail
+  openings the geometry dropped), passes on all 10 law cases. No NOT_APPLICABLE.
+- Builder `p3_coarse_blasts` (`cases.build_period3_coarse_blasts`, BUILDERS only, not a law
+  case): the p3 zone at 1e-7, then 6 single blasts at `area_cutoff = 1e-5`,
+  `min_separation = 1e-5`, `diagnose=False`, repinned after each, partitioned (the E11 cell).
+  Regression `test_coarse_blasts_rows_by_signs`: precondition (a hole bridge whose signs
+  alternate while `geometry_disagrees`), the symbolic dynamics runs, laws
+  `partition_unique_owner` / `openings_follow_signs` / `bridge_rows_consistent`, and
+  `punch_holes()` logs more StablePartition WARNINGs than `punch_holes(diagnose=False)`
+  (level + logger only). Base: AssertionError "approaches its two defining crossings" in the
+  builder.
+- `test_open_p3_deep_runs`: `test_deep_p3_every_class_walks` (no `unresolved_reason`, D3, no
+  xfail) split off the strict xfail, which keeps only `not dyn.virtual_classes`. Fails on the
+  base (the unreachable class) on all three deep runs.
+- Unit, rewritten to the new rule (not weakened): the I2 stubs carry a BridgeId and the TRUE
+  crossing signs of their lobe (`_LOBE_SIGNS = (-1, 1)`); equal signs raise, alternating signs
+  with `_CROSSING_LOBE` pass and come back from `geometry_flags`
+  (`test_contradicting_geometry_with_alternating_signs_is_a_flag`, NUM-1 in miniature);
+  `test_measured_side_disagreement_is_a_flag_not_an_error` replaces `..._raises`;
+  `bridge_side_violations` counts the orbit check only. Production checks:
+  `test_punch_holes_flags_a_contradicting_measured_side` (one WARNING, no raise) replaces
+  `..._raises_...`, new `test_punch_holes_raises_on_equal_signs`. Stable partition:
+  `test_containing_bridge_brackets_by_bisect` replaces the key-filter test,
+  `test_side_at_nearest_segment_reads_two_nodes` (INT-5) is new; deleted with their API:
+  `test_bridge_span_reads_the_branch_from_the_bridges_own_key` (covered by law
+  `propagated_holes_land_on_predicted_branch`), `test_backward_endpoint_prefers_the_table_then_scales`
+  (`image_cdist`'s table-first rule is pinned in `test_image_cdist.py`).

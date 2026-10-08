@@ -47,11 +47,13 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   iterates -3/-5/-6 read "left" from a far fold) and the nearest-vertex misread of direct holes on
   tiny +1/+2 lobes. Guarded by `test_deep_p3_holes_share_bridge_side_through_symbolic_dynamics`
   [6_blasts, 15_steps]; removing `span` turns exactly those two red.
-- Latent: if a `span` lies strictly inside one polyline segment the slice is 2 points,
-  `_arc_side_of` returns None and the hole gets `bridge_side=None` with a misleading DEBUG.
-  Never observed (175/175 span reads had >= 3 points). Widening to >= 3 points would close it.
-- Latent (believed): `_hole_openings` :1148 uses the same whole-polyline nearest vertex for the
-  stable nodes flanking each defining crossing.
+- CLOSED (WP4, INT-5): if a `span` lies strictly inside one polyline segment the slice is 2
+  points and `_arc_side_of` returned None. Observed off the law cases (inversion x period 2 at
+  10/10 steps: 19 of 26 propagated holes). The measured side is now read at the nearest
+  SEGMENT, which answers on two points.
+- CLOSED (WP4, INT-4): `_hole_openings` used the same whole-polyline nearest vertex for the
+  stable nodes flanking each defining crossing; not latent, it opened nothing (or one half at
+  both ends) on p3 at 6 blasts / 15-16 steps. The openings are sign arithmetic now.
 - OPEN: p3 >= 6 blasts (or >= 15 steps) now runs but is unreliable. A new reference orbit
   appears (holes 12 -> 42 at 6 blasts), the partition is re-indexed so NONE of the 9 b0 class
   names survive, ~23-27 classes, class `t` unreachable (`R#2 -> R#3` on branch 0.0), a virtual
@@ -132,9 +134,9 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   branch_key)`; at an anchor the hole opens the OUTWARD half of the stable branch on which the
   bridge's row is `bridge_side` (`_anchor_branch`: `s(o,b)` iff `(home_sign > 0) == (row ==
   "left")`, else `s(o,1-b)`; None when that branch is not computed). At the anchor the record's
-  row is always `bridge_side`. `_approach` returns None at an anchor (no frame of its own), so the
-  geometric row check skips it. The geometry agrees on every case (law
-  `anchor_opening_faces_its_hole`). Non-anchor ends keep the geometric reading (WP4).
+  row is always `bridge_side`. An anchor end has no geometric row (no frame of its own). The
+  geometry agrees on every case (law `anchor_opening_faces_its_hole`). Non-anchor ends: CLOSED
+  by WP4, signs everywhere.
 - Cross-side is flagged only for a pair on ONE branch (`SymbolicDynamics.translate_itinerary`).
   Elements are not glued across the point (C7; author may revisit, it would change `ElementRef`).
 - Re-tagged, not fixed: `anchor_bridge_class_leads_its_tangle` x `inversion` (PK-3: the
@@ -143,3 +145,51 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   between consecutive blast-image crossings no bridge spans).
 - Inversion law cases after WP3: anchors 1, holes 1 / 9 / 9, classes 4 / 10 / 10 at
   0 / 1 / 2 blasts, no virtual class, `is_reliable` True throughout.
+
+## Open-issues round WP4 (2026-10-08, branch `oi/wp04-sign-rule`, base `dad72d2`)
+
+- Signs decide (D6, chalkboard stage 6). `_hole_openings(trellis, bridge, bridge_side)`: at a
+  non-anchor bound `which = "outward" iff (crossing_sign > 0) == (bridge_side == "left")`, row
+  `row_of_end`, branch the crossing's own; the anchor keeps `_anchor_branch`. Derivation: the
+  bridge passes every bound along u+, and s+ is left of u+ iff `cross(u+, s+) > 0`. With
+  alternating signs this IS the inward pair of a direct hole, so `inward=True` is gone; so are
+  the `bridge_side is None` fallback and `SideSource "fallback"` (a propagated hole always
+  carries a side). Deleted: `_stable_frame`, `_arc_side_of`, `_cross_sign`, `_row_polyline`,
+  `_row_at`, `_approach`, `_row_mismatch_message` (folded into `bridge_row_violation`),
+  `_bridge_end_geometry` (now `_approach_displacement`, displacement only),
+  `_backward_endpoint`, `_bridge_unstable_span`. StablePartition.py 2223 -> 1963 lines.
+- I2 is the sign form: `bridge_row_violation` fires exactly on EQUAL signs on one stable
+  branch (C7 via `stable_key_at`); I1 (`check_holes_share_bridge_side`,
+  `bridge_side_violations`) is the orbit check only. The geometry is a flag:
+  `geometry_flags(trellis, bridges, holes) -> (row diagnoses with geometry_disagrees, side
+  diagnoses with measured_disagrees)`, logged once per kind on the StablePartition logger by
+  `Trellis.punch_holes(diagnose=True)` (silent on every law case and on p3_15/p3_16/p3_6_blasts;
+  on `p3_coarse_blasts` 2 row flags (bridges (41,42) 2 nodes, (42,43) 4 nodes) and 20
+  measured-side flags). The geometric row reader is `_anchorward_look` (bisect over node
+  cdists) + `_approach_displacement`.
+- Backward chain (PERF-4): `span = sorted(image_cdist(id, -step, "unstable", branch=start_key))`
+  over the START bridge's two ids, container = bisect over
+  `trellis.branch(advance_key(start_key, -step)).intersection_ids` (`orders` memo per
+  propagation), termination `containing.id in visited`. Same containers as the old scan on every
+  law case and deep run (probe `chain_ids.py`).
+- INT-2 closed BY DESIGN: 600+ container lookups (law cases, deep p3, four deep E11 states) are
+  all strict sub-arcs with at most one linked end; the other end is a crossing with
+  `f^-1(W^s)`, beyond the trimmed stable manifold. The whole containing bridge gets the hole
+  (chalkboard stage 5 says the same).
+- Measured side at the nearest SEGMENT (foot point clipped), same rule as the law oracle
+  `helpers.laws._point_side_of_bridge` (INT-5). Unchanged on every law case and deep run.
+- C1 nit: the bare-branch element asserts no hole opens outward of its anchor.
+- Behaviour: law cases unchanged (holes incl. measured sides, partitions, class counts, words:
+  probes `holeset.py`, `partsig.py`). `inversion_period2`: 3 holes gain the tail opening the
+  geometry dropped, partition unchanged. Deep p3 (15, 16 steps, 6 blasts): 81 -> 84 / 89 -> 92
+  / 81 -> 84 elements, the unreachable class goes (unresolved 1 -> 0), the virtual `new1`
+  stays (WP7). E11 p3 / nested_inner at 1e-5 run all 20 blasts (were AssertionError from
+  blast 6); from blast 9 they hold 3 unresolved / 2 virtual (WP7) and the hole set dips at
+  blast 7 (84 -> 64, BCG-5, WP8).
+- Open after WP4: `OuterFaceError` on the 2-iteration E11 cells and k28 1e-5/1e-6 blasts 16-17
+  (INT-10, WP10); inversion x period 2 at 10 steps still fails
+  `backward_holes_keep_bridge_side` (the law re-measures a carried point that escapes a
+  3-node reference lobe; a law-oracle question), `bridge_endpoints_on_own_branch` (WP7-D1) and
+  the PK-1 symbolic laws (WP7). Hole PLACEMENT (`_stable_arc_midpoint`, `_nearest_arc_point`,
+  `_step_into`, `_image_arc_midpoint`) stays geometric: it places plotted coordinates and the
+  carried point, nothing decides on it.

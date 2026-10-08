@@ -184,6 +184,8 @@ The anchor image chain `0→pip→4→20` then finds no hole at 20/4, so `Partit
 
 E11 has exactly 1 unresolved and 1 virtual class at every blast from 6 to 20 (p3 and nested_inner); blasting never resolves them. After the bursts, every unresolved class is "dual-graph walk unreachable" (127 entries, 0 singleton). k28 ends with 12 unresolved, 1 virtual and 3 ambiguous; k32 with 9/0/2. The report suggests stable growth instead of blasting (untested).
 
+**WP4:** the unreachable class `t` was the geometric hole openings: with the signs deciding them, the deep runs gain 3 elements (81 -> 84, 89 -> 92, 81 -> 84) and every class walks (new test `test_deep_p3_every_class_walks`); the virtual `new1` remains (strict xfail `open_p3_deep_runs`, WP7). Replayed E11 p3 / nested_inner at 1e-5: 0 unresolved / 1 virtual at blasts 6-8, then 3 unresolved / 2 virtual from blast 9 (WP7). Inversion x period 2 at 10/10 steps no longer fails `openings_*` or the library row check; `backward_holes_keep_bridge_side` (its oracle re-measures a carried point that escapes the 3-node reference lobe), `bridge_endpoints_on_own_branch` (WP7-D1) and the symbolic laws still fail there.
+
 **WP3 evidence (inversion x period 2):** the `inversion_period2` law case (k=4.1, 9/9 steps) passes every law. One step deeper (10/10 steps, 47 crossings) eleven laws fail on the WP3 branch, every one also failing on main (which fails sixteen): `bridge_endpoints_on_own_branch`, `bridge_rows_consistent`, `partition_covers_branch`, `backward_holes_keep_bridge_side`, `openings_missing_only_at_anchor_or_tail`, `alphabet_inside_minimal_trellis`, `iterated_cut_provenance`, `every_active_class_walks` (an unreachable walk), `no_virtual_class`, `landings_contained`, `refined_children_inherit_word`. Deep period-k evidence for WP5 / WP7 / WP10; the law case stays at 9 steps.
 
 **Evidence:** `tests/cases.py:831-839`; `tests/regression/test_open_p3_deep_runs.py:1-18, 58-67`; `src/tanglepack/examples/henon_cases.py:30-39`; `src/tanglepack/topology/PartitionFamily.py:800`; `src/tanglepack/topology/DualWalk.py:757-760`; `stress/numerics/report/report.tex:1477-1527, 1734-1735, 2025-2033`; `stress/numerics/report/numbers_extra.tex` (NumDeepUnresolvedUnreachable=127); `stress/numerics/report/numbers.tex:468-472, 576-580, 678-680`; `stress/numerics/results/e11_blast_depth.jsonl` (p3 1e-5 `invariant_assert` blasts 6-19); `.refactor/knowledge/topology.md` (OPEN p3 ≥6 blasts); `.refactor/decisions.md` 2026-10-02
@@ -419,14 +421,16 @@ The homotopy class of f(bridge) relative to the holes is determined by its cross
 **Evidence:** `src/tanglepack/topology/DualWalk.py:273, 350, 672, 827`; `src/tanglepack/topology/SymbolicDynamics.py:583, 1094, 1169`; `src/tanglepack/topology/PartitionFamily.py:684, 900`; `src/tanglepack/topology/MinimalTrellis.py:243-416`
 
 ### INT-2: A hole is punched on the whole containing bridge, not on the backward-image sub-arc
-**Status:** open / decided 2026-10-07 | **Severity:** medium | **Related:** BCG-4, PERF-4, DEC-1 | **WP:** WP4
+**Status:** closed (WP4, by design: whole containing bridge, evidence in StablePartition Dev Notes) | **Severity:** medium | **Related:** BCG-4, PERF-4, DEC-1 | **WP:** WP4
+
+**WP4:** kept, by design. Instrumenting every containing lookup on the ten law cases, the three deep p3 runs and four deep E11 states (600+ lookups) finds every span a STRICT sub-arc of its container, none needing slack, and at most one of its two ends linked by the iterate table: the other end is a crossing of the unstable branch with `f^-1(W^s)`, beyond the trimmed stable manifold, so the trellis has no node to cut the sub-arc at and the region it bounds is, in the trellis, the region beside the containing bridge. Chalkboard stage 5 says the same ("that bridge gets the hole"). The container is now an exact bisect (PERF-4).
 
 Every ancestor bridge becomes a hole bridge and every ancestor endpoint a partition boundary (42 holes → 85 elements). `_containing_bridge` scans with `rtol=1e-3` slack and "tightest span wins"; bridges tile a ray, so a bisect would be exact.
 
 **Evidence:** `src/tanglepack/topology/StablePartition.py:1771-1800`
 
 ### INT-3: Hole openings and partition rows use the GEOMETRIC row while classes, dual graph and walks use the COMBINATORIAL row
-**Status:** open / decided 2026-10-07 | **Severity:** medium | **Related:** INT-4, INT-5, NUM-1, NUM-2, DEC-8 | **WP:** WP4
+**Status:** closed (WP4) | **Severity:** medium | **Related:** INT-4, INT-5, NUM-1, NUM-2, DEC-8 | **WP:** WP4
 
 `_hole_openings` uses `_row_at`, `_stable_frame`, `_bridge_end_geometry`, `_arc_side_of`, nearest-node tests and special trimmed-end/anchor/`inward=True` branches, about 450 lines. Sign arithmetic decides the same thing: `row = row_of_end`, `outward ⇔ (sign>0) == (side==left)`. `measured_side`, `SideDiagnosis` and `RowDiagnosis` exist only to diagnose that geometry.
 
@@ -434,15 +438,17 @@ The two readings disagree on coarse polylines. E11 nested_inner with 2 iteration
 
 **Evidence:** `src/tanglepack/topology/StablePartition.py:714, 755, 790, 916, 982, 1086-1475, 1236-1285, 1476-1582`; `stress/numerics/e11_blast_depth.py:76-95`
 
+**WP4:** openings are sign arithmetic (`outward iff (crossing_sign > 0) == (bridge_side == "left")`, row `row_of_end`), and so is the I2 assertion (equal signs on one stable branch). The polyline readings are flags (`geometry_flags`, one WARNING per kind per `punch_holes`). The geometry was not only missing at depth but wrong: on p3 at 6 blasts and 15-16 steps 4 of 42-44 holes opened differently (a hole opening nothing, its twin opening `anchorward` at both ends), and at 1e-5 18 of 84-88. Law cases are unchanged; the deep p3 partitions gain 3 elements and lose the unreachable class (PK-1).
+
 ### INT-4: `_hole_openings` uses the nearest vertex of the whole polyline (the same defect already fixed for propagated hole sides)
-**Status:** open (latent) | **Severity:** low | **Related:** INT-3 | **WP:** WP4
+**Status:** closed (WP4; not latent: it misread the deep p3 runs and inversion x period 2 at 10 steps, and went with the geometry) | **Severity:** low | **Related:** INT-3 | **WP:** WP4
 
 The same kind of misread broke p3 hole sides at 15 steps / 6 blasts.
 
 **Evidence:** `src/tanglepack/topology/StablePartition.py:~1480-1500`; `.refactor/knowledge/topology.md` ("Latent (believed)"); `.refactor/decisions.md` 2026-10-02
 
 ### INT-5: `_arc_side_of` returns None for a 2-point span slice, giving hole `bridge_side` None with a misleading DEBUG
-**Status:** open (latent; 175/175 observed reads had ≥3 points) | **Severity:** low | **Related:** INT-3 | **WP:** WP4
+**Status:** closed (WP4: observed off the law cases, 19 of 26 propagated holes of inversion x period 2 at 10/10 steps; the measured side is read at the nearest segment, which answers on two points, and it is a flag now) | **Severity:** low | **Related:** INT-3 | **WP:** WP4
 
 Fix: widen the slice to at least 3 points.
 
@@ -496,6 +502,8 @@ After a blast there is no Bridge between a parent crossing and a blast-child cro
 `_merge_faces`/`_innermost_container` test every node with `point_in_polygon` and signed areas. E11 k28 at 1e-6, blast 16: one component has three positively wound faces, which a planar subdivision cannot have; a self-intersecting sliver is suspected. The rotation system already determines the faces, and the chalkboard needs one containment test per fixed point. There is also a "component with no closed face" WARNING.
 
 **Evidence:** `src/tanglepack/topology/DualGraph.py:597-604, 771, 808-810, 842-875`; `stress/numerics/report/report.tex:1667-1673, 1912`; `stress/numerics/report/numbers.tex:412-416`
+
+**WP4 evidence:** with the openings and row check on the signs, the cells that used to stop in the partition now stop here: the E11 2-iteration cells (p3 at 1e-7 from blast 15, nested_inner from blast 17) and k28 at 1e-5 / 1e-6 blasts 16-17.
 
 ---
 
@@ -625,18 +633,22 @@ WP2 removed `Trellis.scale_cdist`, `_get_lambda_u`, `IntersectionRegistry.on_int
 ## Resolution & numerics
 
 ### NUM-1: The bridge-row AssertionError fires on under-resolved bridges even when its own diagnosis says the combinatorial rows agree
-**Status:** deferred (WP7-D1: ≥3 nodes per bridge) | **Severity:** medium | **Related:** INT-3, NEST-1, DEC-18 | **WP:** WP4
+**Status:** closed (WP4) | **Severity:** medium | **Related:** INT-3, NEST-1, DEC-18 | **WP:** WP4
 
 Seen in 39 snapshots across 4 configs: p3 and nested_inner at 1e-5 from blast 6, and the 2-iteration cells. Example: p3 bridge (41,42) has signs +1/−1 and the combinatorial rows agree (both left), but the geometric row is read on a 2-node polyline at 0.16°. The heteroclinic case at 1e-5 asserts with "signs alternate … likely below resolution" (8 nodes, 0.3-0.6°). Asserting here contradicts the 2026-10-07 rule that resolution problems are flags. Relaxing only the geometric reading exposes the hole-side check next.
 
 **Evidence:** `src/tanglepack/topology/StablePartition.py:1269`; `stress/numerics/report/report.tex:235-237, 1674-1690, 1728-1729, 1910-1912, 1995-2002`; `stress/numerics/report/numbers.tex:424-428`
 
+**WP4:** root cause: on a 2-node polyline the "approach displacement" is the vector to the FAR end node. The assertion reads the signs now (it fires on equal signs only) and the geometric row is a flag. Replayed E11: p3 and nested_inner at 1e-5 (one iteration) run all 20 blasts (were AssertionError from blast 6); regression `test_coarse_blasts_rows_by_signs` (builder `p3_coarse_blasts`). The 2-iteration cells now pass the partition and stop at `OuterFaceError` (p3 blast 15, nested_inner blast 17: INT-10, WP10).
+
 ### NUM-2: Hole-side AssertionError: carried "left" vs measured "right"
-**Status:** open | **Severity:** medium | **Related:** INT-3, NUM-1 | **WP:** WP4
+**Status:** closed (WP4; k28 then stops at INT-10, WP10) | **Severity:** medium | **Related:** INT-3, NUM-1 | **WP:** WP4
 
 3 snapshots: k28 at 1e-5/1e-6, blasts 16-17, several iterates of one orbit. Probably measurement on under-resolved sub-arcs; the recommendation is to re-measure on refined sub-arcs.
 
 **Evidence:** `stress/numerics/report/report.tex:240, 1654-1666, 1730-1732, 1910`; `stress/numerics/report/numbers.tex:418-422`
+
+**WP4:** the measured side is the geometric cross-check of the carried one (D6): a disagreement is one WARNING per `punch_holes` (`geometry_flags`), never an assertion; `check_holes_share_bridge_side` asserts the orbit invariant only. The measured side is unreliable for a second reason: the carried point is the reference hole mapped back by the real inverse map, and when the reference lobe is under-resolved the point is not in the true lobe and escapes (inversion x period 2 at 10/10 steps: origin `(3,31)` reaches 1e15 by iterate -11, its reference bridge has 3 nodes). The k28 1e-5 / 1e-6 cells at blasts 15-17 get past the side check (14-17 holes flagged per snapshot) and then raise `OuterFaceError` at blasts 16-17 (INT-10, WP10), as k28 1e-6 blast 17 already did; so "k28 runs through" is reached past the partition, not end to end.
 
 ### NUM-3: Registered crossings below the resolution ratio appear from blast 9 (period 1) or 15 (period 3)
 **Status:** open (flags only; auto-refinement of flagged stretches is open) | **Severity:** medium | **Related:** NUM-4, BCG-4 | **WP:** deferred
@@ -788,7 +800,7 @@ The map is at most 0.84% of growth time; refinement plus the linked list take 75
 **Evidence:** `stress/numerics/report/report.tex:103-108, 241-243, 523-565`
 
 ### PERF-4: The hole-propagation `_containing_bridge` is a linear scan over all bridges per backward step; termination uses `id(bridge)`
-**Status:** open | **Severity:** low | **Related:** INT-2 | **WP:** WP4
+**Status:** closed (WP4: a bisect over the branch's crossing order, the span moved by `image_cdist` from the start bridge's crossing ids, termination on `BridgeId`; same containers as the scan everywhere) | **Severity:** low | **Related:** INT-2 | **WP:** WP4
 
 **Evidence:** `src/tanglepack/topology/StablePartition.py:571-588, 1771-1800`
 
@@ -1061,5 +1073,7 @@ The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases
 **WP2** (KNOWN_ISSUES 52 -> 34): with the β^k lap the 15 vacuous hole laws and the two `inversion_series` entries XPASSed and were removed, as were `anchor_bridge_class_leads_its_tangle` and `cross_side_only_within_a_branch` on `inversion_two_blasts` (WP3 tags; both still xfail on `inversion`). It added `stable_nodes_never_own_a_singleton` x `inversion_two_blasts` (INV-1, WP3); `partition_singletons` x `inversion_two_blasts` is no longer vacuous and shares that entry. WP2 also added the crossing-layer laws `iterate_table_partial_bijection`, `iterate_links_pass_the_map_gate` and `iterate_table_complete` (pass on every law case).
 
 **WP3** (KNOWN_ISSUES 34 -> 21): the inversion anchor is one point with four branches. The 15 WP3 entries were resolved: 13 pairs pass and were removed (`one_anchor_per_unstable_branch` x 3, replaced by the stronger `one_anchor_per_periodic_point`; `arrangement_euler` x `inversion`, `inversion_one_blast`; `no_virtual_class` x 3; `partition_singletons` and `stable_nodes_never_own_a_singleton` x `inversion_one_blast`, `inversion_two_blasts`; `cross_side_only_within_a_branch` x `inversion`), and two with other roots were re-tagged with evidence: `anchor_bridge_class_leads_its_tangle` x `inversion` -> WP5 (PK-3) and `arrangement_euler` x `inversion_two_blasts` -> WP7 (INT-9). New laws (pass on every law case): `one_anchor_per_periodic_point`, `anchor_rays_are_its_branches`, `anchor_opening_faces_its_hole` (not applicable where no hole touches an anchor: k10, k28_two_blasts, inversion). New law case `inversion_period2`. Hole opening records are 4-tuples `(id, which, row, branch_key)`.
+
+**WP4** (KNOWN_ISSUES 21 -> 21, none was tagged WP4): signs decide hole openings and the row assertion (D6), the geometry is a flag (`geometry_flags`, `Trellis.punch_holes(diagnose=True)`), the backward chain is `image_cdist` from the start bridge's crossing ids with a bisect container, and the measured side reads the nearest segment. INT-2 (by design), INT-3, INT-4, INT-5, NUM-1, NUM-2 and PERF-4 are closed. The law `openings_follow_signs` replaces `openings_missing_only_at_anchor_or_tail`; new regression `test_coarse_blasts_rows_by_signs` (builder `p3_coarse_blasts`) and `test_deep_p3_every_class_walks`. Law cases are unchanged (holes, partitions, classes, words); the deep p3 runs lose their unreachable class; E11 p3 / nested_inner at 1e-5 run 20 blasts. The next blocker of the deep cells is `OuterFaceError` (INT-10, WP10).
 
 Verification of the "possibly stale" items (WP0): DOC-3 is confirmed open (the MinimalTrellis "definition is changing", TrellisBranch `return_period`, ResonanceZone "no inversion example", PartitionFamily "concurrent edit" and StrongPip "legitimately None" notes are all still present). PK-7 is confirmed dead code (WP2 deletes it). INV-10, NUM-19 and DOC-4 need a run; they are checked by the WP that owns them.
