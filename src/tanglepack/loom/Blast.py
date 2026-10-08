@@ -173,6 +173,7 @@ def blast_zone(
     fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
     strict: bool = False,
     min_separation: Optional[float] = None,
+    diagnose: bool = True,
 ) -> BlastResult:
     """
     Repeatedly iterate the bridges inside a resonance zone (see the module docstring).
@@ -194,6 +195,13 @@ def blast_zone(
             bridge images that come this close are about to merge into a numerical
             artifact; stopping there keeps the blast on the well-resolved side of the
             precision limit. ``None`` (default) disables the guard.
+        diagnose: If True (default) finish with ONE
+            :meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.report_resolution`
+            pass over the blasted fixed points: deep blasting is where
+            under-resolved crossings and same-stability polyline crossings
+            appear, and ``iterate_bridge`` never passes through
+            ``compute_intersections``. It logs on the workbench's logger, never on
+            this module's.
 
     Note:
         Bridges that re-trace curve an existing bridge already holds -- e.g. the
@@ -384,6 +392,8 @@ def blast_zone(
         )
         frontier = kept
 
+    if diagnose:
+        workbench.report_resolution(allowed_fps)
     return result
 
 

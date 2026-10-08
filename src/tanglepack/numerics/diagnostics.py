@@ -1,0 +1,355 @@
+"""
+Resolution diagnostics: where the polylines are too coarse to trust.
+
+A computed tangle is a set of polylines standing for smooth curves, and two
+things go silently wrong where the polylines are too coarse for the geometry:
+
+* **Unresolved crossings.** Near a tangency an unstable and a stable polyline
+  can straddle each other without the curves crossing there (or cross without
+  the polylines showing it). ``Tangle`` scores every detected crossing with
+  its :attr:`~.Intersection.Intersection.resolution_ratio`;
+  :meth:`~.IntersectionRegistry.IntersectionRegistry.unresolved_crossings`
+  lists the ones below a threshold.
+* **Same-stability crossings.** By the fundamental invariant two unstable
+  curves never cross, nor do two stable ones, and no curve crosses itself. A
+  polyline that does -- a Z-kink of one manifold, two branches, a blast's image
+  bridge over another curve -- is a polygon ARTIFACT, never a real crossing.
+  ``Tangle`` never even tests a manifold against itself, so these were not
+  detected before; :func:`same_stability_crossings` finds them.
+
+Both are FLAGS. Nothing here discards a crossing or changes the tangle: a real
+near-tangent crossing exists, only the count of crossings near a tangency is
+untrustworthy. :meth:`~.TangleWorkbench.TangleWorkbench.check_resolution`
+bundles the two into a :class:`ResolutionReport`.
+
+Dev Notes:
+
+The tangle region is the box of the registered crossings padded by ``pad`` of
+its larger side, the rule of the test-tier law
+``tests/helpers/laws.check_no_same_stability_crossing`` (which stays the
+independent oracle, deliberately not built on this module). Outside it an
+escaping arm is under-resolved by design (the inversion saddle's escaping arm
+crosses itself thousands of times) and says nothing about the dynamics.
+
+``suggested_area_cutoff`` is half the larger curvature area of the two
+crossing segments: refinement only splits a segment whose area reaches
+``area_cutoff``, so that is NECESSARY for the refiner to touch the kink. It is
+not sufficient -- a kink can survive one level of refinement.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Iterable, Literal, Optional
+
+import numpy as np
+from numpy.typing import NDArray
+
+from .geometry import curvature_area_batch
+from .Intersection import Stability
+
+if TYPE_CHECKING:
+    from .BaseManifold import BaseManifold
+    from .FixedPoint import FixedPoint
+    from .TangleWorkbench import TangleWorkbench
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+# Interior parameter margin: two segments that only touch at an endpoint do not
+# cross (the Tangle's own predicate counts touching endpoints).
+_MARGIN = 1e-9
+# Relative parallel threshold on sin(angle), as in Tangle.
+_EPS_REL = 1e-12
+# Candidate pairs generated at once by the sweep.
+_PAIR_BLOCK = 2_000_000
+
+
+@dataclass(frozen=True)
+class SameStabilityCrossing:
+    """
+    Two same-stability polyline segments crossing: a polygon artifact.
+
+    Attributes:
+        stability: The stability of both curves.
+        curve_a: The first curve's name (a manifold key, or an image bridge).
+        curve_b: The second curve's name; equal to ``curve_a`` for a self-crossing.
+        seg_a: The segment index along ``curve_a`` (from its root).
+        seg_b: The segment index along ``curve_b``.
+        point: Where the two segments cross.
+        sin: ``|sin|`` of the crossing angle.
+        local_area: The larger curvature area of the two segments.
+        suggested_area_cutoff: ``0.5 * local_area``, the most the refiner's
+            ``area_cutoff`` can be for it to split these segments at all
+            (necessary, not sufficient; see the module Dev Notes).
+        in_tangle_region: Whether ``point`` lies in the padded box of the
+            registered crossings.
+    """
+
+    stability: Stability
+    curve_a: str
+    curve_b: str
+    seg_a: int
+    seg_b: int
+    point: tuple[float, float]
+    sin: float
+    local_area: float
+    suggested_area_cutoff: float
+    in_tangle_region: bool
+
+
+@dataclass(frozen=True)
+class ResolutionReport:
+    """
+    Everything the polylines fail to resolve, on demand.
+
+    Attributes:
+        threshold: The resolution-ratio threshold used (None: not checked).
+        unresolved_crossings: Registry ids whose resolution ratio is below
+            ``threshold``, in unstable cdist order.
+        same_stability_crossings: Every same-stability polyline crossing.
+    """
+
+    threshold: Optional[float]
+    unresolved_crossings: tuple[int, ...]
+    same_stability_crossings: tuple[SameStabilityCrossing, ...]
+
+    @property
+    def clean(self) -> bool:
+        """No unresolved crossing and no same-stability crossing in the tangle region."""
+        return not self.unresolved_crossings and not any(
+            hit.in_tangle_region for hit in self.same_stability_crossings
+        )
+
+
+def same_stability_crossings(
+    workbench: "TangleWorkbench",
+    fixed_points: Optional[Iterable["FixedPoint"]] = None,
+    *,
+    region: Literal["tangle", "all"] = "tangle",
+    pad: float = 0.1,
+) -> list[SameStabilityCrossing]:
+    """
+    Every crossing of two unstable, or two stable, polylines.
+
+    The curves are every manifold of the selected fixed points plus the
+    unstable image bridges that share no node with a manifold (a blast's
+    images; a bridge cut out of a manifold IS that manifold). Two segments that
+    share a node -- neighbours on one curve, two branches leaving one root, two
+    image bridges overlapping at a crossing -- never count, nor do segments that
+    only touch.
+
+    Args:
+        workbench: The workbench holding the curves.
+        fixed_points: Whose curves to check; None checks every fixed point.
+        region: ``"tangle"`` marks a hit ``in_tangle_region`` only inside the
+            padded box of the registered crossings (none when nothing is
+            registered); ``"all"`` counts the whole plane as the tangle region.
+        pad: The box padding, as a fraction of its larger side.
+
+    Returns:
+        The hits, unstable ones first, each curve pair in curve order.
+    """
+    selected = (
+        list(workbench.fixed_points) if fixed_points is None else list(fixed_points)
+    )
+    box = (
+        _tangle_box(workbench, selected, pad)
+        if region == "tangle"
+        else (np.full(2, -np.inf), np.full(2, np.inf))
+    )
+    return [
+        hit
+        for stability in ("unstable", "stable")
+        for hit in _crossings_among(_curves(workbench, selected, stability), stability, box)
+    ]
+
+
+def _tangle_box(
+    workbench: "TangleWorkbench", fixed_points: list["FixedPoint"], pad: float
+) -> Optional[tuple[NDArray[np.float64], NDArray[np.float64]]]:
+    """The padded box of the registered crossings of these fixed points."""
+    points = np.array(
+        [
+            ix.coords
+            for _iid, ix in workbench.intersection_registry
+            if any(fp is chosen for fp in ix.fixed_points for chosen in fixed_points)
+        ],
+        dtype=float,
+    )
+    if not len(points):
+        return None
+    lo, hi = points.min(axis=0), points.max(axis=0)
+    margin = pad * float((hi - lo).max())
+    return lo - margin, hi + margin
+
+
+def _curves(
+    workbench: "TangleWorkbench", fixed_points: list["FixedPoint"], stability: Stability
+) -> list[tuple[str, list]]:
+    """The named node lists of one stability's curves."""
+    nodes_of = {
+        key: manifold.get_point_array(return_nodes=True)
+        for key, manifold in workbench.manifolds.items()
+        if key[1] == stability
+    }
+    curves = [
+        (_manifold_name(key), nodes)
+        for key, nodes in nodes_of.items()
+        if any(key[0] is fp for fp in fixed_points)
+    ]
+    if stability == "stable":
+        return curves
+    manifold_nodes = {id(node) for nodes in nodes_of.values() for node in nodes}
+    for bridge in workbench.bridges:
+        if not any(bridge.fixed_point is fp for fp in fixed_points):
+            continue
+        nodes = bridge.get_point_array(return_nodes=True)
+        if not any(id(node) in manifold_nodes for node in nodes):
+            curves.append((f"image bridge {bridge.id}", nodes))
+    return curves
+
+
+def _manifold_name(key: tuple) -> str:
+    """A manifold key as text: ``A unstable 0.1``."""
+    fixed_point, stability, orbit, branch = key
+    return f"{fixed_point.label or '?'} {stability} {orbit}.{branch}"
+
+
+def _crossings_among(
+    curves: list[tuple[str, list]],
+    stability: Stability,
+    box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
+) -> list[SameStabilityCrossing]:
+    """The transversal interior crossings among the segments of some curves.
+
+    A hit is in the tangle region when it lies in ``box`` (never, for None).
+    """
+    rows = [_segment_rows(k, nodes) for k, (_name, nodes) in enumerate(curves)]
+    rows = [row for row in rows if row is not None]
+    if not rows:
+        return []
+    a, b, left, right, node_a, node_b, owner, position = (
+        np.concatenate(column) for column in zip(*rows)
+    )
+    # One edge reached from two curves (overlapping image bridges) is one segment.
+    edges = np.sort(np.stack([node_a, node_b], axis=1), axis=1)
+    _, first = np.unique(edges, axis=0, return_index=True)
+    keep = np.sort(first)
+    a, b, left, right, node_a, node_b, owner, position = (
+        column[keep] for column in (a, b, left, right, node_a, node_b, owner, position)
+    )
+
+    i, j = _candidate_pairs(a, b)
+    shared = (
+        (node_a[i] == node_a[j])
+        | (node_a[i] == node_b[j])
+        | (node_b[i] == node_a[j])
+        | (node_b[i] == node_b[j])
+    )
+    i, j = i[~shared], j[~shared]
+
+    d1, d2 = b[i] - a[i], b[j] - a[j]
+    den = d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]
+    scale = np.hypot(*d1.T) * np.hypot(*d2.T)
+    r = a[j] - a[i]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = (r[:, 0] * d2[:, 1] - r[:, 1] * d2[:, 0]) / den
+        u = (r[:, 0] * d1[:, 1] - r[:, 1] * d1[:, 0]) / den
+    hit = (
+        (np.abs(den) > _EPS_REL * scale)
+        & (t > _MARGIN)
+        & (t < 1 - _MARGIN)
+        & (u > _MARGIN)
+        & (u < 1 - _MARGIN)
+    )
+    i, j, t = i[hit], j[hit], t[hit]
+    sin = np.abs(den[hit]) / scale[hit]
+    point = a[i] + t[:, None] * (b[i] - a[i])
+    local_area = np.maximum(
+        curvature_area_batch(a[i], b[i], left[i], right[i]),
+        curvature_area_batch(a[j], b[j], left[j], right[j]),
+    )
+    in_region = (
+        np.zeros(len(i), dtype=bool)
+        if box is None
+        else np.all((box[0] <= point) & (point <= box[1]), axis=1)
+    )
+
+    return [
+        SameStabilityCrossing(
+            stability=stability,
+            curve_a=curves[owner[p]][0],
+            curve_b=curves[owner[q]][0],
+            seg_a=int(position[p]),
+            seg_b=int(position[q]),
+            point=(float(x), float(y)),
+            sin=float(s),
+            local_area=float(area_pq),
+            suggested_area_cutoff=0.5 * float(area_pq),
+            in_tangle_region=bool(inside),
+        )
+        for p, q, (x, y), s, area_pq, inside in zip(
+            i, j, point, sin, local_area, in_region
+        )
+    ]
+
+
+def _segment_rows(owner: int, nodes: list) -> Optional[tuple[NDArray, ...]]:
+    """Per-segment arrays of one curve: ends, outer neighbours, node ids, owner, index."""
+    if len(nodes) < 2:
+        return None
+    points = np.array([node.get_point() for node in nodes], dtype=float)
+    ids = np.array([id(node) for node in nodes], dtype=np.int64)
+    missing = np.full((1, 2), np.nan)
+    count = len(points) - 1
+    return (
+        points[:-1],
+        points[1:],
+        np.vstack([missing, points[:-2]]),
+        np.vstack([points[2:], missing]),
+        ids[:-1],
+        ids[1:],
+        np.full(count, owner),
+        np.arange(count),
+    )
+
+
+def _candidate_pairs(
+    a: NDArray[np.float64], b: NDArray[np.float64]
+) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
+    """Every pair of segments whose bounding boxes overlap, by sweep and prune.
+
+    The boxes are sorted along the axis on which fewer of them overlap, each is
+    paired with the boxes that start before it ends, and the pairs that also
+    overlap on the other axis are kept. A tangle's segments are short next to
+    their spacing, so this yields a few candidates per segment; it runs in
+    blocks of ``_PAIR_BLOCK`` pairs so a dense fold cannot exhaust memory.
+    (rtree's bulk ``intersection_v`` is not used: in 1.4.0 it loses its result
+    buffer once the results outgrow twice the query count, which every polyline
+    does -- each segment meets its two neighbours.)
+    """
+    mins, maxs = np.minimum(a, b), np.maximum(a, b)
+    sweeps = []
+    for axis in (0, 1):
+        order = np.argsort(mins[:, axis], kind="stable")
+        ends = np.searchsorted(mins[order, axis], maxs[order, axis], side="right")
+        sweeps.append((axis, order, np.maximum(ends - np.arange(len(order)) - 1, 0)))
+    axis, order, counts = min(sweeps, key=lambda sweep: sweep[2].sum())
+    other = 1 - axis
+
+    totals = np.cumsum(counts)
+    cuts = np.searchsorted(totals, np.arange(_PAIR_BLOCK, totals[-1], _PAIR_BLOCK))
+    firsts, seconds = [], []
+    for block in np.split(np.arange(len(order)), cuts):
+        block_counts = counts[block]
+        first = np.repeat(block, block_counts)
+        offset = np.arange(block_counts.sum()) - np.repeat(
+            np.cumsum(block_counts) - block_counts, block_counts
+        )
+        i, j = order[first], order[first + offset + 1]
+        overlap = (mins[i, other] <= maxs[j, other]) & (mins[j, other] <= maxs[i, other])
+        firsts.append(i[overlap])
+        seconds.append(j[overlap])
+    return np.concatenate(firsts), np.concatenate(seconds)

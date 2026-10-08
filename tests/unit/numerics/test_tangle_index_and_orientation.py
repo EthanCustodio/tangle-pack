@@ -126,10 +126,11 @@ def test_shallow_crossing_on_fine_segments_is_detected():
     assert Tangle._do_segments_intersect(seg_a, seg_b)
 
     tangle = Tangle()
-    point = tangle._find_true_intersection(
+    found = tangle._find_true_intersection(
         _as_segment(seg_a, "unstable", 0), _as_segment(seg_b, "stable", 1)
     )
-    assert point is not None
+    assert found is not None
+    point, _sin_theta = found
     assert np.linalg.norm(np.asarray(point) - expected) <= 1e-12 * 1e-7
 
 

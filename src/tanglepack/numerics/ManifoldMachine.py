@@ -80,6 +80,7 @@ from .ManifoldView import ManifoldView
 from .BranchPoint import BranchPoint
 from .Bridge import Bridge
 from .Intersection import ManifoldKey, Stability
+from .geometry import curvature_area_batch
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -974,81 +975,8 @@ class ManifoldMachine:
         left: np.ndarray,
         right: np.ndarray,
     ) -> np.ndarray:
-        """
-        Vectorized form of :meth:`_curvature_area` over many pairs at once.
-
-        Mirrors the scalar routine exactly: for each row the chord ``p0->p1`` is
-        rotated onto the x-axis, a left parabola through ``(left, p0, p1)`` and a
-        right parabola through ``(p0, p1, right)`` are fit with the closed-form
-        divided differences, the closed-form integral between each parabola and
-        the chord is taken, and the larger of the two areas is returned.
-
-        Args:
-            p0: ``(M, 2)`` first endpoints.
-            p1: ``(M, 2)`` second endpoints.
-            left: ``(M, 2)`` left neighbours; rows that are ``NaN`` (no
-                neighbour) contribute ``0`` on the left side.
-            right: ``(M, 2)`` right neighbours; ``NaN`` rows contribute ``0`` on
-                the right side.
-
-        Returns:
-            ``(M,)`` array of curvature areas. Degenerate rows (zero-length
-            chord, coincident x-values after rotation) yield ``0`` so they are
-            never flagged for refinement.
-        """
-        p0 = np.asarray(p0, dtype=float)
-        p1 = np.asarray(p1, dtype=float)
-        left = np.asarray(left, dtype=float)
-        right = np.asarray(right, dtype=float)
-
-        chord = p1 - p0
-        length = np.hypot(chord[:, 0], chord[:, 1])
-        safe_len = np.where(length == 0.0, 1.0, length)
-        ux = chord[:, 0] / safe_len
-        uy = chord[:, 1] / safe_len
-
-        def to_frame(pt):
-            rel = pt - p0
-            xf = ux * rel[:, 0] + uy * rel[:, 1]
-            yf = -uy * rel[:, 0] + ux * rel[:, 1]
-            return xf, yf
-
-        x0, y0 = to_frame(p0)  # ~ (0, 0)
-        x1, y1 = to_frame(p1)  # ~ (length, 0)
-
-        # line through the two endpoints (the chord, ~ the x-axis here)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            m = (y1 - y0) / (x1 - x0)
-        d = y0 - m * x0
-
-        def side_area(third):
-            xt, yt = to_frame(third)
-            with np.errstate(divide="ignore", invalid="ignore"):
-                # parabola through (xt, yt), (x0, y0), (x1, y1)
-                s_ab = (y0 - yt) / (x0 - xt)
-                s_bc = (y1 - y0) / (x1 - x0)
-                a = (s_bc - s_ab) / (x1 - xt)
-                b = s_ab - a * (xt + x0)
-                c = yt - a * xt**2 - b * xt
-
-                # closed-form integral between parabola and chord (see
-                # _compute_single_area): coefficients of (quad - line)
-                aa = a / 3.0
-                bb = 0.5 * (b - m)
-                cc = c - d
-                area = np.abs(
-                    aa * (x1**3 - x0**3)
-                    + bb * (x1**2 - x0**2)
-                    + cc * (x1 - x0)
-                )
-            return np.where(np.isfinite(area), area, 0.0)
-
-        left_area = side_area(left)
-        right_area = side_area(right)
-
-        area = np.maximum(left_area, right_area)
-        area = np.where(length == 0.0, 0.0, area)
-        return area
+        """Vectorised :meth:`_curvature_area` (:func:`.geometry.curvature_area_batch`)."""
+        return curvature_area_batch(p0, p1, left, right)
 
     @staticmethod
     def _chord_frame(p0_xy: np.ndarray, p1_xy: np.ndarray):
