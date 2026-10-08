@@ -19,6 +19,8 @@ from numpy.typing import NDArray
 
 from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import MapFunc, JacFunc
+from ..numerics.ManifoldMachine import DEFAULT_AREA_CUTOFF
+from ..numerics.budget import DEFAULT_MAX_POINTS_PER_STEP
 from ..numerics.geometry import polyline_midpoint
 from ..topology import plotting
 from ..topology.Arrangement import Arrangement
@@ -98,6 +100,10 @@ class TangleSession:
         dynamical_map: MapFunc,
         dynamical_map_inverse: MapFunc,
         jacobian_function: Optional[JacFunc] = None,
+        *,
+        area_cutoff: float = DEFAULT_AREA_CUTOFF,
+        max_points_per_step: Optional[int] = DEFAULT_MAX_POINTS_PER_STEP,
+        escape_radius: Optional[float] = None,
     ):
         """
         Build a session around a fresh workbench for the given map.
@@ -106,9 +112,19 @@ class TangleSession:
             dynamical_map: The forward map.
             dynamical_map_inverse: Its inverse.
             jacobian_function: Optional analytic Jacobian.
+            area_cutoff: The workbench's refinement threshold.
+            max_points_per_step: The workbench's per-step point budget; ``None``
+                disables it.
+            escape_radius: ``max|coordinate|`` above which a growth step warns;
+                ``None`` (default) never warns.
         """
         self.workbench = TangleWorkbench(
-            dynamical_map, dynamical_map_inverse, jacobian_function
+            dynamical_map,
+            dynamical_map_inverse,
+            jacobian_function,
+            area_cutoff=area_cutoff,
+            max_points_per_step=max_points_per_step,
+            escape_radius=escape_radius,
         )
         self._trellises: dict = {}
         # (workbench.generation, partition signature, table) per
@@ -147,6 +163,38 @@ class TangleSession:
         raise AttributeError(
             f"{type(self).__name__!r} object (and its workbench) has no attribute {name!r}"
         )
+
+    # ── workbench settings ───────────────────────────────────────────────────
+    #
+    # __getattr__ delegates READS only: without these properties
+    # ``session.area_cutoff = x`` would set a dead attribute on the session.
+
+    @property
+    def area_cutoff(self) -> float:
+        """The workbench's refinement threshold (read and set through)."""
+        return self.workbench.area_cutoff
+
+    @area_cutoff.setter
+    def area_cutoff(self, value: float) -> None:
+        self.workbench.area_cutoff = value
+
+    @property
+    def max_points_per_step(self) -> Optional[int]:
+        """The workbench's per-step point budget (read and set through)."""
+        return self.workbench.max_points_per_step
+
+    @max_points_per_step.setter
+    def max_points_per_step(self, value: Optional[int]) -> None:
+        self.workbench.max_points_per_step = value
+
+    @property
+    def escape_radius(self) -> Optional[float]:
+        """The workbench's escape WARNING radius (read and set through)."""
+        return self.workbench.escape_radius
+
+    @escape_radius.setter
+    def escape_radius(self, value: Optional[float]) -> None:
+        self.workbench.escape_radius = value
 
     # ── topological view ─────────────────────────────────────────────────────
 
@@ -1903,6 +1951,11 @@ class TangleSession:
             the workbench generation advances and any cached Trellis is rebuilt
             on the next :meth:`trellis` call — take a fresh one (and
             re-establish its strong pip) before continuing topological work.
+
+        Note:
+            A :class:`~tanglepack.numerics.budget.PointBudgetExceeded` from one
+            bridge's image propagates (it is never skipped) and leaves the
+            session not resumable; rebuild it.
         """
         return blast_zone(
             self,

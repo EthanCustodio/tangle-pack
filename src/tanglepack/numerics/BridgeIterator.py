@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING, Optional
 
 from .Bridge import Bridge, BridgeId
 from .Intersection import ManifoldKey
+from .budget import PointBudgetExceeded
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from .TangleWorkbench import TangleWorkbench
@@ -277,8 +278,22 @@ class BridgeIterator:
         Raises:
             ValueError: If bridge has already been iterated.
             ValueError: If create_bridges() has not been called yet.
+            PointBudgetExceeded: If the image would create more than the
+                machine's ``max_points_per_step`` points. The generation still
+                advances, but the bridge's points are already linked to a
+                half-refined image while it stays un-iterated: not resumable.
+            RuntimeError: If an earlier call on this bridge raised
+                :class:`~.budget.PointBudgetExceeded` -- retrying would hand back
+                that half-refined image as if it were complete.
         """
         workbench = self._workbench
+        if bridge in workbench._half_iterated_bridges:
+            raise RuntimeError(
+                "this bridge's image was abandoned half-refined by a "
+                "PointBudgetExceeded; it cannot be iterated again. Rebuild the "
+                "session (fewer blasts, a coarser area_cutoff or a larger "
+                "max_points_per_step)."
+            )
         if bridge.iterated:
             raise ValueError(
                 "This bridge has already been iterated. Its image is "
@@ -303,8 +318,14 @@ class BridgeIterator:
             workbench._bump_generation()
             return existing_image
 
-        # 1. map forward
-        iterated = workbench._man_machine.iterate_bridge(bridge)
+        # 1. map forward. The machine links the parent's points to their images
+        #    before refining them, so an overrun leaves a half-built image behind.
+        try:
+            iterated = workbench._man_machine.iterate_bridge(bridge)
+        except PointBudgetExceeded:
+            workbench._half_iterated_bridges.add(bridge)
+            workbench._bump_generation(invalidate_walks=True)
+            raise
 
         # The iterated bridge is M(bridge): a segment of the unstable manifold one
         # orbit step forward of the parent's branch. Recording that key -- before the

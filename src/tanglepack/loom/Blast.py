@@ -208,6 +208,10 @@ def blast_zone(
         KeyError: If ``zone`` is a key not present in ``session.resonance_zones``.
         ValueError: If the resolved zone has no captured boundary (cannot test
             containment).
+        PointBudgetExceeded: If one bridge's image would exceed the machine's
+            per-call point budget. It always propagates and leaves the session
+            NOT resumable (that bridge's points are linked to a half-refined
+            image); rebuild with fewer blasts or a larger budget.
     """
     zone = _resolve_zone(session, zone)
     if zone.boundary_vertices is None:
@@ -304,7 +308,9 @@ def blast_zone(
                 # AssertionError is deliberately NOT caught: assertions are the
                 # correctness guard of this codebase (CLAUDE.md), so a violated
                 # cdist-monotonicity invariant in the forward map must abort the
-                # blast rather than be logged as a skipped bridge.
+                # blast rather than be logged as a skipped bridge. Nor is a
+                # PointBudgetExceeded (a RuntimeError): a resource stop is never
+                # a skippable bridge.
                 if strict:
                     raise
                 logger.warning(
