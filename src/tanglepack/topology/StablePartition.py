@@ -34,60 +34,62 @@ fixed in conversation with the author (July 2026):
   in the trellis that owns its endpoints' stable branch. The authoritative
   lookup is therefore :meth:`Trellis.element_for`, which falls back to the
   endpoint ids carried by the BridgeId itself.
-* Side (REDONE per the author, 2026-07-16 — supersedes the 2026-07-09
-  stable-approach rule and every earlier side test): a hole's side is
-  left/right of its own BRIDGE, i.e. of the unstable manifold, in the
-  bridge's dynamical orientation — the unstable forward flow points AWAY
-  from the fixed point, so the bridge is oriented by increasing unstable
-  cdist (storage order root→tail need not match; `_oriented_bridge_polyline`
-  normalizes it once, from the endpoints' unstable cdists). Standing on the
-  bridge looking along that direction, positive cross(tangent, displacement)
-  = left, matching `_side_of`. The side is classified ONCE at punch time and
-  stored as ``Hole.bridge_side``: a direct hole from its crossing signs
-  (its lobe lies between the pair's stable arc and the bridge, see
-  ``punch_holes``; 2026-10-02), a propagated hole CARRIED from the hole it
-  was propagated from, parity-flipped under an orientation-reversing map
-  (author, 2026-10-07; ``Hole.side_source``). The backward-carried point read
-  on its own image sub-arc (2026-10-02) is kept as ``Hole.measured_side`` and
-  must agree. Holes know nothing of the stable
-  manifold's sides or of resonance zones. The stable partition keeps its own
-  independent left/right, defined by the STABLE dynamical direction — the
-  flow toward the fixed point, i.e. looking toward the anchor (unchanged
-  convention). The per-intersection opening ROW is still the side of the
-  stable manifold the bridge arc approaches that intersection from (each end
-  against its own local stable tangent; on multi-branch tangles the two ends
-  may legitimately sit on different branches) — well-defined because a
-  bridge's endpoints are consecutive crossings, so the arc between them
-  never crosses the (trimmed) stable manifold. Since Phase A of the
-  dual-graph plan the row also has a purely COMBINATORIAL reading,
-  :func:`row_of_end`, straight off ``crossing_sign``; it needs no manifold
-  nodes, so it answers at a synthetic anchor and wherever the local geometry
-  is degenerate, and it is what the bridge-class layer uses. ``_row_at`` stays
-  the geometric ground truth the combinatorial rule is validated against
-  (tests/test_bridge_class.py).
-* Hole generation: each reference bridge is mapped backward step by step;
-  every backward image lies within some existing bridge, and a hole is punched
-  in that containing bridge's region. Termination is the author's "the bridge
-  begins to map onto itself" rule, stated k-aware: one backward step moves the
-  image to the PREVIOUS unstable branch of the cycle, so a bridge can only
-  map onto itself after a multiple of k steps — the recursion stops when the
-  containing bridge repeats one already visited at the same branch-cycle
-  residue (step mod k). For k = 1 that is exactly the consecutive self-map
-  condition; comparing consecutive steps for k > 1 can never fire (the bridges
-  live on different branches) and would run the backward orbit far past the
-  topologically significant holes. The containing bridge is found by
-  canonical-distance bookkeeping: the image span's endpoints are looked up
-  in the iterate table (registered cdists), scaled by 1/beta only where the
-  table has no link, and the branch cycle steps back by one. The
-  reference hole's coordinates are carried backward
-  with the real inverse map: the carried point lies inside the true image
-  region, so it places the hole and measures its side of the containing
-  bridge (``Hole.measured_side``, the geometric check of the carried
-  ``bridge_side``, which decides the intervals it opens) — two
-  orbits landing in the same bridge differ exactly there, and BOTH are
-  punched (per the author: no cross-orbit deduplication, even on the same
-  bridge and side; only a same-orbit same-iterate duplicate of a recorded
-  pair's hole is skipped).
+* Side (author, 2026-07-16): a hole's side is left/right of its own BRIDGE,
+  i.e. of the unstable manifold, in the bridge's dynamical orientation —
+  forward flow points AWAY from the fixed point, so the bridge is oriented by
+  increasing unstable cdist; standing on it looking that way, positive
+  cross(tangent, displacement) = left (``_side_of``). It is decided ONCE and
+  stored as ``Hole.bridge_side``: a direct hole reads it off its crossing
+  signs (2026-10-02), a propagated hole CARRIES it from the hole it was
+  propagated from, parity-flipped under an orientation-reversing map
+  (author, 2026-10-07; ``Hole.side_source``). Holes know nothing of the
+  stable manifold's sides or of resonance zones. The stable partition keeps
+  its own left/right, the ROW, defined by the STABLE dynamical direction
+  (looking toward the anchor).
+* Signs decide (D6, 2026-10-08; chalkboard stage 6). At a crossing ``x``
+  with ``sign = crossing_sign(x) = sign(cross(u+, s+))`` the outward stable
+  ray ``s+`` lies on the left of the bridge's ``u+`` exactly when the sign
+  is positive, so: ``row(first) = left iff sign > 0``, ``row(second) = left
+  iff sign < 0`` (:func:`row_of_end`, the bridge leaves ``first`` along
+  ``u+`` and enters ``second`` along ``u-``), and the stable half on a
+  hole's side of its bridge is ``outward iff (sign > 0) == (side ==
+  "left")`` (:func:`_hole_openings`). No polyline decides anything. The
+  geometry stays as a cross-check that FLAGS under-resolution
+  (:func:`geometry_flags`, one WARNING per kind per ``Trellis.punch_holes``):
+  :func:`bridge_row_diagnosis` reads each end's approach on the polyline,
+  which on a 2-4 node bridge is the vector to the far node (NUM-1, the E11
+  p3 / nested_inner 1e-5 cells from blast 6), and ``Hole.measured_side``
+  reads the backward-carried reference point at the nearest segment of the
+  image sub-arc, which escapes the lobe when the reference lobe is
+  under-resolved (NUM-2, k28 1e-5/1e-6 blasts 15-17; inversion x period 2 at
+  10 steps). Before WP4 the openings and the I2 assertion read the polyline
+  (a nearest vertex of the WHOLE bridge for the halves, INT-4), which opened
+  nothing, or the same half at both ends, at depth: the unreachable class of
+  the deep p3 runs (PK-1) was those openings.
+* Hole generation (chalkboard stage 5): each reference bridge is mapped
+  backward step by step; every backward image lies within some existing
+  bridge, and a hole is punched in that containing bridge's region.
+  Termination is the author's "the bridge begins to map onto itself" rule,
+  stated k-aware: one backward step moves the image to the PREVIOUS unstable
+  branch of the cycle and a bridge lives on one branch, so meeting a visited
+  bridge again means it maps onto itself after a multiple of k steps (for
+  k = 1 the consecutive self-map condition). The image span is the start
+  bridge's two crossing ids moved by :meth:`Trellis.image_cdist` (table
+  first, else ``advance_key`` and beta-scaling; nothing else scales a cdist
+  here), on the branch ``advance_key`` names, and the container is a bisect
+  over that branch's crossing order (:func:`_containing_bridge`; PERF-4).
+  The hole sits on the WHOLE containing bridge, by design (INT-2, checked
+  2026-10-08 on every law case, the deep p3 runs and four deep E11 states:
+  600+ lookups, every span a STRICT sub-arc of its container and at most one
+  of its two ends a registered crossing; the other end is a crossing of the
+  unstable branch with ``f^-1(W^s)``, beyond the trimmed stable manifold, so
+  the trellis has no node to cut the sub-arc at). The reference hole's
+  coordinates are carried backward with the real inverse map (the one use
+  of the map here): the carried point places the hole and is the measured
+  side's flag — two orbits landing in the same bridge differ exactly there,
+  and BOTH are punched (per the author: no cross-orbit deduplication, even
+  on the same bridge and side; only a same-orbit same-iterate duplicate of a
+  recorded pair's hole is skipped).
 * Superseded: resonance-zone association (removed 2026-07-16). Holes used
   to carry an ``interior`` flag (in_zone point-in-polygon test, else a
   cdist-vs-strong-pip-cut fallback) and the partition split its intervals at
@@ -99,16 +101,6 @@ fixed in conversation with the author (July 2026):
   the zone's own boundary bridge, so the point-in-polygon test split
   otherwise identical holes by the luck of a nudge direction. Resonance
   zones remain in the loom layer for blasting only.
-* Lookup before scaling (author's rule, 2026-09-15): the backward image's
-  span is tracked through the bridge's two endpoint CROSSINGS, each stepped
-  with ``Trellis.iterate(id, -1)`` and read at its preimage's registered
-  unstable cdist; an endpoint the table does not link falls back to
-  ``cdist / beta`` and stays scaled from then on (``_backward_endpoint``).
-  Registered cdists carry each crossing's own absolute positional noise, so
-  scaled spans drift with depth; the table is exact where it reaches. The
-  ``carried`` hole coordinate is the one remaining use of the inverse map
-  here (a phase-space point that places the hole and measures its side, not
-  a cdist).
 * Partition intervals (semantics fixed with the author, July 2026 — this
   SUPERSEDES the earlier "only the outermost beyond-cut hole" rule and the
   piece-containment openness test): EVERY punched hole participates.
@@ -116,60 +108,40 @@ fixed in conversation with the author (July 2026):
   (Hole.bounding_ids — the pair's own bridge for a direct hole, the
   containing bridge for a propagated one) plus the anchor and the branch's
   outermost intersection. The openness rule is LOCAL to each defining
-  intersection and keyed to ``Hole.bridge_side``: at each defining
-  intersection the arc crosses the stable manifold, so each side of the
-  bridge contains exactly one of the two stable half-intervals there — the
-  hole opens the interval on ITS side (Hole.openings). A direct hole sits
-  on the side facing the pair's own stable segment, so it opens the inward
-  pair (outward of the near bound, anchorward of the far bound) BY
-  CONSTRUCTION — no geometric side test is run for it, because on sliver
-  lobes whose crossings are closer than the stable node spacing no local
-  estimator can decide the halves (observed on the blasted k=10 tangle). A
-  propagated hole's openings ARE derived geometrically from its stored
-  bridge_side, signing the nearest stable node of each half against the
-  dynamically-oriented arc (finite nodes, not end tangents — an end-tangent
-  cross is cancellation noise near a tangency). A propagated hole whose
-  region hangs off the removed tail can instead open
-  the OUTWARD side of a defining intersection — two holes flanking one
-  bridge (the author's "singleton bridge with a hole on either side")
-  thereby open complementary sides of BOTH defining intersections and
-  pinch each into a closed singleton. In general a boundary point excluded
-  by both neighbouring intervals owns itself as a degenerate closed
-  singleton [x, x]; a hole marked outward of the branch's outermost
-  intersection or anchorward at the anchor-artifact contributes its
+  intersection: the arc crosses the stable manifold there, so each side of
+  the bridge holds exactly one of the two stable half-intervals, and the
+  hole opens the one on ITS side (Hole.openings, by the signs). A direct
+  hole, facing its pair's own stable segment, thereby opens the inward pair
+  (outward of the near bound, anchorward of the far bound). A hole whose
+  region hangs off the removed tail opens the OUTWARD side of the outermost
+  intersection — two holes flanking one bridge (the author's "singleton
+  bridge with a hole on either side") open complementary sides of BOTH
+  defining intersections and pinch each into a closed singleton. In general
+  a boundary point excluded by both neighbouring intervals owns itself as a
+  degenerate closed singleton [x, x]; a hole marked outward of the branch's
+  outermost intersection or anchorward at the anchor contributes its
   opening to that pinch test even though no interval lies there. No point
   is special — the fixed point and the strong pip pinch into singletons by
   exactly the same rule. Each point belongs to exactly one piece ("](" and
   ")[" occur, "][" cannot).
-* Invariants (added 2026-09, plan row 0.3). Two facts are physically exact
-  and are now checked: (I1) all holes of one ``origin`` share
-  ``bridge_side``, because a propagated hole is the backward image of the
-  reference hole and an orientation-PRESERVING map (det J > 0, both Hénon
-  fixtures have b = 1) carries the bridge's dynamical orientation to the
-  image bridge's unchanged — under an orientation-REVERSING map the side
-  alternates with the parity of ``Hole.iterate``, which
-  ``check_holes_share_bridge_side(..., orientation_preserving=False)``
-  encodes; and (I2) a bridge whose two crossings lie on the same stable
-  branch yields the same ``row`` at both ends, because its endpoints are
+* Invariants (2026-09, plan row 0.3). Two facts are physically exact and
+  are asserted in ``Trellis.punch_holes``, once per orbit and once per hole
+  bridge: (I1) all holes of one ``origin`` share ``bridge_side``, because a
+  propagated hole is the backward image of the reference hole and an
+  orientation-PRESERVING map (det J > 0, both Hénon fixtures have b = 1)
+  carries the bridge's dynamical orientation to the image bridge's
+  unchanged — under an orientation-REVERSING map the side alternates with
+  the parity of ``Hole.iterate``
+  (``check_holes_share_bridge_side(..., orientation_preserving=False)``);
+  propagated holes carry their side, so I1 guards the direct holes of one
+  orbit (the reference and its ``+1 .. +(k-1)`` appearances) and the
+  carrying itself; and (I2) a bridge whose two crossings lie on the same
+  stable branch has the same row at both ends, because its endpoints are
   consecutive crossings so the arc between them never crosses the stable
-  manifold again. Both are hard assertions, checked in ``Trellis.punch_holes``
-  once per orbit and once per bridge (plan row 1.1, 2026-09). Since propagated
-  holes carry their side (author, 2026-10-07: option (b) of the stress-report
-  plan) I1 holds for them by construction, so the check also compares each
-  propagated hole's ``measured_side`` with its carried side: that comparison is
-  what keeps it the geometric guard that caught the 2026-10-02 sub-arc bug, and
-  a disagreement is still an assertion, never a warning. Failures name every
-  reading: :class:`SideDiagnosis` per hole, :class:`RowDiagnosis` per bridge
-  (crossing signs, combinatorial and geometric rows, approach angle, node
-  count; built only when a check fails). The nested
-  period-3 tangle used to break both — one orbit flipped side at a single
-  backward iterate and one bridge read opposite rows at its two ends — because
-  ``_containing_bridge`` and ``_bridge_unstable_span`` inferred a bridge's
-  unstable branch from its ENDPOINT intersections instead of from
-  ``Bridge.manifold_key``: every branch's anchor artifact sits at unstable
-  cdist 0, so one branch's anchor was handed to another branch's first bridge
-  and the backward chain stepped onto the wrong branch. Since plan row 2.3 the
-  key is required at construction and the endpoint-derived fallback is gone.
+  manifold again — with rows read off the signs, I2 says the two signs
+  DIFFER (equal signs still assert, D6). Failures name every reading:
+  :class:`SideDiagnosis` per hole, :class:`RowDiagnosis` per bridge (crossing
+  signs, combinatorial and geometric rows, approach angle, node count).
 * BACKWARD ONLY (author's rule, 2026-09-16). Once a hole lands on the stable
   manifold its forward iterates get NO hole, even when the trellis has
   registered the image crossings (a blast does exactly that) and a bridge
@@ -212,28 +184,28 @@ fixed in conversation with the author (July 2026):
   within the tolerance of 0 but not on it is still taken as the anchor, at
   INFO.
 * The anchor (WP3, 2026-10-08). A periodic point is ONE crossing on every
-  branch attached to it (D4). Its geometry cannot say which stable branch a
-  hole at it faces (both leave it), so an anchor opening is read off the
-  signs (D6, :func:`_anchor_branch`) and every opening record names the
-  branch it opens; :func:`_approach` has no frame there. A stable branch with
+  branch attached to it (D4). Both stable branches leave it, so an anchor
+  opening faces the outward half of the branch the signs pick
+  (:func:`_anchor_branch`) and every opening record names the branch it
+  opens; the anchor has no geometric row of its own. A stable branch with
   NO crossing past its anchor (an inversion saddle grown 4-5 steps) is ONE
-  element ``[anchor, end]`` to the end of the computed branch (C1), logged at
-  INFO on this module's logger; grow the unstable manifold to resolve it.
+  element ``[anchor, end]`` to the end of the computed branch (C1), logged
+  at INFO on this module's logger; grow the unstable manifold to resolve it.
 
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
 StrongPip/Pseudoneighbor and is exercised by the inversion law cases (the k=4
-saddle at 0/1/2 blasts and the k=4.1 period-2 orbit). Containing-bridge lookup compares
-unstable cdists, which are only comparable on the same unstable branch, so it
-is filtered by ``Bridge.manifold_key``, which every bridge carries. A
-``partial`` piece (an image arc bounded by fewer than two crossings) has no
-span to contain anything and is skipped. A pseudoneighbor pair with no spanning Bridge object
-(after blasting there is no bridge between a parent-manifold crossing and a
-blast-child crossing) punches no hole and therefore contributes nothing to the
-partition — an open gap in the punching layer, see punch_holes' warning. A
-bridge whose endpoints have equal unstable cdists (impossible for a real
-bridge — its endpoints are consecutive distinct crossings — but reachable via
-numerical collapse) cannot be dynamically oriented: its holes get
-inward-default openings, with a warning, and no measured side.
+saddle at 0/1/2 blasts and the k=4.1 period-2 orbit). Unstable cdists are only
+comparable on one unstable branch, so every bridge carries its branch
+(``Bridge.manifold_key``, required at construction since plan row 2.3: an
+endpoint-derived branch once handed one branch's anchor to another's first
+bridge). A pseudoneighbor pair with no spanning Bridge object (after blasting
+there is no bridge between a parent-manifold crossing and a blast-child
+crossing) punches no hole and therefore contributes nothing to the partition —
+an open gap in the punching layer, see punch_holes' warning; a backward image
+landing on such a pair has no container and ends its chain. A bridge whose
+endpoints have equal unstable cdists (impossible for a real bridge — its
+endpoints are consecutive distinct crossings — but reachable via numerical
+collapse) cannot be oriented: it has no measured side and no geometric row.
 """
 
 from __future__ import annotations

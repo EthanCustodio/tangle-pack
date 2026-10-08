@@ -25,9 +25,9 @@ Dev Notes:
   times, used to trip ``check_holes_share_bridge_side`` (2026-09-30): a
   propagated hole's side was read against the nearest vertex of its whole
   containing bridge, on another fold. Fixed 2026-10-02 (sides are read on the
-  image sub-arc); those runs now reach the symbolic dynamics but are not
-  reliable (an unreachable class, a virtual ``new1``), so the default stays
-  at 13.
+  image sub-arc; since WP4 the signs decide the openings and every class
+  walks); those runs now reach the symbolic dynamics but are not reliable (a
+  virtual ``new1``, PK-1), so the default stays at 13.
 * Each nested zone blasts only its own fixed point (2026-10-02): blasting
   both from either zone also iterated the other tangle's bridges, made the
   result depend on blast order and collapsed the period-3 pseudoneighbors at
