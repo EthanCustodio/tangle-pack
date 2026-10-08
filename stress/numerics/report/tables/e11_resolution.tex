@@ -1,0 +1,11 @@
+% E11 resolution-pass cells: the canonical cell with blast_zone's default same-stability pass, against the reference cell without it
+% suggested column spec: {llrrrrrrrr}
+\toprule
+case & blasts (stop) & ref. blasts & first hit & in box & outside & unresolved & pass / blast & peak GB & ref. GB \\
+\midrule
+k28 & 11 (memory budget) & 15 & 8 & 104\,760 & 707\,053 & 2 & \ensuremath{1.577\times} & 5.4 & 9.0 \\
+k32 & 11 (memory budget) & 14 & 8 & 170\,192 & 1\,298\,841 & 5 & \ensuremath{1.756\times} & 8.2 & 7.6 \\
+nested\_outer & 12 (memory budget) & 15 & 8 & 589\,693 & 660\,837 & 5 & \ensuremath{1.961\times} & 9.7 & 7.5 \\
+p3 & 20 (all blasts) & 20 & 13 & 160 & 0 & 3 & \ensuremath{0.744\times} & 0.4 & 0.4 \\
+nested\_inner & 20 (all blasts) & 20 & 13 & 160 & 0 & 3 & \ensuremath{0.314\times} & 0.4 & 0.4 \\
+\bottomrule
