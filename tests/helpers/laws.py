@@ -831,32 +831,37 @@ def check_partition_covers_branch(case: "Case") -> int:
     return count
 
 
-def _owners(intervals, cdist: float, tol: float) -> list[int]:
-    """Element ids covering a cdist, from the raw interval fields (an end only when closed)."""
-    owners = []
-    for interval in intervals:
-        if cdist < interval.lo_cdist - tol or cdist > interval.hi_cdist + tol:
-            continue
-        if abs(cdist - interval.lo_cdist) <= tol:
-            covered = interval.closed_lo
-        elif abs(cdist - interval.hi_cdist) <= tol:
-            covered = interval.closed_hi
-        else:
-            covered = True
-        if covered:
-            owners.append(interval.element_id)
-    return owners
+def _owners(intervals, intersection_id: int, cdist: float) -> list[int]:
+    """Element ids owning a crossing, from the raw interval fields and with no tolerance:
+    the elements closed at its id when it is a boundary, else those covering its exact
+    cdist (an end only when closed)."""
+    if any(intersection_id in (iv.lo_id, iv.hi_id) for iv in intervals):
+        return sorted(
+            {
+                iv.element_id
+                for iv in intervals
+                if (iv.lo_id == intersection_id and iv.closed_lo)
+                or (iv.hi_id == intersection_id and iv.closed_hi)
+            }
+        )
+    return [
+        iv.element_id
+        for iv in intervals
+        if iv.lo_cdist < cdist < iv.hi_cdist
+        or (cdist == iv.lo_cdist and iv.closed_lo)
+        or (cdist == iv.hi_cdist and iv.closed_hi)
+    ]
 
 
 def check_partition_unique_owner(case: "Case") -> int:
-    """Every crossing of a partitioned branch has exactly one owning element per side."""
+    """Every crossing of a partitioned branch has exactly one owning element per side,
+    by id at a boundary and by exact cdist elsewhere."""
     count = 0
     for trellis, result in _partitions(case):
-        tol = float(trellis.registry.cdist_tol)
         branch = trellis.branch(result.branch_key)
         for intersection_id in branch.intersection_ids:
             cdist = float(trellis.intersection(intersection_id).stable_cdist)
-            owners = _owners(result.intervals, cdist, tol)
+            owners = _owners(result.intervals, intersection_id, cdist)
             assert owners == [result.element_of_intersection[intersection_id]], (
                 f"crossing {intersection_id} on {result.branch_key[1:]} ({result.side}) "
                 f"covered by {owners}"
@@ -1397,19 +1402,18 @@ def _boundaries(result) -> set:
 
 
 def check_iterated_child_inside_parent(case: "Case") -> int:
-    """Each iterated element lies inside the homotopy parent that owns its midpoint."""
+    """Each iterated element lies EXACTLY inside its homotopy parent (no tolerance: every
+    boundary is a registry cdist), and the parent owns the element's midpoint exactly."""
     iterated = case.session.iterated_partition()
     homotopy = iterated.homotopy
-    tol = homotopy.tol
     count = 0
     for key, result in iterated.results.items():
         parent_result = homotopy.result(*key)
         for interval in result.intervals:
             parent = parent_result.element(interval.parent_element_id)
-            assert interval.lo_cdist >= parent.lo_cdist - tol
-            assert interval.hi_cdist <= parent.hi_cdist + tol
+            assert parent.lo_cdist <= interval.lo_cdist <= interval.hi_cdist <= parent.hi_cdist
             mid = 0.5 * (interval.lo_cdist + interval.hi_cdist)
-            assert owns_cdist(parent, mid, tol)
+            assert owns_cdist(parent, mid, 0.0)
             assert interval.ref.branch_key == key[0] and interval.ref.side == key[1]
             count += 1
         assert len(result.intervals) >= len(parent_result.intervals)
@@ -1441,19 +1445,18 @@ def check_iterated_keeps_homotopy_boundaries(case: "Case") -> int:
 
 
 def check_iterated_unique_owner(case: "Case") -> int:
-    """Every crossing of a cut branch has exactly one iterated owner per side, and every
-    stable arc midpoint of the minimal arrangement one owner per side."""
+    """Every crossing of a cut branch has exactly one iterated owner per side (by id at a
+    boundary, by exact cdist elsewhere), and every stable arc midpoint of the minimal
+    arrangement one exact owner per side."""
     iterated = case.session.iterated_partition()
     minimal = case.session.minimal_trellis()
     full = minimal.trellis
-    tol = iterated.homotopy.tol
     count = 0
     for key, result in iterated.results.items():
         for iid in full.branch(key[0]).intersection_ids:
             cdist = float(full.intersection(iid).stable_cdist)
-            owners = [iv for iv in result.intervals if owns_cdist(iv, cdist, tol)]
-            assert len(owners) == 1, (key, iid, len(owners))
-            assert result.element_of_intersection[iid] == owners[0].element_id
+            owners = _owners(result.intervals, iid, cdist)
+            assert owners == [result.element_of_intersection[iid]], (key, iid, owners)
             count += 1
     for face in minimal.arrangement.faces:
         for arc in face.arcs:
@@ -1464,7 +1467,7 @@ def check_iterated_unique_owner(case: "Case") -> int:
                 + float(full.intersection(arc.hi_id).stable_cdist)
             )
             for side in ("left", "right"):
-                iterated.interval_at(arc.branch_key, side, mid)
+                iterated.interval_at(arc.branch_key, side, mid, tol=0.0)
     return count
 
 
@@ -1474,7 +1477,6 @@ def check_iterated_cut_provenance(case: "Case") -> int:
     iterated = case.session.iterated_partition()
     minimal = case.session.minimal_trellis()
     full = minimal.trellis
-    tol = iterated.homotopy.tol
     count = 0
     for bid in minimal.image_bridge_ids:
         a, b = bid
@@ -1488,13 +1490,13 @@ def check_iterated_cut_provenance(case: "Case") -> int:
         near_c, far_c = sorted(float(full.intersection(i).stable_cdist) for i in bid)
         under = [
             iv for iv in result.intervals
-            if iv.lo_cdist >= near_c - tol and iv.hi_cdist <= far_c + tol
+            if near_c <= iv.lo_cdist and iv.hi_cdist <= far_c
         ]
         assert under, bid
         for interval in under:
             assert interval.cut_by is not None and minimal.is_image_bridge(interval.cut_by)
             lo_c, hi_c = sorted(float(full.intersection(i).stable_cdist) for i in interval.cut_by)
-            assert lo_c <= interval.lo_cdist + tol and hi_c >= interval.hi_cdist - tol
+            assert lo_c <= interval.lo_cdist and interval.hi_cdist <= hi_c
             count += 1
     return count
 
@@ -1525,8 +1527,8 @@ def check_names_agree_with_structure(case: "Case") -> int:
         span = homotopy.element(parent)
         for child in naming.children_of(parent):
             child_interval = iterated.element(child)
-            assert child_interval.lo_cdist >= span.lo_cdist - homotopy.tol
-            assert child_interval.hi_cdist <= span.hi_cdist + homotopy.tol
+            assert span.lo_cdist <= child_interval.lo_cdist
+            assert child_interval.hi_cdist <= span.hi_cdist
     return count
 
 
@@ -1773,6 +1775,21 @@ def check_dual_unified_is_pip_segment(case: "Case") -> int:
     return len(expected)
 
 
+def check_stable_nodes_never_own_a_singleton(case: "Case") -> int:
+    """A stable node's element on each faced side is never a singleton ``[x, x]`` (a
+    singleton owns no stable edge), spans the node's edge, and owns its midpoint exactly."""
+    dual = case.session.dual_graph()
+    count = 0
+    for node in dual.stable_nodes.values():
+        for side in node.sides:
+            interval = node.intervals[side]
+            assert interval.lo_id != interval.hi_id, (node.key, side, interval.lo_id)
+            assert interval.lo_cdist <= node.lo_cdist and node.hi_cdist <= interval.hi_cdist
+            assert owns_cdist(interval, node.mid_cdist, 0.0), (node.key, side)
+            count += 1
+    return count
+
+
 def check_dual_bipartite_degree(case: "Case") -> int:
     """The graph view is bipartite face/stable; a wall has degree 1, a unified node 2."""
     import networkx as nx
@@ -2006,6 +2023,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_dual_face_nodes,
         check_dual_face_side_is_geometry,
         check_dual_unified_is_pip_segment,
+        check_stable_nodes_never_own_a_singleton,
         check_dual_bipartite_degree,
     ],
     "symbolic": [

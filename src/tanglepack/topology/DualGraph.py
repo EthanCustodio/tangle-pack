@@ -613,6 +613,9 @@ class DualGraph:
                     traversable=segment is not None,
                     fundamental_span=segment,
                 )
+                # The midpoint is an average, not a registry cdist, but it lies
+                # strictly inside a non-singleton element, so interval_at's exact
+                # reading answers it.
                 mid = node.mid_cdist
                 for side in sides:
                     interval = self.partition.interval_at(arc.branch_key, side, mid)
