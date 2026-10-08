@@ -92,19 +92,26 @@ class ManifoldInitializer:
 
     Attributes:
         system (DynamicalSystem): All the functions related to the dynamical system.
-        machine (ManifoldMachine): Toolbox containing methods for manifold
+        machine (ManifoldMachine): The machine that maps and refines the initial
+            fundamental segments of a ``k_value > 1`` orbit.
     """
 
-    def __init__(self, system: DynamicalSystem) -> None:
+    def __init__(
+        self, system: DynamicalSystem, machine: Optional[ManifoldMachine] = None
+    ) -> None:
         """
         Initializes the toolbox with the dynamical system and machine machinery
 
         Args:
             system (DynamicalSystem): All the functions related to the dynamical system.
+            machine (Optional[ManifoldMachine]): The machine to refine with. The
+                workbench passes its own, so the initial segments refine at ITS
+                ``area_cutoff`` and under its point budget; a fresh machine at the
+                library defaults when omitted.
         """
 
         self.system = system
-        self.machine = ManifoldMachine(system)
+        self.machine = machine if machine is not None else ManifoldMachine(system)
 
     def get_first_point(
         self,

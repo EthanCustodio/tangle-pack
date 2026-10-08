@@ -23,7 +23,8 @@ from .FixedPoint import FixedPoint
 
 from .BaseManifold import BaseManifold
 from .ManifoldView import ManifoldView
-from .ManifoldMachine import ManifoldMachine
+from .ManifoldMachine import ManifoldMachine, DEFAULT_AREA_CUTOFF
+from .budget import PointBudgetExceeded, GrowthStats, DEFAULT_MAX_POINTS_PER_STEP
 from .ManifoldInitializer import ManifoldInitializer
 
 from .Bridge import Bridge
@@ -51,6 +52,10 @@ __all__ = [
     "BaseManifold",
     "ManifoldView",
     "ManifoldMachine",
+    "DEFAULT_AREA_CUTOFF",
+    "PointBudgetExceeded",
+    "GrowthStats",
+    "DEFAULT_MAX_POINTS_PER_STEP",
     "ManifoldInitializer",
     "Bridge",
     "Tangle",

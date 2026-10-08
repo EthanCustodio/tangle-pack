@@ -40,7 +40,8 @@ from .BridgeIterator import BridgeIterator
 from .DynamicalSystem import DynamicalSystem, MapFunc, JacFunc
 from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
-from .ManifoldMachine import ManifoldMachine
+from .ManifoldMachine import DEFAULT_AREA_CUTOFF, ManifoldMachine
+from .budget import DEFAULT_MAX_POINTS_PER_STEP, GrowthStats
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
 from .BaseManifold import BaseManifold
@@ -90,6 +91,12 @@ class TangleWorkbench:
         dynamical_map_inverse: Its inverse.
         jacobian_function: Optional analytic Jacobian; a finite-difference one is
             used when it is omitted.
+        area_cutoff: Refinement threshold of the one shared
+            :class:`~.ManifoldMachine.ManifoldMachine` (see :attr:`area_cutoff`).
+        max_points_per_step: Its per-step point budget, ``None`` to disable
+            (see :attr:`max_points_per_step`).
+        escape_radius: Optional ``max|coordinate|`` above which a growth step
+            logs a WARNING; off by default.
         resolution_ratio_threshold: The resolution ratio below which a detected
             crossing is reported as unresolved (see :meth:`check_resolution`);
             None disables the report.
@@ -130,6 +137,10 @@ class TangleWorkbench:
         dynamical_map: MapFunc,
         dynamical_map_inverse: MapFunc,
         jacobian_function: Optional[JacFunc] = None,
+        *,
+        area_cutoff: float = DEFAULT_AREA_CUTOFF,
+        max_points_per_step: Optional[int] = DEFAULT_MAX_POINTS_PER_STEP,
+        escape_radius: Optional[float] = None,
         resolution_ratio_threshold: Optional[float] = 3.0,
     ) -> None:
         """
@@ -140,6 +151,11 @@ class TangleWorkbench:
             dynamical_map_inverse (MapFunc): Its inverse.
             jacobian_function (Optional[JacFunc]): Analytic Jacobian; a
                 finite-difference one is used when it is omitted.
+            area_cutoff (float): Refinement threshold of the shared machine.
+            max_points_per_step (Optional[int]): Its per-step point budget;
+                ``None`` disables it.
+            escape_radius (Optional[float]): ``max|coordinate|`` above which a
+                growth step warns; ``None`` (default) never warns.
             resolution_ratio_threshold (Optional[float]): A detected crossing
                 whose :attr:`~.Intersection.Intersection.resolution_ratio` is
                 below this is reported as unresolved. 3 is silent on every
@@ -153,8 +169,16 @@ class TangleWorkbench:
         )
 
         self._fp_solver = FixedPointSolver(self.dynamical_system)
-        self._man_maker = ManifoldInitializer(self.dynamical_system)
-        self._man_machine = ManifoldMachine(self.dynamical_system)
+        # ONE machine refines everything, the initializer's fundamental segments
+        # included, so area_cutoff and the point budget reach every refinement.
+        self._man_machine = ManifoldMachine(
+            self.dynamical_system, area_cutoff, max_points_per_step
+        )
+        self._man_maker = ManifoldInitializer(self.dynamical_system, self._man_machine)
+        self.escape_radius = escape_radius
+        self._growth_stats: dict[
+            tuple[FixedPoint, Stability, Optional[int]], GrowthStats
+        ] = {}
 
         self.Tangle = Tangle()
 
@@ -185,6 +209,9 @@ class TangleWorkbench:
         # rebuild_bridges refuses to carry metadata across a mismatch.
         self._registry_id_epoch: int = 0
         self._bridge_id_epoch: int = 0
+        # Bridges whose image a PointBudgetExceeded abandoned half-refined; see
+        # BridgeIterator.iterate_bridge, which refuses to iterate them again.
+        self._half_iterated_bridges: set[Bridge] = set()
 
         # Generation bookkeeping (see the `generation` property). `_mutations`
         # counts the changes this object makes that nothing else can observe
@@ -199,6 +226,72 @@ class TangleWorkbench:
         # the workbench forwards its same-named methods to them.
         self._bridge_iterator = BridgeIterator(self)
         self._iterate_inference = IterateInference(self)
+
+    # ── refinement and the point budget ──────────────────────────────────────
+
+    @property
+    def area_cutoff(self) -> float:
+        """
+        Curvature area above which the shared machine refines a pair of points.
+
+        Setting it takes effect on the next growth step, initial fundamental
+        segments included (the initializer refines with the same machine).
+        """
+        return self._man_machine.area_cutoff
+
+    @area_cutoff.setter
+    def area_cutoff(self, value: float) -> None:
+        self._man_machine.area_cutoff = value
+
+    @property
+    def max_points_per_step(self) -> Optional[int]:
+        """
+        Points one growth step (or one bridge image) may create before it raises
+        :class:`~.budget.PointBudgetExceeded`; ``None`` disables the budget.
+        """
+        return self._man_machine.max_points_per_step
+
+    @max_points_per_step.setter
+    def max_points_per_step(self, value: Optional[int]) -> None:
+        self._man_machine.max_points_per_step = value
+
+    def growth_stats(
+        self,
+        fixed_point: FixedPoint,
+        stability: Stability,
+        branch_index: Optional[int] = 0,
+    ) -> Optional[GrowthStats]:
+        """
+        What the last completed growth step of one manifold branch cost.
+
+        Args:
+            fixed_point: The fixed point whose manifold grew.
+            stability: Which manifold.
+            branch_index: The ``branch_index`` the step was grown with (None =
+                every branch at once). Ignored on an inversion point, whose one
+                chain covers both branches.
+
+        Returns:
+            The :class:`~.budget.GrowthStats` of the last step
+            :meth:`grow_n_times` completed with that branch selection, or None
+            before the first. Steps of different branches are never compared,
+            so the growth factor always relates one branch to itself.
+        """
+        return self._growth_stats.get(
+            self._growth_key(fixed_point, stability, branch_index)
+        )
+
+    @staticmethod
+    def _growth_key(
+        fixed_point: FixedPoint, stability: Stability, branch_index: Optional[int]
+    ) -> tuple[FixedPoint, Stability, Optional[int]]:
+        """The ``growth_stats`` key: an inversion point grows one chain whatever
+        branch is asked for."""
+        return (
+            fixed_point,
+            stability,
+            None if fixed_point.check_inversion() else branch_index,
+        )
 
     # ── generation ───────────────────────────────────────────────────────────
 
@@ -373,6 +466,10 @@ class TangleWorkbench:
 
         Raises:
             ValueError: If ``num_branches`` is neither 1 nor 2.
+            PointBudgetExceeded: If refining the initial segments of a
+                ``k_value > 1`` orbit (which maps them along the chain) would
+                create more than :attr:`max_points_per_step` points. Nothing of
+                this manifold is registered then.
         """
 
         initial_segments = self._man_maker.construct_kevin_way(
@@ -401,6 +498,9 @@ class TangleWorkbench:
 
         Returns:
             ``(unstable_segments, stable_segments)``.
+
+        Raises:
+            PointBudgetExceeded: As :meth:`initialize_manifold`.
         """
 
         unstable_segments = self.initialize_manifold(
@@ -428,27 +528,84 @@ class TangleWorkbench:
 
         Raises:
             ValueError: If the manifold has not been initialized.
+            PointBudgetExceeded: If one step would create more than
+                :attr:`max_points_per_step` points. The tails and the generation
+                are still updated, but the manifold is partly mapped and
+                under-refined: the session is NOT resumable; rebuild it.
 
         Note:
             Growth refines the existing curve as well as extending it, so it
             bumps the generation and drops every memoised point array.
+
+        Note:
+            A fixed count has no notion of escape: an arm leaving the trapped
+            region multiplies its point count within a step or two, guarded only
+            by the point budget. Before each step a WARNING hints when the last
+            step's count times its growth factor exceeds the budget (a hint, not
+            a refusal: past escape it underestimates by an order of magnitude),
+            and with :attr:`escape_radius` set a step reaching it warns too.
+            Prefer the stop-condition drivers (:meth:`grow_until_bounded`,
+            :meth:`grow_until_turnaround`, :meth:`grow_until`). The depth a
+            tangle needs scales like ``1 / ln(lambda_u)``.
         """
 
         self._require_manifold(fixed_point, stability, branch_index)
 
-        self._man_machine.grow_x_times(
-            fixed_point, stability, num_iterations, branch_index
-        )
+        machine = self._man_machine
+        key = self._growth_key(fixed_point, stability, branch_index)
+        try:
+            for _ in range(num_iterations):
+                last = self._growth_stats.get(key)
+                budget = machine.max_points_per_step
+                predicted = (
+                    last.points_created * last.growth_factor
+                    if last is not None and last.growth_factor is not None
+                    else None
+                )
+                if predicted is not None and budget is not None and predicted > budget:
+                    logger.warning(
+                        "the next %s step of %s may create ~%.3g points, over the "
+                        "%d point budget (last step %d, growth factor %.3g): the "
+                        "arm is probably escaping; prefer a stop condition such "
+                        "as grow_until_bounded",
+                        stability,
+                        fixed_point.label,
+                        predicted,
+                        budget,
+                        last.points_created,
+                        last.growth_factor,
+                    )
 
-        for (fp, stab, _orbit_index, _branch_index), manifold in self.manifolds.items():
+                machine.new_grow_manifold(fixed_point, stability, branch_index)
 
-            if fp is fixed_point and stab == stability:
+                created = machine.points_created
+                factor = (
+                    created / last.points_created
+                    if last is not None and last.points_created
+                    else None
+                )
+                stats = GrowthStats(created, factor, machine.max_abs_coord)
+                self._growth_stats[key] = stats
+                if (
+                    self.escape_radius is not None
+                    and stats.max_abs_coord > self.escape_radius
+                ):
+                    logger.warning(
+                        "the %s manifold of %s reached |coordinate| %.3g, beyond "
+                        "escape_radius %.3g: the arm is escaping",
+                        stability,
+                        fixed_point.label,
+                        stats.max_abs_coord,
+                        self.escape_radius,
+                    )
+        finally:
+            for (fp, stab, _orbit, _branch), manifold in self.manifolds.items():
+                if fp is fixed_point and stab == stability:
+                    manifold._find_tail()
 
-                manifold._find_tail()
-
-        # Growth refines the existing curve as well as extending it, so points
-        # can land inside an already-cut bridge: drop the memoised walks.
-        self._bump_generation(invalidate_walks=True)
+            # Growth refines the existing curve as well as extending it, so points
+            # can land inside an already-cut bridge: drop the memoised walks.
+            self._bump_generation(invalidate_walks=True)
 
     def plot_tangle(
         self,
@@ -531,6 +688,53 @@ class TangleWorkbench:
             raise ValueError(
                 "Max iterations reached, choose a higher cap or a different method."
             )
+
+    def grow_until_bounded(
+        self,
+        fixed_point: FixedPoint,
+        stability: Stability,
+        radius: float,
+        max_iterations: int = 10,
+        branch_index: int = 0,
+    ) -> int:
+        """
+        Grow one step at a time until the manifold reaches ``|coordinate| > radius``.
+
+        The escape stop: an arm leaving the trapped region is caught on the step
+        it crosses ``radius``, before the steps whose point count explodes (the
+        stress campaign's E7 found it the one stop condition that does).
+
+        Args:
+            fixed_point (FixedPoint): The fixed point whose manifold is grown.
+            stability (Stability): Which manifold to grow.
+            radius (float): The ``max|coordinate|`` that ends the growth.
+            max_iterations (int): Growth steps to attempt before giving up.
+                Defaults to 10, matching :meth:`grow_until_turnaround`.
+            branch_index (int): Which eigenvector branch to grow. Defaults to 0;
+                ignored on an inversion point, whose one chain covers both.
+
+        Returns:
+            The number of steps grown, the last being the one that crossed
+            ``radius``.
+
+        Raises:
+            ValueError: If the manifold has not been initialized, or if the cap
+                is reached with the manifold still inside ``radius``.
+            PointBudgetExceeded: As :meth:`grow_n_times`.
+        """
+        self._require_manifold(fixed_point, stability, branch_index)
+        growth_branch = None if fixed_point.check_inversion() else branch_index
+
+        for step in range(1, max_iterations + 1):
+            self.grow_n_times(fixed_point, stability, 1, growth_branch)
+            stats = self.growth_stats(fixed_point, stability, growth_branch)
+            if stats.max_abs_coord > radius:
+                return step
+
+        raise ValueError(
+            f"Max iterations ({max_iterations}) reached with the {stability} "
+            f"manifold still inside radius {radius}; choose a higher cap."
+        )
 
     def grow_until_arclength(
         self,

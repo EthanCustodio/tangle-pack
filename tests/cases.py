@@ -303,7 +303,7 @@ def build_k28(*, blasts: Literal[0, 1, 2] = 1, through: Stage = "partitioned") -
     session = TangleSession(
         henon_map(*HENON_K28), henon_map_inverse(*HENON_K28), henon_jacobian(*HENON_K28)
     )
-    session.workbench._man_machine.area_cutoff = 1e-7
+    session.area_cutoff = 1e-7
     fp = session.construct_fixed_point(list(K28_SADDLE_SEED))
     session.orient_eigenvectors(fp, _orientation(PERIOD1_ORIENTATION))
     session.initialize_both_manifolds(fp)
@@ -420,14 +420,14 @@ def _nested_through(
         expect=CaseExpect(periods=(1, 3), n_tangles=2),
         stage=through,
     )
-    session.workbench._man_machine.area_cutoff = p3_area_cutoff
+    session.area_cutoff = p3_area_cutoff
     fp3 = session.construct_fixed_point([list(p) for p in P3_ORBIT_SEED])
     session.orient_eigenvectors(fp3, _orientation(PERIOD3_ORIENTATION))
     session.initialize_both_manifolds(fp3)
     session.grow_n_times(fp3, "unstable", num_iterations=p3_unstable_steps)
     session.grow_n_times(fp3, "stable", num_iterations=p3_stable_steps)
 
-    session.workbench._man_machine.area_cutoff = p1_area_cutoff
+    session.area_cutoff = p1_area_cutoff
     fp1 = session.construct_fixed_point(list(P3_OUTER_SADDLE_SEED))
     session.orient_eigenvectors(fp1, _orientation(PERIOD1_ORIENTATION))
     session.initialize_both_manifolds(fp1)
@@ -681,7 +681,7 @@ def build_near_tangency() -> Case:
         henon_map_inverse(*HENON_NEAR_TANGENCY),
         henon_jacobian(*HENON_NEAR_TANGENCY),
     )
-    session.workbench._man_machine.area_cutoff = 1e-10
+    session.area_cutoff = 1e-10
     k, _b = HENON_NEAR_TANGENCY
     x = 1.0 + 0.5 * np.sqrt(4 + 4 * k)
     fp = session.construct_fixed_point([x, -x])
