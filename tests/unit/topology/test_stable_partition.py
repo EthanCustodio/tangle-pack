@@ -715,7 +715,6 @@ class _FakePair:
     def __init__(self, iterate, fixed_point):
         self.iterate = iterate
         self.branch_key = (fixed_point, "stable", 0, 0)
-        self.intersection_a = 0
 
 
 @pytest.mark.parametrize(
@@ -726,26 +725,25 @@ class _FakePair:
         (1, -7, False),
         (1, 1, True),    # k_value = 1: no forward hole at all
         (1, 2, True),
+        (3, 1, False),   # +1 .. +(k-1): the appearances on the other branches (D5)
+        (3, 2, False),
         (3, 3, True),    # k_value = 3: a full branch return wraps past the fundamental segment
         (3, 4, True),
         (3, None, False),
     ],
 )
 def test_forward_pairs_beyond_the_fundamental_segment_get_no_hole(period, iterate, dropped):
-    """The FIRM half of the backward-only rule: forward iterates ``>= k_value``
-    are the images of holes still attached to the stable manifold and are never
-    punched; references and backward iterates always are.
-
-    Note:
-        The ``+1 .. +(k_value - 1)`` exemption is PROVISIONAL (author,
-        2026-09-16) and deliberately untested here.
-    """
+    """Holes propagate backward only: forward iterates ``>= k_value`` are the
+    images of holes still attached to the stable manifold and are never
+    punched; references, backward iterates and the ``+1 .. +(k_value - 1)``
+    appearances on the other branches of a period-k orbit (D5, 2026-10-07)
+    always are."""
     from tanglepack.topology.StablePartition import _is_forward_beyond_fundamental
 
     fp = _fixed_point(period, 4.0)
     assert fp.k_value == period
     pair = _FakePair(iterate, fp)
 
-    assert _is_forward_beyond_fundamental(None, pair) is dropped
+    assert _is_forward_beyond_fundamental(pair) is dropped
 
 

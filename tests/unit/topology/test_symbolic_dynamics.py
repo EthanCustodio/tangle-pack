@@ -342,7 +342,10 @@ def test_transition_graph_leaves_inert_classes_out(layout):
     assert set(dyn.transition_graph(refined=False).nodes) == {"a"}
 
 
-def test_inert_class_with_word_warns_and_stays_out(layout, caplog):
+def test_inert_class_mapping_onto_inert_classes_is_silent(layout, caplog):
+    """An inert class whose word names only inert symbols is inertness holding
+    (on a period-k orbit it maps to the next branch's inert class, PK-8): it
+    stays out of the matrix and nothing is logged."""
     dyn = layout.dynamics(
         {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_1^1", "L_3")}
     )
@@ -353,7 +356,19 @@ def test_inert_class_with_word_warns_and_stays_out(layout, caplog):
     assert [child.name for child in dyn.refined[layout.u]] == ["u_1", "u_2"]
     assert names == ["a_1", "a_2"]
     assert matrix[0].tolist() == [1, 1]
-    assert_logged(caplog, logging.WARNING, SD.__name__)
+    assert_logged(caplog, logging.WARNING, SD.__name__, count=0)
+
+
+def test_inert_class_naming_an_active_class_warns_and_stays_out(layout, caplog):
+    """An inert class whose word names an ACTIVE class contradicts its own
+    inertness: one WARNING, and it still stays out of the matrix."""
+    dyn = layout.dynamics(
+        {layout.a: layout.k10_itinerary, layout.u: layout.refs("R_1^1", "R_3^3")}
+    )
+    with caplog.at_level(logging.WARNING, logger=SD.__name__):
+        names, _matrix = dyn.transition_matrix()
+    assert "u" not in names and not any(name.startswith("u_") for name in names)
+    assert_logged(caplog, logging.WARNING, SD.__name__, count=1)
 
 
 def test_describe_lists_every_class(layout):

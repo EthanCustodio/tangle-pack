@@ -18,9 +18,10 @@ bridge (D6, checked by geometry); every other bound opens exactly the stable
 half on the hole's side of its bridge, ``outward`` iff ``(crossing_sign > 0) ==
 (bridge_side == "left")`` (D6). Propagated holes land on the
 branch the cycle predicts and stop at periodicity; nothing at iterate
-``>= k_value`` is punched (the firm half of holes-backward-only; the
-``+1 .. +(k-1)`` exemption is provisional and untested); reference pairs are
-consecutive on both branches inside the reference window.
+``>= k_value`` is punched (holes propagate backward only), while every
+``+1 .. +(k-1)`` appearance whose image pair is registered and spanned IS
+punched on the branch ``advance_key`` names (D5, ``window_holes_on_every_branch``);
+reference pairs are consecutive on both branches inside the reference window.
 """
 
 from __future__ import annotations

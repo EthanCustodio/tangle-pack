@@ -520,33 +520,40 @@ def test_trellis_wrapper_populates_and_clears_slots():
 # Strong-pip cut coverage (plan row 1.18)
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
-    "period, uncut_warnings", [(1, 0), (3, 1)], ids=["period_1_cut", "period_3_uncut"]
+    "period, placed_warnings", [(1, 0), (3, 1)], ids=["period_1", "period_3_placed"]
 )
-def test_strong_pip_cuts_warn_when_branches_are_left_uncut(caplog, period, uncut_warnings):
-    """A period-3 anchor needs one cut per stable branch; with no iterate table
-    only the pip itself cuts, and the other two branches are left running to
-    the manifold end -- which must be reported. A period-1 anchor has one
-    stable branch, which the pip alone cuts: nothing to report.
+def test_missing_pip_iterates_are_cut_at_their_predicted_cdist(caplog, period, placed_warnings):
+    """A period-3 anchor is cut on every stable branch (PK-6, D5): with no
+    ``+1``/``+2`` links for the pip, its cuts on the other two branches are
+    placed by ``image_cdist`` (stable cdist ``4 * beta^j``) and flagged in one
+    WARNING. A crossing beyond such a predicted cut leaves the check set N, so
+    it cannot puncture a window pair. A period-1 anchor has one stable branch,
+    which the pip alone cuts: nothing to place, nothing to report.
 
     The window ``(4, 1) -> (3, 2) -> M^k = (4 / lambda, lambda)`` sits on orbit
     point 0 with the pip at its outer end and the table holds the one ``M^k``
-    link (not its single steps), so the reference search itself succeeds
-    silently in both cases.
+    link. ``z`` (period 3 only) lies on ``s(1, 0)`` at stable cdist 3, past the
+    predicted cut 4 * 0.5 = 2, at unstable cdist 1.5 inside the first pair's
+    ``(1, 2)``: uncut, it would puncture that pair.
     """
     lambda_u = 4.0 if period == 1 else 8.0
     fp = _fixed_point(period, lambda_u)
     reg = IntersectionRegistry()
 
-    def _point(stable_cdist, unstable_cdist):
+    def _point(stable_cdist, unstable_cdist, stable_orbit=0):
         return reg.add_synthetic(
             (stable_cdist, unstable_cdist),
             unstable_cdist=unstable_cdist, stable_cdist=stable_cdist,
-            manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+            manifold_a_key=(fp, "unstable", 0, 0),
+            manifold_b_key=(fp, "stable", stable_orbit, 0),
         )
 
     pip = _point(4.0, 1.0)
-    _point(3.0, 2.0)
-    reg.register_iterate(pip, period, _point(4.0 / lambda_u, lambda_u))
+    x1 = _point(3.0, 2.0)
+    r_end = _point(4.0 / lambda_u, lambda_u)
+    reg.register_iterate(pip, period, r_end)
+    if period == 3:
+        _point(3.0, 1.5, stable_orbit=1)
     trellis = _trellis(reg, fp)
     trellis.strong_pip = pip
     assert fp.k_value == period
@@ -554,9 +561,50 @@ def test_strong_pip_cuts_warn_when_branches_are_left_uncut(caplog, period, uncut
     with caplog.at_level(logging.WARNING, logger="tanglepack.topology.Pseudoneighbor"):
         pairs = compute_pseudoneighbors(trellis)
 
-    assert len(pairs) == 2
+    assert [p.as_tuple() for p in pairs] == [
+        tuple(sorted((pip, x1))), tuple(sorted((x1, r_end)))
+    ]
     assert_logged(
-        caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=uncut_warnings
+        caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=placed_warnings
+    )
+
+
+@pytest.mark.parametrize(
+    "period, linked_steps, gap_warnings, emitted",
+    [(3, 1, 1, [1]), (3, 0, 2, []), (1, 0, 0, [])],
+    ids=["period_3_plus_2_missing", "period_3_unlinked", "period_1_needs_no_image"],
+)
+def test_missing_forward_appearance_warns_once_per_branch(
+    caplog, period, linked_steps, gap_warnings, emitted
+):
+    """A reference trajectory appears on each of the k stable branches of its
+    orbit at ``+1 .. +(k-1)`` (D5). Where the table has no ``+j`` link for a
+    member, the image crossing is not registered and nothing is invented, but
+    every branch left without that appearance is named: one WARNING per stable
+    branch (PK-3). A period-1 orbit needs no forward appearance at all."""
+    fp = _fixed_point(period, 8.0)
+    reg = IntersectionRegistry()
+
+    def _point(orbit, s, u):
+        return reg.add_synthetic(
+            (s, u), unstable_cdist=u, stable_cdist=s,
+            manifold_a_key=(fp, "unstable", orbit, 0),
+            manifold_b_key=(fp, "stable", orbit, 0),
+        )
+
+    a0, b0 = _point(0, 4.0, 1.0), _point(0, 3.0, 2.0)
+    if linked_steps:
+        reg.register_iterate(a0, 1, _point(1, 2.0, 2.0))
+        reg.register_iterate(b0, 1, _point(1, 1.5, 4.0))
+    trellis = _trellis(reg, fp)
+    ref = PseudoneighborPair(a0, b0, branch_key=(fp, "stable", 0, 0), is_reference=True)
+
+    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.Pseudoneighbor"):
+        out = extend_pseudoneighbor_trajectories(trellis, [ref])
+
+    assert [p.iterate for p in out] == emitted
+    assert_logged(
+        caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=gap_warnings
     )
 
 
