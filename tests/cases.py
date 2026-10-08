@@ -1173,6 +1173,11 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "WP2",
         ),
         **_each(("series_alphabet_inside_minimal_trellis",), tuple(SERIES), _BCG1),
+        ("three_tangles_take_three_families", "hand_built"): KnownIssue(
+            "TEST-5(c): TANGLE_COLOR_FAMILIES holds two families, so a third tangle "
+            "draws from none",
+            "WP9",
+        ),
     }
 )
 

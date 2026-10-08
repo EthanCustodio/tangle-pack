@@ -18,15 +18,17 @@ Products (each asked for with the default, all-fixed-points selection):
 ``trellis``, ``arrangement``, ``bridge_classes``, ``minimal_trellis``,
 ``iterated_partition``, ``dual_graph``, ``symbolic_dynamics``.
 
-Events, each applied to a fresh ``build_k10()`` after EVERY product has been
-asked for once (so every cache holds an entry that the event may make stale):
+Events, each applied to a fresh build after EVERY product has been asked for
+once (so every cache holds an entry that the event may make stale); the build
+is ``build_k10()`` except for ``generation_bump``:
 
 * ``no_change`` -- reads only (bridges, registry orderings, partitions).
 * ``rebuild`` -- the product asked for again with ``rebuild=True``.
-* ``generation_bump`` -- one ``iterate_bridge`` (a cheap workbench mutation),
-  then the partition redone through the session fan-outs. On ``k10`` it
-  registers no new crossing, so every view stays put: the cell checks that a
-  generation move leaves the session consistent, not that it is noticed.
+* ``generation_bump`` -- on ``build_k28(blasts=1)``, one more blast of its
+  zone, the pip restored and the partition redone through the session
+  fan-outs. Blast 1 -> 2 switches the reference pair, so the direct view of
+  every product changes, and the cell asserts that it did (TEST-5: on ``k10``
+  one ``iterate_bridge`` changed nothing and the cell was blind).
 * ``partition_signature`` -- a re-partition at the SAME generation (the
   trellis's results cleared and redone against another strong pip, then the
   original pip restored). It changes every product from the bridge classes on.
@@ -46,7 +48,7 @@ from typing import Any, Callable
 
 import pytest
 
-from cases import Case, build_k10, build_nested
+from cases import ZONE_MIN_SEPARATION, Case, build_k10, build_k28, build_nested
 from helpers.direct import direct_view, trellis_view, view_of
 from helpers.zones import define_inner_zone
 from tanglepack import TangleSession
@@ -73,14 +75,6 @@ EVENTS: tuple[str, ...] = (
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
-def _repartition(session: TangleSession) -> None:
-    """Redo the pips, pseudoneighbors, holes and partition through the fan-outs."""
-    session.classify_strong_pips()
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-
-
 def _alternate_pip(session: TangleSession, fp: Any) -> int:
     """The anchor-nearest strong-pip candidate of ``fp`` other than the chosen one.
 
@@ -103,12 +97,18 @@ def _reads(case: Case) -> None:
 
 
 def _bump_generation(case: Case) -> None:
-    """One ``iterate_bridge``, then the partition redone."""
-    session = case.session
+    """One more blast of the case's zone, its pip restored, the partition redone."""
+    session, fp = case.session, case.fixed_point
     generation = session.workbench.generation
 
-    session.workbench.iterate_bridge(session.workbench.uniiterated_bridges[0])
-    _repartition(session)
+    session.blast_zone(
+        case.zones[0], num_iterations=1, fixed_point=[fp], min_separation=ZONE_MIN_SEPARATION
+    )
+    session.classify_strong_pips()
+    session.set_strong_pip(fp, case.pips[0])
+    session.compute_pseudoneighbors()
+    session.punch_holes()
+    session.partition_stable_manifold()
 
     assert session.workbench.generation != generation
 
@@ -166,8 +166,9 @@ def _assert_fresh(case: Case, product: str, result: Any, fixed_points: Any = Non
 @pytest.mark.parametrize("product", PRODUCTS)
 def test_session_product_is_fresh_after_every_event(product: str, event: str) -> None:
     """After the event the product equals a direct build; it is the same object
-    only after ``no_change`` and a new one only after ``rebuild=True``."""
-    case = build_k10()
+    only after ``no_change`` and a new one only after ``rebuild=True``; a generation
+    bump changes the direct view, so its cell is not blind."""
+    case = build_k28(blasts=1) if event == "generation_bump" else build_k10()
     for name in PRODUCTS:
         getattr(case.session, name)()
     accessor = getattr(case.session, product)
@@ -177,10 +178,13 @@ def test_session_product_is_fresh_after_every_event(product: str, event: str) ->
         second = accessor(rebuild=True)
         assert second is not first
     else:
+        before = direct_view(case, product)
         _EVENT_ACTIONS[event](case)
         second = accessor()
         if event == "no_change":
             assert second is first
+        if event == "generation_bump":
+            assert direct_view(case, product) != before, f"the blast left {product} unchanged"
 
     _assert_fresh(case, product, second)
 

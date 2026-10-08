@@ -34,7 +34,8 @@ Dev Notes:
     leaves 20-30 hairpin reversals per branch here, while the current code
     leaves none; no segment is long enough to trip the spike check, which is
     why the reversal check is the one with teeth. See
-    docs/test_suite_refactor_ledger.md (Author follow-up).
+    docs/test_suite_refactor_ledger.md (Author follow-up). The stand-in is
+    accepted (TEST-5, 2026-10-07): the real k=2.1 run never reaches near-ULP.
 """
 
 from __future__ import annotations
@@ -75,8 +76,9 @@ def test_period3_near_ulp_growth_is_not_scrambled() -> None:
     """Five stable steps of the k=2.1 period-3 orbit from a coarse seed reach
     adjacent cdists one ULP apart on every branch, and every branch stays a
     smooth, ordered curve."""
-    workbench = TangleWorkbench(henon_map(2.1), henon_map_inverse(2.1), henon_jacobian(2.1))
-    workbench._man_machine.area_cutoff = 1e-7
+    workbench = TangleWorkbench(
+        henon_map(2.1), henon_map_inverse(2.1), henon_jacobian(2.1), area_cutoff=1e-7
+    )
     fp3 = workbench.construct_fixed_point([list(point) for point in P3_ORBIT_SEED])
     workbench.orient_eigenvectors(
         fp3, {"unstable": np.array([0, 1]), "stable": np.array([-1, -1])}
