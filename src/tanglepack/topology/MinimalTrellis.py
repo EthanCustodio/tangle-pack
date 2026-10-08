@@ -34,11 +34,13 @@ Dev Notes:
   spans (the grown manifold stops short of it, or a blast child was never cut
   there) is skipped with a WARNING: the minimal trellis is evidence-based, like
   inertness, and grows as the trellis does.
-* "Active" is read from the supplied
-  :class:`~tanglepack.topology.BridgeClass.BridgeClassTable` and nothing else.
-  Its definition is changing in the concurrent work (from "holds a loop" to
-  "maps to no active class"); only ``entry.active`` is consumed here so both
-  definitions plug in.
+* "Active" is read from the EVIDENCE table (every bridge's class, the
+  :class:`~tanglepack.topology.BridgeClass.BridgeClassTable` of
+  :func:`~tanglepack.topology.BridgeClass.bridge_classes`), never from the
+  alphabet: activity is a fixed point over the images of ALL bridges, and the
+  alphabet is DEFINED by what this trellis keeps, so reading it here would be
+  circular. The order is evidence -> minimal trellis -> alphabet
+  (:attr:`MinimalTrellis.alphabet`, D2, WP6).
 * Anchors are kept as nodes even when no kept bridge ends there: a periodic
   point is the crossing of its own two manifolds and the stable branch's
   partition starts at it. The outermost crossing is kept because the
@@ -103,6 +105,8 @@ class MinimalTrellis:
             trellis that was not kept.
         sparse: The synthetic filtered trellis (kept crossings and kept
             bridges only, sharing the parent's registry and manifolds).
+        classes: The evidence table activity was read from (every bridge's
+            class); :attr:`alphabet` is its restriction to the kept bridges.
     """
 
     trellis: Trellis
@@ -116,9 +120,16 @@ class MinimalTrellis:
     kept: list["Bridge"]
     dropped_bridge_ids: list["BridgeId"]
     sparse: Trellis
+    classes: "BridgeClassTable"
     _arrangement: Optional[Arrangement] = field(default=None, repr=False)
 
     # ── membership ──────────────────────────────────────────────────────────
+
+    @property
+    def alphabet(self) -> "BridgeClassTable":
+        """D2: the classes with a member this trellis keeps; every other bridge is
+        image evidence only. The same entry objects as :attr:`classes`, in table order."""
+        return self.classes.restricted_to(self.kept_bridge_ids)
 
     @property
     def kept_bridge_ids(self) -> list["BridgeId"]:
@@ -255,8 +266,10 @@ def minimal_trellis(
             that heteroclinic bridges and every stable branch are present).
         holes: The punched holes whose ``bounding_ids`` name the hole bridges;
             normally every cached per-fixed-point trellis's ``holes``.
-        classes: The bridge-class table over the homotopy partition; each hole
-            bridge's ``entry.active`` decides whether it is mapped forward.
+        classes: The EVIDENCE table (every bridge's class over the homotopy
+            partition, :func:`~tanglepack.topology.BridgeClass.bridge_classes`);
+            each hole bridge's ``entry.active`` decides whether it is mapped
+            forward. Kept as :attr:`MinimalTrellis.classes`.
 
     Returns:
         The :class:`MinimalTrellis`.
@@ -414,6 +427,7 @@ def minimal_trellis(
         kept=kept,
         dropped_bridge_ids=dropped,
         sparse=sparse,
+        classes=classes,
     )
     logger.info("%s", minimal.summary())
     return minimal

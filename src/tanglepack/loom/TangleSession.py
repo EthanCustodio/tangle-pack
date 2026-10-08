@@ -133,8 +133,8 @@ class TangleSession:
             escape_radius=escape_radius,
         )
         self._trellises: dict = {}
-        # (workbench.generation, partition signature, table) per
-        # trellis-selection cache key; see bridge_classes().
+        # (minimal trellis, its lettered alphabet) per trellis-selection cache
+        # key; see bridge_classes().
         self._bridge_classes: dict = {}
         # The letters of the bridge classes seen so far. Outlives every cache
         # entry so a class keeps its letter across growth, blasts and
@@ -295,54 +295,42 @@ class TangleSession:
         rebuild: bool = False,
     ) -> BridgeClassTable:
         """
-        The bridge classes of a trellis, lettered and placed in their resonance zones.
+        The ALPHABET of a trellis: its minimal trellis's classes, lettered and zoned.
 
-        The classes are computed on the trellis selected by ``fixed_points`` (all
-        fixed points by default, mirroring :meth:`arrangement`), but the stable
-        partitions used to resolve each bridge end's element are gathered from
-        EVERY cached, non-stale per-fixed-point trellis (see
-        :meth:`_gathered_partitions`) rather than from the selected trellis's own
-        (empty) :attr:`~tanglepack.topology.Trellis.Trellis.stable_partitions`. A
-        heteroclinic bridge is a piece of one fixed point's unstable manifold, so
-        it lives only in that fixed point's trellis, while the elements its ends
-        sit against belong to the partitions of whichever (possibly different)
-        fixed point owns the stable branch it crosses — the same split
-        :meth:`partition_element_for` exists to bridge for a single lookup, done
-        here for every bridge of the selection at once. See
+        D2: the alphabet is the classes of :meth:`minimal_trellis`'s
+        ``kept_bridge_ids`` (``MinimalTrellis.alphabet``); every other bridge
+        is image evidence only, and ``minimal_trellis().classes`` holds every
+        bridge's class (the evidence table, see
         :func:`tanglepack.topology.BridgeClass.bridge_classes` for the class
-        semantics themselves (unordered element pairs oriented anchor outward,
-        loops folded into the class they iterated from, inert classes).
+        semantics: unordered element pairs oriented anchor outward, loops
+        folded forward, inert classes). Partitions are gathered from every
+        cached per-fixed-point trellis, because a heteroclinic bridge's ends sit
+        against another fixed point's partitions.
 
-        The session then annotates the table: every ACTIVE class gets its letter
-        from :attr:`bridge_alphabet` (a class seen before keeps its letter, a new
-        one takes the next unused; inert classes stay unlettered), and every
-        class records the resonance zone its member bridges lie in
+        The session annotates the alphabet: every ACTIVE class gets its letter
+        from :attr:`bridge_alphabet` (a class seen before keeps its letter, a
+        new one takes the next unused; inert classes stay unlettered), and
+        every class records the resonance zone its member bridges lie in
         (:meth:`classify_bridge`, unanimous over the members, else a WARNING and
-        no zone).
+        no zone). An evidence class outside the alphabet is never lettered.
 
-        Cached by :attr:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.generation`,
-        exactly like :meth:`trellis`: any growth, recompute, re-cut, trim, blast
-        or resonance-zone change advances the generation, so the next call
-        recomputes rather than returning a stale grouping. The generation alone
-        cannot see re-partitioning, though — punching holes and partitioning are
-        Trellis-level mutations that do not touch the workbench — so the cache
-        is also keyed by a structural :meth:`_partition_signature` of the
-        gathered partitions; see the Note below.
+        Cached with the minimal trellis it is drawn from, so it follows that
+        cache: :attr:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.generation`
+        and the :meth:`_partition_signature` of the gathered partitions (a
+        re-partition is a Trellis-level mutation the generation cannot see).
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None (the
                 default) for all of them — selects which trellis's bridges are
                 classed.
-            rebuild: Force a recompute even if a cached table exists for the
-                current generation and partition signature. Letters are stable
-                across rebuilds (the alphabet persists).
+            rebuild: Force a recompute (of the minimal trellis too). Letters are
+                stable across rebuilds (the alphabet persists).
 
         Returns:
             A :class:`~tanglepack.topology.BridgeClass.BridgeClassTable` in
-            ascending ``min_unstable_cdist`` order (the class holding the
-            smallest-cdist bridge first, so it is lettered ``a`` on first
-            sight), each entry carrying its members with directions, its
-            ``letter`` and its ``zone_key``.
+            table order (grouped by tangle, smallest member cdist first, so the
+            anchor class is lettered ``a`` on first sight), each entry carrying
+            its members with directions, its ``letter`` and its ``zone_key``.
 
         Raises:
             ValueError: Propagated from
@@ -358,40 +346,19 @@ class TangleSession:
             A branch missing a partition on either side is logged as a WARNING,
             naming which side(s), before that happens.
 
-            The cache hit test is ``(generation, signature)`` together: a
-            :class:`~tanglepack.topology.Trellis.Trellis` can be re-partitioned
-            (e.g. after :meth:`~tanglepack.topology.Trellis.Trellis.clear_results`
-            and a fresh :meth:`partition_stable_manifold`) without the workbench
-            generation moving at all, since the mutation happens on the Trellis,
-            not the workbench. :meth:`_partition_signature` reads off exactly
-            the interval boundaries :func:`tanglepack.topology.BridgeClass.bridge_classes`
-            depends on, so a different partition of the same branch is detected
-            even though the generation is unchanged.
-
             A re-partition renumbers element ids, so a class whose element pair
             changed is a NEW class to the alphabet and takes a new letter; the
             old letter stays reserved. Carrying a class's identity across a
             refinement is the refined-symbols work, not the alphabet's.
         """
+        minimal = self.minimal_trellis(fixed_points, rebuild=rebuild)
         cache_key = self._cache_key(fixed_points)
-        trellis = self.trellis(fixed_points)
-        partitions = self._gathered_partitions()
-        signature = self._partition_signature(partitions)
-
         cached = self._bridge_classes.get(cache_key)
-        if (
-            not rebuild
-            and cached is not None
-            and cached[0] == self.workbench.generation
-            and cached[1] == signature
-        ):
-            return cached[2]
-
-        self._warn_unpartitioned_branches(trellis, partitions)
-        table = _bridge_classes(trellis, partitions)
+        if cached is not None and cached[0] is minimal:
+            return cached[1]
+        table = minimal.alphabet
         self._annotate_bridge_classes(table)
-
-        self._bridge_classes[cache_key] = (self.workbench.generation, signature, table)
+        self._bridge_classes[cache_key] = (minimal, table)
         return table
 
     def _annotate_bridge_classes(self, table: BridgeClassTable) -> None:
@@ -581,10 +548,13 @@ class TangleSession:
 
         Reduces the selected trellis to its hole bridges (from
         :meth:`_gathered_holes`) and the first images of those in an active
-        class (from :meth:`bridge_classes`, itself cached on the same key).
+        class. Activity is read from the EVIDENCE table, every bridge's class
+        over the gathered partitions
+        (:func:`tanglepack.topology.BridgeClass.bridge_classes`), kept as
+        ``MinimalTrellis.classes``; :meth:`bridge_classes` is its restriction
+        to the kept bridges (D2).
 
-        Cached on ``(workbench.generation, partition signature)``, exactly as
-        :meth:`bridge_classes`.
+        Cached on ``(workbench.generation, partition signature)``.
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None (the
@@ -594,13 +564,20 @@ class TangleSession:
         Returns:
             The minimal trellis.
 
+        Raises:
+            ValueError: Propagated from
+                :func:`tanglepack.topology.BridgeClass.bridge_classes` when a
+                bridge end needs a partition no gathered result covers (an
+                unpartitioned branch is named in a WARNING first).
+
         Note:
             Needs every fixed point of interest classified, pseudoneighbored,
             punched and partitioned first (the session fan-outs).
         """
         cache_key = self._cache_key(fixed_points)
         trellis = self.trellis(fixed_points)
-        signature = self._partition_signature(self._gathered_partitions())
+        partitions = self._gathered_partitions()
+        signature = self._partition_signature(partitions)
         cached = self._minimal_trellises.get(cache_key)
         if (
             not rebuild
@@ -609,10 +586,9 @@ class TangleSession:
             and cached[1] == signature
         ):
             return cached[2]
+        self._warn_unpartitioned_branches(trellis, partitions)
         minimal = _minimal_trellis(
-            trellis,
-            self._gathered_holes(fixed_points),
-            self.bridge_classes(fixed_points, rebuild=rebuild),
+            trellis, self._gathered_holes(fixed_points), _bridge_classes(trellis, partitions)
         )
         self._minimal_trellises[cache_key] = (self.workbench.generation, signature, minimal)
         return minimal
@@ -694,7 +670,7 @@ class TangleSession:
         (see :meth:`_gathered_strong_pips`).
 
         Cached on ``(workbench.generation, partition signature, gathered strong
-        pips)``: the first two exactly as :meth:`bridge_classes` (the same
+        pips)``: the first two exactly as :meth:`minimal_trellis` (the same
         :meth:`_partition_signature` catches a re-partition that leaves the
         workbench generation untouched), the third because a pip choice moves
         the unified nodes.
@@ -790,13 +766,12 @@ class TangleSession:
 
         The dynamics is read off :meth:`dual_graph` (the walks between the
         one-step images of each class's two elements) and
-        :meth:`bridge_classes` (the classes, lettered by
+        :meth:`bridge_classes` (the alphabet, lettered by
         :attr:`bridge_alphabet`), both cached on their own keys; see
         :func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics` for the
         algorithm (landing, singleton/trellis path, itinerary, word,
-        refinement, transition structure). Inert classes are lettered ``u, v,
-        ...`` by the topology layer for this result only; the session alphabet
-        stays active-only.
+        refinement, transition structure). The session alphabet stays
+        active-only.
 
         Cached on ``(workbench.generation, partition signature, gathered strong
         pips)``, exactly the key of :meth:`dual_graph`: the dynamics depends on
@@ -839,8 +814,7 @@ class TangleSession:
             return cached[3]
 
         dual = self.dual_graph(fixed_points, rebuild=rebuild)
-        table = self.bridge_classes(fixed_points, rebuild=rebuild)
-        dynamics = _symbolic_dynamics(dual, table)
+        dynamics = _symbolic_dynamics(dual, self.bridge_classes(fixed_points))
 
         self._symbolic_dynamics[cache_key] = (
             self.workbench.generation,

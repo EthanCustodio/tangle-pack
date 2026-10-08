@@ -25,7 +25,7 @@ from .ResonanceZone import (
     trim_stable_at_intersection,
 )
 from .Blast import BlastResult, BlastStep, blast_zone
-from .BridgeAlphabet import BridgeAlphabet, letter
+from .BridgeAlphabet import BridgeAlphabet
 from .TangleSession import TangleSession
 
 __all__ = [
@@ -38,5 +38,4 @@ __all__ = [
     "BlastResult",
     "BlastStep",
     "BridgeAlphabet",
-    "letter",
 ]

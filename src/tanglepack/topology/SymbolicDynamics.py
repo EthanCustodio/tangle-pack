@@ -18,12 +18,15 @@ Dev Notes:
 
 * Directions are always shown, inert classes included (author's decision,
   2026-09-21): k=10 reads ``a -> a u^-1 a^-1``, the walk crossing the inert
-  class ``u = {L_1, L_3}`` against its anchor-outward orientation. Inert
-  classes are lettered ``u, v, w, x, y, z, uu, uv, ...`` by THIS layer only —
-  a bijective numeral over the six letters ``u..z`` (:func:`_inert_letter`),
-  skipping any letter an active class already carries (the session alphabet
-  can reach ``u``). The session's ``BridgeAlphabet`` stays active-only and is
-  not imported (topology never imports loom).
+  class ``u = {L_1, L_3}`` against its anchor-outward orientation. Letters are
+  ONE bijective numeral over two disjoint digit sets (:func:`letter`, SIMP-6,
+  WP6): active classes ``a..t, aa, ab, ...``, inert ones ``u..z, uu, uv, ...``,
+  so the two series never collide and nothing is skipped. Inert classes are
+  lettered by THIS layer only; the session's ``BridgeAlphabet`` letters the
+  active ones with the same :func:`letter` (topology never imports loom).
+* The ALPHABET is the table handed in: normally ``MinimalTrellis.alphabet``,
+  the classes of the minimal trellis's bridges, lettered by the session (D2).
+  Every other bridge is image evidence only.
 * Refinement occurrences come ONLY from the walked (or trellis) itineraries of
   all classes, never from registered member images. A class is split when
   its symbol occurs with two or more distinct iterated pairs; every refined
@@ -47,10 +50,11 @@ Dev Notes:
   function and compared at word level (``verified``) and at exact-itinerary
   level (``itinerary_verified``, INFO only). A length mismatch between the
   registered and the walked word is a WARNING — the shortest walk can be
-  topologically wrong where no image is registered.
-* A pair whose class is in no table entry is a VIRTUAL class (an arc no bridge
-  spans yet); it is named ``new1, new2, ...`` in first-seen order with a
-  WARNING and enters the graph as a sink. A pair whose two elements sit on
+  topologically wrong where no image is registered. Evidence never adds a
+  symbol: a class outside the alphabet it names is named locally (D2).
+* A pair of a WORD whose class is not in the alphabet (no minimal-trellis
+  bridge spans it, D2) is a VIRTUAL class; it is named ``new1, new2, ...`` in
+  first-seen order with a WARNING and enters the graph as a sink. A pair whose two elements sit on
   different sides of ONE stable branch is flagged on the symbol
   (``cross_side``) with a WARNING and not asserted. Across two branches there
   is no side relation (D4: the left of an inversion point's branch 0.0 is the
@@ -106,8 +110,9 @@ logger.addHandler(logging.NullHandler())
 SymbolKind = Literal["active", "inert", "virtual"]
 ItinerarySource = Literal["walk", "trellis"]
 
-#: The digits of the inert letter series.
-_INERT_DIGITS = "uvwxyz"
+#: Active classes are lettered over ``a..t``, inert ones over ``u..z``: one
+#: bijective numeral over two disjoint digit sets (SIMP-6, WP6).
+_ACTIVE_DIGITS, _INERT_DIGITS = "abcdefghijklmnopqrst", "uvwxyz"
 #: The prefix of virtual class names.
 _VIRTUAL_PREFIX = "new"
 
@@ -317,96 +322,57 @@ class _SymbolNode:
 # ── letters ─────────────────────────────────────────────────────────────────
 
 
-def _bijective(index: int, digits: str) -> str:
-    """The ``index``-th (zero-based) numeral of the bijective base ``len(digits)``."""
+def letter(index: int, *, inert: bool = False) -> str:
+    """
+    The ``index``-th letter of the active or the inert series.
+
+    Args:
+        index: Zero-based position in the series.
+        inert: The inert series ``u..z, uu, uv, ...`` instead of the active
+            ``a..t, aa, ab, ...``.
+
+    Returns:
+        The bijective numeral of ``index`` over the series' digits.
+
+    Raises:
+        ValueError: If ``index`` is negative.
+    """
     if index < 0:
         raise ValueError(f"letter index must be non-negative, got {index}")
-    base = len(digits)
+    digits = _INERT_DIGITS if inert else _ACTIVE_DIGITS
     chars = []
     index += 1
     while index > 0:
-        index, remainder = divmod(index - 1, base)
+        index, remainder = divmod(index - 1, len(digits))
         chars.append(digits[remainder])
     return "".join(reversed(chars))
 
 
-def _inert_letter(index: int) -> str:
-    """The ``index``-th inert letter: ``u, v, w, x, y, z, uu, uv, ...``."""
-    return _bijective(index, _INERT_DIGITS)
-
-
-def _active_letter(index: int) -> str:
-    """The ``index``-th active fallback letter: ``a, b, ..., z, aa, ...``."""
-    return _bijective(index, "abcdefghijklmnopqrstuvwxyz")
-
-
-def _letter_key(letter: str) -> tuple[int, str]:
+def _letter_key(text: str) -> tuple[int, str]:
     """Order letters ``a < b < ... < z < aa`` (and ``new1 < new2 < ... < new10``)."""
-    if letter.startswith(_VIRTUAL_PREFIX) and letter[len(_VIRTUAL_PREFIX):].isdigit():
-        return (int(letter[len(_VIRTUAL_PREFIX):]), letter)
-    return (len(letter), letter)
+    if text.startswith(_VIRTUAL_PREFIX) and text[len(_VIRTUAL_PREFIX):].isdigit():
+        return (int(text[len(_VIRTUAL_PREFIX):]), text)
+    return (len(text), text)
 
 
-def inert_letters(
-    table: BridgeClassTable,
-    *,
-    used: Iterable[str] = (),
-) -> dict[BridgeClass, str]:
+def inert_letters(table: BridgeClassTable) -> dict[BridgeClass, str]:
     """
-    Letter the inert classes of a table: ``u, v, w, x, y, z, uu, ...``.
+    Letter the inert classes of a table: ``u, v, w, x, y, z, uu, ...`` in table order.
 
     Args:
-        table: The bridge classes; the active entries' ``letter`` s are the
-            letters to avoid. The inert entries are lettered in TABLE order
-            (a table built by
-            :func:`~tanglepack.topology.BridgeClass.bridge_classes` is sorted
-            by ``min_unstable_cdist``, the same order the active letters
-            follow).
-        used: Extra letters to skip (e.g. fallback letters handed to
-            unlettered active classes by the caller).
+        table: The bridge classes (a table built by
+            :func:`~tanglepack.topology.BridgeClass.bridge_classes` is in the
+            order the active letters follow too).
 
     Returns:
-        ``{inert class: letter}``; a letter an active class already carries is
-        skipped.
+        ``{inert class: letter}``.
     """
-    taken = {entry.letter for entry in table.active if entry.letter is not None}
-    taken.update(used)
-    entries = list(table.inert)
-    letters: dict[BridgeClass, str] = {}
-    index = 0
-    for entry in entries:
-        candidate = _inert_letter(index)
-        index += 1
-        while candidate in taken:
-            candidate = _inert_letter(index)
-            index += 1
-        taken.add(candidate)
-        letters[entry.bridge_class] = candidate
-    return letters
+    return {entry.bridge_class: letter(i, inert=True) for i, entry in enumerate(table.inert)}
 
 
 def _active_letters(table: BridgeClassTable) -> dict[BridgeClass, str]:
-    """The active classes' letters, with local ``a, b, ...`` fallbacks for unlettered ones."""
-    letters: dict[BridgeClass, str] = {}
-    taken = {entry.letter for entry in table if entry.letter is not None}
-    index = 0
-    for entry in table.active:
-        if entry.letter is not None:
-            letters[entry.bridge_class] = entry.letter
-            continue
-        candidate = _active_letter(index)
-        index += 1
-        while candidate in taken:
-            candidate = _active_letter(index)
-            index += 1
-        taken.add(candidate)
-        letters[entry.bridge_class] = candidate
-        logger.debug(
-            "active class %s came unlettered; using local fallback letter %r",
-            entry.bridge_class.label,
-            candidate,
-        )
-    return letters
+    """The active classes' letters; an unlettered one takes ``letter(i)`` by its table position."""
+    return {entry.bridge_class: entry.letter or letter(i) for i, entry in enumerate(table.active)}
 
 
 # ── itineraries → words ─────────────────────────────────────────────────────
@@ -444,8 +410,10 @@ def translate_itinerary(
         naming: Resolves each iterated ref to its homotopy parent.
         table: The bridge classes (decides ``active`` / ``inert`` / virtual).
         letters: ``{class: letter}`` for the classes of ``table``. EXTENDED IN
-            PLACE with ``new1, new2, ...`` for virtual classes met here, so
-            one dict shared over every itinerary names them consistently. A
+            PLACE with ``new1, new2, ...`` for virtual classes met here (a pair
+            whose class is not in the alphabet: no minimal-trellis bridge spans
+            it, D2), so one dict shared over every itinerary names them
+            consistently. A
             table class missing from it falls back to the entry's own letter,
             then to the class label.
         fixed_points: The ordering context of
@@ -495,8 +463,9 @@ def translate_itinerary(
                 letter = _virtual_name(letters)
                 letters[bridge_class] = letter
                 logger.warning(
-                    "itinerary pair (%s, %s) names class %s, which no bridge spans; "
-                    "naming it %r (virtual class)",
+                    "itinerary pair (%s, %s) names class %s, which is not in the "
+                    "alphabet (no minimal-trellis bridge spans it); naming it %r "
+                    "(virtual class)",
                     first.label,
                     second.label,
                     bridge_class.label,
@@ -599,7 +568,8 @@ def registered_evidence(
         iterated: The iterated partition family owning the image crossings.
         naming: Resolves iterated refs to their homotopy parents.
         table: The bridge classes.
-        letters: The letter map (see :func:`translate_itinerary`).
+        letters: The letter map (see :func:`translate_itinerary`); never
+            changed here.
         entry: The class whose members to read.
 
     Returns:
@@ -608,6 +578,7 @@ def registered_evidence(
         left ``None`` (the driver fills them). Loop members and members without
         a registered chain contribute nothing.
     """
+    letters = dict(letters)  # evidence names a class outside the alphabet locally, never adds a symbol (D2)
     evidence: list[ImageEvidence] = []
     for member in entry.members:
         if member.is_loop:
@@ -1231,9 +1202,9 @@ def symbolic_dynamics(
         dual_graph: The dual graph of the minimal trellis, built over the
             iterated homotopy partition (its ``partition.homotopy`` is the
             homotopy family).
-        classes: The bridge classes of the same trellis, lettered by the
-            session (unlettered active classes get local ``a, b, ...``
-            fallbacks).
+        classes: The ALPHABET: normally ``MinimalTrellis.alphabet`` lettered by
+            the session (D2). Unlettered active classes take ``letter(i)`` by
+            their table position.
         max_walks: The cap on shortest walks enumerated per class.
 
     Returns:
@@ -1245,9 +1216,9 @@ def symbolic_dynamics(
     naming = ElementNaming(homotopy, iterated)
     fixed_points = trellis.fixed_points
 
-    active = _active_letters(classes)
-    inert = inert_letters(classes, used=active.values())
-    letters: dict[BridgeClass, str] = {**active, **inert}
+    inert = inert_letters(classes)
+    letters: dict[BridgeClass, str] = {**_active_letters(classes), **inert}
+    assert len(set(letters.values())) == len(letters), "a letter names two classes"
 
     records: dict[BridgeClass, ClassDynamics] = {}
     for entry in classes:

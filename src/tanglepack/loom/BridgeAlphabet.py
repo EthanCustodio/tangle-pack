@@ -14,43 +14,24 @@ Dev Notes:
   changes the pair, so the "same" homotopy class comes back as a new class with
   a new letter. Carrying identity across a refinement is the refined-symbols
   work, not this module's.
-* Letters run ``a``..``z`` then ``aa``, ``ab``, ... (bijective base 26), so
-  ``a`` and ``aa`` never collide with a refined symbol such as ``a_1``.
-* This alphabet letters ACTIVE classes only. Inert classes take their own
-  series ``u, v, w, ...`` from ``topology/SymbolicDynamics.inert_letters``
-  (which skips any letter an active class already holds), never from here;
-  topology cannot import loom, and the two series are kept distinct on purpose.
+* Letters run ``a``..``t`` then ``aa``, ``ab``, ... (the active series of
+  :func:`~tanglepack.topology.SymbolicDynamics.letter`), so ``a`` and ``aa``
+  never collide with a refined symbol such as ``a_1``.
+* This alphabet letters ACTIVE classes only, and only the alphabet's (the
+  minimal trellis's classes, D2). Inert classes take the disjoint series
+  ``u..z, uu, ...`` from ``topology/SymbolicDynamics.inert_letters``: the two
+  series share one generator over disjoint digits, so they never collide and
+  nothing is skipped (SIMP-6, WP6).
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..topology.SymbolicDynamics import letter
+
 if TYPE_CHECKING:
     from ..topology.BridgeClass import BridgeClass
-
-
-def letter(index: int) -> str:
-    """
-    The ``index``-th letter of the alphabet: ``a``..``z``, ``aa``, ``ab``, ...
-
-    Args:
-        index: Zero-based position.
-
-    Returns:
-        The letter string.
-
-    Raises:
-        ValueError: If ``index`` is negative.
-    """
-    if index < 0:
-        raise ValueError(f"letter index must be non-negative, got {index}")
-    chars = []
-    index += 1
-    while index > 0:
-        index, remainder = divmod(index - 1, 26)
-        chars.append(chr(ord("a") + remainder))
-    return "".join(reversed(chars))
 
 
 class BridgeAlphabet:

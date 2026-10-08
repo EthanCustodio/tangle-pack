@@ -28,16 +28,26 @@ Dev Notes:
   synthetic crossing with no manifold nodes around it — is classed like any
   other. Partial bridges have no :data:`~tanglepack.numerics.Bridge.BridgeId`
   and are skipped.
-* LOOPS FOLD (user rule, 2026-09-15). A bridge whose two ends land in the SAME
-  element is not a class of its own: it is the forward image of a bridge that
-  did connect two elements and has been pushed into one of them, and it will
-  keep mapping into that element. Such a loop joins the class of the bridge it
-  iterated from — its preimage chain, walked with registry lookups only
-  (:meth:`~.Trellis.Trellis.iterate` and
-  :meth:`~.Trellis.Trellis.bridge_between`; the map is never called) until a
-  non-loop ancestor is found. A loop whose chain is broken (no registered
-  preimage, or a partial one) stands alone as a ``BridgeClass(x, x)`` entry,
-  flagged :attr:`BridgeClass.is_loop` and logged.
+* LOOPS FOLD FORWARD (user rule, 2026-09-15; forward since 2026-10-07, D2). A
+  bridge whose two ends land in the SAME element is not a class of its own: it
+  is the forward image of a bridge that did connect two elements and has been
+  pushed into one of them, and it will keep mapping into that element. Such a
+  loop joins the class of its IMAGE-CHAIN PARENT — the one bridge whose
+  :func:`_image_chain` holds it (the map is a bijection, so the images of
+  disjoint arcs are disjoint and a pair has at most one parent; asserted) —
+  climbing through parents that are loops themselves until one connects two
+  elements. Lookups only, never the map. Walking PREIMAGES instead (the rule
+  until WP6) broke at every fold-born crossing, which has no ``-1`` link, and
+  left a standalone ``BridgeClass(x, x)`` per blast (BCG-2). A loop no image
+  chain reaches is an ORPHAN: logged once, recorded on
+  :attr:`BridgeClassTable.orphans` and left unclassed, never lettered.
+* EVIDENCE vs ALPHABET (D2, 2026-10-07). :func:`bridge_classes` classes every
+  bridge of the trellis: that is the EVIDENCE table (inertness and the minimal
+  trellis read it). The ALPHABET the session letters, the words and the
+  transition matrix use is its restriction to the classes with a member the
+  minimal trellis keeps (``MinimalTrellis.alphabet``,
+  :meth:`BridgeClassTable.restricted_to`); a blast child is image evidence
+  only.
 * INERT = MAPS TO NO ACTIVE CLASS (user definition, 2026-09-16). Each non-loop
   member's forward image is read from the iterate table alone
   (:func:`_image_chain`: the ``+1`` iterates of its two endpoints and every
@@ -130,8 +140,8 @@ class BridgeClass:
 
     Attributes:
         source: The anchor-nearer element; the start of the class's direction.
-        target: The other element. Equal to ``source`` only for an unresolved loop
-            (see the module Dev Notes).
+        target: The other element. Equal to ``source`` only for the pseudo-class
+            :func:`oriented_class` returns for a loop pair; never a table entry.
     """
 
     source: ElementRef
@@ -139,7 +149,7 @@ class BridgeClass:
 
     @property
     def is_loop(self) -> bool:
-        """True when both elements coincide — an unresolved loop standing alone."""
+        """True when both elements coincide: the pseudo-class of a loop pair."""
         return self.source == self.target
 
     @property
@@ -163,8 +173,8 @@ class BridgeMember:
         direction: ``+1`` when the bridge runs ``source -> target`` in the
             unstable dynamical direction, ``-1`` for ``target -> source``, ``0``
             for a loop (both ends in one element; ``a`` and ``a^-1`` coincide).
-        folded_from: For a folded loop, the non-loop ancestor bridge whose class
-            it joined. ``None`` for a direct member and for an unresolved loop.
+        folded_from: For a loop, the first non-loop bridge up its image-chain
+            parents, whose class it joined. ``None`` for a direct member.
         loop_element: For a loop, the element both of its ends sit in.
     """
 
@@ -243,7 +253,7 @@ class BridgeClassEntry:
 
     @property
     def loops(self) -> list[BridgeMember]:
-        """The loop members (folded or unresolved)."""
+        """The loop members (each folded in from its image-chain parent)."""
         return [member for member in self.members if member.is_loop]
 
     @property
@@ -309,12 +319,10 @@ class BridgeClassEntry:
         parts = []
         for member in self.members:
             if member.is_loop:
-                origin = (
-                    f"folded from {member.folded_from}"
-                    if member.folded_from is not None
-                    else "unresolved"
+                parts.append(
+                    f"{member.bridge_id} loop in {member.loop_element} "
+                    f"(folded from {member.folded_from})"
                 )
-                parts.append(f"{member.bridge_id} loop in {member.loop_element} ({origin})")
             elif self.letter is not None:
                 parts.append(f"{member.bridge_id} {self.symbol(member.bridge_id)}")
             else:
@@ -343,15 +351,21 @@ class BridgeClassEntry:
 @dataclass
 class BridgeClassTable:
     """
-    Every bridge class of a trellis, grouped by tangle (``entry.tangle``,
-    heteroclinic last) and in ascending ``min_unstable_cdist`` order within a
-    group (ties by :func:`class_sort_key`).
+    Bridge classes, grouped by tangle (``entry.tangle``, heteroclinic last) and
+    in ascending ``min_unstable_cdist`` order within a group (ties by
+    :func:`class_sort_key`).
+
+    Built by :func:`bridge_classes` over every bridge (the evidence table), or
+    by :meth:`restricted_to` (the alphabet).
 
     Attributes:
         entries: The classes, one :class:`BridgeClassEntry` each.
+        orphans: The loop bridges no image chain reaches, left unclassed (see
+            the module Dev Notes); empty on a restricted table.
     """
 
     entries: list[BridgeClassEntry] = field(default_factory=list)
+    orphans: list["BridgeId"] = field(default_factory=list)
 
     def __iter__(self) -> Iterator[BridgeClassEntry]:
         return iter(self.entries)
@@ -426,6 +440,27 @@ class BridgeClassTable:
         """The itinerary symbol of a bridge; see :meth:`BridgeClassEntry.symbol`."""
         return self.entry_of(bridge_id).symbol(bridge_id)
 
+    def restricted_to(self, bridge_ids: Iterable["BridgeId"]) -> "BridgeClassTable":
+        """
+        The classes with a member among some bridges: the alphabet of a bridge set.
+
+        Args:
+            bridge_ids: The bridges, in either endpoint order (normally
+                ``MinimalTrellis.kept_bridge_ids``).
+
+        Returns:
+            A table of the SAME entry objects, in table order, members kept
+            whole (a class's other members are its image evidence).
+        """
+        wanted = {frozenset(bid) for bid in bridge_ids}
+        return BridgeClassTable(
+            [
+                entry
+                for entry in self.entries
+                if any(frozenset(bid) in wanted for bid in entry.bridge_ids)
+            ]
+        )
+
     def as_dict(self) -> dict[BridgeClass, list["BridgeId"]]:
         """The table as a plain ``{class: sorted member ids}`` mapping."""
         return {entry.bridge_class: list(entry.bridge_ids) for entry in self.entries}
@@ -437,14 +472,10 @@ class BridgeClassTable:
             f"{len(self.inert)} inert"
         )
         names = {entry.bridge_class: entry.name for entry in self.entries}
-        return "\n".join(
-            [head, *(f"  {entry.describe(names)}" for entry in self.entries)]
-        )
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, BridgeClassTable):
-            return NotImplemented
-        return self.entries == other.entries
+        lines = [head, *(f"  {entry.describe(names)}" for entry in self.entries)]
+        if self.orphans:
+            lines.append(f"  orphan loop(s), unclassed: {self.orphans}")
+        return "\n".join(lines)
 
 
 def zone_label(zone_key: "FixedPoint") -> str:
@@ -566,13 +597,17 @@ def bridge_classes(
     """
     Class a trellis's bridges by the pair of partition elements they connect.
 
+    The result is the EVIDENCE table: every bridge's class. The alphabet is its
+    restriction to the minimal trellis (``MinimalTrellis.alphabet``, D2).
+
     For each bridge id, the row at each end (:func:`~.StablePartition.row_of_end`)
     picks the side, the endpoint's ``manifold_b_key`` picks the stable branch,
     and the partition result for that ``(branch, side)`` names the element that
     owns the endpoint. Two different elements give the bridge's
     :class:`BridgeClass` (oriented anchor outward) and its direction; two equal
-    elements make it a loop, which is folded into the class of its first non-loop
-    ancestor along the registry's preimage chain (see the module Dev Notes).
+    elements make it a loop, which is folded FORWARD into the class of the first
+    non-loop bridge up its image-chain parents; a loop with none is an orphan
+    (see the module Dev Notes).
     Each class is then marked inert or active from its members' forward images
     (:func:`_image_chain`, :func:`_resolve_inertness`): inert when it maps only
     to loops and inert classes, active when it maps to an active class (itself
@@ -586,16 +621,17 @@ def bridge_classes(
             per-fixed-point trellis's :attr:`~.Trellis.Trellis.stable_partitions`
             concatenated. Indexed by ``(branch_key, side)``.
         bridge_ids: The bridges to class. Defaults to every non-partial bridge
-            of ``trellis``. A loop's ancestor is looked up on the trellis whether
-            or not it is among these.
+            of ``trellis``. A loop's image-chain parent is looked up among every
+            bridge of the trellis whether or not it is among these.
 
     Returns:
         A :class:`BridgeClassTable` ordered by each class's smallest member
         first-crossing unstable canonical distance (``min_unstable_cdist``,
         ties by :func:`class_sort_key`), each entry's members sorted by
         :data:`~tanglepack.numerics.Bridge.BridgeId` and its ``inert`` flag and
-        image evidence filled in. Letters and zone keys are left unset (the
-        session fills them).
+        image evidence filled in, and the orphan loops listed on
+        :attr:`BridgeClassTable.orphans`. Letters and zone keys are left unset
+        (the session fills them).
 
     Raises:
         ValueError: If two of ``partitions`` cover the same ``(branch, side)``;
@@ -608,15 +644,21 @@ def bridge_classes(
         result's ``element_of_intersection`` is an AssertionError, not a
         ValueError: a partition covers every crossing of its branch by
         construction, so a miss is a broken invariant rather than a caller
-        error.
+        error. So is an image pair held by two bridges' image chains (the map
+        is a bijection).
     """
     by_branch_side = _index_partitions(partitions)
-    ids = (
-        list(bridge_ids)
-        if bridge_ids is not None
-        else [bridge.id for bridge in trellis.bridges if bridge.id is not None]
-    )
+    every = [bridge.id for bridge in trellis.bridges if bridge.id is not None]
+    ids = every if bridge_ids is None else list(bridge_ids)
     fixed_points = trellis.fixed_points
+    chains = {bid: _image_chain(trellis, bid) for bid in [*every, *ids]}
+    image_parent: dict[frozenset, "BridgeId"] = {}
+    for bid, chain in chains.items():
+        for pair in chain or ():
+            assert image_parent.setdefault(frozenset(pair), bid) == bid, (
+                f"image pair {pair} lies in the image chains of both {bid} and "
+                f"{image_parent[frozenset(pair)]}; the images of disjoint arcs are disjoint"
+            )
 
     def ends(bridge_id: "BridgeId") -> tuple[ElementRef, ElementRef]:
         return (
@@ -625,33 +667,26 @@ def bridge_classes(
         )
 
     grouped: dict[BridgeClass, list[BridgeMember]] = {}
+    orphans: list["BridgeId"] = []
     for bridge_id in ids:
         x, y = ends(bridge_id)
         bridge_class, direction = oriented_class(x, y, fixed_points)
         if direction != 0:
             grouped.setdefault(bridge_class, []).append(BridgeMember(bridge_id, direction))
             continue
-        ancestor = _non_loop_ancestor(trellis, bridge_id, ends)
-        if ancestor is None:
-            logger.warning(
-                "loop bridge %s (both ends in element %s) has no registered "
-                "non-loop preimage; classed on its own as an inert loop",
-                bridge_id,
-                x.label,
-            )
-            grouped.setdefault(bridge_class, []).append(
-                BridgeMember(bridge_id, 0, loop_element=x)
-            )
+        folded = _non_loop_parent(bridge_id, image_parent, ends, fixed_points)
+        if folded is None:
+            orphans.append(bridge_id)
             continue
-        ancestor_id, ancestor_class = ancestor
-        grouped.setdefault(ancestor_class, []).append(
-            BridgeMember(bridge_id, 0, folded_from=ancestor_id, loop_element=x)
+        parent_id, parent_class = folded
+        grouped.setdefault(parent_class, []).append(
+            BridgeMember(bridge_id, 0, folded_from=parent_id, loop_element=x)
         )
-        logger.debug(
-            "loop bridge %s folded into class %s via ancestor %s",
-            bridge_id,
-            ancestor_class.label,
-            ancestor_id,
+    if orphans:
+        logger.warning(
+            "loop bridge(s) %s lie in no non-loop bridge's image chain; left "
+            "unclassed and never lettered (D2)",
+            orphans,
         )
 
     def min_cdist(members: list[BridgeMember]) -> float:
@@ -690,15 +725,16 @@ def bridge_classes(
         for bridge_class, members in sorted(grouped.items(), key=table_key)
     ]
     for entry in entries:
-        _collect_image_evidence(trellis, entry, ends, fixed_points)
+        _collect_image_evidence(chains, entry, ends, fixed_points)
     _resolve_inertness(entries)
     logger.debug(
-        "classed %d bridges into %d classes (%d inert)",
+        "classed %d bridges into %d classes (%d inert, %d orphan loops)",
         len(ids),
         len(entries),
         sum(entry.inert for entry in entries),
+        len(orphans),
     )
-    return BridgeClassTable(entries)
+    return BridgeClassTable(entries, orphans)
 
 
 def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["BridgeId"]]:
@@ -759,7 +795,7 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
 
 
 def _collect_image_evidence(
-    trellis: "Trellis",
+    chains: dict["BridgeId", Optional[list["BridgeId"]]],
     entry: BridgeClassEntry,
     ends,
     fixed_points: Sequence["FixedPoint"],
@@ -767,8 +803,8 @@ def _collect_image_evidence(
     """
     Fill an entry's ``image_classes``, ``image_loops`` and ``unresolved``.
 
-    Every non-loop member's image chain (:func:`_image_chain`) is classed pair
-    by pair with the same row/element rule as the members themselves; a pair
+    Every non-loop member's image chain (``chains``, from :func:`_image_chain`)
+    is classed pair by pair with the same row/element rule as the members themselves; a pair
     with two different elements adds its class, a pair with one element adds a
     loop. Loop members add themselves as loop evidence and no images of their
     own (a loop's image is a loop). An image pair whose end lies on a branch no
@@ -784,10 +820,9 @@ def _collect_image_evidence(
 
     for member in entry.members:
         if member.is_loop:
-            if member.loop_element is not None:
-                add_loop(member.bridge_id, member.loop_element)
+            add_loop(member.bridge_id, member.loop_element)
             continue
-        chain = _image_chain(trellis, member.bridge_id)
+        chain = chains[member.bridge_id]
         if chain is None:
             entry.unresolved.append(member.bridge_id)
             continue
@@ -819,13 +854,10 @@ def _resolve_inertness(entries: Iterable[BridgeClassEntry]) -> None:
     already inert (a loop image is never active; an image class with no entry
     of its own — a virtual, uncut pair between two elements — is unknown and
     therefore counts as active). A class among its own images keeps itself
-    active. An entry whose class is itself a loop (an unresolved loop standing
-    alone) is inert outright.
+    active.
     """
     entries = list(entries)
-    inert: set[BridgeClass] = {
-        entry.bridge_class for entry in entries if entry.bridge_class.is_loop
-    }
+    inert: set[BridgeClass] = set()
     changed = True
     while changed:
         changed = False
@@ -839,40 +871,28 @@ def _resolve_inertness(entries: Iterable[BridgeClassEntry]) -> None:
         entry.inert = entry.bridge_class in inert
 
 
-def _non_loop_ancestor(
-    trellis: "Trellis",
+def _non_loop_parent(
     bridge_id: "BridgeId",
+    image_parent: dict[frozenset, "BridgeId"],
     ends,
+    fixed_points: Sequence["FixedPoint"],
 ) -> Optional[tuple["BridgeId", BridgeClass]]:
     """
-    Walk a loop's preimage chain to the first bridge that connects two elements.
-
-    Registry lookups only: each step takes the ``-1`` iterate of both endpoints
-    (:meth:`~.Trellis.Trellis.iterate`) and the bridge spanning them
-    (:meth:`~.Trellis.Trellis.bridge_between`). A bridge's preimage is at most
-    one bridge, because the forward map can only add crossings to an arc.
+    Climb a loop's image-chain parents to the first bridge that connects two elements.
 
     Returns:
-        ``(ancestor id, its class)`` or ``None`` when the chain breaks (a missing
-        iterate, no bridge over the preimage pair, a partial one) or cycles.
+        ``(parent id, its class)``, or ``None`` when no image chain holds the
+        current bridge or the climb cycles (an orphan).
     """
-    fixed_points = trellis.fixed_points
-    current = bridge_id
-    visited = {bridge_id}
-    while True:
-        first = trellis.iterate(current[0], -1)
-        second = trellis.iterate(current[1], -1)
-        if first is None or second is None:
-            return None
-        bridge = trellis.bridge_between(first, second)
-        if bridge is None or bridge.id is None or bridge.id in visited:
-            return None
-        visited.add(bridge.id)
-        x, y = ends(bridge.id)
-        bridge_class, direction = oriented_class(x, y, fixed_points)
-        if direction != 0:
-            return bridge.id, bridge_class
-        current = bridge.id
+    visited = {frozenset(bridge_id)}
+    current = image_parent.get(frozenset(bridge_id))
+    while current is not None and frozenset(current) not in visited:
+        visited.add(frozenset(current))
+        bridge_class, direction = oriented_class(*ends(current), fixed_points)
+        if direction:
+            return current, bridge_class
+        current = image_parent.get(frozenset(current))
+    return None
 
 
 def _index_partitions(

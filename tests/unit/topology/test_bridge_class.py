@@ -548,7 +548,6 @@ def test_an_image_pair_has_one_parent():
     bridges whose image chains share a pair break an invariant and raise."""
     trellis, partitions, _bridges = _fold_born_trellis()
     trellis.bridges.append(SimpleNamespace(id=(2, 3)))
-    trellis._iterates.update({(2, 1): 3, (3, 1): 4})
-    trellis._iterates[(1, 1)] = 2
+    trellis._iterates[(3, 1)] = 4  # f(2, 3) = (5, 4): the pair (4, 5) again
     with pytest.raises(AssertionError):
         bridge_classes(trellis, partitions)
