@@ -32,10 +32,6 @@ from typing import Iterable
 
 # Dead API (plan decision 4): the code stays, its tests are dropped.
 WHITELIST: dict[str, tuple[str, ...]] = {
-    "src/tanglepack/numerics/IntersectionRegistry.py": (
-        "IntersectionRegistry.on_interval",
-        "IntersectionRegistry._get_lambda_u",
-    ),
     # the scalar curvature area and the three helpers only it calls (Phase 3a
     # moved the last tests onto the vectorized kernel ``_curvature_area_batch``)
     "src/tanglepack/numerics/ManifoldMachine.py": (

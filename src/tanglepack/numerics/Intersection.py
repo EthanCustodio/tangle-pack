@@ -52,6 +52,12 @@ class Intersection:
             and tail candidates a cut at this crossing uses; capturing them here
             keeps them stable even after a separator point is spliced into the
             same segment. None for a synthetic crossing.
+        stable_segment: The two adjacent nodes of the stable manifold the
+            crossing was found between. With ``unstable_segment`` they are the
+            crossing's BRACKETS: each canonical distance is known only to within
+            its two nodes' cdists, and the map carries those brackets exactly,
+            which is how the iterate table is filled
+            (:mod:`~.IterateInference`). None for a hand-built synthetic one.
         crossing_sign: Handedness of the crossing: ``+1`` when the stable
             direction is counter-clockwise from the unstable one, ``-1`` when it
             is clockwise, with both directions taken in INCREASING canonical
@@ -88,6 +94,7 @@ class Intersection:
         unstable_segment: Optional[tuple["Point", "Point"]] = None,
         crossing_sign: int = 0,
         resolution_ratio: Optional[float] = None,
+        stable_segment: Optional[tuple["Point", "Point"]] = None,
     ) -> None:
         """
         Build one crossing. Every field is optional so that a synthetic
@@ -104,6 +111,7 @@ class Intersection:
         self.manifold_b_key = manifold_b_key
         self.unstable_manifold = unstable_manifold
         self.unstable_segment = unstable_segment
+        self.stable_segment = stable_segment
         self.crossing_sign = int(crossing_sign)
         self.resolution_ratio = resolution_ratio
 
@@ -122,6 +130,7 @@ class Intersection:
         unstable_segment: Optional[tuple["Point", "Point"]] = None,
         crossing_sign: int = 0,
         resolution_ratio: Optional[float] = None,
+        stable_segment: Optional[tuple["Point", "Point"]] = None,
     ) -> Intersection:
         """Create an Intersection backed by two R-tree segment IDs."""
         return cls(
@@ -136,6 +145,7 @@ class Intersection:
             unstable_segment=unstable_segment,
             crossing_sign=crossing_sign,
             resolution_ratio=resolution_ratio,
+            stable_segment=stable_segment,
         )
 
     @property
@@ -143,9 +153,8 @@ class Intersection:
         """
         Return the distinct FixedPoint objects involved in this intersection.
 
-        Either key may be absent: a crossing born on an iterated bridge carries
-        only ``manifold_b_key`` until the bridge's unstable key is propagated,
-        and a synthetic crossing may carry neither.
+        A detected crossing carries both keys; a hand-built synthetic one may
+        carry either or neither.
 
         Returns:
             The distinct fixed points in (a, b) order: one element for a
@@ -172,6 +181,7 @@ class Intersection:
         unstable_manifold: Optional["BaseManifold"] = None,
         unstable_segment: Optional[tuple["Point", "Point"]] = None,
         crossing_sign: int = 0,
+        stable_segment: Optional[tuple["Point", "Point"]] = None,
     ) -> Intersection:
         """
         Create an Intersection not backed by a detected segment crossing.
@@ -197,6 +207,8 @@ class Intersection:
                 bracketing the crossing, in increasing canonical distance.
             crossing_sign: Handedness of the crossing (see the class docstring).
                 An anchor takes it from the oriented eigenvectors.
+            stable_segment: The two adjacent nodes of the stable branch at the
+                crossing (an anchor passes its stable root and the node after).
 
         Returns:
             An Intersection with ``seg_ids`` and ``id`` both None; the id is
@@ -218,6 +230,7 @@ class Intersection:
             unstable_manifold=unstable_manifold,
             unstable_segment=unstable_segment,
             crossing_sign=crossing_sign,
+            stable_segment=stable_segment,
         )
 
     # --- helpers ---

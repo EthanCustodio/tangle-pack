@@ -1315,7 +1315,7 @@ class TangleWorkbench:
                 False to accumulate further manifolds into an existing computation.
             infer_iterates: If True (default) fill the iterate table from the freshly
                 computed crossings via :meth:`infer_iterates` (the M^1 forward iterate
-                of every intersection, by canonical-distance mapping). Pass False to
+                of every intersection, by the exact bracket rule). Pass False to
                 skip it — used by the growth loops that call this many times and do not
                 need the table.
             preserve_ids: If True (and ``reset`` is True), re-align the rebuilt
@@ -1610,6 +1610,7 @@ class TangleWorkbench:
                         manifold_b_key=s_key,
                         unstable_manifold=u_manifold,
                         unstable_segment=(u_nodes[0], u_nodes[1]),
+                        stable_segment=(s_nodes[0], s_nodes[1]),
                         crossing_sign=self._anchor_crossing_sign(u_nodes, s_nodes),
                     )
                     anchor_ids.append(registry.add(anchor))
@@ -1953,23 +1954,28 @@ class TangleWorkbench:
 
     # ── iterate table inference (see IterateInference) ───────────────────────
 
-    def infer_iterate_table(self, cdist_rtol: float = 0.05) -> int:
-        """
-        Record the n=1 forward iterate of every iterated bridge's endpoints.
+    def infer_iterate_table(self) -> int:
+        """:meth:`infer_iterates` over every crossing, kept for the scripts.
 
-        Delegates to
-        :meth:`~.IterateInference.IterateInference.infer_iterate_table`.
+        The public-API pass (D8) decides its fate.
         """
-        return self._iterate_inference.infer_iterate_table(cdist_rtol)
+        return self.infer_iterates()
 
-    def infer_iterates(self, cdist_rtol: float = 0.05) -> int:
+    def infer_iterates(self, sources: Optional[Iterable[int]] = None) -> int:
         """
-        Fill the iterate table for *every* registered crossing.
+        Record the ``+1`` image of every source crossing, by the exact bracket rule.
 
         Delegates to :meth:`~.IterateInference.IterateInference.infer_iterates`;
-        :meth:`compute_intersections` calls it automatically.
+        :meth:`compute_intersections`, every :meth:`iterate_bridge` and the end
+        of every blast call it, so the table is complete without a manual call.
+
+        Args:
+            sources: Registry ids to find images for; None means all of them.
+
+        Returns:
+            Number of new iterate relationships recorded.
         """
-        return self._iterate_inference.infer_iterates(cdist_rtol)
+        return self._iterate_inference.infer_iterates(sources)
 
     # ── graph view (see graphviz) ────────────────────────────────────────────
 

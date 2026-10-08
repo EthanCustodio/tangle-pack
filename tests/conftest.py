@@ -92,7 +92,6 @@ Dev Notes:
 
     Dead API: the code stays, its tests were dropped (author decision 4), and
     ``_tools/coverage_guard.py`` whitelists it:
-    ``IntersectionRegistry.on_interval`` and ``_get_lambda_u``,
     ``TangleSession.invalidate_trellises`` (deprecated no-op), the scalar
     ``ManifoldMachine._curvature_area`` (superseded by
     ``_curvature_area_batch``), the ``Pseudoneighbor.forward_unstable_branch_cycle``

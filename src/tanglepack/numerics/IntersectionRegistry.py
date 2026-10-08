@@ -26,6 +26,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+#: Two detections are the same crossing when their branch keys agree and both
+#: canonical distances agree to this RELATIVE tolerance (NUM-8, WP2). A
+#: re-detection is bit-identical in practice (the same polylines); distinct
+#: crossings on one branch pair stay >= 4e-3 apart even at 11 k=2.8 blasts, while
+#: an absolute 1e-6 would merge deep ones. An anchor (cdists exactly 0.0) matches
+#: only another exact 0.0.
+DEDUP_RTOL = 1e-9
+
+
+def _close(a: float, b: float) -> bool:
+    """``a`` and ``b`` agree to :data:`DEDUP_RTOL`, relative to the larger."""
+    return abs(a - b) <= DEDUP_RTOL * max(abs(a), abs(b))
+
 
 class IntersectionRegistry:
     """
@@ -34,8 +47,8 @@ class IntersectionRegistry:
     IDs are contiguous integers (0, 1, 2, …) assigned in insertion order.
     An intersection is uniquely identified by (unstable_cdist, stable_cdist,
     unstable branch, stable branch) — the two cdists plus the two manifold keys it
-    crosses on. Duplicates (a match on all four, cdists within tolerance) are
-    detected and deduped — the existing ID is returned rather than creating a
+    crosses on. Duplicates (a match on all four, cdists equal to
+    :data:`DEDUP_RTOL`) are detected and deduped — the existing ID is returned rather than creating a
     second entry. The branch keys are required because canonical distance is
     measured per branch: the periodic anchor of every branch sits at cdist (0, 0),
     so cdist alone would wrongly merge the distinct anchors of a period-p orbit
@@ -52,7 +65,6 @@ class IntersectionRegistry:
         registry.graph(bridges=None)             → nx.MultiDiGraph (live)
 
     Query interface (all return list[Intersection]):
-        registry.on_interval(lo, hi)             → pre-images that map into [lo, hi]
         registry.on_cdist_range(lo, hi)          → intersections with cdist in [lo, hi]
         registry.from_fixed_point(fp)            → intersections involving fp
         registry.from_branch(branch_index)       → intersections on given branch
@@ -61,8 +73,10 @@ class IntersectionRegistry:
     Attributes:
         _store: dict[int, Intersection]
         _next_id: int
-        cdist_tol: float
-        iterate_table: IterateTable
+        cdist_tol: float  — the topology's ABSOLUTE canonical-distance slack
+            (anchor detection, window ends); NOT the dedup rule, which is
+            :data:`DEDUP_RTOL` (its consumers are SIMP-13, WP11)
+        iterate_table: IterateTable  — a partial bijection: the map is injective
         _generation: int  — bumped by every mutation; read via :attr:`generation`
         _orders_version: int  — bumped by the mutations that change the stored
             crossings (insert, renumber); the ordering-derived views key on it
@@ -87,8 +101,8 @@ class IntersectionRegistry:
         Build an empty registry.
 
         Args:
-            cdist_tol (float): Canonical-distance tolerance used to decide that
-                an incoming crossing duplicates one already stored.
+            cdist_tol (float): The absolute canonical-distance slack the
+                topology reads (never the dedup rule; see :data:`DEDUP_RTOL`).
         """
         self._store: dict[int, Intersection] = {}
         self._next_id: int = 0
@@ -154,8 +168,8 @@ class IntersectionRegistry:
         """
         Register an intersection, returning its unique ID.
 
-        If a collision is detected (another intersection with cdists within
-        self.cdist_tol), the existing ID is returned and no duplicate is stored.
+        If a collision is detected (the same two branches and cdists equal to
+        :data:`DEDUP_RTOL`), the existing ID is returned and no duplicate is stored.
         On a new insertion, the node is added to the live graph immediately.
 
         Args:
@@ -206,7 +220,7 @@ class IntersectionRegistry:
         crossing (e.g., a manually placed reference point).
 
         For most workflows, prefer computing real intersections and querying them
-        with on_interval() and related methods.
+        with on_cdist_range() and related methods.
         """
         return self.add(
             Intersection.synthetic(
@@ -224,7 +238,8 @@ class IntersectionRegistry:
         The id of the stored crossing that IS this one, if it is already here.
 
         The public face of the collision test :meth:`add` applies: a match needs
-        both canonical distances within ``cdist_tol`` AND both branch keys equal.
+        both canonical distances equal to :data:`DEDUP_RTOL` AND both branch keys
+        equal.
         Use it to resolve a crossing you can describe but do not hold -- the
         image of an anchor, say, which is the anchor of the next orbit branch and
         is fully specified by its ``(0, 0)`` cdists plus its two advanced keys.
@@ -247,7 +262,7 @@ class IntersectionRegistry:
         renumbers every crossing from zero. That invalidates ids the caller is
         holding — a strong pip chosen as id 7 becomes some unrelated integer. This
         re-aligns the freshly built registry against ``old``: every intersection
-        that matches one in ``old`` (same canonical distances within ``cdist_tol``
+        that matches one in ``old`` (same canonical distances to :data:`DEDUP_RTOL`
         and the same two branch keys — the exact/stable identity used by
         :meth:`_find_collision`) is given back its old id. Crossings with no match
         in ``old`` (genuinely new geometry) are assigned fresh ids above every
@@ -533,7 +548,13 @@ class IntersectionRegistry:
         Record f^n(source) = target.
 
         Delegates to iterate_table and wires the directed edge into the graph.
+
+        Raises:
+            AssertionError: If the link would overwrite another: the map is
+                injective, so the table is a partial bijection.
         """
+        assert self.iterate_table[source_id, n] in (None, target_id), (source_id, n)
+        assert self.iterate_table[target_id, -n] in (None, source_id), (target_id, -n)
         self.iterate_table.register_iterate(source_id, n, target_id)
         self._generation += 1
         if source_id in self._graph and target_id in self._graph:
@@ -559,9 +580,10 @@ class IntersectionRegistry:
         this yields the start plus its p-1 iterates — the points that bound a period-p
         resonance zone.
 
-        The table is populated by :meth:`TangleWorkbench.infer_iterates` (called
-        automatically by ``compute_intersections``), so this just reads it; if the
-        table has not been filled, only ``start_id`` is returned.
+        The table is filled by :meth:`TangleWorkbench.infer_iterates`, which
+        ``compute_intersections``, every ``iterate_bridge`` and the end of every
+        blast run, so this just reads it; if the table has not been filled, only
+        ``start_id`` is returned.
 
         Args:
             start_id: Registry id to start from (e.g. a strong pip).
@@ -610,63 +632,6 @@ class IntersectionRegistry:
         """
         return [ix for ix in self._store.values() if predicate(ix)]
 
-    def on_interval(
-        self,
-        lo: float,
-        hi: float,
-        stability: Stability = "unstable",
-        fixed_point: Optional[FixedPoint] = None,
-        branch_index: Optional[int] = None,
-    ) -> list[Intersection]:
-        """
-        Return all intersections p such that f(p) has cdist on `stability` in [lo, hi].
-
-        Uses the eigenvalue formula — no additional manifold numerics required:
-            f(p).unstable_cdist = lambda_u × p.unstable_cdist
-            f(p).stable_cdist   = p.stable_cdist / lambda_u
-
-        lambda_u is read per intersection from manifold_a_key (for stability="unstable")
-        or manifold_b_key (for stability="stable"), so a registry containing intersections
-        from multiple fixed points with different eigenvalues is handled correctly.
-
-        Args:
-            lo: Lower cdist bound for f(p) on the given manifold.
-            hi: Upper cdist bound for f(p) on the given manifold.
-            stability: Which manifold's cdist to apply the interval on.
-            fixed_point: If given, only consider intersections involving this FP.
-            branch_index: If given, only consider intersections on this branch.
-
-        Returns:
-            List of Intersection objects (the sources, not their images).
-        """
-        results = []
-        for ix in self._store.values():
-            # Optional provenance filters
-            if fixed_point is not None or branch_index is not None:
-                key = (
-                    ix.manifold_a_key if stability == "unstable" else ix.manifold_b_key
-                )
-                if key is None:
-                    continue
-                if fixed_point is not None and key[0] is not fixed_point:
-                    continue
-                if branch_index is not None and key[3] != branch_index:
-                    continue
-
-            lambda_u = self._get_lambda_u(ix, stability)
-            if lambda_u is None:
-                continue
-
-            if stability == "unstable":
-                image_cdist = lambda_u * ix.unstable_cdist
-            else:
-                image_cdist = ix.stable_cdist / lambda_u
-
-            if lo <= image_cdist <= hi:
-                results.append(ix)
-
-        return results
-
     def on_cdist_range(
         self,
         lo: float,
@@ -676,8 +641,7 @@ class IntersectionRegistry:
         """
         Return all intersections whose CURRENT cdist on `stability` is in [lo, hi].
 
-        Unlike on_interval(), no iteration is applied — this filters by where the
-        intersection already sits, not where it maps to.
+        No iteration is applied: this filters by where the intersection sits.
 
         Args:
             lo: Lower bound of the cdist range.
@@ -807,97 +771,36 @@ class IntersectionRegistry:
 
     # ── internal helpers ───────────────────────────────────────────────────
 
-    def _get_lambda_u(
-        self,
-        intersection: Intersection,
-        stability: Stability = "unstable",
-    ) -> Optional[float]:
-        """
-        Read the unstable eigenvalue magnitude from the intersection's manifold keys.
-
-        A crossing can involve two different fixed points (a heteroclinic
-        crossing), whose eigenvalues differ, so the side matters: the image of a
-        crossing along the unstable manifold is governed by the unstable
-        branch's fixed point, and along the stable manifold by the stable
-        branch's fixed point.
-
-        Args:
-            intersection: The crossing whose eigenvalue is wanted.
-            stability: Which side to read: "unstable" uses ``manifold_a_key``,
-                "stable" uses ``manifold_b_key``. Falls back to the other key
-                (logging at debug) only when the requested one is None.
-
-        Returns:
-            The eigenvalue magnitude as a Python float, or None when no key is
-            set or the fixed point has no eigenvalues yet (callers skip the
-            intersection in that case).
-        """
-        preferred = (
-            intersection.manifold_a_key
-            if stability == "unstable"
-            else intersection.manifold_b_key
-        )
-        key = preferred
-        if key is None:
-            key = (
-                intersection.manifold_b_key
-                if stability == "unstable"
-                else intersection.manifold_a_key
-            )
-            if key is not None:
-                logger.debug(
-                    "no %s-side manifold key on intersection %s; falling back to "
-                    "the other side's eigenvalue",
-                    stability,
-                    intersection.id,
-                )
-        if key is None:
-            return None
-
-        fp = key[0]
-        eigenvalues = getattr(fp, "unstable_eigenvalues", None)
-        if eigenvalues is None or len(eigenvalues) == 0:
-            return None
-        return float(abs(np.ravel(eigenvalues[0])[0]))
-
     def _find_collision(self, intersection: Intersection) -> Optional[int]:
         """
         The id of the stored intersection that is the same crossing, if any.
 
-        A duplicate must match on both canonical distances (within cdist_tol) and
-        on the two branches it crosses (manifold_a_key = unstable branch,
-        manifold_b_key = stable branch). The branch test is what keeps the
-        per-branch anchors apart: they all share cdist (0, 0) but lie on different
-        branches, so a cdist-only test would collapse them into one. Branch keys
-        are exact discrete labels, so this needs no positional tolerance and does
-        not rely on the (approximate, drift-prone) phase-space coordinates.
+        A duplicate must match on the two branches it crosses (manifold_a_key =
+        unstable branch, manifold_b_key = stable branch) and on both canonical
+        distances to :data:`DEDUP_RTOL`. The branch test is what keeps the
+        per-branch anchors apart: they all share cdist (0, 0) but lie on
+        different branches. Branch keys are exact discrete labels, and the
+        (approximate, drift-prone) phase-space coordinates are never read.
 
         The unstable cdist is the prefilter: the sorted key array is bisected for
-        the window ``[u - tol, u + tol]`` and only those candidates are tested in
-        full, so an insert costs O(log N) plus the (normally empty) window rather
-        than a scan of the whole store. When several stored crossings fall inside
-        the window and match, the smallest id wins -- ids are handed out in
-        increasing order and preserved by :meth:`reindex_from`, so that is the
-        oldest of them and the deterministic choice.
+        the relative window around it, so an insert costs O(log N) plus the
+        (normally empty) window. When several stored crossings match, the
+        smallest id wins -- ids are handed out in increasing order and preserved
+        by :meth:`reindex_from`, so that is the oldest and the deterministic
+        choice.
         """
-        tol = self.cdist_tol
-        u = intersection.unstable_cdist
-        lo = bisect.bisect_left(self._unstable_keys, u - tol)
-        hi = bisect.bisect_right(self._unstable_keys, u + tol)
-
-        best: Optional[int] = None
-        for pos in range(lo, hi):
-            candidate_id = self._unstable_order[pos]
-            existing = self._store[candidate_id]
-            if (
-                abs(existing.unstable_cdist - u) < tol
-                and abs(existing.stable_cdist - intersection.stable_cdist) < tol
-                and existing.manifold_a_key == intersection.manifold_a_key
-                and existing.manifold_b_key == intersection.manifold_b_key
-            ):
-                if best is None or candidate_id < best:
-                    best = candidate_id
-        return best
+        u, s = intersection.unstable_cdist, intersection.stable_cdist
+        lo = bisect.bisect_left(self._unstable_keys, u - DEDUP_RTOL * abs(u))
+        hi = bisect.bisect_right(self._unstable_keys, u + DEDUP_RTOL * abs(u))
+        matches = (
+            candidate_id
+            for candidate_id in self._unstable_order[lo:hi]
+            if _close(self._store[candidate_id].unstable_cdist, u)
+            and _close(self._store[candidate_id].stable_cdist, s)
+            and self._store[candidate_id].manifold_a_key == intersection.manifold_a_key
+            and self._store[candidate_id].manifold_b_key == intersection.manifold_b_key
+        )
+        return min(matches, default=None)
 
     def candidates_near_stable_cdist(
         self, branch_key: Optional[ManifoldKey], cdist: float, window: float

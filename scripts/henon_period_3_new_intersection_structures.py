@@ -77,8 +77,12 @@ s_order = registry.by_stable_cdist
 
 # --- Query interface ---
 
-# Which intersections will map into the cdist range [5, 10] on the stable manifold?
-sources = registry.on_interval(5.0, 10.0, stability="stable")
+# Which intersections will map into the stable cdist range [5, 10] in one step?
+sources = [
+    ix
+    for _, ix in registry
+    if 5.0 <= ix.stable_cdist * ix.manifold_b_key[0].per_step_beta("stable") <= 10.0
+]
 print(f"{len(sources)} intersections map into s-cdist [5, 10]")
 
 # All intersections currently sitting in a cdist range (no iteration)

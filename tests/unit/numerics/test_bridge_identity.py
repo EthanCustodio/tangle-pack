@@ -99,7 +99,7 @@ def test_standalone_collaborators_agree_with_the_workbench(henon_tangle_with_bri
     for bridge in bridges:
         assert iterator.image_bridges(bridge.id) == workbench.image_bridges(bridge.id)
         assert iterator.preimage_bridges(bridge.id) == workbench.preimage_bridges(bridge.id)
-    assert inference.infer_iterate_table() == 0
+    assert inference.infer_iterates() == 0
 
 
 # --------------------------------------------------------------------------- #

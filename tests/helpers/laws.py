@@ -26,10 +26,14 @@ Dev Notes:
 * Tolerances are stated against library constants where the library has one:
   the area of an iterate link against ``collision_rtol`` (the slack
   ``StrongPip`` / ``Pseudoneighbor`` identify iterates with), the cdist
-  scaling of a link against ``infer_iterate_table``'s ``cdist_rtol`` (the
-  slack the links were matched with), the area of a region image against
-  ``Arrangement.image_of``'s ``rtol``, and every cdist comparison against the
-  registry's ``cdist_tol``.
+  scaling of a link against ``Trellis.SCALING_RTOL``, both widened by the
+  linked crossings' own BRACKETS (the node cdists either side of each crossing
+  on both curves: a crossing's cdist is known only to within them, WP2), the
+  area of a region image against ``Arrangement.image_of``'s ``rtol``, and every
+  cdist comparison against the registry's ``cdist_tol``.
+* The iterate-table laws (WP2) recompute every bracket from the curve nodes
+  and use the REAL map as the oracle of a link: ``|f(x) - y|`` within the image
+  of x's unstable segment plus y's own.
 * The geometric oracles here (crossing sign from the manifold nodes, the row
   of a bridge end, a direct hole's side of its bridge, the side of a face) are
   measured from the curves with public geometry helpers and the ``_side_of``
@@ -51,7 +55,6 @@ from helpers.invariants import (
     assert_no_geometric_spikes,
     assert_one_to_one,
 )
-from tanglepack.numerics.IterateInference import IterateInference
 from tanglepack.numerics.geometry import oriented_bridge_polyline
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.BridgeClass import (
@@ -69,6 +72,7 @@ from tanglepack.topology.StablePartition import (
     row_of_end,
     rows_of_bridge,
 )
+from tanglepack.topology.Trellis import SCALING_RTOL
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from cases import Case
 
@@ -79,12 +83,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 AREA_LINK_RTOL: float = inspect.signature(compute_pseudoneighbors).parameters[
     "collision_rtol"
 ].default
-
-#: Relative slack of a ``+1`` link's cdist ratio against ``per_step_beta``:
-#: the ``cdist_rtol`` the iterate table's links are matched with.
-LINK_SCALING_RTOL: float = inspect.signature(
-    IterateInference.infer_iterate_table
-).parameters["cdist_rtol"].default
 
 #: Relative slack of a region image's area (``Arrangement.image_of``'s ``rtol``).
 REGION_AREA_RTOL: float = inspect.signature(Arrangement.image_of).parameters["rtol"].default
@@ -586,26 +584,78 @@ def check_crossing_sign_is_cross_product(case: "Case") -> int:
     return count
 
 
+def _brackets(ix) -> tuple[tuple[float, float], tuple[float, float]]:
+    """A detected crossing's unstable and stable brackets, from the curve nodes.
+
+    The crossing was found between two adjacent nodes of each curve, so each of
+    its canonical distances is known only to within those nodes' cdists.
+    """
+    (p0, p1), (q0, q1) = ix.unstable_segment, ix.stable_segment
+    unstable = sorted((float(p0.get_cdist("unstable")), float(p1.get_cdist("unstable"))))
+    stable = sorted((float(q0.get_cdist("stable")), float(q1.get_cdist("stable"))))
+    return (unstable[0], unstable[1]), (stable[0], stable[1])
+
+
+def _meets(lo: float, hi: float, other_lo: float, other_hi: float) -> bool:
+    """Two closed intervals meet, up to float rounding (1e-12 relative)."""
+    pad = 1e-12 * max(abs(lo), abs(hi), abs(other_lo), abs(other_hi))
+    return other_lo <= hi + pad and lo <= other_hi + pad
+
+
+def _image_brackets(case: "Case", ix) -> tuple[tuple, tuple, tuple[float, float], tuple[float, float]]:
+    """Where the exact rule puts a crossing's image: the advanced keys and its
+    brackets carried one map step by the two manifolds' own ``stretch_param``."""
+    (u_lo, u_hi), (s_lo, s_hi) = _brackets(ix)
+    stretch_u = ix.unstable_manifold.stretch_param
+    stretch_s = case.workbench.manifolds[ix.manifold_b_key].stretch_param
+    a_key, b_key = (key[0].advance_key(key, 1) for key in (ix.manifold_a_key, ix.manifold_b_key))
+    return a_key, b_key, (u_lo * stretch_u, u_hi * stretch_u), (s_lo / stretch_s, s_hi / stretch_s)
+
+
+def _passes_map_gate(case: "Case", source, image) -> bool:
+    """``|f(x) - y|`` is at most the image of x's unstable segment plus y's own segment."""
+    def mapped(point) -> np.ndarray:
+        return np.ravel(case.workbench.dynamical_system.map(np.asarray(point, dtype=float)))
+
+    p0, p1 = (node.get_point() for node in source.unstable_segment)
+    q0, q1 = (node.get_point() for node in image.unstable_segment)
+    gate = np.linalg.norm(mapped(p1) - mapped(p0)) + np.linalg.norm(np.ravel(q1) - np.ravel(q0))
+    return float(np.linalg.norm(mapped(source.coords) - np.ravel(image.coords))) <= gate
+
+
+def _detected_links(case: "Case") -> list[tuple[int, int]]:
+    """``(x, f(x))`` for every registered ``+1`` link of a detected (non-anchor) crossing."""
+    registry = case.registry
+    return [
+        (source, target)
+        for source, n, target in registry.iterate_table.items()
+        if n == 1 and not registry[source].is_synthetic
+    ]
+
+
 def check_area_along_iterate_links(case: "Case", *, rtol: float = AREA_LINK_RTOL) -> int:
     """``unstable_cdist * stable_cdist`` is preserved by every registered ``+1`` link.
 
     Compared LINK BY LINK, not against the head of the chain, so the error of
     a long chain (period 3 runs a dozen links) does not accumulate. The
-    anchors (product 0) are skipped.
+    anchors (product 0) are skipped. The slack is ``rtol`` plus the relative
+    widths of the four brackets the two products are read from.
     """
     registry = case.registry
-    anchors = set(_anchor_ids(case))
     count = 0
-    for intersection_id, ix in registry:
-        image_id = registry.iterate_table[intersection_id, 1]
-        if image_id is None or intersection_id in anchors:
-            continue
-        image = registry[image_id]
+    for source, target in _detected_links(case):
+        ix, image = registry[source], registry[target]
+        widths = sum(
+            (hi - lo) / float(cdist)
+            for crossing in (ix, image)
+            for (lo, hi), cdist in zip(
+                _brackets(crossing), (crossing.unstable_cdist, crossing.stable_cdist)
+            )
+        )
         before = float(ix.unstable_cdist) * float(ix.stable_cdist)
         after = float(image.unstable_cdist) * float(image.stable_cdist)
-        assert after == pytest.approx(before, rel=rtol), (
-            f"area not preserved on the link {intersection_id} -> {image_id}: "
-            f"{before!r} -> {after!r}"
+        assert after == pytest.approx(before, rel=rtol + widths), (
+            f"area not preserved on the link {source} -> {target}: {before!r} -> {after!r}"
         )
         count += 1
     return count
@@ -613,26 +663,91 @@ def check_area_along_iterate_links(case: "Case", *, rtol: float = AREA_LINK_RTOL
 
 def check_iterate_link_scales_by_beta(case: "Case") -> int:
     """A ``+1`` link scales the unstable cdist by ``per_step_beta`` and the stable by its inverse,
-    and lands on the branch ``advance_key`` names."""
+    and lands on the branch ``advance_key`` names.
+
+    The slack is ``SCALING_RTOL`` of the prediction plus the two crossings'
+    bracket widths (the source's carried one step).
+    """
     registry = case.registry
-    anchors = set(_anchor_ids(case))
     count = 0
-    for intersection_id, ix in registry:
-        image_id = registry.iterate_table[intersection_id, 1]
-        if image_id is None or intersection_id in anchors:
-            continue
-        image = registry[image_id]
+    for source, target in _detected_links(case):
+        ix, image = registry[source], registry[target]
         fp = ix.manifold_a_key[0]
         beta = fp.per_step_beta("unstable")
-        assert image.manifold_a_key == fp.advance_key(ix.manifold_a_key, 1), intersection_id
+        assert image.manifold_a_key == fp.advance_key(ix.manifold_a_key, 1), source
         assert image.manifold_b_key == ix.manifold_b_key[0].advance_key(ix.manifold_b_key, 1)
-        assert float(image.unstable_cdist) == pytest.approx(
-            beta * float(ix.unstable_cdist), rel=LINK_SCALING_RTOL
-        ), (intersection_id, image_id)
-        assert float(image.stable_cdist) == pytest.approx(
-            float(ix.stable_cdist) / beta, rel=LINK_SCALING_RTOL
-        ), (intersection_id, image_id)
+        (u_lo, u_hi), (s_lo, s_hi) = _brackets(ix)
+        (iu_lo, iu_hi), (is_lo, is_hi) = _brackets(image)
+        predicted_u = beta * float(ix.unstable_cdist)
+        predicted_s = float(ix.stable_cdist) / beta
+        assert abs(float(image.unstable_cdist) - predicted_u) <= (
+            SCALING_RTOL * predicted_u + beta * (u_hi - u_lo) + (iu_hi - iu_lo)
+        ), (source, target)
+        assert abs(float(image.stable_cdist) - predicted_s) <= (
+            SCALING_RTOL * predicted_s + (s_hi - s_lo) / beta + (is_hi - is_lo)
+        ), (source, target)
         count += 1
+    return count
+
+
+def check_iterate_table_partial_bijection(case: "Case") -> int:
+    """The map is injective: no crossing is the ``+n`` image of two, and every
+    forward link reads back as the backward one, ``table[table[x, n], -n] == x``."""
+    table = case.registry.iterate_table
+    preimage: dict[tuple[int, int], int] = {}
+    count = 0
+    for source, n, target in table.items():
+        assert table[target, -n] == source, (source, n, target)
+        assert preimage.setdefault((target, n), source) == source, (
+            f"crossing {target} is the +{n} image of both {preimage[target, n]} and {source}"
+        )
+        count += 1
+    return count
+
+
+def check_iterate_links_pass_the_map_gate(case: "Case") -> int:
+    """The real map confirms every ``+1`` link of a detected crossing: ``f(x)``
+    lies within the image of x's unstable segment plus y's own segment of y."""
+    registry = case.registry
+    count = 0
+    for source, target in _detected_links(case):
+        assert _passes_map_gate(case, registry[source], registry[target]), (
+            f"the link {source} -> {target} fails the map gate"
+        )
+        count += 1
+    return count
+
+
+def check_iterate_table_complete(case: "Case") -> int:
+    """No unlinked detected crossing has an image the exact rule would link.
+
+    A crossing y is the image of x when it sits on the advanced branches, both
+    of its brackets meet x's carried one step, and the real map puts it within
+    the gate. The table must already hold every such link (inference runs
+    after every detection and every blast, BCG-3).
+    """
+    registry = case.registry
+    table = registry.iterate_table
+    on_branches: dict[tuple, list[int]] = defaultdict(list)
+    for intersection_id, ix in registry:
+        if not ix.is_synthetic:
+            on_branches[ix.manifold_a_key, ix.manifold_b_key].append(intersection_id)
+    count = 0
+    for intersection_id, ix in registry:
+        if ix.is_synthetic:
+            continue
+        count += 1
+        if table[intersection_id, 1] is not None:
+            continue
+        a_key, b_key, unstable, stable = _image_brackets(case, ix)
+        images = [
+            candidate
+            for candidate in on_branches[a_key, b_key]
+            if _meets(*unstable, *_brackets(registry[candidate])[0])
+            and _meets(*stable, *_brackets(registry[candidate])[1])
+            and _passes_map_gate(case, ix, registry[candidate])
+        ]
+        assert not images, f"crossing {intersection_id} is unlinked, but {images} is its image"
     return count
 
 
@@ -2061,6 +2176,9 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_crossing_sign_is_cross_product,
         check_area_along_iterate_links,
         check_iterate_link_scales_by_beta,
+        check_iterate_table_partial_bijection,
+        check_iterate_links_pass_the_map_gate,
+        check_iterate_table_complete,
     ],
     "anchors": [check_one_anchor_per_unstable_branch, check_anchor_sign_matches_eigendirections],
     "bridges": [

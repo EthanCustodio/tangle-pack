@@ -450,14 +450,16 @@ def test_iterates_closed_all_is_scoped_to_the_grown_fixed_point(
     assert mine != every, "the whole-registry resolution is the bug being pinned"
 
     # Observed through the driver. Closing `simple`'s own crossings by hand (a
-    # stand-in +1 link for each open one; the predicate reads only the table)
-    # must satisfy "all" before any growth, although the other saddle's crossings
-    # are still open. A set resolved against the whole registry would include
-    # those and grow (here: run to the cap and raise ValueError).
+    # +1 link from each open one to a keyless stand-in crossing of its own: the
+    # table is injective, and the predicate reads only the table) must satisfy
+    # "all" before any growth, although the other saddle's crossings are still
+    # open. A set resolved against the whole registry would include those and
+    # grow (here: run to the cap and raise ValueError).
     registry = workbench.intersection_registry
     for iid in mine:
         if (iid, 1) not in registry.iterate_table:
-            registry.register_iterate(iid, 1, iid)
+            stand_in = registry.add_synthetic((0.0, 0.0), -1.0 - iid, -1.0)
+            registry.register_iterate(iid, 1, stand_in)
     table = registry.iterate_table
     assert any((iid, 1) not in table for iid in theirs - mine), (
         "the other saddle's crossings must still lack an image for this to bite"

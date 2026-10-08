@@ -296,21 +296,28 @@ def _k28_zone():
 
 def _spy_bridge_images(workbench) -> tuple[list, list[int]]:
     """Record every bridge the workbench iterates and the map evaluations each
-    image cost (the last bridge is the one being iterated when a call raised)."""
+    image cost the machine (the last bridge is the one being iterated when a call
+    raised). The iterate inference's map gate creates no point, so it is not counted."""
     evaluated = _count_evaluations(workbench)
     iterate_bridge = workbench.iterate_bridge
+    machine = workbench._man_machine
+    map_image = machine.iterate_bridge
     bridges: list = []
     costs: list[int] = []
 
     def spy(bridge):
         bridges.append(bridge)
+        return iterate_bridge(bridge)
+
+    def spy_image(bridge):
         evaluated.clear()
         try:
-            return iterate_bridge(bridge)
+            return map_image(bridge)
         finally:
             costs.append(sum(evaluated))
 
     workbench.iterate_bridge = spy
+    machine.iterate_bridge = spy_image
     return bridges, costs
 
 

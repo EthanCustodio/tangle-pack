@@ -6,6 +6,8 @@ Pins:
          iterated bridge).
     1.10 ``Intersection.synthetic`` must build with keyword arguments so the
          label does not land in the ``id`` slot, and must forward manifold keys.
+    WP2  dedup is RELATIVE (NUM-8), and the iterate table is a partial
+         bijection: the map is injective, so a link never overwrites another.
 """
 
 from __future__ import annotations
@@ -98,3 +100,39 @@ def test_registry_add_synthetic_keeps_label_and_registry_id() -> None:
     assert stored.id == iid
     assert stored.label == "anchor"
     assert stored.is_synthetic
+
+
+# ── WP2: relative dedup, injective iterate table ───────────────────────────
+
+
+def test_dedup_is_relative() -> None:
+    """Two distinct deep crossings closer than any absolute 1e-6 stay distinct;
+    re-adding one returns its id; an anchor dedups only against an exact anchor."""
+    fp = bare_fixed_point(beta=1 / 3)
+    keys = dict(manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0))
+    registry = IntersectionRegistry()
+
+    first = registry.add_synthetic((0.0, 0.0), 3e-7, 2e-7, **keys)
+    second = registry.add_synthetic((0.0, 0.0), 6e-7, 5e-7, **keys)
+    assert first != second
+    assert registry.add_synthetic((0.0, 0.0), 3e-7, 2e-7, **keys) == first
+
+    anchor = registry.add_synthetic((0.0, 0.0), 0.0, 0.0, **keys)
+    assert anchor not in (first, second)
+    assert registry.add_synthetic((0.0, 0.0), 0.0, 0.0, **keys) == anchor
+
+
+def test_iterate_table_is_a_partial_bijection() -> None:
+    """A second preimage of one crossing is refused, not silently overwritten."""
+    fp = bare_fixed_point(beta=1 / 3)
+    keys = dict(manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0))
+    registry = IntersectionRegistry()
+    a, b, c = (registry.add_synthetic((0.0, 0.0), u, 1.0 / u, **keys) for u in (1.0, 2.0, 3.0))
+
+    registry.register_iterate(b, 1, c)
+    registry.register_iterate(b, 1, c)  # the same link again is no conflict
+    with pytest.raises(AssertionError):
+        registry.register_iterate(a, 1, c)
+    with pytest.raises(AssertionError):
+        registry.register_iterate(b, 1, a)
+    assert registry.iterate_table[c, -1] == b

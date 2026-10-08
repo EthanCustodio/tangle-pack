@@ -389,9 +389,14 @@ class BridgeIterator:
                     )
                 ]
 
-        # 5. record the forward iterate of the parent's two endpoint crossings
-        workbench._iterate_inference.register_endpoint_iterates(
-            bridge, new_intersections
+        # 5. the images of the parent's two endpoints, and of the crossings just
+        #    born, by the exact rule against the whole registry
+        workbench.infer_iterates(
+            sources=[
+                bridge.first_intersection,
+                bridge.second_intersection,
+                *(ix.id for ix in new_intersections),
+            ]
         )
 
         # 6. Single-copy invariant: a bridge is uniquely defined by the two
@@ -415,6 +420,9 @@ class BridgeIterator:
         """
         Iterate all bridges that have not yet been mapped forward.
 
+        Ends with a registry-wide :meth:`~.TangleWorkbench.TangleWorkbench.infer_iterates`,
+        so crossings that only now have an image are linked (BCG-3).
+
         Returns:
             All new bridges produced across all iterations.
         """
@@ -426,5 +434,5 @@ class BridgeIterator:
         all_new: list[Bridge] = []
         for bridge in pending:
             all_new.extend(workbench.iterate_bridge(bridge))
-
+        workbench.infer_iterates()
         return all_new

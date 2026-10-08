@@ -34,6 +34,10 @@ zone -- from the previous one; blast factors are stable (~1.7 per step on k=2.8)
 unlike growth past escape. The budget counts points, not RSS: blasting holds
 roughly 1.7 KB per point, growth roughly 1.1 KB.
 
+A blast ends with a registry-wide ``infer_iterates``, so the iterate table is
+exact after it, whatever the stop reason (a raised ``PointBudgetExceeded``
+excepted: that state is not resumable).
+
 This is a loom-layer algorithm: it reads the topological notion of a zone and acts on
 the numerical layer (:meth:`TangleWorkbench.iterate_bridge`). It is exposed on the
 facade as :meth:`tanglepack.loom.TangleSession.blast_zone`.
@@ -489,6 +493,9 @@ def blast_zone(
         )
         frontier = kept
 
+    # The table is exact after every blast (BCG-3, WP2): a crossing born early in
+    # the blast may only now have its image registered.
+    workbench.infer_iterates()
     if diagnose:
         workbench.report_resolution(allowed_fps)
     return result

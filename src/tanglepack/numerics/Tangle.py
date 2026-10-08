@@ -217,13 +217,13 @@ class Tangle:
         self._same_stability_dropped = 0
 
     @staticmethod
-    def _key_of(seg: _Segment) -> Optional[ManifoldKey]:
-        """The ManifoldKey of the segment's manifold (required on unstable ones)."""
+    def _key_of(seg: _Segment) -> ManifoldKey:
+        """The ManifoldKey of the segment's manifold (required on every curve)."""
         key = seg.manifold.manifold_key
-        assert key is not None or seg.manifold.stability != "unstable", (
-            "every unstable curve indexed in a Tangle -- manifold or bridge -- "
-            "must carry its manifold_key, so the crossings found on it record "
-            "which unstable branch they sit on"
+        assert key is not None, (
+            "every curve indexed in a Tangle -- manifold or bridge -- must carry "
+            "its manifold_key, so the crossings found on it record which two "
+            "branches they sit on"
         )
         return key
 
@@ -337,6 +337,7 @@ class Tangle:
             # it with these two real nodes, and they must not be re-read off the
             # segment later, after a separator point has been spliced in.
             unstable_segment=(u_seg.p0, u_seg.p0_seg1),
+            stable_segment=(s_seg.p0, s_seg.p0_seg1),
             crossing_sign=self._crossing_sign(u_seg, s_seg),
             resolution_ratio=self._resolution_ratio(u_seg, s_seg, sin_theta),
         )
