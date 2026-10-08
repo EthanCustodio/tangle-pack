@@ -198,7 +198,7 @@ class BlastResult:
 
 def blast_zone(
     session: "TangleSession",
-    zone: "ResonanceZone | tuple",
+    zone: "ResonanceZone | FixedPoint",
     num_iterations: int,
     *,
     fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
@@ -213,8 +213,8 @@ def blast_zone(
 
     Args:
         session: The session owning the zone and its workbench.
-        zone: A :class:`ResonanceZone`, or its ``(fixed_point, branch_index)`` key to
-            look up in ``session.resonance_zones``.
+        zone: A :class:`ResonanceZone`, or its key (the fixed point) to look up
+            in ``session.resonance_zones``.
         num_iterations: Maximum number of blast steps.
         fixed_point: If given, only bridges emanating from this fixed point (or, if a
             list/iterable of fixed points is passed, any of them) participate;
@@ -502,9 +502,9 @@ def blast_zone(
 
 
 def _resolve_zone(
-    session: "TangleSession", zone: "ResonanceZone | tuple"
+    session: "TangleSession", zone: "ResonanceZone | FixedPoint"
 ) -> "ResonanceZone":
-    """Resolve ``zone`` from a ResonanceZone or its ``(fixed_point, branch_index)`` key."""
+    """Resolve ``zone`` from a ResonanceZone or its key (the fixed point)."""
     from .ResonanceZone import ResonanceZone
 
     if isinstance(zone, ResonanceZone):

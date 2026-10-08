@@ -8,10 +8,16 @@ regions use.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
-from cases import build_k10
+from cases import build_k10, build_period3
+from helpers.fakes import bare_fixed_point
+from tanglepack.loom.ResonanceZone import ring_cycles
+from tanglepack.loom.TangleSession import _zone_ring_order
+from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.geometry import polyline_midpoint
 from tanglepack.topology.TopologyResults import Arc
 
@@ -172,3 +178,50 @@ def test_p3_anchor_ids_survive_a_trim_and_recompute(henon_p3_session):
     workbench.trim_stable_manifolds(fp1)
     workbench.compute_intersections([fp3, fp1], preserve_ids=True)
     assert _anchor_ids(workbench) == before
+
+
+# --------------------------------------------------------------------------- #
+# The ring, by full branch key (INV-5)
+# --------------------------------------------------------------------------- #
+def _cut(fp, unstable: tuple[int, int], stable: tuple[int, int]) -> Intersection:
+    """A hand-made cut on ``u(orbit, branch) x s(orbit, branch)``."""
+    return Intersection.synthetic(
+        (0.0, 0.0), 1.0, 1.0,
+        manifold_a_key=(fp, "unstable", *unstable),
+        manifold_b_key=(fp, "stable", *stable),
+    )
+
+
+def test_a_period_three_ring_is_one_cycle():
+    fp = bare_fixed_point(3)
+    cuts = [_cut(fp, (2, 0), (0, 0)), _cut(fp, (0, 0), (1, 0)), _cut(fp, (1, 0), (2, 0))]
+    assert ring_cycles(cuts) == [[0, 1, 2]]
+
+
+def test_an_inversion_point_closes_one_loop_per_branch_pair():
+    """Both cuts sit at orbit index 0; the branch index tells the loops apart."""
+    fp = bare_fixed_point(inversion=True)
+    cuts = [_cut(fp, (0, 0), (0, 0)), _cut(fp, (0, 1), (0, 1))]
+    assert ring_cycles(cuts) == [[0], [1]]
+    crossed = [_cut(fp, (0, 0), (0, 1)), _cut(fp, (0, 1), (0, 0))]
+    assert ring_cycles(crossed) == [[0, 1]]
+
+
+def test_a_missing_iterate_leaves_the_ring_open():
+    fp = bare_fixed_point(3)
+    cuts = [_cut(fp, (0, 0), (1, 0)), _cut(fp, (1, 0), (2, 0))]
+    assert ring_cycles(cuts) == [[0, 1]]
+    open_zone = SimpleNamespace(boundary_intersections=cuts)
+    assert _zone_ring_order(open_zone) == []
+
+
+def test_p3_ring_order_visits_each_stable_branch_once_in_ring_order():
+    """The ring runs from a cut's stable branch to the cut on the unstable branch of
+    the same orbit point and branch index."""
+    session = build_period3().session
+    (zone,) = session.resonance_zones.values()
+    order = _zone_ring_order(zone)
+    assert sorted(order, key=lambda key: key[2:]) == zone.fixed_point.branch_cycle("stable")
+    by_stable = {cut.manifold_b_key: cut for cut in zone.boundary_intersections}
+    for key, following in zip(order, order[1:] + order[:1]):
+        assert by_stable[following].manifold_a_key[2:] == key[2:]

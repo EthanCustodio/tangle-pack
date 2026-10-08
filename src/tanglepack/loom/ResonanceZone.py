@@ -17,9 +17,12 @@ Multi-period anchors: a period-k orbit's zone is bounded not by a single pip but
 the strong pip AND its k-1 forward iterates — one cut point on each of the k stable
 branches (registry.iterate_orbit gathers them). Each branch is trimmed at its own
 cut point. The closed boundary then alternates around the orbit: from a pip, in
-along its stable branch to a periodic point, out along that point's unstable branch
-to the next pip, and so on back to the start. For k = 1 this reduces to the single
-loop z → (unstable) → pip → (stable) → z.
+along its stable branch ``s(o, b)`` to a periodic point, out along ``u(o, b)`` --
+the same orbit point and branch index, the FULL key (:func:`ring_cycles`) -- to the
+next pip, and so on back to the start. For k = 1 this reduces to the single loop
+z → (unstable) → pip → (stable) → z; an inversion point has two such loops, one
+per branch pair, both through its one anchor, and the zone is their union (a
+figure eight at the periodic point).
 
 Why trim to ``segment.p0_seg1``: the stable manifold's canonical distance grows from
 0 at the periodic point outward; the segment carrying a pip has its near endpoint
@@ -34,9 +37,8 @@ which carry the canonical distances and branch keys and are stable across
 recomputes, and the primary pip's id is resolved against the live registry on
 demand by ``resolve_boundary_intersection_id``.
 
-Inversion (k_value == 2*period) is not yet validated here (no inversion example in
-the codebase) — the boundary traversal matches branches by orbit index, which is
-exact only for the non-inversion case. Mirrors the StrongPip inversion caveat.
+One zone per fixed point (C8): an inversion chain's two branches bound ONE zone,
+keyed by the fixed point (:attr:`ResonanceZone.key`).
 """
 
 from __future__ import annotations
@@ -119,18 +121,13 @@ class ResonanceZone:
         return self.cut_intersections or [self.boundary_intersection]
 
     @property
-    def branch_index(self) -> int:
-        """The branch index of the primary stable branch (0, or 0/1 under inversion)."""
-        return self.stable_branch_key[3]
+    def key(self) -> "FixedPoint":
+        """Storage key: the fixed point -- one zone per fixed point (C8).
 
-    @property
-    def key(self) -> tuple["FixedPoint", int]:
-        """Storage key ``(fixed_point, branch_index)`` — one zone per branch.
-
-        A non-inversion periodic point has a single branch (one zone); an inversion
-        point (``k_value == 2 * period``) has two branches and so two zones.
+        An inversion point's two branches are one chain, and its zone is the
+        union of the two loops through the periodic point (:func:`ring_cycles`).
         """
-        return (self.fixed_point, self.branch_index)
+        return self.fixed_point
 
     def boundary_polygon(
         self, workbench: "TangleWorkbench", *, close: bool = True
@@ -139,10 +136,12 @@ class ResonanceZone:
         The closed boundary of the resonance zone, as an (N, 2) array, for shading.
 
         Walks each cut point's unstable arc (periodic point → pip) and stable arc
-        (periodic point → pip), then stitches them into one closed ring that
-        alternates around the orbit: stable arc reversed (pip → periodic point),
-        then the unstable arc out of that periodic point to the next pip, repeating
-        until it returns to the start. For k = 1 this is the single z → pip → z loop.
+        (periodic point → pip), then stitches them cycle by cycle
+        (:func:`ring_cycles`): a cut's unstable arc out to its pip, its stable arc
+        reversed back to a periodic point, then the unstable arc of that point
+        with the same branch index, until the cycle returns to its start. For
+        k = 1 this is the single z → pip → z loop; an inversion point's two loops
+        follow each other through the periodic point.
 
         Rebuilt live from the workbench's current manifolds; for a snapshot frozen at
         definition time use :attr:`boundary_vertices` (set by :meth:`capture_boundary`).
@@ -220,7 +219,7 @@ class ResonanceZone:
                 )
             return pts
 
-        unstable_arcs, stable_arcs, u_orbit, b_orbit = [], [], [], []
+        unstable_arcs, stable_arcs = [], []
         for ix in cuts:
             pip = ix.coords
             pip_id = _live_id(registry, ix)
@@ -230,26 +229,12 @@ class ResonanceZone:
             stable_arcs.append(
                 arc(ix.manifold_b_key, "stable", ix.stable_cdist, pip, pip_id)
             )
-            u_orbit.append(ix.manifold_a_key[2])
-            b_orbit.append(ix.manifold_b_key[2])
-
-        # Index the cut whose unstable branch starts at each periodic point, so we can
-        # hop pip -> periodic point (stable) -> next pip (unstable) around the orbit.
-        by_u_orbit = {orbit: i for i, orbit in enumerate(u_orbit)}
 
         ring: list[NDArray] = []
-        cur, start, n = 0, 0, len(cuts)
-        for _ in range(n):
-            ring.extend(stable_arcs[cur][::-1])  # pip -> periodic point
-            nxt = by_u_orbit.get(b_orbit[cur])
-            if nxt is None:
-                # Iterates incomplete: fall back to closing this single pip's loop.
-                ring.extend(unstable_arcs[cur][::-1])
-                break
-            ring.extend(unstable_arcs[nxt])  # periodic point -> next pip
-            cur = nxt
-            if cur == start:
-                break
+        for cycle in ring_cycles(cuts):
+            for current in cycle:
+                ring.extend(unstable_arcs[current])  # periodic point -> pip
+                ring.extend(stable_arcs[current][::-1])  # pip -> next periodic point
 
         if close and ring:
             ring = ring + [ring[0]]
@@ -372,16 +357,50 @@ class ResonanceZone:
             workbench.rebuild_bridges()
 
 
+def ring_cycles(cuts: list[Intersection]) -> list[list[int]]:
+    """
+    The zone boundary as cycles of cut indices, by full branch key.
+
+    From a cut's pip the boundary runs in along its stable branch ``s(o, b)``
+    to that branch's periodic point, then out along ``u(o, b)`` -- the same
+    orbit point AND branch index -- to the cut on that unstable branch. A
+    period-k orbit closes one cycle through all its cuts; an inversion point
+    closes one loop per branch pair, both through the same point (D4).
+
+    Args:
+        cuts: The zone's cut crossings (:attr:`ResonanceZone.boundary_intersections`).
+
+    Returns:
+        The cycles, each listing cut indices in boundary order. A cycle closes
+        when the last cut's stable branch leads back to the first cut's
+        unstable one; a run that reaches a branch with no cut (iterates
+        incomplete) stops there, open.
+    """
+    by_unstable = {cut.manifold_a_key: index for index, cut in enumerate(cuts)}
+    cycles: list[list[int]] = []
+    seen: set[int] = set()
+    for start in range(len(cuts)):
+        cycle, current = [], start
+        while current is not None and current not in seen:
+            seen.add(current)
+            cycle.append(current)
+            fp, _, orbit_index, branch_index = cuts[current].manifold_b_key
+            current = by_unstable.get((fp, "unstable", orbit_index, branch_index))
+        if cycle:
+            cycles.append(cycle)
+    return cycles
+
+
 def _anchor_id(
     registry: "IntersectionRegistry", key: ManifoldKey
 ) -> Optional[int]:
     """The registry id of the anchor crossing at the root of one branch.
 
-    A branch is anchored at a periodic point, which is registered as a crossing of
-    that point's unstable and stable branches at canonical distance ``(0, 0)`` (see
-    ``TangleWorkbench._register_anchors``). The probe names the pair of branches
-    exactly, so the registry's own collision test resolves it without any
-    coordinate comparison.
+    A branch is anchored at a periodic point, which is registered as ONE crossing
+    of every branch attached to it at canonical distance ``(0, 0)`` (see
+    ``TangleWorkbench._register_anchors``). The probe names the point through a
+    pair of its branches, so the registry's own collision test resolves it
+    without any coordinate comparison.
 
     Args:
         registry: The registry to resolve against.
@@ -389,7 +408,7 @@ def _anchor_id(
             pick out the partner branch of the other stability.
 
     Returns:
-        The anchor's registry id, or None if that branch pair has no anchor.
+        The anchor's registry id, or None if that point has no anchor.
     """
     fixed_point, stability, orbit_index, branch_index = key
     unstable = (

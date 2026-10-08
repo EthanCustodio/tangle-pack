@@ -67,7 +67,7 @@ pip = trellis.strong_pip
 print(f"Chosen strong pip: {pip}")
 
 session.add_resonance_zones([pip])  # trim at the pip + recompute (ids preserved)
-zone = session.resonance_zones[(fp, 0)]
+zone = session.resonance_zones[fp]
 trellis = session.trellis(fp)  # fresh snapshot of the truncated trellis
 trellis.classify_strong_pips(choose_default=False)
 trellis.set_strong_pip(1)

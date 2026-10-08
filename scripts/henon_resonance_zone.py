@@ -81,7 +81,7 @@ print("fp3 strong pip:", T3.strong_pip, "-> cut points:", T3.strong_pip_cut_poin
 # branch (each cut point) then recomputes once, so the zones nest correctly: the
 # inner period-3 zone is a subset of the outer period-1 zone.
 session.add_resonance_zones([T1.strong_pip, T3.strong_pip])
-for (fp, bi), rz in session.resonance_zones.items():
+for fp, rz in session.resonance_zones.items():
     name = "fp1 (period 1)" if fp is fp1 else "fp3 (period 3)"
     print(
         f"  zone {name}: {len(rz.cut_intersections)} cut point(s), "

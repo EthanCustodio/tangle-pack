@@ -43,4 +43,4 @@ def define_inner_zone(session: "TangleSession", fixed_point: "FixedPoint") -> "R
     pip = max(inner, key=lambda c: registry[c].stable_cdist)
     trellis.set_strong_pip(pip)
     session.add_resonance_zones([pip])
-    return session.resonance_zones[(fixed_point, 0)]
+    return session.resonance_zones[fixed_point]

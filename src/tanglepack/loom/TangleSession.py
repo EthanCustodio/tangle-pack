@@ -39,7 +39,7 @@ from ..topology.SymbolicDynamics import (
 )
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
-from .ResonanceZone import ResonanceZone, define_resonance_zone
+from .ResonanceZone import ResonanceZone, define_resonance_zone, ring_cycles
 from .Blast import BlastResult, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
 
@@ -152,15 +152,15 @@ class TangleSession:
         # trellis-selection cache key; see symbolic_dynamics(). Built over the
         # dual graph and the bridge classes, so it shares the dual graph's key.
         self._symbolic_dynamics: dict = {}
-        # One resonance zone per (fixed_point, branch_index): a non-inversion point
-        # has a single branch (one zone); an inversion point has two. Insertion order
-        # is preserved so plotting/shading is deterministic.
-        self.resonance_zones: dict[tuple["FixedPoint", int], ResonanceZone] = {}
+        # One resonance zone per fixed point (C8): an inversion point's zone is the
+        # union of its two loops. Insertion order is preserved so plotting/shading
+        # is deterministic.
+        self.resonance_zones: dict["FixedPoint", ResonanceZone] = {}
         # The last blast iteration's growth factor (new points per frontier
         # point) per zone key: blast_zone(max_points=...) predicts a call's
         # first iteration from it, since blasts usually come one iteration at
         # a time. Stale once the zone changes; the budget is opt-in.
-        self._blast_stats: dict[tuple["FixedPoint", int], float] = {}
+        self._blast_stats: dict["FixedPoint", float] = {}
 
     # ── attribute delegation ─────────────────────────────────────────────────
 
@@ -401,7 +401,7 @@ class TangleSession:
                 entry.letter = self.bridge_alphabet.letter_for(entry.bridge_class)
             entry.zone_key = self._zone_key_of_entry(entry)
 
-    def _zone_key_of_entry(self, entry: BridgeClassEntry) -> Optional[tuple]:
+    def _zone_key_of_entry(self, entry: BridgeClassEntry) -> Optional["FixedPoint"]:
         """
         The zone key shared by every member bridge of an entry, or None.
 
@@ -417,7 +417,7 @@ class TangleSession:
             logger.warning(
                 "bridge class %s straddles resonance zones: members fall in %s",
                 entry.bridge_class.label,
-                sorted("none" if k is None else zone_label(k) for k in keys),
+                sorted("none" if key is None else zone_label(key) for key in keys),
             )
             return None
         return next(iter(keys), None)
@@ -1803,9 +1803,9 @@ class TangleSession:
         """
         Define and store one resonance zone by trimming the stable manifold at a pip.
 
-        The zone is stored in :attr:`resonance_zones` keyed by ``(fixed_point,
-        branch_index)``, so each periodic point keeps its own zone (two under
-        inversion) and a later call for a different fixed point does not overwrite it.
+        The zone is stored in :attr:`resonance_zones` keyed by its fixed point
+        (one zone per fixed point, inversion included), so a later call for a
+        different fixed point does not overwrite it.
         Trims are cumulative (each sets a manifold's tail), so building zones for
         several fixed points nests correctly — the inner zone ends up a subset of the
         outer one. A recompute advances the workbench generation, so any cached
@@ -1929,7 +1929,7 @@ class TangleSession:
 
     def blast_zone(
         self,
-        zone: "ResonanceZone | tuple",
+        zone: "ResonanceZone | FixedPoint",
         num_iterations: int,
         *,
         fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
@@ -2051,26 +2051,15 @@ class TangleSession:
 
 def _zone_ring_order(zone: ResonanceZone) -> list:
     """
-    The stable branch keys of a zone's boundary in ring order.
-
-    Mirrors ``ResonanceZone._build_boundary``: from a cut on stable branch
-    ``j`` the ring runs to ``z_j`` and out along the unstable branch of
-    ``z_j`` to the cut whose unstable branch starts there.
+    The stable branch keys of a zone's boundary in ring order (see
+    :func:`~tanglepack.loom.ResonanceZone.ring_cycles`).
 
     Returns:
-        The branch keys, starting at the first cut; empty when the cuts do
-        not close into one ring (iterates missing).
+        The branch keys, cycle after cycle; empty when a cycle does not close
+        (iterates missing).
     """
     cuts = zone.boundary_intersections
-    by_u_orbit = {cut.manifold_a_key[2]: i for i, cut in enumerate(cuts)}
-    order: list = []
-    current = 0
-    for _ in range(len(cuts)):
-        order.append(cuts[current].manifold_b_key)
-        following = by_u_orbit.get(cuts[current].manifold_b_key[2])
-        if following is None:
-            return []
-        current = following
-        if current == 0:
-            break
-    return order if len(order) == len(cuts) else []
+    cycles = ring_cycles(cuts)
+    if any(cuts[cycle[-1]].manifold_b_key[2:] != cuts[cycle[0]].manifold_a_key[2:] for cycle in cycles):
+        return []
+    return [cuts[index].manifold_b_key for cycle in cycles for index in cycle]
