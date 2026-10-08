@@ -21,6 +21,19 @@ counted rather than aborting the whole blast, so a long run always returns a
 ``AssertionError`` is never tolerated: assertions guard the invariants of the numerical
 layer (CLAUDE.md), so a violated invariant aborts the blast at either strictness.
 
+Memory is budgeted at two levels. The machine's per-call cap
+(``max_points_per_step``) is always on and RAISES
+:class:`~tanglepack.numerics.budget.PointBudgetExceeded` mid-image, leaving the
+session not resumable. ``blast_zone(max_points=...)`` is the opt-in budget of a
+whole blast: it stops BETWEEN iterations, before one whose predicted cost would
+take the blast over budget, so every completed iteration is whole and the session
+can be blasted again (``stop_reason == "point_budget"``). The prediction is the
+next frontier's point count times the last observed growth factor (points the
+images added per frontier point), from this call or -- stored on the session per
+zone -- from the previous one; blast factors are stable (~1.7 per step on k=2.8),
+unlike growth past escape. The budget counts points, not RSS: blasting holds
+roughly 1.7 KB per point, growth roughly 1.1 KB.
+
 This is a loom-layer algorithm: it reads the topological notion of a zone and acts on
 the numerical layer (:meth:`TangleWorkbench.iterate_bridge`). It is exposed on the
 facade as :meth:`tanglepack.loom.TangleSession.blast_zone`.
@@ -30,9 +43,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
+
+from ..numerics.budget import PointBudgetExceeded
 
 if TYPE_CHECKING:
     from ..numerics.Bridge import Bridge, BridgeId
@@ -130,9 +145,13 @@ class BlastResult:
             ``d`` is the frontier that survived ``d`` iterations. A non-empty entry at
             index ``d`` means interior bridges lasted ``d`` generations.
         completed_iterations: Number of steps actually run (≤ requested; fewer if the
-            frontier emptied first).
-        terminated_early: True if the blast stopped because no interior bridges
-            remained before reaching ``num_iterations``.
+            frontier emptied first or the point budget stopped it).
+        stop_reason: Why the blast stopped: ``"max_iterations"`` (it ran them
+            all), ``"frontier_empty"`` (no interior bridge was left to iterate) or
+            ``"point_budget"`` (the next iteration was predicted to exceed
+            ``max_points``).
+        points_created: Points held by the bridges this blast added to the
+            workbench (images that re-trace existing curve add none).
         skipped: Total number of bridges skipped across all steps (forward-map
             failures).
     """
@@ -143,10 +162,18 @@ class BlastResult:
     steps: list[BlastStep] = field(default_factory=list)
     interior_bridges_by_iteration: list[list["Bridge"]] = field(default_factory=list)
     completed_iterations: int = 0
-    terminated_early: bool = False
+    stop_reason: Literal["max_iterations", "frontier_empty", "point_budget"] = (
+        "max_iterations"
+    )
+    points_created: int = 0
     skipped: int = 0
     too_close: int = 0
     already_known: int = 0
+
+    @property
+    def terminated_early(self) -> bool:
+        """True if no interior bridge remained before ``num_iterations`` ran."""
+        return self.stop_reason == "frontier_empty"
 
     def max_depth_reached(self) -> int:
         """The deepest generation that still held at least one interior bridge."""
@@ -174,6 +201,8 @@ def blast_zone(
     strict: bool = False,
     min_separation: Optional[float] = None,
     diagnose: bool = True,
+    max_points: Optional[int] = None,
+    predict: bool = True,
 ) -> BlastResult:
     """
     Repeatedly iterate the bridges inside a resonance zone (see the module docstring).
@@ -202,6 +231,18 @@ def blast_zone(
             appear, and ``iterate_bridge`` never passes through
             ``compute_intersections``. It logs on the workbench's logger, never on
             this module's.
+        max_points: Opt-in point budget of the whole blast (points its new
+            bridges hold). Checked BETWEEN iterations: the blast stops, without
+            an exception and on a consistent, resumable state, before an
+            iteration that would take it over budget (``stop_reason ==
+            "point_budget"``, logged at INFO). ``None`` (default) never stops.
+        predict: If True (default) an iteration is refused when the points
+            created so far plus its PREDICTED cost (frontier points times the
+            last growth factor of this call, else the one stored on the session
+            for this zone) exceed ``max_points``; with no factor yet (a zone's
+            first iteration) it runs, backed by the machine's per-call cap. If
+            False the blast only stops once it has already reached
+            ``max_points``, so it can overshoot by one iteration.
 
     Note:
         Bridges that re-trace curve an existing bridge already holds -- e.g. the
@@ -217,9 +258,12 @@ def blast_zone(
         ValueError: If the resolved zone has no captured boundary (cannot test
             containment).
         PointBudgetExceeded: If one bridge's image would exceed the machine's
-            per-call point budget. It always propagates and leaves the session
-            NOT resumable (that bridge's points are linked to a half-refined
-            image); rebuild with fewer blasts or a larger budget.
+            per-call point budget. It always propagates, its message extended
+            with the zone, iteration and bridge (also on ``exc.blast_context``
+            as ``(zone.key, iteration, bridge.id)``), and leaves the session NOT
+            resumable (that bridge's points are linked to a half-refined image);
+            rebuild with fewer blasts or a larger budget. ``max_points`` is the
+            budget that stops cleanly instead.
     """
     zone = _resolve_zone(session, zone)
     if zone.boundary_vertices is None:
@@ -283,10 +327,38 @@ def blast_zone(
             if len(interior):
                 reference_points.append(interior)
 
+    # The point budget's bookkeeping: the bridges the workbench already holds
+    # (an image piece resolving to one of them adds no points) and the growth
+    # factor of the zone's last blast iteration, this call's or a previous one's.
+    held: set["BridgeId | int"] = {_seen_key(b) for b in workbench.bridges}
+    factor: Optional[float] = session._blast_stats.get(zone.key)
+
     for iteration in range(1, num_iterations + 1):
         if not frontier:
-            result.terminated_early = True
+            result.stop_reason = "frontier_empty"
             break
+
+        frontier_points = sum(
+            len(b.get_point_array()) for b in frontier if not b.iterated
+        )
+        if max_points is not None:
+            predicted = factor * frontier_points if predict and factor else 0.0
+            if (
+                result.points_created + predicted > max_points
+                if predict
+                else result.points_created >= max_points
+            ):
+                logger.info(
+                    "blast: point budget stops before step %d — %d points created, "
+                    "%.0f predicted for %d frontier points, budget %d",
+                    iteration,
+                    result.points_created,
+                    predicted,
+                    frontier_points,
+                    max_points,
+                )
+                result.stop_reason = "point_budget"
+                break
 
         produced: list["Bridge"] = []
         kept: list["Bridge"] = []
@@ -312,6 +384,13 @@ def blast_zone(
                 continue
             try:
                 children = workbench.iterate_bridge(parent)
+            except PointBudgetExceeded as exc:
+                exc.blast_context = (zone.key, iteration, parent.id)
+                exc.args = (
+                    f"{exc.args[0]} [blasting zone {zone.key}, step {iteration}, "
+                    f"bridge {parent.id}]",
+                )
+                raise
             except (AttributeError, ValueError) as exc:
                 # AssertionError is deliberately NOT caught: assertions are the
                 # correctness guard of this codebase (CLAUDE.md), so a violated
@@ -383,6 +462,18 @@ def blast_zone(
         result.skipped += len(skipped)
         result.too_close += len(too_close)
         result.already_known += len(already_known)
+
+        new_points = 0
+        for child in produced:
+            if _seen_key(child) not in held:
+                held.add(_seen_key(child))
+                new_points += len(child.get_point_array())
+        result.points_created += new_points
+        mapped_points = frontier_points - sum(len(b.get_point_array()) for b in skipped)
+        if mapped_points > 0:
+            factor = new_points / mapped_points
+            session._blast_stats[zone.key] = factor
+
         result.completed_iterations = iteration
         result.interior_bridges_by_iteration.append(list(kept))
         logger.info(
