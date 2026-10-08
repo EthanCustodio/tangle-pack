@@ -74,6 +74,30 @@ class DynamicalSystem:
         self._map_batchable: bool | None = None
         self._map_inv_batchable: bool | None = None
 
+    def check_area_preserving(
+        self, point: npt.ArrayLike, *, rtol: float = 1e-6
+    ) -> bool | None:
+        """
+        Whether the map preserves area at ``point``: ``|det J| == 1`` within ``rtol``.
+
+        Area preservation is the fundamental property every topological result
+        rests on (CLAUDE.md, "Area Preservation"). The absolute value is
+        compared, so an orientation-reversing map (``det J = -1``) passes.
+
+        Args:
+            point: A ``(2,)`` point at which to evaluate :attr:`jacobian`.
+            rtol: Allowed relative deviation of ``|det J|`` from 1.
+
+        Returns:
+            True or False from the Jacobian, or None when the system has no
+            Jacobian (nothing to check; finite differences would only test
+            their own step size).
+        """
+        if self.jacobian is None:
+            return None
+        determinant = np.linalg.det(np.asarray(self.jacobian(np.asarray(point, float))))
+        return bool(abs(abs(determinant) - 1.0) <= rtol)
+
     def map_batch(self, coords: npt.NDArray[float64]) -> npt.NDArray[float64]:
         """
         Apply :attr:`map` to a batch of points ``(N, 2) -> (N, 2)``.

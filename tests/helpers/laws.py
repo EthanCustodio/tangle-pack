@@ -284,6 +284,28 @@ def check_k_value_matches_inversion(case: "Case") -> int:
     return len(case.fixed_points)
 
 
+def check_map_is_area_preserving(case: "Case") -> int:
+    """``|det J| = 1`` at every orbit point, so ``construct_fixed_point`` never warned.
+
+    Measured by central differences of the map itself (exact up to rounding for
+    a quadratic map), since not every case hands the workbench a Jacobian; the
+    library's own guard must agree wherever it has one to read.
+    """
+    system = case.workbench.dynamical_system
+    points = [np.asarray(p, float) for fp in case.fixed_points for p in fp.coordinates]
+    h = 1e-6
+    for point in points:
+        columns = [
+            (np.asarray(system.map(point + h * e)) - np.asarray(system.map(point - h * e)))
+            / (2 * h)
+            for e in np.eye(2)
+        ]
+        determinant = np.linalg.det(np.column_stack(columns))
+        assert abs(abs(determinant) - 1) < 1e-6, f"|det J| = {abs(determinant)} at {point}"
+        assert system.check_area_preserving(point) is not False
+    return len(points)
+
+
 def check_every_branch_is_built(case: "Case") -> int:
     """Every key of every branch cycle is a manifold of the workbench, keyed by itself."""
     count = 0
@@ -1931,6 +1953,7 @@ LAYERS: dict[str, list[LawCheck]] = {
     "case_sanity": [
         check_case_builds,
         check_k_value_matches_inversion,
+        check_map_is_area_preserving,
         check_every_branch_is_built,
         check_every_branch_crosses,
     ],

@@ -355,9 +355,26 @@ class TangleWorkbench:
             FixedPoint: The constructed fixed point, already registered here and
                 labelled ``A, B, ...`` in construction order. Its branch count is
                 derived (``FixedPoint.num_branches``).
+
+        Raises:
+            ValueError: From the solver, if the orbit does not converge or is
+                not a saddle (see ``FixedPointSolver.construct_fixed_point``).
+
+        Note:
+            With a Jacobian, area preservation is checked once at the orbit's
+            first point (:meth:`DynamicalSystem.check_area_preserving`) and a
+            failure is logged as one WARNING: the construction still succeeds,
+            but nothing downstream is validated for a dissipative map.
         """
 
         fixed_point = self._fp_solver.construct_fixed_point(initial_guess)
+        orbit_point = fixed_point.coordinates[0]
+        if self.dynamical_system.check_area_preserving(orbit_point) is False:
+            logger.warning(
+                "the map does not preserve area at %s (|det J| != 1); the "
+                "topological layer assumes an area-preserving map",
+                orbit_point,
+            )
         position = len(self.fixed_points)
         fixed_point.label = position_letter(position)
 
