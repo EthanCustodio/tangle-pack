@@ -26,20 +26,22 @@ Dev Notes:
   active ones with the same :func:`letter` (topology never imports loom).
 * The ALPHABET is the table handed in -- normally ``MinimalTrellis.alphabet``,
   the classes of the minimal trellis's bridges, lettered by the session (D2) --
-  CLOSED under the word map (WP7, Claude's call C9 under D3/D8). Every pair of
-  a walk is the class of one piece of ``f(B)`` between two crossings, a real
-  bridge of ``W^u``, so a word naming a class outside the table adds it: it is
-  walked in turn, lettered (the session's ``letter_for`` when active) and
-  records the class whose word first named it (``named_by``). The closure is
-  finite because element pairs are. It is the next layer of the tangle that a
-  deep reference switch exposes (BCG-4): the minimal trellis keeps the FIRST
-  images of the hole bridges, and the image of an image bridge lies one layer
-  further out. A closure class copies its evidence-table entry (members,
-  inertness) when some bridge spans it, so its members verify its word; with
-  no registered bridge it has no members and, by the no-evidence convention,
-  is active. Word-based inertness of such a class (an empty or all-inert
-  word) is not inferred: revisit with WP8's recompute semantics. Every other
-  bridge is image evidence only.
+  closed under the word map over REGISTERED bridges only (WP7, C9). Every pair
+  of a walk is the class of one piece of ``f(B)`` between two crossings. When
+  some registered bridge spans it (the evidence table, ``minimal.classes``),
+  a word naming it adds that class: a copy of its evidence entry (members,
+  inertness), walked in turn, lettered (the session's ``letter_for`` when
+  active), recording the class whose word first named it (``named_by``). The
+  minimal trellis keeps the FIRST images of the hole bridges, and the image
+  of an image bridge lies one layer further out (BCG-4), so this is the
+  hole-bridge transport chain followed as far as bridges were computed. A
+  pair NO bridge spans is a construction error (D3), never a class: the class
+  whose itinerary names it is unresolved ("grow or blast") with one WARNING
+  naming the pairs and the members whose image predicts them, so the dynamics
+  is not reliable; its walk stays on ``search``. Whether such a pair must get
+  its bridge (the minimal trellis keeping the images of active image-bridge
+  classes, which costs map calls) is DEC-21. Every other bridge is image
+  evidence only.
 * Refinement occurrences come ONLY from the walked (or trellis) itineraries of
   all classes, never from registered member images. A class is split when
   its symbol occurs with two or more distinct iterated pairs; every refined
@@ -283,7 +285,9 @@ class ClassDynamics:
             the word).
         ambiguous: True when several shortest walks disagree; the first
             candidate is the primary itinerary.
-        unresolved_reason: Why no itinerary was found, else ``None``.
+        unresolved_reason: Why the class has no itinerary (a failed landing,
+            no walk, or an itinerary naming a pair no bridge spans), else
+            ``None``.
         evidence: The registered member images, one record each.
         verified: Word-level agreement of every piece of evidence; ``None``
             without evidence or without an itinerary.
@@ -1140,6 +1144,19 @@ def _resolve_itinerary(
     cd.ambiguous = search.status == "ambiguous"
 
 
+def _unspanned(cd: ClassDynamics, pairs: Sequence[BridgeClass]) -> None:
+    """Unresolve a class whose itinerary names pairs no bridge spans (D3: a
+    construction error, never a state); the walk stays on ``cd.search``."""
+    members = [str(member.bridge_id) for member in cd.entry.members if not member.is_loop]
+    cd.unresolved_reason = (
+        f"its {cd.source} itinerary names {', '.join(pair.label for pair in pairs)}, "
+        f"which no bridge spans, in the image of member(s) {', '.join(members) or '-'}; "
+        "grow or blast"
+    )
+    cd.itinerary = cd.source = None
+    logger.warning("class %s unresolved: %s", cd.letter, cd.unresolved_reason)
+
+
 def _diagnose(
     trellis: "Trellis", evidence: ImageEvidence, symbols: Sequence[Symbol]
 ) -> EvidenceDiagnosis:
@@ -1222,16 +1239,18 @@ def symbolic_dynamics(
     (image chain of the first non-loop member that has one); otherwise the
     shortest dual-graph walk between the two landings is the itinerary. A pair
     of the itinerary whose class is not in the alphabet yet adds that class
-    (the closure under the word map, see the module Dev Notes), which is
-    walked in turn. Once the alphabet is closed every itinerary is translated
-    to a word and checked against the registered member images, and the words
-    of all classes drive the refinement and the rules.
+    when a registered bridge spans it (the closure under the word map, see the
+    module Dev Notes), and it is walked in turn; a pair no bridge spans
+    unresolves the class that names it, with a WARNING. Once the alphabet is
+    closed every itinerary is translated to a word and checked against the
+    registered member images, and the words of all classes drive the
+    refinement and the rules.
 
     Args:
         dual_graph: The dual graph of the minimal trellis, built over the
             iterated homotopy partition (its ``partition.homotopy`` is the
-            homotopy family; its ``minimal.classes`` is the evidence table a
-            closure class copies its entry from).
+            homotopy family; its ``minimal.classes`` is the evidence table: a
+            word may only name a class it holds).
         classes: The ALPHABET: normally ``MinimalTrellis.alphabet`` lettered by
             the session (D2). Unlettered active classes take ``letter(i)`` by
             their table position.
@@ -1259,13 +1278,8 @@ def symbolic_dynamics(
     closure: dict[BridgeClass, BridgeClass] = {}  # added class -> the class that named it
 
     def add(named: BridgeClass, named_by: BridgeClass) -> BridgeClassEntry:
-        """A class a word names: its evidence entry (copied) or a bare one, lettered."""
-        if named in evidence_table:
-            entry = replace(evidence_table[named], letter=None)
-        else:
-            owners = {id(named.source.fixed_point), id(named.target.fixed_point)}
-            tangle = next((i for i, fp in enumerate(fixed_points) if {id(fp)} == owners), None)
-            entry = BridgeClassEntry(named, tangle=tangle)
+        """A class a word names: a copy of its evidence entry, lettered."""
+        entry = replace(evidence_table[named], letter=None)
         if entry.active and letter_for is not None:
             letters[named] = entry.letter = letter_for(named)
         else:
@@ -1292,16 +1306,22 @@ def symbolic_dynamics(
         )
         _resolve_itinerary(dual_graph, iterated, cd, max_walks)
         itinerary = cd.itinerary or ()
-        for x, y in zip(itinerary[::2], itinerary[1::2]):
-            named, direction = oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
-            if direction and named not in letters:
-                entries.append(add(named, cls))
+        named = [
+            oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
+            for x, y in zip(itinerary[::2], itinerary[1::2])
+        ]
+        new = {pair: None for pair, direction in named if direction and pair not in letters}
+        bare = [pair for pair in new if pair not in evidence_table]
+        if bare:
+            _unspanned(cd, bare)
+        else:
+            entries.extend(add(pair, cls) for pair in new)
         records[cls] = cd
     assert len(set(letters.values())) == len(letters), "a letter names two classes"
     if closure:
         logger.info(
-            "the words name %d class(es) outside the alphabet; closed it under the word "
-            "map (%s)",
+            "the words name %d class(es) outside the alphabet that registered bridges "
+            "span; closed it under the word map (%s)",
             len(closure),
             ", ".join(letters[named] for named in closure),
         )
