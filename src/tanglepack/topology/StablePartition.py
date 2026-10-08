@@ -153,13 +153,14 @@ fixed in conversation with the author (July 2026):
   the blast-child bridge (the +1 image of a reference pair) that split the
   partition and produced a fourth bridge class; k=10 escaped only because its
   reference pair's forward images were never registered (the manifold was not
-  grown that far). PERIOD-k CHOICE, PROVISIONAL: forward iterates
-  ``1 .. k_value - 1`` are still punched — they are how the other branches of
-  the orbit get their fundamental-segment holes, since the reference window
-  lives on the strong pip's branch alone (Pseudoneighbor Dev Notes) — and only
-  ``iterate >= k_value`` is dropped. The author asked for this to be recorded
-  as a choice to revisit, not a settled rule (``_is_forward_beyond_fundamental``
-  is the one place it lives).
+  grown that far). PERIOD-k (D5, 2026-10-07, kept): forward iterates
+  ``1 .. k_value - 1`` are punched — they are how the other branches of the
+  orbit get their fundamental-segment holes, since the reference window lives
+  on the strong pip's branch alone (Pseudoneighbor Dev Notes) — and only
+  ``iterate >= k_value`` is dropped (``_is_forward_beyond_fundamental``). An
+  appearance whose image crossings are not computed (the stagger of a
+  period-k chain) has no pair to punch; ``extend_pseudoneighbor_trajectories``
+  names its branch in a WARNING (WP5, PK-3), and nothing is invented.
 * Propagation start: a reference whose pair has no spanning Bridge object
   (after a blast there is no bridge between a parent-manifold crossing and
   a blast-child crossing) punches no direct hole, but its orbit still
@@ -194,7 +195,10 @@ fixed in conversation with the author (July 2026):
 
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
 StrongPip/Pseudoneighbor and is exercised by the inversion law cases (the k=4
-saddle at 0/1/2 blasts and the k=4.1 period-2 orbit). Unstable cdists are only
+saddle at 0/1/2 blasts and the k=4.1 period-2 orbit). On a period-k orbit a
+branch can lack a reference's window hole when that reference's ``+j`` image
+crossings are not computed; the pseudoneighbor layer names each such branch in
+a WARNING (PK-3; filling the gap is DEC-19). Unstable cdists are only
 comparable on one unstable branch, so every bridge carries its branch
 (``Bridge.manifold_key``, required at construction since plan row 2.3: an
 endpoint-derived branch once handed one branch's anchor to another's first
@@ -213,12 +217,14 @@ from __future__ import annotations
 import logging
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
+from itertools import count
 from typing import Iterable, Optional, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
 
 from ..numerics.geometry import oriented_bridge_polyline
+from .Pseudoneighbor import _branch_text
 from .TopologyResults import (
     Endpoint,
     endpoint_index,
@@ -235,7 +241,6 @@ if TYPE_CHECKING:
     from .Trellis import Trellis
     from .TrellisBranch import TrellisBranch
     from ..numerics.Bridge import Bridge, BridgeId
-    from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Intersection import Intersection, ManifoldKey
 
 logger = logging.getLogger(__name__)
@@ -320,7 +325,8 @@ def punch_holes(
     # +1 .. +(k_value - 1) are exempt: they are the reference trajectory's
     # appearances on the OTHER branches' fundamental segments (the reference
     # window lives on the strong pip's branch only). See the module Dev Notes.
-    forward = [pair for pair in pairs if _is_forward_beyond_fundamental(trellis, pair)]
+    forward = [pair for pair in pairs if _is_forward_beyond_fundamental(pair)]
+    pairs = [pair for pair in pairs if not _is_forward_beyond_fundamental(pair)]
     if forward:
         logger.debug(
             "Not punching %d forward-iterate pair(s) (iterate >= k_value): "
@@ -328,15 +334,13 @@ def punch_holes(
             len(forward),
             [(pair.as_tuple(), pair.iterate) for pair in forward],
         )
-        dropped = {id(pair) for pair in forward}
-        pairs = [pair for pair in pairs if id(pair) not in dropped]
 
     holes: list[Hole] = []
-    skipped = 0
+    skipped: list[PseudoneighborPair] = []
     for pair in pairs:
         bridge = bridge_for_pair(trellis, pair)
         if bridge is None:
-            skipped += 1
+            skipped.append(pair)
             continue
 
         near_id, far_id = _near_far(trellis, pair.intersection_a, pair.intersection_b)
@@ -348,7 +352,7 @@ def punch_holes(
         stable_mid, _stable_tangent = _stable_arc_midpoint(trellis, near, far)
         arc_point = _nearest_arc_point(bridge, stable_mid)
         if arc_point is None:
-            skipped += 1
+            skipped.append(pair)
             continue
 
         chord_len = float(np.linalg.norm(far.get_point() - near.get_point()))
@@ -384,7 +388,15 @@ def punch_holes(
         holes.append(hole)
 
     if skipped:
-        logger.warning("Skipped %d pair(s) with no spanning bridge", skipped)
+        named = [
+            f"{pair.as_tuple()} (iterate {pair.iterate} of {pair.origin}) on "
+            + _branch_text(pair.branch_key or trellis.intersection(pair.intersection_a).manifold_b_key)
+            for pair in skipped
+        ]
+        logger.warning(
+            "Skipped %d pair(s) with no spanning bridge; their stable branches get no "
+            "hole from them: %s", len(skipped), "; ".join(named),
+        )
     logger.debug("Punched %d hole(s)", len(holes))
     return holes
 
@@ -392,8 +404,6 @@ def punch_holes(
 def propagate_reference_holes(
     trellis: "Trellis",
     references: Optional[Iterable[PseudoneighborPair]] = None,
-    *,
-    max_steps: int = 50,
 ) -> list[Hole]:
     """
     Punch the holes generated by mapping each reference bridge backward.
@@ -410,7 +420,9 @@ def propagate_reference_holes(
     bridge again means it has mapped onto itself after a multiple of k steps
     (for k = 1 exactly the "image lands in the same bridge" rule). The
     recursion also stops when no containing bridge is found (the image left
-    the computed trellis) or after ``max_steps`` (safety guard).
+    the computed trellis). It needs no step cap: every step either stops or
+    visits a new bridge, so it ends within the trellis's finite bridge count
+    (PK-9).
 
     Requires the reference holes to exist already (call :func:`punch_holes`
     first); references without a hole are skipped.
@@ -419,7 +431,6 @@ def propagate_reference_holes(
         trellis: The Trellis carrying pairs, bridges, and eigen/orbit data.
         references: Reference pairs to propagate. Defaults to the trellis's
             recorded reference pairs.
-        max_steps: Upper bound on backward steps per reference.
 
     Returns:
         The newly punched holes. Every reference orbit punches its own chain —
@@ -503,7 +514,7 @@ def propagate_reference_holes(
         # same branch-cycle residue: the backward orbit has become periodic.
         visited = {bridge.id}
 
-        for step in range(1, max_steps + 1):
+        for step in count(1):
             iterate = start_iterate - step
             span = tuple(sorted(
                 trellis.image_cdist(end_id, -step, "unstable", branch=start_key)[1]
@@ -1519,24 +1530,16 @@ def _nearest_arc_point(
     return points[int(np.argmin(distances))]
 
 
-def _pair_fixed_point(trellis: "Trellis", pair: PseudoneighborPair) -> "FixedPoint":
-    """The fixed point owning the pair's stable branch."""
-    key = pair.branch_key or trellis.intersection(pair.intersection_a).manifold_b_key
-    return key[0]
-
-
-def _is_forward_beyond_fundamental(trellis: "Trellis", pair: PseudoneighborPair) -> bool:
+def _is_forward_beyond_fundamental(pair: PseudoneighborPair) -> bool:
     """True for a forward-iterated pair that has wrapped past the fundamental segment.
 
     A pair at ``iterate >= k_value`` is the image of one already on a fundamental
     segment (its own branch's, after a full branch return) and gets no direct
     hole; ``1 .. k_value - 1`` are the trajectory's first appearances on the
-    other branches and do. References and backward iterates return False.
+    other branches and do (D5, 2026-10-07, kept). References and backward
+    iterates return False.
     """
-    if pair.iterate is None or pair.iterate <= 0:
-        return False
-    k_value = getattr(_pair_fixed_point(trellis, pair), "k_value", 1)
-    return pair.iterate >= k_value
+    return pair.iterate is not None and pair.iterate >= pair.branch_key[0].k_value
 
 
 def _containing_bridge(
