@@ -310,9 +310,8 @@ def test_image_of_element_covers_both_endpoint_images(p3_partitioned):
 def test_element_image_endpoints_scale_by_the_stable_factor(p3_partitioned):
     """The image arc of an element is its own arc contracted by ``per_step_beta``.
 
-    A direct check that the stable factor — not the unstable one
-    :meth:`Trellis.scale_cdist` would use for both — is what moves an element's
-    endpoints one step forward.
+    A direct check that the stable factor — not the reciprocal of the unstable
+    one — is what moves an element's endpoints one step forward.
     """
     session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)

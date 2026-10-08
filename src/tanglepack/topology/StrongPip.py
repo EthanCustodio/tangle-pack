@@ -61,15 +61,17 @@ The disqualifier loop therefore skips any r whose stable branch is not on q0's
 fixed point (it is absent from the branch cycle) or whose unstable branch is known
 to be on a different fixed point. The whole orbit of a period-p point counts as one
 "periodic point" here — the restriction is on the FixedPoint object, not on the
-orbit index or branch index. The unstable key (manifold_a_key) is legitimately None
-on points born from iterated bridges; those are kept (the stable key is the reliable
-discriminator), so only a *known* foreign unstable key is rejected.
+orbit index or branch index. Every detected crossing carries both keys (the Tangle
+asserts it), blast-born ones included.
+
+Lookup first: a crossing's backward representative is the iterate table's answer
+when it has one, and otherwise Trellis.image_cdist -- the one crossing-level scaling
+path (table first, then per_step_beta).
 
 Branch cycle / inversion: forward_stable_branch_cycle() is validated for the
 non-inversion case (k_value == period). The inversion ordering (k_value == 2*period,
-branch_index flips after each full orbit) is implemented from first principles but
-has not yet been validated against a computed inversion trellis — revisit when one
-is available.
+branch_index flips after each full orbit) is exercised by the k=4 inversion law
+cases.
 """
 
 from __future__ import annotations
@@ -165,8 +167,8 @@ def is_strong_pip(
         disqualifier).
 
     Raises:
-        ValueError: If q0 has no stable branch, its fixed point has no eigenvalue,
-            or q0's branch is missing from the computed branch cycle.
+        ValueError: If q0 has no stable branch, or q0's branch is missing from
+            the computed branch cycle.
 
     Note:
         If q0 is itself the anchoring fixed point (canonical distance ~0 on both
@@ -184,13 +186,6 @@ def is_strong_pip(
     fixed_point = branch_key[0]
     s0 = q0.stable_cdist
     u0 = q0.unstable_cdist
-    if trellis.lambda_u(fixed_point) is None:
-        raise ValueError(
-            f"Fixed point of intersection {intersection_id} has no unstable "
-            "eigenvalue; cannot scale canonical distances."
-        )
-    beta = fixed_point.per_step_beta("unstable")
-
     pos_map, k = _branch_position_map(fixed_point)
 
     pos_B = pos_map.get(branch_key)
@@ -216,22 +211,14 @@ def is_strong_pip(
             continue
         if abs(r.stable_cdist) <= tol and abs(r.unstable_cdist) <= tol:
             continue  # the anchoring fixed point, not a transverse intersection
-        r_branch = r.manifold_b_key
-        if r_branch is None:
-            continue
         # A strong pip is a property of one periodic point's own tangle, so only
-        # crossings between two manifolds of THIS fixed point may disqualify q0.
-        # pos_r below already confirms r's stable branch belongs to fixed_point;
-        # here we also reject the case where r's unstable branch is known to
-        # belong to a *different* fixed point — a heteroclinic crossing (e.g. a
-        # period-1 outer tangle meeting this period-3 inner tangle). Those
-        # crossings are real and kept elsewhere, but must not be used to classify
-        # a strong pip. A None unstable key is an iterated-bridge homoclinic point
-        # on this tangle (manifold_b_key is the reliable discriminator throughout
-        # the code), so it is kept.
-        if r.manifold_a_key is not None and r.manifold_a_key[0] is not fixed_point:
+        # crossings between two manifolds of THIS fixed point may disqualify q0:
+        # pos_r below confirms r's stable branch belongs to fixed_point, and a
+        # heteroclinic crossing (e.g. a period-1 outer tangle meeting this
+        # period-3 inner tangle) is real but kept out here.
+        if r.manifold_a_key[0] is not fixed_point:
             continue
-        pos_r = pos_map.get(r_branch)
+        pos_r = pos_map.get(r.manifold_b_key)
         if pos_r is None:
             # Stable branch of a different fixed point — cannot map onto B.
             continue
@@ -248,11 +235,9 @@ def is_strong_pip(
             unstable_rep = rep.unstable_cdist
         else:
             # Unlinked: backward_steps applications of M^-1 by the cdist
-            # definition — the stable cdist grows by beta per step, the unstable
-            # one shrinks by it (beta is the ONE map step factor,
-            # FixedPoint.per_step_beta -- never a hand-rolled root of lambda_u).
-            stable_rep = r.stable_cdist * (beta ** backward_steps)
-            unstable_rep = r.unstable_cdist * (beta ** -backward_steps)
+            # definition, through the one scaling path.
+            _, stable_rep, _ = trellis.image_cdist(r_id, -backward_steps, "stable")
+            _, unstable_rep, _ = trellis.image_cdist(r_id, -backward_steps, "unstable")
 
             # q0's own orbit maps back onto q0 itself — a collision on BOTH
             # cdists. That is the same point, not a disqualifier, so skip it.

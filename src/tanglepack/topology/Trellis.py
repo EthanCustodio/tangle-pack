@@ -184,7 +184,7 @@ class Trellis:
         branches: Mapping from manifold key to TrellisBranch.
         bridges: Bridges belonging to the trellis's fixed points.
         dynamical_system: The underlying map/inverse (for algorithms that need it;
-            many steps can instead use canonical-distance scaling — see scale_cdist).
+            many steps can instead use canonical-distance scaling — see image_cdist).
         pseudoneighbors: Output slot — pseudoneighbor pairs found by the algorithm.
         holes: Output slot — holes punched for pseudoneighbor pairs.
         stable_partitions: Output slot — stable-manifold partitions built from
@@ -301,17 +301,9 @@ class Trellis:
                     return determinant > 0.0
 
         for fixed_point in self.fixed_points:
-            if fixed_point.period % 2 == 0:
-                continue  # even p squares away the single-step sign
-            lam_u = getattr(fixed_point, "unstable_eigenvalues", None)
-            lam_s = getattr(fixed_point, "stable_eigenvalues", None)
-            if not lam_u or not lam_s:
-                continue
-            product = float(np.asarray(lam_u[0]).ravel()[0]) * float(
-                np.asarray(lam_s[0]).ravel()[0]
-            )
-            if product != 0.0:
-                return product > 0.0
+            preserving = fixed_point.preserves_orientation
+            if preserving is not None:
+                return preserving
 
         logger.debug(
             "No jacobian and no odd-period eigenvalue pair on this trellis; "
@@ -676,61 +668,6 @@ class Trellis:
 
     # ── canonical-distance helpers ──────────────────────────────────────────
 
-    def lambda_u(self, fixed_point: "FixedPoint") -> Optional[float]:
-        """
-        Unstable eigenvalue magnitude for a fixed point, governing cdist scaling.
-
-        Returns None if the fixed point has no eigenvalues set.
-        """
-        evals = getattr(fixed_point, "unstable_eigenvalues", None)
-        if not evals:
-            return None
-        return float(abs(np.asarray(evals[0]).ravel()[0]))
-
-    def scale_cdist(
-        self,
-        cdist: float,
-        n: int,
-        stability: Stability,
-        fixed_point: "FixedPoint",
-    ) -> Optional[float]:
-        """
-        Scale a canonical distance under n applications of the MAP.
-
-        Uses the eigenvalue relation rather than the dynamical map itself:
-            unstable: c_dist(M^n) = c_dist · beta^n
-            stable:   c_dist(M^n) = c_dist / beta^n
-        where ``beta = fixed_point.per_step_beta("unstable")`` is the factor of
-        ONE map step. Pass a negative n for backward iterates (the Strong Pip
-        Algorithm maps intersections back onto a stable branch this way).
-
-        Args:
-            cdist: The starting canonical distance.
-            n: Number of MAP STEPS (negative for backward). One full return to
-                the same branch is ``k_value`` steps, so a caller counting branch
-                returns passes ``returns * fixed_point.k_value`` -- which scales
-                by ``|lambda| ** num_branches`` per return, i.e. by the
-                eigenvalue itself only when the point has no inversion.
-            stability: Which manifold's cdist is being scaled.
-            fixed_point: Fixed point supplying the per-step factor.
-
-        Returns:
-            The scaled canonical distance, or None if the eigenvalue is
-            unavailable.
-
-        Note:
-            The unit is map steps, not branch returns: ``advance_key``,
-            ``per_step_beta`` and this method all count the same thing, so a
-            crossing's image after ``n`` steps is on ``advance_key(key, n)`` at
-            ``scale_cdist(c, n, ...)``.
-        """
-        if self.lambda_u(fixed_point) is None:
-            return None
-        beta = fixed_point.per_step_beta("unstable")
-        if stability == "unstable":
-            return cdist * (beta ** n)
-        return cdist / (beta ** n)
-
     def _keyed_cdist(
         self, intersection_id: int, stability: Stability
     ) -> tuple[ManifoldKey, float]:
@@ -771,6 +708,11 @@ class Trellis:
         """
         Where one crossing lands after ``n`` map steps, on one side.
 
+        THE crossing-level scaling path: topology moves a crossing only through
+        this method (a bare distance with no crossing behind it, only through
+        :meth:`FixedPoint.per_step_beta`), and nothing in topology reads an
+        eigenvalue.
+
         A crossing sits on two branches at once, and this answers for the one of
         the requested stability: the branch its image lies on and the canonical
         distance it lies at. The registry's iterate table is the authority
@@ -810,11 +752,10 @@ class Trellis:
                 "unstable" nor "stable".
 
         Note:
-            This is deliberately NOT :meth:`scale_cdist`, which divides by the
-            UNSTABLE per-step factor for a stable distance. The two agree on an
-            area-preserving map, where ``per_step_beta("stable")`` is defined as
-            the reciprocal of the unstable one, and this method stays right when
-            they are two independent estimates.
+            A stable distance is scaled by ``per_step_beta("stable")``, never by
+            the reciprocal of the unstable factor: the two agree on an
+            area-preserving map and this stays right when they are two
+            independent estimates.
 
         Note:
             Never compare the product of a crossing's stable and unstable
@@ -1001,7 +942,6 @@ class Trellis:
         *,
         extend: bool = True,
         collision_rtol: float = 1e-2,
-        match_rtol: float = 0.05,
         tol: Optional[float] = None,
         verbose: bool = False,
     ) -> list[PseudoneighborPair]:
@@ -1021,7 +961,6 @@ class Trellis:
             extend: Also record the iterated (non-reference) pairs.
             collision_rtol: Relative slack of the endpoint-collision test (a
                 landing skipped only when BOTH its cdists match an endpoint).
-            match_rtol: Relative tolerance of the r_{n+p} cdist fallback.
             tol: Absolute canonical-distance slack (defaults to the registry's
                 ``cdist_tol``).
             verbose: Report :meth:`describe_pseudoneighbors` when done —
@@ -1040,9 +979,7 @@ class Trellis:
 
         self.pseudoneighbors.clear()
         self.holes.clear()
-        references = _compute(
-            self, collision_rtol=collision_rtol, match_rtol=match_rtol, tol=tol
-        )
+        references = _compute(self, collision_rtol=collision_rtol, tol=tol)
         for pair in references:
             self.add_pseudoneighbor(pair)
         if extend:

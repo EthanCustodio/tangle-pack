@@ -529,10 +529,6 @@ def propagate_reference_holes(
             )
 
         fixed_point = _pair_fixed_point(trellis, ref)
-        lambda_u = trellis.lambda_u(fixed_point)
-        if lambda_u is None:
-            logger.warning("No eigenvalue for %s; cannot propagate", ref.as_tuple())
-            continue
         cycle = forward_unstable_branch_cycle(fixed_point)
         k = len(cycle)
         beta = fixed_point.per_step_beta("unstable")

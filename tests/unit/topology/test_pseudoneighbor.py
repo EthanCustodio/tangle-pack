@@ -227,7 +227,8 @@ def test_branch_residue_gates_iterates():
         (0.5, 8.0), unstable_cdist=8.0, stable_cdist=0.5,
         manifold_a_key=unstable0, manifold_b_key=stable,
     )
-    # No full forward chain in the table: r_end is found by the cdist fallback.
+    # The table holds M^3(r_n) = r_end as one direct link, no single steps.
+    reg.register_iterate(r_n, 3, r_end)
 
     # On unstable branch 1 (cycle position 1): reaches branch 0 only after
     # d = (0 - 1) % 3 = 2 steps, giving cdist 0.6 * 2^2 = 2.4 — outside
@@ -251,6 +252,38 @@ def test_branch_residue_gates_iterates():
     assert (r_n, x1) not in [(p.intersection_a, p.intersection_b) for p in pairs]
 
 
+def test_inversion_branch_return_scales_by_beta_to_the_k():
+    """Inversion: a branch return is ``k_value = 2`` map steps and scales an
+    unstable cdist by ``beta ** 2`` (= ``lambda_u ** 2``), not by ``lambda_u``.
+
+    A candidate at u = 1.5 on the pair's own unstable branch returns to it at
+    1.5 * 4 = 6, outside the pair's interval (2, 4); a ``lambda_u`` lap would put
+    it at 1.5 * 2 = 3, inside, and puncture the pair."""
+    fp = bare_fixed_point(1, inversion=True, beta=0.5)  # lambda_u = -2, beta = 2
+    assert fp.k_value == 2
+    reg = IntersectionRegistry()
+    s0, u0 = (fp, "stable", 0, 0), (fp, "unstable", 0, 0)
+    s1, u1 = (fp, "stable", 0, 1), (fp, "unstable", 0, 1)
+
+    def _point(s, u, s_key, u_key):
+        return reg.add_synthetic(
+            (s, u), unstable_cdist=u, stable_cdist=s,
+            manifold_a_key=u_key, manifold_b_key=s_key,
+        )
+
+    r_n = _point(4.0, 1.0, s0, u0)
+    x1 = _point(3.0, 2.0, s0, u0)
+    middle = _point(2.0, 2.0, s1, u1)  # M(r_n), on the other half-branch
+    r_end = _point(1.0, 4.0, s0, u0)  # M^2(r_n): one full return
+    reg.register_iterate(r_n, 1, middle)
+    reg.register_iterate(middle, 1, r_end)
+    _point(0.9, 1.5, s0, u0)
+
+    pairs = compute_pseudoneighbors(_trellis(reg, fp))
+
+    assert (x1, r_end) in [(p.intersection_a, p.intersection_b) for p in pairs]
+
+
 def test_walk_stops_at_reference_window_end():
     """Pairs below r_{n+p} are outside the reference window and not returned."""
     fp = _fixed_point(1, 4.0)
@@ -268,31 +301,25 @@ def test_walk_stops_at_reference_window_end():
     assert len(pairs) == 2
 
 
-def test_reference_end_fallback_by_cdist_match():
-    """With no iterate links, r_{n+p} is located by matching BOTH scaled cdists."""
+def test_reference_end_is_a_table_iterate(caplog):
+    """r_{n+p} = M^p(r_n) comes from the iterate table only: without the link
+    there is no reference window (one WARNING), however well a crossing's
+    cdists would match the scaled ones."""
     fp = _fixed_point(1, 4.0)
     reg = IntersectionRegistry()
     stable = (fp, "stable", 0, 0)
     unstable = (fp, "unstable", 0, 0)
-    r_n = reg.add_synthetic(
-        (4.0, 1.0), unstable_cdist=1.0, stable_cdist=4.0,
-        manifold_a_key=unstable, manifold_b_key=stable,
-    )
-    x1 = reg.add_synthetic(
-        (3.0, 2.0), unstable_cdist=2.0, stable_cdist=3.0,
-        manifold_a_key=unstable, manifold_b_key=stable,
-    )
-    r_end = reg.add_synthetic(
-        (1.0, 4.0), unstable_cdist=4.0, stable_cdist=1.0,
-        manifold_a_key=unstable, manifold_b_key=stable,
-    )
+    for s_cdist, u_cdist in ((4.0, 1.0), (3.0, 2.0), (1.0, 4.0)):
+        reg.add_synthetic(
+            (s_cdist, u_cdist), unstable_cdist=u_cdist, stable_cdist=s_cdist,
+            manifold_a_key=unstable, manifold_b_key=stable,
+        )
 
-    pairs = compute_pseudoneighbors(_trellis(reg, fp))
+    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.Pseudoneighbor"):
+        pairs = compute_pseudoneighbors(_trellis(reg, fp))
 
-    assert [(p.intersection_a, p.intersection_b) for p in pairs] == [
-        (r_n, x1),
-        (x1, r_end),
-    ]
+    assert pairs == []
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=1)
 
 
 def test_heteroclinic_candidate_ignored():
@@ -310,22 +337,6 @@ def test_heteroclinic_candidate_ignored():
     pairs = compute_pseudoneighbors(_trellis(reg, fp, other))
 
     assert len(pairs) == 2
-
-
-def test_unknown_unstable_branch_is_conservative():
-    """A candidate with no unstable key (iterated-bridge point) is tested at
-    every cycle residue and still punctures the interval."""
-    fp = _fixed_point(1, 4.0)
-    reg = IntersectionRegistry()
-    r_n, x1, r_end = _reference_window(fp, reg)
-    reg.add_synthetic(
-        (0.5, 1.5), unstable_cdist=1.5, stable_cdist=0.5,
-        manifold_a_key=None, manifold_b_key=(fp, "stable", 0, 0),
-    )
-
-    pairs = compute_pseudoneighbors(_trellis(reg, fp))
-
-    assert [(p.intersection_a, p.intersection_b) for p in pairs] == [(x1, r_end)]
 
 
 def test_reference_window_starts_at_chosen_strong_pip():
@@ -363,8 +374,8 @@ def test_reference_window_starts_at_chosen_strong_pip():
 def test_single_reference_window_per_fixed_point():
     """Period-3: the reference window lives ONLY on the branch of greatest
     stable cdist (the pip's branch); the trajectory's appearances on the other
-    branches come from extension — via the cdist fallback when the iterate
-    table has no links — never as independent references."""
+    branches come from extension through the iterate table, never as
+    independent references."""
     fp = _fixed_point(3, 8.0)  # k = 3, beta = 2
     reg = IntersectionRegistry()
 
@@ -376,10 +387,13 @@ def test_single_reference_window_per_fixed_point():
         )
 
     # Branch 0 carries the globally outermost intersection: the window
-    # [4 -> 0.5] with a middle point. No iterate links anywhere.
+    # [4 -> 0.5] with a middle point, closed by the direct link M^3(a0) = e0.
     a0, b0, e0 = _point(0, 4.0, 1.0), _point(0, 3.0, 2.0), _point(0, 0.5, 8.0)
+    reg.register_iterate(a0, 3, e0)
     # Branch 1 holds the forward images (stable /beta, unstable *beta).
     a1, b1, e1 = _point(1, 2.0, 2.0), _point(1, 1.5, 4.0), _point(1, 0.25, 16.0)
+    for source, image in ((a0, a1), (b0, b1), (e0, e1)):
+        reg.register_iterate(source, 1, image)
 
     trellis = _trellis(reg, fp)
     references = compute_pseudoneighbors(trellis)
@@ -515,8 +529,9 @@ def test_strong_pip_cuts_warn_when_branches_are_left_uncut(caplog, period, uncut
     stable branch, which the pip alone cuts: nothing to report.
 
     The window ``(4, 1) -> (3, 2) -> M^k = (4 / lambda, lambda)`` sits on orbit
-    point 0 with the pip at its outer end, so the reference search itself
-    succeeds silently in both cases.
+    point 0 with the pip at its outer end and the table holds the one ``M^k``
+    link (not its single steps), so the reference search itself succeeds
+    silently in both cases.
     """
     lambda_u = 4.0 if period == 1 else 8.0
     fp = _fixed_point(period, lambda_u)
@@ -531,7 +546,7 @@ def test_strong_pip_cuts_warn_when_branches_are_left_uncut(caplog, period, uncut
 
     pip = _point(4.0, 1.0)
     _point(3.0, 2.0)
-    _point(4.0 / lambda_u, lambda_u)
+    reg.register_iterate(pip, period, _point(4.0 / lambda_u, lambda_u))
     trellis = _trellis(reg, fp)
     trellis.strong_pip = pip
     assert fp.k_value == period

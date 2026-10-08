@@ -143,7 +143,6 @@ def _intersect_and_bridge(session, fixed_points) -> None:
         session.trim_stable_manifolds(fp)
     for fp in fixed_points:
         session.create_bridges(fp)
-    session.infer_iterate_table()
 
 
 def _repin(session, fixed_points, pips) -> None:

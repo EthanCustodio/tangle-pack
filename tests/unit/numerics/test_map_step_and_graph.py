@@ -143,10 +143,7 @@ def test_every_map_step_reaches_fixed_point_advance_key(monkeypatch):
 
     Note:
         Inference is exercised through ``infer_iterates`` on a registry built
-        with ``infer_iterates=False``: ``infer_iterate_table`` shares its
-        prediction step but only visits endpoints of iterated bridges, which
-        ``iterate_bridge`` has already linked, so on a real build it has
-        nothing left to predict.
+        with ``infer_iterates=False``, so the pass has every link left to find.
     """
     case = build_k10(through="grown")
     workbench, fp = case.workbench, case.fixed_point
@@ -181,25 +178,6 @@ def test_every_map_step_reaches_fixed_point_advance_key(monkeypatch):
     _key, _cdist, from_table = trellis.image_cdist(crossing, 40, "stable")
     assert not from_table, "40 steps must fall off the iterate table"
     assert calls, "Trellis.image_cdist did not reach FixedPoint.advance_key"
-
-
-def test_scale_cdist_is_in_map_steps(henon_p3_session):
-    """``Trellis.scale_cdist(c, n, ...)`` scales by ONE map step per n."""
-    session, fp3, _fp1, _zone = henon_p3_session
-    trellis = session.trellis(fp3)
-
-    beta = fp3.per_step_beta("unstable")
-    assert trellis.scale_cdist(1.0, 1, "unstable", fp3) == pytest.approx(beta)
-    assert trellis.scale_cdist(1.0, 1, "stable", fp3) == pytest.approx(1.0 / beta)
-
-    # k_value map steps is one full branch return, which costs
-    # |lambda| ** num_branches -- the eigenvalue itself on this non-inversion orbit.
-    lambda_u = trellis.lambda_u(fp3)
-    assert fp3.num_branches == 1
-    assert trellis.scale_cdist(1.0, fp3.k_value, "unstable", fp3) == pytest.approx(
-        lambda_u**fp3.num_branches
-    )
-    assert trellis.scale_cdist(2.0, 0, "unstable", fp3) == pytest.approx(2.0)
 
 
 # --------------------------------------------------------------------------- #

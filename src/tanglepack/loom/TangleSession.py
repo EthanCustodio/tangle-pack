@@ -1546,7 +1546,7 @@ class TangleSession:
                 reference-pair list), an iterable of them, or None for every
                 fixed point (→ returns a ``{fixed_point: references}`` dict).
             **kwargs: Forwarded to :meth:`Trellis.compute_pseudoneighbors`
-                (``extend``, ``collision_rtol``, ``match_rtol``, ``tol``).
+                (``extend``, ``collision_rtol``, ``tol``).
 
         Returns:
             A reference-pair list for a single fixed point, or a dict mapping

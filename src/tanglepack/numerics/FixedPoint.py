@@ -165,6 +165,25 @@ class FixedPoint:
         """
         return 2 if self.check_inversion() else 1
 
+    @property
+    def preserves_orientation(self) -> Optional[bool]:
+        """
+        The sign of the single-step ``det J``, when the eigenvalues can tell it.
+
+        The product of the two eigenvalues is ``det DM^period``, whose sign is the
+        single-step sign only for an ODD period (an even one squares it away).
+
+        Returns:
+            True / False for an odd period with both eigenvalues computed, None
+            otherwise (an even period, or eigenvalues still unset).
+        """
+        if self.period % 2 == 0 or not self.unstable_eigenvalues or not self.stable_eigenvalues:
+            return None
+        product = float(np.asarray(self.unstable_eigenvalues[0]).ravel()[0]) * float(
+            np.asarray(self.stable_eigenvalues[0]).ravel()[0]
+        )
+        return None if product == 0.0 else product > 0.0
+
     def check_inversion(self) -> bool:
         """
         Returns True if the Fixed Point has inversion

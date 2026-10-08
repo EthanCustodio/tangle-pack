@@ -3,14 +3,14 @@ One branch of one manifold of one orbit point, as an ordered list of ids.
 
 :class:`TrellisBranch` is the topological unit the algorithms walk: the
 crossings on a single branch, ordered by canonical distance outward from the
-anchoring periodic point, plus the eigen/orbit metadata they need.
+anchoring periodic point, plus the orbit metadata they need.
 
 Dev Notes:
 
 A TrellisBranch is the topological view of one branch of one manifold of one
 periodic-orbit point. It is intentionally lightweight: it stores the *ordering*
 of intersections along the branch (encoded as the order of intersection_ids) and
-the eigen/orbit metadata the algorithms need, but it does not hold a reference to
+the orbit metadata the algorithms need, but it does not hold a reference to
 the registry. Anything that needs the underlying Intersection objects or their
 cdists goes through the owning Trellis.
 
@@ -18,11 +18,11 @@ intersection_ids is always kept sorted by canonical distance ascending — i.e.
 from the anchoring periodic point outward. "Toward the anchor" therefore means
 walking toward index 0.
 
-Open question — return_period: for a period-q orbit a single branch maps onto
-itself under M^k_value (k_value = q, or 2q with inversion). We expose that as a
-convenience, but the precise branch period p used by the Pseudoneighbor Algorithm
-should be confirmed against the orbit/inversion bookkeeping when that algorithm
-is implemented.
+Settled (WP2) — return_period: a branch maps onto itself under M^k_value
+(k_value = q for a period-q orbit, 2q with inversion). The pseudoneighbor window
+and lap use ``return_period = k_value``, and a return scales a canonical distance
+by ``beta ** k_value`` (``FixedPoint.per_step_beta``); no branch reads an
+eigenvalue.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class TrellisBranch:
 
     A branch corresponds exactly to one ``TangleWorkbench.manifolds`` key. It
     carries the intersections that lie on it, ordered by canonical distance from
-    the anchoring periodic point outward, plus the eigen/orbit metadata the
+    the anchoring periodic point outward, plus the orbit metadata the
     topological algorithms read.
 
     Attributes:
@@ -66,21 +66,7 @@ class TrellisBranch:
     branch_index: int
     intersection_ids: list[int] = field(default_factory=list)
 
-    # ── eigen / orbit metadata ──────────────────────────────────────────────
-
-    @property
-    def eigenvalue(self) -> Optional[float]:
-        """
-        Unstable eigenvalue magnitude (lambda_u) governing cdist scaling.
-
-        Canonical distance scales by lambda_u per forward iterate on the unstable
-        side and by 1/lambda_u on the stable side; a single magnitude is used for
-        both (the map is area-preserving). Returns None if eigenvalues are unset.
-        """
-        evals = getattr(self.fixed_point, "unstable_eigenvalues", None)
-        if not evals:
-            return None
-        return float(abs(np.asarray(evals[0]).ravel()[0]))
+    # ── orbit metadata ──────────────────────────────────────────────
 
     @property
     def return_period(self) -> int:

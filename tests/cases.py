@@ -36,8 +36,7 @@ Cases:
   negative (-1.96 / -0.51), ``k_value = 2 * period``, det J = +1 (inversion,
   NOT orientation reversing); 11 unstable / 11 stable steps at ``area_cutoff
   = 1e-5`` (step 12 escapes), then the k=2.8 zone recipe with 0, 1 or 2
-  blasts (INV-4). Holes 1 / 7 / 0: the 0 at two blasts is INV-2 (the
-  pseudoneighbor lap factor), not the fixture.
+  blasts (INV-4).
 * ``k10_inversion`` -- the ``k=10`` map's inversion saddle at ``(-2.3166,
   2.3166)``, 6 unstable / 5 stable steps at ``area_cutoff = 1e-4``: the
   numerics fixture behind ``henon_inversion*`` only (it escapes at 7 steps and
@@ -351,7 +350,6 @@ def build_k10(
         return case
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
-    session.infer_iterate_table()
     if not _reached(through, "pips"):
         return case
     session.classify_strong_pips()
@@ -403,7 +401,6 @@ def build_k28(
     session.compute_intersections([fp])
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
-    session.infer_iterate_table()
     pip, zone = _zone_at_image_pip(session, fp, blasts)
     if through == "partitioned":
         _partition(session)
@@ -497,7 +494,6 @@ def _period3_zone(unstable_steps: int, stable_steps: int, area_cutoff: float) ->
     session.compute_intersections([fp3])
     session.trim_stable_manifolds(fp3)
     session.create_bridges(fp3)
-    session.infer_iterate_table()
     session.classify_strong_pips()
     pip = session.trellis(fp3).strong_pip
     zone = session.resonance_zone(pip)
@@ -558,7 +554,6 @@ def _nested_through(
     session.trim_stable_manifolds(fp1)
     session.create_bridges(fp3)
     session.create_bridges(fp1)
-    session.infer_iterate_table()
     if not _reached(through, "pips"):
         return case
 
@@ -692,7 +687,6 @@ def build_inversion(*, blasts: int = 0, through: Stage = "partitioned") -> Case:
     session.compute_intersections([fp])
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
-    session.infer_iterate_table()
     pip, zone = _zone_at_image_pip(session, fp, blasts)
     if through == "partitioned":
         _partition(session)
@@ -768,7 +762,6 @@ def build_k10_inversion(
         return case
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
-    session.infer_iterate_table()
     if not _reached(through, "pips"):
         return case
     session.classify_strong_pips()
@@ -831,7 +824,6 @@ def build_orientation_reversing(*, through: Stage = "partitioned") -> Case:
         return case
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
-    session.infer_iterate_table()
     if not _reached(through, "pips"):
         return case
     session.classify_strong_pips()
@@ -911,7 +903,7 @@ class SeriesStep:
 
 
 #: ``name -> (zone-stage builder, blasts)``. k28 switches its reference pair at
-#: blasts 2 and 8, p3 at blast 6; inversion stops at 2 (INV-2 until WP2).
+#: blasts 2 and 8, p3 at blast 6; inversion stops at 2.
 SERIES: Mapping[str, tuple[Callable[[], Case], int]] = MappingProxyType(
     {
         "k28_series": (lambda: build_k28(blasts=0, through="zones"), 8),
@@ -1029,23 +1021,6 @@ def _each(laws: tuple[str, ...], names: tuple[str, ...], issue: KnownIssue) -> d
 
 
 _INVERSION = ("inversion", "inversion_one_blast", "inversion_two_blasts")
-_HOLE_LAWS = (
-    "holes_are_classified",
-    "backward_holes_keep_bridge_side",
-    "direct_hole_side_is_coordinate_side",
-    "direct_hole_opens_inward_pair",
-    "openings_on_own_bridge_row",
-    "openings_missing_only_at_anchor_or_tail",
-    "propagated_holes_land_on_predicted_branch",
-    "propagation_terminates",
-    "no_direct_hole_beyond_fundamental",
-    "reference_pairs_valid",
-    "iterated_cut_provenance",
-    "minimal_trellis_bridges",
-    "dual_face_side_is_geometry",
-    "refined_children_inherit_word",
-    "member_matching_consistent",
-)
 _NUM16 = KnownIssue(
     "NUM-16: a zero-area region after a blast reports a representative point inside "
     "its neighbour",
@@ -1105,7 +1080,7 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
         ),
         **_each(
             ("anchor_bridge_class_leads_its_tangle",),
-            ("inversion", "inversion_two_blasts"),
+            ("inversion",),
             KnownIssue(
                 "INV-1: the bridge leaving an unstable branch's second anchor is no +1 "
                 "member of the class that leads the tangle",
@@ -1124,21 +1099,16 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
         ),
         **_each(
             ("partition_singletons", "stable_nodes_never_own_a_singleton"),
-            ("inversion_one_blast",),
+            ("inversion_one_blast", "inversion_two_blasts"),
             KnownIssue(
                 "INV-1: the singleton at one anchor owns the coincident anchors, a "
                 "zero-length stable edge",
                 "WP3",
             ),
         ),
-        ("partition_singletons", "inversion_two_blasts"): KnownIssue(
-            "INV-1: vacuous today (no holes, INV-2); with holes it fails like "
-            "inversion_one_blast",
-            "WP3",
-        ),
         **_each(
             ("cross_side_only_within_a_branch",),
-            ("inversion", "inversion_two_blasts"),
+            ("inversion",),
             KnownIssue(
                 "INV-6: SymbolicDynamics flags every pair whose sides differ, across two "
                 "branches too (D4: only within one branch)",
@@ -1147,14 +1117,6 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
         ),
         **_each(("alphabet_inside_minimal_trellis",), _INVERSION, _BCG1),
         **_each(
-            _HOLE_LAWS,
-            ("inversion_two_blasts",),
-            KnownIssue(
-                "INV-2: 0 holes -- the pseudoneighbor lap factor is lambda_u, not beta^k",
-                "WP2",
-            ),
-        ),
-        **_each(
             ("series_class_count_constant_while_holes_constant",),
             ("k28_series", "p3_series"),
             KnownIssue(
@@ -1162,15 +1124,6 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
                 "stand alone, so the class count grows while the hole set is constant",
                 "WP6",
             ),
-        ),
-        ("series_class_count_never_decreases", "inversion_series"): KnownIssue(
-            "INV-2: the lap factor lambda_u loses every hole at blast 2, and classes go "
-            "down with them",
-            "WP2",
-        ),
-        ("series_class_count_constant_while_holes_constant", "inversion_series"): KnownIssue(
-            "INV-2: vacuous today, no two consecutive recomputes share a hole set",
-            "WP2",
         ),
         **_each(("series_alphabet_inside_minimal_trellis",), tuple(SERIES), _BCG1),
         ("three_tangles_take_three_families", "hand_built"): KnownIssue(

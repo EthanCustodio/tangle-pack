@@ -731,14 +731,14 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
         return None
     ia, ib = (trellis.intersection(image) for image in images)
     key = ia.manifold_a_key
-    if key is None or ib.manifold_a_key != key:
+    if ib.manifold_a_key != key:
         logger.warning(
             "image of bridge %s has endpoints %s on unstable branches %s and %s; "
             "cannot place its image arc",
             bridge_id,
             tuple(images),
-            None if key is None else key[1:],
-            None if ib.manifold_a_key is None else ib.manifold_a_key[1:],
+            key[1:],
+            ib.manifold_a_key[1:],
         )
         return None
     branch = trellis.branch(key)

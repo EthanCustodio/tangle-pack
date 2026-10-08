@@ -41,8 +41,8 @@ def _trellis(registry: IntersectionRegistry, *fixed_points: FixedPoint) -> Trell
 
 @pytest.mark.parametrize(
     "owner, disqualifies",
-    [("other_fixed_point", False), ("same_fixed_point", True), ("unknown", True)],
-    ids=["heteroclinic_ignored", "homoclinic_blocks", "missing_unstable_key_blocks"],
+    [("other_fixed_point", False), ("same_fixed_point", True)],
+    ids=["heteroclinic_ignored", "homoclinic_blocks"],
 )
 def test_only_the_own_tangle_disqualifies_a_strong_pip(owner: str, disqualifies: bool):
     """The one point inside q0's open box decides by whose tangle it belongs to.
@@ -53,10 +53,7 @@ def test_only_the_own_tangle_disqualifies_a_strong_pip(owner: str, disqualifies:
 
     * ``other_fixed_point`` -- the period-1 saddle's: a heteroclinic crossing,
       not part of the period-3 tangle, so it is skipped and q0 stays strong;
-    * ``same_fixed_point`` -- fp3's own: a homoclinic crossing, which blocks q0;
-    * ``unknown`` -- no unstable key (an iterated-bridge crossing): its stable
-      side is the reliable discriminator, so it counts as this tangle's and
-      blocks q0.
+    * ``same_fixed_point`` -- fp3's own: a homoclinic crossing, which blocks q0.
     """
     fp3 = _fixed_point(3, 4.0)
     fp1 = _fixed_point(1, 6.0)
@@ -70,7 +67,6 @@ def test_only_the_own_tangle_disqualifies_a_strong_pip(owner: str, disqualifies:
     unstable_side = {
         "other_fixed_point": (fp1, "unstable", 0, 0),
         "same_fixed_point": (fp3, "unstable", 0, 0),
-        "unknown": None,
     }[owner]
     inside = reg.add_synthetic(
         (0.1, 0.1), unstable_cdist=0.5, stable_cdist=0.5,
