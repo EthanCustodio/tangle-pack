@@ -69,12 +69,14 @@ class PointBudgetExceeded(RuntimeError):
         self.max_abs_coord = max_abs_coord
         self.manifold_key = manifold_key
         super().__init__(
-            f"one growth step would create more than {budget:,} points (stopped "
-            f"while {'mapping' if stage == 'map' else 'refining'} after "
-            f"{points_created:,}; largest |coordinate| {max_abs_coord:.3g}). The "
-            "arm is probably escaping: grow with a stop condition (grow_until_*), "
-            "fewer steps or a coarser area_cutoff, or raise max_points_per_step "
-            "(None disables it). The session is not resumable; rebuild it."
+            f"one growth step or bridge image would create more than {budget:,} "
+            f"points (stopped while {'mapping' if stage == 'map' else 'refining'} "
+            f"after {points_created:,}; largest |coordinate| {max_abs_coord:.3g}). "
+            "A huge coordinate means an escaping arm: grow with a stop condition "
+            "(grow_until_bounded and the other grow_until_* drivers); otherwise "
+            "use fewer steps or blasts, a coarser area_cutoff, or a larger "
+            "max_points_per_step (None disables it). The session is not "
+            "resumable; rebuild it."
         )
 
 
