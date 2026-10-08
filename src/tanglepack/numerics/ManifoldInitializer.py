@@ -19,11 +19,10 @@ the things I learned from Kevin's way like the output dict structure and such.
     +1 This class will have no dependency on ManifoldMachine which is awkward
     -1 p**2 unnessesary points are added to the manifold.
 
-Fully sus out what to do about branch_index. It is unused in most of 
-these methods, but I think it is given as an input elsewhere in the codebase.
-Decide if that is necessary and make its inclusion in these methods more clear.
-Potentially it is necessary to do things the Ethan way, in the Kevin way
-I don't think it matters.
+branch_index (answered, WP3 2026-10-08): a branch index names an
+EIGENDIRECTION, and each one seeds one chain of ``k_value`` pieces walked by
+``FixedPoint.advance_key``. An inversion chain covers both branches, so asking
+for branch 1 there adds nothing; without inversion branch 1 is its own chain.
 
 orient_manifolds only accepts approximate directions for the 0th iterate of
 the cycle, and it requires both a stable and an unstable direction. Allowing
@@ -419,7 +418,9 @@ class ManifoldInitializer:
         Allows the user to provide an approximate direction for the manifolds.
         This routine goes through the list of eigenvectors and checks if the
         approximate direction matches. Give the approximate direction for the
-        0th iterate of the cycle and it will be mapped around.
+        0th iterate of the cycle and it will be mapped around. On an inversion
+        point this chooses which half of each manifold is branch 0 (branch 1
+        runs the other way), and it is propagated along the orbit the same way.
 
         Args:
             fixed_point (FixedPoint): Fixed point to orient the manifolds from.
@@ -427,10 +428,6 @@ class ManifoldInitializer:
                 manifolds to grow. It is a dictionary that looks like:
                     {"unstable": [ux, uy], "stable": [sx, sy]}.
         """
-
-        # if there is inversion there is no need to flip
-        if fixed_point.check_inversion():
-            return None
 
         unstable_approx = approx_dirs["unstable"]
         stable_approx = approx_dirs["stable"]
@@ -490,11 +487,12 @@ class ManifoldInitializer:
             fixed_point (FixedPoint): Fixed point to grow the manifolds from.
             stability (Stability): Stability of the manifold.
             num_branches (int): Number of EIGENDIRECTIONS to seed. Must be 1 or 2.
-                Ignored for inversion points, whose single chain always covers
-                both branches. For a point without inversion the two directions
-                are two independent chains, so 2 is a legitimate request even
-                though ``fixed_point.num_branches`` is 1 (that property counts
-                the branches of ONE chain -- plan 2.8).
+                Each direction seeds one chain; a direction an earlier chain
+                already covers (branch 1 of an inversion point) is skipped. For
+                a point without inversion the two directions are two independent
+                chains, so 2 is a legitimate request even though
+                ``fixed_point.num_branches`` is 1 (that property counts the
+                branches of ONE chain).
 
         Returns:
             Dict[Tuple[int, int], BaseManifold]: All initial fundamental segments.
@@ -504,96 +502,39 @@ class ManifoldInitializer:
             ValueError: If ``num_branches`` is not 1 or 2.
 
         Note:
-            The chain is walked with :meth:`FixedPoint.advance_key`: ``+1`` for the
-            unstable manifold and ``-1`` for the stable one. The stable fundamental
-            segment is grown by the INVERSE map, which is why the orbit indices it
-            visits run ``0, p-1, ..., 1`` (the same order ``get_iterable_array
-            ("stable")`` produces).
-
-        Note:
-            For an inversion point the chain is now
-            ``(0, 0), (1, 0), ..., (p-1, 0), (0, 1), ..., (p-1, 1)``. The previous
-            implementation nested ``for orbit_index: for branch_index:`` and so
-            visited ``(0, 1)`` immediately after ``(0, 0)``, which is physically
-            wrong: the piece one map step after ``(0, 0)`` is ``(1, 0)``, and
-            ``(0, 1)`` only comes a full orbit later, after ``(p-1, 0)``.
-            Non-inversion points are unaffected -- the branch index never changes
-            there.
+            ONE ordering rule: each chain is ``k_value`` pieces walked with
+            :meth:`FixedPoint.advance_key`, ``+1`` for the unstable manifold and
+            ``-1`` for the stable one (grown by the INVERSE map, so its orbit
+            indices run ``0, p-1, ..., 1``). An inversion chain runs
+            ``(0, 0), (1, 0), ..., (p-1, 0), (0, 1), ..., (p-1, 1)`` (reversed for
+            the stable manifold) and so covers both branches.
         """
 
         if num_branches not in (1, 2):
             raise ValueError(f"num_branches must be 1 or 2, got {num_branches}")
 
-        orbit_indices = fixed_point.get_iterable_array(stability)
         step = 1 if stability == "unstable" else -1
-
-        if fixed_point.check_inversion():
-            # num_branches is not consulted here: the single chain of k_value
-            # pieces visits both branches whatever the caller asked for, and the
-            # only value that differs from that outcome is the default 1 -- so
-            # warning about it would fire on every ordinary call.
-            branch_indices = fixed_point.get_branch_array()  # always [0, 1]
-
-            initial_segments = {
-                (orbit_index, branch_index): None
-                for branch_index in branch_indices
-                for orbit_index in orbit_indices
-            }
-
-            segment = self.get_initial_fundamental_segment(fixed_point, 0, 0, stability)
-            initial_segments[(0, 0)] = segment
+        initial_segments: Dict[Tuple[int, int], BaseManifold] = {}
+        for branch_index in range(num_branches):
+            key = (fixed_point, stability, 0, branch_index)
+            if key[2:] in initial_segments:
+                continue  # an inversion chain already covers both branches
+            segment = self.get_initial_fundamental_segment(fixed_point, 0, branch_index, stability)
             segment.root = segment.first_node()
-
-            key = (fixed_point, stability, 0, 0)
+            initial_segments[key[2:]] = segment
             for _ in range(fixed_point.k_value - 1):
                 key = fixed_point.advance_key(key, step)
-                orbit_index, branch_index = key[2], key[3]
                 segment = self.machine.iterate_manifold(segment)
                 # iterate_manifold builds the image without a branch identity (it
                 # cannot advance the key itself); the chain walk knows it exactly.
                 segment.manifold_key = key
-                segment.branch_index = branch_index
-                initial_segments[(orbit_index, branch_index)] = segment
+                segment.branch_index = key[3]
+                initial_segments[key[2:]] = segment
                 self.machine._insert_point_geometrically(
-                    fixed_point.branch_points[orbit_index],
-                    segment.root,
-                    segment,
-                    branch_index,
+                    fixed_point.branch_points[key[2]], segment.root, segment, key[3]
                 )
 
-        else:
-            branch_indices = list(range(num_branches))
-
-            initial_segments = {
-                (orbit_index, branch_index): None
-                for branch_index in branch_indices
-                for orbit_index in orbit_indices
-            }
-
-            for b in branch_indices:
-                segment = self.get_initial_fundamental_segment(
-                    fixed_point, 0, b, stability
-                )
-                initial_segments[(0, b)] = segment
-                segment.root = segment.first_node()
-
-                key = (fixed_point, stability, 0, b)
-                for _ in range(fixed_point.period - 1):
-                    key = fixed_point.advance_key(key, step)
-                    orbit_index, branch_index = key[2], key[3]
-                    segment = self.machine.iterate_manifold(segment)
-                    segment.manifold_key = key
-                    segment.branch_index = branch_index
-                    initial_segments[(orbit_index, branch_index)] = segment
-                    self.machine._insert_point_geometrically(
-                        fixed_point.branch_points[orbit_index],
-                        segment.root,
-                        segment,
-                        branch_index,
-                    )
-
-        for dict_index in initial_segments:
-            orbit_index = dict_index[0]
-            initial_segments[dict_index].root = fixed_point.branch_points[orbit_index]
+        for (orbit_index, _branch), segment in initial_segments.items():
+            segment.root = fixed_point.branch_points[orbit_index]
 
         return initial_segments

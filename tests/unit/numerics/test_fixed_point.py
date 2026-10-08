@@ -156,15 +156,6 @@ def test_num_branches_needs_the_k_value():
         fp.num_branches
 
 
-def test_num_branches_agrees_with_get_branch_array():
-    for fp in (
-        _bare_fixed_point(1),
-        _bare_fixed_point(3),
-        _bare_fixed_point(2, inversion=True),
-    ):
-        assert fp.get_branch_array() == list(range(fp.num_branches))
-
-
 def test_both_eigendirection_slots_are_always_allocated():
     """A planar saddle has two eigendirections whether or not the chain uses both.
 

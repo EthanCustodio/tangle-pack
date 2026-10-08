@@ -339,20 +339,12 @@ def test_iterating_an_inversion_bridge_lands_on_the_other_branch(henon_inversion
     (it can contain more: the image arc may also cover bridges already there).
 
     The id, ``bridges_at`` and single-copy laws on this saddle run in
-    ``tests/invariants/test_law_bridges.py`` (case ``inversion``); a bridge
-    between the saddle's two coincident anchors (the known two-anchors issue)
-    is skipped here.
+    ``tests/invariants/test_law_bridges.py`` (case ``inversion``).
     """
     workbench, fp = henon_inversion
     bridges = workbench.create_bridges(fp)
-    registry = workbench.intersection_registry
-    proper = [
-        b
-        for b in bridges
-        if not b.partial
-        and registry[b.id[0]].unstable_cdist < registry[b.id[1]].unstable_cdist
-    ]
-    assert proper, "the inversion fixture must produce a non-degenerate bridge"
+    proper = [b for b in bridges if not b.partial]
+    assert proper, "the inversion fixture must produce a bridge"
 
     exact = 0
     checked = 0
@@ -382,3 +374,25 @@ def test_iterating_an_inversion_bridge_lands_on_the_other_branch(henon_inversion
 
     assert checked > 0, "no inversion bridge produced an identified child"
     assert exact > 0, "the derived image must reproduce at least one cut exactly"
+
+
+def test_iterating_an_anchor_rooted_inversion_bridge_cuts_identified_children(
+    henon_inversion,
+):
+    """INV-10: the image of a bridge leaving the inversion anchor starts at that same
+    anchor (one point on every branch, D4), so every child is identified and the
+    first one starts at the anchor -- the image is never left a partial piece."""
+    workbench, fp = henon_inversion
+    registry = workbench.intersection_registry
+    rooted = [
+        bridge
+        for bridge in workbench.create_bridges(fp)
+        if not bridge.partial and registry[bridge.id[0]].unstable_cdist == 0.0
+    ]
+    unstable = {key for key in workbench.manifolds if key[0] is fp and key[1] == "unstable"}
+    assert {bridge.manifold_key for bridge in rooted} == unstable
+
+    for bridge in rooted:
+        children = workbench.iterate_bridge(bridge)
+        assert children and all(child.id is not None for child in children), bridge.id
+        assert children[0].id[0] == bridge.id[0]

@@ -17,9 +17,13 @@ the ``inversion`` case of ``tests/invariants/``.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pytest
 
+from cases import build_k10_inversion
+from helpers.logs import assert_logged
 from tanglepack.numerics.ManifoldInitializer import _MIN_SEED_STEP
 
 
@@ -129,3 +133,35 @@ def test_one_map_step_scales_cdist_by_per_step_beta(henon_inversion, branch_inde
         assert ratio != pytest.approx(wrong, rel=0.5)
 
 
+# --------------------------------------------------------------------------- #
+# (d) one chain per eigendirection: no branch_index noise, orientation applies
+# --------------------------------------------------------------------------- #
+def test_growing_an_inversion_point_logs_no_branch_index_warning(
+    henon_inversion_initialized, caplog
+):
+    """INV-9: every branch index of an inversion point names its one chain, so the
+    default ``branch_index`` of ``grow_n_times`` is nothing to warn about."""
+    workbench, fp = henon_inversion_initialized
+    with caplog.at_level(logging.WARNING, logger="tanglepack.numerics.ManifoldMachine"):
+        workbench.grow_n_times(fp, "unstable", num_iterations=2)
+        workbench.grow_n_times(fp, "stable", num_iterations=2, branch_index=1)
+    assert_logged(caplog, logging.WARNING, "tanglepack.numerics.ManifoldMachine", count=0)
+
+
+def test_orient_eigenvectors_acts_on_an_inversion_point():
+    """INV-8: orienting chooses which half of each manifold is branch 0, under
+    inversion as without it."""
+    case = build_k10_inversion(through="fixed_point")
+    session, fp = case.session, case.fixed_point
+    unstable = np.asarray(fp.unstable_eigenvectors[0], dtype=float).ravel().copy()
+    stable = np.asarray(fp.stable_eigenvectors[0], dtype=float).ravel().copy()
+
+    session.orient_eigenvectors(fp, {"unstable": -unstable, "stable": -stable})
+
+    assert np.allclose(np.asarray(fp.unstable_eigenvectors[0], dtype=float).ravel(), -unstable)
+    assert np.allclose(np.asarray(fp.stable_eigenvectors[0], dtype=float).ravel(), -stable)
+    session.initialize_both_manifolds(fp)
+    anchor = np.asarray(fp.coordinates[0], dtype=float).ravel()
+    for stability, requested in (("unstable", -unstable), ("stable", -stable)):
+        points = session.workbench.manifolds[(fp, stability, 0, 0)].get_point_array()
+        assert float(np.dot(np.asarray(points[1], dtype=float).ravel() - anchor, requested)) > 0

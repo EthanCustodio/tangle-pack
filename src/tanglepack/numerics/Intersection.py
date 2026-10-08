@@ -187,7 +187,8 @@ class Intersection:
         Create an Intersection not backed by a detected segment crossing.
 
         Use this for:
-        - The periodic point itself (the anchor at cdist (0, 0) of a branch pair)
+        - The periodic point itself (the anchor at cdist (0, 0), one crossing of
+          every branch attached to it)
         - Manually specified turning points
         - Any crossing you want to declare programmatically
 
@@ -199,25 +200,27 @@ class Intersection:
             manifold_a_key: Key of the unstable branch this crossing sits on.
             manifold_b_key: Key of the stable branch this crossing sits on.
             unstable_manifold: The unstable curve this crossing sits on, when it
-                is known. An anchor sits on the root of its unstable branch and
-                passes it, so a bridge can be cut there exactly as at a detected
-                crossing; a hand-declared reference point leaves it None and is
-                skipped by ``create_bridges``.
+                is known. An anchor passes none: it lies on every unstable branch
+                of its point, and ``create_bridges`` cuts each one rooted there
+                at its own root.
             unstable_segment: The two adjacent points of ``unstable_manifold``
                 bracketing the crossing, in increasing canonical distance.
             crossing_sign: Handedness of the crossing (see the class docstring).
                 An anchor takes it from the oriented eigenvectors.
             stable_segment: The two adjacent nodes of the stable branch at the
-                crossing (an anchor passes its stable root and the node after).
+                crossing.
 
         Returns:
             An Intersection with ``seg_ids`` and ``id`` both None; the id is
             assigned by :meth:`IntersectionRegistry.add`.
 
         Note:
-            The keys matter for anchors: every branch anchor shares cdist
-            (0, 0), so the branch keys are what keeps them apart in the
-            registry's collision test.
+            The keys matter for anchors: the anchor of every point of a
+            periodic orbit sits at cdist (0, 0), so the fixed point and orbit
+            index of its keys are what keep them apart in the registry's
+            collision test. An anchor is stored under its HOME pair
+            ``(u(o, 0), s(o, 0))`` with that pair's crossing sign; branch 1 of
+            either stability leaves it the opposite way (D4).
         """
         return cls(
             coords=coords,
@@ -234,6 +237,11 @@ class Intersection:
         )
 
     # --- helpers ---
+    @property
+    def is_anchor(self) -> bool:
+        """A periodic point's own crossing: synthetic, at canonical distance (0, 0) (D4)."""
+        return self.seg_ids is None and self.unstable_cdist == 0.0 and self.stable_cdist == 0.0
+
     @property
     def is_synthetic(self) -> bool:
         """True if this intersection was not detected from crossing segments."""

@@ -12,10 +12,12 @@ Dev Notes:
 Ensure that the shape of the coordinates array is consisntent everywhere
 in the package. In this class it is (2, 1). I know in BasePoint it is (2,).
 
-Check how the unstable eigenvectors is implemented when it comes to points 
-with inversion. We may or may not need to store two vectors, the method
-we use elsewhere I think just takes the initial vector and maps it around
-k times so we don't need to be able to walk in both eigendirections likely.
+Eigenvectors under inversion (answered, WP3 2026-10-08): one vector per orbit
+point is enough. It orients branch 0; branch 1 of an inversion point is the
+second half of the same chain, reached by mapping the branch-0 seed around
+``k_value`` steps (``ManifoldInitializer.construct_kevin_way``), so it runs along
+the negated vector. ``orient_eigenvectors`` orients branch 0 and propagates it
+along the orbit exactly as without inversion.
 
 Specify why we store the partial_jacobians. What are they used for?
 """
@@ -23,7 +25,6 @@ Specify why we store the partial_jacobians. What are they used for?
 from __future__ import annotations
 
 from typing import Optional, Tuple
-from collections import deque
 
 import numpy as np
 from .BranchPoint import BranchPoint
@@ -512,43 +513,3 @@ class FixedPoint:
             return (fp, stability, position % self.period, position // self.period)
 
         return (fp, stability, (orbit_index + n) % self.period, branch_index)
-
-    def get_iterable_array(
-        self, stability: Stability, shift: int = 0
-    ) -> list[int]:
-        """
-        Construct a list of orbit indices based off the stability.
-        Starting at the zeroth index this is the order a manifold will move
-        between the indices of the fixed points
-
-        Ex:
-            unstable [0, 1, 2, 3]
-            stable [0, 3, 2, 1]
-
-        Parameters:
-            stability: The stability of the manifold.
-            shift: Amount to cyclically shift the resulting array
-                    "takes the last element and moves it to the front".
-                    This is equivalent to starting at another point in the cycle.
-        """
-
-        orbit_indices = [i for i in range(self.period)]
-        if stability == "stable":
-            temp = orbit_indices[1:]
-            orbit_indices = [0] + temp[::-1]
-
-        orbit_indices = deque(orbit_indices)
-        orbit_indices.rotate(shift)
-
-        return list(orbit_indices)
-
-    def get_branch_array(self) -> list[int]:
-        """
-        Get an array to iterate over the branch indices.
-
-        Returns:
-            list[int]: A list of branch indices [0] or [0, 1], depending on
-                whether the fixed point has inversion (see :attr:`num_branches`).
-        """
-
-        return list(range(self.num_branches))

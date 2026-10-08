@@ -26,7 +26,7 @@ from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
-def _ix(u: float, s: float, key=("u",), b_key=("s",)) -> Intersection:
+def _ix(u: float, s: float, key=("fp", "unstable", 0, 0), b_key=("fp", "stable", 0, 0)) -> Intersection:
     """A synthetic crossing at the given canonical distances."""
     return Intersection.synthetic(
         coords=(u, s),

@@ -257,9 +257,8 @@ class ManifoldMachine:
         fresh view.
 
         The walk starts one step BEHIND ``(0, b)`` so that the piece whose image
-        lands on orbit point 0 is iterated first; that is the order the previous
-        implementation produced via ``get_iterable_array(stability, shift=1)``, and
-        it keeps every piece growing by exactly one fundamental segment per call.
+        lands on orbit point 0 is iterated first; it keeps every piece growing by
+        exactly one fundamental segment per call.
 
         Args:
             fixed_point (FixedPoint): The fixed point whose manifolds are grown.
@@ -267,14 +266,14 @@ class ManifoldMachine:
                 pieces advance along the chain (+1 map step), stable pieces are
                 grown by the inverse map and so walk it backwards (-1).
             branch_index (int, optional): Which eigenvector branch to grow. None
-                grows every allocated branch. Ignored (with a warning) on an
-                inversion point, where a single chain already covers both branches.
+                grows every allocated branch. On an inversion point every branch
+                index names the same chain, which covers both branches.
 
         Note:
-            On an inversion point the previous implementation iterated each piece
-            once per branch index, mapping the same piece forward twice per orbit
-            step and discarding the result. One chain walk of ``k_value`` steps
-            covers both branches exactly once.
+            A branch index names an EIGENDIRECTION, and each one is a chain of
+            ``k_value`` pieces walked by ``advance_key``. An inversion chain
+            visits both branches, so it is walked once from branch 0 whatever is
+            asked.
 
         Raises:
             PointBudgetExceeded: If the step would create more than
@@ -284,17 +283,8 @@ class ManifoldMachine:
         step = 1 if stability == "unstable" else -1
 
         if fixed_point.check_inversion():
-            if branch_index is not None:
-                logger.warning(
-                    "branch_index is ignored for inversion points; "
-                    "both branches are grown together."
-                )
-            # a single chain of k_value pieces already visits both branches
             start_branches = [0]
         else:
-            # Without inversion each eigendirection is its own chain, so growing
-            # "every branch" means every direction that was initialized; the
-            # view lookup below skips the ones that were not.
             start_branches = [0, 1] if branch_index is None else [branch_index]
 
         with self._top_level_call():

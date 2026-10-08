@@ -31,7 +31,7 @@ logger.addHandler(logging.NullHandler())
 #: re-detection is bit-identical in practice (the same polylines); distinct
 #: crossings on one branch pair stay >= 4e-3 apart even at 11 k=2.8 blasts, while
 #: an absolute 1e-6 would merge deep ones. An anchor (cdists exactly 0.0) matches
-#: only another exact 0.0.
+#: only another exact 0.0 at the same periodic point.
 DEDUP_RTOL = 1e-9
 
 
@@ -50,9 +50,11 @@ class IntersectionRegistry:
     crosses on. Duplicates (a match on all four, cdists equal to
     :data:`DEDUP_RTOL`) are detected and deduped — the existing ID is returned rather than creating a
     second entry. The branch keys are required because canonical distance is
-    measured per branch: the periodic anchor of every branch sits at cdist (0, 0),
+    measured per branch: the anchor of every periodic point sits at cdist (0, 0),
     so cdist alone would wrongly merge the distinct anchors of a period-p orbit
-    into one. Branch keys are used rather than phase-space coordinates because the
+    into one. A periodic point is ONE anchor, on every branch attached to it
+    (D4), so at exactly (0, 0) two keys match when they name the same fixed
+    point and orbit index. Branch keys are used rather than phase-space coordinates because the
     coordinates are only approximate (drift under the nonlinear map), while the
     cdists and branch identity are exact/stable.
 
@@ -239,9 +241,9 @@ class IntersectionRegistry:
 
         The public face of the collision test :meth:`add` applies: a match needs
         both canonical distances equal to :data:`DEDUP_RTOL` AND both branch keys
-        equal.
+        equal (at ``(0, 0)``: the same periodic point).
         Use it to resolve a crossing you can describe but do not hold -- the
-        image of an anchor, say, which is the anchor of the next orbit branch and
+        image of an anchor, say, which is the anchor of the next orbit point and
         is fully specified by its ``(0, 0)`` cdists plus its two advanced keys.
 
         Args:
@@ -523,23 +525,32 @@ class IntersectionRegistry:
     def _consecutive_on_branch(
         self, stability: Stability
     ) -> list[tuple[int, int]]:
-        """Neighbouring id pairs within each branch, in that branch's cdist order."""
+        """Neighbouring id pairs within each branch, in that branch's cdist order.
+
+        An anchor is the first node of EVERY branch of its periodic point (D4),
+        whichever pair of keys it is stored under.
+        """
         order = (
             self._unstable_order if stability == "unstable" else self._stable_order
         )
         per_branch: dict[ManifoldKey, list[int]] = {}
+        anchors: dict[tuple, int] = {}
         for ix_id in order:  # already sorted by cdist, so each group inherits it
             ix = self._store[ix_id]
             key = ix.manifold_a_key if stability == "unstable" else ix.manifold_b_key
             if key is None:
                 continue  # no branch identity: it belongs to no arc
-            per_branch.setdefault(key, []).append(ix_id)
+            if ix.is_anchor:
+                anchors[key[0], key[2]] = ix_id
+            else:
+                per_branch.setdefault(key, []).append(ix_id)
 
-        return [
-            (ids[i], ids[i + 1])
-            for ids in per_branch.values()
-            for i in range(len(ids) - 1)
-        ]
+        pairs = []
+        for key, ids in per_branch.items():
+            anchor = anchors.get((key[0], key[2]))
+            ids = ids if anchor is None else [anchor, *ids]
+            pairs.extend(zip(ids, ids[1:]))
+        return pairs
 
     # ── iterate table ──────────────────────────────────────────────────────
 
@@ -778,9 +789,13 @@ class IntersectionRegistry:
         A duplicate must match on the two branches it crosses (manifold_a_key =
         unstable branch, manifold_b_key = stable branch) and on both canonical
         distances to :data:`DEDUP_RTOL`. The branch test is what keeps the
-        per-branch anchors apart: they all share cdist (0, 0) but lie on
-        different branches. Branch keys are exact discrete labels, and the
-        (approximate, drift-prone) phase-space coordinates are never read.
+        anchors of a period-p orbit apart: they all sit at cdist (0, 0) but on
+        the branches of different orbit points. At exactly (0, 0) only the fixed
+        point and orbit index of the two keys are compared, because a periodic
+        point is one crossing of all its branches (D4): the root segments of
+        branch pairs other than the anchor's own resolve to the anchor. Branch
+        keys are exact discrete labels, and the (approximate, drift-prone)
+        phase-space coordinates are never read.
 
         The unstable cdist is the prefilter: the sorted key array is bisected for
         the relative window around it, so an insert costs O(log N) plus the
@@ -790,6 +805,17 @@ class IntersectionRegistry:
         choice.
         """
         u, s = intersection.unstable_cdist, intersection.stable_cdist
+        # A periodic point is ONE crossing of every branch attached to it (D4):
+        # at exactly (0, 0) any two of its branches meet at its one anchor.
+        at_anchor = u == 0.0 and s == 0.0
+
+        def branches(crossing: Intersection) -> tuple:
+            keys = (crossing.manifold_a_key, crossing.manifold_b_key)
+            if at_anchor and None not in keys:
+                return tuple((key[0], key[2]) for key in keys)
+            return keys
+
+        own = branches(intersection)
         lo = bisect.bisect_left(self._unstable_keys, u - DEDUP_RTOL * abs(u))
         hi = bisect.bisect_right(self._unstable_keys, u + DEDUP_RTOL * abs(u))
         matches = (
@@ -797,8 +823,7 @@ class IntersectionRegistry:
             for candidate_id in self._unstable_order[lo:hi]
             if _close(self._store[candidate_id].unstable_cdist, u)
             and _close(self._store[candidate_id].stable_cdist, s)
-            and self._store[candidate_id].manifold_a_key == intersection.manifold_a_key
-            and self._store[candidate_id].manifold_b_key == intersection.manifold_b_key
+            and branches(self._store[candidate_id]) == own
         )
         return min(matches, default=None)
 

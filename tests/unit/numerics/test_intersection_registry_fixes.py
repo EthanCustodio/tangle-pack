@@ -136,3 +136,30 @@ def test_iterate_table_is_a_partial_bijection() -> None:
     with pytest.raises(AssertionError):
         registry.register_iterate(b, 1, a)
     assert registry.iterate_table[c, -1] == b
+
+
+# ── WP3: a periodic point is ONE anchor of every branch attached to it ─────
+
+
+def test_a_periodic_point_is_one_anchor_of_all_its_branches() -> None:
+    """D4: at exactly (0, 0) a crossing of any two branches of one periodic point IS
+    its anchor (the root segments of the other branch pairs detect it there); the
+    anchor of another point of the orbit stays distinct."""
+    fp = bare_fixed_point(2, inversion=True, beta=1 / 3)
+    registry = IntersectionRegistry()
+
+    def at_point(orbit_index: int, unstable_branch: int, stable_branch: int) -> int:
+        return registry.add_synthetic(
+            (0.0, 0.0),
+            0.0,
+            0.0,
+            manifold_a_key=(fp, "unstable", orbit_index, unstable_branch),
+            manifold_b_key=(fp, "stable", orbit_index, stable_branch),
+        )
+
+    anchor = at_point(0, 0, 0)
+    assert {at_point(0, u, s) for u in (0, 1) for s in (0, 1)} == {anchor}
+    other = at_point(1, 0, 0)
+    assert other != anchor
+    assert at_point(1, 1, 1) == other
+    assert len(registry) == 2

@@ -513,6 +513,11 @@ class TangleWorkbench:
 
         Input like:
             approx_dirs = {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
+
+        Note:
+            The directions orient branch 0 at orbit point 0 and are propagated
+            along the orbit. On an inversion point they choose which half of
+            each manifold is branch 0; branch 1 runs the other way.
         """
 
         self._man_maker.orient_manifolds(fixed_point, approx_dirs)
@@ -528,10 +533,10 @@ class TangleWorkbench:
             stability: Which manifold to initialize.
             num_branches: How many EIGENDIRECTIONS to seed, 1 or 2. This is a
                 request, not a property of the fixed point: a simple saddle has
-                two unstable directions and the caller may want both. It is
-                ignored on an inversion point, where the single chain of
-                ``k_value`` pieces already covers both branches
-                (``FixedPoint.num_branches`` is 2 there).
+                two unstable directions and the caller may want both. On an
+                inversion point the single chain of ``k_value`` pieces seeded
+                on branch 0 already covers both branches
+                (``FixedPoint.num_branches`` is 2 there), so 2 adds nothing.
 
         Returns:
             The initial segments, keyed by ``(orbit_index, branch_index)``.
@@ -807,11 +812,10 @@ class TangleWorkbench:
             PointBudgetExceeded: As :meth:`grow_n_times`.
         """
         self._require_manifold(fixed_point, stability, branch_index)
-        growth_branch = None if fixed_point.check_inversion() else branch_index
 
         for step in range(1, max_iterations + 1):
-            self.grow_n_times(fixed_point, stability, 1, growth_branch)
-            stats = self.growth_stats(fixed_point, stability, growth_branch)
+            self.grow_n_times(fixed_point, stability, 1, branch_index)
+            stats = self.growth_stats(fixed_point, stability, branch_index)
             if stats.max_abs_coord > radius:
                 return step
 
@@ -954,9 +958,8 @@ class TangleWorkbench:
             max_iterations: Growth rounds to attempt before giving up. Defaults
                 to 10, matching :meth:`grow_until_turnaround`.
             branch_index: Which eigenvector branch to grow. Defaults to 0. On an
-                INVERSION point it is ignored (one chain covers both branches) and
-                ``None`` is forwarded to :meth:`grow_n_times` so the per-round
-                "branch_index is ignored" warning is not emitted ten times.
+                INVERSION point every branch index names the one chain, which
+                covers both branches.
 
         Returns:
             The number of growth rounds performed: 0 when the predicate was
@@ -995,10 +998,6 @@ class TangleWorkbench:
                     "initialized. Please run initialize_manifold first."
                 )
 
-        # An inversion point's two branches are one chain; passing a branch index
-        # would only earn a warning from ManifoldMachine on every single round.
-        growth_branch = None if fixed_point.check_inversion() else branch_index
-
         if predicate(self):
             return 0
 
@@ -1006,7 +1005,7 @@ class TangleWorkbench:
 
             for stability in stabilities:
                 self.grow_n_times(
-                    fixed_point, stability, num_iterations=1, branch_index=growth_branch
+                    fixed_point, stability, num_iterations=1, branch_index=branch_index
                 )
 
             self.compute_intersections(
@@ -1251,17 +1250,12 @@ class TangleWorkbench:
             immediate 0 or the cap.
 
         Note:
-            An ANCHOR never closes, but that is a limitation of the arrangement's
-            anchor model rather than a fact about periodic points. A periodic point
-            is one degree-four node whose ``u-`` and ``s-`` rays are the OTHER
-            branch's ``u+`` and ``s+``;
-            :meth:`_register_anchors` instead registers one anchor per (unstable
-            branch, stable branch) pair, and the arrangement has no notion of a
-            branch continuing THROUGH a node, so those two slots are filled with
-            virtual stubs and every face through one of them is open. That is the
-            deferred item recorded in the "Inversion caveat" Dev Note of
-            :mod:`tanglepack.topology.Arrangement`; until it is closed, asking for
-            an anchor's faces runs to the cap.
+            A crossing on the outer envelope never closes, the inversion anchor
+            included (one degree-4 node of its four branches, D4): that is a
+            fact about where it sits, not a missing growth step. A
+            non-inversion anchor seeded on one eigendirection keeps virtual
+            ``u-`` / ``s-`` stubs (the other half of each manifold is not
+            computed), so its faces through them are open as well.
         """
         from ..topology.Trellis import Trellis
 
@@ -1536,95 +1530,63 @@ class TangleWorkbench:
 
     def _register_anchors(self, fixed_points: Iterable[FixedPoint]) -> list[int]:
         """
-        Declare every periodic point as a crossing of its own two manifolds.
+        Declare every periodic point as a crossing of its own manifolds.
 
         A periodic point sits at canonical distance 0 on every branch attached to
-        it, so it IS a crossing of each of its unstable branches with each of its
-        stable branches -- the ``(0, 0)`` anchor the topological layer treats as
-        the innermost node of a branch. Until now that crossing appeared only by
-        accident, when the two fundamental segments happened to be detected as an
-        rtree pair; declaring it makes it a fact of the model rather than a
-        by-product of the index.
+        it, so it IS a crossing -- the ``(0, 0)`` anchor the topological layer
+        treats as the innermost node of every one of those branches. It is ONE
+        crossing (D4): at an inversion point the two stable and two unstable
+        branches all meet there, and the arrangement draws it as one degree-4
+        node.
 
         Anchors are registered BEFORE :meth:`Tangle.resolve_crossings`, so:
 
-        * they take the lowest registry ids, deterministically ordered by the
-          manifold insertion order rather than by whatever order the rtree
+        * they take the lowest registry ids, deterministically ordered by fixed
+          point and orbit index rather than by whatever order the rtree
           returned its candidate pairs;
-        * the accidentally detected crossing at the same place collides with the
-          anchor in :meth:`IntersectionRegistry.add` (same ``(0, 0)`` cdists,
-          same two branch keys) and is dropped in its favour -- one crossing, not
-          two, and the id belongs to the declared one.
+        * the root segments detected crossing there collide with the anchor in
+          :meth:`IntersectionRegistry.add` (exactly ``(0, 0)`` at the same
+          periodic point) and are dropped in its favour -- one crossing, and the
+          id belongs to the declared one, which ``preserve_ids`` relies on.
 
-        Purging the detected copy afterwards instead would work equally well
-        geometrically but would leave the anchor's id dependent on detection
-        order, which is exactly what ``preserve_ids`` has to be able to rely on.
-
-        The anchor carries the same cut geometry a detected crossing carries --
-        its unstable branch's root and the node after it -- so
-        :meth:`Tangle.create_bridges` cuts at it exactly as before and the bridge
-        set is unchanged.
+        The anchor is stored under its HOME pair ``(u(o, 0), s(o, 0))`` with
+        that pair's crossing sign; branch 1 of either stability leaves it the
+        opposite way. It carries no curve of its own:
+        :meth:`Tangle.create_bridges` cuts every unstable branch rooted at the
+        point at that branch's root.
 
         Args:
             fixed_points: The fixed points whose periodic points to anchor.
 
         Returns:
-            The registry ids of the anchors, in registration order.
-
-        Note:
-            One anchor is registered per (unstable branch, stable branch) pair
-            meeting at each periodic point. For a point without inversion that is
-            the single pair (branch 0, branch 0). An inversion point has two
-            branches of each manifold and so gets FOUR anchors at one coordinate,
-            which keeps every branch anchored but is not the topologically right
-            model -- the four rays leaving an inversion point form ONE degree-4
-            node. See the Dev Notes in
-            :mod:`tanglepack.topology.Arrangement`.
+            The registry ids of the anchors, in registration order. A point
+            whose branch-0 manifolds are missing or have fewer than two nodes
+            gets none.
         """
         registry = self._intersection_registry
         anchor_ids: list[int] = []
         for fp in fixed_points:
-            unstable = self._branch_items(fp, "unstable")
-            stable = self._branch_items(fp, "stable")
-            for u_key, u_manifold in unstable:
-                u_nodes = u_manifold.get_point_array(return_nodes=True)
-                if len(u_nodes) < 2:
-                    logger.debug(
-                        "No anchor on %s: the branch has fewer than two nodes",
-                        u_key,
-                    )
+            for orbit_index in range(fp.period):
+                u_key = (fp, "unstable", orbit_index, 0)
+                s_key = (fp, "stable", orbit_index, 0)
+                if u_key not in self.manifolds or s_key not in self.manifolds:
                     continue
-                for s_key, s_manifold in stable:
-                    if s_key[2] != u_key[2]:
-                        continue  # a different point of the periodic orbit
-                    s_nodes = s_manifold.get_point_array(return_nodes=True)
-                    if len(s_nodes) < 2:
-                        continue
-                    coords = u_nodes[0].get_point()
-                    anchor = Intersection.synthetic(
-                        coords=(float(coords[0]), float(coords[1])),
-                        unstable_cdist=0.0,
-                        stable_cdist=0.0,
-                        label="anchor",
-                        manifold_a_key=u_key,
-                        manifold_b_key=s_key,
-                        unstable_manifold=u_manifold,
-                        unstable_segment=(u_nodes[0], u_nodes[1]),
-                        stable_segment=(s_nodes[0], s_nodes[1]),
-                        crossing_sign=self._anchor_crossing_sign(u_nodes, s_nodes),
-                    )
-                    anchor_ids.append(registry.add(anchor))
+                u_nodes = self.manifolds[u_key].get_point_array(return_nodes=True)
+                s_nodes = self.manifolds[s_key].get_point_array(return_nodes=True)
+                if len(u_nodes) < 2 or len(s_nodes) < 2:
+                    continue
+                coords = u_nodes[0].get_point()
+                anchor = Intersection.synthetic(
+                    coords=(float(coords[0]), float(coords[1])),
+                    unstable_cdist=0.0,
+                    stable_cdist=0.0,
+                    label="anchor",
+                    manifold_a_key=u_key,
+                    manifold_b_key=s_key,
+                    crossing_sign=self._anchor_crossing_sign(u_nodes, s_nodes),
+                )
+                anchor_ids.append(registry.add(anchor))
         return anchor_ids
-
-    def _branch_items(
-        self, fp: FixedPoint, stability: Stability
-    ) -> list[tuple[ManifoldKey, BaseManifold]]:
-        """The ``(key, manifold)`` pairs of one fixed point's branches."""
-        return [
-            (key, manifold)
-            for key, manifold in self.manifolds.items()
-            if key[0] is fp and key[1] == stability
-        ]
 
     @staticmethod
     def _anchor_crossing_sign(u_nodes: list, s_nodes: list) -> int:
@@ -1634,10 +1596,9 @@ class TangleWorkbench:
         The eigendirections are read off the fundamental segments rather than off
         ``FixedPoint``: the initializer lays each fundamental segment along the
         oriented eigenvector, so the first node-to-node step IS that eigenvector
-        -- and, unlike the stored eigenvector, it already carries the sign of the
-        branch it belongs to, which is what an inversion point's second branch
-        needs (there the two branches run along opposite eigendirections and one
-        stored vector cannot describe both).
+        -- the one of branch 0, the anchor's home pair. Branch 1 of either
+        stability runs the other way, so each branch index other than 0 flips
+        the sign of a pair (``cross(-u, s) = -cross(u, s)``).
 
         Args:
             u_nodes: The unstable branch's nodes, root first.
