@@ -77,8 +77,8 @@ From the audit; the details and evidence are in `open_issues.md`.
 | Stage | Divergence | Issue | WP |
 |---|---|---|---|
 | 1 | Four coincident anchors at an inversion point | INV-1 | WP3 |
-| 2 | Iterate table filled by a 5% cdist heuristic, never after a blast | INT-6, BCG-3 | WP2 |
-| 4 | Lap factor λ_u instead of β^k | INV-2 | WP2 |
+| 2 | Iterate table filled by a 5% cdist heuristic, never after a blast | INT-6, BCG-3 | fixed (WP2) |
+| 4 | Lap factor λ_u instead of β^k | INV-2 | fixed (WP2) |
 | 4 | Missing table links leave branches without holes | PK-3 | WP5 |
 | 5-6 | Holes and rows read from polyline geometry, not signs | INT-3 | WP4 |
 | 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | WP6 |

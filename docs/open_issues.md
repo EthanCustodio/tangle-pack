@@ -47,7 +47,7 @@ This cascades:
 **Evidence:** `src/tanglepack/numerics/TangleWorkbench.py:1537-1616` (:1574-1599, filter :1598, docstring :1575-1580); `src/tanglepack/numerics/Tangle.py:9-16`; `src/tanglepack/numerics/Tangle.py:1050-1072` (`_both_anchors`); `src/tanglepack/topology/Arrangement.py:80-88`; `src/tanglepack/topology/BridgeClass.py:748-758`; `tests/cases.py:796-815`; `tests/conftest.py:99-104`; `docs/regions_bridge_identity_and_cleanup_plan.md:334-337`; `stress/numerics/report/report.tex:2012-2014`; probe `inv_probe.py` (zone+1 blast: `new1 b u^-1 c^-1` vs walk `h u^-1 c^-1`)
 
 ### INV-2: Pseudoneighbor uses bare λ_u as the branch-return factor (should be β^k_value = λ_u²)
-**Status:** open, confirmed by probe | **Severity:** high | **Related:** SIMP-3, INV-4 | **WP:** WP2
+**Status:** closed (WP2) | **Severity:** high | **Related:** SIMP-3, INV-4 | **WP:** WP2
 
 - `_resolve_reference_end` scales by `/lambda_u` and `*lambda_u`.
 - `_unstable_interval_is_clear` uses `c*lambda_u**m` per k-step lap, with `log(lambda_u)` for the m-range.
@@ -61,6 +61,8 @@ A lap is k_value = 2·period steps, which is β^k = λ_u². Patching this in mem
 
 The current fixture never reaches this code because it has no pairs. `TrellisBranch.eigenvalue` and `IntersectionRegistry.on_interval` have the same defect.
 
+**WP2:** the all-iterates check laps by `per_step_beta("unstable") ** k_value`, and r_{n+p} is the table's `M^k(r_n)` (the λ_u cdist fallback is gone). The inversion law cases have 1 / 9 / 9 holes at 0 / 1 / 2 blasts.
+
 **Evidence:** `src/tanglepack/topology/Pseudoneighbor.py:51-60` (OPEN Dev Note), `:491-492`, `:551`, `:571-576`; `src/tanglepack/topology/TrellisBranch.py:79`; `src/tanglepack/numerics/IntersectionRegistry.py:656`; `docs/regions_bridge_identity_and_cleanup_plan.md:330`; probe `inv_probe.py`
 
 ### INV-3: An anchor-only stable branch at 4-5 steps raises AssertionError "owned by 0 partition elements" (WP4-B)
@@ -73,7 +75,7 @@ The current fixture never reaches this code because it has no pairs. `TrellisBra
 ### INV-4: No usable inversion fixture: the k=10 saddle escapes, has no pseudoneighbors and no holes, so most laws are N/A
 **Status:** closed (WP1) | **Severity:** high | **Related:** INV-2, INV-11, TEST-1, DEC-4 | **WP:** WP1
 
-**WP1:** the k=4 other-root saddle is the law case `inversion` at 0, 1 and 2 blasts (`tests/cases.py` `build_inversion`); the k=10 saddle survives as the numerics fixture `build_k10_inversion`. Holes are 1 / 7 / 0: the 0 at two blasts is INV-2 (with the lap factor patched to β^k they are 1 / 9 / 9), so the vacuous laws there are strict xfails naming WP2.
+**WP1:** the k=4 other-root saddle is the law case `inversion` at 0, 1 and 2 blasts (`tests/cases.py` `build_inversion`); the k=10 saddle survives as the numerics fixture `build_k10_inversion`. Holes were 1 / 7 / 0 (the 0 was INV-2); they are 1 / 9 / 9 since WP2, and the vacuous-law xfails are gone.
 
 `build_inversion` grows k=10 to 6/5 steps:
 - 7 steps raises PointBudgetExceeded, and points jump from 196 to 49,417 between steps 5 and 6. The window between "too shallow" and "escaped" is one step wide.
@@ -212,9 +214,11 @@ If the pip's iterates are not registered on all branches, the windows on the rem
 **Evidence:** `src/tanglepack/topology/Pseudoneighbor.py:444-450`
 
 ### PK-7: Crossings with `manifold_a_key is None` are tested at every cycle residue (can reject a true pair)
-**Status:** possibly stale — verify | **Severity:** low | **Related:** SIMP-12, DOC-3 | **WP:** WP2
+**Status:** closed (WP2) | **Severity:** low | **Related:** SIMP-12, DOC-3 | **WP:** WP2
 
 Verified 2026-10-07: blast children carry their key (`BridgeIterator.py:334-335`, `:388`), and `Tangle._key_of` asserts a key on every unstable curve. So the `None` branches look dead, not conservative. The Dev Notes still say "legitimately None".
+
+**WP2:** confirmed dead on every builder; `Tangle._key_of` now asserts a key on every curve and the None-key branches (Pseudoneighbor residues, StrongPip, BridgeClass, IterateInference) and their Dev Notes are deleted.
 
 **Evidence:** `src/tanglepack/topology/Pseudoneighbor.py:84-93, 561-567, 591`; `src/tanglepack/topology/StrongPip.py:84-87, 232`; `src/tanglepack/numerics/IterateInference.py:89-94, 254-361`; `src/tanglepack/numerics/Tangle.py:220-228`
 
@@ -325,11 +329,13 @@ The parent's `_image_chain` does contain (61,62), and the author's rule ("the im
 **Evidence:** `src/tanglepack/topology/BridgeClass.py:636-647, 706, 842-875` (:863-866); E11 p3 `n_inert` 1,1,1,2,3,…,13 over blasts 6..20; probe `probe_p3.py`; `CLAUDE.md` "a loop with no registered ancestor stands alone"
 
 ### BCG-3: Blasts never re-run registry-wide iterate inference, so interior image crossings stay unlinked
-**Status:** open, confirmed by probe | **Severity:** high | **Related:** BCG-2, INT-6, PK-3 | **WP:** WP2
+**Status:** closed (WP2) | **Severity:** high | **Related:** BCG-2, INT-6, PK-3 | **WP:** WP2
 
 - `iterate_bridge` only calls `register_endpoint_iterates`.
 - `infer_iterates` runs only inside `compute_intersections`.
 - The recipe calls it once before the blasts, and `Blast.py` never calls it.
+
+**WP2:** the root cause was twofold: the endpoint path's ABSOLUTE map gate `1e-3 * max(1, |f|)` rejected the six true links (`|f(x) - y|` = 1.2e-3 .. 3.5e-3 on ~1e-2 segments), and no registry-wide pass ran after a blast. The exact bracket rule with a segment-scale gate now runs in every `iterate_bridge` and at the end of every blast; after `build_period3(blasts=10)` a further `infer_iterates()` records 0 (regression `test_iterates_after_blasts`), and three more near-anchor links the 5% window missed are found.
 
 Example: p3 crossing 61's true preimage 54 matches to 0.3-0.5% but `iterate(54,1)=None`. Running `session.workbench.infer_iterates()` after `build_period3(blasts=10)` adds 6 links: 31→29 classes and 2→0 standalone loops (another run: 29/27 active → 28/24 active).
 
@@ -423,18 +429,22 @@ Fix: widen the slice to at least 3 points.
 **Evidence:** `src/tanglepack/topology/StablePartition.py:794-795`
 
 ### INT-6: The iterate table is filled by a 5% relative-cdist heuristic, not registered exactly when a crossing is created
-**Status:** open | **Severity:** medium | **Related:** BCG-3, NUM-8, SIMP-3 | **WP:** WP2
+**Status:** closed (WP2) | **Severity:** medium | **Related:** BCG-3, NUM-8, SIMP-3 | **WP:** WP2
 
 `infer_iterates` uses `cdist_rtol=0.05` and has no map gate (a 1e-3 phase-space gate exists only on the endpoint path). Deep blasts put real crossings much closer than 5%, so two crossings can be mis-linked, and pips, pairs, holes and chains all trust the link as exact. The topology re-implements the scaling fallback three more times.
 
 The machine already links each mapped point to its image, but refined points cache only a preiterate. So exact registration is a numerics change, not a tweak.
 
+**WP2:** each crossing records both brackets (`unstable_segment`, `stable_segment`); y = M(x) iff y is on the advanced branches and both its brackets meet x's carried one step by the manifolds' own `stretch_param`, uniquely, confirmed by the real map within the image of x's unstable segment plus y's own (one batched call per pass). No 5% window, no absolute gate. No mis-link was ever observed; the old rule's harm was missed links. Topology's own matchers (`_iterate_intersection`, `_resolve_reference_end`) are gone.
+
 **Evidence:** `src/tanglepack/numerics/IterateInference.py:119, 151, 436`; `src/tanglepack/numerics/ManifoldMachine.py:372-374, 878-899`; `src/tanglepack/topology/Pseudoneighbor.py` (`_iterate_intersection` `match_rtol 0.05`, `:491`); `StablePartition._backward_endpoint`
 
 ### INT-7: Crossing identity is re-derived by tolerance matching on every `compute_intersections`; ids are not reproducible
-**Status:** open | **Severity:** medium | **Related:** NUM-8, API-1 | **WP:** WP2
+**Status:** answered (WP2); id reproducibility deferred to WP8 | **Severity:** medium | **Related:** NUM-8, API-1 | **WP:** WP2
 
 The registry is replaced and `reindex_from` re-matches by `cdist_tol` (absolute 1e-6). `Tangle` keys segment edges on `id()`, so ids differ between builds in one process. `ResonanceZone` re-finds ids by tolerance (`_live_id`, `_anchor_id`), and `reindex_from`'s remap is never consumed. Crossing identity is really combinatorial: segment pair plus ordinal along each ray.
+
+**WP2:** exact iterate registration does NOT make `reindex_from` unnecessary: `compute_intersections` replaces the registry, and only the rematch gives a re-detected crossing its old id. Every rematch on every builder is a bit-identical re-detection, so it stays correct under the relative dedup. Ids are not reproducible because `Tangle.resolve_crossings` registers in the iteration order of a `set` of segment-id pairs (`Tangle.py:265`); sorting by `(keys, unstable_cdist)` first is ~3 lines but renumbers every crossing and the id-based fixture facts, so it belongs with WP8's identity work.
 
 **Evidence:** `src/tanglepack/numerics/IntersectionRegistry.py:241-330, 863`; `src/tanglepack/topology/Trellis.py:24-30`; `docs/dual_graph_symbolic_dynamics_plan.md:324`; `.refactor/knowledge/testing.md` ("Registry ids are NOT reproducible")
 
@@ -487,7 +497,7 @@ Same rule, possibly two answers.
 **Evidence:** `src/tanglepack/topology/Trellis.py:42-105, 128, 143, 1315-1440`; `src/tanglepack/topology/DualWalk.py:270-380`; `src/tanglepack/topology/DualGraph.py:932-956`
 
 ### SIMP-3: Cdist scaling is implemented several ways; `scale_cdist` is unused
-**Status:** open | **Severity:** low | **Related:** INV-2, INT-6 | **WP:** WP2
+**Status:** closed (WP2) | **Severity:** low | **Related:** INV-2, INT-6 | **WP:** WP2
 
 - `scale_cdist` divides by the unstable β for stable cdists. Verified 2026-10-07: its only reference is its own docstring.
 - `_scaled_image_cdist` uses `per_step_beta(stability)`.
@@ -496,6 +506,8 @@ Same rule, possibly two answers.
 - `land_element` scales the open end by `per_step_beta('stable')`.
 
 `Trellis.lambda_u` and `TrellisBranch.eigenvalue` are extra accessors; the latter has 0 uses and a wrong docstring. `image_cdist` should be the one path.
+
+**WP2:** a crossing is moved only by `Trellis.image_cdist`, a bare distance with no crossing only by `FixedPoint.per_step_beta` (`_backward_endpoint`, `land_element`'s unbounded end); nothing in topology reads an eigenvalue (`scale_cdist`, `lambda_u`, `TrellisBranch.eigenvalue`, `IntersectionRegistry.on_interval` / `_get_lambda_u` deleted; the orientation fallback reads `FixedPoint.preserves_orientation`).
 
 **Evidence:** `src/tanglepack/topology/Trellis.py:679-763` (:690, :725); `src/tanglepack/topology/StablePartition.py:1744-1768`; `src/tanglepack/topology/Pseudoneighbor.py:491, 551-576`; `src/tanglepack/topology/TrellisBranch.py:72-84`; `src/tanglepack/topology/DualWalk.py:330-334`
 
@@ -573,6 +585,8 @@ Active letters can reach `u` after 20 classes, and E11 reaches `bw`/`cz`.
 - `get_iterable_array`
 - the `manifold_a_key is None` branches
 
+WP2 removed `Trellis.scale_cdist`, `_get_lambda_u`, `IntersectionRegistry.on_interval`, `TrellisBranch.eigenvalue` and the `manifold_a_key is None` branches.
+
 **Evidence:** `tests/conftest.py:85-93`; `src/tanglepack/numerics/IterateTable.py:81, 98, 107`; `src/tanglepack/numerics/IntersectionRegistry.py:792, 800`; `src/tanglepack/topology/SymbolicDynamics.py:167, 787`; `src/tanglepack/topology/TrellisBranch.py:72, 96`; `src/tanglepack/topology/BridgeClass.py:410`; `src/tanglepack/loom/Blast.py:178`; `src/tanglepack/topology/Trellis.py:24-30, 690`; `docs/dual_graph_symbolic_dynamics_plan.md:326`
 
 ### SIMP-13: Tolerance and warning density
@@ -641,9 +655,11 @@ Reference cells peak at 0.0514 (median 1.2e-5). The excess falls on the first bl
 **Evidence:** `stress/numerics/report/report.tex:1625-1633, 1716-1719, 2037-2040`; `stress/numerics/report/numbers.tex:384-394`
 
 ### NUM-8: The registry `cdist_tol` is an absolute 1e-6, so dedup can merge distinct deep crossings
-**Status:** open | **Severity:** low | **Related:** INT-6, INT-7 | **WP:** WP2
+**Status:** closed (WP2) | **Severity:** low | **Related:** INT-6, INT-7 | **WP:** WP2
 
 68% of consecutive k28 gaps fall below it by blast 14, and it caused E11 error 1. The fix is a relative tolerance. The near-ULP vs exact merge dedup question is also undecided.
+
+**WP2:** dedup is relative, `DEDUP_RTOL = 1e-9` (every registry collision on every builder, k28 at 11 blasts included, is a bit-identical re-detection; the closest distinct same-key pair is 4e-3 apart; an anchor matches only an exact 0.0). `cdist_tol` stays as the topology's absolute slack (its ~86 consumers are SIMP-13, WP11).
 
 **Evidence:** `src/tanglepack/numerics/IntersectionRegistry.py:85-95`; `src/tanglepack/topology/StablePartition.py:200-206`; `stress/numerics/report/report.tex:1645-1649, 2003-2005`
 
@@ -1001,15 +1017,17 @@ Each strict xfail below is a `cases.KNOWN_ISSUES` entry naming the WP that turns
 
 | Law | Cases that xfail | WP |
 |---|---|---|
-| `cross_side_only_within_a_branch` (D4; replaces `itinerary_pairs_same_side`) | inversion, inversion_two_blasts | WP3 (INV-6) |
+| `cross_side_only_within_a_branch` (D4; replaces `itinerary_pairs_same_side`) | inversion (inversion_two_blasts passes since WP2) | WP3 (INV-6) |
 | `every_active_class_walks` (D3) | none (not applicable on p3 and k28_one_blast: singleton words) | — |
 | `no_virtual_class` (D3) | inversion, inversion_one_blast, inversion_two_blasts | WP3 (INV-1/INV-6) |
 | `alphabet_inside_minimal_trellis` (D2) | inversion, inversion_one_blast, inversion_two_blasts | WP6 (BCG-1) |
-| `series_class_count_never_decreases` (D1) | inversion_series | WP2 (INV-2) |
-| `series_class_count_constant_while_holes_constant` (D1, D2) | k28_series, p3_series; inversion_series | WP6 (BCG-1/2); WP2 (INV-2) |
+| `series_class_count_never_decreases` (D1) | none (WP2) | — |
+| `series_class_count_constant_while_holes_constant` (D1, D2) | k28_series, p3_series | WP6 (BCG-1/2) |
 | `series_alphabet_inside_minimal_trellis` (D2) | k28_series, p3_series, inversion_series | WP6 (BCG-1) |
 | `three_tangles_take_three_families` (TEST-5(c)) | hand_built | WP9 |
 
 The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases `one_anchor_per_unstable_branch`, `arrangement_euler`, `anchor_bridge_class_leads_its_tangle`, `partition_singletons` and `stable_nodes_never_own_a_singleton` (WP3, INV-1), `arrangement_regions_disjoint` (WP10, NUM-16) and, on `inversion_two_blasts`, the 15 hole-dependent laws that are vacuous with 0 holes (WP2, INV-2); on `nested_inner_blasts` `arrangement_regions_sound` and `arrangement_regions_disjoint` (WP10, NUM-16). WP2 must add `stable_nodes_never_own_a_singleton` on `inversion_two_blasts` (WP3) once holes appear there.
+
+**WP2** (KNOWN_ISSUES 52 -> 34): with the β^k lap the 15 vacuous hole laws and the two `inversion_series` entries XPASSed and were removed, as were `anchor_bridge_class_leads_its_tangle` and `cross_side_only_within_a_branch` on `inversion_two_blasts` (WP3 tags; both still xfail on `inversion`). It added `stable_nodes_never_own_a_singleton` x `inversion_two_blasts` (INV-1, WP3); `partition_singletons` x `inversion_two_blasts` is no longer vacuous and shares that entry. WP2 also added the crossing-layer laws `iterate_table_partial_bijection`, `iterate_links_pass_the_map_gate` and `iterate_table_complete` (pass on every law case).
 
 Verification of the "possibly stale" items (WP0): DOC-3 is confirmed open (the MinimalTrellis "definition is changing", TrellisBranch `return_period`, ResonanceZone "no inversion example", PartitionFamily "concurrent edit" and StrongPip "legitimately None" notes are all still present). PK-7 is confirmed dead code (WP2 deletes it). INV-10, NUM-19 and DOC-4 need a run; they are checked by the WP that owns them.

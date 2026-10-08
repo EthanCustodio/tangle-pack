@@ -105,3 +105,23 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   the analytic seed reproduces it, the `(4,-4)` seed does not). Still tolerant by design:
   `Trellis.image_of_element` and `DualWalk._end_tolerance` (estimated cdists). Open: a relative
   `cdist_tol` for deduplication (a numerics question).
+
+## Open-issues round WP2 (2026-10-08, branch `oi/wp02-exact-iterates`)
+
+- Scaling rule: a crossing is moved only by `Trellis.image_cdist` (table first, then
+  `advance_key` / `per_step_beta`); a bare distance with no crossing behind it only by
+  `FixedPoint.per_step_beta` (`StablePartition._backward_endpoint`, `land_element`'s unbounded
+  end keep it by design). Nothing in topology reads an eigenvalue: `Trellis.lambda_u`,
+  `Trellis.scale_cdist`, `TrellisBranch.eigenvalue` are gone, the orientation fallback reads
+  `FixedPoint.preserves_orientation`.
+- Pseudoneighbor (INV-2): a branch return is `k_value` map steps and laps a cdist by
+  `beta ** k_value` (lambda_u squared under inversion, not lambda_u). r_{n+p} and every
+  trajectory image are `Trellis.iterate` lookups; `_resolve_reference_end` /
+  `_iterate_intersection` and every `match_rtol` are gone. A missing link means a missing image
+  crossing; predicting it so no branch loses its holes is PK-3 / D5, WP5. An unlinked landing's
+  stable cdist comes from `image_cdist`.
+- StrongPip: the unlinked backward representative is two `image_cdist` calls (same numbers).
+- PK-7 closed: every detected crossing carries both keys (`Tangle._key_of` asserts), so the
+  "unknown unstable branch, test every residue" path and the StrongPip / BridgeClass None-key
+  branches are deleted.
+- Inversion law cases after WP2: holes 1 / 9 / 9 at 0 / 1 / 2 blasts (was 1 / 7 / 0).

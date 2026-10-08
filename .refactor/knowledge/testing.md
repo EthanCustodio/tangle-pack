@@ -155,3 +155,35 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   machine 833 passed / 11 xfailed, ~106 s). The k=10 inversion law builds (1.3 s per module)
   are gone; `nested_inner_blasts` (~0.6 s per module), the three k=4 cases, the series (~5 s)
   and the k28 generation_bump cells more than offset that.
+
+## Open-issues round WP2 (2026-10-08, branch `oi/wp02-exact-iterates`, base `f39f617`)
+
+- Suite: 877 passed, 19 skipped, 3 deselected, 34 xfailed, ~106 s (base on the same machine 871
+  passed / 52 xfailed, 108 s). KNOWN_ISSUES 52 -> 34: the 15 `_HOLE_LAWS` x `inversion_two_blasts`
+  and the two `inversion_series` entries (all WP2) XPASSed with the beta**k lap and went, as did
+  `anchor_bridge_class_leads_its_tangle` and `cross_side_only_within_a_branch` on
+  `inversion_two_blasts` (WP3 tags; still xfail on `inversion`). Added:
+  `stable_nodes_never_own_a_singleton` x `inversion_two_blasts` (INV-1, WP3), folded with
+  `partition_singletons` (no longer vacuous) into the `inversion_one_blast` entry. No WP2 entry
+  remains; no remaining entry is vacuous for want of holes.
+- New crossing-layer laws (all nine LAW_CASES, no set-aside): `iterate_table_partial_bijection`,
+  `iterate_links_pass_the_map_gate` (the real map as the oracle), `iterate_table_complete` (the
+  law recomputes both brackets from the nodes). `iterate_link_scales_by_beta` and
+  `area_along_iterate_links` now take `SCALING_RTOL` / `AREA_LINK_RTOL` plus the linked
+  crossings' own bracket widths as slack (`LINK_SCALING_RTOL`, read off the deleted
+  `cdist_rtol`, is gone).
+- New tests: unit `test_iterate_inference.py` (one `map` call per pass from an empty table,
+  rebuilding the same links; the gate refuses a displaced image with one WARNING), registry
+  `test_dedup_is_relative` / `test_iterate_table_is_a_partial_bijection`, pseudoneighbor
+  `test_inversion_branch_return_scales_by_beta_to_the_k` / `test_reference_end_is_a_table_iterate`,
+  regression `test_iterates_after_blasts.py` (p3 at ten blasts, ~1 s). All fail on the base.
+- Adapted, not weakened: `test_grow_until` stand-in links now point at keyless stand-in crossings
+  (a self-link gave a crossing two preimages, now asserted); `test_point_budget`'s image-cost spy
+  counts the machine's evaluations only (the gate's one map call creates no points); the
+  pseudoneighbor residue / single-window / cut-warning tests register the table links they used
+  to get from the cdist fallback. Deleted: `test_unknown_unstable_branch_is_conservative`,
+  `test_reference_end_fallback_by_cdist_match`, StrongPip `missing_unstable_key_blocks` (PK-7 and
+  the removed fallback), `test_scale_cdist_is_in_map_steps` (API gone).
+- Series after WP2: inversion holes [1, 9, 9], classes [6, 11, 11]; p3 classes
+  9 x6, 23, 25, 27, 28 (last step 29 -> 28); k28 unchanged. p3 at ten blasts: 62 detected
+  forward links (+3 anchor links), 29 classes (31 on base).
