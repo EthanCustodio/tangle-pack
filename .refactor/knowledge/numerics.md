@@ -65,7 +65,7 @@ the crossing / iterate-table path is described; growth, refinement and budgets a
   NOT make `reindex_from` unnecessary: `compute_intersections` replaces the registry and only the
   rematch gives a re-detected crossing its old id. Every rematch on every builder is a
   bit-identical re-detection, so the relative dedup keeps it correct (INT-7, answered).
-- Ids are not reproducible across builds: `resolve_crossings` registers in the iteration order of
+- (Fixed in WP8, see below.) Ids were not reproducible across builds: `resolve_crossings` registered in the iteration order of
   a `set` of segment-id pairs (`Tangle.py` :265). Sorting by `(keys, unstable_cdist)` before
   registering is ~3 lines but renumbers every crossing and the id-based fixture facts in
   `CLAUDE.md` — deferred to WP8 (identity across recomputes).
@@ -94,3 +94,12 @@ the crossing / iterate-table path is described; growth, refinement and budgets a
   returns early under inversion. `ManifoldMachine.new_grow_manifold` walks an inversion chain from
   branch 0 without warning; the workbench's `growth_branch` special cases are gone
   (`_growth_key` still maps an inversion point's stats to one key).
+
+## Open-issues round WP8 (2026-10-08)
+
+- Registration order (INT-7): `compute_intersections` registers `sorted(resolve_crossings(), key=
+  (unstable fp position, orbit, branch, unstable_cdist, stable fp position, orbit, branch,
+  stable_cdist))`, positions from `self.fixed_points`. Before, the order was the iteration order of
+  a set of frozensets of segment ids, and `Tangle._ids` is a process-wide counter: reproducible for
+  the first build of a process, not for a second build in the same process. Anchors are still
+  registered first; blast registration was already ordered (`_collapse_noise_crossings`).

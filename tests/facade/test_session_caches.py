@@ -82,8 +82,8 @@ EVENTS: tuple[str, ...] = (
 def _alternate_pip(session: TangleSession, fp: Any) -> int:
     """The anchor-nearest strong-pip candidate of ``fp`` other than the chosen one.
 
-    Chosen by stable cdist, never by list position: the candidates come in
-    registry-id order, which is not reproducible between builds.
+    Chosen by stable cdist, never by list position (no test leans on
+    registry-id order).
     """
     trellis = session.trellis(fp)
     alternates = [c for c in trellis.strong_pip_candidates if c != trellis.strong_pip]

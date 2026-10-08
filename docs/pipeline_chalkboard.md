@@ -37,6 +37,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
 
 4. **Pseudoneighbors** (`Pseudoneighbor_Algorithm.pdf`). Consecutive crossings x, x′ on a stable branch are a pair iff the unstable arc between them contains no point of X = ∪_n Mⁿ(N).
    - Reference pairs are the pairs in F, plus their +1..+(k−1) iterates on the other branches of a period-k orbit.
+   - A landing is compared on ONE polyline: the registered landing's own, else r's own against the pair's registered images there (WP8); β-scaling onto the pair is the fallback only when neither image is registered.
    - D5: a missing `+j` is predicted by `image_cdist`, never invented: its branch is named in a WARNING (the stagger of a period-k chain); a missing pip cut is placed by `image_cdist`.
    - ★ Heteroclinic (D7): a pair of heteroclinic crossings on B's stable branch can be a pair of B's tangle.
 
@@ -68,7 +69,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
 
 9. **Refinement and transition matrix.** A class whose symbol occurs with two or more distinct image pairs splits into a₁, a₂, …. The nodes are the active refined symbols, and the edge weights are token multiplicities. Inert classes are not nodes.
 
-10. **Recompute (D1).** Topology is a pure function of the numerical state. Any growth or blast recomputes stages 1-9 from scratch. Successive recomputes are compared by element identity (bounding holes), and the class count may only go up.
+10. **Recompute (D1).** Topology is a pure function of the numerical state. Any growth or blast recomputes stages 1-9 from scratch. Successive recomputes are compared by element identity (the bounding crossings of each element: hole-bridge endpoints, whose ids persist in a session; C10), and the class count may only go up.
 
 ★ **Several saddles.** A heteroclinic crossing is a node of both tangles. Nesting of tangles needs ONE containment test per fixed point. Nothing else changes.
 
@@ -86,4 +87,5 @@ From the audit; the details and evidence are in `open_issues.md`.
 | 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | fixed (WP6) |
 | 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | no longer states (WP7): a walk pair no bridge spans unresolves its class and is warned; giving it its bridge is DEC-21 |
 | 3, 8 | The partition and dual graph do not cut S at the pip orbit (unified window ≠ S \ f(S) when S runs past it) | PK-5 | DEC-20 |
-| 10 | Element identity is a positional index | BCG-7 | WP8 |
+| 10 | Element identity is a positional index | BCG-7 | fixed (WP8): letters by bounding crossings |
+| 4 | The PDF definition is not monotone as W^u grows (lambda-lemma copies of a window bridge kill its reference) | BCG-5 | DEC-22 |

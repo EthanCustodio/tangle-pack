@@ -333,3 +333,21 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   `partition_covers_branch`, `bridge_endpoints_on_own_branch`, `backward_holes_keep_bridge_side`
   (WP8 / WP10).
 - Deferred: escape-lobe images (WP9 / WP10); DEC-21 (a walk pair no bridge spans).
+
+## Open-issues round WP8 (2026-10-08, branch `oi/wp08-recompute-identity`)
+
+- Pseudoneighbor endpoint frame (BCG-5): in `_unstable_interval_is_clear`, after the linked-landing
+  branch, an unlinked candidate r is compared with the pair's images `iterate(x0|x1, -steps)` on
+  r's own unstable branch when at least one is registered (the other by `image_cdist`); r punctures
+  iff its registered cdist lies strictly between them (r itself being an image: skip). Scaling +
+  2D collision only when neither image is registered. Root cause of nested 10 outer blasts
+  (`(37,38)` lost to 592, 6178 below `M^8(37)` yet 1.3e-5 inside after scaling, noise 0.0103) and
+  k32 12 blasts. Law cases / deep runs / series: hole sets identical.
+- The definitional decreases left (lambda-lemma copies within 1e-6 of a window crossing; nested 11
+  outer blasts loses every outer reference) are DEC-22, open.
+- Element identity (C10): `PartitionInterval.identity = (branch_key, side, lo_id, hi_id)`; registry
+  ids persist across one session's recomputes. `ElementRef` stays positional (an identity inside its
+  equality broke 58 unit tests built on hand-made refs). Names stay positional.
+- Open: `partition_covers_branch` fails on `p3_6_blasts` / `p3_15` / `p3_16` (open elements that are
+  no hole's stretch: 6 / 6 / 5 spans, e.g. `(0,35)` on p3_6_blasts) -- hole bridges of one deep chain
+  nest on a branch and the law assumes disjoint hole stretches; unexamined (not a law case).

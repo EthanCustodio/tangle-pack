@@ -22,9 +22,8 @@ Dev Notes:
     The k=10 recipe is ``scripts/henon_k10_dual_graph.py`` (saddle at
     ``[4, -4]``, ten unstable steps, pip = f(q0)); the k=2.8 recipe is
     ``scripts/henon_pseudoneighbors.py`` (same saddle guess, ten steps,
-    ``area_cutoff = 1e-7``, pip = f(q0), one blast of the zone). Registry ids
-    are not reproducible between builds, so the pip is named by its relation to
-    the default candidate (``"default"`` = q0, ``"image"`` = f(q0)), never by id.
+    ``area_cutoff = 1e-7``, pip = f(q0), one blast of the zone). The pip is
+    named by its relation to the default candidate (``"default"`` = q0, ``"image"`` = f(q0)), never by id.
     Since holes propagate backward only (2026-09-16) the k=2.8 case has THREE
     classes: the anchor bridge's (the only active one, lettered ``a``), the
     exterior class inert through a virtual loop (its image pair is registered

@@ -13,8 +13,6 @@ not decrease (D1); no id or count is pinned.
 
 from __future__ import annotations
 
-import pytest
-
 from cases import build_nested
 from helpers.laws import reference_witness
 

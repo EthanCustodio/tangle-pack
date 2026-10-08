@@ -13,8 +13,9 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   code + direction (`_tangle_words`), never letters; select a tangle's classes by
   `bridge_class.source.branch_key[0] is fp`, not `entry.tangle` (session order differs from
   `TangleBuild.fixed_points`).
-- Registry ids are NOT reproducible between builds (15-step failing origin seen as (12,33),
-  (21,35), (3,17)); pin iterates and sides, never ids.
+- Registry ids were NOT reproducible between builds in one process until WP8 (15-step failing
+  origin seen as (12,33), (21,35), (3,17)); they are now, but tests still pin iterates and
+  sides, never ids.
 - Worktrees have no env: run `../tangle-pack/env/bin/python -m pytest` inside the worktree;
   `pyproject.toml` `pythonpath = ["src", "tests"]` makes it import that worktree's src.
 - Probe technique that works without touching the repo: put a module on PYTHONPATH that
@@ -387,3 +388,43 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 - Base check: the branch tests copied onto a detached base worktree
   (`../tp-oi-wp07-walk-exists-base`) fail 31 there (every new test above, the arrangement laws
   on the five blasted cases, the symbolic laws on all ten).
+
+## Open-issues round WP8 (2026-10-08, branch `oi/wp08-recompute-identity`, base `083f910`)
+
+- Suite: 969 passed, 28 skipped, 3 deselected, 2 xfailed, ~120 s (base 952 passed / 28 skipped /
+  2 xfailed). KNOWN_ISSUES 2 -> 2 (C3, WP9); NOT_APPLICABLE unchanged.
+- Registry ids are reproducible (INT-7): `test_registry_ids_are_reproducible` (two
+  `build_k28(blasts=2)` in one process, same `id -> (keys, cdists)` map). Tests still never pin ids.
+- Builders: `cases._repin` / `_partition` gone; `_blast(session, zone, fixed_points, *, diagnose)`
+  takes no pips (the session carries them); the `partitioned` stage is `session.topology()`.
+  `SeriesStep` gains `references`, `unwitnessed` (via `helpers.laws.reference_witness`: a crossing
+  strictly between the pair, or between its registered images, on either branch; table only) and
+  `letters` (`(identity, letter)`, the identity built IN `cases._class_identity` from
+  `homotopy_partition().element(ref)` lo/hi ids, never `Topology.identity`).
+- New laws (series): `series_lost_references_are_witnessed` (passes on base too: a
+  characterization of BCG-4), `series_letters_follow_element_identity` (fails on base: 3 classes
+  re-lettered on `p3_series` from blast 6).
+- New: unit `test_unlinked_landing_is_read_against_the_pairs_images` x2 (frame fix; `below_c`
+  fails on base), regression `test_deep_reference_survives_noise` (nested zone stage, 9 outer
+  blasts, recompute, 1 more, recompute; `diagnose=False` blasts, ~11 s, kept in the default run;
+  base: `(37,38)` lost with no witness, 13 -> 9 classes), facade `test_session_topology.py`
+  (every product is a stage of one `topology()`; a blast / `set_strong_pip` recomputes; the pip
+  survives a blast; `trellis(fp) is trellis([fp])`; gathering follows the selection, asked before
+  or after the full topology).
+- Adapted, not weakened: `helpers.direct.DirectBuild` builds its OWN per-fixed-point trellises
+  for the SELECTED fixed points (classify, the session's pip, pseudoneighbors, holes, partition)
+  and letters by element bounds on a fresh alphabet. `test_session_caches.py`:
+  `generation_bump` blasts with no repin or manual partition; `partition_signature` ->
+  `manual_repartition` (the per-fp trellis's own partition changes, no product follows);
+  `pip_change` through `session.set_strong_pip`; the letters test reads
+  `bridge_alphabet.assigned[identity]` after a pip change. `test_session_bridge_classes.py`:
+  `test_no_partitions_raises_and_warns` -> `test_products_need_only_the_numerics` (D1: no manual
+  stage call) + `test_a_pip_trimmed_away_warns_and_raises`. `test_unified_segment_precondition`
+  wraps its `dual_graph(rebuild=True)` in `np.errstate(over="ignore")` (a rebuild recomputes the
+  holes, whose geometric check maps the escaping arms).
+- Base check: the new / changed tests copied onto `../tp-oi-wp08-recompute-identity-base`
+  (detached `083f910`) fail 24 there (the frame unit test for the right reason; the rest mostly
+  on the missing `topology()` / pip memory). Right-reason probes on base: `wp08/ids.py 16` two
+  digests, `nested10.py 10` holes `[0, 12]` / 9 classes, `letters.py p3_series` 3 re-lettered.
+- Probe trap: `stress/numerics/harness.py` puts MAIN's `src` first on `sys.path`; import
+  `tanglepack` before the harness or a probe silently runs main.

@@ -32,8 +32,9 @@ Fixtures:
 * ``k28_partitioned`` / ``k28_two_blasts_partitioned`` -- ``(session, fp)``,
   the k=2.8 zone blasted once / twice, partitioned.
 
-Registry ids are not reproducible between builds (even of one case in one
-process): locate crossings by cdist order or structure, never by id.
+Registry ids are reproducible since WP8 (registered along each unstable branch
+in cdist order), but no test pins one: locate crossings by cdist order or
+structure, never by id.
 
 Layout (tiers; every test basename is unique, no ``__init__.py``):
 

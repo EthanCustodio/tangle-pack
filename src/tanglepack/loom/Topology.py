@@ -26,7 +26,6 @@ Dev Notes:
 
 from __future__ import annotations
 
-import logging
 from functools import cached_property
 from typing import TYPE_CHECKING, Sequence
 
@@ -41,9 +40,6 @@ if TYPE_CHECKING:
     from ..topology.TopologyResults import StablePartitionResult
     from ..topology.Trellis import Trellis
     from .TangleSession import TangleSession
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
 
 
 class Topology:

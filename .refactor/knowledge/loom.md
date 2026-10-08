@@ -101,3 +101,36 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
 - `TangleSession.symbolic_dynamics` passes `letter_for=self.bridge_alphabet.letter_for`, so an
   active class the closure adds (a class a word names outside `bridge_classes()`, C9) keeps its
   letter across rebuilds; `bridge_classes()` stays the seed alphabet, `dyn.table` is closed.
+
+## Open-issues round WP8 (2026-10-08, branch `oi/wp08-recompute-identity`, base `083f910`)
+
+- `loom/Topology.py`: `Topology(session, fixed_points)` = one recompute (D1, SIMP-8). Its
+  constructor runs `session._recompute_holes(fp)` per selected fixed point (classify when no pip,
+  pseudoneighbors, holes, partition, on the per-fixed-point trellis, from scratch) and copies the
+  holes / partitions into its own lists (a later manual stage call clears the trellis slots in
+  place). Lazy `cached_property` stages: `homotopy`, `minimal`, `classes` (alphabet lettered by
+  `identity`, zoned through `session._zone_key_of_entry`), `iterated`, `dual_graph` (pips with
+  None filtered), `dynamics` (`letter_for=self.letter_for`). `identity(bridge_class)` =
+  frozenset of the two elements' `PartitionInterval.identity`.
+- `TangleSession`: `_trellises` / `_topologies` keyed by `frozenset(id(fp))` of the resolved
+  selection (`_cache_key` is a method now; `trellis(fp) is trellis([fp])`, a one-fixed-point
+  session's `trellis() is trellis(fp)`), the trellis built with the selection in WORKBENCH order.
+  `topology()` rebuilds on `rebuild`, a new generation, or `topology.strong_pips !=
+  tuple(self.strong_pip(fp) ...)`. The six product accessors are one-line delegates.
+- Pip memory (API-1): `_strong_pips[fp] = Intersection`, written by `set_strong_pip`,
+  `resonance_zone` (the zone's pip, read from the registry BEFORE the trim; `add_resonance_zones`
+  goes through it), `classify_strong_pips` (fan-out: re-applies a remembered pip, else remembers
+  the default) and `_recompute_holes` (a pip set directly on the trellis is adopted). A rebuilt
+  single-fixed-point trellis is classified (`choose_default=False`) and the remembered pip found
+  by `registry.find`; not a candidate -> WARNING, left unset, `topology()` raises ValueError.
+- Deleted: `_bridge_classes`, `_dual_graphs`, `_minimal_trellises`, `_iterated_partitions`,
+  `_symbolic_dynamics`, `_partition_signature`, `_gathered_partitions`, `_gathered_holes`,
+  `_gathered_strong_pips`, `_annotate_bridge_classes`, `_warn_unpartitioned_branches` (dead: every
+  selected branch is partitioned). Kept: `partition_element_for` (scans snapshots; WP11).
+- `henon_cases`: `_repin` / `_partition` gone; builders end at `session.topology()`. The E07 / E11
+  harness lost its `hc._repin` calls; E11's `repin()` helper still runs and now returns the
+  restored pips, not the defaults (WP12 rerun). `scripts/henon_bridge_classes.py` ends at
+  `session.topology()`. `scripts/refactor_proof/hole-side-and-own-blast/*` still import the
+  deleted `hc._repin` / `hc._partition` (historical proof scripts, not maintained).
+- A `rebuild=True` on any product recomputes the holes too, whose geometric cross-check calls the
+  map (escaping builds need `np.errstate(over="ignore")` around it).
