@@ -96,9 +96,8 @@ fp_cols = [fp_label(fp) for fp in fixed_points]
 
 # Stable row order: each defined zone (insertion order), then the catch-all.
 zone_rows = []  # (row_label, zone_key) ; zone_key is None for the "outside" row
-for (fp, branch_index), rz in session.resonance_zones.items():
-    label = f"Zone: {fp_label(fp)} branch {branch_index}"
-    zone_rows.append((label, rz.key))
+for fp, rz in session.resonance_zones.items():
+    zone_rows.append((f"Zone: {fp_label(fp)}", rz.key))
 zone_rows.append(("Outside all zones", None))
 
 # counts[zone_key][fp] -> int
