@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
@@ -22,6 +23,8 @@ RESULTS = REPORT.parent / "results"
 OUT = REPORT / "numbers_extra.tex"
 
 MACROS: list[tuple[str, str, str]] = []
+#: The experiments rerun on 2026-10-07 after the fixes (the others are the first campaign's).
+RERUN = ("e03_scaling", "e07_breaking", "e08_fixed_point_solver", "e09_intersections", "e11_blast_depth")
 
 
 def load(name: str) -> list[dict]:
@@ -175,24 +178,36 @@ def e03() -> None:
             f"e03 growth k={c['k']} cutoff {c['area_cutoff']}: unstable points after the last completed step")
         add(f"NumGrowthSteps{w}", str(len(s["points_unstable"])),
             f"e03 growth k={c['k']} cutoff {c['area_cutoff']}: completed growth steps")
-        if r["outcome"] == "oom":
-            kills.append((s["points_unstable"][-1], r["process_wall_s"] - r["wall_s"]))
-    add("NumScalingOomConfigs", str(len(kills)), "e03 growth: configs killed at the 24 GB RSS cap")
-    add("NumScalingOomMinPointsHeld", grp(min(p for p, _ in kills)),
-        "e03 growth oom: fewest unstable points held after the last completed step")
-    add("NumScalingOomMaxPointsHeld", grp(max(p for p, _ in kills)),
-        "e03 growth oom: most unstable points held after the last completed step")
-    add("NumScalingOomKilledStepMinS", f"{min(t for _, t in kills):.0f}",
-        "e03 growth oom: process wall minus checkpointed wall = time spent in the killed step (min, s)")
-    add("NumScalingOomKilledStepMaxS", f"{max(t for _, t in kills):.0f}",
-        "e03 growth oom: time spent in the killed step (max, s)")
-    bpp = []
-    for r in recs:
-        if r["config"]["kind"] == "growth" and r["outcome"] == "ok":
-            pass
-    # ceiling estimate from the median bytes/point of numbers.tex (1058 B/point)
-    add("NumPointCeilingTwentyFourGB", sci(24 * 2**30 / 1057.7246839312834, 1),
-        "derived: 24 GiB / median RSS slope 1057.7 B/point (summary.json BytesPerPoint)")
+        if "point_budget" in (r.get("metrics") or {}):
+            stop = r["metrics"]["point_budget"]
+            kills.append((s["points_unstable"][-1], r["wall_s"] - sum(s["step_s"]),
+                          stop["points_created"], stop["max_abs_coord"], r["peak_rss_mb"]))
+    add("NumScalingOomConfigs", str(sum(r["outcome"] == "oom" for r in recs)),
+        "e03: configs killed at the 24 GB RSS cap")
+    add("NumScalingBudgetConfigs", str(len(kills)),
+        "e03 growth: configs stopped by the library's per-step point budget (PointBudgetExceeded)")
+    if kills:
+        held, inside, created, coord, rss = zip(*kills)
+        add("NumScalingBudgetMinPointsHeld", grp(min(held)),
+            "e03 growth budget stop: fewest unstable points held after the last completed step")
+        add("NumScalingBudgetMaxPointsHeld", grp(max(held)),
+            "e03 growth budget stop: most unstable points held after the last completed step")
+        add("NumScalingBudgetStepMinS", f"{min(inside):.1f}",
+            "e03 growth budget stop: worker wall minus the completed steps = time inside the stopped step (min, s)")
+        add("NumScalingBudgetStepMaxS", f"{max(inside):.1f}",
+            "e03 growth budget stop: time inside the stopped step (max, s)")
+        add("NumScalingBudgetCreatedMin", grp(min(created)),
+            "e03 growth budget stop: points the stopped step had created when it raised (min)")
+        add("NumScalingBudgetCoordMin", sci(min(coord), 1),
+            "e03 growth budget stop: largest |coordinate| created in the stopped step (min over configs)")
+        add("NumScalingBudgetRssMaxGb", f"{max(rss) / 1024:.1f}",
+            "e03 growth budget stop: peak RSS of those configs (max, GB)")
+        add("NumScalingBudgetFactorMax", fixed(max((h + c) / h for h, c in zip(held, created)), 0),
+            "e03 growth budget stop: (held + created) / held, a lower bound on the stopped step's growth factor (max)")
+    # ceiling estimate from the median bytes/point of numbers.tex
+    per_point = json.load(open(REPORT / "summary.json"))["experiments"]["e03_scaling"]["findings"]["BytesPerPoint"]
+    add("NumPointCeilingTwentyFourGB", sci(24 * 2**30 / per_point, 1),
+        f"derived: 24 GiB / median RSS slope {per_point:.1f} B/point (summary.json BytesPerPoint)")
 
 
 def e04() -> None:
@@ -298,8 +313,16 @@ def e07() -> None:
     for r in recs:
         c = r["config"]
         if c["study"] == "escape" and c["mode"] == "fixed":
-            add("NumEscapeKilledStepS", f"{r['process_wall_s'] - r['wall_s']:.0f}",
-                "e07 escape fixed: process wall minus checkpointed wall (time inside the killed step, s)")
+            inside = r["wall_s"] - sum(r["series"]["step_s"]) - r["stages"].get("setup", 0.0)
+            add("NumEscapeStoppedStepS", f"{inside:.0f}",
+                "e07 escape fixed: worker wall minus setup and the completed steps (time inside the stopped step, s)")
+            stop = r["metrics"].get("point_budget") or {}
+            add("NumEscapeBudgetCreated", grp(stop["points_created"]) if stop else "n/a",
+                "e07 escape fixed: points the stopped step had created when PointBudgetExceeded was raised")
+            add("NumEscapeBudgetCoord", sci(stop["max_abs_coord"], 1) if stop else "n/a",
+                "e07 escape fixed: largest |coordinate| created in the stopped step")
+            add("NumEscapeBudget", grp(stop["budget"]) if stop else "n/a",
+                "e07 escape fixed: the per-step point budget that stopped it")
         if c["study"] == "depth" and c["case"] == "inversion" and c["unstable_steps"] == 7:
             add("NumInversionPointsSixSteps", grp(r["series"]["unstable_points"][-1]),
                 "e07 depth inversion 7: unstable points after step 6, before the kill")
@@ -317,20 +340,30 @@ def e07() -> None:
             add(f"NumBlastClasses{w}", str(m["n_classes"]), f"e07 blasts {c['case']}: bridge classes after the last blast")
             add(f"NumBlastUnresolved{w}", str(m["n_unresolved"]), f"e07 blasts {c['case']}: unresolved classes")
             add(f"NumBlastVirtual{w}", str(m["n_virtual"]), f"e07 blasts {c['case']}: virtual classes")
+            for fragment, word in (("resolution ratio below", "Unresolved"), ("same-stability polyline", "SameStability")):
+                add(f"NumBlast{word}Warnings{w}", str(sum(n for k, n in r["warnings"].items() if fragment in k)),
+                    f"e07 blasts {c['case']}: the library's '{fragment}' WARNINGs over all blasts (one per blast_zone at most)")
     summ = json.load(open(REPORT / "summary.json"))["experiments"]["e07_breaking"]["details"]
     p3 = summ["depth_p3"]
     rel = [int(n) for n, d in p3.items() if d["reliable"]]
     unrel = [int(n) for n, d in p3.items() if d["reliable"] is False]
     add("NumDepthReliableMaxPThree", str(max(rel)), "e07 depth p3: deepest run with is_reliable = True")
     add("NumDepthUnreliableMinPThree", str(min(unrel)), "e07 depth p3: shallowest run with is_reliable = False")
-    add("NumDepthOomPThree", " and ".join(str(n) for n in sorted(int(n) for n, d in p3.items() if d["outcome"] == "oom")),
-        "e07 depth p3: unstable steps whose run hit the RSS cap")
+    def steps_with(details: dict, outcome: str) -> str:
+        return " and ".join(str(n) for n in sorted(int(n) for n, d in details.items() if d["outcome"] == outcome)) or "none"
+
+    budget = {(r["config"]["case"], r["config"]["unstable_steps"]) for r in recs
+              if r["config"]["study"] == "depth" and "point_budget" in (r.get("metrics") or {})}
+    add("NumDepthOomPThree", steps_with(p3, "oom"), "e07 depth p3: unstable steps whose run hit the RSS cap")
+    add("NumDepthBudgetPThree", " and ".join(str(n) for case, n in sorted(budget) if case == "p3") or "none",
+        "e07 depth p3: unstable steps whose run the library's point budget stopped (PointBudgetExceeded)")
     inv = summ["depth_inversion"]
     add("NumInversionAssertSteps", " and ".join(str(n) for n in sorted(int(n) for n, d in inv.items()
                                                                       if d["topology"] == "invariant_assert")),
         "e07 depth inversion: unstable steps whose topology stack raised an invariant AssertionError")
-    add("NumInversionOomSteps", " and ".join(str(n) for n in sorted(int(n) for n, d in inv.items() if d["outcome"] == "oom")),
-        "e07 depth inversion: unstable steps whose run hit the RSS cap")
+    add("NumInversionOomSteps", steps_with(inv, "oom"), "e07 depth inversion: unstable steps whose run hit the RSS cap")
+    add("NumInversionBudgetSteps", " and ".join(str(n) for case, n in sorted(budget) if case == "inversion") or "none",
+        "e07 depth inversion: unstable steps whose run the library's point budget stopped")
     tan = [r for r in recs if r["config"]["study"] == "tangency"]
     add("NumTangencyConfigs", str(len(tan)), "e07 tangency: configs (24 k values x 3 cutoffs)")
     by = {}
@@ -362,6 +395,26 @@ def e07() -> None:
         "e07 tangency cutoff 1e-12, k+1 <= 0.025: median over configs of the median |sin|")
     add("NumTangencyWarningsTotal", str(sum(sum((r["warnings"] or {}).values()) for r in tan)),
         "e07 tangency: WARNING records of any kind, all configs")
+    # The library's resolution flag (2026-10-07) against the cutoff-agreement split above.
+    flagged = {key for key, m in by.items() if m.get("unresolved")}
+    below = [key for key in by if key[1] < 0.158]
+    add("NumTangencyFlaggedBelow", f"{len(flagged & set(below))}/{len(below)}",
+        "e07 tangency, k+1 < 0.16 (cutoffs disagree): configs with at least one crossing below the resolution threshold")
+    add("NumTangencyFlaggedAbove", str(len(flagged - set(below))),
+        "e07 tangency, k+1 >= 0.16 (cutoffs agree): configs with a flagged crossing")
+    add("NumTangencyMinRatioFar", fixed(min(m["min_resolution_ratio"] for key, m in by.items() if key[1] >= 0.158), 1),
+        "e07 tangency, k+1 >= 0.16: smallest resolution ratio of any crossing")
+    add("NumTangencyThreshold", f"{tan[0]['metrics']['resolution_threshold']:g}",
+        "e07 tangency: the workbench's resolution-ratio threshold (library default)")
+    near12 = by[(1e-12, 0.0001)]
+    add("NumTangencyFlaggedNearCutoffTwelve", grp(near12["unresolved"]),
+        "e07 tangency k+1=1e-4 cutoff 1e-12: crossings below the resolution threshold")
+    add("NumTangencyResolutionWarnings",
+        str(sum(n for r in tan for k, n in r["warnings"].items() if "resolution ratio below" in k)),
+        "e07 tangency: the library's aggregated resolution WARNINGs (one per compute_intersections call at most)")
+    add("NumTangencySameStability", str(sum(m["same_stability_unstable_in"] + m["same_stability_stable_in"]
+                                            + m["same_stability_out"] for m in by.values())),
+        "e07 tangency: same-stability polyline crossings the library's diagnostic found, all configs")
 
 
 def e08() -> None:
@@ -396,6 +449,13 @@ def e08() -> None:
     add("NumSolverLowerSlideRateKTen", pct(k10_slide / k10_conv), "e08 k = 10: lower-period / converged")
     add("NumSolverLowerAccepted", grp(accepted),
         "e08: lower-period solves that construct_fixed_point accepted as a saddle of the requested period")
+    rejected = sum(s["outcome"] == "lower_period" for r in recs for s in r["series"]["solves"])
+    add("NumSolverLowerRejected", grp(rejected),
+        "e08: solves construct_fixed_point rejected with the minimal-period ValueError (failure class lower_period)")
+    lower = sum(1 for r in recs for s in r["series"]["solves"]
+                if s.get("minimal_period") is not None and s["minimal_period"] < r["config"]["period"])
+    add("NumSolverLowerRejectedShare", pct(rejected / lower) if lower else "n/a",
+        "e08: those / every converged solve with a lower minimal period")
     add("NumSolverMedianMs", f"{1e3 * float(np.median(times_s)):.2f}", "e08: median solve time (ms)")
     add("NumSolverPNinetyNineMs", f"{1e3 * float(np.percentile(times_s, 99)):.1f}", "e08: p99 solve time (ms)")
 
@@ -412,6 +472,21 @@ def e09() -> None:
     add("NumIsectLargestBruteS", f"{m['brute_s']:.1f}", "e09 largest config: brute-force time (s)")
     uu = [r for r in recs if r["metrics"].get("uu_crossings")]
     add("NumIsectUUConfigs", str(len(uu)), "e09: configs with at least one u x u crossing")
+    # The library's own same-stability diagnostic (2026-10-07) against the harness's u x u count.
+    lib = [r["metrics"] for r in recs]
+    add("NumIsectLibUUIn", str(sum(m["lib_same_stability_unstable_in"] for m in lib)),
+        "e09: u x u polyline crossings the library's diagnostic reports in the tangle region, total")
+    add("NumIsectLibSSIn", str(sum(m["lib_same_stability_stable_in"] for m in lib)),
+        "e09: s x s polyline crossings the library reports in the tangle region, total (the harness never tests s x s)")
+    add("NumIsectLibOut", str(sum(m["lib_same_stability_out"] for m in lib)),
+        "e09: same-stability crossings the library reports outside the tangle region (INFO only), total")
+    caught = sum(1 for r in uu if r["metrics"]["lib_same_stability_unstable_in"] + r["metrics"]["lib_same_stability_out"])
+    add("NumIsectLibCaughtUU", f"{caught}/{len(uu)}",
+        "e09: configs with a harness u x u crossing in which the library also reports a same-stability crossing")
+    add("NumIsectLibUnresolved", str(sum(m["lib_unresolved"] for m in lib)),
+        "e09: crossings below the resolution-ratio threshold, total over configs")
+    add("NumIsectDiagnoseShareMax", pct(max(m["diagnose_s"] / m["library_s"] for m in lib), 0),
+        "e09: max over configs of check_resolution time / compute_intersections time")
     add("NumIsectUUCutoff", sci(uu[0]["config"]["area_cutoff"], 1) if all(
         r["config"].get("area_cutoff") == uu[0]["config"].get("area_cutoff") for r in uu) else "mixed",
         "e09: area_cutoff of every config with u x u crossings")
@@ -444,13 +519,28 @@ def campaign() -> None:
     add("NumConfigsTotal", grp(n), "all full-run JSONL files (e01-e11): records")
     add("NumConfigsCampaign", grp(n - len(load("e11_blast_depth"))),
         "e01-e10 full-run JSONL files: records of the scripted campaign (e11 ran on its own)")
-    import re
-    done = re.findall(r"campaign done in ([0-9.]+) min", (RESULTS / "progress.log").read_text())
-    add("NumCampaignQuickMin", done[-2], "progress.log: wall-clock of the last --quick campaign (min)")
-    add("NumCampaignFullMin", done[-1], "progress.log: wall-clock of the full campaign e01-e10 (min; e11 ran on its own, see NumDeepWallMin)")
+    # The rerun of 2026-10-07 (after the fixes): e03, e07, e08, e09 through
+    # run_campaign.py, then e11; the other experiments are the first campaign's.
+    rerun = [r for name in RERUN for r in load(name)]
+    started = [time.mktime(time.strptime(r["started"], "%Y-%m-%dT%H:%M:%S")) for r in rerun]
+    ended = [s + r.get("process_wall_s", 0) for s, r in zip(started, rerun)]
+    add("NumRerunMin", f"{(max(ended) - min(started)) / 60:.0f}",
+        "rerun records (e03, e07, e08, e09, e11): wall clock from the first start to the last end (min)")
+    add("NumRerunCampaignMin", f"{(max(e for e, r in zip(ended, rerun) if r['experiment'] != 'e11_blast_depth') - min(started)) / 60:.0f}",
+        "rerun records of e03, e07, e08, e09 (run_campaign.py --only): wall clock (min)")
+    add("NumConfigsRerun", grp(len(rerun)), "rerun records (e03, e07, e08, e09, e11)")
+    shas = sorted({r.get("git_sha") for r in rerun})
+    add("NumRerunCommit", "/".join(f"\\code{{{s}}}" for s in shas), "rerun records: git_sha (the harness commit)")
+    first = sorted({r.get("git_sha") for name in names if name not in RERUN for r in load(name)})
+    add("NumFirstCommit", "/".join(f"\\code{{{s}}}" for s in first),
+        "records of the experiments not rerun (e01, e02, e04, e05, e06, e10): git_sha")
     for o in ("ok", "exception", "oom", "timeout", "invariant_assert"):
         add(f"NumOutcomeTotal{o.replace('_', ' ').title().replace(' ', '')}", str(out.get(o, 0)),
             f"all full-run JSONL files: outcome {o}")
+    add("NumOutcomeTotalBudget", str(sum("point_budget" in (r.get("metrics") or {}) for name in names for r in load(name))),
+        "all full-run JSONL files: exception records that are the library's PointBudgetExceeded")
+    add("NumOutcomeRerunOom", str(sum(r["outcome"] == "oom" for name in RERUN for r in load(name))),
+        "rerun records: outcome oom (RSS watchdog kills)")
 
 
 CAPS = {  # (timeout s, RSS cap GB, workers): the scripts' TIMEOUT / RSS_CAP_GB / WORKERS constants
@@ -462,24 +552,31 @@ CAPS = {  # (timeout s, RSS cap GB, workers): the scripts' TIMEOUT / RSS_CAP_GB 
 
 
 def counts_table() -> None:
-    """tables/campaign_counts.tex: records and outcomes per experiment."""
+    """tables/campaign_counts.tex: records and outcomes per experiment.
+
+    ``budget`` counts the ``exception`` records that are the library's per-step
+    point budget (``PointBudgetExceeded``, 2026-10-07); ``run`` says whether the
+    records are the first campaign's or the rerun's.
+    """
     rows = []
     tot: Counter = Counter()
     for name, (timeout, cap) in CAPS.items():
         recs = load(name)
         out = Counter(r["outcome"] for r in recs)
+        out["budget"] = sum("point_budget" in (r.get("metrics") or {}) for r in recs)
         tot.update(out)
         tot["n"] += len(recs)
         label = name.replace("_", "\_")
-        rows.append(f"{label} & {len(recs)} & {out.get('ok', 0)} & {out.get('exception', 0)} & "
-                    f"{out.get('invariant_assert', 0)} & {out.get('oom', 0)} & {out.get('timeout', 0)} & "
-                    f"{timeout} & {cap} \\\\")
+        rows.append(f"{label} & {'rerun' if name in RERUN else 'first'} & {len(recs)} & {out.get('ok', 0)} & "
+                    f"{out.get('exception', 0)} & {out['budget']} & {out.get('invariant_assert', 0)} & "
+                    f"{out.get('oom', 0)} & {out.get('timeout', 0)} & {timeout} & {cap} \\\\")
     rows.append("\\midrule")
-    rows.append(f"total & {tot['n']} & {tot['ok']} & {tot['exception']} & {tot['invariant_assert']} & "
-                f"{tot['oom']} & {tot['timeout']} & & \\\\")
-    body = ["% campaign: records and outcomes per experiment (full run); timeout / RSS cap = default per config",
-            "% suggested column spec: {lrrrrrrrr}", "\\toprule",
-            "experiment & configs & ok & exception & assert & oom & timeout & timeout (s) & cap (GB) \\\\",
+    rows.append(f"total & & {tot['n']} & {tot['ok']} & {tot['exception']} & {tot['budget']} & "
+                f"{tot['invariant_assert']} & {tot['oom']} & {tot['timeout']} & & \\\\")
+    body = ["% campaign: records and outcomes per experiment; timeout / RSS cap = default per config",
+            "% suggested column spec: {llrrrrrrrrr}", "\\toprule",
+            "experiment & run & configs & ok & exception & of which budget & assert & oom & timeout & "
+            "timeout (s) & cap (GB) \\\\",
             "\\midrule", *rows, "\\bottomrule"]
     (REPORT / "tables" / "campaign_counts.tex").write_text("\n".join(body) + "\n")
 

@@ -36,8 +36,8 @@ cells of one case start from the same tangle; ``area_cutoff`` is the
 refinement threshold while BLASTING (the bridge images are refined by the
 manifold machine). ``num_iterations`` is passed to each ``blast_zone`` call.
 
-Grid (full mode, 53 configs; calibrated 2026-10-07)
----------------------------------------------------
+Grid (full mode, 53 configs + 5 resolution_pass cells; calibrated 2026-10-07)
+------------------------------------------------------------------------
 For each case ``min_separation`` in {None, 1e-6, 1e-5, 1e-4, 1e-3} at
 ``area_cutoff = 1e-7`` (plus 1e-2 for ``k28``/``k32``: through 1e-3 the
 separation never bites there, see below); ``area_cutoff`` in {1e-5, 1e-6,
