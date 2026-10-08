@@ -105,7 +105,7 @@ def _session() -> "TangleSession":
 
 def _grow_period3(session, unstable_steps: int, stable_steps: int, area_cutoff: float):
     """Construct, orient, initialise and grow the period-3 orbit."""
-    session.workbench._man_machine.area_cutoff = area_cutoff
+    session.area_cutoff = area_cutoff
     fp3 = session.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
     session.orient_eigenvectors(fp3, PERIOD3_ORIENTATION)
     session.initialize_both_manifolds(fp3)
@@ -116,7 +116,7 @@ def _grow_period3(session, unstable_steps: int, stable_steps: int, area_cutoff: 
 
 def _grow_period1(session, unstable_steps: int, area_cutoff: float):
     """Construct, orient, initialise and grow the outer period-1 saddle."""
-    session.workbench._man_machine.area_cutoff = area_cutoff
+    session.area_cutoff = area_cutoff
     fp1 = session.construct_fixed_point(saddle_guesses(*HENON_P3)["saddle"])
     session.orient_eigenvectors(fp1, PERIOD1_ORIENTATION)
     session.initialize_both_manifolds(fp1)
