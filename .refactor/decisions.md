@@ -59,3 +59,8 @@ What the author has decided. Binding on every later run. Newest last.
   (anchor-only branch = one element, element identity by bounding holes, det<0 out of scope,
   innermost-zone blasting, new-image-only same-stability count, per-call `max_points`) are
   revisable by the author.
+
+## 2026-10-08 — DEC-19, the period-k growth stagger (raised by WP5)
+
+- **Said:** "Accept the asymmetry" (offered: trim the trellis to complete orbits; warn and grow more; accept).
+- **Consequence (D9):** a stable branch whose reference pair's +j images lie beyond the computed manifold has no fundamental-segment hole; that is correct for the finite trellis, not a bug. WP5's WARNING naming the branch stays. Laws that assume every branch has a window hole (e.g. the inversion anchor class leading its tangle) must be scoped to branches that have one, not left as known issues.

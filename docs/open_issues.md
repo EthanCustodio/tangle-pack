@@ -204,7 +204,7 @@ A side effect on the baseline is the inert chain `u(1.0)→v(2.0)→x(0.0)→loo
 **Evidence:** `src/tanglepack/topology/StablePartition.py:173-190, 1712-1723`; `tests/conftest.py:72-77`; `CLAUDE.md` "Holes propagate BACKWARD only"; memory `holes-backward-only-2026-09`
 
 ### PK-3: When `extend_pseudoneighbor_trajectories` finds no table links, the other k−1 rays silently get no window holes
-**Status:** open — slice 1 done (WP5), slice 2 = DEC-19 | **Severity:** high | **Related:** PK-2, BCG-3, PK-1, NUM-18, DEC-19 | **WP:** WP5
+**Status:** closed (WP5 + DEC-19: asymmetry accepted, 2026-10-08) | **Severity:** high | **Related:** PK-2, BCG-3, PK-1, NUM-18, DEC-19 | **WP:** WP5
 
 Probe p3 at 6 blasts: `pairs=2` and zero forward pairs, so rays 0.0 and 2.0 got no direct window holes (at 5 blasts they had +1/+2 holes). The partition becomes asymmetric across the orbit, and the provisional rule is never even applied.
 
@@ -1001,7 +1001,7 @@ The same paragraph also notes that runs at 6+ blasts are unreliable, so the "bla
 
 ## Decision questions raised by the audit
 
-Every question of the audit is now answered or deferred; see "Author decisions" below. DEC-19 was raised later by WP5 and is open.
+Every question of the audit is now answered or deferred; see "Author decisions" below. DEC-19 was raised later by WP5 and answered on 2026-10-08 (D9).
 
 | ID | Question | Blocks | Resolved by |
 |---|---|---|---|
@@ -1023,7 +1023,7 @@ Every question of the audit is now answered or deferred; see "Author decisions" 
 | DEC-16 | **Dissipative maps (b ≠ ±1) in scope?** Today they run unvalidated with one \|det J\| WARNING, and the area laws silently do not hold. | NUM-15 | deferred |
 | DEC-17 | **`image_of` misses:** expected (unregistered image crossings), or should union-valued images be supported? | NUM-17 | deferred |
 | DEC-18 | **Demote the bridge-row assertion to a resolution flag when the signs alternate?** Keep the assertion when the signs are equal. | NUM-1 | D6 |
-| DEC-19 | **Period-k stagger** (raised by WP5): a reference trajectory on the outermost lap of the longest unstable branch has no `+j` image in the trellis. (a) accept and warn (WP5 slice 1); (b) trim N to crossings whose `+1..+(k-1)` images are registered (an unstable-side cut, making every reference Z_k-complete; changes the deep p3 / inversion references, BCG-4); (c) virtual partition boundaries at the predicted landings (invents holes, rejected). Orphan window pairs are not pairs (NUM-18). | PK-3 | open, WP5 slice 2 |
+| DEC-19 | **Period-k stagger** (raised by WP5): a reference trajectory on the outermost lap of the longest unstable branch has no `+j` image in the trellis. (a) accept and warn (WP5 slice 1); (b) trim N to crossings whose `+1..+(k-1)` images are registered (an unstable-side cut, making every reference Z_k-complete; changes the deep p3 / inversion references, BCG-4); (c) virtual partition boundaries at the predicted landings (invents holes, rejected). Orphan window pairs are not pairs (NUM-18). | PK-3 | D9 (accept) |
 
 ## Author decisions (2026-10-07)
 
@@ -1036,6 +1036,7 @@ Every question of the audit is now answered or deferred; see "Author decisions" 
 | D5 | **Period-k.** Keep the +1..+(k−1) iterate rule for the other branches' holes, but close the gap: a missing table link never silently leaves a branch without holes. | DEC-6 |
 | D6 | **Signs decide** hole openings and bridge rows. Geometry stays as an optional cross-check that flags under-resolution; it never asserts when the signs alternate. | DEC-8, DEC-18 |
 | D7 | **Heteroclinic.** A heteroclinic crossing pair on B's stable branch can be a pseudoneighbor pair and gets a hole in B's partition. | DEC-7 |
+| D9 | **Period-k stagger accepted** (2026-10-08, DEC-19). A branch whose reference images were never computed simply has no window hole yet; the WARNING naming it stays, and the topology never invents a hole or trims the trellis to complete orbits. | DEC-19 |
 | D8 | **Simplify freely** toward the chalkboard design with a strong architecture. Aligning the public API with how the author uses it is a later, separate plan. | — |
 
 Taken under D8 (Claude's call, revisit if wrong):
