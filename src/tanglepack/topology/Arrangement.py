@@ -311,7 +311,7 @@ class Arrangement:
 
     def _build_unstable_arcs(self) -> None:
         """
-        One arc per consecutive pair on each unstable branch; each is a bridge.
+        One arc per COMPUTED consecutive pair on each unstable branch.
 
         "The arc between two consecutive crossings of an unstable branch" and "a
         bridge" are two names for one object, so the two constructions are
@@ -325,10 +325,18 @@ class Arrangement:
         * **Not every arc need be a bridge.** After a blast the branch also carries
           crossings born on ITERATED images of its bridges. The arcs between those
           were never cut as bridge objects (and a partial image piece has no id at
-          all), so the pair is a real piece of unstable manifold with no Bridge
-          behind it. That is expected, not a fault — logged, and the arc is built
-          with ``bridge_id`` None so its geometry falls back to the parent branch
-          rather than silently reading some other curve's points.
+          all), so a pair on ONE computed curve is a real piece of unstable
+          manifold with no Bridge behind it. That is expected, not a fault —
+          logged, and the arc is built with ``bridge_id`` None so its geometry
+          falls back to the parent branch rather than silently reading some other
+          curve's points.
+        * **A pair on two curves is a gap, not an arc** (INT-9,
+          :meth:`~tanglepack.topology.Trellis.Trellis.is_computed_arc`). Two
+          consecutive crossings on the images of two non-adjacent bridges, or on
+          the grown tip and an image, have manifold between them that was never
+          computed: no arc is drawn, and the two free slots get the usual
+          dangling stubs ("not computed this far"), so the faces there are open.
+          Drawing it closed zero-area faces and broke Euler's formula (NUM-16).
 
         Raises:
             AssertionError: If a bridge's endpoints are not consecutive on any
@@ -342,10 +350,14 @@ class Arrangement:
         cut: set["BridgeId"] = {
             bridge.id for bridge in self.trellis.bridges if bridge.id is not None
         }
+        gaps: list["BridgeId"] = []
         for branch in self.trellis.unstable_branches:
             ordered = branch.ordered_ids()
             for lo_id, hi_id in zip(ordered, ordered[1:]):
                 pairs.add((lo_id, hi_id))
+                if not self.trellis.is_computed_arc(lo_id, hi_id):
+                    gaps.append((lo_id, hi_id))
+                    continue
                 self._add_edge(
                     Arc(
                         kind="unstable",
@@ -361,13 +373,21 @@ class Arrangement:
             f"this trellis: {sorted(cut - pairs)} — the branch ordering and the "
             "bridge set describe different curves"
         )
-        uncut = pairs - cut
+        uncut = pairs - cut - set(gaps)
         if uncut:
             logger.debug(
                 "%d unstable arcs have no bridge object (iterated-image crossings "
                 "or partial pieces): %s",
                 len(uncut),
                 sorted(uncut),
+            )
+        if gaps:
+            logger.debug(
+                "%d consecutive unstable pairs lie on two different computed curves "
+                "(the manifold between them was never computed); left as dangling "
+                "ends: %s",
+                len(gaps),
+                gaps,
             )
 
     def _build_sparse_unstable_arcs(self) -> None:

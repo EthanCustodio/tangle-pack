@@ -31,8 +31,9 @@ Dev Notes:
 * A subdivided image (the parent bridge crossed the trimmed-away part of the
   stable manifold, so its image crosses the computed part in the middle)
   contributes EVERY consecutive pair of the chain. A pair no ``Bridge`` object
-  spans (the grown manifold stops short of it, or a blast child was never cut
-  there) is skipped with a WARNING: the minimal trellis is evidence-based, like
+  spans is manifold that was never computed (the grown manifold stops short of
+  it, or it is the image of a bridge no blast iterated, INT-9 / D9): it is
+  skipped with a WARNING, the minimal trellis is evidence-based, like
   inertness, and grows as the trellis does.
 * "Active" is read from the EVIDENCE table (every bridge's class, the
   :class:`~tanglepack.topology.BridgeClass.BridgeClassTable` of
@@ -337,7 +338,8 @@ def minimal_trellis(
             bridge = trellis.bridge_between(*pair)
             if bridge is None or bridge.id is None:
                 logger.warning(
-                    "image pair %s of hole bridge %s has no Bridge object; skipped "
+                    "image pair %s of hole bridge %s has no Bridge object: its arc is "
+                    "not computed (the image of a bridge no blast iterated, D9); skipped "
                     "(grow or blast the trellis to register it)",
                     pair,
                     bid,

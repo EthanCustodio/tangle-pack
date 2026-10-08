@@ -440,6 +440,29 @@ class Trellis:
             self._bridge_lookup_len = len(self.bridges)
         return self._bridge_by_endpoints.get(frozenset((first_id, second_id)))
 
+    def is_computed_arc(self, lo_id: int, hi_id: int) -> bool:
+        """
+        Whether the unstable manifold between two consecutive crossings was computed.
+
+        A Bridge spans them, or both lie on one computed curve (an anchor, which
+        names no curve, lies on every curve rooted at it). After a blast two
+        consecutive crossings of an unstable branch can sit on the images of two
+        NON-adjacent bridges (the bridge between them was not iterated), or on the
+        grown tip and an image: the arc between them was never computed, so it is
+        a gap, not an arc (INT-9).
+
+        Args:
+            lo_id: One crossing's registry id.
+            hi_id: The other's.
+
+        Returns:
+            True when the arc between them is computed manifold.
+        """
+        if self.bridge_between(lo_id, hi_id) is not None:
+            return True
+        lo, hi = (self.intersection(i).unstable_manifold for i in (lo_id, hi_id))
+        return lo is None or hi is None or lo is hi
+
     @property
     def arrangement(self) -> "Arrangement":
         """

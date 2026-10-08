@@ -394,8 +394,9 @@ def punch_holes(
             for pair in skipped
         ]
         logger.warning(
-            "Skipped %d pair(s) with no spanning bridge; their stable branches get no "
-            "hole from them: %s", len(skipped), "; ".join(named),
+            "Skipped %d pair(s) with no spanning bridge: the arc between them is not "
+            "computed (the image of a bridge no blast iterated, D9), so their stable "
+            "branches get no hole from them: %s", len(skipped), "; ".join(named),
         )
     logger.debug("Punched %d hole(s)", len(holes))
     return holes
