@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 
+import numpy as np
 import pytest
 
 from cases import BUILDERS, build_inversion_period2
@@ -38,7 +39,8 @@ def _differing_branches(session) -> list:
 
 
 def test_a_stable_manifold_past_the_pip_orbit_is_warned(caplog):
-    session = build_inversion_period2(unstable_steps=10, stable_steps=10).session
+    with np.errstate(over="ignore"):  # the 10th step's arms escape to infinity
+        session = build_inversion_period2(unstable_steps=10, stable_steps=10).session
     differing = _differing_branches(session)
     assert differing, "the 10-step build no longer runs past the pip orbit"
     caplog.clear()
