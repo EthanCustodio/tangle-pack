@@ -294,8 +294,10 @@ def test_area_cutoff_reaches_the_one_shared_machine() -> None:
     assert workbench._man_maker.machine.area_cutoff == 2e-7
 
     session.max_points_per_step = 123
-    assert workbench._man_machine.max_points_per_step == 123
-    assert "area_cutoff" not in vars(session)
+    session.escape_radius = 5.0
+    assert workbench._man_machine.max_points_per_step == session.max_points_per_step == 123
+    assert workbench.escape_radius == session.escape_radius == 5.0
+    assert not {"area_cutoff", "max_points_per_step", "escape_radius"} & set(vars(session))
 
 
 def test_finer_cutoff_never_gives_fewer_points() -> None:
