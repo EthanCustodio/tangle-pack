@@ -37,7 +37,8 @@ Implementation notes:
 * p = branch.return_period = k_value: a branch return is k_value map steps
   and scales a canonical distance by beta**k_value (= |lambda_u|**num_branches,
   lambda_u squared under inversion; INV-2, fixed in WP2). The inversion
-  ordering (k_value == 2*period) is exercised by the k=4 inversion law cases.
+  ordering (k_value == 2*period) is exercised by the inversion law cases (the
+  k=4 saddle and the k=4.1 period-2 orbit).
 * The iterate table is the only identity authority: r_{n+p} and every
   trajectory image are table lookups (Trellis.iterate). Since WP2 the table is
   filled by an exact rule after every detection and blast, so a missing link
@@ -48,7 +49,7 @@ Implementation notes:
   the work is in the unstable-interval check.
 * Both members of a pair must lie on the SAME unstable branch: two distinct
   unstable curves (different orbit points, or the two inversion half-branches,
-  which join only through the anchor — itself a trellis point) cannot be
+  which join only through their one anchor — itself a trellis point) cannot be
   connected by an open unstable arc, so such a pair is rejected outright.
 * One map step scales an unstable canonical distance by
   FixedPoint.per_step_beta("unstable") = |lambda_u|^(1/period); a crossing's

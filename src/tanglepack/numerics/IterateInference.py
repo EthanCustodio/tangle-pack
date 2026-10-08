@@ -164,12 +164,13 @@ class IterateInference:
         """
         Record the forward image of an ANCHOR -- a periodic point's own crossing.
 
-        A periodic point sits at canonical distance ``(0, 0)`` on the two branches
-        it anchors, and the map carries it to the next point of its orbit, whose
-        anchor sits at ``(0, 0)`` on the two ADVANCED branches. So the image is
-        fully determined by the branch bookkeeping and
-        :meth:`IntersectionRegistry.find` resolves it exactly. On a period-1
-        orbit the anchor is its own image.
+        A periodic point sits at canonical distance ``(0, 0)`` on every branch
+        attached to it, and the map carries it to the next point of its orbit,
+        whose anchor sits at ``(0, 0)`` on the ADVANCED branches. So the image
+        is fully determined by the branch bookkeeping and
+        :meth:`IntersectionRegistry.find` resolves it exactly (at ``(0, 0)`` it
+        matches the point, whichever of its branches the probe names). On a
+        period-1 orbit the anchor is its own image.
 
         Args:
             src_id: Registry id of the crossing being iterated.

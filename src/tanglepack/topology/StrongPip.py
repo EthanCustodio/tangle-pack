@@ -68,10 +68,10 @@ Lookup first: a crossing's backward representative is the iterate table's answer
 when it has one, and otherwise Trellis.image_cdist -- the one crossing-level scaling
 path (table first, then per_step_beta).
 
-Branch cycle / inversion: forward_stable_branch_cycle() is validated for the
-non-inversion case (k_value == period). The inversion ordering (k_value == 2*period,
-branch_index flips after each full orbit) is exercised by the k=4 inversion law
-cases.
+Branch cycle / inversion: forward_stable_branch_cycle() follows advance_key, so the
+inversion ordering (k_value == 2*period, branch_index flips after each full orbit)
+needs no special case; it is exercised by the inversion law cases (the k=4 saddle
+at 0/1/2 blasts and the k=4.1 period-2 orbit).
 """
 
 from __future__ import annotations
