@@ -1361,7 +1361,18 @@ class TangleWorkbench:
         # and declaring it beats detecting it (see _register_anchors).
         self._register_anchors(fixed_points)
 
-        for intersection in self.Tangle.resolve_crossings():
+        # Registration order is the order along each unstable branch (INT-7), never
+        # the iteration order of a set of segment ids: ids are reproducible.
+        position = {id(fp): i for i, fp in enumerate(self.fixed_points)}
+
+        def along(ix: Intersection) -> tuple:
+            (u_fp, _, u_orbit, u_branch), (s_fp, _, s_orbit, s_branch) = (
+                ix.manifold_a_key, ix.manifold_b_key
+            )
+            return (position[id(u_fp)], u_orbit, u_branch, ix.unstable_cdist,
+                    position[id(s_fp)], s_orbit, s_branch, ix.stable_cdist)
+
+        for intersection in sorted(self.Tangle.resolve_crossings(), key=along):
             intersection.id = self._intersection_registry.add(intersection)
 
         if reset and preserve_ids and len(old_registry) > 0:
