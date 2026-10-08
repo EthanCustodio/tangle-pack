@@ -7,7 +7,8 @@ instead, and the two agree exactly when the stable manifold is trimmed at the
 pip orbit (every law case). Inversion x period 2 grown to 10 steps runs past the
 pip orbit, and a walk there is unreachable; until the author settles DEC-20 the
 dual graph states its precondition with one WARNING per branch where the two
-differ. Rule-based: the branches are found independently, no wording is pinned.
+differ. Rule-based: the branches are found independently (a crossing belongs to
+``S \\ f(S)`` iff it has no registered preimage).
 """
 
 from __future__ import annotations
@@ -18,24 +19,17 @@ import numpy as np
 import pytest
 
 from cases import BUILDERS, build_inversion_period2
-from helpers.laws import where_f_of_s_stops
+from helpers.laws import misplaced_unified_crossings
 from helpers.logs import assert_logged
 
 _LOGGER = "tanglepack.topology.DualGraph"
 
 
 def _differing_branches(session) -> list:
-    """The stable branches of a pip's fixed point where ``S \\ f(S)`` is not the unified span."""
-    dual = session.dual_graph()
-    tol = float(dual.trellis.registry.cdist_tol)
-    differing = []
-    for key, span in where_f_of_s_stops(dual).items():
-        unified = dual.fundamental_segments.get(key)
-        if (span is None) != (unified is None) or (
-            span is not None and max(abs(a - b) for a, b in zip(span, unified)) > tol
-        ):
-            differing.append(key)
-    return differing
+    """The stable branches of a pip's fixed point where ``S \\ f(S)`` is not the unified
+    span (read off the iterate table, not the dual graph's arithmetic)."""
+    misplaced = misplaced_unified_crossings(session.dual_graph())
+    return list(dict.fromkeys(key for key, _crossing in misplaced))
 
 
 def test_a_stable_manifold_past_the_pip_orbit_is_warned(caplog):

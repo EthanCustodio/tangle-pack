@@ -70,7 +70,9 @@ letter or count of a particular build (author, 2026-10-05: the golden tier was
 removed as "arbitrary and irrelevant"; the CLAUDE.md fixture facts are
 documentation). A real build is checked against RULES; a specific word or name
 appears only in a synthetic test whose input was built by hand to produce it.
-``is_reliable``, ``verified`` and ``source`` are never asserted.
+``is_reliable``, ``verified`` and ``source`` of a real build are never pinned;
+they appear only in rules (WP7: an unresolved, ambiguous, contradicted or
+straddling class makes ``is_reliable`` False).
 
 Dev Notes:
     Provisional rules, tested only in their firm part (author decision 3,

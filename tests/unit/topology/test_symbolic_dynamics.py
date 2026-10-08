@@ -515,36 +515,56 @@ def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
     return symbolic_dynamics(dual, alphabet, letter_for=letter_for)
 
 
-def test_a_word_naming_a_new_class_closes_the_alphabet(layout, monkeypatch, caplog):
-    """D3: a pair of a walk is the class of a real piece of f(B). A word naming a class
-    outside the alphabet adds it: it is walked, lettered (an active one by
-    ``letter_for``) and remembers the class that named it. No WARNING."""
+def test_a_word_naming_a_spanned_class_closes_the_alphabet(layout, monkeypatch, caplog):
+    """A word naming a class outside the alphabet that a registered bridge spans adds a
+    copy of its evidence entry: walked in turn, lettered (an active one by
+    ``letter_for``, an inert one in the inert series) and remembering the class that
+    named it. No WARNING."""
     alphabet = BridgeClassTable([layout.table[layout.a]])
     walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
+    members = layout.table[layout.u].members
     asked = []
 
     def letter_for(cls):
         asked.append(cls)
         return "q"
 
-    with caplog.at_level(logging.WARNING, logger=SD.__name__):
-        dyn = _drive(layout, monkeypatch, alphabet, alphabet, walks, letter_for=letter_for)
-    assert_logged(caplog, logging.WARNING, SD.__name__, count=0)
-    assert dyn.table.classes == [layout.a, layout.u]
-    closed = dyn.classes[layout.u]
-    assert closed.named_by == layout.a and dyn.classes[layout.a].named_by is None
-    assert (closed.letter, closed.kind, asked) == ("q", "active", [layout.u])
-    assert closed.itinerary == walks[layout.u] and closed.status == "trivial"
-    assert dyn.word("a", refined=False) == "a q^-1 a^-1"
-    assert dyn.is_reliable
+    for inert, letter in ((True, "u"), (False, "q")):
+        asked.clear()
+        evidence = BridgeClassTable(
+            [layout.table[layout.a], BridgeClassEntry(layout.u, members, inert=inert)]
+        )
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=SD.__name__):
+            dyn = _drive(layout, monkeypatch, alphabet, evidence, walks, letter_for=letter_for)
+        assert_logged(caplog, logging.WARNING, SD.__name__, count=0)
+        assert dyn.table.classes == [layout.a, layout.u]
+        closed = dyn.classes[layout.u]
+        assert closed.named_by == layout.a and dyn.classes[layout.a].named_by is None
+        assert (closed.letter, closed.kind) == (letter, "inert" if inert else "active")
+        assert asked == ([] if inert else [layout.u])
+        assert closed.entry.members == members
+        assert closed.itinerary == walks[layout.u]
+        assert dyn.word("a", refined=False) == f"a {letter}^-1 a^-1"
+        assert dyn.is_reliable
 
-    # with an evidence entry the closure class keeps its inertness: inert series
-    asked.clear()
-    dyn = _drive(layout, monkeypatch, alphabet, layout.table, walks, letter_for=letter_for)
-    closed = dyn.classes[layout.u]
-    assert (closed.letter, closed.kind, asked) == ("u", "inert", [])
-    assert closed.entry.members == layout.table[layout.u].members
-    assert dyn.word("a", refined=False) == "a u^-1 a^-1"
+
+def test_a_pair_no_bridge_spans_is_warned_and_unreliable(layout, monkeypatch, caplog):
+    """D3: a pair of a walk that no registered bridge spans is a construction error,
+    never a class. The class whose walk names it is unresolved ("grow or blast"), one
+    WARNING names the pair and the members whose image predicts it, nothing is
+    lettered, and the dynamics is not reliable."""
+    alphabet = BridgeClassTable([layout.table[layout.a]])
+    walks = {layout.a: layout.k10_itinerary}
+    asked = []
+    with caplog.at_level(logging.WARNING, logger=SD.__name__):
+        dyn = _drive(layout, monkeypatch, alphabet, alphabet, walks, letter_for=asked.append)
+    assert_logged(caplog, logging.WARNING, SD.__name__, count=1)
+    assert dyn.table.classes == [layout.a] and asked == []
+    cd = dyn.classes[layout.a]
+    assert cd.status == "unresolved" and cd.unresolved_reason
+    assert dyn.unresolved == [cd]
+    assert not dyn.is_reliable
 
 
 @pytest.mark.parametrize(

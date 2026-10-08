@@ -2160,40 +2160,38 @@ def check_dual_unified_is_pip_segment(case: "Case") -> int:
     return len(expected)
 
 
-def where_f_of_s_stops(dual) -> dict:
-    """``{stable branch: S \\ f(S) as (lo, hi), or None when empty}`` for every stable
-    branch of a fixed point that owns a unified segment, from the branch ends alone:
-    ``(c_s(f(end of the previous branch)), end]`` (the image of a bridge crosses the
-    trellis's stable manifold only at the images of its ends and there)."""
+def misplaced_unified_crossings(dual) -> list:
+    """``[(stable branch key, crossing id)]`` for every crossing of a pip's fixed point
+    whose place disagrees with the unified span. ``S \\ f(S)`` is read off the iterate
+    table, independently of the dual graph's cdist arithmetic: a crossing lies in it
+    exactly when it has no registered preimage (its preimage would sit beyond the end of
+    the computed stable branch), so it must be unified exactly then."""
     trellis = dual.trellis
     tol = float(trellis.registry.cdist_tol)
     owners = {key[0] for key in dual.fundamental_segments}
-    stops = {}
+    misplaced = []
     for branch in trellis.stable_branches:
-        fixed_point = branch.key[0]
-        if fixed_point not in owners or not len(branch):
+        if branch.key[0] not in owners:
             continue
-        previous = fixed_point.advance_key(branch.key, -1)
-        end = float(trellis.intersection(branch.intersection_ids[-1]).stable_cdist)
-        last = trellis.branch(previous).intersection_ids[-1]
-        _key, image, _from_table = trellis.image_cdist(last, 1, "stable", branch=previous)
-        stops[branch.key] = (float(image), end) if image < end - tol else None
-    return stops
+        span = dual.fundamental_segments.get(branch.key)
+        for crossing_id in branch.intersection_ids:
+            cdist = float(trellis.intersection(crossing_id).stable_cdist)
+            if cdist == 0.0:  # the anchor is its own preimage
+                continue
+            unified = span is not None and span[0] + tol < cdist <= span[1] + tol
+            if unified != (trellis.iterate(crossing_id, -1) is None):
+                misplaced.append((branch.key, crossing_id))
+    return misplaced
 
 
 def check_dual_unified_is_where_f_of_s_stops(case: "Case") -> int:
     """The precondition of the walk (PK-5 / DEC-20): on every stable branch of a pip's
     fixed point the unified span is exactly ``S \\ f(S)``, where the image of a bridge
-    may cross the stable manifold away from the images of its ends."""
+    may cross the stable manifold away from the images of its ends: a crossing is
+    unified iff it has no registered preimage."""
     dual = case.session.dual_graph()
-    tol = _tol(case)
-    stops = where_f_of_s_stops(dual)
-    for key, span in stops.items():
-        unified = dual.fundamental_segments.get(key)
-        assert (span is None) == (unified is None), key[1:]
-        if span is not None:
-            assert span == (pytest.approx(unified[0], abs=tol), pytest.approx(unified[1], abs=tol))
-    return len(stops)
+    assert misplaced_unified_crossings(dual) == []
+    return sum(len(branch) for branch in dual.trellis.stable_branches)
 
 
 def check_stable_nodes_never_own_a_singleton(case: "Case") -> int:
@@ -2283,10 +2281,13 @@ def check_every_active_class_walks(case: "Case") -> int:
 
 def check_alphabet_closed_under_words(case: "Case") -> int:
     """D3: every symbol of every word names a class of the table. The seed classes are
-    the session alphabet; every other class was added by the closure, is named in the
-    word of the class that named it, and has an itinerary of its own."""
+    the session alphabet; every other class was added by the closure, is spanned by a
+    registered bridge (the evidence table) and is named in the word of the class that
+    named it. A pair no bridge spans is never a class: its class has no itinerary,
+    and then the dynamics is not reliable."""
     dyn = case.session.symbolic_dynamics()
     seed = case.session.bridge_classes()
+    evidence = case.session.minimal_trellis().classes
     count = 0
     for letter, word in dyn.rules.items():
         for symbol in word:
@@ -2296,9 +2297,11 @@ def check_alphabet_closed_under_words(case: "Case") -> int:
     for cls, cd in dyn.classes.items():
         assert (cd.named_by is None) == (cls in seed), cd.letter
         if cd.named_by is not None:
+            assert cls in evidence, cd.letter
             namer = dyn.classes[cd.named_by]
             assert cls in {symbol.bridge_class for symbol in namer.symbols}, cd.letter
-            assert cd.itinerary is not None, cd.letter
+        if cd.itinerary is None:
+            assert not dyn.is_reliable, cd.letter
     return count + len(dyn.classes)
 
 
