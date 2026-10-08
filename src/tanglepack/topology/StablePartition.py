@@ -45,8 +45,11 @@ fixed in conversation with the author (July 2026):
   = left, matching `_side_of`. The side is classified ONCE at punch time and
   stored as ``Hole.bridge_side``: a direct hole from its crossing signs
   (its lobe lies between the pair's stable arc and the bridge, see
-  ``punch_holes``; 2026-10-02), a propagated hole from the backward-carried
-  point read on its own image sub-arc. Holes know nothing of the stable
+  ``punch_holes``; 2026-10-02), a propagated hole CARRIED from the hole it
+  was propagated from, parity-flipped under an orientation-reversing map
+  (author, 2026-10-07; ``Hole.side_source``). The backward-carried point read
+  on its own image sub-arc (2026-10-02) is kept as ``Hole.measured_side`` and
+  must agree. Holes know nothing of the stable
   manifold's sides or of resonance zones. The stable partition keeps its own
   independent left/right, defined by the STABLE dynamical direction — the
   flow toward the fixed point, i.e. looking toward the anchor (unchanged
@@ -78,8 +81,9 @@ fixed in conversation with the author (July 2026):
   table has no link, and the branch cycle steps back by one. The
   reference hole's coordinates are carried backward
   with the real inverse map: the carried point lies inside the true image
-  region, so it classifies the hole's ``bridge_side`` (which side of the
-  containing bridge the hole plots on and which intervals it opens) — two
+  region, so it places the hole and measures its side of the containing
+  bridge (``Hole.measured_side``, the geometric check of the carried
+  ``bridge_side``, which decides the intervals it opens) — two
   orbits landing in the same bridge differ exactly there, and BOTH are
   punched (per the author: no cross-orbit deduplication, even on the same
   bridge and side; only a same-orbit same-iterate duplicate of a recorded
@@ -103,7 +107,8 @@ fixed in conversation with the author (July 2026):
   Registered cdists carry each crossing's own absolute positional noise, so
   scaled spans drift with depth; the table is exact where it reaches. The
   ``carried`` hole coordinate is the one remaining use of the inverse map
-  here (a phase-space point for the side classification, not a cdist).
+  here (a phase-space point that places the hole and measures its side, not
+  a cdist).
 * Partition intervals (semantics fixed with the author, July 2026 — this
   SUPERSEDES the earlier "only the outermost beyond-cut hole" rule and the
   piece-containment openness test): EVERY punched hole participates.
@@ -148,7 +153,15 @@ fixed in conversation with the author (July 2026):
   branch yields the same ``row`` at both ends, because its endpoints are
   consecutive crossings so the arc between them never crosses the stable
   manifold again. Both are hard assertions, checked in ``Trellis.punch_holes``
-  once per orbit and once per bridge (plan row 1.1, 2026-09). The nested
+  once per orbit and once per bridge (plan row 1.1, 2026-09). Since propagated
+  holes carry their side (author, 2026-10-07: option (b) of the stress-report
+  plan) I1 holds for them by construction, so the check also compares each
+  propagated hole's ``measured_side`` with its carried side: that comparison is
+  what keeps it the geometric guard that caught the 2026-10-02 sub-arc bug, and
+  a disagreement is still an assertion, never a warning. Failures name every
+  reading: :class:`SideDiagnosis` per hole, :class:`RowDiagnosis` per bridge
+  (crossing signs, combinatorial and geometric rows, approach angle, node
+  count; built only when a check fails). The nested
   period-3 tangle used to break both — one orbit flipped side at a single
   backward iterate and one bridge read opposite rows at its two ends — because
   ``_containing_bridge`` and ``_bridge_unstable_span`` inferred a bridge's
@@ -232,13 +245,14 @@ partition — an open gap in the punching layer, see punch_holes' warning. A
 bridge whose endpoints have equal unstable cdists (impossible for a real
 bridge — its endpoints are consecutive distinct crossings — but reachable via
 numerical collapse) cannot be dynamically oriented: its holes get
-bridge_side=None and inward-default openings, with a warning.
+inward-default openings, with a warning, and no measured side.
 """
 
 from __future__ import annotations
 
 import logging
 from bisect import bisect_left, bisect_right
+from dataclasses import dataclass
 from typing import Iterable, Optional, TYPE_CHECKING
 
 import numpy as np
@@ -254,6 +268,7 @@ from .TopologyResults import (
     PartitionInterval,
     PseudoneighborPair,
     Side,
+    SideSource,
     StablePartitionResult,
 )
 
@@ -404,6 +419,7 @@ def punch_holes(
             openings=openings,
             iterate=pair.iterate,
             origin=pair.origin,
+            side_source="signs",
         )
         pair.hole = hole
         holes.append(hole)
@@ -543,6 +559,8 @@ def propagate_reference_holes(
         ]
         carried = np.asarray(start.hole.coords, dtype=np.float64)
         start_iterate = start.iterate or 0
+        start_side = start.hole.bridge_side
+        flips = not trellis.orientation_preserving
 
         # Containing bridges already visited, per branch-cycle residue. A
         # repeat at the same residue means the backward orbit is periodic
@@ -571,8 +589,15 @@ def propagate_reference_holes(
 
             key = (origin, iterate)
             if key not in seen:
+                # The side is CARRIED along the orbit (author, 2026-10-07): the
+                # map carries the bridge's dynamical orientation to the image
+                # bridge's, flipping it every step only when it reverses
+                # orientation. The carried point is measured against it.
+                side = start_side
+                if side is not None and flips and step % 2:
+                    side = OPPOSITE_SIDE[side]
                 hole = _punch_in_bridge(
-                    trellis, containing,
+                    trellis, containing, bridge_side=side,
                     iterate=iterate, origin=origin, carried=carried, span=span,
                 )
                 if hole is not None:
@@ -920,12 +945,29 @@ def _row_at(
         ``"left"`` or ``"right"``, or None when the arc end, the local stable
         frame, or the cross product is degenerate/unavailable.
     """
+    approach = _approach(trellis, poly, intersection_id, frame=frame)
+    if approach is None:
+        return None
+    disp, look = approach
+    return _side_of(look, disp)
+
+
+def _approach(
+    trellis: "Trellis",
+    poly: NDArray[np.float64],
+    intersection_id: int,
+    *,
+    frame: Optional[tuple] = None,
+) -> Optional[tuple[NDArray[np.float64], NDArray[np.float64]]]:
+    """(approach displacement into the arc, stable look direction) at a bridge end.
+
+    The look direction is the unit stable tangent toward the anchor; None when
+    the arc end or the local stable frame is unavailable.
+    """
     ix = trellis.intersection(intersection_id)
-    q = np.asarray(ix.get_point(), dtype=np.float64)
-    end = _bridge_end_geometry(poly, q)
+    end = _bridge_end_geometry(poly, np.asarray(ix.get_point(), dtype=np.float64))
     if end is None:
         return None
-    disp, _t_end = end
     anchorward, outward, _below, _above = (
         frame if frame is not None else _stable_frame(trellis, ix)
     )
@@ -934,7 +976,7 @@ def _row_at(
     )
     if look is None:
         return None  # no manifold data at this end
-    return _side_of(look, disp)
+    return end[0], look
 
 
 def row_of_end(
@@ -1040,6 +1082,154 @@ def _row_mismatch_message(
     )
 
 
+@dataclass(frozen=True)
+class RowEnd:
+    """
+    One end of a bridge as the row check reads it.
+
+    Attributes:
+        intersection_id: Registry id of the crossing.
+        crossing_sign: Its ``crossing_sign``.
+        combinatorial_row: :func:`row_of_end` (None at a zero sign).
+        geometric_row: ``_row_at`` on the bridge polyline (None when
+            undecidable).
+        approach_angle: Degrees between the arc's approach displacement and
+            the stable tangent, in ``[0, 90]`` (None when undecidable). A
+            fraction of a degree is a near-tangent end.
+        displacement: Length of that approach displacement (None when
+            undecidable).
+        unstable_cdist: The crossing's unstable canonical distance.
+        stable_cdist: The crossing's stable canonical distance.
+    """
+
+    intersection_id: int
+    crossing_sign: float
+    combinatorial_row: Optional[Side]
+    geometric_row: Optional[Side]
+    approach_angle: Optional[float]
+    displacement: Optional[float]
+    unstable_cdist: float
+    stable_cdist: float
+
+    def describe(self) -> str:
+        """One line naming every reading of this end."""
+        angle = "-" if self.approach_angle is None else f"{self.approach_angle:.3g} deg"
+        disp = "-" if self.displacement is None else f"{self.displacement:.3g}"
+        return (
+            f"crossing {self.intersection_id}: sign {self.crossing_sign:+g}, "
+            f"combinatorial row {self.combinatorial_row}, geometric row "
+            f"{self.geometric_row}, approach {angle} over |d| {disp}, cdists "
+            f"(u {self.unstable_cdist!r}, s {self.stable_cdist!r})"
+        )
+
+
+@dataclass(frozen=True)
+class RowDiagnosis:
+    """
+    Every reading behind a bridge's row check, for the failure message.
+
+    Attributes:
+        bridge_id: The two crossing ids, ordered by unstable cdist (the
+            :data:`~tanglepack.numerics.Bridge.BridgeId` order).
+        branch_key: The stable branch holding the first crossing (None when
+            it lies on no branch of the trellis).
+        ends: The ``"first"`` and ``"second"`` ends, in ``bridge_id`` order.
+        n_nodes: Nodes in the bridge polyline the geometric rows are read on.
+        chord: Distance between the two crossings.
+    """
+
+    bridge_id: tuple[int, int]
+    branch_key: Optional["ManifoldKey"]
+    ends: tuple[RowEnd, RowEnd]
+    n_nodes: int
+    chord: float
+
+    @property
+    def signs_alternate(self) -> bool:
+        """True when the two crossing signs differ (the combinatorial rows then agree)."""
+        return self.ends[0].crossing_sign * self.ends[1].crossing_sign < 0
+
+    @property
+    def verdict(self) -> str:
+        """Which reading to distrust."""
+        if self.signs_alternate:
+            angles = [e.approach_angle for e in self.ends if e.approach_angle is not None]
+            angle = f"{min(angles):.3g} deg" if angles else "an undecidable angle"
+            return (
+                "signs alternate: the combinatorial rows agree; the geometric "
+                f"reading on a {self.n_nodes}-node polyline at {angle} is likely "
+                "below resolution"
+            )
+        return "signs equal: the combinatorial rows disagree as well"
+
+    def describe(self) -> str:
+        """The diagnosis as text: the bridge, both ends, and the verdict."""
+        key = self.branch_key
+        branch = "None" if key is None else f"({key[1]}, {key[2]}, {key[3]})"
+        return "\n".join(
+            [
+                f"bridge {self.bridge_id} on stable branch {branch}: "
+                f"{self.n_nodes} node(s), chord {self.chord:.3g}",
+                *(f"  {end.describe()}" for end in self.ends),
+                f"  verdict: {self.verdict}",
+            ]
+        )
+
+
+def bridge_row_diagnosis(
+    trellis: "Trellis", bridge: "Bridge"
+) -> Optional[RowDiagnosis]:
+    """
+    Read both ends of a bridge every way the row check can.
+
+    Args:
+        trellis: The Trellis carrying the intersections, branches and manifolds.
+        bridge: The bridge to diagnose.
+
+    Returns:
+        The :class:`RowDiagnosis`, or None when the bridge has no polyline or
+        lacks a defining crossing.
+    """
+    poly, _oriented = _row_polyline(trellis, bridge)
+    ids = (bridge.first_intersection, bridge.second_intersection)
+    if poly is None or None in ids:
+        return None
+    bridge_id = tuple(sorted(ids, key=lambda iid: trellis.intersection(iid).unstable_cdist))
+    ends = []
+    for endpoint, iid in zip(("first", "second"), bridge_id):
+        ix = trellis.intersection(iid)
+        approach = _approach(trellis, poly, iid)
+        angle = displacement = None
+        if approach is not None:
+            disp, look = approach
+            displacement = float(np.linalg.norm(disp))
+            angle = float(np.degrees(np.arctan2(
+                abs(float(look[0] * disp[1] - look[1] * disp[0])),
+                abs(float(np.dot(look, disp))),
+            )))
+        ends.append(RowEnd(
+            intersection_id=iid,
+            crossing_sign=float(ix.crossing_sign),
+            combinatorial_row=(
+                row_of_end(trellis, bridge_id, endpoint) if ix.crossing_sign else None
+            ),
+            geometric_row=None if approach is None else _side_of(approach[1], approach[0]),
+            approach_angle=angle,
+            displacement=displacement,
+            unstable_cdist=ix.unstable_cdist,
+            stable_cdist=ix.stable_cdist,
+        ))
+    branch = trellis.branch_containing(bridge_id[0], "stable")
+    first, second = (np.asarray(trellis.intersection(i).get_point(), dtype=np.float64) for i in bridge_id)
+    return RowDiagnosis(
+        bridge_id=bridge_id,
+        branch_key=None if branch is None else branch.key,
+        ends=tuple(ends),
+        n_nodes=len(poly),
+        chord=float(np.linalg.norm(second - first)),
+    )
+
+
 def bridge_row_violation(
     trellis: "Trellis", bridge: "Bridge"
 ) -> Optional[str]:
@@ -1059,8 +1249,9 @@ def bridge_row_violation(
         bridge: The bridge to check.
 
     Returns:
-        A human-readable violation message, or None when the invariant holds
-        or the check does not apply.
+        A human-readable violation message followed by the bridge's
+        :class:`RowDiagnosis` (built only on failure), or None when the
+        invariant holds or the check does not apply.
     """
     poly, _oriented = _row_polyline(trellis, bridge)
     if poly is None:
@@ -1069,7 +1260,10 @@ def bridge_row_violation(
     if ids[0] is None or ids[1] is None:
         return None
     rows = {iid: _row_at(trellis, poly, iid) for iid in ids}
-    return _row_mismatch_message(trellis, bridge, rows)
+    message = _row_mismatch_message(trellis, bridge, rows)
+    if message is None:
+        return None
+    return f"{message}\n{bridge_row_diagnosis(trellis, bridge).describe()}"
 
 
 def check_bridge_rows_consistent(trellis: "Trellis", bridge: "Bridge") -> None:
@@ -1106,67 +1300,161 @@ def _orbit_side(hole: Hole, orientation_preserving: bool) -> Optional[Side]:
     return hole.bridge_side if hole.iterate % 2 == 0 else OPPOSITE_SIDE[hole.bridge_side]
 
 
-def bridge_side_violations(
-    holes: Iterable[Hole], *, orientation_preserving: bool = True
-) -> list[str]:
+@dataclass(frozen=True)
+class SideDiagnosis:
     """
-    Describe every orbit whose holes disagree on their side of the bridge.
+    One hole that fails a hole-side check, with every reading of its side.
 
-    A propagated hole is the backward image of its orbit's reference hole, and
-    the map carries a bridge's dynamical orientation to the image bridge's, so
-    an orientation-PRESERVING map (det J > 0 — both Hénon fixtures have
-    b = 1) leaves the left/right classification fixed along the whole backward
-    chain. Under an orientation-REVERSING map the side alternates with the
-    parity of :attr:`Hole.iterate`, which ``orientation_preserving=False``
-    encodes.
+    Attributes:
+        bounding_ids: The hole's bridge (its two defining crossings).
+        origin: The hole's orbit (``Hole.origin``).
+        iterate: The hole's place on it (``Hole.iterate``).
+        side_source: Where its ``bridge_side`` came from (``Hole.side_source``).
+        bridge_side: The stored side.
+        measured_side: The side measured on the curves (``Hole.measured_side``).
+        expected_side: The orbit's side at this iterate, from the first hole of
+            the origin (parity-flipped under an orientation-reversing map);
+            None when the orbit check does not apply.
+        reference_iterate: The iterate of that first hole.
+    """
 
-    Holes with no ``origin`` or no ``bridge_side`` carry no orbit identity to
-    compare and are skipped (counted and logged at debug level), as are holes
-    with no ``iterate`` when the parity rule is in force.
+    bounding_ids: Optional[tuple[int, int]]
+    origin: Optional[tuple[int, int]]
+    iterate: Optional[int]
+    side_source: Optional[SideSource]
+    bridge_side: Optional[Side]
+    measured_side: Optional[Side]
+    expected_side: Optional[Side]
+    reference_iterate: Optional[int]
+
+    @property
+    def orbit_disagrees(self) -> bool:
+        """The stored side breaks the orbit invariant."""
+        return self.expected_side is not None and self.bridge_side != self.expected_side
+
+    @property
+    def measured_disagrees(self) -> bool:
+        """The measured side contradicts the stored (carried) one."""
+        return self.measured_side is not None and self.measured_side != self.bridge_side
+
+    def describe(self) -> str:
+        """One line naming the hole and each reading that disagrees."""
+        parts = [
+            f"hole {self.bounding_ids} of origin {self.origin} at iterate "
+            f"{self.iterate} ({self.side_source}): bridge_side {self.bridge_side}"
+        ]
+        if self.orbit_disagrees:
+            parts.append(
+                f"its orbit expects {self.expected_side} (from iterate "
+                f"{self.reference_iterate})"
+            )
+        if self.measured_disagrees:
+            parts.append(f"measured {self.measured_side} on its image sub-arc")
+        return ", ".join(parts)
+
+
+def side_diagnoses(
+    holes: Iterable[Hole], *, orientation_preserving: bool = True
+) -> list[SideDiagnosis]:
+    """
+    Diagnose every hole that breaks one of the two hole-side checks.
+
+    The ORBIT check: a propagated hole is the backward image of its orbit's
+    reference hole, and the map carries a bridge's dynamical orientation to
+    the image bridge's, so an orientation-PRESERVING map (det J > 0 — both
+    Hénon fixtures have b = 1) leaves the left/right classification fixed
+    along the whole backward chain. Under an orientation-REVERSING map the
+    side alternates with the parity of :attr:`Hole.iterate`, which
+    ``orientation_preserving=False`` encodes. Since propagated holes CARRY
+    their side (author, 2026-10-07) this guards the direct holes of one
+    orbit (the reference and its ``+1 .. +(k-1)`` appearances, each read off
+    its own crossing signs) and the carrying itself.
+
+    The MEASURED check keeps the guard geometric: a hole whose
+    ``measured_side`` (the reference hole carried back by the real inverse
+    map, read on the image sub-arc) is known must agree with its stored side.
+
+    Holes with no ``origin`` or no comparable side skip the orbit check, and
+    holes with no ``measured_side`` skip the measured one; both counts are
+    logged at INFO.
 
     Args:
         holes: The holes to check, typically ``trellis.holes``.
         orientation_preserving: True when the map has det J > 0.
 
     Returns:
-        One message per disagreeing hole, naming the origin and both holes'
-        iterates and sides. Empty when the invariant holds.
+        One :class:`SideDiagnosis` per disagreeing hole, in input order.
     """
-    by_origin: dict[tuple[int, int], list[Hole]] = {}
-    skipped = 0
+    holes = list(holes)
+    orbit_side: dict[tuple[int, int], tuple[Side, Optional[int]]] = {}
+    unplaced = 0
     for hole in holes:
-        if hole.origin is None or _orbit_side(hole, orientation_preserving) is None:
-            skipped += 1
-            continue
-        by_origin.setdefault(hole.origin, []).append(hole)
-    if skipped:
-        logger.debug(
-            "Skipped %d hole(s) with no comparable orbit side", skipped
+        side = _orbit_side(hole, orientation_preserving)
+        if hole.origin is None or side is None:
+            unplaced += 1
+        else:
+            orbit_side.setdefault(hole.origin, (side, hole.iterate))
+    unmeasured = sum(
+        1 for hole in holes if hole.side_source == "carried" and hole.measured_side is None
+    )
+    if unplaced or unmeasured:
+        logger.info(
+            "Hole-side check skips %d hole(s) with no comparable orbit side and "
+            "%d propagated hole(s) with no measured side", unplaced, unmeasured
         )
 
-    rule = "" if orientation_preserving else " (after the parity flip)"
-    messages: list[str] = []
-    for origin, group in sorted(by_origin.items()):
-        reference = group[0]
-        expected = _orbit_side(reference, orientation_preserving)
-        for hole in group[1:]:
-            if _orbit_side(hole, orientation_preserving) == expected:
-                continue
-            messages.append(
-                f"Holes of origin {origin} disagree on bridge_side{rule}: "
-                f"iterate {reference.iterate} is {reference.bridge_side}, "
-                f"iterate {hole.iterate} is {hole.bridge_side}"
-            )
-    return messages
+    diagnoses: list[SideDiagnosis] = []
+    for hole in holes:
+        expected = reference_iterate = None
+        if hole.origin in orbit_side and _orbit_side(hole, orientation_preserving):
+            expected, reference_iterate = orbit_side[hole.origin]
+            if not orientation_preserving and hole.iterate % 2:
+                expected = OPPOSITE_SIDE[expected]
+        diagnosis = SideDiagnosis(
+            bounding_ids=hole.bounding_ids,
+            origin=hole.origin,
+            iterate=hole.iterate,
+            side_source=hole.side_source,
+            bridge_side=hole.bridge_side,
+            measured_side=hole.measured_side,
+            expected_side=expected,
+            reference_iterate=reference_iterate,
+        )
+        if diagnosis.orbit_disagrees or diagnosis.measured_disagrees:
+            diagnoses.append(diagnosis)
+    return diagnoses
+
+
+def bridge_side_violations(
+    holes: Iterable[Hole], *, orientation_preserving: bool = True
+) -> list[str]:
+    """
+    Describe every hole whose side of its bridge breaks a hole-side check.
+
+    See :func:`side_diagnoses` for the two checks and which holes they skip.
+
+    Args:
+        holes: The holes to check, typically ``trellis.holes``.
+        orientation_preserving: True when the map has det J > 0.
+
+    Returns:
+        One line per disagreeing hole (its :class:`SideDiagnosis`). Empty when
+        both checks hold.
+    """
+    return [
+        diagnosis.describe()
+        for diagnosis in side_diagnoses(holes, orientation_preserving=orientation_preserving)
+    ]
 
 
 def check_holes_share_bridge_side(
     holes: Iterable[Hole], *, orientation_preserving: bool = True
 ) -> None:
     """
-    Assert that all holes of one origin share their side of the bridge.
+    Assert that all holes of one origin share their side of the bridge, and
+    that every measured side agrees with the stored one.
 
-    See :func:`bridge_side_violations` for the invariant, the parity rule for
+    See :func:`side_diagnoses` for the two checks, the parity rule for
     orientation-reversing maps, and which holes are skipped.
 
     Args:
@@ -1176,7 +1464,8 @@ def check_holes_share_bridge_side(
     Raises:
         AssertionError: If two holes of the same origin sit on different sides
             of their bridges (up to the parity flip when the map reverses
-            orientation).
+            orientation), or a hole's measured side contradicts its carried
+            one. The message lists every :class:`SideDiagnosis`.
     """
     messages = bridge_side_violations(
         holes, orientation_preserving=orientation_preserving
@@ -1528,6 +1817,7 @@ def _punch_in_bridge(
     trellis: "Trellis",
     bridge: "Bridge",
     *,
+    bridge_side: Optional[Side] = None,
     iterate: Optional[int] = None,
     origin: Optional[tuple[int, int]] = None,
     carried: Optional[NDArray[np.float64]] = None,
@@ -1538,13 +1828,15 @@ def _punch_in_bridge(
     ``span`` is the backward image's unstable-cdist extent inside the
     containing bridge — the two imaged pseudoneighbor points bound it, and the
     hole plots at the middle of that sub-arc (two orbits landing in the same
-    bridge occupy different sub-arcs). ``carried`` is the reference hole's
+    bridge occupy different sub-arcs). ``bridge_side`` is the side carried
+    from the orbit (``Hole.bridge_side``, ``side_source == "carried"``); it
+    decides the intervals the hole opens at the bridge's defining
+    intersections (see :func:`_hole_openings`), and without it they default
+    to the inward pair (``"fallback"``). ``carried`` is the reference hole's
     coordinates mapped backward alongside — a point inside the true image
-    region — and classifies the hole's side of the containing bridge
-    (``Hole.bridge_side``), which in turn decides the intervals it opens at
-    the bridge's defining intersections (see :func:`_hole_openings`). Without
-    it the containing bridge's own midpoint and chord are the fallback and
-    the openings default to the inward pair.
+    region — which places the hole and is read on the image sub-arc as
+    ``Hole.measured_side``, the geometric check of the carried side. Without
+    it the containing bridge's own midpoint and chord place the hole.
 
     Returns None for a ``partial`` piece: a hole is punched between a bridge's two
     defining crossings, and a partial piece has fewer than two.
@@ -1582,19 +1874,19 @@ def _punch_in_bridge(
     else:
         coords = _step_into(midpoint, stable_mid, 0.05, arc_chord)
 
-    bridge_side = (
+    measured_side = (
         _bridge_side_of(trellis, bridge, carried, span) if carried is not None else None
     )
-    openings = _hole_openings(trellis, bridge, bridge_side)
-    coords = (float(coords[0]), float(coords[1]))
     return Hole(
-        coords=coords,
+        coords=(float(coords[0]), float(coords[1])),
         near_intersection_id=near_id,
         bridge_side=bridge_side,
         bounding_ids=(near_id, far_id),
-        openings=openings,
+        openings=_hole_openings(trellis, bridge, bridge_side),
         iterate=iterate,
         origin=origin,
+        measured_side=measured_side,
+        side_source="carried" if bridge_side is not None else "fallback",
     )
 
 

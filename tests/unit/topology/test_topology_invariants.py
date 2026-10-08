@@ -38,10 +38,12 @@ from helpers.logs import assert_logged
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.StablePartition import (
+    bridge_row_diagnosis,
     bridge_row_violation,
     bridge_side_violations,
     check_bridge_rows_consistent,
     check_holes_share_bridge_side,
+    side_diagnoses,
 )
 from tanglepack.topology.TopologyResults import Hole
 from tanglepack.topology.Trellis import Trellis
@@ -51,8 +53,8 @@ from tanglepack.topology.TrellisBranch import TrellisBranch
 # --------------------------------------------------------------------------- #
 # I1 — holes of one origin share their side of the bridge
 # --------------------------------------------------------------------------- #
-def _hole(origin, iterate, side) -> Hole:
-    """A bare hole carrying only the orbit identity the check reads."""
+def _hole(origin, iterate, side, *, measured=None, source=None) -> Hole:
+    """A bare hole carrying only the orbit identity and the sides the check reads."""
     return Hole(
         coords=(0.0, 0.0),
         near_intersection_id=0,
@@ -61,6 +63,8 @@ def _hole(origin, iterate, side) -> Hole:
         openings=[],
         iterate=iterate,
         origin=origin,
+        measured_side=measured,
+        side_source=source,
     )
 
 
@@ -137,6 +141,51 @@ def test_orientation_without_a_jacobian(caplog, periods, defaulted):
     with caplog.at_level(logging.DEBUG, logger="tanglepack.topology.Trellis"):
         assert trellis.orientation_preserving is True
     assert_logged(caplog, logging.DEBUG, "tanglepack.topology.Trellis", count=int(defaulted))
+
+
+def test_measured_side_contradicting_the_carried_one_raises():
+    """A propagated hole carries its orbit's side, so I1 holds for it by
+    construction; its measured side keeps the check geometric (author, D2)."""
+    agreeing = [
+        _hole((3, 4), 0, "left", source="signs"),
+        _hole((3, 4), -1, "left", measured="left", source="carried"),
+    ]
+    check_holes_share_bridge_side(agreeing)
+    contradicted = agreeing + [_hole((3, 4), -2, "left", measured="right", source="carried")]
+    with pytest.raises(AssertionError):
+        check_holes_share_bridge_side(contradicted)
+
+
+def test_side_diagnoses_name_each_disagreeing_hole():
+    """One diagnosis per disagreeing hole, saying which reading disagrees."""
+    holes = [
+        _hole((3, 4), 0, "left", source="signs"),
+        _hole((3, 4), -1, "left", measured="right", source="carried"),
+        _hole((3, 4), -2, "right", measured="right", source="carried"),
+        _hole((5, 6), 0, "right", source="signs"),
+    ]
+    diagnoses = side_diagnoses(holes)
+    assert [d.iterate for d in diagnoses] == [-1, -2]
+    measured, orbit = diagnoses
+    assert measured.measured_disagrees and not measured.orbit_disagrees
+    assert orbit.orbit_disagrees and not orbit.measured_disagrees
+    assert (orbit.expected_side, orbit.reference_iterate) == ("left", 0)
+    assert len(bridge_side_violations(holes)) == len(diagnoses)
+
+
+def test_side_diagnoses_expect_the_parity_flip():
+    """Under det J < 0 the expected side of an odd iterate is the opposite one."""
+    holes = [_hole((3, 4), 0, "left"), _hole((3, 4), -1, "left")]
+    (diagnosis,) = side_diagnoses(holes, orientation_preserving=False)
+    assert diagnosis.expected_side == "right"
+
+
+def test_unmeasured_propagated_holes_are_logged(caplog):
+    """A propagated hole with no measured side skips that check, at INFO."""
+    holes = [_hole((3, 4), 0, "left", source="signs"), _hole((3, 4), -1, "left", source="carried")]
+    with caplog.at_level(logging.INFO, logger="tanglepack.topology.StablePartition"):
+        assert side_diagnoses(holes) == []
+    assert_logged(caplog, logging.INFO, "tanglepack.topology.StablePartition", count=1)
 
 
 def test_orientation_reversing_skips_holes_without_iterate():
@@ -258,3 +307,37 @@ def test_bridge_rows_on_different_stable_branches_are_exempt():
     bridge = _StubBridge(a_id, b_id, _CROSSING_LOBE)
     check_bridge_rows_consistent(trellis, bridge)
     assert bridge_row_violation(trellis, bridge) is None
+
+
+@pytest.mark.parametrize("lobe", [_LOBE, _CROSSING_LOBE], ids=["one_sided", "crossing"])
+def test_row_diagnosis_reads_every_end(lobe):
+    """The diagnosis carries both crossings in BridgeId order, every row reading,
+    the approach geometry, and the polyline the geometric rows were read on."""
+    trellis, a_id, b_id = _row_trellis()
+    trellis.intersection(a_id).crossing_sign = 1
+    trellis.intersection(b_id).crossing_sign = -1
+    bridge = _StubBridge(b_id, a_id, lobe[::-1])
+    diagnosis = bridge_row_diagnosis(trellis, bridge)
+
+    assert diagnosis.bridge_id == (a_id, b_id)  # ordered by unstable cdist
+    assert diagnosis.branch_key == trellis.intersection(a_id).manifold_b_key
+    assert diagnosis.n_nodes == len(lobe)
+    assert diagnosis.chord == pytest.approx(2.0)
+    assert diagnosis.signs_alternate
+    first, second = diagnosis.ends
+    assert (first.intersection_id, second.intersection_id) == (a_id, b_id)
+    assert first.combinatorial_row == second.combinatorial_row  # alternating signs
+    for end in diagnosis.ends:
+        assert 0.0 < end.approach_angle <= 90.0
+        assert end.displacement > 0.0
+    same_row = first.geometric_row == second.geometric_row
+    assert same_row == (bridge_row_violation(trellis, bridge) is None)
+    assert same_row == (lobe is _LOBE)
+
+
+def test_row_diagnosis_without_a_sign_has_no_combinatorial_row():
+    """A zero crossing sign leaves the combinatorial row undetermined, not an error."""
+    trellis, a_id, b_id = _row_trellis()
+    diagnosis = bridge_row_diagnosis(trellis, _StubBridge(a_id, b_id, _LOBE))
+    assert [end.combinatorial_row for end in diagnosis.ends] == [None, None]
+    assert not diagnosis.signs_alternate
