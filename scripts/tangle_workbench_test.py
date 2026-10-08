@@ -36,9 +36,9 @@ unstable_segments, stable_segments = workbench.initialize_both_manifolds(fixed_p
 workbench.grow_n_times(fixed_point, "unstable", num_iterations=8)
 workbench.grow_until_turnaround(fixed_point, "stable")
 
-intersections = workbench.compute_intersections(fixed_point)
-print(intersections)
-print(len(intersections))
+registry = workbench.compute_intersections(fixed_point)  # the registry it installs
+print([ix.coords for _iid, ix in registry])
+print(len(registry))
 
 # for each bridge find the intersections that are the endpoints
 # add a directed edge between the two intersections

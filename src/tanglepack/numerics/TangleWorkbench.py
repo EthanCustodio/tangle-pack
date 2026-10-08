@@ -29,6 +29,7 @@ the accumulated ``edist`` would make it exact.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Callable, Literal, Iterable, Optional, Sequence, Union
 
 import numpy as np
@@ -54,6 +55,61 @@ from .diagnostics import ResolutionReport, SameStabilityCrossing, same_stability
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+#: How much a stable segment must be stretched (log of the factor) before it
+#: turns around: rounds * ln(stretch per round) measured 14.8-17.1 on the Hénon
+#: saddle over k = 0.3 .. 10 from the default ~5e-6 seed (2026-10-07), with margin.
+TURNAROUND_LOG_STRETCH = 18.0
+
+
+class MaxIterationsReached(ValueError):
+    """
+    A ``grow_until_*`` driver hit its iteration cap before its stop condition.
+
+    One growth round stretches a branch by ``stretch_per_round`` (``lambda_u``
+    per map step on an area-preserving map), so the depth a stop condition
+    needs scales with ``1 / ln(stretch_per_round)``: a small ``lambda_u``
+    (Hénon at small ``k``) needs more rounds than the default cap of 10.
+
+    Attributes:
+        max_iterations: The cap that was reached.
+        stretch_per_round: The canonical-distance factor of one growth round on
+            the grown manifold.
+        suggested_max_iterations: ``ceil(log_stretch / ln(stretch_per_round))``
+            for the stretch the condition is estimated to need, at least one
+            more than the cap.
+    """
+
+    def __init__(
+        self,
+        max_iterations: int,
+        stretch_per_round: float,
+        log_stretch: float,
+        what: str,
+    ) -> None:
+        """
+        Build the error and its message.
+
+        Args:
+            max_iterations: The cap that was reached.
+            stretch_per_round: The grown manifold's factor per growth round.
+            log_stretch: Natural log of the total stretch the stop condition is
+                estimated to need, counted from the start of the call.
+            what: The stop condition that was not met, for the message.
+        """
+        self.max_iterations = max_iterations
+        self.stretch_per_round = stretch_per_round
+        self.suggested_max_iterations = max(
+            math.ceil(log_stretch / math.log(stretch_per_round)), max_iterations + 1
+        )
+        super().__init__(
+            f"Max iterations ({max_iterations}) reached without {what}. One growth "
+            f"round stretches the branch by {stretch_per_round:.4g}, so the depth "
+            f"needed scales with 1/ln({stretch_per_round:.4g}); try "
+            f"max_iterations={self.suggested_max_iterations}, or stop on a "
+            f"condition of your own with grow_until(predicate) or "
+            f"grow_until_bounded(radius)."
+        )
 
 
 class TangleWorkbench:
@@ -419,9 +475,22 @@ class TangleWorkbench:
                 period, never at ``k_value``), if it is not a real saddle, or if
                 its eigenvalues disagree in sign
                 (:meth:`FixedPointSolver.construct_fixed_point`).
+
+        Note:
+            With a Jacobian, area preservation is checked once at the orbit's
+            first point (:meth:`DynamicalSystem.check_area_preserving`) and a
+            failure is logged as one WARNING: the construction still succeeds,
+            but nothing downstream is validated for a dissipative map.
         """
 
         fixed_point = self._fp_solver.construct_fixed_point(initial_guess)
+        orbit_point = fixed_point.coordinates[0]
+        if self.dynamical_system.check_area_preserving(orbit_point) is False:
+            logger.warning(
+                "the map does not preserve area at %s (|det J| != 1); the "
+                "topological layer assumes an area-preserving map",
+                orbit_point,
+            )
         position = len(self.fixed_points)
         fixed_point.label = position_letter(position)
 
@@ -545,8 +614,14 @@ class TangleWorkbench:
             a refusal: past escape it underestimates by an order of magnitude),
             and with :attr:`escape_radius` set a step reaching it warns too.
             Prefer the stop-condition drivers (:meth:`grow_until_bounded`,
-            :meth:`grow_until_turnaround`, :meth:`grow_until`). The depth a
-            tangle needs scales like ``1 / ln(lambda_u)``.
+            :meth:`grow_until_turnaround`, :meth:`grow_until`).
+
+            One iteration stretches a branch by ``per_step_beta("unstable")``
+            (``lambda_u`` per map step), so the depth a tangle needs scales with
+            ``1 / ln(lambda_u)``. A fixed count that works at one parameter can
+            leave a weakly hyperbolic saddle (Hénon at small ``k``) with ZERO
+            crossings: that is a depth problem, not a bug. Grow on a stop
+            condition (``grow_until_*``, ``grow_until(predicate)``) instead.
         """
 
         self._require_manifold(fixed_point, stability, branch_index)
@@ -650,8 +725,9 @@ class TangleWorkbench:
                 Defaults to 0.
 
         Raises:
-            ValueError: If the manifold has not been initialized, or if the cap
-                is reached before a turnaround is detected.
+            ValueError: If the manifold has not been initialized.
+            MaxIterationsReached: A ``ValueError`` raised when the cap is reached
+                before a turnaround is detected; it carries ``suggested_max_iterations``.
         """
 
         manifold = self._require_manifold(fixed_point, stability, branch_index)
@@ -684,10 +760,10 @@ class TangleWorkbench:
             if dot_product < 0:
                 return None
 
-        else:
-            raise ValueError(
-                "Max iterations reached, choose a higher cap or a different method."
-            )
+        raise self._cap_reached(
+            fixed_point, stability, max_iterations, TURNAROUND_LOG_STRETCH,
+            "a turnaround",
+        )
 
     def grow_until_bounded(
         self,
@@ -756,8 +832,9 @@ class TangleWorkbench:
             branch_index (int): Which eigenvector branch to grow. Defaults to 0.
 
         Raises:
-            ValueError: If the manifold has not been initialized, or if the cap is
-                reached before the tail passes ``length``.
+            ValueError: If the manifold has not been initialized.
+            MaxIterationsReached: A ``ValueError`` raised when the cap is reached
+                before the tail passes ``length``; it carries ``suggested_max_iterations``.
         """
 
         self._require_manifold(fixed_point, stability, branch_index)
@@ -765,6 +842,7 @@ class TangleWorkbench:
         def tail_distance() -> float:
             return self.manifolds[(fixed_point, stability, 0, branch_index)].tail.cdist
 
+        start_distance = tail_distance()
         for _ in range(max_iterations):
 
             if tail_distance() >= length:
@@ -777,8 +855,9 @@ class TangleWorkbench:
         if tail_distance() >= length:
             return None
 
-        raise ValueError(
-            "Max iterations reached, choose a higher cap or a shorter length."
+        raise self._cap_reached(
+            fixed_point, stability, max_iterations,
+            math.log(length / start_distance), f"the tail reaching cdist {length:g}",
         )
 
     def grow_until_intersection(
@@ -799,8 +878,9 @@ class TangleWorkbench:
             branch_index (int): Which eigenvector branch to grow. Defaults to 0.
 
         Raises:
-            ValueError: If the manifold has not been initialized, or if the cap is
-                reached without a new crossing.
+            ValueError: If the manifold has not been initialized.
+            MaxIterationsReached: A ``ValueError`` raised when the cap is reached
+                before a new crossing appears; it carries ``suggested_max_iterations``.
         """
 
         self._require_manifold(fixed_point, stability, branch_index)
@@ -824,7 +904,10 @@ class TangleWorkbench:
             if num_current_intersections > num_initial_intersections:
                 return None
 
-        raise ValueError("Max iterations reached, no intersection found")
+        raise self._cap_reached(
+            fixed_point, stability, max_iterations, TURNAROUND_LOG_STRETCH,
+            "a new crossing",
+        )
 
     # ── predicate-driven growth ──────────────────────────────────────────────
 
@@ -1208,7 +1291,7 @@ class TangleWorkbench:
         infer_iterates: bool = True,
         preserve_ids: bool = False,
         diagnose: bool = True,
-    ) -> list[tuple[float, float]]:
+    ) -> IntersectionRegistry:
         """
         Compute intersections among the manifolds of one or more fixed points.
 
@@ -1239,7 +1322,12 @@ class TangleWorkbench:
                 growth loops pass False and report once at the end.
 
         Returns:
-            List of (x, y) coordinates, one per detected crossing.
+            The registry the workbench now holds. With ``reset`` (the default)
+            this is a NEW object: a reference to :attr:`intersection_registry`
+            taken before the call is stale (its crossings and ids belong to the
+            old manifolds), so re-fetch the registry after every call or use
+            this return value. Coordinates are ``[ix.coords for _, ix in
+            registry]``.
         """
         fixed_points = (
             [fixed_points] if isinstance(fixed_points, FixedPoint) else list(fixed_points)
@@ -1247,6 +1335,12 @@ class TangleWorkbench:
 
         old_registry = self._intersection_registry
         if reset:
+            if len(old_registry) > 0:
+                logger.debug(
+                    "compute_intersections replaces a registry of %d crossings; "
+                    "references to the old one are stale",
+                    len(old_registry),
+                )
             self.Tangle.clear_all()
             self._intersection_registry = IntersectionRegistry()
             # The registry object itself changed; its own generation restarts at
@@ -1281,7 +1375,7 @@ class TangleWorkbench:
         if diagnose:
             self.report_resolution(fixed_points)
 
-        return [ix.coords for _iid, ix in self._intersection_registry]
+        return self._intersection_registry
 
     # ── resolution diagnostics (see diagnostics) ─────────────────────────────
 
@@ -1823,7 +1917,13 @@ class TangleWorkbench:
 
     @property
     def intersection_registry(self) -> IntersectionRegistry:
-        """The single source of truth for this workbench's crossings."""
+        """The single source of truth for this workbench's crossings.
+
+        Note:
+            :meth:`compute_intersections` replaces this object (unless
+            ``reset=False``), so re-fetch it after every call rather than
+            holding a reference across one.
+        """
         return self._intersection_registry
 
     def iterate_bridge(self, bridge: Bridge) -> list[Bridge]:
@@ -2002,6 +2102,20 @@ class TangleWorkbench:
                 continue
 
             manifold.tail = new_tail
+
+    @staticmethod
+    def _cap_reached(
+        fixed_point: FixedPoint,
+        stability: Stability,
+        max_iterations: int,
+        log_stretch: float,
+        what: str,
+    ) -> MaxIterationsReached:
+        """The cap error of a ``grow_until_*`` driver, with its suggested cap."""
+        beta = fixed_point.per_step_beta(stability)
+        # stable growth runs the inverse map, which stretches by 1 / beta_s
+        stretch = beta if stability == "unstable" else 1.0 / beta
+        return MaxIterationsReached(max_iterations, stretch, log_stretch, what)
 
     def _require_manifold(
         self,

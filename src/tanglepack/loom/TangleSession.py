@@ -79,6 +79,11 @@ class TangleSession:
     the session: every round they run moves the workbench generation, so the next
     :meth:`trellis` or :meth:`arrangement` call rebuilds itself.
 
+    ``compute_intersections`` REPLACES the workbench's intersection registry
+    and returns the new one: re-fetch ``session.intersection_registry`` after
+    every call (growth drivers and resonance-zone trims call it too) instead of
+    holding a reference across one.
+
     Attributes:
         workbench: The underlying TangleWorkbench.
 

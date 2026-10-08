@@ -3,7 +3,9 @@
 Each case builds through the full pipeline (every product non-empty), its
 ``k_value`` is ``2 * period`` exactly on an inversion point (the k=10 saddle
 at ``(-2.3166, 2.3166)``: both eigenvalues negative, det J = +1, NOT
-orientation reversing), every branch of every cycle is built and grown, and
+orientation reversing), the map is area preserving at every orbit point
+(``|det J| = 1``, so ``construct_fixed_point`` never warns), every branch of
+every cycle is built and grown, and
 every unstable and stable branch crosses something. The ``b = -1`` orientation-reversing
 placeholder is a known issue: ``construct_fixed_point`` raises ``ValueError``
 until det J < 0 is supported.
