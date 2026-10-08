@@ -83,3 +83,15 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
   `session.resonance_zones[fp]`, `_blast_stats[fp]`, `zone_label` "zone p<period>";
   `ResonanceZone.branch_index` deleted. Inversion zone area 1.412087 (was 1.232), which changes
   the bridges the inversion blasts iterate (classes 4 / 10 / 10, was 6 / 11 / 11).
+
+## Open-issues round WP6 (2026-10-08, branch `oi/wp06-minimal-alphabet`)
+
+- `TangleSession.minimal_trellis` builds the EVIDENCE table itself
+  (`_bridge_classes(trellis, gathered partitions)`, after `_warn_unpartitioned_branches`) and
+  passes it to `minimal_trellis`; `bridge_classes()` is `minimal_trellis().alphabet`, lettered
+  (`BridgeAlphabet`) and zoned, cached as `(minimal, table)` per selection key and rebuilt
+  whenever the minimal trellis object changes (so it can never hold entries of a stale minimal
+  trellis). `symbolic_dynamics` takes `bridge_classes(fixed_points)` after the dual graph (no
+  second rebuild of the minimal trellis).
+- `BridgeAlphabet.letter_for` uses `topology.SymbolicDynamics.letter` (active `a..t, aa, ...`);
+  `loom.letter` is gone (no shim, D8). Session caches stay hand-rolled (SIMP-8, WP8).

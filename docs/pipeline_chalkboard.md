@@ -81,6 +81,6 @@ From the audit; the details and evidence are in `open_issues.md`.
 | 4 | Lap factor λ_u instead of β^k | INV-2 | fixed (WP2) |
 | 4 | Missing table links leave branches without holes | PK-3 | warned (WP5); filling is DEC-19 |
 | 5-6 | Holes and rows read from polyline geometry, not signs | INT-3 | fixed (WP4) |
-| 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | WP6 |
+| 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | fixed (WP6) |
 | 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | WP7 |
 | 10 | Element identity is a positional index | BCG-7 | WP8 |

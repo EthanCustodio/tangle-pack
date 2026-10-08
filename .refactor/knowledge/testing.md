@@ -294,3 +294,43 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   forward-pair kernel takes `(pair)` and gains the firm rows `(3, 1, False)`, `(3, 2, False)`.
 - `p3_6_blasts` / `inversion_period2` builds take under a second each here; the regression adds
   ~2 s.
+
+## Open-issues round WP6 (2026-10-08, branch `oi/wp06-minimal-alphabet`, base `b90b718`)
+
+- Suite: 938 passed, 27 skipped, 3 deselected, 13 xfailed, ~108 s (base 921 passed / 25
+  skipped / 21 xfailed). KNOWN_ISSUES 21 -> 13: all eight WP6 entries XPASSed and were removed
+  (`alphabet_inside_minimal_trellis` x inversion / inversion_one_blast / inversion_two_blasts,
+  `series_class_count_constant_while_holes_constant` x k28_series / p3_series,
+  `series_alphabet_inside_minimal_trellis` x the three series), with `_BCG1` and the now unused
+  `_INVERSION` tuple. NOT_APPLICABLE +2: `every_active_class_walks` and `matrix_is_token_counts`
+  on `inversion` (its alphabet is one inert class until DEC-19); they report skips and flip
+  loudly when s(0.1) gets its hole.
+- Laws (classes layer). `_evidence(case)` = `minimal_trellis().classes`. The classing laws read
+  it (`every_bridge_in_one_class`, `class_orientation_anchor_outward`,
+  `anchor_bridge_class_leads_its_tangle`, `class_table_order`, `classes_do_not_mix_tangles`,
+  `classes_use_every_orbit_branch`; `minimal_trellis_bridges` reads `minimal.classes`): on base
+  they read this same full table, so no weakening. `every_bridge_in_one_class` counts
+  `table.orphans` (each a loop by independent `_element_ends`); `class_orientation_anchor_outward`
+  asserts no class is a loop (was "or inert"). NEW `loops_fold_forward` (D2): each loop's
+  `folded_from` is a non-loop member of its class, reached from the loop up independently indexed
+  `image_chain` parents through loops only; returns entries + loops, non-vacuous everywhere.
+  `alphabet_inside_minimal_trellis` is an iff over the evidence table and an evidence class
+  outside the alphabet is unlettered. The lettering law `only_active_classes_lettered` reads the
+  alphabet.
+- Unit (`test_bridge_class.py`): `test_loop_folds_into_the_class_whose_image_holds_it` (was the
+  preimage test), `test_orphan_loop_is_logged_and_unclassed` (was "stands alone and warns"),
+  `test_restricted_to_keeps_the_entries_with_a_member_in_table_order`, the hand-built BCG-2
+  kernel `test_a_fold_born_loop_folds_forward` and `test_an_image_pair_has_one_parent` (the
+  bijection assertion); `_ClassTrellis` gains `bridges`, `iterates` and `branch()`. Deleted
+  `test_an_unresolved_loop_class_is_inert_outright` (the rule is gone).
+  `test_symbolic_dynamics.py`: `test_letter_series_are_disjoint` replaces
+  `test_inert_letters_skip_active_letters` (the skipping is gone; `test_inert_letter_series`
+  kept); new `test_registered_evidence_never_extends_the_letters`. Facade:
+  `test_letter_sequence` deleted (covered by the disjoint-series test); `helpers/direct.py` has
+  `evidence()`, `minimal()` over it and `classes()` = `minimal().alphabet`; equivalence adds
+  `inversion_one_blast` (alphabet strictly inside the evidence table).
+- Regression `test_blast_children_are_evidence_only.py` (k28 zone, 6 single blasts, ~3 s): the
+  alphabet is exactly the evidence classes with a kept member (and strictly smaller there), no
+  virtual class, every word symbol in the alphabet, matrix nodes = the active alphabet's refined
+  symbols. Fails on base.
+- `test_class_count_under_blasting.py` unchanged in code: 9 passed, 0 xfailed.

@@ -186,6 +186,8 @@ E11 has exactly 1 unresolved and 1 virtual class at every blast from 6 to 20 (p3
 
 **WP4:** the unreachable class `t` was the geometric hole openings: with the signs deciding them, the deep runs gain 3 elements (81 -> 84, 89 -> 92, 81 -> 84) and every class walks (new test `test_deep_p3_every_class_walks`); the virtual `new1` remains (strict xfail `open_p3_deep_runs`, WP7). Replayed E11 p3 / nested_inner at 1e-5: 0 unresolved / 1 virtual at blasts 6-8, then 3 unresolved / 2 virtual from blast 9 (WP7). Inversion x period 2 at 10/10 steps no longer fails `openings_*` or the library row check; `backward_holes_keep_bridge_side` (its oracle re-measures a carried point that escapes the 3-node reference lobe), `bridge_endpoints_on_own_branch` (WP7-D1) and the symbolic laws still fail there.
 
+**WP6 (for WP7): the alphabet is not closed under the word map.** In deep runs an image-bridge class that is not a hole-bridge class has a word naming the class of the image's image, which the minimal trellis does not keep: p3 from blast 7 (`u = {(40,41), (44,45)}` maps to `w = {(46,47), (50,51)}`), k28 at blast 8 (`e` maps to `g`). Those were lettered blast children before WP6 and are virtual classes now (p3 deep 1 `new1`, k28 blast 8 2, was 3). Rooting it out (keep the images of active image-bridge classes, or show the walk never needs them) changes the minimal trellis's definition: D3, WP7.
+
 **WP3 evidence (inversion x period 2):** the `inversion_period2` law case (k=4.1, 9/9 steps) passes every law. One step deeper (10/10 steps, 47 crossings) eleven laws fail on the WP3 branch, every one also failing on main (which fails sixteen): `bridge_endpoints_on_own_branch`, `bridge_rows_consistent`, `partition_covers_branch`, `backward_holes_keep_bridge_side`, `openings_missing_only_at_anchor_or_tail`, `alphabet_inside_minimal_trellis`, `iterated_cut_provenance`, `every_active_class_walks` (an unreachable walk), `no_virtual_class`, `landings_contained`, `refined_children_inherit_word`. Deep period-k evidence for WP5 / WP7 / WP10; the law case stays at 9 steps. **WP5:** at 10/10 steps it is not a WP5 gap. Seven laws fail on main `3e12d53` (`bridge_endpoints_on_own_branch`, `partition_covers_branch`, `backward_holes_keep_bridge_side`, `alphabet_inside_minimal_trellis`, `every_active_class_walks`, `no_virtual_class`, `landings_contained`). `partition_covers_branch` fails on an element of s(0.0) left opened at both ends by two holes of ONE origin a lap apart (iterates -3 and -7), the -3 one on a cross-branch container through the inversion point: the INT-2 whole-bridge convention meeting the law's one-hole-per-open-element reading, not the missing `+3` hole. The landing failures are outermost elements whose image runs past the next branch's partition (INT-8). Owners WP7 / WP8; not a law case.
 
 **Evidence:** `tests/cases.py:831-839`; `tests/regression/test_open_p3_deep_runs.py:1-18, 58-67`; `src/tanglepack/examples/henon_cases.py:30-39`; `src/tanglepack/topology/PartitionFamily.py:800`; `src/tanglepack/topology/DualWalk.py:757-760`; `stress/numerics/report/report.tex:1477-1527, 1734-1735, 2025-2033`; `stress/numerics/report/numbers_extra.tex` (NumDeepUnresolvedUnreachable=127); `stress/numerics/report/numbers.tex:468-472, 576-580, 678-680`; `stress/numerics/results/e11_blast_depth.jsonl` (p3 1e-5 `invariant_assert` blasts 6-19); `.refactor/knowledge/topology.md` (OPEN p3 ≥6 blasts); `.refactor/decisions.md` 2026-10-02
@@ -338,7 +340,7 @@ The two orders are opposite, which invites mix-ups. Align them or document the d
 ## Bridge-class growth
 
 ### BCG-1: Every trellis bridge is classed (blast children included), and members with no image count as active, giving +1 active class per blast
-**Status:** open | **Severity:** high | **Related:** BCG-2, BCG-3, BCG-6, DEC-2, TEST-2 | **WP:** WP6
+**Status:** closed (WP6) | **Severity:** high | **Related:** BCG-2, BCG-3, BCG-6, DEC-2, TEST-2 | **WP:** WP6
 
 `bridge_classes` defaults to all non-partial bridges, and the session passes no `bridge_ids`. The whole table reaches `symbolic_dynamics` and the transition matrix.
 
@@ -349,14 +351,18 @@ From blast 8, p3 has these counts constant: holes 44, homotopy elements 85, iter
 
 Classes with a minimal-trellis member stay at 25 (p3 blasts 8-16, while the total goes 27→43); k28 stays at 14-20 between switches. The fix is to build letters from `minimal.kept_bridge_ids` and keep blast children as evidence only. E7 shows the same thing with depth: p3 classes 9 at 11-14 steps, then 23/30/36 at 15/16/17.
 
+**WP6:** `bridge_classes(trellis, partitions)` is the EVIDENCE table (every bridge); the session's minimal trellis is built from it (activity is a fixed point over ALL bridges' images, so the order is evidence -> minimal trellis -> alphabet) and keeps it as `MinimalTrellis.classes`; `MinimalTrellis.alphabet` (`BridgeClassTable.restricted_to(kept_bridge_ids)`, same entries, members whole) is what `session.bridge_classes()` letters and what the words and the matrix use (D2). A second leak is closed with it: `registered_evidence` translated member images with the SHARED letters, so a blast child's image naming a class outside the table became a virtual class and a matrix node; it now translates on a copy. Series (`cases.SERIES`, total classes): `k28_series` 3,3,4,4,4,4,6,7,23 -> 3,3,4,4,4,4,4,4,15 (matrix 4 = the active refined symbols at blasts 2-7, 0 virtual); `p3_series` 9 x6,23,25,27,28 -> 9 x6,23,24,25,25; `inversion_series` 4,10,10 -> 1,9,9. E11 small on the branch: p3 alphabet 25 at every blast 8-16 (evidence 27 -> 35), matrix 23 and 1 virtual over 9-16; k28 alphabet 4 (blasts 2-7), 15 (8-10), 19 (11-12). Law cases unchanged except inversion (4 -> 1 class: the inert hole-bridge class alone, no active class until DEC-19), inversion_one_blast and inversion_two_blasts (10 -> 9: an active class with no kept member leaves). Members with no image still count as active (CLAUDE.md's evidence rule); with a minimal alphabet that no longer grows anything.
+
 **Evidence:** `src/tanglepack/topology/BridgeClass.py:616-622, 789-792, 833`; `src/tanglepack/loom/TangleSession.py:391`; `src/tanglepack/topology/SymbolicDynamics.py:1251`; `stress/numerics/results/e11_blast_depth.jsonl` (p3/nested_inner 1e-7); `stress/numerics/report/report.tex:1238-1246, 1284-1291`; `stress/numerics/report/numbers.tex:646-666, 854-866`; `stress/numerics/report/tables/e11_summary.tex`; `e07_breaking.jsonl`; probes `probe_p3.py`, `minimal_classes.py`
 
 ### BCG-2: Loops are folded by following preimage links, so a loop born from a fold stands alone as an inert BridgeClass(x,x), giving +1 inert class per blast
-**Status:** open | **Severity:** high | **Related:** BCG-3, INT-1, DEC-2 | **WP:** WP6
+**Status:** closed (WP6) | **Severity:** high | **Related:** BCG-3, INT-1, DEC-2 | **WP:** WP6
 
 `_non_loop_ancestor` walks `iterate(x,−1)`. Crossings created by a fold have no −1 link, so the chain breaks. Example: loop (61,62) with preimages `[None, 55]` goes to its own class, and its images (69,70), (77,78) each stand alone in a different element (R#21, R#19, R#16…).
 
 The parent's `_image_chain` does contain (61,62), and the author's rule ("the image of a bridge that did connect two elements") is the forward relation, so the intent did not make it into the code. Fix: fold via the bridge whose image chain contains the loop, falling back to `BridgeIterator.preimage_bridges`. Put true orphans in one bucket per orbit.
+
+**WP6:** WP2's exact table had already removed every standalone loop but inversion's four at 0 blasts (`(9,6)`, `(17,25)`, `(7,12)`, `(8,24)`, under the anchor bridge whose `-1` link breaks the backward walk). A loop now folds FORWARD: `bridge_classes` computes every bridge's image chain once, indexes each image pair by the one bridge whose chain holds it (asserted: the images of disjoint arcs are disjoint; 0 double parents measured) and climbs those parents through loops to the first bridge that connects two elements (`_non_loop_parent`). It agrees with the old walk wherever the old walk found an ancestor and leaves 0 orphans on every law case, the deep p3 runs and every series step; inversion's four fold into one class (evidence 4 -> 2 classes). The `preimage_bridges` fallback is redundant with a partial-bijection table and is not used. A true orphan is logged once and listed on `BridgeClassTable.orphans`, never classed or lettered (D2), so `_non_loop_ancestor`, the standalone `BridgeClass(x, x)` entry and its inert seed in `_resolve_inertness` are gone. New law `loops_fold_forward`.
 
 **Evidence:** `src/tanglepack/topology/BridgeClass.py:636-647, 706, 842-875` (:863-866); E11 p3 `n_inert` 1,1,1,2,3,…,13 over blasts 6..20; probe `probe_p3.py`; `CLAUDE.md` "a loop with no registered ancestor stands alone"
 
@@ -402,9 +408,11 @@ This is consistent with the confirmed full-orbit disqualification, but the repor
 **Evidence:** `stress/numerics/report/report.tex:1247-1252, 1285-1293`; `stress/numerics/report/numbers.tex:560-564, 770-774`; E11 k32/nested_outer series; memory `pseudoneighbor-blast-semantics`
 
 ### BCG-6: The class table is not quotiented by the map or the orbit shift; one class per hole-ladder rung, and period-3 classes come in shifted triples
-**Status:** open / decided 2026-10-07 | **Severity:** medium | **Related:** BCG-1, BCG-4, DEC-2 | **WP:** WP6
+**Status:** closed (WP6, decided D2: no quotient by the map or the orbit shift, no transport-chain collapse; what remains is one class per hole-chain bridge, WP8's BCG-4) | **Severity:** medium | **Related:** BCG-1, BCG-4, DEC-2 | **WP:** WP6
 
 A ladder `E_n→E_{n+1}` produces a class `a_n` for each rung. Transport chains (`a1→a2→…→a20`, single-token rules) could be shown as one symbol plus a delay. Period-3 words run `A0→A1→A2→A0`. The growth is bounded by the hole-chain depth (about 20 blasts to close), but it is linear by construction.
+
+**WP6:** with the minimal alphabet the per-blast growth is gone (BCG-1); p3 keeps 23-25 alphabet classes for 26-28 kept bridges after its reference switch, one per hole-chain bridge class, bounded by the hole chain (BCG-4, WP8). No code change.
 
 **Evidence:** class-growth investigation §4.5; chalkboard §4; E11 p3 blast-20 `canonical_rules`
 
@@ -564,9 +572,11 @@ The collision test exists only for unlinked crossings and would vanish with an e
 **Evidence:** `src/tanglepack/topology/PartitionFamily.py:54-67, 518`; `src/tanglepack/topology/StablePartition.py:1968`
 
 ### SIMP-6: Two letter generators (active base-26 in loom, inert u..z,uu.. in topology), with fragile collision-skipping
-**Status:** open | **Severity:** low | **Related:** BCG-1 | **WP:** WP6
+**Status:** closed (WP6) | **Severity:** low | **Related:** BCG-1 | **WP:** WP6
 
 Active letters can reach `u` after 20 classes, and E11 reaches `bw`/`cz`.
+
+**WP6:** one generator, `topology.letter(index, inert=False)`: a bijective numeral over `a..t` (active) or `u..z` (inert). The two series are disjoint by construction, so `inert_letters(table)` (no `used=`) and the active fallback skip nothing, and `symbolic_dynamics` asserts one letter per class. `BridgeAlphabet` uses it; `loom.letter` is gone. Active letters change only past the 20th active class of one session (`u` -> `aa`); no law case gets there.
 
 **Evidence:** `src/tanglepack/loom/BridgeAlphabet.py:10-25, 74`; `src/tanglepack/topology/SymbolicDynamics.py:330-345`
 
@@ -840,7 +850,7 @@ The map is at most 0.84% of growth time; refinement plus the linked list take 75
 ### TEST-2: No law asserts structural stability under blasting
 **Status:** closed (WP1) | **Severity:** medium | **Related:** BCG-1, BCG-4, BCG-7 | **WP:** WP1
 
-**WP1:** `tests/regression/test_class_count_under_blasting.py` runs the D1 loop on `cases.SERIES` (k28 8 blasts, p3 9 blasts, inversion 2 blasts): the TOTAL class count never decreases, is constant while the hole set is constant, and every class has a member in the minimal trellis. Their strict xfails name WP2 (inversion) and WP6 (BCG-1/2). The count is total, not per kind: per kind it moves legitimately (k28 blast 0→1 turns two active classes inert once their image loops are registered; reference switches merge inert classes).
+**WP1:** `tests/regression/test_class_count_under_blasting.py` runs the D1 loop on `cases.SERIES` (k28 8 blasts, p3 9 blasts, inversion 2 blasts): the TOTAL class count never decreases, is constant while the hole set is constant, and every class has a member in the minimal trellis. Their strict xfails name WP2 (inversion) and WP6 (BCG-1/2). The count is total, not per kind: per kind it moves legitimately (k28 blast 0→1 turns two active classes inert once their image loops are registered; reference switches merge inert classes). **WP6:** all three laws pass on every series (the count is the alphabet's: k28 3,3,4,4,4,4,4,4,15; p3 9 x6,23,24,25,25; inversion 1,9,9).
 
 Nothing checks that "more blasts refine, never contradict": a stable hole set between switches, class count independent of blast count between switches, or letters kept. The p3 burst and the linear growth pass a green suite (833 pass). `laws.py` reads the class count but never bounds it. Under the no-golden policy and the "topology change is expected" rule, this has to be a rule-based law.
 
@@ -959,7 +969,7 @@ Also: `partial_jacobians` is unexplained, and BranchPoint has a `_description_` 
 ### DOC-3: Stale Dev Notes
 **Status:** possibly stale — verify | **Severity:** low | **Related:** SIMP-5, PK-7 | **WP:** WP12
 
-- MinimalTrellis says the inertness definition is "changing" (settled 2026-09-16).
+- MinimalTrellis says the inertness definition is "changing" (settled 2026-09-16). **Fixed by WP6:** the note now says activity is read from the evidence table, never the alphabet.
 - TrellisBranch's `return_period` question is resolved.
 - ResonanceZone says "no inversion example" (`build_inversion` exists).
 - PartitionFamily cites a "concurrent edit".
@@ -1073,10 +1083,10 @@ Each strict xfail below is a `cases.KNOWN_ISSUES` entry naming the WP that turns
 | `cross_side_only_within_a_branch` (D4; replaces `itinerary_pairs_same_side`) | none (WP3) | — |
 | `every_active_class_walks` (D3) | none (not applicable on p3 and k28_one_blast: singleton words) | — |
 | `no_virtual_class` (D3) | none (WP3) | — |
-| `alphabet_inside_minimal_trellis` (D2) | inversion, inversion_one_blast, inversion_two_blasts | WP6 (BCG-1) |
+| `alphabet_inside_minimal_trellis` (D2; an iff over the evidence table since WP6) | none (WP6) | — |
 | `series_class_count_never_decreases` (D1) | none (WP2) | — |
-| `series_class_count_constant_while_holes_constant` (D1, D2) | k28_series, p3_series | WP6 (BCG-1/2) |
-| `series_alphabet_inside_minimal_trellis` (D2) | k28_series, p3_series, inversion_series | WP6 (BCG-1) |
+| `series_class_count_constant_while_holes_constant` (D1, D2) | none (WP6) | — |
+| `series_alphabet_inside_minimal_trellis` (D2) | none (WP6) | — |
 | `three_tangles_take_three_families` (TEST-5(c)) | hand_built | WP9 |
 
 The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases `one_anchor_per_unstable_branch`, `arrangement_euler`, `anchor_bridge_class_leads_its_tangle`, `partition_singletons` and `stable_nodes_never_own_a_singleton` (WP3, INV-1), `arrangement_regions_disjoint` (WP10, NUM-16) and, on `inversion_two_blasts`, the 15 hole-dependent laws that are vacuous with 0 holes (WP2, INV-2); on `nested_inner_blasts` `arrangement_regions_sound` and `arrangement_regions_disjoint` (WP10, NUM-16). WP2 must add `stable_nodes_never_own_a_singleton` on `inversion_two_blasts` (WP3) once holes appear there.
@@ -1088,5 +1098,7 @@ The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases
 **WP4** (KNOWN_ISSUES 21 -> 21, none was tagged WP4): signs decide hole openings and the row assertion (D6), the geometry is a flag (`geometry_flags`, `Trellis.punch_holes(diagnose=True)`), the backward chain is `image_cdist` from the start bridge's crossing ids with a bisect container, and the measured side reads the nearest segment. INT-2 (by design), INT-3, INT-4, INT-5, NUM-1, NUM-2 and PERF-4 are closed. The law `openings_follow_signs` replaces `openings_missing_only_at_anchor_or_tail`; new regression `test_coarse_blasts_rows_by_signs` (builder `p3_coarse_blasts`) and `test_deep_p3_every_class_walks`. Law cases are unchanged (holes, partitions, classes, words); the deep p3 runs lose their unreachable class; E11 p3 / nested_inner at 1e-5 run 20 blasts. The next blocker of the deep cells is `OuterFaceError` (INT-10, WP10).
 
 **WP5** (KNOWN_ISSUES 21 -> 21, one reason re-tagged): D5's period-k rule is kept and stated (`_is_forward_beyond_fundamental(pair)`), and no branch is left without its window holes silently. A missing `+j` appearance is a crossing past the computed unstable branch (the stagger of a period-k chain); `extend_pseudoneighbor_trajectories` names each such stable branch in one WARNING with the `image_cdist` prediction, and nothing is invented. The strong pip's k cuts are placed by `image_cdist` (PK-6), the hole-chain step cap is gone (PK-9), and an inert class mapping onto inert classes is silent (PK-8). PK-2, PK-6, PK-8 and PK-9 are closed; PK-3 is slice 1 done, with DEC-19 open for slice 2. New law `window_holes_on_every_branch` (passes on every law case) and regression `test_period_k_window_gaps`. Measured gap WARNINGs per build: inversion 1, inversion_one_blast 1, inversion_period2 3, p3_15 / p3_6_blasts / p3_coarse_blasts 2 each; k10, k28 x2, p3, nested, nested_inner_blasts and inversion_two_blasts 0. Law cases are unchanged (holes with openings, partitions, classes, words). `("anchor_bridge_class_leads_its_tangle", "inversion")` stays a strict xfail tagged WP5: its hole cannot be made without inventing one (DEC-19).
+
+**WP6** (KNOWN_ISSUES 21 -> 13): the alphabet is the minimal trellis's classes (D2). `bridge_classes` is the evidence table, the minimal trellis reads activity from it and keeps it (`MinimalTrellis.classes`), and `MinimalTrellis.alphabet` is what the session letters; registered evidence never adds a symbol. Loops fold FORWARD into their image-chain parent's class (one parent per pair, asserted); orphans are logged and unclassed. One letter generator, `topology.letter`, over disjoint digit sets. BCG-1, BCG-2, BCG-6 (decided D2) and SIMP-6 are closed. All eight WP6 entries XPASSed and were removed (`alphabet_inside_minimal_trellis` x 3 inversion cases, `series_class_count_constant_while_holes_constant` x k28_series / p3_series, `series_alphabet_inside_minimal_trellis` x 3 series). New law `loops_fold_forward`; the classing laws read the evidence table, `alphabet_inside_minimal_trellis` is an iff; two NOT_APPLICABLE entries on `inversion` (`every_active_class_walks`, `matrix_is_token_counts`: its alphabet is one inert class until DEC-19). Regression `test_blast_children_are_evidence_only`. Law cases change only on the inversion cases (4 -> 1, 10 -> 9, 10 -> 9 classes). Open for WP7: the alphabet is not closed under the word map in deep runs (PK-1).
 
 Verification of the "possibly stale" items (WP0): DOC-3 is confirmed open (the MinimalTrellis "definition is changing", TrellisBranch `return_period`, ResonanceZone "no inversion example", PartitionFamily "concurrent edit" and StrongPip "legitimately None" notes are all still present). PK-7 is confirmed dead code (WP2 deletes it). INV-10, NUM-19 and DOC-4 need a run; they are checked by the WP that owns them.

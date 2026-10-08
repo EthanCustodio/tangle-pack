@@ -240,3 +240,42 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   Owners WP7 / WP8. Not a law case.
 - Behaviour: law cases unchanged (holes with openings and sides, partitions, class counts,
   words; probes `wp04/holeset.py`, `wp04/partsig.py`, `wp05/impl/holeopen.py`).
+
+## Open-issues round WP6 (2026-10-08, branch `oi/wp06-minimal-alphabet`, base `b90b718`)
+
+- Evidence vs alphabet (D2). Activity is a fixed point over the images of ALL bridges
+  (`_resolve_inertness`), and the minimal trellis maps only active hole bridges, so the alphabet
+  cannot feed the minimal trellis. The order is: `bridge_classes(trellis, partitions)` = the
+  EVIDENCE table (every bridge) -> `minimal_trellis(trellis, holes, evidence)` (kept as
+  `MinimalTrellis.classes`) -> `MinimalTrellis.alphabet` = `classes.restricted_to(kept_bridge_ids)`
+  (same entry objects, table order, members whole: a class's other members are its image
+  evidence). Hole bridges are never loops (the hole's empty stretch separates their ends), and an
+  image bridge's image-chain parent is its hole bridge, so a kept bridge is never an orphan.
+- Forward folding (`_non_loop_parent`): every bridge's `_image_chain` is computed once per
+  `bridge_classes` call (also the inertness evidence: `_collect_image_evidence(chains, ...)`), each
+  image pair indexed by the one bridge whose chain holds it (asserted), and a loop climbs those
+  parents through loops to the first non-loop bridge. Probe `wp06/fold_probe.py` over the 10 law
+  cases, the deep p3 runs and every series step: 0 double parents, 0 disagreements with the old
+  backward walk where it found an ancestor, 0 orphans. Inversion at 0 blasts had the only
+  standalone loops left after WP2 (four, under the anchor bridge `(0,7)` whose `-1` link breaks the
+  backward walk); they fold into one class (evidence 4 -> 2). `BridgeIterator.preimage_bridges`
+  as a fallback is redundant with a partial-bijection table (it finds a parent only when both ends
+  have `-1` links, and then the forward index already holds the pair). Orphans: one WARNING,
+  `BridgeClassTable.orphans`, no entry, never lettered. `_resolve_inertness` starts from nothing
+  (no loop-class seed).
+- The evidence-letters leak: `registered_evidence` translated with the SHARED `letters`, so an
+  image naming a class outside the table became `new<n>` in the driver's `virtual_classes` and a
+  matrix node (k28 series blasts 6-7: 2 virtual and a 6-node matrix with the restriction alone).
+  It translates on a copy now; `virtual_classes` comes from words only.
+- Letters (SIMP-6): `SymbolicDynamics.letter(index, inert=False)`, one bijective numeral over
+  `a..t` / `u..z`; `inert_letters(table)` and `_active_letters` are one comprehension each;
+  `symbolic_dynamics` asserts one letter per class. Exported from `tanglepack.topology`.
+- Measured (series, alphabet size): k28 3,3,4,4,4,4,4,4,15 (evidence 3,3,4,4,4,4,6,7,23); p3
+  9 x6,23,24,25,25; inversion 1,9,9. E11 small (`wp06/e11_proto.py`): p3 alphabet 25 at blasts
+  8-16 (evidence 27 -> 35), matrix 23 / 1 virtual over 9-16; k28 4 (2-7), 15 (8-10), 19 (11-12).
+- OPEN for WP7 (PK-1 / D3): the alphabet is not closed under the word map. An image-bridge class
+  that is not a hole-bridge class can name the class of its image's image, which the minimal
+  trellis does not keep (p3 from blast 7: `u = {(40,41), (44,45)}` -> `w = {(46,47), (50,51)}`;
+  k28 blast 8 `e` -> `g`); those symbols are virtual now (p3 deep 1, k28 blast 8 2, was 3).
+- Inversion (0 blasts) has no active class: its alphabet is the inert class of the hole bridge
+  `(22,10)`; the anchor bridges carry no hole because s(0.1) has no window hole (PK-3 / DEC-19).
