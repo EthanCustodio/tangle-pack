@@ -103,6 +103,7 @@ from .DualWalk import (
 )
 from .SymbolicDynamics import (
     ClassDynamics,
+    EvidenceDiagnosis,
     ImageEvidence,
     RefinedClass,
     Symbol,
@@ -167,6 +168,7 @@ __all__ = [
     "shortest_walks",
     "trellis_itinerary",
     "ClassDynamics",
+    "EvidenceDiagnosis",
     "ImageEvidence",
     "RefinedClass",
     "Symbol",

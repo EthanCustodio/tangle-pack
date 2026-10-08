@@ -1118,7 +1118,7 @@ TANGLE_FAMILY_CMAPS = ("winter", "autumn", "cool", "summer", "spring")
 #: Line defaults for a classed bridge (inert classes are additionally dashed).
 CLASS_BRIDGE_STYLE = {"linewidth": 2.0, "zorder": 6, "solid_capstyle": "round"}
 
-#: Colour of a symbol the palette does not know (a virtual class, say).
+#: Colour of a symbol the palette does not know.
 CLASS_UNKNOWN_COLOR = "#898781"
 
 #: ``**line_kwargs`` names :func:`plot_bridges_by_class` manages itself.
@@ -1435,8 +1435,8 @@ def plot_transition_graph(
     Nodes are the (refined) active symbols on a circle
     (``networkx.circular_layout``), coloured as in :func:`plot_bridges_by_class`
     and labelled with their mathtext; inert classes are not drawn (they are
-    not part of the graph, see ``SymbolicDynamics.transition_graph``) and
-    virtual symbols are sinks drawn with a dashed outline. Each edge ``x -> y`` (``y`` occurs in the word of ``x``) is
+    not part of the graph, see ``SymbolicDynamics.transition_graph``). Each
+    edge ``x -> y`` (``y`` occurs in the word of ``x``) is
     curved so that ``a -> b`` and ``b -> a`` bow apart and a self-loop shows,
     with width growing with its ``weight`` (multiplicity), which is also
     written on edges of weight above one. The title names the symbol family.
@@ -1466,19 +1466,12 @@ def plot_transition_graph(
 
     pos = nx.circular_layout(graph)
     nodes = list(graph.nodes)
-    kinds = {node: graph.nodes[node].get("kind", "active") for node in nodes}
-    sources = [node for node in nodes if kinds[node] == "active"]
-    sinks = [node for node in nodes if kinds[node] != "active"]
-    for group, linestyle in ((sources, "solid"), (sinks, "dashed")):
-        if not group:
-            continue
-        collection = nx.draw_networkx_nodes(
-            graph, pos, nodelist=group, ax=target, node_size=TRANSITION_NODE_SIZE,
-            node_color="white", edgecolors=[palette.get(n, CLASS_UNKNOWN_COLOR) for n in group],
-            linewidths=2.0,
-        )
-        collection.set_linestyle(linestyle)
-        collection.set_zorder(3)
+    collection = nx.draw_networkx_nodes(
+        graph, pos, nodelist=nodes, ax=target, node_size=TRANSITION_NODE_SIZE,
+        node_color="white", edgecolors=[palette.get(n, CLASS_UNKNOWN_COLOR) for n in nodes],
+        linewidths=2.0,
+    )
+    collection.set_zorder(3)
     nx.draw_networkx_labels(
         graph, pos, labels={node: name_mathtext(node) for node in nodes},
         ax=target, font_size=11,

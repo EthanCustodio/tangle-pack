@@ -24,9 +24,22 @@ Dev Notes:
   so the two series never collide and nothing is skipped. Inert classes are
   lettered by THIS layer only; the session's ``BridgeAlphabet`` letters the
   active ones with the same :func:`letter` (topology never imports loom).
-* The ALPHABET is the table handed in: normally ``MinimalTrellis.alphabet``,
-  the classes of the minimal trellis's bridges, lettered by the session (D2).
-  Every other bridge is image evidence only.
+* The ALPHABET is the table handed in -- normally ``MinimalTrellis.alphabet``,
+  the classes of the minimal trellis's bridges, lettered by the session (D2) --
+  CLOSED under the word map (WP7, Claude's call C9 under D3/D8). Every pair of
+  a walk is the class of one piece of ``f(B)`` between two crossings, a real
+  bridge of ``W^u``, so a word naming a class outside the table adds it: it is
+  walked in turn, lettered (the session's ``letter_for`` when active) and
+  records the class whose word first named it (``named_by``). The closure is
+  finite because element pairs are. It is the next layer of the tangle that a
+  deep reference switch exposes (BCG-4): the minimal trellis keeps the FIRST
+  images of the hole bridges, and the image of an image bridge lies one layer
+  further out. A closure class copies its evidence-table entry (members,
+  inertness) when some bridge spans it, so its members verify its word; with
+  no registered bridge it has no members and, by the no-evidence convention,
+  is active. Word-based inertness of such a class (an empty or all-inert
+  word) is not inferred: revisit with WP8's recompute semantics. Every other
+  bridge is image evidence only.
 * Refinement occurrences come ONLY from the walked (or trellis) itineraries of
   all classes, never from registered member images. A class is split when
   its symbol occurs with two or more distinct iterated pairs; every refined
@@ -48,13 +61,16 @@ Dev Notes:
 * Registered member images are EVIDENCE, the walk is the answer: every
   non-loop member with a registered image chain is translated with the same
   function and compared at word level (``verified``) and at exact-itinerary
-  level (``itinerary_verified``, INFO only). A length mismatch between the
-  registered and the walked word is a WARNING — the shortest walk can be
-  topologically wrong where no image is registered. Evidence never adds a
-  symbol: a class outside the alphabet it names is named locally (D2).
-* A pair of a WORD whose class is not in the alphabet (no minimal-trellis
-  bridge spans it, D2) is a VIRTUAL class; it is named ``new1, new2, ...`` in
-  first-seen order with a WARNING and enters the graph as a sink. A pair whose two elements sit on
+  level (``itinerary_verified``, INFO only). A word-level disagreement is a
+  WARNING with an :class:`EvidenceDiagnosis` on the evidence and counts
+  against :attr:`SymbolicDynamics.is_reliable`: ``"stable end"`` when two
+  consecutive crossings of the registered chain on ONE stable branch share a
+  crossing sign (the image passed around the end of the computed stable
+  branch, so its crossings with the trimmed-away part are not registered and
+  the pairing shifts: k=2.8 at 6 blasts), else ``"walk"`` (no numerical
+  explanation). Evidence never adds a symbol: a class outside the closed table
+  is named by its label (D2).
+* A pair whose two elements sit on
   different sides of ONE stable branch is flagged on the symbol
   (``cross_side``) with a WARNING and not asserted. Across two branches there
   is no side relation (D4: the left of an inversion point's branch 0.0 is the
@@ -67,18 +83,22 @@ Dev Notes:
   are still visible in the words. A token naming an inert class is dropped
   from the edges. An inert class whose word names only inert symbols is
   inertness holding (on a period-k orbit an inert class maps to the next
-  branch's inert class) and is silent; one whose word names an ACTIVE or
-  virtual symbol contradicts the table's inertness and is reported at WARNING
-  when the graph is built (PK-8, WP5). Virtual symbols stay as
-  sinks — they mark an arc no bridge spans yet — with zero matrix rows, so
-  the graph and the matrix agree.
+  branch's inert class) and is silent; one whose word names an ACTIVE symbol
+  contradicts the table's inertness and is reported at WARNING when the graph
+  is built (PK-8, WP5). Every token of an active word names a class of the
+  closed table, so every edge target is a node.
+* A landing that straddles a cut (``contained`` False) still resolves to its
+  midpoint owner, so the walk exists (D3); but under a correct partition a
+  homotopy element's image lies in ONE iterated element, so a straddle is a
+  construction inconsistency and counts against ``is_reliable`` (INT-8).
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from typing import Iterable, Literal, Optional, Sequence, TYPE_CHECKING
+from itertools import count
+from typing import Callable, Iterable, Literal, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
@@ -107,14 +127,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-SymbolKind = Literal["active", "inert", "virtual"]
+SymbolKind = Literal["active", "inert"]
 ItinerarySource = Literal["walk", "trellis"]
 
 #: Active classes are lettered over ``a..t``, inert ones over ``u..z``: one
 #: bijective numeral over two disjoint digit sets (SIMP-6, WP6).
 _ACTIVE_DIGITS, _INERT_DIGITS = "abcdefghijklmnopqrst", "uvwxyz"
-#: The prefix of virtual class names.
-_VIRTUAL_PREFIX = "new"
 
 
 # ── symbols ─────────────────────────────────────────────────────────────────
@@ -128,10 +146,11 @@ class Symbol:
     Attributes:
         bridge_class: The class the token names.
         letter: The class's letter (session letter for an active class, inert
-            letter for an inert one, ``new<n>`` for a virtual one).
+            letter for an inert one; the class label for a class outside the
+            table, which only registered evidence can name).
         direction: ``+1`` for ``source -> target`` (``a``), ``-1`` for
             ``target -> source`` (``a^-1``).
-        kind: ``"active"``, ``"inert"`` or ``"virtual"`` (no table entry).
+        kind: ``"active"`` or ``"inert"`` (``"active"`` outside the table).
         occurrence: The two ITERATED elements the token's pair consists of,
             class-source end first (swapped for direction ``-1``).
         refined_index: The 1-based index of the refined child this
@@ -180,6 +199,33 @@ class Symbol:
         return self.text
 
 
+@dataclass(frozen=True)
+class EvidenceDiagnosis:
+    """
+    Why a registered image disagrees with the walked word (INT-1).
+
+    Attributes:
+        position: The first token where the two words differ.
+        walked: The walked token's occurrence there (iterated pair, class
+            source end first), ``None`` past the end of the walked word.
+        registered: The registered token's occurrence there, ``None`` past the
+            end of the registered word.
+        cause: ``"stable end"`` when two consecutive crossings of the
+            registered chain on one stable branch share a crossing sign: the
+            image passed around the end of the computed stable branch, so its
+            crossings with the trimmed-away part are not registered and the
+            registered word is incomplete. ``"walk"`` otherwise: no numerical
+            explanation, the shortest walk is not the image's class.
+        crossings: The equal-sign run behind ``"stable end"``, else ``()``.
+    """
+
+    position: int
+    walked: Optional[tuple[ElementRef, ElementRef]]
+    registered: Optional[tuple[ElementRef, ElementRef]]
+    cause: Literal["stable end", "walk"]
+    crossings: tuple[int, ...] = ()
+
+
 @dataclass
 class ImageEvidence:
     """
@@ -192,18 +238,22 @@ class ImageEvidence:
             even-length, disjoint-pair format as a dual-graph walk, running
             from the image of the class source to the image of the target.
         symbols: The itinerary translated (loops dropped).
+        chain: The registered image chain the itinerary was read off.
         word_agrees: True when the non-loop ``(class, direction)`` sequence
             equals the class's primary word; ``None`` when the class has no
             itinerary to compare with.
         itinerary_agrees: True when the iterated refs agree exactly.
+        diagnosis: Why the word disagrees, when ``word_agrees`` is False.
     """
 
     bridge_id: "BridgeId"
     direction: int
     itinerary: tuple[ElementRef, ...]
     symbols: list[Symbol]
+    chain: tuple["BridgeId", ...] = ()
     word_agrees: Optional[bool] = None
     itinerary_agrees: Optional[bool] = None
+    diagnosis: Optional[EvidenceDiagnosis] = None
 
     @property
     def word(self) -> str:
@@ -238,6 +288,8 @@ class ClassDynamics:
         verified: Word-level agreement of every piece of evidence; ``None``
             without evidence or without an itinerary.
         itinerary_verified: Exact-itinerary agreement, reported only.
+        named_by: ``None`` for a class of the alphabet handed in; for a class
+            the closure added, the class whose word first named it.
     """
 
     entry: BridgeClassEntry
@@ -254,6 +306,7 @@ class ClassDynamics:
     evidence: list[ImageEvidence] = field(default_factory=list)
     verified: Optional[bool] = None
     itinerary_verified: Optional[bool] = None
+    named_by: Optional[BridgeClass] = None
 
     @property
     def bridge_class(self) -> BridgeClass:
@@ -349,9 +402,7 @@ def letter(index: int, *, inert: bool = False) -> str:
 
 
 def _letter_key(text: str) -> tuple[int, str]:
-    """Order letters ``a < b < ... < z < aa`` (and ``new1 < new2 < ... < new10``)."""
-    if text.startswith(_VIRTUAL_PREFIX) and text[len(_VIRTUAL_PREFIX):].isdigit():
-        return (int(text[len(_VIRTUAL_PREFIX):]), text)
+    """Order letters ``a < b < ... < z < aa``."""
     return (len(text), text)
 
 
@@ -378,16 +429,6 @@ def _active_letters(table: BridgeClassTable) -> dict[BridgeClass, str]:
 # ── itineraries → words ─────────────────────────────────────────────────────
 
 
-def _virtual_name(letters: dict[BridgeClass, str]) -> str:
-    """The next ``new<n>`` name, counting the virtual names already handed out."""
-    count = sum(
-        1
-        for name in letters.values()
-        if name.startswith(_VIRTUAL_PREFIX) and name[len(_VIRTUAL_PREFIX):].isdigit()
-    )
-    return f"{_VIRTUAL_PREFIX}{count + 1}"
-
-
 def translate_itinerary(
     itinerary: Sequence[ElementRef],
     naming: ElementNaming,
@@ -408,14 +449,13 @@ def translate_itinerary(
     Args:
         itinerary: The iterated element refs, even in number.
         naming: Resolves each iterated ref to its homotopy parent.
-        table: The bridge classes (decides ``active`` / ``inert`` / virtual).
-        letters: ``{class: letter}`` for the classes of ``table``. EXTENDED IN
-            PLACE with ``new1, new2, ...`` for virtual classes met here (a pair
-            whose class is not in the alphabet: no minimal-trellis bridge spans
-            it, D2), so one dict shared over every itinerary names them
-            consistently. A
-            table class missing from it falls back to the entry's own letter,
-            then to the class label.
+        table: The bridge classes (decides ``active`` / ``inert``). The
+            driver closes it under the word map before translating, so only
+            registered evidence can name a class outside it; such a token is
+            named by its class label and counted active.
+        letters: ``{class: letter}`` for the classes of ``table``; never
+            changed. A table class missing from it falls back to the entry's
+            own letter, then to the class label.
         fixed_points: The ordering context of
             :func:`~tanglepack.topology.BridgeClass.oriented_class`.
 
@@ -450,27 +490,11 @@ def translate_itinerary(
                 first.label,
                 second.label,
             )
-        if bridge_class in table:
-            entry = table[bridge_class]
-            kind: SymbolKind = "active" if entry.active else "inert"
-            letter = letters.get(bridge_class)
-            if letter is None:
-                letter = entry.letter if entry.letter is not None else bridge_class.label
-        else:
-            kind = "virtual"
-            letter = letters.get(bridge_class)
-            if letter is None:
-                letter = _virtual_name(letters)
-                letters[bridge_class] = letter
-                logger.warning(
-                    "itinerary pair (%s, %s) names class %s, which is not in the "
-                    "alphabet (no minimal-trellis bridge spans it); naming it %r "
-                    "(virtual class)",
-                    first.label,
-                    second.label,
-                    bridge_class.label,
-                    letter,
-                )
+        entry = table[bridge_class] if bridge_class in table else None
+        kind: SymbolKind = "inert" if entry is not None and entry.inert else "active"
+        letter = letters.get(bridge_class)
+        if letter is None:
+            letter = entry.letter if entry is not None and entry.letter else bridge_class.label
         occurrence = (first, second) if direction > 0 else (second, first)
         symbols.append(
             Symbol(bridge_class, letter, direction, kind, occurrence, None, cross_side)
@@ -568,8 +592,7 @@ def registered_evidence(
         iterated: The iterated partition family owning the image crossings.
         naming: Resolves iterated refs to their homotopy parents.
         table: The bridge classes.
-        letters: The letter map (see :func:`translate_itinerary`); never
-            changed here.
+        letters: The letter map (see :func:`translate_itinerary`).
         entry: The class whose members to read.
 
     Returns:
@@ -578,7 +601,6 @@ def registered_evidence(
         left ``None`` (the driver fills them). Loop members and members without
         a registered chain contribute nothing.
     """
-    letters = dict(letters)  # evidence never adds a symbol (D2)
     evidence: list[ImageEvidence] = []
     for member in entry.members:
         if member.is_loop:
@@ -600,7 +622,9 @@ def registered_evidence(
         symbols, _loops = translate_itinerary(
             itinerary, naming, table, letters, trellis.fixed_points
         )
-        evidence.append(ImageEvidence(member.bridge_id, member.direction, itinerary, symbols))
+        evidence.append(
+            ImageEvidence(member.bridge_id, member.direction, itinerary, symbols, tuple(chain))
+        )
     return evidence
 
 
@@ -626,13 +650,11 @@ class SymbolicDynamics:
 
     Attributes:
         naming: The element naming (homotopy and iterated families).
-        table: The bridge classes.
+        table: The bridge classes: the alphabet closed under the word map.
         fixed_points: The ordering context.
         classes: ``{class: ClassDynamics}`` for every table entry, in table
             order.
         inert_letters: ``{inert class: letter}``.
-        virtual_classes: ``{class: "new<n>"}`` for the classes no bridge spans
-            that some itinerary named.
         refined: ``{class: children}`` for every class that split.
         member_refinement: ``{bridge id: child or None}`` for the non-loop
             members of the split classes.
@@ -653,7 +675,6 @@ class SymbolicDynamics:
         classes: dict[BridgeClass, ClassDynamics],
         *,
         inert_letters: Optional[dict[BridgeClass, str]] = None,
-        virtual_classes: Optional[dict[BridgeClass, str]] = None,
     ) -> None:
         """
         Args:
@@ -663,8 +684,6 @@ class SymbolicDynamics:
             classes: The per-class records, itineraries and symbols filled in.
             inert_letters: ``{inert class: letter}``; derived from ``classes``
                 when omitted.
-            virtual_classes: ``{class: name}`` of the virtual classes; derived
-                from the symbols when omitted.
         """
         self.naming = naming
         self.table = table
@@ -675,14 +694,6 @@ class SymbolicDynamics:
             if inert_letters is not None
             else {cls: cd.letter for cls, cd in self.classes.items() if cd.kind == "inert"}
         )
-        self.virtual_classes: dict[BridgeClass, str] = (
-            dict(virtual_classes) if virtual_classes is not None else {}
-        )
-        if virtual_classes is None:
-            for cd in self.classes.values():
-                for symbol in cd.symbols:
-                    if symbol.kind == "virtual":
-                        self.virtual_classes.setdefault(symbol.bridge_class, symbol.letter)
         self.member_refinement: dict["BridgeId", Optional[RefinedClass]] = {}
         self.unmatched_members: dict["BridgeId", tuple[ElementRef, ElementRef]] = {}
 
@@ -796,9 +807,13 @@ class SymbolicDynamics:
 
     @property
     def is_reliable(self) -> bool:
-        """True when no class is ambiguous, unresolved or contradicted by evidence."""
+        """True when no class is ambiguous, unresolved, contradicted by evidence or
+        landed across a cut (a straddling landing, INT-8)."""
         return all(
-            cd.itinerary is not None and not cd.ambiguous and cd.verified is not False
+            cd.itinerary is not None
+            and not cd.ambiguous
+            and cd.verified is not False
+            and all(landing.contained for landing in cd.landings if landing is not None)
             for cd in self.classes.values()
         )
 
@@ -813,8 +828,8 @@ class SymbolicDynamics:
         """
         The transition graph's nodes in their deterministic order.
 
-        Active symbols first (letter order, a split class's children in
-        index order), then virtual. Inert classes are not nodes (author,
+        Active symbols in letter order, a split class's children in index
+        order. Inert classes are not nodes (author,
         2026-09-23): they contribute nothing to the dynamics, and their
         symbols remain visible in the words.
 
@@ -826,24 +841,17 @@ class SymbolicDynamics:
         """
         nodes: list[_SymbolNode] = []
 
-        def add(cls: BridgeClass, letter: str, kind: SymbolKind, unresolved: bool) -> None:
-            children = self.refined.get(cls) if refined else None
-            if children:
-                for child in children:
-                    nodes.append(
-                        _SymbolNode(child.name, kind, cls, letter, kind != "active", unresolved)
-                    )
-            else:
-                nodes.append(_SymbolNode(letter, kind, cls, letter, kind != "active", unresolved))
-
         records = sorted(
             (cd for cd in self.classes.values() if cd.kind == "active"),
             key=lambda cd: _letter_key(cd.letter),
         )
         for cd in records:
-            add(cd.bridge_class, cd.letter, "active", cd.itinerary is None)
-        for cls, name in sorted(self.virtual_classes.items(), key=lambda item: _letter_key(item[1])):
-            add(cls, name, "virtual", True)
+            children = self.refined.get(cd.bridge_class) if refined else None
+            names = [child.name for child in children] if children else [cd.letter]
+            nodes.extend(
+                _SymbolNode(name, "active", cd.bridge_class, cd.letter, False, cd.itinerary is None)
+                for name in names
+            )
         return nodes
 
     def _rules_for(self, refined: bool) -> dict[str, list[Symbol]]:
@@ -857,14 +865,12 @@ class SymbolicDynamics:
         dropped (inert classes are not in the graph). An inert class whose
         word names a non-inert symbol contradicts its inertness and is
         reported at WARNING; one mapping onto inert classes is silent (PK-8).
-        Virtual targets are kept (sinks).
         """
-        nodes = {node.name: node for node in self.symbol_nodes(refined=refined)}
+        nodes = {node.name for node in self.symbol_nodes(refined=refined)}
         inert_names = {cd.letter for cd in self.classes.values() if cd.kind == "inert"}
         edges: dict[tuple[str, str], tuple[int, int]] = {}
         for name, symbols in self._rules_for(refined).items():
-            node = nodes.get(name)
-            if node is None:
+            if name not in nodes:
                 base = name.split("_", 1)[0] if refined else name
                 if base in inert_names and any(symbol.kind != "inert" for symbol in symbols):
                     logger.warning(
@@ -873,8 +879,6 @@ class SymbolicDynamics:
                         name,
                         " ".join(symbol.text for symbol in symbols),
                     )
-                continue
-            if node.kind != "active":
                 continue
             for symbol in symbols:
                 if symbol.kind == "inert":
@@ -886,11 +890,12 @@ class SymbolicDynamics:
 
     def transition_graph(self, *, refined: bool = True) -> "networkx.DiGraph":
         """
-        The transition graph: one node per active or virtual symbol, one edge
-        per token naming such a symbol.
+        The transition graph: one node per active symbol, one edge per token
+        naming such a symbol.
 
         Inert classes are not part of the graph (their tokens in a word are
-        skipped); virtual symbols are sinks.
+        skipped). The alphabet is closed under the word map, so every edge
+        target is a node.
 
         Args:
             refined: Over refined symbols (default) or bare letters.
@@ -914,15 +919,7 @@ class SymbolicDynamics:
                 unresolved=node.unresolved,
             )
         for (source, target), (weight, inverse) in self._edges(refined).items():
-            if target not in graph:
-                graph.add_node(
-                    target,
-                    kind="virtual",
-                    bridge_class=None,
-                    parent=target,
-                    inert=True,
-                    unresolved=True,
-                )
+            assert target in graph, f"symbol {target} of the word of {source} is no node"
             graph.add_edge(source, target, weight=weight, inverse=inverse)
         return graph
 
@@ -935,8 +932,8 @@ class SymbolicDynamics:
 
         Returns:
             ``(symbols, matrix)``: row ``i`` counts the occurrences of symbol
-            ``j`` in the word of symbol ``i`` (zero rows for the virtual
-            sinks; inert classes have no row or column).
+            ``j`` in the word of symbol ``i`` (inert classes have no row or
+            column).
         """
         names = [node.name for node in self.symbol_nodes(refined=refined)]
         index = {name: position for position, name in enumerate(names)}
@@ -991,7 +988,7 @@ class SymbolicDynamics:
         lines.append(
             f"{len(self.classes)} bridge class(es): "
             f"{sum(cd.kind == 'active' for cd in self.classes.values())} active, "
-            f"{len(self.inert_letters)} inert, {len(self.virtual_classes)} virtual"
+            f"{len(self.inert_letters)} inert"
             f"{'' if self.is_reliable else ' (NOT reliable)'}"
         )
         for cd in self.classes.values():
@@ -1022,10 +1019,14 @@ class SymbolicDynamics:
                 f"    verified: {cd.verified}; itinerary verified: "
                 f"{cd.itinerary_verified}; evidence: {len(cd.evidence)}"
             )
-        if self.virtual_classes:
-            lines.append("virtual classes:")
-            for cls, name in self.virtual_classes.items():
-                lines.append(f"  {name}: {cls.label}")
+        closure = [cd for cd in self.classes.values() if cd.named_by is not None]
+        if closure:
+            lines.append(
+                f"closure: {len(closure)} class(es) named by words: "
+                + ", ".join(
+                    f"{cd.letter} (by {self.classes[cd.named_by].letter})" for cd in closure
+                )
+            )
         if self.refined:
             lines.append("refined symbols:")
             for cls, children in self.refined.items():
@@ -1139,8 +1140,35 @@ def _resolve_itinerary(
     cd.ambiguous = search.status == "ambiguous"
 
 
-def _compare_evidence(cd: ClassDynamics) -> None:
-    """Fill the evidence agreement flags and the class's ``verified`` fields."""
+def _diagnose(
+    trellis: "Trellis", evidence: ImageEvidence, symbols: Sequence[Symbol]
+) -> EvidenceDiagnosis:
+    """Where a registered word parts from the walked one, and why (see :class:`EvidenceDiagnosis`)."""
+    pairs = list(zip(_signature(symbols), _signature(evidence.symbols)))
+    position = next((i for i, (w, r) in enumerate(pairs) if w != r), len(pairs))
+    walked = symbols[position].occurrence if position < len(symbols) else None
+    registered = (
+        evidence.symbols[position].occurrence if position < len(evidence.symbols) else None
+    )
+    chain = evidence.chain
+    crossings = [chain[0][0], *(pair[1] for pair in chain)] if chain else []
+    run: list[int] = []
+    for crossing in crossings:
+        if run:
+            last, this = trellis.intersection(run[-1]), trellis.intersection(crossing)
+            if (last.manifold_b_key, last.crossing_sign) == (this.manifold_b_key, this.crossing_sign):
+                run.append(crossing)
+                continue
+            if len(run) > 1:
+                break
+        run = [crossing]
+    if len(run) > 1:
+        return EvidenceDiagnosis(position, walked, registered, "stable end", tuple(run))
+    return EvidenceDiagnosis(position, walked, registered, "walk")
+
+
+def _compare_evidence(cd: ClassDynamics, trellis: "Trellis") -> None:
+    """Fill the evidence agreement flags, the diagnoses and the class's ``verified`` fields."""
     if not cd.evidence or cd.itinerary is None:
         cd.verified = None
         cd.itinerary_verified = None
@@ -1149,30 +1177,27 @@ def _compare_evidence(cd: ClassDynamics) -> None:
     for evidence in cd.evidence:
         evidence.word_agrees = _signature(evidence.symbols) == signature
         evidence.itinerary_agrees = tuple(evidence.itinerary) == tuple(cd.itinerary)
-        if len(evidence.symbols) != len(cd.symbols):
-            logger.warning(
-                "class %s: registered image of member %s reads %r (%d symbol(s)) but "
-                "the %s itinerary reads %r (%d); the shortest walk may be wrong where "
-                "no image is registered",
-                cd.letter,
-                evidence.bridge_id,
-                evidence.word,
-                len(evidence.symbols),
-                cd.source,
-                cd.word,
-                len(cd.symbols),
-            )
+        if evidence.word_agrees:
+            continue
+        evidence.diagnosis = diagnosis = _diagnose(trellis, evidence, cd.symbols)
+        logger.warning(
+            "class %s: the registered image of member %s reads %r but the %s itinerary "
+            "reads %r; they part at token %d: %s",
+            cd.letter,
+            evidence.bridge_id,
+            evidence.word,
+            cd.source,
+            cd.word,
+            diagnosis.position,
+            f"the image passes the end of the computed stable branch at crossings "
+            f"{list(diagnosis.crossings)} (same branch, same sign), so the registered "
+            "word is incomplete"
+            if diagnosis.cause == "stable end"
+            else "no numerical explanation: the shortest walk is not the image's class",
+        )
     cd.verified = all(evidence.word_agrees for evidence in cd.evidence)
     cd.itinerary_verified = all(evidence.itinerary_agrees for evidence in cd.evidence)
-    if not cd.verified:
-        disagreeing = [e.bridge_id for e in cd.evidence if not e.word_agrees]
-        logger.warning(
-            "class %s: word %r disagrees with the registered image(s) of member(s) %s",
-            cd.letter,
-            cd.word,
-            disagreeing,
-        )
-    elif not cd.itinerary_verified:
+    if cd.verified and not cd.itinerary_verified:
         logger.info(
             "class %s: word verified but the registered itinerary differs from the "
             "%s one at element level",
@@ -1186,6 +1211,7 @@ def symbolic_dynamics(
     classes: BridgeClassTable,
     *,
     max_walks: int = 64,
+    letter_for: Optional[Callable[[BridgeClass], str]] = None,
 ) -> SymbolicDynamics:
     """
     Compute the symbolic dynamics of a trellis from its dual graph and classes.
@@ -1194,48 +1220,100 @@ def symbolic_dynamics(
     (:func:`~tanglepack.topology.DualWalk.land_element`); a failed landing
     leaves the class unresolved; a singleton landing takes the trellis path
     (image chain of the first non-loop member that has one); otherwise the
-    shortest dual-graph walk between the two landings is the itinerary. The
-    itinerary is translated to a word, checked against the registered member
-    images, and the words of all classes drive the refinement and the rules.
+    shortest dual-graph walk between the two landings is the itinerary. A pair
+    of the itinerary whose class is not in the alphabet yet adds that class
+    (the closure under the word map, see the module Dev Notes), which is
+    walked in turn. Once the alphabet is closed every itinerary is translated
+    to a word and checked against the registered member images, and the words
+    of all classes drive the refinement and the rules.
 
     Args:
         dual_graph: The dual graph of the minimal trellis, built over the
             iterated homotopy partition (its ``partition.homotopy`` is the
-            homotopy family).
+            homotopy family; its ``minimal.classes`` is the evidence table a
+            closure class copies its entry from).
         classes: The ALPHABET: normally ``MinimalTrellis.alphabet`` lettered by
             the session (D2). Unlettered active classes take ``letter(i)`` by
             their table position.
         max_walks: The cap on shortest walks enumerated per class.
+        letter_for: Letters an ACTIVE class the closure adds (normally the
+            session's ``BridgeAlphabet.letter_for``, so the letter persists);
+            without it the next unused active letter. An inert closure class
+            continues the inert series.
 
     Returns:
-        The :class:`SymbolicDynamics`.
+        The :class:`SymbolicDynamics`, its ``table`` the closed alphabet (the
+        classes handed in first, then the closure in discovery order).
     """
     trellis = dual_graph.trellis
     iterated = dual_graph.partition
     homotopy = _homotopy_of(iterated)
     naming = ElementNaming(homotopy, iterated)
     fixed_points = trellis.fixed_points
+    evidence_table = dual_graph.minimal.classes
 
     inert = inert_letters(classes)
     letters: dict[BridgeClass, str] = {**_active_letters(classes), **inert}
     assert len(set(letters.values())) == len(letters), "a letter names two classes"
+    entries = list(classes)
+    closure: dict[BridgeClass, BridgeClass] = {}  # added class -> the class that named it
+
+    def add(named: BridgeClass, named_by: BridgeClass) -> BridgeClassEntry:
+        """A class a word names: its evidence entry (copied) or a bare one, lettered."""
+        if named in evidence_table:
+            entry = replace(evidence_table[named], letter=None)
+        else:
+            owners = {id(named.source.fixed_point), id(named.target.fixed_point)}
+            tangle = next((i for i, fp in enumerate(fixed_points) if {id(fp)} == owners), None)
+            entry = BridgeClassEntry(named, tangle=tangle)
+        if entry.active and letter_for is not None:
+            letters[named] = entry.letter = letter_for(named)
+        else:
+            used = set(letters.values())
+            letters[named] = next(
+                text for i in count() if (text := letter(i, inert=entry.inert)) not in used
+            )
+            if entry.active:
+                entry.letter = letters[named]
+            else:
+                inert[named] = letters[named]
+        closure[named] = named_by
+        return entry
 
     records: dict[BridgeClass, ClassDynamics] = {}
-    for entry in classes:
+    for entry in entries:  # the list grows while the words name new classes
         cls = entry.bridge_class
         kind: Literal["active", "inert"] = "active" if entry.active else "inert"
         landings = tuple(
             land_element(trellis, homotopy, iterated, ref) for ref in (cls.source, cls.target)
         )
-        cd = ClassDynamics(entry, letters[cls], kind, (landings[0], landings[1]))
+        cd = ClassDynamics(
+            entry, letters[cls], kind, (landings[0], landings[1]), named_by=closure.get(cls)
+        )
         _resolve_itinerary(dual_graph, iterated, cd, max_walks)
+        itinerary = cd.itinerary or ()
+        for x, y in zip(itinerary[::2], itinerary[1::2]):
+            named, direction = oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
+            if direction and named not in letters:
+                entries.append(add(named, cls))
+        records[cls] = cd
+    assert len(set(letters.values())) == len(letters), "a letter names two classes"
+    if closure:
+        logger.info(
+            "the words name %d class(es) outside the alphabet; closed it under the word "
+            "map (%s)",
+            len(closure),
+            ", ".join(letters[named] for named in closure),
+        )
+
+    table = BridgeClassTable(entries)
+    for cd in records.values():
         if cd.itinerary is not None:
             cd.symbols, cd.loops = translate_itinerary(
-                cd.itinerary, naming, classes, letters, fixed_points
+                cd.itinerary, naming, table, letters, fixed_points
             )
-        cd.evidence = registered_evidence(trellis, iterated, naming, classes, letters, entry)
-        _compare_evidence(cd)
-        records[cls] = cd
+        cd.evidence = registered_evidence(trellis, iterated, naming, table, letters, cd.entry)
+        _compare_evidence(cd, trellis)
         logger.debug(
             "class %s: %s, word %r, verified %s",
             cd.letter,
@@ -1244,15 +1322,7 @@ def symbolic_dynamics(
             cd.verified,
         )
 
-    virtual = {cls: name for cls, name in letters.items() if cls not in classes}
-    dynamics = SymbolicDynamics(
-        naming,
-        classes,
-        fixed_points,
-        records,
-        inert_letters=inert,
-        virtual_classes=virtual,
-    )
+    dynamics = SymbolicDynamics(naming, table, fixed_points, records, inert_letters=inert)
     dynamics.match_members(trellis, iterated)
     logger.info(
         "symbolic dynamics: %d class(es), %d resolved, %d refined, reliable=%s",

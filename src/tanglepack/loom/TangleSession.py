@@ -769,9 +769,12 @@ class TangleSession:
         :meth:`bridge_classes` (the alphabet, lettered by
         :attr:`bridge_alphabet`), both cached on their own keys; see
         :func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics` for the
-        algorithm (landing, singleton/trellis path, itinerary, word,
-        refinement, transition structure). The session alphabet stays
-        active-only.
+        algorithm (landing, singleton/trellis path, itinerary, word, closure
+        of the alphabet under the word map, refinement, transition
+        structure). An active class the closure adds takes its letter from
+        :attr:`bridge_alphabet` too, so it persists; the session alphabet
+        stays active-only, and :meth:`bridge_classes` stays the alphabet
+        handed in (the dynamics' ``table`` is the closed one).
 
         Cached on ``(workbench.generation, partition signature, gathered strong
         pips)``, exactly the key of :meth:`dual_graph`: the dynamics depends on
@@ -814,7 +817,11 @@ class TangleSession:
             return cached[3]
 
         dual = self.dual_graph(fixed_points, rebuild=rebuild)
-        dynamics = _symbolic_dynamics(dual, self.bridge_classes(fixed_points))
+        dynamics = _symbolic_dynamics(
+            dual,
+            self.bridge_classes(fixed_points),
+            letter_for=self.bridge_alphabet.letter_for,
+        )
 
         self._symbolic_dynamics[cache_key] = (
             self.workbench.generation,
