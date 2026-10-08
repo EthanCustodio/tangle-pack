@@ -148,6 +148,14 @@ tanglepack.numerics.TangleWorkbench module
    :undoc-members:
    :show-inheritance:
 
+tanglepack.numerics.diagnostics module
+--------------------------------------
+
+.. automodule:: tanglepack.numerics.diagnostics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 tanglepack.numerics.geometry module
 -----------------------------------
 

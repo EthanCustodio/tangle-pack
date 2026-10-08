@@ -48,6 +48,7 @@ from .Bridge import Bridge, BridgeId
 from .Intersection import Intersection, ManifoldKey, Stability
 from .IntersectionRegistry import IntersectionRegistry
 from .IterateInference import IterateInference
+from .diagnostics import ResolutionReport, SameStabilityCrossing, same_stability_crossings
 
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,9 @@ class TangleWorkbench:
         dynamical_map_inverse: Its inverse.
         jacobian_function: Optional analytic Jacobian; a finite-difference one is
             used when it is omitted.
+        resolution_ratio_threshold: The resolution ratio below which a detected
+            crossing is reported as unresolved (see :meth:`check_resolution`);
+            None disables the report.
 
     Note:
         Bridge iteration, iterate-table inference and graph plotting are
@@ -126,6 +130,7 @@ class TangleWorkbench:
         dynamical_map: MapFunc,
         dynamical_map_inverse: MapFunc,
         jacobian_function: Optional[JacFunc] = None,
+        resolution_ratio_threshold: Optional[float] = 3.0,
     ) -> None:
         """
         Build an empty workbench around one dynamical system.
@@ -135,6 +140,11 @@ class TangleWorkbench:
             dynamical_map_inverse (MapFunc): Its inverse.
             jacobian_function (Optional[JacFunc]): Analytic Jacobian; a
                 finite-difference one is used when it is omitted.
+            resolution_ratio_threshold (Optional[float]): A detected crossing
+                whose :attr:`~.Intersection.Intersection.resolution_ratio` is
+                below this is reported as unresolved. 3 is silent on every
+                well-resolved test tangle (their smallest ratio is ~9) and flags
+                near-tangency artifacts (~7 and below). None disables the report.
         """
 
         self.dynamical_system = DynamicalSystem(
@@ -152,6 +162,13 @@ class TangleWorkbench:
         self._manifolds: dict[tuple[FixedPoint, Stability, int, int], BaseManifold] = {}
 
         self._intersection_registry = IntersectionRegistry()
+        self.resolution_ratio_threshold = resolution_ratio_threshold
+        # What report_resolution has already logged, so a repeated pass (a zone
+        # recompute, the next blast) only speaks about NEW findings: the flagged
+        # crossing ids with the registry id epoch they belong to, and the
+        # same-stability hits.
+        self._reported_flags: tuple[int, frozenset[int]] = (0, frozenset())
+        self._reported_artifacts: set[tuple] = set()
         # Bridges are keyed by their topological identity (the ordered endpoint
         # crossing pair), so there is exactly one object per computed bridge and
         # genealogy can be derived rather than stored. Partial pieces have no such
@@ -575,7 +592,7 @@ class TangleWorkbench:
 
         self._require_manifold(fixed_point, stability, branch_index)
 
-        self.compute_intersections(fixed_point, infer_iterates=False)
+        self.compute_intersections(fixed_point, infer_iterates=False, diagnose=False)
 
         num_initial_intersections = len(self._intersection_registry)
         logger.info("current intersections %d", num_initial_intersections)
@@ -586,7 +603,9 @@ class TangleWorkbench:
                 fixed_point, stability, num_iterations=1, branch_index=branch_index
             )
 
-            self.compute_intersections(fixed_point, infer_iterates=False)
+            self.compute_intersections(
+                fixed_point, infer_iterates=False, diagnose=False
+            )
             num_current_intersections = len(self._intersection_registry)
 
             if num_current_intersections > num_initial_intersections:
@@ -690,11 +709,13 @@ class TangleWorkbench:
                 self._fixed_points_with_manifolds(),
                 infer_iterates=True,
                 preserve_ids=True,
+                diagnose=False,
             )
             if self._bridges or self._partial_bridges:
                 self._recut_bridges_after_growth()
 
             if predicate(self):
+                self.report_resolution(self._fixed_points_with_manifolds())
                 return round_index
 
         raise ValueError(
@@ -973,6 +994,7 @@ class TangleWorkbench:
         reset: bool = True,
         infer_iterates: bool = True,
         preserve_ids: bool = False,
+        diagnose: bool = True,
     ) -> list[tuple[float, float]]:
         """
         Compute intersections among the manifolds of one or more fixed points.
@@ -998,12 +1020,17 @@ class TangleWorkbench:
                 Used by the resonance-zone recompute so a strong pip chosen as id N is
                 still id N after the stable manifolds are trimmed. Defaults to False —
                 the growth loops renumber freely.
+            diagnose: If True (default) finish with :meth:`report_resolution`:
+                one WARNING for new unresolved crossings, one for new
+                same-stability polyline crossings in the tangle region. The
+                growth loops pass False and report once at the end.
 
         Returns:
             List of (x, y) coordinates, one per detected crossing.
         """
-        if isinstance(fixed_points, FixedPoint):
-            fixed_points = [fixed_points]
+        fixed_points = (
+            [fixed_points] if isinstance(fixed_points, FixedPoint) else list(fixed_points)
+        )
 
         old_registry = self._intersection_registry
         if reset:
@@ -1038,7 +1065,159 @@ class TangleWorkbench:
         if infer_iterates:
             self.infer_iterates()
 
+        if diagnose:
+            self.report_resolution(fixed_points)
+
         return [ix.coords for _iid, ix in self._intersection_registry]
+
+    # ── resolution diagnostics (see diagnostics) ─────────────────────────────
+
+    def check_resolution(
+        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
+    ) -> ResolutionReport:
+        """
+        What the polylines fail to resolve, on demand and without logging.
+
+        Args:
+            fixed_points: Whose crossings and curves to check; None checks every
+                fixed point.
+
+        Returns:
+            The registered crossings whose resolution ratio is below
+            :attr:`resolution_ratio_threshold` (none when it is None) and every
+            same-stability polyline crossing
+            (:func:`~.diagnostics.same_stability_crossings`). Both are flags:
+            nothing is discarded, and neither feeds any reliability verdict.
+        """
+        if fixed_points is None:
+            selected = list(self.fixed_points)
+        elif isinstance(fixed_points, FixedPoint):
+            selected = [fixed_points]
+        else:
+            selected = list(fixed_points)
+        threshold = self.resolution_ratio_threshold
+        registry = self._intersection_registry
+        unresolved = (
+            ()
+            if threshold is None
+            else tuple(
+                iid
+                for iid in registry.unresolved_crossings(threshold)
+                if any(
+                    fp is chosen
+                    for fp in registry[iid].fixed_points
+                    for chosen in selected
+                )
+            )
+        )
+        return ResolutionReport(
+            threshold=threshold,
+            unresolved_crossings=unresolved,
+            same_stability_crossings=tuple(same_stability_crossings(self, selected)),
+        )
+
+    def report_resolution(
+        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
+    ) -> ResolutionReport:
+        """
+        :meth:`check_resolution`, logging what no earlier report has said.
+
+        One WARNING when unresolved crossings appear that were not reported
+        before (with the totals, the smallest ratio and the current
+        ``area_cutoff``); one WARNING when same-stability polyline crossings
+        appear in the tangle region, one INFO when they appear only outside it
+        (an escaping arm). Each finding is reported once, so the zone
+        recomputes and the next blast stay quiet about what is already known.
+        Everything goes to this module's logger.
+
+        Args:
+            fixed_points: As in :meth:`check_resolution`.
+
+        Returns:
+            The report.
+        """
+        report = self.check_resolution(fixed_points)
+        self._report_unresolved(report.unresolved_crossings, report.threshold)
+        self._report_artifacts(report.same_stability_crossings)
+        return report
+
+    def pending_resolution_flags(self) -> list[int]:
+        """The unresolved crossings no report has logged yet, in unstable cdist order."""
+        if self.resolution_ratio_threshold is None:
+            return []
+        reported = self._reported_flag_ids()
+        return [
+            iid
+            for iid in self._intersection_registry.unresolved_crossings(
+                self.resolution_ratio_threshold
+            )
+            if iid not in reported
+        ]
+
+    def _reported_flag_ids(self) -> frozenset[int]:
+        """The flagged ids already reported, while the registry still numbers them so."""
+        epoch, ids = self._reported_flags
+        return ids if epoch == self._registry_id_epoch else frozenset()
+
+    def _report_unresolved(
+        self, unresolved: tuple[int, ...], threshold: Optional[float]
+    ) -> None:
+        """One WARNING for the unresolved crossings, if any of them is new."""
+        reported = self._reported_flag_ids()
+        self._reported_flags = (self._registry_id_epoch, reported | frozenset(unresolved))
+        registry = self._intersection_registry
+        new = [iid for iid in unresolved if iid not in reported]
+        for iid in new:
+            logger.debug(
+                "Crossing %d: resolution ratio %.3g below %.3g",
+                iid,
+                registry[iid].resolution_ratio,
+                threshold,
+            )
+        if not new:
+            return
+        cdists = [registry[iid].unstable_cdist for iid in unresolved]
+        logger.warning(
+            "%d of %d detected crossings have a resolution ratio below %.3g "
+            "(smallest %.3g, unstable cdist %.6g .. %.6g, area_cutoff %.3g): they "
+            "cannot be distinguished from polygon noise at this area_cutoff; refine "
+            "and compare counts -- near a tangency they may be undecidable",
+            len(unresolved),
+            sum(ix.resolution_ratio is not None for _iid, ix in registry),
+            threshold,
+            min(registry[iid].resolution_ratio for iid in unresolved),
+            min(cdists),
+            max(cdists),
+            self._man_machine.area_cutoff,
+        )
+
+    def _report_artifacts(self, hits: tuple[SameStabilityCrossing, ...]) -> None:
+        """One WARNING for new same-stability hits in the tangle region, one INFO outside."""
+
+        def key(hit: SameStabilityCrossing) -> tuple:
+            return (hit.stability, hit.curve_a, hit.curve_b, hit.seg_a, hit.seg_b)
+
+        inside = [hit for hit in hits if hit.in_tangle_region]
+        outside = [hit for hit in hits if not hit.in_tangle_region]
+        if any(key(hit) not in self._reported_artifacts for hit in inside):
+            pairs = sorted({f"{hit.curve_a} x {hit.curve_b}" for hit in inside})
+            logger.warning(
+                "%d same-stability polyline crossing(s) in the tangle region (%s): "
+                "two curves of one stability never cross, so these are polygon "
+                "artifacts of under-resolved polylines; an area_cutoff below %.3g "
+                "is needed to refine them at all (current %.3g)",
+                len(inside),
+                "; ".join(pairs[:5]) + (" ..." if len(pairs) > 5 else ""),
+                min(hit.suggested_area_cutoff for hit in inside),
+                self._man_machine.area_cutoff,
+            )
+        if any(key(hit) not in self._reported_artifacts for hit in outside):
+            logger.info(
+                "%d same-stability polyline crossing(s) outside the tangle region: "
+                "an escaping arm is under-resolved",
+                len(outside),
+            )
+        self._reported_artifacts.update(key(hit) for hit in hits)
 
     def _register_anchors(self, fixed_points: Iterable[FixedPoint]) -> list[int]:
         """
@@ -1184,7 +1363,7 @@ class TangleWorkbench:
                 color="k").
         """
         if len(self._intersection_registry) == 0 and fp is not None:
-            self.compute_intersections(fp, infer_iterates=False)
+            self.compute_intersections(fp, infer_iterates=False, diagnose=False)
 
         # Pull coords (and ids, for labelling) from the registry so we can filter
         # by fixed point; an intersection belongs to fp if fp is among the fixed

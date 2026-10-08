@@ -1876,6 +1876,7 @@ class TangleSession:
         fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
         strict: bool = False,
         min_separation: Optional[float] = None,
+        diagnose: bool = True,
     ) -> BlastResult:
         """
         Repeatedly iterate the bridges inside a resonance zone.
@@ -1894,6 +1895,8 @@ class TangleSession:
             min_separation: Drop a child bridge whose interior comes within this
                 distance of an already-kept sibling, to avoid precision-driven merges
                 of near-coincident unstable curves (default: disabled).
+            diagnose: Finish with one resolution report on the workbench logger
+                (default; see :func:`~tanglepack.loom.Blast.blast_zone`).
 
         Returns:
             A :class:`~tanglepack.loom.Blast.BlastResult` genealogy of the blast.
@@ -1911,6 +1914,7 @@ class TangleSession:
             fixed_point=fixed_point,
             strict=strict,
             min_separation=min_separation,
+            diagnose=diagnose,
         )
 
     def plot_resonance_zones(

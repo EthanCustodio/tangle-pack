@@ -30,6 +30,17 @@ bridge and the manifold it was cut out of legitimately share a key while being
 distinct polylines, so key-grouping would let one cut span two curves. Phase 3's
 BridgeId may make a key-plus-generation grouping viable; until then the object is
 the only unambiguous grouping.
+
+Crossing resolution (2026-10-07). Below a ``resolution_ratio`` of a few, a
+crossing of two near-tangent polylines is undecidable at the current
+``area_cutoff``: the polylines may straddle where the curves do not cross, or
+miss a pair of crossings the curves do have. The ratio FLAGS such crossings
+(``TangleWorkbench.report_resolution``) and nothing is discarded -- real
+near-tangent crossings exist; only their count is untrustworthy. Deciding them
+would need a validated method, and interval arithmetic alone is not enough: the
+splitting angle near ``k = -1`` reaches ~1e-31, below double precision, so it
+would need multiprecision (and a parameterisation of the curves) as well. That is
+research, not engineering, and is accepted as out of reach for now.
 """
 
 from __future__ import annotations
@@ -202,6 +213,8 @@ class Tangle:
 
         self._intersecting_segments: set[frozenset[int]] = set()
         self._processed_pairs: set[frozenset[int]] = set()
+        # same-stability pairs dropped in the current resolve pass (for its summary)
+        self._same_stability_dropped = 0
 
     @staticmethod
     def _key_of(seg: _Segment) -> Optional[ManifoldKey]:
@@ -247,11 +260,19 @@ class Tangle:
             The freshly resolved crossings, for the caller to register. The Tangle
             keeps no copy: the registry is the single source of truth.
         """
+        self._same_stability_dropped = 0
         resolved: list[Intersection] = []
         for seg_id_pair in list(self._intersecting_segments):
             intersection = self._resolve_crossing_pair(seg_id_pair)
             if intersection is not None:
                 resolved.append(intersection)
+        if self._same_stability_dropped:
+            logger.info(
+                "Resolved %d crossings; dropped %d same-stability segment pairs "
+                "as near-tangencies",
+                len(resolved),
+                self._same_stability_dropped,
+            )
         return resolved
 
     def _resolve_crossing_pair(
@@ -397,8 +418,8 @@ class Tangle:
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         """The curve points just before and just after a segment, NaN for none.
 
-        A BranchPoint end (the periodic point) counts as having no neighbour, as
-        in the refiner: the curve on its far side is another branch.
+        A BranchPoint end (the periodic point) counts as having no neighbour:
+        the curve on its far side is another branch.
         """
         missing = np.array([np.nan, np.nan])
         before = (
@@ -472,15 +493,19 @@ class Tangle:
         curve folding near itself, two orbit branches sharing a resonance island, or
         two fixed points' manifolds running close. None is a malfunction to surface --
         it is expected geometry for a folded tangle -- so all are dropped (logged at
-        debug, not warning). A genuine *transversal* self-crossing (a real numerics
-        bug) is caught by the invariant test ``test_no_same_stability_crossing``, not
-        by flagging every near-tangency here.
+        debug, not warning, and counted in the pass summary of
+        :meth:`resolve_crossings`). A *transversal* same-stability polyline crossing
+        -- including one curve crossing itself, which this index never tests -- is
+        a polygon artifact of under-resolution; it is reported by
+        :func:`~.diagnostics.same_stability_crossings`, not by flagging every
+        near-tangency here.
         """
         logger.debug(
             "Dropping same-stability (%s) segment pair %s as a near-tangency",
             seg_1.manifold.stability,
             tuple(seg_id_pair),
         )
+        self._same_stability_dropped += 1
         self._processed_pairs.add(seg_id_pair)
 
     def add_manifold(

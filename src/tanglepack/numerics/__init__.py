@@ -32,6 +32,8 @@ from .BridgeIterator import BridgeIterator
 from .IterateInference import IterateInference
 from .TangleWorkbench import TangleWorkbench
 from . import graphviz
+from . import diagnostics
+from .diagnostics import ResolutionReport, SameStabilityCrossing
 
 from .IterateTable import IterateTable
 from .IntersectionRegistry import IntersectionRegistry
@@ -56,6 +58,9 @@ __all__ = [
     "IterateInference",
     "TangleWorkbench",
     "graphviz",
+    "diagnostics",
+    "ResolutionReport",
+    "SameStabilityCrossing",
     "IterateTable",
     "IntersectionRegistry",
     "Intersection",
