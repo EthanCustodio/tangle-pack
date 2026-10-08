@@ -51,6 +51,7 @@ from .BaseManifold import BaseManifold
 from .Point import Point
 from .BranchPoint import BranchPoint
 from .Bridge import Bridge
+from .geometry import chord_deviation_batch
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -60,6 +61,11 @@ logger.addHandler(logging.NullHandler())
 # of the two lengths involved, so dividing that product out makes the threshold a
 # bound on sin(angle) between the two directions and the predicates scale invariant.
 _EPS_REL = 1e-12
+
+# The deviation floor of the resolution ratio, RELATIVE to the shorter segment: two
+# straight segments get a large finite ratio instead of a division by zero, and the
+# ratio stays invariant under translation, rotation and scaling.
+_DEVIATION_FLOOR_REL = 1e-8
 
 
 def _both_anchors(
@@ -283,13 +289,14 @@ class Tangle:
             self._discard_same_stability(seg_id_pair, seg_1, seg_2)
             return None
 
-        point = self._find_true_intersection(seg_1, seg_2)
-        if point is None:
+        found = self._find_true_intersection(seg_1, seg_2)
+        if found is None:
             # near-parallel pair (already logged): discard it rather than let it
             # abort the whole intersection pass
             self._intersecting_segments.discard(seg_id_pair)
             self._processed_pairs.add(seg_id_pair)
             return None
+        point, sin_theta = found
 
         u_seg, s_seg = (
             (seg_1, seg_2) if seg_1.manifold.stability == "unstable" else (seg_2, seg_1)
@@ -310,6 +317,7 @@ class Tangle:
             # segment later, after a separator point has been spliced in.
             unstable_segment=(u_seg.p0, u_seg.p0_seg1),
             crossing_sign=self._crossing_sign(u_seg, s_seg),
+            resolution_ratio=self._resolution_ratio(u_seg, s_seg, sin_theta),
         )
 
         self._processed_pairs.add(seg_id_pair)
@@ -351,9 +359,65 @@ class Tangle:
         cross = float(u_dir[0] * s_dir[1] - u_dir[1] * s_dir[0])
         return int(np.sign(cross))
 
+    @staticmethod
+    def _resolution_ratio(u_seg: _Segment, s_seg: _Segment, sin_theta: float) -> float:
+        """
+        How far a crossing stands above the polygon noise of its two polylines.
+
+        ``min(l_u, l_s) * |sin(theta)|`` is how far the two segments separate
+        across the shorter one; the chord deviation ``h = 1.5 * area / l`` of each
+        (the refiner's curvature area, with the curve's neighbouring points, one
+        side only where there is none) is how far the true curve may stray from
+        its segment. Their ratio is ``min(l) * |sin| / max(h_u, h_s)``: well above
+        one the crossing is a fact about the curves, near or below one it may be
+        two near-tangent polylines straddling each other. The deviation is
+        floored at ``_DEVIATION_FLOOR_REL * min(l)`` so straight segments stay
+        finite and the ratio stays similarity invariant.
+
+        Args:
+            u_seg: The unstable segment of the crossing pair.
+            s_seg: The stable segment.
+            sin_theta: ``|sin|`` of the crossing angle.
+
+        Returns:
+            The resolution ratio.
+        """
+        segments = (u_seg, s_seg)
+        p0 = np.array([seg.p0.get_point() for seg in segments], dtype=float)
+        p1 = np.array([seg.p0_seg1.get_point() for seg in segments], dtype=float)
+        left, right = zip(*(Tangle._outer_neighbours(seg) for seg in segments))
+        deviation = chord_deviation_batch(p0, p1, np.array(left), np.array(right))
+        shorter = float(np.hypot(*(p1 - p0).T).min())
+        floor = _DEVIATION_FLOOR_REL * shorter
+        return shorter * sin_theta / max(float(deviation.max()), floor)
+
+    @staticmethod
+    def _outer_neighbours(
+        seg: _Segment,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """The curve points just before and just after a segment, NaN for none.
+
+        A BranchPoint end (the periodic point) counts as having no neighbour, as
+        in the refiner: the curve on its far side is another branch.
+        """
+        missing = np.array([np.nan, np.nan])
+        before = (
+            None
+            if isinstance(seg.p0, BranchPoint)
+            else seg.manifold.walk_back(seg.p0_seg1, seg.p0)
+        )
+        after = (
+            None
+            if isinstance(seg.p0_seg1, BranchPoint)
+            else seg.manifold.walk_fwd(seg.p0, seg.p0_seg1)
+        )
+        return tuple(
+            missing if node is None else node.get_point() for node in (before, after)
+        )
+
     def _find_true_intersection(
         self, seg1: _Segment, seg2: _Segment
-    ) -> Optional[NDArray[np.float64]]:
+    ) -> Optional[tuple[NDArray[np.float64], float]]:
         """
         Solve two crossing segments for their true point of intersection.
 
@@ -367,8 +431,9 @@ class Tangle:
             seg2: The other segment.
 
         Returns:
-            The crossing point, or None if the two directions are parallel to
-            within ``_EPS_REL`` (the caller discards such a pair).
+            The crossing point and ``|sin|`` of the crossing angle, or None if the
+            two directions are parallel to within ``_EPS_REL`` (the caller
+            discards such a pair).
         """
         p0_seg1, p1_seg1 = seg1.p0.get_point(), seg1.p0_seg1.get_point()
         p0_seg2, p1_seg2 = seg2.p0.get_point(), seg2.p0_seg1.get_point()
@@ -393,8 +458,7 @@ class Tangle:
             return None
 
         t, s = np.linalg.solve(M, rhs)  # t on AB, s on CD
-        # (Optional sanity: assert 0<=t<=1 and 0<=s<=1 if you didn't already know)
-        return a + t * (b - a)
+        return a + t * (b - a), abs(det) / scale
 
     def _discard_same_stability(
         self, seg_id_pair: "frozenset[int]", seg_1: _Segment, seg_2: _Segment

@@ -381,6 +381,26 @@ class IntersectionRegistry:
             self._rank_version = self._orders_version
         return self._rank_maps
 
+    def unresolved_crossings(self, threshold: float) -> list[int]:
+        """
+        The detected crossings the polylines resolve too poorly to trust.
+
+        Args:
+            threshold: The smallest :attr:`Intersection.resolution_ratio` a
+                crossing may have and still count as resolved.
+
+        Returns:
+            The ids whose ratio lies below ``threshold``, in unstable cdist
+            order. Anchors and synthetic crossings carry no ratio and are never
+            listed.
+        """
+        return [
+            iid
+            for iid in self._unstable_order
+            if (ratio := self._store[iid].resolution_ratio) is not None
+            and ratio < threshold
+        ]
+
     def all_ids(self) -> list[int]:
         """All registered IDs in insertion order."""
         return list(self._store.keys())

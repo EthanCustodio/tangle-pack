@@ -64,6 +64,14 @@ class Intersection:
             :class:`~tanglepack.topology.Arrangement.Arrangement`). ``0`` marks a
             crossing whose sign was never computed (a hand-built synthetic one);
             the arrangement treats that as positive and logs it.
+        resolution_ratio: How well the two polylines resolve this crossing:
+            ``min(l_u, l_s) * |sin(theta)| / max(h_u, h_s)``, the separation the
+            two segments gain across their shorter length over the larger chord
+            deviation of the curves they stand for (see
+            ``Tangle._resolution_ratio``). Below a few, the crossing cannot be
+            told apart from polygon noise. None for an anchor or a synthetic
+            crossing. When a later detection collides with a registered
+            crossing, the stored (first) detection's ratio is the one kept.
     """
 
     def __init__(
@@ -79,6 +87,7 @@ class Intersection:
         unstable_manifold: Optional["BaseManifold"] = None,
         unstable_segment: Optional[tuple["Point", "Point"]] = None,
         crossing_sign: int = 0,
+        resolution_ratio: Optional[float] = None,
     ) -> None:
         """
         Build one crossing. Every field is optional so that a synthetic
@@ -96,6 +105,7 @@ class Intersection:
         self.unstable_manifold = unstable_manifold
         self.unstable_segment = unstable_segment
         self.crossing_sign = int(crossing_sign)
+        self.resolution_ratio = resolution_ratio
 
     @classmethod
     def from_segments(
@@ -111,6 +121,7 @@ class Intersection:
         unstable_manifold: Optional["BaseManifold"] = None,
         unstable_segment: Optional[tuple["Point", "Point"]] = None,
         crossing_sign: int = 0,
+        resolution_ratio: Optional[float] = None,
     ) -> Intersection:
         """Create an Intersection backed by two R-tree segment IDs."""
         return cls(
@@ -124,6 +135,7 @@ class Intersection:
             unstable_manifold=unstable_manifold,
             unstable_segment=unstable_segment,
             crossing_sign=crossing_sign,
+            resolution_ratio=resolution_ratio,
         )
 
     @property
