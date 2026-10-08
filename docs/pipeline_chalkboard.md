@@ -88,4 +88,4 @@ From the audit; the details and evidence are in `open_issues.md`.
 | 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | no longer states (WP7): a walk pair no bridge spans unresolves its class and is warned; giving it its bridge is DEC-21 |
 | 3, 8 | The partition and dual graph do not cut S at the pip orbit (unified window ≠ S \ f(S) when S runs past it) | PK-5 | DEC-20 |
 | 10 | Element identity is a positional index | BCG-7 | fixed (WP8): letters by bounding crossings |
-| 4 | The PDF definition is not monotone as W^u grows (lambda-lemma copies of a window bridge kill its reference) | BCG-5 | DEC-22 |
+| 4 | Class-count decreases at depth: references lost to witnesses inside the cdist placement error bar (noise not ruled out; one clear lambda-lemma copy) | BCG-5 | DEC-22 |

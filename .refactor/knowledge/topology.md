@@ -343,8 +343,10 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   2D collision only when neither image is registered. Root cause of nested 10 outer blasts
   (`(37,38)` lost to 592, 6178 below `M^8(37)` yet 1.3e-5 inside after scaling, noise 0.0103) and
   k32 12 blasts. Law cases / deep runs / series: hole sets identical.
-- The definitional decreases left (lambda-lemma copies within 1e-6 of a window crossing; nested 11
-  outer blasts loses every outer reference) are DEC-22, open.
+- The decreases left are DEC-22, open, and NOT shown definitional: the witnesses (nested 11 outer
+  blasts, k32 11 and 13) sit within 1e-6..1.6e-5 of a window crossing, unlinked both ways, INSIDE
+  the placement error bar `min(l_u, l_s) / ratio` (the ratio is the crossing angle's resolution,
+  not cdist placement). Only k32 blast 10 is a clear lambda-lemma copy (1.25e-2 inside).
 - Element identity (C10): `PartitionInterval.identity = (branch_key, side, lo_id, hi_id)`; registry
   ids persist across one session's recomputes. `ElementRef` stays positional (an identity inside its
   equality broke 58 unit tests built on hand-made refs). Names stay positional.
