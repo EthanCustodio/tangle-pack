@@ -267,8 +267,10 @@ def _crossings_among(
     i, j, t = i[hit], j[hit], t[hit]
     sin = np.abs(den[hit]) / scale[hit]
     point = a[i] + t[:, None] * (b[i] - a[i])
-    area = curvature_area_batch(a, b, left, right)
-    local_area = np.maximum(area[i], area[j])
+    local_area = np.maximum(
+        curvature_area_batch(a[i], b[i], left[i], right[i]),
+        curvature_area_batch(a[j], b[j], left[j], right[j]),
+    )
     in_region = (
         np.zeros(len(i), dtype=bool)
         if box is None

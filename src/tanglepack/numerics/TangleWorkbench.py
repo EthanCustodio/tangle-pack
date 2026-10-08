@@ -143,8 +143,9 @@ class TangleWorkbench:
             resolution_ratio_threshold (Optional[float]): A detected crossing
                 whose :attr:`~.Intersection.Intersection.resolution_ratio` is
                 below this is reported as unresolved. 3 is silent on every
-                well-resolved test tangle (their smallest ratio is ~9) and flags
-                near-tangency artifacts (~7 and below). None disables the report.
+                well-resolved test tangle (smallest ratio ~9 on period 3, hundreds
+                on the period-1 cases) and flags the near-tangent polylines of a
+                tangle close to a tangency. None disables the report.
         """
 
         self.dynamical_system = DynamicalSystem(
