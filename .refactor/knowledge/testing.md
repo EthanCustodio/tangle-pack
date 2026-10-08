@@ -46,6 +46,20 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   p3 31/1/1; nested 13/0/0. E7 `depth`: p3 classes 9 (11-14 steps) -> 23, 30, 36 (15-17),
   is_reliable False from 15; inversion 4,5 = genuine topology AssertionError ("owned by 0
   partition elements"), 6 = ok but is_reliable False (1 virtual), 7,8 OOM.
+- SECOND EDITION of the report (WP10, merge 70222ee): E3, E7, E8, E9 and E11 rerun in full on
+  the fixed library (harness commits efccdd4 / 61ce364); E1, E2, E4, E5, E6, E10 keep their
+  first-campaign numbers, labelled as such. Harness changes: `_worker` records
+  `PointBudgetExceeded` details (outcome stays `exception`), `maps.resolution_metrics`
+  summarises `workbench.report_resolution`, E9 times `check_resolution` separately
+  (`compute_intersections(diagnose=False)`), E7 depth cells pin `area_cutoff=1e-4`,
+  `session.area_cutoff` setter replaces the private poke. Rerun: 0 OOM kills, 9 budget stops;
+  E8 0 lower-period accepted; E9 154/154 matched; E11 error 1 gone, 43 error snapshots in 6
+  configs (39 bridge rows = D1 resolution effect, 3 hole side, 1 outer face).
+- OPEN (author decision): the blast-end same-stability pass `blast_zone` runs by default keeps
+  1e5-1e6 hits per blast from blast 7-8, costs 1.6-2x the blast from blast 10-11 and cut E11's
+  reachable depth by 3-4 blasts, so E11's main grid blasts with `diagnose=False` and the pass is
+  measured only in five `resolution_pass` cells (report sec. 10.6). Bound it (count hits, check
+  only new image bridges) or default `diagnose=False` for blasting.
 - AUTHOR RULE 2026-10-07 for any write-up: topology changing under blasting / deeper growth
   (new crossings, classes, holes, splits, words, letters) is EXPECTED, never a failure.
   Three tiers: (a) topology change = new information; (b) library provisional flags
