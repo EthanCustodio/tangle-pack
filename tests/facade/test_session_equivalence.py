@@ -5,8 +5,10 @@ and strong pips from its per-fixed-point trellises and hands them to the
 topology functions. ``helpers/direct.py`` rebuilds each product WITHOUT the
 session's caches -- from the public topology constructors over the
 partitions, holes and pips read off the per-fixed-point trellises -- and this
-module checks the session's result against it, on the ``k10`` case and on the
-two-fixed-point ``nested`` case (author decision 6, 2026-10-05).
+module checks the session's result against it, on the ``k10`` case, on the
+two-fixed-point ``nested`` case (author decision 6, 2026-10-05) and on
+``inversion_one_blast``, where the alphabet is a strict part of the evidence
+table (D2, WP6).
 
 Comparisons are structural and letter-free: ids within ONE build, element
 names, and words as oriented element pairs. That the session stays equal to a
@@ -19,12 +21,15 @@ from typing import Callable
 
 import pytest
 
-from cases import Case, build_k10, build_nested
+from cases import Case, build_inversion, build_k10, build_nested
 from helpers.direct import PRODUCT_NAMES, direct_view, view_of
 
 _BUILDERS: dict[str, Callable[[], Case]] = {
     "k10": build_k10,
     "nested": build_nested,
+    # The alphabet (D2) is smaller than the evidence table here: a class with no
+    # member in the minimal trellis is left out.
+    "inversion_one_blast": lambda: build_inversion(blasts=1),
 }
 
 

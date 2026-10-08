@@ -21,7 +21,7 @@ import pytest
 
 from cases import build_k10
 from helpers.logs import assert_logged
-from tanglepack.loom.BridgeAlphabet import BridgeAlphabet, letter
+from tanglepack.loom.BridgeAlphabet import BridgeAlphabet
 
 
 # --------------------------------------------------------------------------- #
@@ -115,18 +115,8 @@ def test_no_partitions_raises_and_warns(k10_session, caplog):
 
 
 # --------------------------------------------------------------------------- #
-# (c) the alphabet on its own
+# (c) the alphabet on its own (the letter series is ``test_symbolic_dynamics``)
 # --------------------------------------------------------------------------- #
-def test_letter_sequence():
-    assert [letter(i) for i in range(4)] == ["a", "b", "c", "d"]
-    assert letter(25) == "z"
-    assert letter(26) == "aa"
-    assert letter(27) == "ab"
-    assert letter(26 + 26) == "ba"
-    with pytest.raises(ValueError):
-        letter(-1)
-
-
 def test_alphabet_reuses_assigns_and_resets():
     alphabet = BridgeAlphabet()
     first, second = object(), object()

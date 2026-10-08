@@ -989,7 +989,8 @@ class SeriesStep:
         blasts: Single-iteration blasts so far.
         holes: ``(bounding_ids, iterate, bridge_side)`` of every hole; ids
             persist across the blasts of one session, so two steps compare.
-        classes: ``len(session.bridge_classes())``, active and inert together.
+        classes: ``len(session.bridge_classes())``, the ALPHABET's size (the classes
+            with a member the minimal trellis keeps, D2), active and inert together.
         active: The active classes (a diagnostic, never compared).
         inert: The inert classes (a diagnostic, never compared).
         outside_minimal: Classes with no member in ``minimal_trellis().kept_bridge_ids``.
@@ -1124,16 +1125,10 @@ def _each(laws: tuple[str, ...], names: tuple[str, ...], issue: KnownIssue) -> d
     return {(law, name): issue for law in laws for name in names}
 
 
-_INVERSION = ("inversion", "inversion_one_blast", "inversion_two_blasts")
 _NUM16 = KnownIssue(
     "NUM-16: a zero-area region after a blast reports a representative point inside "
     "its neighbour",
     "WP10",
-)
-_BCG1 = KnownIssue(
-    "BCG-1: every trellis bridge is classed, blast children included, so a class can "
-    "have no member in the minimal trellis (D2)",
-    "WP6",
 )
 
 #: ``(law_id, case) -> KnownIssue``: every pair fails today and names the WP that
@@ -1186,17 +1181,6 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "image is a loop (an inert anchor class)",
             "WP5",
         ),
-        **_each(("alphabet_inside_minimal_trellis",), _INVERSION, _BCG1),
-        **_each(
-            ("series_class_count_constant_while_holes_constant",),
-            ("k28_series", "p3_series"),
-            KnownIssue(
-                "BCG-1/BCG-2: blast children with no image are classed and orphan loops "
-                "stand alone, so the class count grows while the hole set is constant",
-                "WP6",
-            ),
-        ),
-        **_each(("series_alphabet_inside_minimal_trellis",), tuple(SERIES), _BCG1),
         ("three_tangles_take_three_families", "hand_built"): KnownIssue(
             "TEST-5(c): TANGLE_COLOR_FAMILIES holds two families, so a third tangle "
             "draws from none",
@@ -1243,6 +1227,13 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
                 "itinerary (D3)"
             )
             for name in ("k28_one_blast", "p3")
+        },
+        **{
+            (law, "inversion"): (
+                "the alphabet is the inert hole-bridge class alone (D2): s(0.1) has no "
+                "window hole (PK-3 / DEC-19), so no class is active"
+            )
+            for law in ("every_active_class_walks", "matrix_is_token_counts")
         },
         **{
             (law, "inversion"): (

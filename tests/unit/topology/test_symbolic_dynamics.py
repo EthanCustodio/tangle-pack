@@ -170,23 +170,22 @@ def test_inert_letter_series(layout):
     assert [letters[cls] for cls in inert] == ["u", "v", "w", "x", "y", "z", "uu", "uv", "uw"]
 
 
-def test_inert_letters_skip_active_letters(layout):
-    fp = layout.fp
-    key = layout.key
-    inert_a = BridgeClass(ElementRef(key, "left", 0), ElementRef(key, "left", 2))
-    inert_b = BridgeClass(ElementRef(key, "left", 1), ElementRef(key, "left", 3))
-    active = BridgeClass(ElementRef(key, "right", 0), ElementRef(key, "right", 2))
-    table = BridgeClassTable(
-        [
-            BridgeClassEntry(inert_a, inert=True),
-            BridgeClassEntry(inert_b, inert=True),
-            BridgeClassEntry(active, inert=False, letter="u"),
-        ]
-    )
-    letters = inert_letters(table)
-    assert letters == {inert_a: "v", inert_b: "w"}
-    letters = inert_letters(table, used=["v"])
-    assert letters == {inert_a: "w", inert_b: "x"}
+def test_letter_series_are_disjoint():
+    """One bijective numeral over two disjoint digit sets (SIMP-6): active letters use
+    ``a..t``, inert ones ``u..z``, so the series never collide and nothing is skipped."""
+    letter = SD.letter
+    active = [letter(i) for i in range(2000)]
+    inert = [letter(i, inert=True) for i in range(2000)]
+    assert set("".join(active)) <= set("abcdefghijklmnopqrst")
+    assert set("".join(inert)) <= set("uvwxyz")
+    assert len(set(active)) == len(active) and len(set(inert)) == len(inert)
+    assert letter(0) == "a" and letter(0, inert=True) == "u"
+    for series in (active, inert):
+        width = sum(len(text) == 1 for text in series)
+        assert all(len(text) == 1 for text in series[:width])
+        assert series[width] == series[0] * 2  # bijective: no "a0"-style gap
+    with pytest.raises(ValueError):
+        letter(-1)
 
 
 # --------------------------------------------------------------------------- #
@@ -426,13 +425,33 @@ def test_unreadable_image_chain_is_skipped_as_evidence(layout, monkeypatch, capl
     assert_logged(caplog, logging.WARNING, SD.__name__)
 
 
+def test_registered_evidence_never_extends_the_letters(layout, monkeypatch):
+    """D2: evidence names a class outside the alphabet locally and never adds a symbol
+    to the caller's letters (only words make virtual classes)."""
+    entry = layout.table[layout.a]
+    outside = layout.refs("R_1^1", "R_2")  # {R_1, R_2}: no class of the table
+
+    class _FakeTrellis:
+        def __init__(self, fixed_points):
+            self.fixed_points = fixed_points
+
+    monkeypatch.setattr(SD, "_image_chain", lambda _trellis, _bid: [(0, 1), (1, 2)])
+    monkeypatch.setattr(SD, "trellis_itinerary", lambda *_args: outside)
+    letters = dict(layout.letters)
+    evidence = SD.registered_evidence(
+        _FakeTrellis(layout.fixed_points), object(), layout.naming, layout.table, letters, entry
+    )
+    assert letters == layout.letters
+    assert evidence and all(e.symbols[0].kind == "virtual" for e in evidence)
+
+
 # --------------------------------------------------------------------------- #
 # Real data: fallback letters and an unresolved class
 # --------------------------------------------------------------------------- #
 def test_unlettered_active_classes_get_fallback_letters(k10_partitioned):
     """A table built outside the session carries no letters: its active classes
     are lettered ``a, b, ...`` in table order, its inert ones ``u, v, ...``."""
-    from tanglepack.loom.BridgeAlphabet import letter
+    from tanglepack.topology import letter
     from tanglepack.topology.BridgeClass import bridge_classes
 
     session, _fp = k10_partitioned

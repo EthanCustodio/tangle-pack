@@ -1516,27 +1516,38 @@ def _element_ends(case: "Case", bridge_id) -> tuple:
     return tuple(refs)
 
 
+def _evidence(case: "Case"):
+    """Every bridge's class: the EVIDENCE table the alphabet is drawn from (D2)."""
+    return case.session.minimal_trellis().classes
+
+
 def check_every_bridge_in_one_class(case: "Case") -> int:
-    """Every identified bridge of the trellis lands in exactly one class."""
+    """Every identified bridge of the trellis lands in exactly one class of the evidence
+    table, or is an orphan loop (both ends in one element) that the table leaves
+    unclassed (D2)."""
     trellis = _full(case)
-    table = case.session.bridge_classes()
+    table = _evidence(case)
     expected = sorted(bridge.id for bridge in trellis.bridges if bridge.id is not None)
-    placed = [bid for entry in table for bid in entry.bridge_ids]
+    placed = [bid for entry in table for bid in entry.bridge_ids] + list(table.orphans)
     assert len(placed) == len(set(placed)), "a bridge landed in two classes"
     assert sorted(placed) == expected
+    for bid in table.orphans:
+        x, y = _element_ends(case, bid)
+        assert x == y, bid
     return len(placed)
 
 
 def check_class_orientation_anchor_outward(case: "Case") -> int:
     """A class runs anchor outward (``anchor_outward_key``), and a member's direction is
-    ``+1`` exactly when its first end is the class source; a loop sits in one element."""
+    ``+1`` exactly when its first end is the class source; a loop member sits in one
+    element, and no class is a loop (D2: a loop folds into a class, never stands alone)."""
     trellis = _full(case)
     fixed_points = trellis.fixed_points
-    table = case.session.bridge_classes()
+    table = _evidence(case)
     count = 0
     for entry in table:
         cls = entry.bridge_class
-        assert not cls.is_loop or not entry.active
+        assert not cls.is_loop, cls.label
         assert anchor_outward_key(cls.source, fixed_points) <= anchor_outward_key(
             cls.target, fixed_points
         )
@@ -1548,6 +1559,35 @@ def check_class_orientation_anchor_outward(case: "Case") -> int:
                 assert {x, y} == {cls.source, cls.target}
                 assert member.direction == (+1 if x == cls.source else -1)
                 assert oriented_class(x, y, fixed_points) == (cls, member.direction)
+            count += 1
+    return count
+
+
+def check_loops_fold_forward(case: "Case") -> int:
+    """D2: a loop folds FORWARD. Up its image-chain parents (each pair's parent is the one
+    bridge whose ``image_chain`` holds it), through loop bridges only, the first bridge
+    that connects two elements is the loop's ``folded_from``, a non-loop member of the
+    loop's own class."""
+    full = _full(case)
+    table = _evidence(case)
+    parent: dict = {}
+    for bridge in full.bridges:
+        if bridge.id is None:
+            continue
+        for pair in image_chain(full, bridge.id) or ():
+            assert parent.setdefault(frozenset(pair), bridge.id) == bridge.id, pair
+    count = len(table)
+    for entry in table:
+        for loop in entry.loops:
+            assert loop.folded_from is not None, loop.bridge_id
+            assert not entry.member(loop.folded_from).is_loop, loop.bridge_id
+            current, seen = parent[frozenset(loop.bridge_id)], set()
+            while frozenset(current) != frozenset(loop.folded_from):
+                assert frozenset(current) not in seen, (loop.bridge_id, current)
+                seen.add(frozenset(current))
+                x, y = _element_ends(case, current)
+                assert x == y, (loop.bridge_id, current)
+                current = parent[frozenset(current)]
             count += 1
     return count
 
@@ -1596,7 +1636,7 @@ def check_anchor_bridge_class_leads_its_tangle(case: "Case") -> int:
     """A tangle's anchor bridge (leaving an anchor) is a ``+1`` member of an ACTIVE class,
     and that class comes first in its tangle's group (smallest member cdist: 0)."""
     trellis = _full(case)
-    table = case.session.bridge_classes()
+    table = _evidence(case)
     entries = list(table)
     anchors = set(_anchor_ids(case))
     tol = _tol(case)
@@ -1619,7 +1659,7 @@ def check_class_table_order(case: "Case") -> int:
     first-crossing unstable cdist, then ``class_sort_key``; members by ``BridgeId``."""
     trellis = _full(case)
     fixed_points = trellis.fixed_points
-    table = case.session.bridge_classes()
+    table = _evidence(case)
     entries = list(table)
     for entry in entries:
         assert entry.bridge_ids == sorted(entry.bridge_ids)
@@ -1643,7 +1683,7 @@ def check_classes_do_not_mix_tangles(case: "Case") -> int:
     members' unstable branches all belong to that fixed point; every tangle has classes."""
     trellis = _full(case)
     fixed_points = trellis.fixed_points
-    table = case.session.bridge_classes()
+    table = _evidence(case)
     seen = set()
     for entry in table:
         cls = entry.bridge_class
@@ -1663,7 +1703,7 @@ def check_classes_do_not_mix_tangles(case: "Case") -> int:
 def check_classes_use_every_orbit_branch(case: "Case") -> int:
     """The classes of a fixed point name elements on every stable branch of its cycle
     (all k orbit indices of a period-k orbit, both branches of an inversion point)."""
-    table = case.session.bridge_classes()
+    table = _evidence(case)
     count = 0
     for fp in case.fixed_points:
         named = {
@@ -1691,12 +1731,19 @@ def check_only_active_classes_lettered(case: "Case") -> int:
 
 
 def check_alphabet_inside_minimal_trellis(case: "Case") -> int:
-    """D2: the alphabet is the minimal trellis's bridges: every class has a member the
-    minimal trellis keeps (blast children are image evidence only)."""
-    kept = set(case.session.minimal_trellis().kept_bridge_ids)
+    """D2: the alphabet is the minimal trellis's bridges: a class of the evidence table
+    is in the session's lettered table exactly when it has a member the minimal trellis
+    keeps, and one outside it is never lettered (blast children are image evidence only)."""
+    minimal = case.session.minimal_trellis()
+    kept = set(minimal.kept_bridge_ids)
     table = case.session.bridge_classes()
     for entry in table:
         assert any(m.bridge_id in kept for m in entry.members), entry.bridge_class.label
+    alphabet = set(table.classes)
+    for entry in minimal.classes:
+        has_kept = any(m.bridge_id in kept for m in entry.members)
+        assert has_kept == (entry.bridge_class in alphabet), entry.bridge_class.label
+        assert has_kept or entry.letter is None, entry.bridge_class.label
     return len(table)
 
 
@@ -1857,7 +1904,7 @@ def check_minimal_trellis_bridges(case: "Case") -> int:
     session = case.session
     minimal = session.minimal_trellis()
     full = minimal.trellis
-    table = session.bridge_classes()
+    table = minimal.classes
     hole_set = {frozenset(b) for b in minimal.hole_bridge_ids}
     for _trellis, hole in _holes(case):
         bridge = full.bridge_between(*hole.bounding_ids)
@@ -2359,6 +2406,7 @@ LAYERS: dict[str, list[LawCheck]] = {
     "classes": [
         check_every_bridge_in_one_class,
         check_class_orientation_anchor_outward,
+        check_loops_fold_forward,
         check_row_of_end_is_geometry,
         check_bridge_rows_consistent,
         check_anchor_bridge_class_leads_its_tangle,

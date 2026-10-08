@@ -93,19 +93,23 @@ class DirectBuild:
         """The homotopy partition family."""
         return HomotopyPartition.from_results(self.partitions, trellis=self.trellis)
 
+    def evidence(self):
+        """Every bridge's class: the evidence table the minimal trellis reads."""
+        return bridge_classes(self.trellis, self.partitions)
+
+    def minimal(self):
+        """The minimal trellis."""
+        return minimal_trellis(self.trellis, self.holes, self.evidence())
+
     def classes(self):
-        """The bridge-class table, lettered from a FRESH alphabet (letters are a
-        session annotation; every view here is letter-free)."""
-        table = bridge_classes(self.trellis, self.partitions)
+        """The alphabet (the minimal trellis's classes, D2), lettered from a FRESH
+        alphabet (letters are a session annotation; every view here is letter-free)."""
+        table = self.minimal().alphabet
         alphabet = BridgeAlphabet()
         for entry in table:
             if entry.active:
                 entry.letter = alphabet.letter_for(entry.bridge_class)
         return table
-
-    def minimal(self):
-        """The minimal trellis."""
-        return minimal_trellis(self.trellis, self.holes, self.classes())
 
     def iterated(self) -> IteratedHomotopyPartition:
         """The iterated homotopy partition."""
