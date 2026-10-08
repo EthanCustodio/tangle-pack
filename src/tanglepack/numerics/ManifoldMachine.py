@@ -323,140 +323,142 @@ class ManifoldMachine:
                 (the links are made before refinement); that state is not
                 resumable.
         """
+        with self._top_level_call():
+            return self._iterate_manifold(manifold)
+
+    def _iterate_manifold(self, manifold: BaseManifold) -> BaseManifold:
+        """The body of :meth:`iterate_manifold`, inside the caller's budget scope."""
         from .ManifoldInitializer import ManifoldInitializer
 
-        with self._top_level_call():
-            initalizer = ManifoldInitializer(self.system, self)
-            viewer = ManifoldView(manifold, self.system)
+        initializer = ManifoldInitializer(self.system, self)
+        viewer = ManifoldView(manifold, self.system)
 
-            non_iterated_coords = manifold.get_non_iterated_point_array()
-            non_iterated_cdists = manifold.get_non_iterated_cdist_array()
-            non_iterated_points = manifold.get_non_iterated_point_array(
-                return_nodes=True
+        non_iterated_coords = manifold.get_non_iterated_point_array()
+        non_iterated_cdists = manifold.get_non_iterated_cdist_array()
+        non_iterated_points = manifold.get_non_iterated_point_array(return_nodes=True)
+
+        old_points = manifold.get_iterated_point_array(return_nodes=True)
+
+        if len(non_iterated_coords):
+
+            self._note_coords(non_iterated_coords)
+            self._charge(len(non_iterated_coords), "map", manifold)
+            iterated_points = viewer.map_fwd_batch(non_iterated_coords)
+            self._note_coords(iterated_points)
+            distances = np.ravel(manifold.stretch_param * non_iterated_cdists)
+
+            xvals = iterated_points[:, 0]
+            yvals = iterated_points[:, 1]
+
+            new_points = [
+                Point(x, y, float(cdist), stretch_param=manifold.stretch_param)
+                for x, y, cdist in zip(xvals, yvals, distances)
+            ]
+
+            for i, point in enumerate(non_iterated_points):
+                if manifold.stability == "unstable":
+                    point.insert_next_iterate(new_points[i])
+                else:
+                    point.insert_prev_iterate(new_points[i])
+
+            # The image of a piece lives on the branch one map step forward, which
+            # only the caller can name (see iterate_bridge); the machine leaves the
+            # key unset rather than copying the un-advanced one.
+            new_iterated_points = initializer.construct_manifold_from_point_list(
+                new_points,
+                manifold.stability,
+                manifold.stretch_param,
+                manifold.fixed_point,
+                manifold.branch_index,
+                manifold_key=None,
             )
 
-            old_points = manifold.get_iterated_point_array(return_nodes=True)
+        # if there were points that needed to be mapped
+        if not len(non_iterated_coords) == 0:
 
-            if len(non_iterated_coords):
-
-                self._note_coords(non_iterated_coords)
-                self._charge(len(non_iterated_coords), "map", manifold)
-                iterated_points = viewer.map_fwd_batch(non_iterated_coords)
-                self._note_coords(iterated_points)
-                distances = np.ravel(manifold.stretch_param * non_iterated_cdists)
-
-                xvals = iterated_points[:, 0]
-                yvals = iterated_points[:, 1]
-
-                new_points = [
-                    Point(x, y, float(cdist), stretch_param=manifold.stretch_param)
-                    for x, y, cdist in zip(xvals, yvals, distances)
-                ]
-
-                for i, point in enumerate(non_iterated_points):
-                    if manifold.stability == "unstable":
-                        point.insert_next_iterate(new_points[i])
-                    else:
-                        point.insert_prev_iterate(new_points[i])
-
-                # The image of a piece lives on the branch one map step forward, which
-                # only the caller can name (see iterate_bridge); the machine leaves the
-                # key unset rather than copying the un-advanced one.
-                new_iterated_points = initalizer.construct_manifold_from_point_list(
-                    new_points,
+            # Only create old_iterated_points if there are some
+            if len(old_points) > 0:
+                old_iterated_points = BaseManifold(
+                    old_points[0],
                     manifold.stability,
                     manifold.stretch_param,
                     manifold.fixed_point,
-                    manifold.branch_index,
+                    tail=old_points[-1],
+                    branch_index=manifold.branch_index,
                     manifold_key=None,
                 )
 
-            # if there were points that needed to be mapped
-            if not len(non_iterated_coords) == 0:
-
-                # Only create old_iterated_points if there are some
-                if len(old_points) > 0:
-                    old_iterated_points = BaseManifold(
-                        old_points[0],
-                        manifold.stability,
-                        manifold.stretch_param,
-                        manifold.fixed_point,
-                        tail=old_points[-1],
-                        branch_index=manifold.branch_index,
-                        manifold_key=None,
-                    )
-
-                    mapped_manifold = self.merge_manifolds(
-                        old_iterated_points, new_iterated_points
-                    )
-                    self.refine_manifold(mapped_manifold)
-                else:
-                    # No old iterated points - this is the first iteration of this bridge
-                    # Just refine the newly iterated points
-                    self.refine_manifold(new_iterated_points)
-                    mapped_manifold = new_iterated_points
-
-                # cdist is the manifold's ordering key, so the geometric list must be
-                # cdist-sorted. It is only *non-decreasing*, not strictly increasing:
-                # where a high-stretch fold has collapsed adjacent cdists to within a
-                # float ULP the refiner bridges the gap with equal-cdist points (a tie
-                # is harmless -- such points are spliced geometrically, never re-sorted).
-                assert (np.diff(mapped_manifold.get_cdist_array(), axis=0) >= 0).all()
-
-                return mapped_manifold
-
+                mapped_manifold = self.merge_manifolds(
+                    old_iterated_points, new_iterated_points
+                )
+                self.refine_manifold(mapped_manifold)
             else:
-                # All points already have iterates - collect the iterated points
-                # This happens with bridges cut from the middle of a manifold
-                if len(old_points) == 0:
-                    raise ValueError("No points in manifold to iterate")
+                # No old iterated points - this is the first iteration of this bridge
+                # Just refine the newly iterated points
+                self.refine_manifold(new_iterated_points)
+                mapped_manifold = new_iterated_points
 
-                # The old_points already have their iterates computed
-                # Just need to create a new manifold/bridge from those iterates
-                # The iterated points are already geometrically connected in the iterate chain
+            # cdist is the manifold's ordering key, so the geometric list must be
+            # cdist-sorted. It is only *non-decreasing*, not strictly increasing:
+            # where a high-stretch fold has collapsed adjacent cdists to within a
+            # float ULP the refiner bridges the gap with equal-cdist points (a tie
+            # is harmless -- such points are spliced geometrically, never re-sorted).
+            assert (np.diff(mapped_manifold.get_cdist_array(), axis=0) >= 0).all()
 
-                # ``old_points`` are already the iterates (forward images) of this
-                # manifold's points -- ``get_iterated_point_array`` returned each point's
-                # image. The iterated manifold is therefore bracketed by those images
-                # directly; do NOT step one more iterate forward (that image does not
-                # exist yet and was the source of the spurious "next_iterate is None"
-                # failure when re-iterating an already-iterated child bridge).
-                first_iterate = old_points[0]
-                last_iterate = old_points[-1]
+            return mapped_manifold
 
-                if first_iterate is None or last_iterate is None:
-                    raise ValueError(
-                        "Points claim to have iterates but next_iterate/prev_iterate is None"
-                    )
+        else:
+            # All points already have iterates - collect the iterated points
+            # This happens with bridges cut from the middle of a manifold
+            if len(old_points) == 0:
+                raise ValueError("No points in manifold to iterate")
 
-                # Check if the input was a Bridge - if so, return a Bridge
-                # I might want to do this for the other case as well, not just
-                # if none of the points had already been iterated
-                if isinstance(manifold, Bridge):
-                    iterated_bridge = Bridge(
-                        root=first_iterate,
-                        stability=manifold.stability,
-                        stretch_param=manifold.stretch_param,
-                        fixed_point=manifold.fixed_point,
-                        tail=last_iterate,
-                        name=manifold.name,
-                        branch_index=manifold.branch_index,
-                        manifold_key=None,
-                    )
-                    return iterated_bridge
-                else:
-                    # Construct a new BaseManifold
-                    iterated_manifold = BaseManifold(
-                        root=first_iterate,
-                        stability=manifold.stability,
-                        stretch_param=manifold.stretch_param,
-                        fixed_point=manifold.fixed_point,
-                        tail=last_iterate,
-                        branch_index=manifold.branch_index,
-                        manifold_key=None,
-                    )
+            # The old_points already have their iterates computed
+            # Just need to create a new manifold/bridge from those iterates
+            # The iterated points are already geometrically connected in the iterate chain
 
-                    return iterated_manifold
+            # ``old_points`` are already the iterates (forward images) of this
+            # manifold's points -- ``get_iterated_point_array`` returned each point's
+            # image. The iterated manifold is therefore bracketed by those images
+            # directly; do NOT step one more iterate forward (that image does not
+            # exist yet and was the source of the spurious "next_iterate is None"
+            # failure when re-iterating an already-iterated child bridge).
+            first_iterate = old_points[0]
+            last_iterate = old_points[-1]
+
+            if first_iterate is None or last_iterate is None:
+                raise ValueError(
+                    "Points claim to have iterates but next_iterate/prev_iterate is None"
+                )
+
+            # Check if the input was a Bridge - if so, return a Bridge
+            # I might want to do this for the other case as well, not just
+            # if none of the points had already been iterated
+            if isinstance(manifold, Bridge):
+                iterated_bridge = Bridge(
+                    root=first_iterate,
+                    stability=manifold.stability,
+                    stretch_param=manifold.stretch_param,
+                    fixed_point=manifold.fixed_point,
+                    tail=last_iterate,
+                    name=manifold.name,
+                    branch_index=manifold.branch_index,
+                    manifold_key=None,
+                )
+                return iterated_bridge
+            else:
+                # Construct a new BaseManifold
+                iterated_manifold = BaseManifold(
+                    root=first_iterate,
+                    stability=manifold.stability,
+                    stretch_param=manifold.stretch_param,
+                    fixed_point=manifold.fixed_point,
+                    tail=last_iterate,
+                    branch_index=manifold.branch_index,
+                    manifold_key=None,
+                )
+
+                return iterated_manifold
 
     def iterate_bridge(self, manifold: Bridge) -> BaseManifold:
         """
