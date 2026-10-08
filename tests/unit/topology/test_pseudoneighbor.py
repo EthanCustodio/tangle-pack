@@ -689,3 +689,44 @@ def test_table_linked_landing_uses_registered_cdist():
     candidate(reg, link=False)
     pairs = compute_pseudoneighbors(_trellis(reg, fp))
     assert (x1, r_end) not in [(p.intersection_a, p.intersection_b) for p in pairs]
+
+
+@pytest.mark.parametrize(
+    ("r_unstable", "survives"), [(128.2, True), (130.0, False)], ids=["below_c", "between_c_f"]
+)
+def test_unlinked_landing_is_read_against_the_pairs_images(r_unstable, survives):
+    """An UNLINKED candidate is compared, on its own unstable branch, with the
+    pair's REGISTERED images, not scaled back onto the pair (BCG-5).
+
+    x1 and r_end are linked three steps forward to c (registered at 128.5, a
+    drift of 0.5 off 2 * 4**3) and f (256). A crossing r at 128.2 with a far
+    stable cdist scales back to 2.003, inside the pair's (2, 4), yet lies BELOW
+    c on its own polyline, outside (128.5, 256): the image of W^U(x1, r_end)
+    does not hold it, and the pair survives. At 130.0 it lies between c and f
+    and punctures. Nested at 10 outer blasts lost its reference this way: the
+    scaling noise at depth 8 exceeded the gap.
+    """
+    fp = _fixed_point(1, 4.0)
+    stable = (fp, "stable", 0, 0)
+    unstable = (fp, "unstable", 0, 0)
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    for start, (u, s) in ((x1, (2.0, 3.0)), (r_end, (4.0, 1.0))):
+        previous = start
+        for n in (1, 2, 3):
+            image_u = 128.5 if (start, n) == (x1, 3) else u * 4.0**n
+            image = reg.add_synthetic(
+                (s / 4.0**n, image_u), unstable_cdist=image_u, stable_cdist=s / 4.0**n,
+                manifold_a_key=unstable, manifold_b_key=stable,
+            )
+            reg.register_iterate(previous, 1, image)
+            previous = image
+    reg.add_synthetic(
+        (0.01, r_unstable), unstable_cdist=r_unstable, stable_cdist=0.01,
+        manifold_a_key=unstable, manifold_b_key=stable,
+    )
+
+    pairs = [(p.intersection_a, p.intersection_b) for p in compute_pseudoneighbors(_trellis(reg, fp))]
+
+    assert (r_n, x1) in pairs
+    assert ((x1, r_end) in pairs) is survives

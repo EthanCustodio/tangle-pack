@@ -89,6 +89,15 @@ Implementation notes:
   by beta per step, so ANY relative tolerance on a scaled value fails at
   depth — the k=2.8 script at 8 blasts lost the pair (10, 9) to its own
   M^6(9), linked in the table but 1.8% off on the scaled stable cdist.
+  Lookup comes first on the PAIR's side too (BCG-5, WP8): when the table
+  knows an image M^-steps of x0 or x1, an unlinked r is compared with those
+  images on r's OWN unstable branch (the image of an arc is an arc, cdist is
+  monotone along one polyline), the other end placed by image_cdist. Only
+  when neither image is registered is r scaled back onto the pair. Nested at
+  10 outer blasts lost its only outer reference (37, 38) to scaling noise:
+  crossing 592 sits 6178 below M^8(37) on its own polyline, outside the image
+  of the pair, but its depth-8 scaled cdist landed 1.3e-5 inside (37, 38),
+  where the scaling noise is 0.0103 (k32 at 12 blasts the same).
 * For unlinked landings the open interval is STRICT; x0, x1 and their own
   iterates sit exactly at the (scaled) endpoints up to canonical-distance
   noise and are recognised by a 2D endpoint collision (both the landing's
@@ -446,10 +455,13 @@ def _unstable_interval_is_clear(
     e.g. the preimages of blasted crossings puncture the interval they land
     on, per the author. Each landing is resolved by iterate-table LOOKUP
     first (``Trellis.iterate``): a linked landing is a registered crossing,
-    so its identity (is it x0 or x1?) and its unstable cdist are exact. Only
-    an unlinked landing is placed by scaling: its unstable cdist by
-    ``beta ** steps``, its stable one by ``Trellis.image_cdist``. There the
-    open interval is strict and the landing is
+    so its identity (is it x0 or x1?) and its unstable cdist are exact. An
+    unlinked landing is read in r's own frame when the table knows an image
+    of x0 or x1 there: r punctures iff its registered cdist lies strictly
+    between the pair's images (one may be placed by ``image_cdist``). Only
+    when neither image is registered is the landing placed by scaling: its
+    unstable cdist by ``beta ** steps``, its stable one by
+    ``Trellis.image_cdist``. There the open interval is strict and the landing is
     skipped only when it 2D-collides with an endpoint (both the scaled
     unstable and stable positions match within ``collision_rtol``) — x0/x1's
     own orbit up to cdist noise, the same-point test StrongPip uses.
@@ -523,6 +535,26 @@ def _unstable_interval_is_clear(
                     )
                     return False
                 continue
+
+            # Lookup first on the pair's side too: the images of x0 and x1 bound
+            # the image of W^U(x0, x1) on r's own polyline, where r's registered
+            # cdist is exact.
+            images = [trellis.iterate(x, -steps) for x in (x0, x1)]
+            if any(image is not None for image in images):
+                lo_r, hi_r = sorted(
+                    trellis.intersection(image).unstable_cdist
+                    if image is not None
+                    else trellis.image_cdist(x, -steps, "unstable")[1]
+                    for x, image in zip((x0, x1), images)
+                )
+                if r_id in images or not lo_r < r.unstable_cdist < hi_r:
+                    continue
+                logger.debug(
+                    "Pair (%d, %d) punctured by %d in its own frame "
+                    "(cdist %.9g in (%.9g, %.9g))",
+                    x0, x1, r_id, r.unstable_cdist, lo_r, hi_r,
+                )
+                return False
 
             _, s_value, _ = trellis.image_cdist(r_id, steps, "stable")
             if any(
