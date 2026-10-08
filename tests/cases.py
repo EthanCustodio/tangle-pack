@@ -1167,8 +1167,9 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             ("open_p3_deep_runs",),
             ("p3_15", "p3_16", "p3_6_blasts"),
             KnownIssue(
-                "PK-1: the deep period-3 runs (15 or 16 steps, 6 blasts) have an "
-                "unreachable class and a virtual new1",
+                "PK-1: the deep period-3 runs (15 or 16 steps, 6 blasts) have a "
+                "virtual new1 (the unreachable class went with the geometric "
+                "openings, WP4)",
                 "WP7",
             ),
         ),

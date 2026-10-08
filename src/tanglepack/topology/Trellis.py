@@ -1068,6 +1068,7 @@ class Trellis:
         *,
         epsilon: float = 0.05,
         propagate: bool = True,
+        diagnose: bool = True,
         verbose: bool = False,
     ) -> list[Hole]:
         """
@@ -1085,6 +1086,11 @@ class Trellis:
             pairs: Pairs to punch holes for; defaults to every recorded pair.
             epsilon: Inward nudge of the hole off the manifold it hugs.
             propagate: Also punch the backward-propagated holes.
+            diagnose: Cross-check the sign rule against the polylines and log
+                one WARNING per kind of disagreement (a hole bridge whose
+                geometric row is not its signs', a propagated hole measured on
+                the other side of its bridge): resolution flags, never errors
+                (D6; :func:`topology.StablePartition.geometry_flags`).
             verbose: Report :meth:`describe_holes` when done —
                 logged at INFO (this module's logger is raised to INFO for the
                 call, so a higher application-level setting cannot swallow it),
@@ -1095,9 +1101,9 @@ class Trellis:
 
         Raises:
             AssertionError: If two holes of one ``origin`` disagree on their
-                side of the bridge (I1), or if a bridge carrying a hole
-                approaches its two defining crossings from opposite sides of
-                their shared stable branch (I2).
+                side of the bridge (I1), or if a bridge carrying a hole has
+                equal crossing signs at its two ends on one stable branch, i.e.
+                opposite rows (I2).
 
         Note:
             Holes only exist after punching, so this is where the two
@@ -1106,6 +1112,7 @@ class Trellis:
             hole are checked; the rest are not part of this result.
         """
         from .StablePartition import (
+            _warn_geometry_flags,
             check_bridge_rows_consistent as _check_rows,
             check_holes_share_bridge_side as _check_sides,
             punch_holes as _punch,
@@ -1130,14 +1137,18 @@ class Trellis:
             for hole in self.holes
             if hole.bounding_ids is not None
         }
-        for bridge in self.bridges:
-            ends = frozenset((bridge.first_intersection, bridge.second_intersection))
-            if ends not in punched:
-                continue
+        hole_bridges = [
+            bridge
+            for bridge in self.bridges
+            if frozenset((bridge.first_intersection, bridge.second_intersection)) in punched
+        ]
+        for bridge in hole_bridges:
             _check_rows(self, bridge)
         _check_sides(
             self.holes, orientation_preserving=self.orientation_preserving
         )
+        if diagnose:
+            _warn_geometry_flags(self, hole_bridges, self.holes)
 
         if verbose:
             _log_report(self.describe_holes())

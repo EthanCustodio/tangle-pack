@@ -57,7 +57,7 @@ logger.addHandler(logging.NullHandler())
 Side = Literal["left", "right"]
 Endpoint = Literal["first", "second"]
 #: Where a hole's ``bridge_side`` came from (see :class:`Hole`).
-SideSource = Literal["signs", "carried", "fallback"]
+SideSource = Literal["signs", "carried"]
 
 OPPOSITE_SIDE: dict[Side, Side] = {"left": "right", "right": "left"}
 
@@ -105,19 +105,20 @@ class Hole:
             carries a bridge's dynamical orientation to its image's, so the side
             is unchanged along the backward chain under an orientation-preserving
             map and alternates with the parity of the step under a reversing one.
-            None only when there was no side to carry.
+            The crossing signs turn it into the openings (D6). None only on a
+            hand-built hole.
         measured_side: A propagated hole's side MEASURED on the curves: the
             reference hole's coordinates carried back by the real inverse map,
-            read against the image sub-arc of the containing bridge. None for a
-            direct hole, or when the point sits on the arc. It must agree with
-            ``bridge_side``; :func:`topology.StablePartition.check_holes_share_bridge_side`
-            asserts it, together with the orbit invariant (all holes of one
-            ``origin`` share ``bridge_side``, up to the parity flip).
+            read at the nearest segment of the containing bridge's image
+            sub-arc. None for a direct hole, without an inverse map, or when
+            the point sits on the arc. It is a resolution FLAG, never a
+            decision: a disagreement with ``bridge_side`` means an
+            under-resolved lobe (or a carried point that left it) and is
+            logged once per ``Trellis.punch_holes``
+            (:func:`topology.StablePartition.geometry_flags`), never asserted.
         side_source: Where ``bridge_side`` came from: ``"signs"`` (a direct
-            hole, from its crossing signs), ``"carried"`` (a propagated hole,
-            from its orbit's side) or ``"fallback"`` (a propagated hole with no
-            side to carry; its openings default to the inward pair). None for a
-            hand-built hole.
+            hole, from its crossing signs) or ``"carried"`` (a propagated hole,
+            from its orbit's side). None for a hand-built hole.
         bounding_ids: Registry IDs of the two intersections defining the bridge
             the hole belongs to — the pair's own bridge for a directly punched
             hole, the containing bridge for a propagated one. These are the
@@ -126,7 +127,8 @@ class Hole:
             defining intersection: ``(intersection_id, which, row,
             branch_key)`` where ``which`` is ``"anchorward"``/``"outward"``
             (which side of that intersection along the stable manifold the
-            hole abuts — derived from ``bridge_side``), ``row`` is the
+            hole abuts: ``"outward"`` iff ``(crossing_sign > 0) ==
+            (bridge_side == "left")``, D6), ``row`` is the
             left/right partition the opening acts on and ``branch_key`` the
             stable branch it opens: the intersection's own, or at the anchor
             (one point on every branch, D4) the one the signs pick. A hole

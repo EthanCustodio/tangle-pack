@@ -1631,7 +1631,7 @@ class TangleSession:
                 list), an iterable of them, or None for every fixed point (→
                 returns a ``{fixed_point: holes}`` dict).
             **kwargs: Forwarded to :meth:`Trellis.punch_holes` (``pairs``,
-                ``epsilon``, ``propagate``, ``verbose``).
+                ``epsilon``, ``propagate``, ``diagnose``, ``verbose``).
 
         Returns:
             A hole list for a single fixed point, or a dict mapping each fixed
@@ -1639,7 +1639,9 @@ class TangleSession:
 
         Raises:
             AssertionError: Propagated from :meth:`Trellis.punch_holes` when one
-                of its two topological invariants fails.
+                of its two topological invariants fails (I1 on the carried
+                sides, I2 on the crossing signs); a geometric disagreement is a
+                WARNING, never an error (D6).
         """
         return self._fanout_call("punch_holes", fixed_point, **kwargs)
 

@@ -51,7 +51,8 @@ def test_coarse_blasts_rows_by_signs(caplog):
 
     # The geometric reading is a flag: punching with it logs more than without.
     caplog.set_level(logging.WARNING, logger=_LOGGER)
+    before = _warnings(caplog)
     trellis.punch_holes(diagnose=False)
-    quiet = _warnings(caplog)
+    quiet = _warnings(caplog) - before
     trellis.punch_holes()
-    assert _warnings(caplog) > 2 * quiet
+    assert _warnings(caplog) - before > 2 * quiet
