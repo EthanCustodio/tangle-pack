@@ -13,6 +13,6 @@ bridges and closes up.
 
 from __future__ import annotations
 
-from helpers.law_tier import layer_test
+from helpers.law_tier import layer_tests
 
-test_iterated_laws = layer_test("iterated")
+test_iterated_laws, test_iterated_set_aside = layer_tests("iterated")

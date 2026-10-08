@@ -779,63 +779,74 @@ class KnownIssue:
     A known bug recorded as ``xfail(strict=True)``.
 
     Attributes:
-        reason: Why the pair fails today.
+        reason: Why the pair fails today, led by the catalog issue id
+            (``docs/open_issues.md``).
+        wp: The work package that fixes it (``"WP3"``), or the decision that
+            keeps it (``"C3"``).
         raises: The exception type the failure raises, when it is one.
     """
 
     reason: str
+    wp: str
     raises: Optional[type[BaseException]] = None
 
 
-#: ``(law_id, case) -> KnownIssue``; fixing these is out of scope (decision 10).
-#: The law ids are the ``helpers.laws`` check names without ``check_``. A
-#: law-tier pair is left out of its layer's run and gets a test of its own
-#: (``helpers.law_tier.known_issue_test``), so a fix flips loudly to XPASS.
+#: ``(law_id, case) -> KnownIssue``: every pair fails today and names the WP that
+#: fixes it. The law ids are the ``helpers.laws`` check names without
+#: ``check_`` (or a standalone test's id); a law-tier pair is left out of its
+#: layer's run and gets a set-aside test of its own (``helpers.law_tier``), so
+#: a fix flips loudly to XPASS.
 KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
     {
         ("one_anchor_per_unstable_branch", "inversion"): KnownIssue(
-            "an inversion point registers one (0,0) anchor per (unstable, stable) "
-            "branch pair, i.e. two per unstable branch; the author's rule is one (P2)"
+            "INV-1: an inversion point registers one (0,0) anchor per (unstable, stable) "
+            "branch pair, i.e. two per unstable branch; the author's rule is one",
+            "WP3",
         ),
         ("anchor_bridge_class_leads_its_tangle", "inversion"): KnownIssue(
-            "with two anchors per unstable branch, the bridge leaving the second "
-            "anchor sits in an inert class (Phase 4 finding, tied to the anchor issue)"
+            "INV-1: with two anchors per unstable branch, the bridge leaving the second "
+            "anchor sits in an inert class",
+            "WP3",
         ),
         ("arrangement_euler", "inversion"): KnownIssue(
-            "the inversion arrangement has V - E + F = 0 on its one component (four "
-            "coincident anchors; Phase 4 finding)"
+            "INV-1: the inversion arrangement has V - E + F = 0 on its one component "
+            "(four coincident anchors)",
+            "WP3",
         ),
         ("itinerary_pairs_same_side", "inversion"): KnownIssue(
-            "an inversion class's walked itinerary pairs a left element of branch 0.1 "
-            "with a right element of branch 0.0 (a cross-side pair; Phase 4 finding)"
+            "INV-6: an inversion class's walked itinerary pairs a left element of branch "
+            "0.1 with a right element of branch 0.0 (a cross-side pair)",
+            "WP3",
         ),
         ("landings_contained", "inversion"): KnownIssue(
-            "an inversion class's one-step landing straddles a cut of the image "
-            "branch (contained=False; Phase 4 finding)"
+            "INV-1: an inversion class's one-step landing straddles a cut of the image "
+            "branch (contained=False)",
+            "WP3",
         ),
         ("arrangement_regions_disjoint", "k28_one_blast"): KnownIssue(
-            "a zero-area region bounded by an unstable arc no Bridge object spans "
-            "(after a blast) reports a representative point inside a neighbouring "
-            "region (Phase 4 finding)"
+            "NUM-16: a zero-area region after a blast reports a representative point "
+            "inside its neighbour",
+            "WP10",
         ),
         ("arrangement_regions_disjoint", "k28_two_blasts"): KnownIssue(
-            "a zero-area region bounded by an unstable arc no Bridge object spans "
-            "(after a blast) reports a representative point inside a neighbouring "
-            "region (Phase 4 finding)"
+            "NUM-16: a zero-area region after a blast reports a representative point "
+            "inside its neighbour",
+            "WP10",
         ),
         ("orientation_reversing_case_builds", "orientation_reversing"): KnownIssue(
-            "det J < 0 is not supported: FixedPoint.set_k_value rejects a saddle "
-            "with exactly one negative eigenvalue (P4)",
+            "INV-11: det J < 0 is out of scope (C3); FixedPoint.set_k_value rejects a "
+            "saddle with exactly one negative eigenvalue",
+            "C3",
             raises=ValueError,
         ),
         ("open_p3_deep_runs", "p3_15"): KnownIssue(
-            "15 unstable steps: an unreachable class and a virtual new1 (P3)"
+            "PK-1: 15 unstable steps: an unreachable class and a virtual new1", "WP7"
         ),
         ("open_p3_deep_runs", "p3_16"): KnownIssue(
-            "16 unstable steps: an unreachable class and a virtual new1 (P3)"
+            "PK-1: 16 unstable steps: an unreachable class and a virtual new1", "WP7"
         ),
         ("open_p3_deep_runs", "p3_6_blasts"): KnownIssue(
-            "6 blasts: an unreachable class and a virtual new1 (P3)"
+            "PK-1: 6 blasts: an unreachable class and a virtual new1", "WP7"
         ),
     }
 )
@@ -844,8 +855,9 @@ _NO_HOLES = "no pseudoneighbors, hence no holes, at the only feasible depth (P2)
 _NO_IMAGE_BRIDGES = "the minimal trellis maps no hole bridge forward (no image bridges)"
 _NO_REFINEMENT = "no class splits (no refined children)"
 
-#: ``(law_id, case) -> reason``: the law has nothing to check on that case; the
-#: layer test skips it (and does not count it) on that case.
+#: ``(law_id, case) -> reason``: the law has nothing to check on that case. The
+#: layer test leaves it out; its set-aside test runs it, insists it still checks
+#: nothing and reports a visible skip.
 NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
     {
         **{
@@ -892,24 +904,20 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
 
 def issue_marks(law_id: str, case: str) -> list:
     """
-    The pytest marks one ``(law, case)`` pair carries.
+    The pytest marks of one ``(law, case)`` pair.
 
     Args:
         law_id: The law's identifier.
         case: The case name.
 
     Returns:
-        ``xfail(strict=True)`` (with ``raises`` when given) for a known issue,
-        a ``skip`` for a not-applicable pair, nothing otherwise.
+        ``[xfail(strict=True)]`` (with ``raises`` when given) for a known
+        issue, ``[]`` otherwise.
     """
-    marks = []
     issue = KNOWN_ISSUES.get((law_id, case))
-    if issue is not None:
-        kwargs = {"strict": True, "reason": issue.reason}
-        if issue.raises is not None:
-            kwargs["raises"] = issue.raises
-        marks.append(pytest.mark.xfail(**kwargs))
-    reason = NOT_APPLICABLE.get((law_id, case))
-    if reason is not None:
-        marks.append(pytest.mark.skip(reason=f"not applicable: {reason}"))
-    return marks
+    if issue is None:
+        return []
+    kwargs = {"strict": True, "reason": f"{issue.wp}: {issue.reason}"}
+    if issue.raises is not None:
+        kwargs["raises"] = issue.raises
+    return [pytest.mark.xfail(**kwargs)]

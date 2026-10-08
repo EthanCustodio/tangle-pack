@@ -10,6 +10,6 @@ lands on the advanced branch and round-trips through the preimage.
 
 from __future__ import annotations
 
-from helpers.law_tier import layer_test
+from helpers.law_tier import layer_tests
 
-test_bridges_laws = layer_test("bridges")
+test_bridges_laws, test_bridges_set_aside = layer_tests("bridges")

@@ -6,29 +6,31 @@ Each case builds through the full pipeline (every product non-empty) at the
 at ``(-2.3166, 2.3166)``: both eigenvalues negative, det J = +1, NOT
 orientation reversing), the map is area preserving at every orbit point
 (``|det J| = 1``, so ``construct_fixed_point`` never warns), every branch of
-every cycle is built and grown, and
-every unstable and stable branch crosses something. The ``b = -1`` orientation-reversing
-placeholder is a known issue: ``construct_fixed_point`` raises ``ValueError``
-until det J < 0 is supported.
+every cycle is built and grown, and every unstable and stable branch crosses
+something. The ``b = -1`` orientation-reversing placeholder is a known issue:
+det J < 0 is out of scope (C3) and ``construct_fixed_point`` raises
+``ValueError``.
 
 This module also guards the tier's wiring: every check of ``helpers.laws``
-runs in some layer, every layer has its ``test_law_<layer>.py`` test, every
-known issue of a layer has its own test, and every ``KNOWN_ISSUES`` /
-``NOT_APPLICABLE`` key names a real law.
+runs in some layer, every layer is wired into a ``test_law_<layer>.py``
+module through ``layer_tests`` (which also gives every set-aside pair its own
+test), every ``KNOWN_ISSUES`` / ``NOT_APPLICABLE`` key names a real law and a
+real case, no pair is both, and every known issue names the WP that fixes it.
 """
 
 from __future__ import annotations
 
 import inspect
+import re
 from pathlib import Path
 
 import pytest
 
-from cases import BUILDERS, KNOWN_ISSUES, NOT_APPLICABLE, issue_marks
+from cases import BUILDERS, KNOWN_ISSUES, LAW_CASES, NOT_APPLICABLE, issue_marks
 from helpers import laws
-from helpers.law_tier import assert_non_vacuous, build_products, known_issue_pairs, layer_test
+from helpers.law_tier import assert_non_vacuous, build_products, layer_tests
 
-test_case_sanity_laws = layer_test("case_sanity")
+test_case_sanity_laws, test_case_sanity_set_aside = layer_tests("case_sanity")
 
 #: Known-issue ids that are tests of their own, not ``helpers.laws`` checks.
 _STANDALONE_ISSUES = {"orientation_reversing_case_builds", "open_p3_deep_runs"}
@@ -54,8 +56,8 @@ def test_orientation_reversing_case_builds(name: str) -> None:
 
 
 def test_every_law_runs_in_the_tier() -> None:
-    """Every check is in a layer, every layer (and known issue) is wired into a module,
-    and the issue registries name real laws.
+    """Every check is in a layer, every layer is wired into a module, and the issue
+    registries name real laws and cases, apart, each known issue with its WP.
 
     A law written but never run over the cases would check nothing.
     """
@@ -71,18 +73,20 @@ def test_every_law_runs_in_the_tier() -> None:
     here = Path(__file__).parent
     sources = {path.stem: path.read_text() for path in here.glob("test_law_*.py")}
     everything = "".join(sources.values())
-    missing = [layer for layer in layers if f'layer_test("{layer}")' not in everything]
-    missing += [
-        f"known_issue_test({layer!r})"
-        for layer in layers
-        if known_issue_pairs(layer) and f'known_issue_test("{layer}")' not in everything
-    ]
+    missing = [layer for layer in layers if f'layer_tests("{layer}")' not in everything]
     assert not missing, missing
 
     ids = {laws.law_id(check) for check in layered}
+    standalone_cases = set(BUILDERS)
     unknown = [
-        pair
-        for pair in list(KNOWN_ISSUES) + list(NOT_APPLICABLE)
-        if pair[0] not in ids and pair[0] not in _STANDALONE_ISSUES
+        (law, case)
+        for law, case in (*KNOWN_ISSUES, *NOT_APPLICABLE)
+        if not (law in ids and case in LAW_CASES)
+        and not (law in _STANDALONE_ISSUES and case in standalone_cases)
     ]
     assert not unknown, unknown
+    assert not set(KNOWN_ISSUES) & set(NOT_APPLICABLE)
+    untagged = [
+        pair for pair, issue in KNOWN_ISSUES.items() if not re.fullmatch(r"WP\d+|C\d", issue.wp)
+    ]
+    assert not untagged, untagged

@@ -7,7 +7,6 @@ anchor's crossing sign is the handedness of the two oriented eigendirections.
 
 from __future__ import annotations
 
-from helpers.law_tier import known_issue_test, layer_test
+from helpers.law_tier import layer_tests
 
-test_anchors_laws = layer_test("anchors")
-test_anchors_known_issue = known_issue_test("anchors")
+test_anchors_laws, test_anchors_set_aside = layer_tests("anchors")

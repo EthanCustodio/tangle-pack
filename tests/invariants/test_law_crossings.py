@@ -14,7 +14,7 @@ mutate the session).
 
 from __future__ import annotations
 
-from helpers.law_tier import layer_test
+from helpers.law_tier import layer_tests
 
-test_crossings_laws = layer_test("crossings")
-test_recompute_laws = layer_test("recompute")
+test_crossings_laws, test_crossings_set_aside = layer_tests("crossings")
+test_recompute_laws, test_recompute_set_aside = layer_tests("recompute")

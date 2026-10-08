@@ -14,7 +14,6 @@ lettered.
 
 from __future__ import annotations
 
-from helpers.law_tier import known_issue_test, layer_test
+from helpers.law_tier import layer_tests
 
-test_classes_laws = layer_test("classes")
-test_classes_known_issue = known_issue_test("classes")
+test_classes_laws, test_classes_set_aside = layer_tests("classes")

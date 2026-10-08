@@ -10,7 +10,6 @@ graph and matrix; and the matrix counts the word tokens.
 
 from __future__ import annotations
 
-from helpers.law_tier import known_issue_test, layer_test
+from helpers.law_tier import layer_tests
 
-test_symbolic_laws = layer_test("symbolic")
-test_symbolic_known_issue = known_issue_test("symbolic")
+test_symbolic_laws, test_symbolic_set_aside = layer_tests("symbolic")

@@ -10,6 +10,6 @@ OWN branch (author, 2026-09-30); the graph is bipartite with walls of degree
 
 from __future__ import annotations
 
-from helpers.law_tier import layer_test
+from helpers.law_tier import layer_tests
 
-test_dual_graph_laws = layer_test("dual_graph")
+test_dual_graph_laws, test_dual_graph_set_aside = layer_tests("dual_graph")

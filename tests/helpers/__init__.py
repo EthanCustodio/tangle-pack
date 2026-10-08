@@ -5,8 +5,8 @@
 * :mod:`helpers.laws` -- the physical-law checks over a built
   :class:`cases.Case`, each returning how many items it checked.
 * :mod:`helpers.law_tier` -- the law tier's plumbing: shared-build products,
-  the fingerprint guard's snapshot, ``run_layer`` and the ``layer_test`` /
-  ``known_issue_test`` factories.
+  the fingerprint guard's snapshot, ``run_layer`` and the ``layer_tests``
+  factory (a layer's test and its set-aside test).
 * :mod:`helpers.fakes` -- synthetic fixed points, partitions, trellises and
   dual graphs for the walk and naming kernels.
 * :mod:`helpers.names` -- letter-free spellers of classes, words, brackets and

@@ -8,11 +8,13 @@
 * :func:`run_layer` runs every check of one layer on one case, insists each
   applicable check was not vacuous, and raises ONE ``AssertionError`` naming
   every failing check and its message.
-* :func:`layer_test` turns one layer into a test function parametrized over
-  :data:`cases.LAW_CASES` (one test per (layer, case)); :func:`known_issue_test`
-  gives every ``cases.KNOWN_ISSUES`` pair of the layer a test of its own,
-  ``xfail(strict=True)``, and :func:`run_layer` leaves that pair out, so a
-  known issue stays precise and a fix still flips to XPASS.
+* :func:`layer_tests` turns one layer into its two test functions: the
+  layer test, parametrized over :data:`cases.LAW_CASES` (one test per (layer,
+  case)), and the set-aside test, one per ``cases.KNOWN_ISSUES`` or
+  ``cases.NOT_APPLICABLE`` pair of the layer, which :func:`run_layer` leaves
+  out. A known issue is ``xfail(strict=True)``, so it stays precise and a fix
+  flips to XPASS; a not-applicable pair runs, must still check nothing and
+  reports a visible skip, so a law that starts to apply fails loudly (TEST-3).
 """
 
 from __future__ import annotations
@@ -141,10 +143,10 @@ def run_layer(layer: str, case: "Case") -> dict[str, int]:
     """
     Run every check of a layer on a case and report every failure at once.
 
-    A check whose ``(law, case)`` pair is in ``cases.NOT_APPLICABLE`` is
-    skipped and not counted; one in ``cases.KNOWN_ISSUES`` is left out (it
-    has its own ``xfail(strict=True)`` test, :func:`known_issue_test`). Every
-    other check must pass AND check at least one item.
+    A check whose ``(law, case)`` pair is in ``cases.NOT_APPLICABLE`` or
+    ``cases.KNOWN_ISSUES`` is left out (it has its own set-aside test, see
+    :func:`layer_tests`). Every other check must pass AND check at least one
+    item.
 
     Args:
         layer: The layer name.
@@ -203,18 +205,11 @@ def _layer_params(layer: str) -> list:
     return params
 
 
-def layer_test(layer: str) -> Callable[..., None]:
-    """
-    The test function of one layer, parametrized over the law cases.
+def _layer_test(layer: str) -> Callable[..., None]:
+    """The test function of one layer, parametrized over the law cases.
 
     A read-only layer reads the module's shared ``law_case`` build; a layer
     of ``helpers.laws.MUTATING_LAYERS`` takes ``fresh_law_case``.
-
-    Args:
-        layer: The layer name.
-
-    Returns:
-        The test function, named ``test_<layer>_laws``.
     """
     fixture = "fresh_law_case" if layer in MUTATING_LAYERS else "law_case"
     if fixture == "law_case":
@@ -236,44 +231,67 @@ def layer_test(layer: str) -> Callable[..., None]:
     return pytest.mark.parametrize(fixture, _layer_params(layer), indirect=True)(test)
 
 
-def known_issue_pairs(layer: str) -> list[tuple[str, str]]:
-    """The ``(law_id, case)`` pairs of ``cases.KNOWN_ISSUES`` that belong to a layer."""
-    laws_here = {law_id(check) for check in layer_checks(layer)}
-    return sorted(pair for pair in KNOWN_ISSUES if pair[0] in laws_here)
+def set_aside_pairs(layer: str) -> list[tuple[str, str]]:
+    """The known-issue and not-applicable ``(law_id, case)`` pairs of one layer."""
+    here = {law_id(check) for check in layer_checks(layer)}
+    return sorted(pair for pair in (*KNOWN_ISSUES, *NOT_APPLICABLE) if pair[0] in here)
 
 
-def known_issue_test(layer: str) -> Optional[Callable[..., None]]:
+def _set_aside_test(layer: str) -> Optional[Callable[..., None]]:
+    """One test per set-aside pair of a layer, or None when the layer has none."""
+    pairs = set_aside_pairs(layer)
+    if not pairs:
+        return None
+    checks = {law_id(check): check for check in layer_checks(layer)}
+
+    def run(law: str, case: "Case") -> None:
+        why = NOT_APPLICABLE.get((law, case.name))
+        if why is None:  # a known issue: xfail(strict=True), so a fix flips to XPASS
+            assert_non_vacuous(checks[law], case)
+            return
+        count = checks[law](case)
+        assert count == 0, (
+            f"{law!r} now checks {count} item(s) on {case.name!r}: remove it from "
+            "cases.NOT_APPLICABLE"
+        )
+        pytest.skip(f"not applicable: {law} on {case.name}: {why}")
+
+    fixture = "fresh_law_case" if layer in MUTATING_LAYERS else "law_case"
+    if fixture == "law_case":
+
+        def test(law: str, law_case: "Case") -> None:
+            run(law, law_case)
+
+    else:
+
+        def test(law: str, fresh_law_case: "Case") -> None:
+            run(law, fresh_law_case)
+
+    test.__name__ = f"test_{layer}_set_aside"
+    test.__qualname__ = test.__name__
+    test.__doc__ = (
+        f"A known issue (strict xfail) or a not-applicable pair (visible skip) of the "
+        f"{layer!r} layer, kept apart from its layer test."
+    )
+    params = [
+        pytest.param(law, case, marks=issue_marks(law, case), id=f"{law}-{case}")
+        for law, case in pairs
+    ]
+    return pytest.mark.parametrize(("law", fixture), params, indirect=[fixture])(test)
+
+
+def layer_tests(
+    layer: str,
+) -> tuple[Callable[..., None], Optional[Callable[..., None]]]:
     """
-    One small ``xfail(strict=True)`` test per known issue of a layer.
+    The two test functions of one layer.
 
     Args:
         layer: The layer name.
 
     Returns:
-        The test function ``test_<layer>_known_issue`` parametrized over the
-        layer's known ``(law, case)`` pairs, or None when the layer has none.
+        ``(test_<layer>_laws, test_<layer>_set_aside)``; the second is None
+        when the layer has no known-issue or not-applicable pair (pytest
+        ignores a None module attribute).
     """
-    pairs = known_issue_pairs(layer)
-    if not pairs:
-        return None
-    checks = {law_id(check): check for check in layer_checks(layer)}
-    fixture = "fresh_law_case" if layer in MUTATING_LAYERS else "law_case"
-    params = [
-        pytest.param(law, case, marks=issue_marks(law, case), id=f"{law}-{case}")
-        for law, case in pairs
-    ]
-
-    if fixture == "law_case":
-
-        def test(law: str, law_case: "Case") -> None:
-            assert_non_vacuous(checks[law], law_case)
-
-    else:
-
-        def test(law: str, fresh_law_case: "Case") -> None:
-            assert_non_vacuous(checks[law], fresh_law_case)
-
-    test.__name__ = f"test_{layer}_known_issue"
-    test.__qualname__ = test.__name__
-    test.__doc__ = f"A known issue of the {layer!r} layer, kept apart so a fix flips to XPASS."
-    return pytest.mark.parametrize(("law", fixture), params, indirect=[fixture])(test)
+    return _layer_test(layer), _set_aside_test(layer)

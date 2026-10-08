@@ -21,6 +21,6 @@ consecutive on both branches inside the reference window.
 
 from __future__ import annotations
 
-from helpers.law_tier import layer_test
+from helpers.law_tier import layer_tests
 
-test_partition_laws = layer_test("partition")
+test_partition_laws, test_partition_set_aside = layer_tests("partition")
