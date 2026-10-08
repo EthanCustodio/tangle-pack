@@ -1,9 +1,11 @@
 """The deep period-3 runs: a known open problem, pinned where it is firm.
 
 At 15 or 16 unstable steps, or after 6 blasts, the period-3 tangle's symbolic
-dynamics is unreliable: one class is unreachable by the dual-graph walk
-(``A:p3@2.0/R#2 <-> A:p3@2.0/R#3``) and a virtual ``new1`` appears (Phase 0
-probe P3; ``KNOWN_ISSUES`` key ``open_p3_deep_runs``). What IS firm there:
+dynamics is unreliable: a virtual ``new1`` appears (Phase 0 probe P3;
+``KNOWN_ISSUES`` key ``open_p3_deep_runs``, PK-1). One class used to be
+unreachable by the dual-graph walk (``A:p3@2.0/R#2 <-> A:p3@2.0/R#3``); that
+was the geometric hole openings, and since the signs decide them (WP4, D6)
+every class walks. What IS firm there:
 
 * invariant I1 -- all holes of one origin share their side of their bridge.
   A bridge's unstable branch is carried by ``Bridge.manifold_key``; inferring it
@@ -13,9 +15,10 @@ probe P3; ``KNOWN_ISSUES`` key ``open_p3_deep_runs``). What IS firm there:
   ``bridge_side`` partway down the chain. The deep runs are where a propagated
   hole's image sub-arc and the nearest vertex of its whole containing bridge sit
   on different folds (fixed 2026-10-02). The symbolic dynamics must still run.
+* every class walks (D3).
 * virtual symbols are sinks of the transition graph.
 
-That every class resolves without a virtual symbol is ``xfail(strict=True)``.
+That no virtual symbol appears is ``xfail(strict=True)``.
 """
 
 from __future__ import annotations
@@ -55,9 +58,17 @@ def test_deep_p3_holes_share_bridge_side(name: str) -> None:
     ],
 )
 def test_deep_p3_every_class_resolves_without_virtual_symbols(name: str) -> None:
-    """Every class gets an itinerary and no pair falls outside the class table."""
+    """No pair of a walked itinerary falls outside the class table."""
     dyn = _build(name).session.symbolic_dynamics()
     assert not dyn.virtual_classes
+
+
+@pytest.mark.parametrize("name", DEEP_RUNS)
+def test_deep_p3_every_class_walks(name: str) -> None:
+    """Every class gets an itinerary (D3): the walk exists once the openings follow
+    the crossing signs (D6). The geometric openings left an element boundary out
+    and made one class unreachable."""
+    dyn = _build(name).session.symbolic_dynamics()
     assert not [cd for cd in dyn.classes.values() if cd.unresolved_reason]
 
 

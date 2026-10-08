@@ -14,7 +14,11 @@ I2. A bridge whose two defining crossings lie on the SAME stable branch
     entirely on one side of the stable manifold, because the bridge's endpoints
     are consecutive crossings so the arc between them never crosses it again.
     Bridges whose two crossings sit on different stable branches
-    (heteroclinic / period > 1) are exempt.
+    (heteroclinic / period > 1) are exempt. The rows are read off the crossing
+    signs (D6), so the check fires exactly when the two signs are EQUAL; a
+    polyline whose geometric rows disagree while the signs alternate is
+    under-resolved and only flagged (``geometry_flags``), as is a propagated
+    hole whose measured side disagrees with its carried one.
 
 The synthetic tests pin the checks themselves (they must FIRE on hand-built
 violations); both invariants run on every law case in
@@ -43,6 +47,7 @@ from tanglepack.topology.StablePartition import (
     bridge_side_violations,
     check_bridge_rows_consistent,
     check_holes_share_bridge_side,
+    geometry_flags,
     side_diagnoses,
 )
 from tanglepack.topology.TopologyResults import Hole
@@ -143,17 +148,22 @@ def test_orientation_without_a_jacobian(caplog, periods, defaulted):
     assert_logged(caplog, logging.DEBUG, "tanglepack.topology.Trellis", count=int(defaulted))
 
 
-def test_measured_side_contradicting_the_carried_one_raises():
+def test_measured_side_disagreement_is_a_flag_not_an_error():
     """A propagated hole carries its orbit's side, so I1 holds for it by
-    construction; its measured side keeps the check geometric (author, D2)."""
+    construction; its measured side is the geometric cross-check, and a
+    disagreement is a resolution flag, never an error (D6)."""
     agreeing = [
         _hole((3, 4), 0, "left", source="signs"),
         _hole((3, 4), -1, "left", measured="left", source="carried"),
     ]
-    check_holes_share_bridge_side(agreeing)
     contradicted = agreeing + [_hole((3, 4), -2, "left", measured="right", source="carried")]
-    with pytest.raises(AssertionError):
-        check_holes_share_bridge_side(contradicted)
+    check_holes_share_bridge_side(contradicted)
+    assert bridge_side_violations(contradicted) == []
+    (diagnosis,) = side_diagnoses(contradicted)
+    assert diagnosis.measured_disagrees and not diagnosis.orbit_disagrees
+    trellis, _a_id, _b_id = _row_trellis()
+    rows, sides = geometry_flags(trellis, [], contradicted)
+    assert rows == [] and sides == [diagnosis]
 
 
 def test_side_diagnoses_name_each_disagreeing_hole():
@@ -170,7 +180,7 @@ def test_side_diagnoses_name_each_disagreeing_hole():
     assert measured.measured_disagrees and not measured.orbit_disagrees
     assert orbit.orbit_disagrees and not orbit.measured_disagrees
     assert (orbit.expected_side, orbit.reference_iterate) == ("left", 0)
-    assert len(bridge_side_violations(holes)) == len(diagnoses)
+    assert len(bridge_side_violations(holes)) == 1  # the orbit check only
 
 
 def test_side_diagnoses_expect_the_parity_flip():
@@ -221,11 +231,16 @@ class _StubManifold:
 
 
 class _StubBridge:
-    """A minimal bridge stand-in: endpoint registry ids and a fixed polyline."""
+    """A minimal bridge stand-in: endpoint registry ids, its BridgeId and a polyline.
+
+    :func:`_row_trellis` registers its crossings in unstable-cdist order, so the
+    BridgeId is the two ids sorted.
+    """
 
     def __init__(self, first: int, second: int, points) -> None:
         self.first_intersection = first
         self.second_intersection = second
+        self.id = tuple(sorted((first, second)))
         self._points = np.asarray(points, dtype=np.float64)
 
     def get_point_array(self, return_nodes: bool = False):
@@ -278,32 +293,61 @@ def _row_trellis(*, split_branches: bool = False):
 
 # A lobe hanging above the stable line: both ends are approached from the same
 # side, which is what a real bridge between consecutive crossings looks like.
+# Its true crossing signs alternate: u+ leaves the near crossing up-right
+# (cross(u+, s+) < 0) and enters the far one down-right (> 0).
 _LOBE = [(2.0, 0.0), (2.5, 1.0), (3.5, 1.0), (4.0, 0.0)]
-# The same arc with the far end pulled below the line: the arc now crosses the
-# stable manifold between its own defining crossings, which cannot happen.
+_LOBE_SIGNS = (-1, 1)
+# The same arc with the far end pulled below the line: drawn on a bridge whose
+# signs alternate it is an under-resolved polyline; a real arc like this would
+# cross the stable manifold and carry EQUAL signs.
 _CROSSING_LOBE = [(2.0, 0.0), (2.5, 1.0), (3.5, -1.0), (4.0, 0.0)]
+_EQUAL_SIGNS = (-1, -1)
+
+
+def _signed(trellis, a_id, b_id, signs):
+    """Give the two crossings of :func:`_row_trellis` their signs."""
+    trellis.intersection(a_id).crossing_sign, trellis.intersection(b_id).crossing_sign = signs
 
 
 def test_bridge_rows_consistent_on_a_one_sided_lobe():
-    """A lobe entirely on one side of the stable branch passes the check."""
+    """Alternating signs on one stable branch: one row at both ends, no flag."""
     trellis, a_id, b_id = _row_trellis()
+    _signed(trellis, a_id, b_id, _LOBE_SIGNS)
     bridge = _StubBridge(a_id, b_id, _LOBE)
     check_bridge_rows_consistent(trellis, bridge)
     assert bridge_row_violation(trellis, bridge) is None
+    assert geometry_flags(trellis, [bridge], []) == ([], [])
 
 
-def test_bridge_rows_inconsistent_raise():
-    """An arc that crosses its own stable branch fires the row assertion."""
+def test_bridge_rows_with_equal_signs_raise():
+    """Equal signs on one stable branch put the two ends on opposite rows: the arc
+    would cross its own stable branch, which the row assertion refuses (D6)."""
     trellis, a_id, b_id = _row_trellis()
+    _signed(trellis, a_id, b_id, _EQUAL_SIGNS)
     bridge = _StubBridge(a_id, b_id, _CROSSING_LOBE)
     with pytest.raises(AssertionError):
         check_bridge_rows_consistent(trellis, bridge)
     assert bridge_row_violation(trellis, bridge) is not None
 
 
+def test_contradicting_geometry_with_alternating_signs_is_a_flag():
+    """NUM-1 in miniature: the signs alternate, so the rows agree and the check
+    passes, while the polyline reads opposite rows; ``geometry_flags`` reports it."""
+    trellis, a_id, b_id = _row_trellis()
+    _signed(trellis, a_id, b_id, _LOBE_SIGNS)
+    bridge = _StubBridge(a_id, b_id, _CROSSING_LOBE)
+    check_bridge_rows_consistent(trellis, bridge)
+    assert bridge_row_violation(trellis, bridge) is None
+    (flag,), sides = geometry_flags(trellis, [bridge], [])
+    assert sides == []
+    assert flag.bridge_id == (a_id, b_id)
+    assert flag.signs_alternate and flag.geometry_disagrees
+
+
 def test_bridge_rows_on_different_stable_branches_are_exempt():
     """Heteroclinic / period>1 bridges span two branches and are not checked."""
     trellis, a_id, b_id = _row_trellis(split_branches=True)
+    _signed(trellis, a_id, b_id, _EQUAL_SIGNS)
     bridge = _StubBridge(a_id, b_id, _CROSSING_LOBE)
     check_bridge_rows_consistent(trellis, bridge)
     assert bridge_row_violation(trellis, bridge) is None
@@ -314,8 +358,7 @@ def test_row_diagnosis_reads_every_end(lobe):
     """The diagnosis carries both crossings in BridgeId order, every row reading,
     the approach geometry, and the polyline the geometric rows were read on."""
     trellis, a_id, b_id = _row_trellis()
-    trellis.intersection(a_id).crossing_sign = 1
-    trellis.intersection(b_id).crossing_sign = -1
+    _signed(trellis, a_id, b_id, _LOBE_SIGNS)
     bridge = _StubBridge(b_id, a_id, lobe[::-1])
     diagnosis = bridge_row_diagnosis(trellis, bridge)
 
@@ -331,8 +374,9 @@ def test_row_diagnosis_reads_every_end(lobe):
         assert 0.0 < end.approach_angle <= 90.0
         assert end.displacement > 0.0
     same_row = first.geometric_row == second.geometric_row
-    assert same_row == (bridge_row_violation(trellis, bridge) is None)
     assert same_row == (lobe is _LOBE)
+    assert diagnosis.geometry_disagrees == (lobe is _CROSSING_LOBE)
+    assert bridge_row_violation(trellis, bridge) is None  # the signs decide
 
 
 def test_row_diagnosis_without_a_sign_has_no_combinatorial_row():

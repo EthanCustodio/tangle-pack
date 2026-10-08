@@ -523,6 +523,41 @@ def _period3_zone(unstable_steps: int, stable_steps: int, area_cutoff: float) ->
     )
 
 
+def build_period3_coarse_blasts(*, blasts: int = 6, area_cutoff: float = 1e-5) -> Case:
+    """
+    The period-3 zone blasted at a coarse refinement cutoff (stress campaign E11).
+
+    The zone is built at 1e-7 (:func:`build_period3` ``through="zones"``), then
+    ``blasts`` single-iteration blasts refine at ``area_cutoff`` with
+    ``min_separation = 1e-5`` (no same-stability pass), the pips restored after
+    each, and the stable manifold is partitioned. At 1e-5 and 6 blasts some hole
+    bridges hold 2-4 nodes, where a polyline reading of their rows disagrees with
+    the crossing signs (NUM-1).
+
+    Args:
+        blasts: Single-iteration blasts of the zone.
+        area_cutoff: The manifold machine's refinement cutoff during the blasts.
+
+    Returns:
+        The partitioned case.
+    """
+    case = build_period3(through="zones")
+    session = case.session
+    session.area_cutoff = area_cutoff
+    (zone,) = case.zones
+    for _ in range(blasts):
+        session.blast_zone(
+            zone, num_iterations=1, fixed_point=case.fixed_points,
+            min_separation=1e-5, diagnose=False,
+        )
+        _repin(session, case.fixed_points, case.pips)
+    _partition(session)
+    case.name = "p3_coarse_blasts"
+    case.expect = CaseExpect(periods=(3,), area_cutoff=area_cutoff, blasts=blasts)
+    case.stage = "partitioned"
+    return case
+
+
 def _nested_through(
     *,
     through: Stage,
@@ -1058,6 +1093,7 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         "p3_15": lambda: build_period3(unstable_steps=15),
         "p3_16": lambda: build_period3(unstable_steps=16),
         "p3_6_blasts": lambda: build_period3(blasts=6),
+        "p3_coarse_blasts": build_period3_coarse_blasts,
         "near_tangency": build_near_tangency,
         "k28_deep_blast_sliver": lambda: build_k28(blasts=9, seed=K28_ANALYTIC_SADDLE_SEED),
     }

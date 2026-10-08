@@ -3,8 +3,9 @@
 ``Trellis.punch_holes`` asserts the two topological invariants itself, once per
 call: I2 (``check_bridge_rows_consistent``) on every bridge that carries a hole,
 and I1 (``check_holes_share_bridge_side``) on all holes with the trellis's
-orientation -- since propagated holes carry their side (2026-10-07), I1's teeth
-are each propagated hole's measured side. ``DualGraph`` runs its structural self-check on construction. These
+orientation. Both read the crossing signs and the carried sides (D6); the
+geometric readings (a bridge's polyline rows, a propagated hole's measured
+side) are flags, one WARNING per kind. ``DualGraph`` runs its structural self-check on construction. These
 tests spy on those call sites (both checks are imported inside ``punch_holes``,
 so a module-attribute patch reaches them) instead of repeating the checks; the
 invariants themselves run on every law case in ``tests/invariants/`` and the
@@ -15,14 +16,17 @@ checks are pinned to fire on hand-built violations in
 from __future__ import annotations
 
 import importlib
+import logging
 from typing import Any, Callable
 
 import pytest
 
 from cases import Case, build_period3
+from helpers.logs import assert_logged
 
 stable_partition = importlib.import_module("tanglepack.topology.StablePartition")
 dual_graph_module = importlib.import_module("tanglepack.topology.DualGraph")
+_LOGGER = "tanglepack.topology.StablePartition"
 
 
 @pytest.fixture
@@ -129,11 +133,11 @@ def test_propagated_holes_carry_their_orbit_side(p3: Case) -> None:
         assert hole.measured_side in (None, hole.bridge_side)
 
 
-def test_punch_holes_raises_on_a_contradicting_measured_side(
-    p3: Case, monkeypatch: pytest.MonkeyPatch
+def test_punch_holes_flags_a_contradicting_measured_side(
+    p3: Case, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The carried side makes the orbit check hold by construction; the measured
-    side is what keeps ``punch_holes`` a geometric guard."""
+    """The measured side is the geometric cross-check of the carried one: a
+    disagreement is one WARNING, never an error (D6)."""
     (fp,) = p3.fixed_points
     trellis = p3.session.trellis(fp)
     real = stable_partition.propagate_reference_holes
@@ -145,6 +149,22 @@ def test_punch_holes_raises_on_a_contradicting_measured_side(
         return holes
 
     monkeypatch.setattr(stable_partition, "propagate_reference_holes", contradicted)
+    caplog.set_level(logging.WARNING, logger=_LOGGER)
+    trellis.punch_holes()
+    assert_logged(caplog, logging.WARNING, _LOGGER, count=1)
+
+
+def test_punch_holes_raises_on_equal_signs(
+    p3: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hole bridge on one stable branch whose two crossing signs are equal would
+    cross that branch between consecutive crossings: the row assertion fires."""
+    (fp,) = p3.fixed_points
+    trellis = p3.session.trellis(fp)
+    near, far = next(hole.bounding_ids for hole in trellis.holes if hole.pair is not None)
+    monkeypatch.setattr(
+        trellis.intersection(far), "crossing_sign", trellis.intersection(near).crossing_sign
+    )
     with pytest.raises(AssertionError):
         trellis.punch_holes()
 

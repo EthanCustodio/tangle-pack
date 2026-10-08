@@ -1271,23 +1271,47 @@ def check_anchor_opening_faces_its_hole(case: "Case") -> int:
     return count
 
 
-def check_openings_missing_only_at_anchor_or_tail(case: "Case") -> int:
-    """Openings law (3): a hole bound opens nothing only at an anchor or a trimmed tail."""
+def check_openings_follow_signs(case: "Case") -> int:
+    """Openings law (D6): at each bound a hole opens the stable half on its side of
+    its own bridge, read off the crossing sign.
+
+    The bridge passes every bound ``x`` along ``u+`` (increasing unstable cdist),
+    and ``crossing_sign(x) = sign(cross(u+, s+))``, so the outward stable ray ``s+``
+    lies on the LEFT of the bridge exactly when the sign is positive: the hole's
+    side holds the outward half iff ``(sign > 0) == (bridge_side == "left")``.
+    Hence exactly one opening per non-anchor bound, on the crossing's own stable
+    branch and on the bridge's row there (``u+`` is left of the stable direction
+    iff the sign is positive, the bridge leaves its first end along ``u+`` and
+    enters its second along ``u-``); at most one at an anchor bound, whose
+    branch the signs pick (it may be uncomputed)."""
     count = 0
     for trellis, hole in _holes(case):
-        opened = {iid for iid, _which, _row, _key in hole.openings or []}
-        tol = float(trellis.registry.cdist_tol)
-        for intersection_id in hole.bounding_ids:
-            if intersection_id in opened:
+        bridge = trellis.bridge_between(*hole.bounding_ids)
+        assert bridge is not None and bridge.id is not None, hole.bounding_ids
+        opened: dict[int, list] = {}
+        for intersection_id, which, row, key in hole.openings or []:
+            opened.setdefault(intersection_id, []).append((which, row, key))
+        assert set(opened) <= set(bridge.id), (hole.bounding_ids, sorted(opened))
+        for endpoint, intersection_id in zip(("first", "second"), bridge.id):
+            ix = case.registry[intersection_id]
+            records = opened.get(intersection_id, [])
+            if _is_anchor(ix):
+                assert len(records) <= 1, (hole.bounding_ids, records)
                 continue
-            ix = trellis.intersection(intersection_id)
-            branch = trellis.branch(ix.manifold_b_key)
-            tail = branch.ordered_ids()[-1] if branch is not None and len(branch) else None
-            assert float(ix.stable_cdist) <= tol or intersection_id == tail, (
-                f"hole {hole.bounding_ids} (iterate {hole.iterate}) opens nothing at "
-                f"{intersection_id}, which is neither an anchor nor the branch end"
+            assert len(records) == 1, (
+                f"hole {hole.bounding_ids} (iterate {hole.iterate}) opens "
+                f"{len(records)} half(s) at {intersection_id}, expected one"
             )
-        count += 1
+            ((which, row, key),) = records
+            positive = ix.crossing_sign > 0
+            outward = positive == (hole.bridge_side == "left")
+            assert which == ("outward" if outward else "anchorward"), (
+                hole.bounding_ids, intersection_id, which, hole.bridge_side,
+            )
+            assert key == ix.manifold_b_key, (hole.bounding_ids, intersection_id)
+            expected_row = "left" if positive == (endpoint == "first") else "right"
+            assert row == expected_row, (hole.bounding_ids, intersection_id, row)
+            count += 1
     return count
 
 
@@ -2295,7 +2319,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_direct_hole_opens_inward_pair,
         check_openings_on_own_bridge_row,
         check_anchor_opening_faces_its_hole,
-        check_openings_missing_only_at_anchor_or_tail,
+        check_openings_follow_signs,
         check_propagated_holes_land_on_predicted_branch,
         check_propagation_terminates,
         check_no_direct_hole_beyond_fundamental,

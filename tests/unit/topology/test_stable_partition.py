@@ -626,114 +626,84 @@ def test_repunching_a_narrower_scope_clears_the_other_pairs_holes(henon_with_hol
 
 
 # --------------------------------------------------------------------------- #
-# A bridge's unstable branch comes from its own key (plan row 1.1)
+# The containing bridge is a bisect over the ray's crossing order (PERF-4)
 # --------------------------------------------------------------------------- #
-@pytest.fixture
-def two_branch_bridges():
-    """``(trellis, cycle, bridges)``: two bridges on two unstable branches of a
-    period-3 orbit, sharing an anchor artifact at unstable cdist 0.
-
-    The shared anchor's ``manifold_a_key`` names branch 1, so the branch-1
-    bridge is correctly labelled by its endpoints but the branch-0 bridge is
-    NOT — exactly the situation the after-the-fact endpoint assignment creates
-    (all three anchors sit at unstable cdist 0). The branch-0 bridge is also
-    the tighter of the two, so an endpoint-key filter picks it as the branch-1
-    container.
-    """
-    fp = _fixed_point(3, 4.0)
-    cycle = [(fp, "unstable", i, 0) for i in range(3)]
-    reg = IntersectionRegistry()
-    stable = (fp, "stable", 0, 0)
-    anchor = reg.add_synthetic(
-        (0.0, 0.0), unstable_cdist=0.0, stable_cdist=0.0,
-        manifold_a_key=cycle[1], manifold_b_key=stable,
-    )
-    end_0 = reg.add_synthetic(
-        (1.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0,
-        manifold_a_key=cycle[0], manifold_b_key=stable,
-    )
-    end_1 = reg.add_synthetic(
-        (2.0, 0.0), unstable_cdist=2.0, stable_cdist=2.0,
-        manifold_a_key=cycle[1], manifold_b_key=stable,
-    )
-    bridges = {
-        0: _StubBridge(anchor, end_0, [(0.0, 0.0), (1.0, 0.0)], manifold_key=cycle[0]),
-        1: _StubBridge(anchor, end_1, [(0.0, 0.0), (2.0, 0.0)], manifold_key=cycle[1]),
-    }
-    trellis = Trellis(
-        fixed_points=[fp], registry=reg, branches={}, bridges=list(bridges.values())
-    )
-    return trellis, cycle, bridges
-
-
-def test_bridge_span_reads_the_branch_from_the_bridges_own_key(two_branch_bridges):
-    """A bridge's cycle position comes from ``Bridge.manifold_key``, not from
-    whichever endpoint happens to carry an unstable key."""
-    from tanglepack.topology.StablePartition import _bridge_unstable_span
-
-    trellis, cycle, bridges = two_branch_bridges
-    span, pos = _bridge_unstable_span(trellis, bridges[0], cycle)
-
-    assert span == (0.0, 1.0)
-    assert pos == 0  # the shared anchor's own key would say 1
-
-
-def test_containing_bridge_filters_on_the_bridges_own_key(two_branch_bridges):
-    """The container of a backward image is looked up on the image's branch.
-
-    The branch-0 bridge spans the query too and is tighter, so it wins on cdist
-    evidence; only its own ``manifold_key`` rules it out of a branch-1 lookup.
-    """
+def test_containing_bridge_brackets_by_bisect():
+    """Bridges tile an unstable branch between consecutive crossings, so the
+    container of a backward image is the bridge whose two crossings bracket its
+    span, on the image's own branch; a span straddling a crossing has none."""
     from tanglepack.topology.StablePartition import _containing_bridge
 
-    trellis, cycle, bridges = two_branch_bridges
-
-    assert _containing_bridge(trellis, (0.1, 0.5), cycle[1]) is bridges[1]
-    assert _containing_bridge(trellis, (0.1, 0.5), cycle[0]) is bridges[0]
-    assert _containing_bridge(trellis, (0.1, 0.5), cycle[2]) is None
-
-
-
-# --------------------------------------------------------------------------- #
-# Backward images of a bridge span: iterate-table lookup first, scaling after
-# --------------------------------------------------------------------------- #
-def test_backward_endpoint_prefers_the_table_then_scales():
-    """A bridge endpoint's preimage is read from the iterate table at its
-    REGISTERED unstable cdist (5% off the scaled estimate here, which a
-    scaled span would have carried); once the chain ends, scaling by 1/beta
-    takes over from the last registered value and the id is dropped."""
-    from tanglepack.topology.StablePartition import _backward_endpoint
-
-    fp = _fixed_point(1, 4.0)
-    beta = fp.per_step_beta("unstable")
+    fp = _fixed_point(3, 4.0)
     reg = IntersectionRegistry()
-    unstable, stable = (fp, "unstable", 0, 0), (fp, "stable", 0, 0)
-    root = reg.add_synthetic(
-        (0.0, 0.0), unstable_cdist=2.1, stable_cdist=4.0,
-        manifold_a_key=unstable, manifold_b_key=stable,
+    stable = (fp, "stable", 0, 0)
+    rays = {(fp, "unstable", 0, 0): (0.5, 1.0, 2.0, 3.0), (fp, "unstable", 1, 0): (0.5, 1.5)}
+    branches, bridges = {}, {}
+    for key, cdists in rays.items():
+        ids = [
+            reg.add_synthetic(
+                (float(key[2]), u), unstable_cdist=u, stable_cdist=u,
+                manifold_a_key=key, manifold_b_key=stable,
+            )
+            for u in cdists
+        ]
+        branches[key] = TrellisBranch(
+            key=key, fixed_point=fp, stability="unstable",
+            orbit_index=key[2], branch_index=0, intersection_ids=ids,
+        )
+        for lo, hi in zip(ids, ids[1:]):
+            bridges[key, lo] = _StubBridge(lo, hi, [(0.0, 0.0), (1.0, 0.0)], manifold_key=key)
+    trellis = Trellis(
+        fixed_points=[fp], registry=reg, branches=branches, bridges=list(bridges.values())
     )
-    end = reg.add_synthetic(
-        (0.0, 0.0), unstable_cdist=8.0, stable_cdist=1.0,
-        manifold_a_key=unstable, manifold_b_key=stable,
-    )
-    reg.register_iterate(root, 1, end)
-    trellis = Trellis(fixed_points=[fp], registry=reg, branches={}, bridges=[])
+    ray0, ray1 = rays
+    first0 = branches[ray0].intersection_ids
 
-    linked = _backward_endpoint(trellis, end, 8.0, beta)
-    assert linked == (root, 2.1)  # the registered value, not 8 / 4 = 2
+    orders: dict = {}
+    assert _containing_bridge(trellis, (1.2, 1.8), ray0, orders) is bridges[ray0, first0[1]]
+    assert _containing_bridge(trellis, (1.0, 1.5), ray0, orders) is bridges[ray0, first0[1]]
+    assert _containing_bridge(trellis, (1.5, 2.5), ray0, orders) is None  # straddles 2.0
+    assert _containing_bridge(trellis, (3.2, 3.5), ray0, orders) is None  # past the last
+    assert _containing_bridge(trellis, (0.2, 0.4), ray0, orders) is None  # before the first
+    first1 = branches[ray1].intersection_ids[0]
+    assert _containing_bridge(trellis, (0.6, 0.9), ray1, orders) is bridges[ray1, first1]
 
-    beyond = _backward_endpoint(trellis, *linked, beta)
-    assert beyond == (None, 2.1 / beta)  # chain ended: scaled from 2.1
 
-    assert _backward_endpoint(trellis, *beyond, beta) == (None, 2.1 / beta**2)
+# --------------------------------------------------------------------------- #
+# The measured side reads the nearest segment of the image sub-arc (INT-5)
+# --------------------------------------------------------------------------- #
+class _Node:
+    """A bridge node: a point at an unstable canonical distance."""
 
-    reg2 = IntersectionRegistry()
-    unlinked = reg2.add_synthetic(
-        (0.0, 0.0), unstable_cdist=8.0, stable_cdist=1.0,
-        manifold_a_key=unstable, manifold_b_key=stable,
-    )
-    trellis2 = Trellis(fixed_points=[fp], registry=reg2, branches={}, bridges=[])
-    assert _backward_endpoint(trellis2, unlinked, 8.0, beta) == (None, 2.0)
+    def __init__(self, point, cdist: float) -> None:
+        self._point = np.asarray(point, dtype=np.float64)
+        self.cdist = float(cdist)
+
+    def get_point(self):
+        return self._point
+
+
+class _NodeBridge(_StubBridge):
+    """A stub bridge that also hands out its nodes (the sub-arc slice reads them)."""
+
+    def __init__(self, first: int, second: int, nodes) -> None:
+        super().__init__(first, second, [node.get_point() for node in nodes])
+        self._nodes = list(nodes)
+
+    def get_point_array(self, return_nodes: bool = False):
+        return self._nodes if return_nodes else self._points
+
+
+def test_side_at_nearest_segment_reads_two_nodes(stable_line):
+    """A propagated hole's sub-arc can lie inside one segment of its bridge: the
+    slice then holds two nodes, and the side is still read there (its nearest
+    segment), not left undecided. The dynamical direction runs -x here (ids[1]
+    at x=2 has the smaller unstable cdist), so a point above the arc is RIGHT."""
+    trellis, ids = stable_line
+    bridge = _NodeBridge(ids[1], ids[0], [_Node((2.0, 0.0), 5.0), _Node((1.0, 0.0), 6.0)])
+    span = (5.2, 5.8)
+    assert _bridge_side_of(trellis, bridge, np.array([1.5, 1.0]), span) == "right"
+    assert _bridge_side_of(trellis, bridge, np.array([1.5, -1.0]), span) == "left"
 
 
 # --------------------------------------------------------------------------- #
