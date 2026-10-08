@@ -119,6 +119,7 @@ S = session.symbolic_dynamics()              # itineraries, words, refined class
 | Layer | Name | File | Role |
 |---|---|---|---|
 | numerics | `DynamicalSystem` | `DynamicalSystem.py` | Wraps `map`, `map_inv`, optional `jacobian` (axis-0 batches) |
+| numerics | `enable_gpu`, `disable_gpu` | `gpu.py` | OPT-IN CuPy routing of the batched map calls; measured as NO gain (2026-10-07 stress campaign: 0.96-1.00x end to end, the map is <= 0.84% of growth), so leave it off; not deprecated |
 | numerics | `FixedPoint`, `FixedPointSolver` | `FixedPoint.py`, `FixedPointSolver.py` | Periodic orbit, eigendata, `k_value`, `advance_key`, `per_step_beta`, `branch_cycle`, `label` (display letter, `position_letter`); Newton/fsolve locator with saddle validation and an `orient` hook |
 | numerics | `ManifoldInitializer`, `ManifoldMachine` | same names | Fundamental segments ("Kevin way", chain-walked with `advance_key`); growth by one map step with refinement |
 | numerics | `BaseManifold`, `Bridge` | `BaseManifold.py`, `Bridge.py` | Linked-list manifold; `Bridge` = unstable arc between two consecutive crossings, `Bridge.id: BridgeId = (first_id, second_id)` ordered by unstable cdist, `None` when `partial` |
