@@ -6,13 +6,16 @@ first), the chosen strong pips, the resonance zones it made and the
 blasts) the law tier checks the build against. The builder
 parameters are FROZEN in this file. They are never read from the defaults of
 :mod:`tanglepack.examples.henon_cases` (those serve the figure scripts and may
-move), so a change of a figure recipe can never silently change a test case.
+move), nor from library defaults: every builder passes its ``area_cutoff``
+explicitly (``CaseExpect.area_cutoff`` records it), so a change of a figure
+recipe or of ``DEFAULT_AREA_CUTOFF`` can never silently change a test case.
 
 Cases:
 
 * ``k10`` -- the ``k=10, b=1`` binary horseshoe, the plain saddle at
-  ``(4, -4)``: 9 unstable steps, the stable manifold grown to turnaround, no
-  analytic Jacobian (the conftest recipe since the start of the suite).
+  ``(4, -4)``: 9 unstable steps at ``area_cutoff = 1e-4``, the stable manifold
+  grown to turnaround, no analytic Jacobian (the conftest recipe since the
+  start of the suite).
 * ``k28_one_blast`` / ``k28_two_blasts`` -- ``k=2.8``: 10 unstable steps at
   ``area_cutoff = 1e-7``, the stable manifold trimmed at the pip ``f(q0)`` (a
   resonance zone), then one or two single-iteration blasts of that zone with
@@ -28,12 +31,12 @@ Cases:
   as a parameter: Phase 0 probe P6 showed the cutoff changes the outer tangle).
 * ``inversion`` -- the ``k=10`` map's OTHER saddle at ``(-2.3166, 2.3166)``:
   both eigenvalues negative, ``k_value = 2 * period``, det J = +1 (inversion,
-  NOT orientation reversing); 6 unstable / 5 stable steps (7 unstable steps
-  does not finish, P2).
+  NOT orientation reversing); 6 unstable / 5 stable steps at ``area_cutoff =
+  1e-4`` (7 unstable steps does not finish, P2).
 * ``orientation_reversing`` -- the ``b = -1`` placeholder (``k = 4``, seed
-  ``[2, 2]``): ``construct_fixed_point`` raises ``ValueError`` today because a
-  single ``k_value`` cannot describe a saddle with exactly one negative
-  eigenvalue (P4).
+  ``[2, 2]``, ``area_cutoff = 1e-4``): ``construct_fixed_point`` raises
+  ``ValueError`` today because a single ``k_value`` cannot describe a saddle
+  with exactly one negative eigenvalue (P4).
 * ``p3_15`` / ``p3_16`` / ``p3_6_blasts`` -- the deep period-3 runs that are
   known open problems (an unreachable class and a virtual ``new1``, P3).
 * ``near_tangency`` -- the period-1 ``b = 1`` saddle at ``k = -0.999``, close to
@@ -153,12 +156,15 @@ class CaseExpect:
 
     Attributes:
         periods: The period of each fixed point, outermost first.
+        area_cutoff: The machine's refinement cutoff the build ends with (the
+            outer saddle's for nested), always passed explicitly.
         inversion: Whether any fixed point has inversion (``k_value == 2 * period``).
         n_tangles: The number of fixed points.
         blasts: Single-iteration blasts applied (outer blasts for nested).
     """
 
     periods: tuple[int, ...]
+    area_cutoff: float
     inversion: bool = False
     n_tangles: int = 1
     blasts: int = 0
@@ -248,13 +254,16 @@ def build_k10(
     Returns:
         The case. No analytic Jacobian is passed (the historical recipe).
     """
-    session = TangleSession(henon_map(*HENON_K10), henon_map_inverse(*HENON_K10))
+    area_cutoff = 1e-4
+    session = TangleSession(
+        henon_map(*HENON_K10), henon_map_inverse(*HENON_K10), area_cutoff=area_cutoff
+    )
     case = Case(
         name="k10",
         session=session,
         fixed_points=[],
         pips=[None],
-        expect=CaseExpect(periods=(1,)),
+        expect=CaseExpect(periods=(1,), area_cutoff=area_cutoff),
         stage=through,
     )
     if not _reached(through, "fixed_point"):
@@ -316,10 +325,13 @@ def build_k28(
     """
     if not _reached(through, "bridges"):
         raise ValueError("build_k28 starts at the 'bridges' stage")
+    area_cutoff = 1e-7
     session = TangleSession(
-        henon_map(*HENON_K28), henon_map_inverse(*HENON_K28), henon_jacobian(*HENON_K28)
+        henon_map(*HENON_K28),
+        henon_map_inverse(*HENON_K28),
+        henon_jacobian(*HENON_K28),
+        area_cutoff=area_cutoff,
     )
-    session.area_cutoff = 1e-7
     fp = session.construct_fixed_point(list(seed))
     session.orient_eigenvectors(fp, _orientation(PERIOD1_ORIENTATION))
     session.initialize_both_manifolds(fp)
@@ -337,7 +349,7 @@ def build_k28(
         session=session,
         fixed_points=[fp],
         pips=[None],
-        expect=CaseExpect(periods=(1,), blasts=blasts),
+        expect=CaseExpect(periods=(1,), area_cutoff=area_cutoff, blasts=blasts),
         stage=through,
     )
     if not _reached(through, "pips"):
@@ -410,7 +422,7 @@ def build_period3(
         session=build.session,
         fixed_points=list(build.fixed_points),
         pips=list(build.pips),
-        expect=CaseExpect(periods=(3,), blasts=blasts),
+        expect=CaseExpect(periods=(3,), area_cutoff=area_cutoff, blasts=blasts),
         zones=list(build.session.resonance_zones.values()),
     )
 
@@ -433,7 +445,7 @@ def _nested_through(
         session=session,
         fixed_points=[],
         pips=[None, None],
-        expect=CaseExpect(periods=(1, 3), n_tangles=2),
+        expect=CaseExpect(periods=(1, 3), area_cutoff=p1_area_cutoff, n_tangles=2),
         stage=through,
     )
     session.area_cutoff = p3_area_cutoff
@@ -542,6 +554,7 @@ def build_nested(
         pips=list(build.pips),
         expect=CaseExpect(
             periods=(1, 3),
+            area_cutoff=p1_area_cutoff,
             n_tangles=2,
             blasts=outer_blasts,
         ),
@@ -575,15 +588,19 @@ def build_inversion(
     Returns:
         The case.
     """
+    area_cutoff = 1e-4
     session = TangleSession(
-        henon_map(*HENON_K10), henon_map_inverse(*HENON_K10), henon_jacobian(*HENON_K10)
+        henon_map(*HENON_K10),
+        henon_map_inverse(*HENON_K10),
+        henon_jacobian(*HENON_K10),
+        area_cutoff=area_cutoff,
     )
     case = Case(
         name="inversion",
         session=session,
         fixed_points=[],
         pips=[None],
-        expect=CaseExpect(periods=(1,), inversion=True),
+        expect=CaseExpect(periods=(1,), area_cutoff=area_cutoff, inversion=True),
         stage=through,
     )
     if not _reached(through, "fixed_point"):
@@ -638,10 +655,12 @@ def build_orientation_reversing(*, through: Stage = "partitioned") -> Case:
         ValueError: From ``FixedPoint.set_k_value`` via
             ``construct_fixed_point``, today.
     """
+    area_cutoff = 1e-4
     session = TangleSession(
         henon_map(*HENON_ORIENTATION_REVERSING),
         henon_map_inverse(*HENON_ORIENTATION_REVERSING),
         henon_jacobian(*HENON_ORIENTATION_REVERSING),
+        area_cutoff=area_cutoff,
     )
     fp = session.construct_fixed_point(list(ORIENTATION_REVERSING_SEED))
     case = Case(
@@ -649,7 +668,7 @@ def build_orientation_reversing(*, through: Stage = "partitioned") -> Case:
         session=session,
         fixed_points=[fp],
         pips=[None],
-        expect=CaseExpect(periods=(1,)),
+        expect=CaseExpect(periods=(1,), area_cutoff=area_cutoff),
         stage=through,
     )
     if not _reached(through, "seeded"):
@@ -692,12 +711,13 @@ def build_near_tangency() -> Case:
     Returns:
         The case, stage ``intersected``.
     """
+    area_cutoff = 1e-10
     session = TangleSession(
         henon_map(*HENON_NEAR_TANGENCY),
         henon_map_inverse(*HENON_NEAR_TANGENCY),
         henon_jacobian(*HENON_NEAR_TANGENCY),
+        area_cutoff=area_cutoff,
     )
-    session.area_cutoff = 1e-10
     k, _b = HENON_NEAR_TANGENCY
     x = 1.0 + 0.5 * np.sqrt(4 + 4 * k)
     fp = session.construct_fixed_point([x, -x])
@@ -713,7 +733,7 @@ def build_near_tangency() -> Case:
         session=session,
         fixed_points=[fp],
         pips=[None],
-        expect=CaseExpect(periods=(1,)),
+        expect=CaseExpect(periods=(1,), area_cutoff=area_cutoff),
         stage="intersected",
     )
 

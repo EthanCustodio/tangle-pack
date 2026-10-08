@@ -266,6 +266,16 @@ def check_case_builds(case: "Case") -> int:
     return len(products)
 
 
+def check_case_area_cutoff(case: "Case") -> int:
+    """The build refined at its frozen cutoff, never at the library default.
+
+    The workbench and its initializer share one machine, so one value covers
+    every refinement of the case, the initial fundamental segments included.
+    """
+    assert case.session.area_cutoff == case.expect.area_cutoff
+    return 1
+
+
 def check_k_value_matches_inversion(case: "Case") -> int:
     """``k_value = 2 * period`` exactly on an inversion point (both eigenvalues < 0).
 
@@ -1992,6 +2002,7 @@ def check_matrix_is_token_counts(case: "Case") -> int:
 LAYERS: dict[str, list[LawCheck]] = {
     "case_sanity": [
         check_case_builds,
+        check_case_area_cutoff,
         check_k_value_matches_inversion,
         check_fixed_point_minimal_period,
         check_map_is_area_preserving,

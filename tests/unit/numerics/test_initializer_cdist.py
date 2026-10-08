@@ -62,7 +62,10 @@ def _p3_initialized() -> tuple[TangleWorkbench, FixedPoint]:
         The workbench and the period-3 fixed point (``k_value = 3``).
     """
     session = TangleSession(
-        henon_map(*HENON_P3), henon_map_inverse(*HENON_P3), henon_jacobian(*HENON_P3)
+        henon_map(*HENON_P3),
+        henon_map_inverse(*HENON_P3),
+        henon_jacobian(*HENON_P3),
+        area_cutoff=1e-4,
     )
     fp = session.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
     session.orient_eigenvectors(

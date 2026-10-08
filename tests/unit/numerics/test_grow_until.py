@@ -336,7 +336,7 @@ def test_session_exposes_the_drivers(henon_map, henon_map_inverse):
     """
     from tanglepack import TangleSession
 
-    session = TangleSession(henon_map, henon_map_inverse)
+    session = TangleSession(henon_map, henon_map_inverse, area_cutoff=1e-4)
     fp = session.construct_fixed_point([4, -4])
     session.orient_eigenvectors(
         fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])}
@@ -397,7 +397,7 @@ def _two_saddle_workbench(henon_map, henon_map_inverse, henon_jacobian):
     """
     from tanglepack import TangleWorkbench
 
-    workbench = TangleWorkbench(henon_map, henon_map_inverse, henon_jacobian)
+    workbench = TangleWorkbench(henon_map, henon_map_inverse, henon_jacobian, area_cutoff=1e-4)
 
     simple = workbench.construct_fixed_point([4, -4])
     workbench.orient_eigenvectors(

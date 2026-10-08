@@ -48,7 +48,10 @@ def _grown_cdists(session: tanglepack.TangleSession) -> np.ndarray:
 def _k10_session() -> tanglepack.TangleSession:
     """A fresh k=10 session with the analytic Jacobian."""
     return tanglepack.TangleSession(
-        henon_map(*HENON_K10), henon_map_inverse(*HENON_K10), henon_jacobian(*HENON_K10)
+        henon_map(*HENON_K10),
+        henon_map_inverse(*HENON_K10),
+        henon_jacobian(*HENON_K10),
+        area_cutoff=1e-4,
     )
 
 
