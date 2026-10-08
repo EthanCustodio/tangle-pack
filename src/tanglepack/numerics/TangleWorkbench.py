@@ -318,6 +318,14 @@ class TangleWorkbench:
             FixedPoint: The constructed fixed point, already registered here and
                 labelled ``A, B, ...`` in construction order. Its branch count is
                 derived (``FixedPoint.num_branches``).
+
+        Raises:
+            ValueError: If the solve does not converge, if the orbit's minimal
+                period is a proper divisor of the requested one (``period`` is
+                the minimal period; a saddle with inversion is requested at its
+                period, never at ``k_value``), if it is not a real saddle, or if
+                its eigenvalues disagree in sign
+                (:meth:`FixedPointSolver.construct_fixed_point`).
         """
 
         fixed_point = self._fp_solver.construct_fixed_point(initial_guess)

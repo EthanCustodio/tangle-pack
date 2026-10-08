@@ -29,7 +29,7 @@ from tanglepack.examples import (
     henon_map_inverse,
     saddle_guesses,
 )
-from tanglepack.numerics import BaseManifold, BranchPoint
+from tanglepack.numerics import BaseManifold, BranchPoint, FixedPointSolver
 
 
 # --------------------------------------------------------------------------- #
@@ -275,18 +275,22 @@ def test_henon_factories_are_batch_capable_on_axis_zero():
 
 @pytest.mark.parametrize(
     "params, name",
-    [(HENON_K10, "saddle"), (HENON_K10, "inversion"), (HENON_P3, "saddle")],
+    [(HENON_K10, "saddle"), (HENON_K10, "inversion"),
+     (HENON_P3, "period_3"), (HENON_P3, "saddle")],
 )
 def test_saddle_guesses_converge_to_real_fixed_points(params, name):
+    """Every recorded guess converges to a real orbit of its own minimal period."""
     guess = saddle_guesses(*params)[name]
     workbench = tanglepack.TangleWorkbench(
         henon_map(*params), henon_map_inverse(*params), henon_jacobian(*params)
     )
     fp = workbench.construct_fixed_point(guess)
 
-    coord = np.asarray(fp.coordinates[0], dtype=float).ravel()[:2]
-    image = np.asarray(henon_map(*params)(coord), dtype=float).ravel()[:2]
-    assert np.allclose(image, coord, atol=1e-9)
+    assert fp.period == len(np.atleast_2d(guess))
+    assert FixedPointSolver.minimal_period(fp.coordinates) == fp.period
+    orbit = np.asarray(fp.coordinates, dtype=float)
+    images = np.array([np.ravel(henon_map(*params)(point))[:2] for point in orbit])
+    assert np.allclose(images, np.roll(orbit, -1, axis=0), atol=1e-9)
 
 
 def test_saddle_guesses_returns_a_fresh_copy():

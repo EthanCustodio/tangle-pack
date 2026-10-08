@@ -85,6 +85,8 @@ def canonical(orbit: np.ndarray, digits: int = 8) -> list:
 
 def failure_class(exc: Exception) -> str:
     message = str(exc)
+    if "minimal period" in message:
+        return "lower_period"
     if "fsolve did not converge" in message:
         return "no_convergence_ier" + message.split("ier=")[1].split(")")[0]
     if "are complex" in message:
