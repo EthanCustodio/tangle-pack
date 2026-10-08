@@ -10,7 +10,8 @@ loop folds FORWARD up its image-chain parents into a non-loop member of its
 class (D2); the combinatorial row of a bridge
 end (crossing sign alone) is the side the bridge geometrically approaches
 from; a same-branch bridge has one row at both ends (I2); a tangle's anchor
-bridge is a ``+1`` member of an active class that leads its group; the table groups
+bridge is a ``+1`` member of an active class that leads its group (in a tangle
+whose every stable branch carries a hole, D9); the table groups
 by tangle (connecting classes last) and orders by smallest member cdist; a
 class mixes fixed points only as a connecting class; the classes of a fixed
 point reach every stable branch of its cycle; only active classes are

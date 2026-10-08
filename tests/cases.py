@@ -52,8 +52,10 @@ Cases:
   ``[2, 2]``, ``area_cutoff = 1e-4``): ``construct_fixed_point`` raises
   ``ValueError`` because a single ``k_value`` cannot describe a saddle with
   exactly one negative eigenvalue; det J < 0 is out of scope (C3).
-* ``p3_15`` / ``p3_16`` / ``p3_6_blasts`` -- the deep period-3 runs that are
-  known open problems (an unreachable class and a virtual ``new1``, PK-1).
+* ``p3_15`` / ``p3_16`` / ``p3_6_blasts`` -- the deep period-3 runs past the
+  reference switch (BCG-4): their words name classes outside the minimal
+  trellis's alphabet, which the symbolic dynamics closes under the word map
+  (PK-1, WP7).
 * ``near_tangency`` -- the period-1 ``b = 1`` saddle at ``k = -0.999``, close to
   the saddle-centre bifurcation at ``k = -1`` where the splitting angle is
   exponentially small, each arm grown to 20 fixed-point separations of
@@ -753,7 +755,9 @@ def build_inversion(*, blasts: int = 0, through: Stage = "partitioned") -> Case:
     )
 
 
-def build_inversion_period2(*, through: Stage = "partitioned") -> Case:
+def build_inversion_period2(
+    *, unstable_steps: int = 9, stable_steps: int = 9, through: Stage = "partitioned"
+) -> Case:
     """
     Inversion on a period-k orbit: the ``k=4.1`` period-2 orbit, no zone.
 
@@ -764,6 +768,9 @@ def build_inversion_period2(*, through: Stage = "partitioned") -> Case:
     its outermost crossings and partitioned at the default strong pip.
 
     Args:
+        unstable_steps: Unstable growth steps (the law case: 9; 10 runs the
+            stable manifold past the pip orbit, DEC-20).
+        stable_steps: Stable growth steps (the law case: 9).
         through: ``"bridges"`` or ``"partitioned"``.
 
     Returns:
@@ -784,8 +791,8 @@ def build_inversion_period2(*, through: Stage = "partitioned") -> Case:
     fp = session.construct_fixed_point([list(point) for point in K41_INVERSION_PERIOD2_SEED])
     assert (fp.period, fp.k_value) == (2, 4), "the k=4.1 period-2 orbit must have inversion"
     session.initialize_both_manifolds(fp)
-    session.grow_n_times(fp, "unstable", num_iterations=9)
-    session.grow_n_times(fp, "stable", num_iterations=9)
+    session.grow_n_times(fp, "unstable", num_iterations=unstable_steps)
+    session.grow_n_times(fp, "stable", num_iterations=stable_steps)
     session.compute_intersections([fp])
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
@@ -1125,12 +1132,6 @@ def _each(laws: tuple[str, ...], names: tuple[str, ...], issue: KnownIssue) -> d
     return {(law, name): issue for law in laws for name in names}
 
 
-_NUM16 = KnownIssue(
-    "NUM-16: a zero-area region after a blast reports a representative point inside "
-    "its neighbour",
-    "WP10",
-)
-
 #: ``(law_id, case) -> KnownIssue``: every pair fails today and names the WP that
 #: fixes it. The law ids are the ``helpers.laws`` check names without
 #: ``check_`` (or a standalone test's id); a law-tier pair is left out of its
@@ -1139,47 +1140,11 @@ _NUM16 = KnownIssue(
 #: law whose entry names the later WP that fixes it.
 KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
     {
-        **_each(
-            ("arrangement_regions_disjoint",),
-            ("k28_one_blast", "k28_two_blasts", "inversion_one_blast", "inversion_two_blasts"),
-            _NUM16,
-        ),
-        **_each(
-            ("arrangement_regions_sound", "arrangement_regions_disjoint"),
-            ("nested_inner_blasts",),
-            KnownIssue(
-                "NUM-16: a zero-area region after the inner blasts has no verified "
-                "representative point (regions_disjoint then raises TypeError)",
-                "WP10",
-            ),
-        ),
         ("orientation_reversing_case_builds", "orientation_reversing"): KnownIssue(
             "INV-11: det J < 0 is out of scope (C3); FixedPoint.set_k_value rejects a "
             "saddle with exactly one negative eigenvalue",
             "C3",
             raises=ValueError,
-        ),
-        **_each(
-            ("open_p3_deep_runs",),
-            ("p3_15", "p3_16", "p3_6_blasts"),
-            KnownIssue(
-                "PK-1: the deep period-3 runs (15 or 16 steps, 6 blasts) have a "
-                "virtual new1 (the unreachable class went with the geometric "
-                "openings, WP4)",
-                "WP7",
-            ),
-        ),
-        ("arrangement_euler", "inversion_two_blasts"): KnownIssue(
-            "INT-9: the dense arrangement draws an arc between consecutive blast-image "
-            "crossings no bridge spans; dropping those arcs gives V - E + F = 2",
-            "WP7",
-        ),
-        ("anchor_bridge_class_leads_its_tangle", "inversion"): KnownIssue(
-            "PK-3 / DEC-19: the reference pair's +1 image lies past the computed u(0.0) "
-            "(the inversion halves are grown one map step apart, a stagger), so s(0.1) "
-            "gets no window hole (named in a WARNING since WP5) and the anchor bridge's "
-            "image is a loop (an inert anchor class)",
-            "WP5",
         ),
         ("three_tangles_take_three_families", "hand_built"): KnownIssue(
             "TEST-5(c): TANGLE_COLOR_FAMILIES holds two families, so a third tangle "
@@ -1204,6 +1169,11 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
             "which image_of rejects; no region has a closed image"
         ),
         ("arrangement_preimage_inverts_image", "k10"): "no region has a closed image",
+        ("anchor_bridge_class_leads_its_tangle", "inversion"): (
+            "s(0.1) carries no hole (D9): its reference images are not computed, so "
+            "the anchor bridges map onto a loop and no tangle has a hole on every "
+            "stable branch"
+        ),
         **{
             ("partition_singletons", name): _NO_PINCH
             for name in ("k10", "k28_two_blasts", "inversion")

@@ -222,9 +222,6 @@ def _symbol_key(dyn: "SymbolicDynamics", symbol_name: str, refined: bool) -> Nam
     for cls, cd in dyn.classes.items():
         if cd.letter == symbol_name:
             return class_pair(dyn.naming, cls)
-    for cls, letter in dyn.virtual_classes.items():
-        if letter == symbol_name:
-            return class_pair(dyn.naming, cls)
     raise KeyError(f"no class or refined child named {symbol_name!r}")
 
 

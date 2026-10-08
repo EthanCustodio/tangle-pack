@@ -1,31 +1,27 @@
-"""The deep period-3 runs: a known open problem, pinned where it is firm.
+"""The deep period-3 runs: 15 or 16 unstable steps, or 6 blasts.
 
-At 15 or 16 unstable steps, or after 6 blasts, the period-3 tangle's symbolic
-dynamics is unreliable: a virtual ``new1`` appears (Phase 0 probe P3;
-``KNOWN_ISSUES`` key ``open_p3_deep_runs``, PK-1). One class used to be
-unreachable by the dual-graph walk (``A:p3@2.0/R#2 <-> A:p3@2.0/R#3``); that
-was the geometric hole openings, and since the signs decide them (WP4, D6)
-every class walks. What IS firm there:
+Past the reference switch (BCG-4) the hole set is deeper, and the word of an
+image-bridge class names the class of ITS image, which the minimal trellis
+does not keep: that pair used to be a virtual ``new1`` (PK-1). Every pair of a
+walk is the class of one piece of ``f(B)`` between two crossings, a real bridge
+of ``W^u``, so the symbolic dynamics closes the alphabet under the word map
+(WP7, D3). What holds there:
 
 * invariant I1 -- all holes of one origin share their side of their bridge.
   A bridge's unstable branch is carried by ``Bridge.manifold_key``; inferring it
   from the endpoint intersections instead was unreliable on a period > 1 orbit
   (every branch's anchor sits at unstable cdist 0), so the backward propagation
   picked a container on the wrong branch and an orbit's holes flipped
-  ``bridge_side`` partway down the chain. The deep runs are where a propagated
-  hole's image sub-arc and the nearest vertex of its whole containing bridge sit
-  on different folds (fixed 2026-10-02). The symbolic dynamics must still run.
-* every class walks (D3).
-* virtual symbols are sinks of the transition graph.
-
-That no virtual symbol appears is ``xfail(strict=True)``.
+  ``bridge_side`` partway down the chain (fixed 2026-10-02).
+* every class walks (D3), and the alphabet is closed: every symbol of every
+  word names a class of the table, and the dynamics is reliable.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from cases import BUILDERS, Case, issue_marks
+from cases import BUILDERS, Case
 from tanglepack.topology import check_holes_share_bridge_side
 
 #: The deep runs (``tests/cases.py``): 15 and 16 unstable steps, 6 blasts.
@@ -50,17 +46,16 @@ def test_deep_p3_holes_share_bridge_side(name: str) -> None:
     assert case.session.symbolic_dynamics().classes
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(name, marks=issue_marks("open_p3_deep_runs", name), id=name)
-        for name in DEEP_RUNS
-    ],
-)
-def test_deep_p3_every_class_resolves_without_virtual_symbols(name: str) -> None:
-    """No pair of a walked itinerary falls outside the class table."""
+@pytest.mark.parametrize("name", DEEP_RUNS)
+def test_deep_p3_alphabet_is_closed(name: str) -> None:
+    """Every symbol of every word is a class of the table, every class resolves, and
+    the dynamics is reliable (no virtual class: D3)."""
     dyn = _build(name).session.symbolic_dynamics()
-    assert not dyn.virtual_classes
+    for letter, word in dyn.rules.items():
+        for symbol in word:
+            assert symbol.bridge_class in dyn.table, (letter, symbol.text)
+    assert dyn.unresolved == []
+    assert dyn.is_reliable
 
 
 @pytest.mark.parametrize("name", DEEP_RUNS)
@@ -70,19 +65,3 @@ def test_deep_p3_every_class_walks(name: str) -> None:
     and made one class unreachable."""
     dyn = _build(name).session.symbolic_dynamics()
     assert not [cd for cd in dyn.classes.values() if cd.unresolved_reason]
-
-
-def test_virtual_symbols_are_transition_sinks() -> None:
-    """A virtual symbol has no outgoing transition and a zero matrix row (real data:
-    the 15-step run, unreliable as it is)."""
-    dyn = _build("p3_15").session.symbolic_dynamics()
-    graph = dyn.transition_graph()
-    virtual = [node for node, data in graph.nodes(data=True) if data["kind"] == "virtual"]
-    if not virtual:
-        pytest.skip("the 15-step run produced no virtual symbol (the open problem is gone)")
-    names, matrix = dyn.transition_matrix()
-    for node in virtual:
-        assert graph.out_degree(node) == 0
-        assert graph.in_degree(node) > 0
-        if node in names:
-            assert not matrix[names.index(node)].any()

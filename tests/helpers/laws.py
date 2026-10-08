@@ -1642,17 +1642,29 @@ def check_bridge_rows_consistent(case: "Case") -> int:
 
 def check_anchor_bridge_class_leads_its_tangle(case: "Case") -> int:
     """A tangle's anchor bridge (leaving an anchor) is a ``+1`` member of an ACTIVE class,
-    and that class comes first in its tangle's group (smallest member cdist: 0)."""
+    and that class comes first in its tangle's group (smallest member cdist: 0).
+
+    Only for a tangle whose every stable branch carries a hole: a branch whose
+    reference images were never computed has none (D9), and the anchor bridge can then
+    map onto a loop, an inert class."""
     trellis = _full(case)
     table = _evidence(case)
     entries = list(table)
     anchors = set(_anchor_ids(case))
     tol = _tol(case)
+    holed = {opening[3] for _trellis, hole in _holes(case) for opening in hole.openings or ()}
+    complete = {
+        index
+        for index, fp in enumerate(trellis.fixed_points)
+        if all(branch.key in holed for branch in trellis.branches_of(fp, "stable"))
+    }
     count = 0
     for bridge in trellis.bridges:
         if bridge.id is None or bridge.id[0] not in anchors or bridge.id[1] in anchors:
             continue
         entry = table.entry_of(bridge.id)
+        if entry.tangle not in complete:
+            continue
         assert entry.active, bridge.id
         assert entry.member(bridge.id).direction == +1, bridge.id
         assert entry.min_unstable_cdist == pytest.approx(0.0, abs=tol)
@@ -2148,6 +2160,42 @@ def check_dual_unified_is_pip_segment(case: "Case") -> int:
     return len(expected)
 
 
+def where_f_of_s_stops(dual) -> dict:
+    """``{stable branch: S \\ f(S) as (lo, hi), or None when empty}`` for every stable
+    branch of a fixed point that owns a unified segment, from the branch ends alone:
+    ``(c_s(f(end of the previous branch)), end]`` (the image of a bridge crosses the
+    trellis's stable manifold only at the images of its ends and there)."""
+    trellis = dual.trellis
+    tol = float(trellis.registry.cdist_tol)
+    owners = {key[0] for key in dual.fundamental_segments}
+    stops = {}
+    for branch in trellis.stable_branches:
+        fixed_point = branch.key[0]
+        if fixed_point not in owners or not len(branch):
+            continue
+        previous = fixed_point.advance_key(branch.key, -1)
+        end = float(trellis.intersection(branch.intersection_ids[-1]).stable_cdist)
+        last = trellis.branch(previous).intersection_ids[-1]
+        _key, image, _from_table = trellis.image_cdist(last, 1, "stable", branch=previous)
+        stops[branch.key] = (float(image), end) if image < end - tol else None
+    return stops
+
+
+def check_dual_unified_is_where_f_of_s_stops(case: "Case") -> int:
+    """The precondition of the walk (PK-5 / DEC-20): on every stable branch of a pip's
+    fixed point the unified span is exactly ``S \\ f(S)``, where the image of a bridge
+    may cross the stable manifold away from the images of its ends."""
+    dual = case.session.dual_graph()
+    tol = _tol(case)
+    stops = where_f_of_s_stops(dual)
+    for key, span in stops.items():
+        unified = dual.fundamental_segments.get(key)
+        assert (span is None) == (unified is None), key[1:]
+        if span is not None:
+            assert span == (pytest.approx(unified[0], abs=tol), pytest.approx(unified[1], abs=tol))
+    return len(stops)
+
+
 def check_stable_nodes_never_own_a_singleton(case: "Case") -> int:
     """A stable node's element on each faced side is never a singleton ``[x, x]`` (a
     singleton owns no stable edge), spans the node's edge, and owns its midpoint exactly."""
@@ -2233,12 +2281,25 @@ def check_every_active_class_walks(case: "Case") -> int:
     return count
 
 
-def check_no_virtual_class(case: "Case") -> int:
-    """D3: no itinerary names a class no bridge spans (a virtual ``new*`` class is a
-    construction bug, never a state)."""
+def check_alphabet_closed_under_words(case: "Case") -> int:
+    """D3: every symbol of every word names a class of the table. The seed classes are
+    the session alphabet; every other class was added by the closure, is named in the
+    word of the class that named it, and has an itinerary of its own."""
     dyn = case.session.symbolic_dynamics()
-    assert not dyn.virtual_classes, sorted(dyn.virtual_classes.values())
-    return len(dyn.classes)
+    seed = case.session.bridge_classes()
+    count = 0
+    for letter, word in dyn.rules.items():
+        for symbol in word:
+            assert symbol.bridge_class in dyn.table, (letter, symbol.text)
+            count += 1
+    assert list(dyn.classes) == dyn.table.classes
+    for cls, cd in dyn.classes.items():
+        assert (cd.named_by is None) == (cls in seed), cd.letter
+        if cd.named_by is not None:
+            namer = dyn.classes[cd.named_by]
+            assert cls in {symbol.bridge_class for symbol in namer.symbols}, cd.letter
+            assert cd.itinerary is not None, cd.letter
+    return count + len(dyn.classes)
 
 
 def check_itinerary_pairs_are_classes(case: "Case") -> int:
@@ -2322,7 +2383,7 @@ def check_inert_classes_outside_transitions(case: "Case") -> int:
 
 def check_matrix_is_token_counts(case: "Case") -> int:
     """Entry ``(i, j)`` counts the tokens of symbol ``j`` (inert tokens skipped) in the
-    refined word of active symbol ``i``; virtual symbols are sink rows."""
+    refined word of active symbol ``i``; every token of an active word is a node."""
     dyn = case.session.symbolic_dynamics()
     names, matrix = dyn.transition_matrix()
     index = {name: position for position, name in enumerate(names)}
@@ -2333,13 +2394,10 @@ def check_matrix_is_token_counts(case: "Case") -> int:
         if node is None or node.kind != "active":
             continue
         for symbol in symbols:
-            if symbol.kind == "inert" or symbol.base not in index:
+            if symbol.kind == "inert":
                 continue
             expected[index[name], index[symbol.base]] += 1
     assert matrix.tolist() == expected.tolist()
-    for name, node in nodes.items():
-        if node.kind == "virtual":
-            assert not matrix[index[name]].any()
     return int(matrix.sum()) + len(names)
 
 
@@ -2438,6 +2496,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_dual_face_nodes,
         check_dual_face_side_is_geometry,
         check_dual_unified_is_pip_segment,
+        check_dual_unified_is_where_f_of_s_stops,
         check_stable_nodes_never_own_a_singleton,
         check_dual_bipartite_degree,
     ],
@@ -2445,7 +2504,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_itineraries_even,
         check_cross_side_only_within_a_branch,
         check_every_active_class_walks,
-        check_no_virtual_class,
+        check_alphabet_closed_under_words,
         check_itinerary_pairs_are_classes,
         check_landings_contained,
         check_refined_children_inherit_word,

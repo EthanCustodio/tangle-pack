@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -215,21 +216,21 @@ def test_loops_dropped_from_word_but_recorded(layout):
     assert loops == [layout.refs("L_1^1", "L_1^2")]
 
 
-def test_virtual_class_named_new1_with_warning(layout, caplog):
+def test_a_class_outside_the_table_is_named_by_its_label(layout, caplog):
+    """Only registered evidence can name a class outside the (closed) table: the token
+    is named by the class label, counted active, and nothing is logged or lettered."""
     itinerary = layout.refs("R_1^1", "R_2", "R_2", "R_3^1")
+    letters = dict(layout.letters)
     with caplog.at_level(logging.WARNING, logger=SD.__name__):
-        symbols, _loops = layout.translate(itinerary)
-    assert [symbol.kind for symbol in symbols] == ["virtual", "virtual"]
-    assert [symbol.text for symbol in symbols] == ["new1", "new2"]
-    assert_logged(caplog, logging.WARNING, SD.__name__)
-    # the shared letter map remembers the names
-    assert layout.letters[BridgeClass(layout.R[0], layout.R[1])] == "new1"
-    assert layout.letters[BridgeClass(layout.R[1], layout.R[2])] == "new2"
-    # a second translation reuses them and warns no more
-    caplog.clear()
-    with caplog.at_level(logging.WARNING, logger=SD.__name__):
-        again, _ = layout.translate(itinerary)
-    assert [symbol.text for symbol in again] == ["new1", "new2"]
+        symbols, _loops = translate_itinerary(
+            itinerary, layout.naming, layout.table, letters, layout.fixed_points
+        )
+    assert [symbol.kind for symbol in symbols] == ["active", "active"]
+    assert [symbol.letter for symbol in symbols] == [
+        BridgeClass(layout.R[0], layout.R[1]).label,
+        BridgeClass(layout.R[1], layout.R[2]).label,
+    ]
+    assert letters == layout.letters
     assert_logged(caplog, logging.WARNING, SD.__name__, count=0)
 
 
@@ -299,7 +300,7 @@ def test_refined_words_of_k10(layout):
     with pytest.raises(KeyError):
         dyn.word("b")
     assert dyn.inert_letters == {layout.u: "u"}
-    assert dyn.virtual_classes == {}
+    assert all(cd.named_by is None for cd in dyn.classes.values())
 
 
 # --------------------------------------------------------------------------- #
@@ -426,8 +427,8 @@ def test_unreadable_image_chain_is_skipped_as_evidence(layout, monkeypatch, capl
 
 
 def test_registered_evidence_never_extends_the_letters(layout, monkeypatch):
-    """D2: evidence names a class outside the alphabet locally and never adds a symbol
-    to the caller's letters (only words make virtual classes)."""
+    """D2: evidence names a class outside the alphabet by its label and never adds a
+    symbol to the caller's letters (only a WORD closes the alphabet)."""
     entry = layout.table[layout.a]
     outside = layout.refs("R_1^1", "R_2")  # {R_1, R_2}: no class of the table
 
@@ -442,7 +443,137 @@ def test_registered_evidence_never_extends_the_letters(layout, monkeypatch):
         _FakeTrellis(layout.fixed_points), object(), layout.naming, layout.table, letters, entry
     )
     assert letters == layout.letters
-    assert evidence and all(e.symbols[0].kind == "virtual" for e in evidence)
+    label = BridgeClass(layout.R[0], layout.R[1]).label
+    assert evidence and all(
+        (e.symbols[0].kind, e.symbols[0].letter) == ("active", label) for e in evidence
+    )
+    assert all(e.chain == ((0, 1), (1, 2)) for e in evidence)
+
+
+def test_a_straddling_landing_is_unreliable(layout):
+    """INT-8: a landing across a cut still resolves (the walk exists, D3), but a
+    homotopy element's image lies in ONE iterated element, so a straddle counts
+    against ``is_reliable``."""
+    dyn = _k10_dynamics(layout)
+    cd = dyn.classes[layout.a]
+
+    def landing(contained: bool) -> SD.ElementLanding:
+        covering = (layout.iR[0],) if contained else (layout.iR[0], layout.iR[1])
+        return SD.ElementLanding(
+            layout.R[0], layout.key, "right", (0.0, 1.0), (True, True), layout.iR[0],
+            contained, False, covering, None,
+        )
+
+    cd.landings = (landing(True), landing(True))
+    assert dyn.is_reliable
+    cd.landings = (landing(True), landing(False))
+    assert not dyn.is_reliable
+
+
+# --------------------------------------------------------------------------- #
+# The driver on the synthetic layout: closure and evidence diagnosis
+# --------------------------------------------------------------------------- #
+class _Crossings:
+    """A trellis stand-in: fixed points and ``intersection(id)`` with key and sign."""
+
+    def __init__(self, fixed_points, crossings: dict) -> None:
+        self.fixed_points = fixed_points
+        self._crossings = crossings
+
+    def intersection(self, crossing_id):
+        key, sign = self._crossings[crossing_id]
+        return SimpleNamespace(manifold_b_key=key, crossing_sign=sign)
+
+
+def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
+           chains=None, registered=None, letter_for=None):
+    """``symbolic_dynamics`` over the layout: every landing is contained, each class
+    walks ``walks[class]``, ``chains`` / ``registered`` stand in for the iterate table."""
+    def land(_trellis, _homotopy, _iterated, ref):
+        return SD.ElementLanding(
+            ref, ref.branch_key, ref.side, (0.0, 1.0), (True, True), ref, True, False,
+            (ref,), None,
+        )
+
+    def resolve(_dual, _iterated, cd, _max_walks):
+        cd.itinerary, cd.source = tuple(walks[cd.bridge_class]), "walk"
+
+    def owner_pair(*_args):
+        raise ValueError("no owners in the synthetic layout")
+
+    monkeypatch.setattr(SD, "ElementNaming", lambda _homotopy, _iterated: layout.naming)
+    monkeypatch.setattr(SD, "land_element", land)
+    monkeypatch.setattr(SD, "_resolve_itinerary", resolve)
+    monkeypatch.setattr(SD, "_member_pair", owner_pair)
+    monkeypatch.setattr(SD, "_image_chain", lambda _t, bid: (chains or {}).get(bid))
+    monkeypatch.setattr(SD, "trellis_itinerary", lambda _t, _i, chain, _d: registered[tuple(chain)])
+    dual = SimpleNamespace(
+        trellis=_Crossings(layout.fixed_points, crossings or {}),
+        partition=SimpleNamespace(homotopy=object()),
+        minimal=SimpleNamespace(classes=evidence),
+    )
+    return symbolic_dynamics(dual, alphabet, letter_for=letter_for)
+
+
+def test_a_word_naming_a_new_class_closes_the_alphabet(layout, monkeypatch, caplog):
+    """D3: a pair of a walk is the class of a real piece of f(B). A word naming a class
+    outside the alphabet adds it: it is walked, lettered (an active one by
+    ``letter_for``) and remembers the class that named it. No WARNING."""
+    alphabet = BridgeClassTable([layout.table[layout.a]])
+    walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
+    asked = []
+
+    def letter_for(cls):
+        asked.append(cls)
+        return "q"
+
+    with caplog.at_level(logging.WARNING, logger=SD.__name__):
+        dyn = _drive(layout, monkeypatch, alphabet, alphabet, walks, letter_for=letter_for)
+    assert_logged(caplog, logging.WARNING, SD.__name__, count=0)
+    assert dyn.table.classes == [layout.a, layout.u]
+    closed = dyn.classes[layout.u]
+    assert closed.named_by == layout.a and dyn.classes[layout.a].named_by is None
+    assert (closed.letter, closed.kind, asked) == ("q", "active", [layout.u])
+    assert closed.itinerary == walks[layout.u] and closed.status == "trivial"
+    assert dyn.word("a", refined=False) == "a q^-1 a^-1"
+    assert dyn.is_reliable
+
+    # with an evidence entry the closure class keeps its inertness: inert series
+    asked.clear()
+    dyn = _drive(layout, monkeypatch, alphabet, layout.table, walks, letter_for=letter_for)
+    closed = dyn.classes[layout.u]
+    assert (closed.letter, closed.kind, asked) == ("u", "inert", [])
+    assert closed.entry.members == layout.table[layout.u].members
+    assert dyn.word("a", refined=False) == "a u^-1 a^-1"
+
+
+@pytest.mark.parametrize(
+    "signs, cause, run",
+    [((+1, -1, -1, +1), "stable end", (11, 12)), ((+1, -1, +1, -1), "walk", ())],
+)
+def test_evidence_disagreement_names_a_stable_end(layout, monkeypatch, caplog, signs, cause, run):
+    """INT-1: a registered word that parts from the walk carries a diagnosis: two
+    consecutive chain crossings on one stable branch with one sign mean the image
+    passed the end of the computed stable branch; otherwise the walk is to blame.
+    Either way it is a WARNING and the dynamics is not reliable."""
+    chain = ((10, 11), (11, 12), (12, 13))
+    registered = {chain: layout.refs("R_1^1", "R_3^3", "R_3^1", "R_1^3")}  # a a^-1
+    crossings = {cid: (layout.key, sign) for cid, sign in zip((10, 11, 12, 13), signs)}
+    walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
+    with caplog.at_level(logging.WARNING, logger=SD.__name__):
+        dyn = _drive(
+            layout, monkeypatch, layout.table, layout.table, walks,
+            crossings=crossings, chains={(0, 5): list(chain)}, registered=registered,
+        )
+    cd = dyn.classes[layout.a]
+    (evidence,) = cd.evidence
+    assert evidence.word_agrees is False and cd.verified is False
+    diagnosis = evidence.diagnosis
+    assert (diagnosis.cause, diagnosis.crossings, diagnosis.position) == (cause, run, 1)
+    assert diagnosis.walked == layout.refs("L_1^2", "L_3")
+    assert diagnosis.registered == layout.refs("R_1^3", "R_3^1")
+    assert_logged(caplog, logging.WARNING, SD.__name__, count=1)
+    assert not dyn.is_reliable
 
 
 # --------------------------------------------------------------------------- #

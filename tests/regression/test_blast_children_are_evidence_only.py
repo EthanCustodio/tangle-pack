@@ -6,7 +6,8 @@ be classed, lettered and fed to the transition matrix, so the alphabet grew
 while the hole set stayed the same. D2: the alphabet is the classes of the
 minimal trellis's bridges; every other bridge is evidence only, and evidence
 never adds a symbol (a registered image naming a class outside the alphabet
-used to leak a virtual ``new<n>`` into the graph). Rule-based: no count, letter
+used to leak a virtual ``new<n>`` into the graph); only a WORD may add a class,
+by closing the alphabet under the word map (WP7). Rule-based: no count, letter
 or word of the build is pinned.
 """
 
@@ -44,11 +45,11 @@ def test_alphabet_is_the_minimal_trellis_classes(k28_blasted):
 
 def test_words_and_matrix_stay_inside_the_alphabet(k28_blasted):
     session = k28_blasted.session
-    table = session.bridge_classes()
     dynamics = session.symbolic_dynamics()
-    assert dynamics.virtual_classes == {}
+    table = dynamics.table
     for cd in dynamics.classes.values():
         assert all(symbol.bridge_class in table for symbol in cd.symbols), cd.letter
+        assert (cd.named_by is None) == (cd.bridge_class in session.bridge_classes())
     expected = [
         name
         for entry in table.active

@@ -174,10 +174,11 @@ def test_every_bridge_must_be_consecutive_on_its_branch():
 
 
 def test_an_arc_without_a_bridge_is_still_an_arc():
-    """The converse does NOT hold: a blast leaves arcs with no bridge object.
+    """The converse does NOT hold: a pair on ONE computed curve is an arc with no bridge.
 
-    Dropping the bridge list leaves the branch orderings untouched, so the lobe is
-    still an arc and still closes a face -- it simply carries no
+    Dropping the bridge list leaves the branch orderings untouched, and neither
+    crossing names a different curve (an anchor lies on every curve rooted at it), so
+    the lobe is still an arc and still closes a face -- it simply carries no
     :data:`~tanglepack.numerics.Bridge.BridgeId`. With no bridge AND no parent
     manifold to fall back on, its geometry collapses to the chord between the two
     crossings, which is the documented degradation.
@@ -192,6 +193,39 @@ def test_an_arc_without_a_bridge_is_still_an_arc():
     assert lobe.bridge_ids == []
     assert np.allclose(lobe.boundary_points, [[0.0, 0.0], [0.0, 2.0]])
     assert lobe.area == 0.0
+
+
+def test_is_computed_arc_truth_table():
+    """A consecutive pair is computed manifold when a Bridge spans it or both crossings
+    lie on one computed curve; an anchor (no curve) lies on every curve rooted at it."""
+    trellis, a, b = _hand_built_trellis()
+    one, other = object(), object()
+    assert trellis.is_computed_arc(a, b), "a Bridge spans the pair"
+    trellis.bridges = []
+    assert trellis.is_computed_arc(a, b), "two crossings on no named curve"
+    trellis.intersection(b).unstable_manifold = one
+    assert trellis.is_computed_arc(a, b), "an anchor and a curve"
+    trellis.intersection(a).unstable_manifold = one
+    assert trellis.is_computed_arc(a, b), "one curve"
+    trellis.intersection(b).unstable_manifold = other
+    assert not trellis.is_computed_arc(a, b), "two curves: the arc between them was never computed"
+
+
+def test_a_gap_between_two_curves_is_two_dangling_ends():
+    """INT-9: two consecutive crossings on DIFFERENT computed curves with no Bridge
+    between them are a gap, not an arc: each end dangles, and nothing closes."""
+    trellis, a, b = _hand_built_trellis()
+    trellis.bridges = []
+    trellis.intersection(a).unstable_manifold = object()
+    trellis.intersection(b).unstable_manifold = object()
+    arrangement = Arrangement.from_trellis(trellis)
+
+    assert arrangement.regions == []
+    assert all(not face.is_closed for face in arrangement.faces)
+    assert not [
+        arc for face in arrangement.faces for arc in face.arcs if arc.kind == "unstable"
+    ]
+    assert arrangement.euler_characteristic == 2 * arrangement.component_count
 
 
 def test_canonical_corners_preserves_cyclic_order():
@@ -486,9 +520,11 @@ def test_preimage_of_a_region_is_its_hand_derived_backward_image(henon_p3_sessio
 def test_arrangement_survives_a_blast(k10_session):
     """A blast adds crossings on ITERATED bridges, whose arcs were never cut.
 
-    Those arcs have no ``BridgeId``; the arrangement must still build (the
-    every-bridge-is-an-arc invariant is untouched) and still close faces. This is
-    the case that made the two-way bridge/arc equality assertion untenable.
+    Consecutive crossings of one unstable branch can then sit on two different
+    computed curves (the images of two non-adjacent bridges, or the grown tip and an
+    image): the manifold between them was never computed, so they are no arc (INT-9).
+    Every unstable arc the arrangement draws is computed, the every-bridge-is-an-arc
+    invariant is untouched, and Euler's formula holds per component.
     """
     session, fp = k10_session
     trellis = session.trellis(fp)
@@ -497,31 +533,26 @@ def test_arrangement_survives_a_blast(k10_session):
     (zone,) = session.resonance_zones.values()
     session.blast_zone(zone, 2, min_separation=1e-3)
 
-    arrangement = session.arrangement()
-    assert arrangement.regions
-    assert any(
-        arc.bridge_id is None
-        for region in arrangement.regions
-        for arc in region.arcs
-        if arc.kind == "unstable"
-    ), "the blast must leave at least one unstable arc with no bridge object"
+    trellis = session.trellis(fp)
+    gaps = [
+        (lo, hi)
+        for branch in trellis.unstable_branches
+        for lo, hi in zip(branch.ordered_ids(), branch.ordered_ids()[1:])
+        if not trellis.is_computed_arc(lo, hi)
+    ]
+    assert gaps, "the blast must leave a consecutive pair on two different curves"
 
-    representable = 0
-    for region in arrangement.regions:
-        if len(region.boundary_points) < 3:
-            # A blast puts crossings closer together than the manifold has nodes,
-            # so a face can end up with both of its arcs collapsed to the same
-            # chord. Such a face is real combinatorially and unrepresentable
-            # geometrically at this resolution; it has no representative point,
-            # and that is the honest answer rather than a fabricated one.
-            assert region.representative_point is None
-            assert region.area == 0.0
-            continue
-        assert region.verify_representative_point(), (
-            f"region {region.corners} has a representative point outside itself"
-        )
-        representable += 1
-    assert representable > 0, "the blast closed no representable face"
+    arrangement = session.arrangement()
+    unstable = {
+        arc.edge_key: arc
+        for face in arrangement.faces
+        for arc in face.arcs
+        if arc.kind == "unstable"
+    }
+    assert all(arrangement.trellis.is_computed_arc(arc.lo_id, arc.hi_id) for arc in unstable.values())
+    assert not {(arc.lo_id, arc.hi_id) for arc in unstable.values()} & set(gaps)
+    assert arrangement.euler_characteristic == 2 * arrangement.component_count
+    assert arrangement.regions
 
 
 # --------------------------------------------------------------------------- #
