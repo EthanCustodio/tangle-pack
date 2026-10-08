@@ -42,8 +42,25 @@ Implementation notes:
 * The iterate table is the only identity authority: r_{n+p} and every
   trajectory image are table lookups (Trellis.iterate). Since WP2 the table is
   filled by an exact rule after every detection and blast, so a missing link
-  is a missing image CROSSING, never a match to be made here by cdist (PK-3 /
-  D5 decide what to predict for it).
+  is a missing image CROSSING, never a match to be made here by cdist.
+* Period-k gaps (D5, WP5). A period-k chain is grown one map step at a time,
+  so its unstable branches are staggered: each reaches beta further than the
+  one before it in the cycle. A reference on the outermost lap of the longest
+  branch therefore has no computed +j image (inversion: the +1 image of the
+  window pair lies at unstable cdist 55.5 on u(0.0), which ends at 21.1; p3
+  at 6 blasts: 4097 against a last crossing at 1662), and its appearance on
+  that branch is not in the trellis. extend_pseudoneighbor_trajectories names
+  every stable branch left without it in ONE WARNING per branch, with each
+  missing member's image_cdist prediction; nothing is matched or invented.
+  Walking the other branches' windows instead finds "orphan" pairs there, but
+  their open stable interval holds the predicted images of the tip crossings,
+  so they are no pairs by the definition (they pass only because the
+  stable-side check reads registered crossings alone, NUM-18). Filling the
+  gap is DEC-19 (WP5 slice 2).
+* The strong pip cuts every stable branch of its orbit: its +j orbit point
+  is a stable-cdist threshold, read through Trellis.image_cdist (the table
+  first, else advance_key and beta-scaling), so a missing pip iterate is
+  PLACED and flagged in one WARNING (PK-6), never left uncut.
 * The algorithm walks *consecutive* intersections on the stable branch, so the
   open stable interval between a candidate pair is empty by construction; all
   the work is in the unstable-interval check.
@@ -91,6 +108,7 @@ from __future__ import annotations
 
 import logging
 import math
+from itertools import count
 from typing import Iterable, Optional, TYPE_CHECKING
 
 from ..numerics.Intersection import ManifoldKey
@@ -169,7 +187,7 @@ def compute_pseudoneighbors(
     # pip (and its iterates on the other branches): intersections beyond a cut
     # are not part of the (conceptually truncated) trellis, so they leave the
     # check set N.
-    _cut_ids, cut_cdists = _strong_pip_cuts(trellis)
+    cut_cdists = _strong_pip_cuts(trellis)
     candidates = [
         iid
         for iid in trellis.own_intersection_ids
@@ -236,7 +254,7 @@ def extend_pseudoneighbor_trajectories(
     registered image. On a period-k orbit this is what populates the OTHER
     branches: the reference window lives on the strong pip's branch only, and
     the trajectory's appearance on each remaining branch is its +1 .. +(k-1)
-    forward iterate.
+    forward iterate (D5).
 
     Args:
         trellis: The Trellis whose iterate table to walk.
@@ -245,21 +263,34 @@ def extend_pseudoneighbor_trajectories(
     Returns:
         The generated pairs (``is_reference=False``), deduplicated against the
         references and against each other.
+
+    Note:
+        A forward walk that stops before ``+(k-1)`` leaves the remaining
+        branches without this trajectory's appearance: its image crossings are
+        not computed (the stagger of a period-k chain, see the Dev Notes).
+        Nothing is invented for them; ONE WARNING per such stable branch names
+        it, each reference missing it, and where ``image_cdist`` predicts the
+        missing members on their unstable branch.
     """
     references = list(references)
     seen = {ref.as_tuple() for ref in references}
     out: list[PseudoneighborPair] = []
+    gaps: dict[ManifoldKey, list[str]] = {}
 
     for ref in references:
+        fixed_point = ref.branch_key[0]
         for direction in (1, -1):
             a, b = ref.intersection_a, ref.intersection_b
-            steps = 0
-            while True:
-                a = trellis.iterate(a, direction)
-                b = trellis.iterate(b, direction)
+            for steps in count(1):
+                a, b = trellis.iterate(a, direction), trellis.iterate(b, direction)
                 if a is None or b is None:
+                    if direction > 0:
+                        for j in range(steps, fixed_point.k_value):
+                            branch_key = fixed_point.advance_key(ref.branch_key, j)
+                            gaps.setdefault(branch_key, []).append(
+                                _missing_appearance(trellis, ref, j)
+                            )
                     break
-                steps += 1
                 key = (min(a, b), max(a, b))
                 if key in seen:
                     # The table is injective, so a collision means the rest of
@@ -281,15 +312,50 @@ def extend_pseudoneighbor_trajectories(
                     )
                 )
 
+    for branch_key, missing in gaps.items():
+        logger.warning(
+            "Stable branch %s gets no window hole from %s: the image crossings are not "
+            "computed (a period-k chain is grown one map step per branch, so the "
+            "outermost lap of the longest unstable branch has no image); nothing is "
+            "invented, grow or blast to register them (D5)",
+            _branch_text(branch_key),
+            "; ".join(missing),
+        )
     logger.debug("Extended %d reference pair(s) into %d iterated pair(s)",
                  len(references), len(out))
     return out
 
 
-def _pair_fixed_point(trellis: "Trellis", pair: PseudoneighborPair):
-    """The fixed point owning a pair's stable branch (None if unresolvable)."""
-    key = pair.branch_key or trellis.intersection(pair.intersection_a).manifold_b_key
-    return None if key is None else key[0]
+def _missing_appearance(trellis: "Trellis", ref: PseudoneighborPair, j: int) -> str:
+    """Why a reference has no ``+j`` appearance: where each unlinked member would land.
+
+    The landing is ``image_cdist`` on the unstable side, set against the last
+    registered crossing of that unstable branch: past it is the stagger, inside
+    it an image crossing the table does not link.
+    """
+    landings = []
+    for end in ref.as_tuple():
+        if trellis.iterate(end, j) is not None:
+            continue
+        key, cdist, _ = trellis.image_cdist(end, j, "unstable")
+        branch = trellis.branch(key)
+        if branch is None or not branch.intersection_ids:
+            where = "which has no crossing"
+        else:
+            last = trellis.intersection(branch.intersection_ids[-1]).unstable_cdist
+            where = (
+                f"past its last crossing at {last:.4g}" if cdist > last
+                else f"inside its crossings (last at {last:.4g}) but unlinked"
+            )
+        landings.append(f"{end} -> {cdist:.4g} on {_branch_text(key)}, {where}")
+    return f"reference {ref.as_tuple()} at +{j} ({', '.join(landings)})"
+
+
+def _branch_text(key: ManifoldKey) -> str:
+    """A branch as the warnings print it: ``s(1.0)``, ``A:u(2.0)`` when lettered."""
+    fixed_point, stability, orbit_index, branch_index = key
+    text = f"{stability[0]}({orbit_index}.{branch_index})"
+    return text if fixed_point.label is None else f"{fixed_point.label}:{text}"
 
 
 def _reference_branch(
@@ -328,43 +394,32 @@ def _reference_branch(
     return best_branch, best_id
 
 
-def _strong_pip_cuts(
-    trellis: "Trellis",
-) -> tuple[dict[ManifoldKey, int], dict[ManifoldKey, float]]:
-    """Per stable branch: the strong-pip cut point's id and stable cdist.
+def _strong_pip_cuts(trellis: "Trellis") -> dict[ManifoldKey, float]:
+    """Per stable branch: the stable cdist its strong-pip orbit point cuts it at.
 
-    Empty when no strong pip has been chosen. A period-k anchor is cut on all
-    ``k_value`` of its stable branches, by the pip and its k-1 forward
-    iterates; anything short of that (a gap in the iterate table, or two cut
-    points landing on one branch) leaves branches uncut and silently widens the
-    reference window there, so it is logged.
+    Empty when no strong pip has been chosen. The pip cuts its own branch and
+    its ``+1 .. +(k-1)`` iterates cut the others. An iterate the table does not
+    hold is placed by :meth:`Trellis.image_cdist` (D5), so no branch is ever
+    left uncut; a placed cut is flagged (one WARNING, PK-6).
     """
-    cut_ids: dict[ManifoldKey, int] = {}
-    cut_cdists: dict[ManifoldKey, float] = {}
-    cut_points = trellis.strong_pip_cut_points()
-    for iid in cut_points:
-        ix = trellis.intersection(iid)
-        if ix.manifold_b_key is not None:
-            cut_ids[ix.manifold_b_key] = iid
-            cut_cdists[ix.manifold_b_key] = ix.stable_cdist
-
-    pip = trellis.strong_pip_intersection
-    if pip is not None and pip.manifold_b_key is not None:
-        k_value = getattr(pip.manifold_b_key[0], "k_value", None)
-        if k_value is not None and (
-            len(cut_points) < k_value or len(cut_ids) < k_value
-        ):
-            logger.warning(
-                "Strong pip %s cuts only %d point(s) on %d stable branch(es), "
-                "but its fixed point has k_value %d; the remaining branches are "
-                "uncut and their reference windows run to the manifold end "
-                "(is the iterate table inferred?)",
-                trellis.strong_pip,
-                len(cut_points),
-                len(cut_ids),
-                k_value,
-            )
-    return cut_ids, cut_cdists
+    pip = trellis.strong_pip
+    if pip is None:
+        return {}
+    k_value = trellis.intersection(pip).manifold_b_key[0].k_value
+    cuts, placed = {}, []
+    for j in range(k_value):
+        key, cdist, from_table = trellis.image_cdist(pip, j, "stable")
+        cuts[key] = cdist
+        if not from_table:
+            placed.append(f"{_branch_text(key)} at {cdist:.6g}")
+    if placed:
+        logger.warning(
+            "Strong pip %s: %d of its %d orbit points are not registered; the cuts on "
+            "%s are placed by image_cdist (grow the stable manifold or blast to "
+            "register them)",
+            pip, len(placed), k_value, ", ".join(placed),
+        )
+    return cuts
 
 
 def _within_cut(ix, cut_cdists: dict[ManifoldKey, float], tol: float) -> bool:
