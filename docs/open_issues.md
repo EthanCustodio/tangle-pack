@@ -71,7 +71,9 @@ The current fixture never reaches this code because it has no pairs. `TrellisBra
 **Evidence:** `src/tanglepack/topology/StablePartition.py:214-235` (DEFERRED Dev Note), `:662`→`:2147`; `stress/numerics/report/report.tex:941, 956-967, 2009-2014`; `stress/numerics/report/numbers_extra.tex:297`; `stress/numerics/e07_breaking.py:312-318`; probe `inv.py` (steps 4, 5 ERR)
 
 ### INV-4: No usable inversion fixture: the k=10 saddle escapes, has no pseudoneighbors and no holes, so most laws are N/A
-**Status:** open | **Severity:** high | **Related:** INV-2, INV-11, TEST-1, DEC-4 | **WP:** WP1
+**Status:** closed (WP1) | **Severity:** high | **Related:** INV-2, INV-11, TEST-1, DEC-4 | **WP:** WP1
+
+**WP1:** the k=4 other-root saddle is the law case `inversion` at 0, 1 and 2 blasts (`tests/cases.py` `build_inversion`); the k=10 saddle survives as the numerics fixture `build_k10_inversion`. Holes are 1 / 7 / 0: the 0 at two blasts is INV-2 (with the lap factor patched to β^k they are 1 / 9 / 9), so the vacuous laws there are strict xfails naming WP2.
 
 `build_inversion` grows k=10 to 6/5 steps:
 - 7 steps raises PointBudgetExceeded, and points jump from 196 to 49,417 between steps 5 and 6. The window between "too shallow" and "escaped" is one step wide.
@@ -765,28 +767,34 @@ The map is at most 0.84% of growth time; refinement plus the linked list take 75
 ## Tests & coverage gaps
 
 ### TEST-1: No law case combines inversion with period-k, no nested case blasts its inner zone, and there is no heteroclinic or det<0 case
-**Status:** open | **Severity:** medium | **Related:** INV-4, INV-11, NEST-1, NEST-3 | **WP:** WP1
+**Status:** partly closed (WP1) | **Severity:** medium | **Related:** INV-4, INV-11, NEST-1, NEST-3 | **WP:** WP1
+
+**WP1:** the k=4 inversion cases and `nested_inner_blasts` (2 outer + 2 inner blasts) are law cases. Inversion × period-k waits for WP3: the period-2 orbits with both eigenvalues of DM² negative (k ≥ 4.1) cross only at their 8 anchors at 3-5 steps, so the partition raises INV-3, and they escape at about 6 steps for k=4.5. Heteroclinic is WP9 (NEST-1); det<0 is out of scope by C3.
 
 `LAW_CASES` are k10, k28_one_blast, k28_two_blasts, p3 (13 steps, unblasted), nested (2 outer, 0 inner) and inversion (no holes). Inner blasting goes untested even though E11 nested_inner grows 13→55. There is no inversion or det<0 case in E11 or in the deep sweep.
 
 **Evidence:** `tests/cases.py:385-388, 493-501, 745-752`
 
 ### TEST-2: No law asserts structural stability under blasting
-**Status:** open | **Severity:** medium | **Related:** BCG-1, BCG-4, BCG-7 | **WP:** WP1
+**Status:** closed (WP1) | **Severity:** medium | **Related:** BCG-1, BCG-4, BCG-7 | **WP:** WP1
+
+**WP1:** `tests/regression/test_class_count_under_blasting.py` runs the D1 loop on `cases.SERIES` (k28 8 blasts, p3 9 blasts, inversion 2 blasts): the TOTAL class count never decreases, is constant while the hole set is constant, and every class has a member in the minimal trellis. Their strict xfails name WP2 (inversion) and WP6 (BCG-1/2). The count is total, not per kind: per kind it moves legitimately (k28 blast 0→1 turns two active classes inert once their image loops are registered; reference switches merge inert classes).
 
 Nothing checks that "more blasts refine, never contradict": a stable hole set between switches, class count independent of blast count between switches, or letters kept. The p3 burst and the linear growth pass a green suite (833 pass). `laws.py` reads the class count but never bounds it. Under the no-golden policy and the "topology change is expected" rule, this has to be a rule-based law.
 
 **Evidence:** `tests/helpers/laws.py:1974`; `tests/regression/test_blast_monotonicity.py`; `tests/conftest.py:61-66`; memory `topology-change-is-expected`
 
 ### TEST-3: NOT_APPLICABLE pairs are dropped inside the layer tests, so pytest reports 0 skips
-**Status:** open | **Severity:** low | **Related:** INV-4 | **WP:** WP1
+**Status:** closed (WP1) | **Severity:** low | **Related:** INV-4 | **WP:** WP1
+
+**WP1:** every not-applicable pair has its own set-aside test, which runs the law, insists it still checks nothing and reports a visible skip (19 today); known issues share the same test as strict xfails.
 
 The 15+ laws switched off on inversion, and the k10/p3/k28 exclusions, never appear in the summary. Last run: 833 passed, 3 deselected, 11 xfailed, 0 skipped, 100.88 s.
 
 **Evidence:** `tests/helpers/law_tier.py:186-202`; `tests/cases.py:849-889`
 
 ### TEST-4: Provisional, untested rules
-**Status:** provisional | **Severity:** low | **Related:** API-5 | **WP:** WP1
+**Status:** provisional (WP1: no decision; anchor faces go with API-5 in WP3) | **Severity:** low | **Related:** API-5 | **WP:** WP1
 
 - The refined-point cdist is the mean of its neighbours.
 - Anchor faces never close (the `grow_until_faces_closed` cap).
@@ -794,7 +802,9 @@ The 15+ laws switched off on inversion, and the k10/p3/k28 exclusions, never app
 **Evidence:** `tests/conftest.py:68-83`; `docs/regions_bridge_identity_and_cleanup_plan.md:250`
 
 ### TEST-5: Test-policy open items
-**Status:** open | **Severity:** low | **Related:** NUM-8 | **WP:** WP1
+**Status:** closed (WP1) | **Severity:** low | **Related:** NUM-8 | **WP:** WP1
+
+**WP1:** (a) the `generation_bump` cache cell runs on `build_k28(blasts=1)` plus one blast and asserts the direct view changed; (b) the seed-seam stand-in is accepted (the real k=2.1 run never reaches near-ULP) and the private `_man_machine` poke is gone; (c) is a strict xfail `three_tangles_take_three_families` for WP9; (d) was already done in `e963893`.
 
 - `generation_bump` cache cells are blind on k10.
 - The p3 near-ULP regression uses a seed-seam stand-in.
@@ -984,5 +994,22 @@ Each WP runs on its own branch `wp/<n>-<slug>` through analyst → planner → t
 | WP11 | Simplification sweep and API traps | INV-11, SIMP-*, API-3, 4, 6, 7, TEST-6 |
 | WP12 | Rerun E7/E11 and the figures, confirm class counts plateau, update CLAUDE.md / knowledge / memory, close issues | NUM-5..7, PERF-2, PERF-5, DOC-1..5 |
 | deferred | — | NUM-3, NUM-4, NUM-17, NUM-18, PERF-3 |
+
+### Laws added by WP1
+
+Each strict xfail below is a `cases.KNOWN_ISSUES` entry naming the WP that turns it green; an XPASS fails the run, so that WP removes the entry.
+
+| Law | Cases that xfail | WP |
+|---|---|---|
+| `cross_side_only_within_a_branch` (D4; replaces `itinerary_pairs_same_side`) | inversion, inversion_two_blasts | WP3 (INV-6) |
+| `every_active_class_walks` (D3) | none (not applicable on p3 and k28_one_blast: singleton words) | — |
+| `no_virtual_class` (D3) | inversion, inversion_one_blast, inversion_two_blasts | WP3 (INV-1/INV-6) |
+| `alphabet_inside_minimal_trellis` (D2) | inversion, inversion_one_blast, inversion_two_blasts | WP6 (BCG-1) |
+| `series_class_count_never_decreases` (D1) | inversion_series | WP2 (INV-2) |
+| `series_class_count_constant_while_holes_constant` (D1, D2) | k28_series, p3_series; inversion_series | WP6 (BCG-1/2); WP2 (INV-2) |
+| `series_alphabet_inside_minimal_trellis` (D2) | k28_series, p3_series, inversion_series | WP6 (BCG-1) |
+| `three_tangles_take_three_families` (TEST-5(c)) | hand_built | WP9 |
+
+The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases `one_anchor_per_unstable_branch`, `arrangement_euler`, `anchor_bridge_class_leads_its_tangle`, `partition_singletons` and `stable_nodes_never_own_a_singleton` (WP3, INV-1), `arrangement_regions_disjoint` (WP10, NUM-16) and, on `inversion_two_blasts`, the 15 hole-dependent laws that are vacuous with 0 holes (WP2, INV-2); on `nested_inner_blasts` `arrangement_regions_sound` and `arrangement_regions_disjoint` (WP10, NUM-16). WP2 must add `stable_nodes_never_own_a_singleton` on `inversion_two_blasts` (WP3) once holes appear there.
 
 Verification of the "possibly stale" items (WP0): DOC-3 is confirmed open (the MinimalTrellis "definition is changing", TrellisBranch `return_period`, ResonanceZone "no inversion example", PartitionFamily "concurrent edit" and StrongPip "legitimately None" notes are all still present). PK-7 is confirmed dead code (WP2 deletes it). INV-10, NUM-19 and DOC-4 need a run; they are checked by the WP that owns them.

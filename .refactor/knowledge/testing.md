@@ -108,3 +108,50 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   the class; `max_points` on `blast_zone` is a PER-CALL budget (author to confirm);
   `scripts/*.ipynb` now refine at 1e-7; committed `figures/.../nested_p1_p3/partitions.png`
   was already stale at 8148d48 (crossing-id labels only).
+
+## Open-issues round WP1 (2026-10-07, branch `oi/wp01-decision-laws`, base `d76ef7c`)
+
+- Tests only; `src/` byte-identical. Law cases now `k10, k28_one_blast, k28_two_blasts, p3,
+  nested, nested_inner_blasts, inversion, inversion_one_blast, inversion_two_blasts`.
+  `inversion*` = the k=4 OTHER root `(1-sqrt5, sqrt5-1)` (eigenvalues -1.96/-0.51),
+  `area_cutoff=1e-5`, 11/11 steps (12 escapes), zone at `f(q0)` via the shared k28 recipe
+  `cases._zone_at_image_pip`, 0/1/2 blasts, each build ~0.1-0.2 s. Holes 1 / 7 / 0; the 0 at two
+  blasts is INV-2 (patching `Trellis.lambda_u` to beta^k gives 1 / 9 / 9). The old k=10 saddle is
+  `build_k10_inversion`, only behind the numerics fixtures `henon_inversion*` (moving those to
+  k=4 is WP3). `nested_inner_blasts` = `build_nested(inner_blasts=2)`; other blast counts are
+  named `nested_<outer>_<inner>`.
+- New laws: symbolic `cross_side_only_within_a_branch` (D4; replaced `itinerary_pairs_same_side`),
+  `every_active_class_walks` (D3; walk status unique/trivial unless a landing is a singleton;
+  not applicable on p3 and k28_one_blast, whose active classes all land on singletons),
+  `no_virtual_class` (D3); classes `alphabet_inside_minimal_trellis` (D2).
+- Blast series (`cases.SERIES`, `blast_series`, `tests/regression/test_class_count_under_blasting.py`):
+  the D1 loop on one session from the zone stage (k28 8 blasts, p3 9, inversion 2;
+  `min_separation=1e-5`, `diagnose=False`), ~5 s total, cached per run in immutable
+  `SeriesStep`s. Counts today: k28 classes 3,3,4,4,4,4,6,7,23 (holes switch at 2 and 8); p3
+  9 x6, 23, 25, 27, 29 (switch at 6); inversion 6, 11, 6 (holes 1, 7, 0). The law compares the
+  TOTAL class count, not per kind: per kind moves legitimately (k28 0->1 active 3->1 as image
+  loops register, inert drops at reference switches). Author may overrule (D1 said "the class
+  count"); the per-kind counts are recorded, so it is a one-line change.
+- Set-aside tests: `helpers.law_tier.layer_tests(layer) -> (test_<layer>_laws,
+  test_<layer>_set_aside)`; the set-aside test is a strict xfail for a known issue and, for a
+  not-applicable pair, runs the law, asserts count 0 and skips with
+  "not applicable: <law> on <case>: <reason>" (19 skips). `KnownIssue.wp` names the fixing WP
+  (or `C3`), reasons lead with the catalog id; the meta test checks `WP\d+|C\d`, KI/NA disjoint,
+  law-tier pairs on LAW_CASES.
+- KNOWN_ISSUES 11 -> 52 (6 kept, re-tagged; 5 k=10 inversion entries removed; 46 new naming
+  WP2/WP3/WP6/WP9/WP10, none WP1). NOT_APPLICABLE 28 -> 19. WP2 must drop the 15 vacuous
+  `inversion_two_blasts` entries when holes appear and ADD `stable_nodes_never_own_a_singleton`
+  there (WP3).
+- TEST-5: `generation_bump` cache cells run on `build_k28(blasts=1)` + one blast and assert the
+  direct view changed; the p3 near-ULP stand-in is accepted (constructor `area_cutoff`, no
+  `_man_machine` poke); three tangles -> strict xfail `three_tangles_take_three_families` (WP9).
+- Break-it (copied tree): `cross_side = True` reddens symbolic on p3/nested/inversion_one_blast;
+  DualWalk status "unreachable" for one walk reddens `every_active_class_walks` on k10; a class
+  decrease after blast 1 (NOT on the last step: k28 jumps 7 -> 23 there, so -1 is invisible)
+  reddens `never_decreases`; a false NA pair fails its set-aside test with "now checks".
+- Inversion x period-k: no fixture builds today (period-2 orbits with negative DM^2 eigenvalues
+  at k >= 4.1 cross only at their 8 anchors at 3-5 steps -> INV-3; k=4.5 escapes ~6 steps); WP3.
+- Suite after WP1: 871 passed, 19 skipped, 3 deselected, 52 xfailed, ~113 s (base on the same
+  machine 833 passed / 11 xfailed, ~106 s). The k=10 inversion law builds (1.3 s per module)
+  are gone; `nested_inner_blasts` (~0.6 s per module), the three k=4 cases, the series (~5 s)
+  and the k28 generation_bump cells more than offset that.
