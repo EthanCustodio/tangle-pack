@@ -7,8 +7,10 @@ image of the pair's unstable arc on its own polyline was scaled back eight
 steps, and the scaling noise there (2e-6 relative) exceeded the gap, so it
 landed a hair inside the pair. A landing is now read against the pair's
 registered images. Rule-based: every reference lost between the two
-recomputes has a witness the iterate table names, and the class count does
-not decrease (D1); no id or count is pinned.
+recomputes has a witness the iterate table names, consistent in every frame
+it is registered in (an order flip made by cdist noise -- 725 = M(439)
+between M(37) and M(38) while 439 lies outside (37, 38) -- is no witness),
+and the class count does not decrease (D1); no id or count is pinned.
 """
 
 from __future__ import annotations

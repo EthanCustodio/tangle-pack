@@ -1429,9 +1429,13 @@ def reference_witness(trellis, pair: tuple[int, int]) -> Optional[str]:
     The definition (``Pseudoneighbor_Algorithm.pdf``) kills a pair when its open
     stable or unstable interval holds a point of X = every iterate of a
     crossing. Read off the snapshot's orderings and the iterate table alone (no
-    scaling, no tolerance): a crossing strictly between the two on either
+    scaling, no tolerance): a crossing ``w`` strictly between the two on either
     branch, or strictly between their registered images ``M^n(x0)``,
     ``M^n(x1)`` on either branch (the image of an interval is an interval).
+    The map preserves order along a branch, so a witness must hold in EVERY
+    frame where the table registers ``M^m(w)`` beside the pair's images: one
+    whose own chain falls outside the pair there is an order flip made by
+    cdist noise, not a point of X between them, and is rejected.
 
     Args:
         trellis: The later recompute's per-fixed-point trellis.
@@ -1440,25 +1444,42 @@ def reference_witness(trellis, pair: tuple[int, int]) -> Optional[str]:
     Returns:
         The witness, described, or None when the table names none.
     """
-    def between(x: int, y: int) -> Optional[str]:
+    frames = {0: pair}
+    for step in (1, -1):
+        x, y, n = *pair, 0
+        while (x := trellis.iterate(x, step)) is not None and (
+            y := trellis.iterate(y, step)
+        ) is not None:
+            n += step
+            frames[n] = (x, y)
+
+    def inside(w: int, x: int, y: int, stability: str) -> Optional[bool]:
+        """Whether w lies strictly between x and y on their branch; None off it."""
+        branch = trellis.branch_containing(x, stability)
+        if branch is None or not {y, w} <= set(branch.intersection_ids):
+            return None
+        i, j, k = (branch.intersection_ids.index(z) for z in (x, y, w))
+        return min(i, j) < k < max(i, j)
+
+    def consistent(w: int, n: int, stability: str) -> bool:
+        """No other frame orders ``M^(m-n)(w)`` outside the pair's images."""
+        for m, (x, y) in frames.items():
+            image = trellis.iterate(w, m - n) if m != n else None
+            if image is not None and inside(image, x, y, stability) is False:
+                return False
+        return True
+
+    for n, (x, y) in sorted(frames.items(), key=lambda item: abs(item[0])):
         for stability in ("stable", "unstable"):
             branch = trellis.branch_containing(x, stability)
             if branch is None or y not in branch.intersection_ids:
                 continue
             ids = branch.intersection_ids
             i, j = sorted((ids.index(x), ids.index(y)))
-            if j - i > 1:
-                return f"{ids[i + 1:j]} between {x} and {y} on their {stability} branch"
-        return None
-
-    frames = [pair]
-    for step in (1, -1):
-        x, y = pair
-        while (x := trellis.iterate(x, step)) is not None and (
-            y := trellis.iterate(y, step)
-        ) is not None:
-            frames.append((x, y))
-    return next((witness for x, y in frames if (witness := between(x, y))), None)
+            for w in ids[i + 1:j]:
+                if consistent(w, n, stability):
+                    return f"{w} between {x} and {y} on their {stability} branch (frame {n})"
+    return None
 
 
 # --------------------------------------------------------------------------- #
