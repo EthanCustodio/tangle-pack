@@ -37,7 +37,7 @@ EXPERIMENTS = {
     "e10": "e10_determinism",
     "e11": "e11_blast_depth",
 }
-OUTCOMES = ("ok", "exception", "timeout", "oom", "invariant_assert", "crash")
+OUTCOMES = ("ok", "exception", "point_budget", "timeout", "oom", "invariant_assert", "crash")
 
 #: Set by the scripts' ``--quick`` flag before the first ``load``.
 QUICK = False
@@ -96,6 +96,16 @@ def ok(prefix: str, **config) -> list[dict]:
 
 def matches(record: dict, config: dict) -> bool:
     return all(record["config"].get(k) == v for k, v in config.items())
+
+
+def status(record: dict) -> str:
+    """The record's outcome, with the library's point-budget stop told apart.
+
+    A ``PointBudgetExceeded`` (the per-step cap, 2026-10-07) is an ``exception``
+    record carrying ``metrics["point_budget"]``; figures draw it as its own
+    status, ``point_budget``, so it is not mistaken for a crash of the code.
+    """
+    return "point_budget" if "point_budget" in record["metrics"] else record["outcome"]
 
 
 def outcome_counts(prefix: str) -> dict[str, int]:
@@ -358,7 +368,7 @@ def e03_growth() -> dict[tuple[float, float], dict]:
             **s, "lambda_u": num(r["metrics"].get("lambda_u")), "baseline_rss_mb": baseline,
             "step_fit": step_fit, "bytes_per_point_fit": mem,
             "bytes_per_point_last": float(s["bytes_per_point"][-1]) if len(s.get("bytes_per_point", [])) else None,
-            "stop_reason": r["metrics"].get("stop_reason"), "outcome": r["outcome"],
+            "stop_reason": r["metrics"].get("stop_reason"), "outcome": status(r),
         }
     return out
 
@@ -599,6 +609,10 @@ def e09_rows() -> list[dict]:
             "brute": num(m.get("brute_crossings")), "matched": num(m.get("matched")),
             **{k: num(m.get(k)) for k in (*E9_MISSED, *E9_EXTRA)},
             "uu": m.get("uu_crossings", "missing"),
+            # the library's own diagnostic (2026-10-07): u x u / s x s in the tangle box, any outside
+            "lib_uu": num(m.get("lib_same_stability_unstable_in")),
+            "lib_ss": num(m.get("lib_same_stability_stable_in")),
+            "lib_out": num(m.get("lib_same_stability_out")),
         })
     return rows
 
@@ -662,10 +676,15 @@ E11_CUTOFF = 1e-7
 E11_SEPARATION = {"k28": 1e-5, "k32": 1e-5, "p3": 1e-5, "nested_outer": 1e-4, "nested_inner": 1e-4}
 E11_KINDS = ("canonical", "separation", "cutoff", "iterations", "repeat")
 #: message fragment -> (short name, where it is raised); every topology error seen.
+#: The first campaign's messages are kept so its records still classify; since
+#: 2026-10-07 (WP7) the hole-side assertion lists one SideDiagnosis per hole.
 E11_ERRORS = {
-    "is not inside its parent": ("zero-width iterated element", "PartitionFamily.from_minimal"),
+    "is not inside its parent": ("iterated element outside its parent", "PartitionFamily.from_minimal"),
     "disagree on bridge_side": ("holes disagree on bridge side", "check_holes_share_bridge_side"),
+    "on its image sub-arc": ("holes disagree on bridge side", "check_holes_share_bridge_side"),
+    "its orbit expects": ("holes disagree on bridge side", "check_holes_share_bridge_side"),
     "faces of positive traversal area": ("several outer faces", "DualGraph (arrangement component)"),
+    "no face of positive traversal area": ("several outer faces", "DualGraph (arrangement component)"),
     "approaches its two defining crossings": ("bridge rows disagree", "check_bridge_rows_consistent"),
 }
 #: per-blast event of one config, in drawing order
@@ -687,12 +706,21 @@ def e11_kind(record: dict) -> tuple[str, Any]:
 
 
 def e11_records() -> list[dict]:
-    """Every e11 record, by case, then sweep, then swept value (None first)."""
+    """Every e11 record of the main grid, by case, then sweep, then swept value (None first).
+
+    The ``resolution_pass`` cells (:func:`e11_resolution_cells`) are left out:
+    their per-blast same-stability pass changes how deep they can blast.
+    """
     def key(r):
         kind, value = e11_kind(r)
         return (E11_CASES.index(r["config"]["case"]), E11_KINDS.index(kind),
                 -1 if value is None else num(value))
-    return sorted(load("e11"), key=key)
+    return sorted((r for r in load("e11") if not r["config"].get("resolution_pass")), key=key)
+
+
+def e11_resolution_cells() -> dict[str, dict]:
+    """case -> the canonical cell rerun with the library's per-blast same-stability pass."""
+    return {r["config"]["case"]: r for r in load("e11") if r["config"].get("resolution_pass")}
 
 
 def e11_reference() -> dict[str, dict]:

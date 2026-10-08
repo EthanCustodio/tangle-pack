@@ -25,6 +25,12 @@ unstable polylines are also tested against each other (non-adjacent segments
 only): a proper u x u crossing is a polygon that breaks the fundamental
 invariant at the discretisation level (``uu_crossings``; skipped above
 ``UU_MAX_SEGMENTS``).
+
+Since the 2026-10-07 resolution guards the library flags the same artifacts
+itself: ``compute_intersections`` runs with ``diagnose=False`` (so
+``library_s`` stays comparable with the first campaign) and
+``workbench.check_resolution`` is timed apart (``diagnose_s``); its counts
+are the ``lib_*`` metrics (``maps.resolution_metrics``).
 """
 
 from __future__ import annotations
@@ -36,7 +42,7 @@ from itertools import combinations
 import numpy as np
 
 import harness
-from maps import saddle_session
+from maps import resolution_metrics, saddle_session
 
 sys.path.insert(0, str(harness.REPO / "tests"))
 
@@ -259,8 +265,14 @@ def run(config: dict, rec: harness.Recorder) -> None:
     rec.checkpoint()
 
     t0 = time.perf_counter()
-    session.compute_intersections([fp], infer_iterates=False)
+    registry = session.compute_intersections([fp], infer_iterates=False, diagnose=False)
     rec.metric("library_s", time.perf_counter() - t0)
+    # The library's own resolution pass, timed apart so library_s stays comparable.
+    t0 = time.perf_counter()
+    report = session.workbench.check_resolution([fp])
+    rec.metric("diagnose_s", time.perf_counter() - t0)
+    for name, value in resolution_metrics(report, registry).items():
+        rec.metric(f"lib_{name}", value)
     t0 = time.perf_counter()
     found = brute_force(session)
     rec.metric("brute_s", time.perf_counter() - t0)

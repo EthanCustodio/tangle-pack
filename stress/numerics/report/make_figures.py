@@ -44,10 +44,11 @@ RAMP = LinearSegmentedColormap.from_list("blue_ramp", ["#cde2fb", "#0d366b"])
 CPU, GPU = BLUE, ORANGE
 CASE_COLORS = {"k28": BLUE, "p3": AQUA, "k10": VIOLET, "nested": MAGENTA, "inversion": YELLOW,
                "k32": ORANGE, "nested_outer": MAGENTA, "nested_inner": GREEN}
-STATUS_COLORS = {"ok": GREEN, "exception": RED, "timeout": YELLOW, "oom": VIOLET,
+STATUS_COLORS = {"ok": GREEN, "exception": RED, "point_budget": ORANGE, "timeout": YELLOW, "oom": VIOLET,
                  "invariant_assert": MAGENTA, "crash": INK}
-STATUS_LABELS = {"ok": "ok", "exception": "exception", "timeout": "timeout", "oom": "out of memory",
-                 "invariant_assert": "invariant assert", "crash": "crash"}
+STATUS_LABELS = {"ok": "ok", "exception": "exception", "point_budget": "point budget (library)",
+                 "timeout": "timeout", "oom": "out of memory", "invariant_assert": "invariant assert",
+                 "crash": "crash"}
 # Pipeline stages; growth in the blue ramp, the later stages after the cases' colours.
 STAGE_COLORS = {"grow_unstable": "#0d366b", "grow_stable": "#7fb0ee", "compute_intersections": GREEN,
                 "trim_and_bridges": RED, "infer_iterate_table": VIOLET}
@@ -762,9 +763,10 @@ def fig_e07_escape() -> None:
     ax.plot(step, points, color=INK, marker="o", ms=3, label="fixed step count")
     bx.plot(step, max_abs, color=INK, marker="o", ms=3, label="fixed step count")
     if fixed["outcome"] != "ok":
+        ended = A.status(fixed)
         for axis, y in ((ax, points), (bx, max_abs)):
-            axis.plot(step[-1], y[-1], ls="", marker="X", ms=8, color=STATUS_COLORS.get(fixed["outcome"], INK),
-                      label=f"run ended: {STATUS_LABELS.get(fixed['outcome'], fixed['outcome'])}")
+            axis.plot(step[-1], y[-1], ls="", marker="X", ms=8, color=STATUS_COLORS.get(ended, INK),
+                      label=f"run ended: {STATUS_LABELS.get(ended, ended)}")
     # Stop runs that end on the same step sit side by side, not on top of each other.
     stops = {"arclength": (VIOLET, "^", -0.15), "predicate": (AQUA, "D", 0.15)}
     for r in records:
@@ -826,7 +828,7 @@ def fig_e07_blasts() -> None:
         axes[2].plot(idx, A.arr(s.get("bridges", [])), marker="o", ms=3, color=color)
         if r["outcome"] != "ok":
             for axis, key in ((axes[1], "crossings"), (axes[2], "bridges")):
-                axis.plot(idx[-1], A.num(s[key][-1]), ls="", marker="X", ms=7, color=STATUS_COLORS.get(r["outcome"], INK))
+                axis.plot(idx[-1], A.num(s[key][-1]), ls="", marker="X", ms=7, color=STATUS_COLORS.get(A.status(r), INK))
     axes[0].set_yscale("log")
     axes[1].set_yscale("log")
     axes[2].set_yscale("log")
@@ -838,7 +840,7 @@ def fig_e07_blasts() -> None:
         axis.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
         panel(axis, letter, title)
     handles, _ = axes[0].get_legend_handles_labels()
-    failed = {r["outcome"] for r in records if r["outcome"] != "ok"}
+    failed = {A.status(r) for r in records if r["outcome"] != "ok"}
     handles += [Line2D([], [], ls="", marker="X", color=STATUS_COLORS[o], label=f"stopped: {STATUS_LABELS[o]}")
                 for o in A.OUTCOMES if o in failed]
     fig.legend(handles=handles, loc="outside lower center", ncol=min(len(handles), 2), fontsize=7)
@@ -861,7 +863,7 @@ def fig_e07_depth() -> None:
         for r in mine:
             if r["outcome"] != "ok":
                 ax.plot(r["config"]["unstable_steps"], pipeline_s(r), ls="", marker="X", ms=7,
-                        color=STATUS_COLORS.get(r["outcome"], INK))
+                        color=STATUS_COLORS.get(A.status(r), INK))
     ax.set_yscale("log")
     ax.set_xlabel("unstable steps")
     ax.set_ylabel("pipeline time (s)")
@@ -875,7 +877,7 @@ def fig_e07_depth() -> None:
         for r in (r for r in records if r["config"]["case"] == case):
             m = r["metrics"]
             if layer == "numerics":
-                status = r["outcome"] if r["outcome"] != "ok" or m.get("numerics_done") else "exception"
+                status = A.status(r) if r["outcome"] != "ok" or m.get("numerics_done") else "exception"
                 reliable = True
             else:
                 status, reliable = m.get("topology_outcome"), m.get("is_reliable", True)
@@ -903,27 +905,34 @@ def fig_e07_tangency() -> None:
         raise Skip("no e07 tangency records with crossings")
     cutoffs = sorted({r["config"]["area_cutoff"] for r in records}, reverse=True)
     colors = dict(zip(cutoffs, ramp(len(cutoffs))))
-    fig, (ax, bx) = plt.subplots(1, 2, figsize=WIDE, sharex=True)
+    fig, (ax, bx, cx) = plt.subplots(1, 3, figsize=(6.3, 2.5), sharex=True)
     for cutoff in cutoffs:
         mine = sorted((r for r in records if r["config"]["area_cutoff"] == cutoff), key=lambda r: r["config"]["k"])
         x = [r["config"]["k"] + 1 for r in mine]
-        ax.plot(x, [A.num(r["metrics"]["non_anchor_crossings"]) for r in mine], marker="o", ms=3,
-                color=colors[cutoff], label=f"cutoff {sci(cutoff)}")
-        bx.plot(x, [A.num(r["metrics"].get("min_sin")) for r in mine], marker="o", ms=3, color=colors[cutoff],
-                label=f"cutoff {sci(cutoff)}")
+        style = dict(marker="o", ms=2.5, color=colors[cutoff], label=f"cutoff {sci(cutoff)}")
+        ax.plot(x, [A.num(r["metrics"]["non_anchor_crossings"]) for r in mine], **style)
+        bx.plot(x, [A.num(r["metrics"].get("min_sin")) for r in mine], **style)
+        # The library's resolution flag (2026-10-07): crossings whose chord-deviation
+        # ratio is below the workbench threshold, as a share of the registered ones.
+        cx.plot(x, [A.num(r["metrics"].get("unresolved")) / max(A.num(r["metrics"]["non_anchor_crossings"]), 1)
+                    for r in mine], **style)
     ref = sorted({(r["config"]["k"] + 1, A.num(r["metrics"].get("splitting_reference"))) for r in records})
     bx.plot(*zip(*ref), color=INK, ls="--", lw=0.9, label=r"$e^{-\pi^2/\ln\lambda}$ (heuristic)")
-    for axis in (ax, bx):
+    for axis in (ax, bx, cx):
         axis.set_xscale("log")
-        axis.set_xlabel("$k + 1$ (distance to the saddle-centre bifurcation)")
+        axis.set_xlabel("$k + 1$")
     ax.set_yscale("log")
     bx.set_yscale("log")
+    cx.set_ylim(-0.03, 1.03)
     ax.set_ylabel("crossings (no anchors)")
     bx.set_ylabel("smallest |sin| at a crossing")
-    ax.legend(loc="upper right", fontsize=6.5)
-    bx.legend(loc="lower right", fontsize=6.5)
+    threshold = next((A.num(r["metrics"].get("resolution_threshold")) for r in records), np.nan)
+    cx.set_ylabel(f"share flagged (ratio < {threshold:g})")
+    ax.legend(loc="upper right", fontsize=6)
+    bx.legend(loc="lower right", fontsize=6)
     panel(ax, "a", "crossings near tangency")
-    panel(bx, "b", "crossing angle vs splitting")
+    panel(bx, "b", "angle vs splitting")
+    panel(cx, "c", "flagged by the library")
     save(fig, "e07_tangency")
 
 
@@ -1269,6 +1278,42 @@ def fig_e11_cost() -> None:
     save(fig, "e11_cost")
 
 
+def fig_e11_resolution() -> None:
+    """The library's resolution flags under deep blasting (2026-10-07)."""
+    cells, refs = A.e11_resolution_cells(), A.e11_reference()
+    if not cells:
+        raise Skip("no e11 resolution-pass cells")
+    fig, axes = plt.subplots(1, 3, figsize=(6.3, 2.7))
+    for case, r in cells.items():
+        s, color = r["series"], CASE_COLORS[case]
+        blast = A.arr(s["blast"])
+        inside = A.arr(s["same_stability_unstable_in"]) + A.arr(s["same_stability_stable_in"])
+        axes[0].plot(blast, inside, color=color, marker="o", ms=2.5, label=case)
+        keep = blast > 0
+        axes[1].plot(A.arr(s["blast_s"])[keep], A.arr(s["resolution_s"])[keep], color=color, marker="o", ms=2.5)
+    for case, r in refs.items():
+        s = r["series"]
+        axes[2].plot(A.arr(s["blast"]), A.arr(s["unresolved"]), color=CASE_COLORS[case], marker="o", ms=2.5)
+    axes[0].set_yscale("symlog", linthresh=1)
+    axes[2].set_yscale("symlog", linthresh=1)
+    axes[1].set_xscale("log")
+    axes[1].set_yscale("log")
+    lo, hi = axes[1].get_xlim()
+    axes[1].plot([lo, hi], [lo, hi], color=INK2, ls="--", lw=0.8, label="pass = blast")
+    axes[0].set_ylabel("same-stability crossings in the box")
+    axes[1].set_ylabel("time of the pass (s)")
+    axes[2].set_ylabel("crossings below the ratio threshold")
+    axes[0].set_xlabel("blasts done")
+    axes[1].set_xlabel("time of the blast (s)")
+    axes[2].set_xlabel("blasts done")
+    for axis, letter, title in zip(axes, "abc", ("polygon artifacts", "cost of the pass", "unresolved (reference)")):
+        panel(axis, letter, title)
+    axes[1].legend(loc="upper left", fontsize=6)
+    handles = [Line2D([], [], color=CASE_COLORS[c], marker="o", label=c) for c in cells]
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), fontsize=6.5)
+    save(fig, "e11_resolution")
+
+
 E11_COLUMNS = ([("separation", v) for v in (None, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2)]
                + [("cutoff", v) for v in (1e-5, 1e-6, 1e-8)])
 
@@ -1546,7 +1591,7 @@ FIGURE_FUNCTIONS = [
     fig_e08_solver_outcomes, fig_e08_orbits, fig_e08_solve_time,
     fig_e09_intersections,
     fig_e10_determinism,
-    fig_e11_evolution, fig_e11_events, fig_e11_cost, fig_e11_parameters, fig_e11_agreement,
+    fig_e11_evolution, fig_e11_events, fig_e11_cost, fig_e11_parameters, fig_e11_agreement, fig_e11_resolution,
     fig_e11_provisional,
     fig_overview,
 ]

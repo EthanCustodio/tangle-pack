@@ -519,11 +519,13 @@ def e09() -> None:
         uu_text = "n/a" if all(v is None for v in uu_vals) else f"{sum(v for v in uu_vals if v is not None):.0f}" + (
             "$^*$" if None in uu_vals else "")
         table.append([case, str(len(mine)), s("brute"), s("matched"), s("near_parallel"), s("zigzag"),
-                      s("collision"), s("missed_unexplained"), s("extra_touch"), s("extra_unexplained"), uu_text])
-    write_table("e09_intersections", "lrrrrrrrrrr",
+                      s("collision"), s("missed_unexplained"), s("extra_touch"), s("extra_unexplained"), uu_text,
+                      f"{s('lib_uu')}/{s('lib_ss')}/{s('lib_out')}"])
+    write_table("e09_intersections", "lrrrrrrrrrrr",
                 ["case", "configs", "brute", "matched", "near-par.", "zigzag", "collision", "missed unexpl.",
-                 "extra touch", "extra unexpl.", "$u\\times u$"], table,
-                "E9: crossings vs brute force summed per case; * = some configs too large for the u x u check")
+                 "extra touch", "extra unexpl.", "$u\\times u$", "lib. u/s/out"], table,
+                "E9: crossings vs brute force summed per case; * = some configs too large for the u x u check; "
+                "lib. = the library's same-stability diagnostic (u x u and s x s in the tangle box / any outside)")
 
 
 # --------------------------------------------------------------------------- #
@@ -571,7 +573,7 @@ def e10() -> None:
 DEEP_CASE_WORDS = {"k28": "KTwoEight", "k32": "KThreeTwo", "p3": "PThree", "nested_outer": "NestedOuter",
                    "nested_inner": "NestedInner"}
 CUTOFF_WORDS = {1e-5: "Five", 1e-6: "Six", 1e-8: "Eight"}
-ERROR_WORDS = {"zero-width iterated element": "ZeroWidth", "holes disagree on bridge side": "HoleSide",
+ERROR_WORDS = {"iterated element outside its parent": "Parent", "holes disagree on bridge side": "HoleSide",
                "several outer faces": "OuterFaces", "bridge rows disagree": "BridgeRows"}
 STOP_TEXT = {"max_blasts": "all blasts", "budget": "time budget", "memory_budget": "memory budget"}
 
@@ -860,6 +862,53 @@ def e11() -> None:
     detail("e11", "errors", {name: {"where": e["where"], "outcomes": sorted(e["outcomes"]), "snapshots": e["snapshots"],
                                     "cells": [[A.e11_label(r), r["config"]["case"], bl] for r, bl in e["cells"]]}
                              for name, e in errors.items()})
+    e11_resolution(records, refs)
+
+
+def e11_resolution(records: list[dict], refs: dict[str, dict]) -> None:
+    """The library's resolution flags under deep blasting (2026-10-07).
+
+    The main grid reads the unresolved crossings (resolution ratio below the
+    threshold) after every blast; the ``resolution_pass`` cells rerun each
+    case's canonical cell with the same-stability pass that ``blast_zone``
+    runs by default.
+    """
+    unresolved = [x for r in records for x in r["series"].get("unresolved", []) if x is not None]
+    put("e11", "DeepUnresolvedCrossingsMax", max(unresolved) if unresolved else None,
+        "largest number of crossings below the resolution-ratio threshold at any blast, main grid", "int")
+    put("e11", "DeepUnresolvedCrossingsCells", sum(any(x for x in r["series"].get("unresolved", []) if x) for r in records),
+        "main-grid configs with an unresolved crossing at some blast", "int")
+    for case, r in refs.items():
+        w, s = DEEP_CASE_WORDS[case], r["series"]
+        first = next((b for b, x in zip(s["blast"], s.get("unresolved", [])) if x), None)
+        put("e11", f"DeepFirstUnresolved{w}", first, f"{case} reference: first blast with an unresolved crossing", "int",
+            text=None if first is not None else "never")
+        put("e11", f"DeepUnresolvedLast{w}", s["unresolved"][-1], f"{case} reference: unresolved crossings after the last blast", "int")
+    rows = []
+    for case, r in A.e11_resolution_cells().items():
+        w, s = DEEP_CASE_WORDS[case], r["series"]
+        inside = [a + b for a, b in zip(s["same_stability_unstable_in"], s["same_stability_stable_in"])]
+        first = next((b for b, x in zip(s["blast"], inside) if x), None)
+        ratio = [p / b for p, b in zip(s["resolution_s"][1:], s["blast_s"][1:]) if b]
+        put("e11", f"DeepPassBlasts{w}", r["metrics"]["blasts_done"], f"{case} resolution-pass cell: blasts done", "int")
+        put("e11", f"DeepPassFirstHit{w}", first, f"{case} resolution-pass cell: first blast with a same-stability "
+            "crossing in the tangle region", "int", text=None if first is not None else "never")
+        put("e11", f"DeepPassHitsEnd{w}", inside[-1], f"{case} resolution-pass cell: in-region same-stability crossings "
+            "after the last blast", "int")
+        put("e11", f"DeepPassCostEnd{w}", ratio[-1] if ratio else None,
+            f"{case} resolution-pass cell: pass time / blast time at the last blast", "x")
+        rows.append([case.replace("_", "\\_"), f"{r['metrics']['blasts_done']} ({STOP_TEXT[r['metrics']['stop_reason']]})",
+                     str(refs[case]["metrics"]["blasts_done"]) if case in refs else "n/a",
+                     tex(first, "int") if first is not None else "never", tex(inside[-1], "int"),
+                     tex(s["same_stability_out"][-1], "int"), tex(s["unresolved"][-1], "int"),
+                     tex(ratio[-1] if ratio else None, "x"), f"{A.nanmax(s['rss_mb']) / 1024:.1f}",
+                     f"{A.nanmax(refs[case]['series']['rss_mb']) / 1024:.1f}" if case in refs else "n/a"])
+    put("e11", "DeepPassCells", len(rows), "resolution-pass cells", "int")
+    write_table("e11_resolution", "llrrrrrrrr",
+                ["case", "blasts (stop)", "ref. blasts", "first hit", "in box", "outside", "unresolved",
+                 "pass / blast", "peak GB", "ref. GB"], rows,
+                "E11 resolution-pass cells: the canonical cell with blast_zone's default same-stability pass, "
+                "against the reference cell without it")
 
 
 def clean(value: Any) -> Any:

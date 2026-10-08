@@ -25,7 +25,15 @@ Four sub-studies, one ``"study"`` key per config:
   when the arms are grown to ``20 * |x+ - x-|`` of canonical distance; there
   is no onset inside the existence range, so the scan is log-spaced in
   ``k + 1`` and asks how many of the near-``-1`` crossings are polygon
-  artifacts.
+  artifacts. Since 2026-10-07 the library flags them itself: each record
+  keeps the ``workbench.check_resolution`` counts (``unresolved`` = crossings
+  whose resolution ratio is below the threshold, ``same_stability_*``) and
+  the sorted ``resolution_ratios``.
+
+The library's per-step point budget (2,000,000 points, 2026-10-07) stops a
+runaway growth step with ``PointBudgetExceeded``, an ``exception`` record
+whose ``metrics["point_budget"]`` says where; the inversion depth cells pin
+``area_cutoff = 1e-4``, the default the first campaign ran at.
 
 Expected failures are data: an ``oom``/``timeout`` escape config, an
 ``exception`` or ``invariant_assert`` at a deep blast or depth.
@@ -42,7 +50,7 @@ import numpy as np
 import psutil
 
 import harness
-from maps import henon_session, max_abs_coord, saddle_session, total_points
+from maps import henon_session, max_abs_coord, resolution_metrics, saddle_session, total_points
 
 sys.path.insert(0, str(harness.REPO / "tests"))
 
@@ -304,7 +312,9 @@ def run_depth(config: dict, rec: harness.Recorder) -> None:
         session.orient_eigenvectors(fp, {s: np.array(v) for s, v in PERIOD3_ORIENTATION.items()})
         stable_steps = 9
     else:
-        session = henon_session(10, 1)
+        # The cutoff the first campaign used (the library default until
+        # 2026-10-07; tests/cases.build_inversion freezes the same value).
+        session = henon_session(10, 1, area_cutoff=1e-4)
         fp = session.construct_fixed_point(list(K10_INVERSION_SEED))
         stable_steps = 5
     session.initialize_both_manifolds(fp)
@@ -398,8 +408,17 @@ def run_tangency(config: dict, rec: harness.Recorder) -> None:
     rec.metric("max_abs", max_abs_coord(session))
     rec.checkpoint()
 
+    # The library's own resolution pass runs inside (diagnose=True, the default)
+    # and logs its WARNINGs, which the harness counts; the report is re-read here.
     with rec.stage("intersections"):
-        session.compute_intersections([fp])
+        registry = session.compute_intersections([fp])
+    with rec.stage("check_resolution"):
+        report = wb.check_resolution([fp])
+    for name, value in resolution_metrics(report, registry).items():
+        rec.metric(name, value)
+    ratios = sorted(ix.resolution_ratio for _id, ix in registry
+                    if ix.resolution_ratio is not None)
+    rec.metric("resolution_ratios", ratios[:2000])
     sines = crossing_sines(session)
     rec.metric("crossings", len(wb.intersection_registry))
     rec.metric("non_anchor_crossings", len(sines))

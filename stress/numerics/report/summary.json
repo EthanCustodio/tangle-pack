@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-07 18:01:42",
+ "generated": "2026-10-07 21:33:25",
  "mode": "full",
  "experiments": {
   "e01_map_throughput": {
@@ -309,80 +309,80 @@
   },
   "e03_scaling": {
    "findings": {
-    "StepTimeExponentKTwoEight": 1.071584875623914,
-    "BytesPerPointKTwoEight": 1069.405056779355,
+    "StepTimeExponentKTwoEight": 1.0716180626949132,
+    "BytesPerPointKTwoEight": 1053.1666884212088,
     "EscapeStepKTwoEight": 11,
-    "StepTimeExponentKTwoEightCoarse": 1.0815722137275172,
-    "BytesPerPointKTwoEightCoarse": 1054.1906701580838,
+    "StepTimeExponentKTwoEightCoarse": 1.0776880741081527,
+    "BytesPerPointKTwoEightCoarse": 1054.8361943555428,
     "EscapeStepKTwoEightCoarse": 11,
-    "StepTimeExponentKFour": 1.0556653123826043,
-    "BytesPerPointKFour": 1053.4324065988199,
+    "StepTimeExponentKFour": 1.0610030519654663,
+    "BytesPerPointKFour": 1051.5032324425752,
     "EscapeStepKFour": 10,
-    "StepTimeExponentKSix": 1.0516539536331266,
-    "BytesPerPointKSix": 1074.5559900574112,
+    "StepTimeExponentKSix": 1.0170997872016487,
+    "BytesPerPointKSix": 1126.9508765150201,
     "EscapeStepKSix": 10,
-    "StepTimeExponentKTen": 1.0619120492035332,
-    "BytesPerPointKTen": 1057.7246839312834,
+    "StepTimeExponentKTen": 1.0609022754114863,
+    "BytesPerPointKTen": 1054.2265911914953,
     "EscapeStepKTen": 9,
-    "StepTimeExponent": 1.0619120492035332,
-    "BytesPerPoint": 1057.7246839312834,
-    "BytesPerPointMax": 1074.5559900574112,
-    "IntersectionsExponent": 1.0743430346073595,
-    "TrimBridgesExponent": 0.9575646014965724,
-    "IterateTableExponent": 0.0390947378729646
+    "StepTimeExponent": 1.0610030519654663,
+    "BytesPerPoint": 1054.2265911914953,
+    "BytesPerPointMax": 1126.9508765150201,
+    "IntersectionsExponent": 1.0597472989185661,
+    "TrimBridgesExponent": 0.8564313898426349,
+    "IterateTableExponent": 0.07123863813026966
    },
    "details": {
     "growth_k2.8_c1e-07": {
      "steps": 12,
      "max_points": 407709.0,
      "stop_reason": null,
-     "outcome": "oom",
+     "outcome": "point_budget",
      "lambda_u": 5.7240151968560395,
      "last_growth_factor": 24.00264924055104,
      "step_fit": [
-      1.071584875623914,
-      -5.3883846731003935
+      1.0716180626949132,
+      -5.385219072880203
      ],
-     "bytes_per_point_fit": 1069.405056779355
+     "bytes_per_point_fit": 1053.1666884212088
     },
     "growth_k2.8_c1e-05": {
      "steps": 12,
      "max_points": 86168.0,
      "stop_reason": null,
-     "outcome": "oom",
+     "outcome": "point_budget",
      "lambda_u": 5.7240151968560395,
      "last_growth_factor": 23.41521739130435,
      "step_fit": [
-      1.0815722137275172,
-      -5.40844641318534
+      1.0776880741081527,
+      -5.387621228888855
      ],
-     "bytes_per_point_fit": 1054.1906701580838
+     "bytes_per_point_fit": 1054.8361943555428
     },
     "growth_k4_c1e-07": {
      "steps": 11,
      "max_points": 89077.0,
      "stop_reason": null,
-     "outcome": "oom",
+     "outcome": "point_budget",
      "lambda_u": 6.313751514675044,
      "last_growth_factor": 12.920945749927473,
      "step_fit": [
-      1.0556653123826043,
-      -5.30227377928744
+      1.0610030519654663,
+      -5.320193837716403
      ],
-     "bytes_per_point_fit": 1053.4324065988199
+     "bytes_per_point_fit": 1051.5032324425752
     },
     "growth_k6_c1e-07": {
-     "steps": 11,
-     "max_points": 2194304.0,
-     "stop_reason": "max points",
-     "outcome": "ok",
+     "steps": 10,
+     "max_points": 35510.0,
+     "stop_reason": null,
+     "outcome": "point_budget",
      "lambda_u": 7.151675243800323,
-     "last_growth_factor": 61.7939735285835,
+     "last_growth_factor": 7.845779938135219,
      "step_fit": [
-      1.0516539536331266,
-      -5.289599368058632
+      1.0170997872016487,
+      -5.162120383995568
      ],
-     "bytes_per_point_fit": 1074.5559900574112
+     "bytes_per_point_fit": 1126.9508765150201
     },
     "growth_k10_c1e-07": {
      "steps": 10,
@@ -392,10 +392,10 @@
      "lambda_u": 8.515821092114916,
      "last_growth_factor": 38.57856507560036,
      "step_fit": [
-      1.0619120492035332,
-      -5.32975521223536
+      1.0609022754114863,
+      -5.321504225238103
      ],
-     "bytes_per_point_fit": 1057.7246839312834
+     "bytes_per_point_fit": 1054.2265911914953
     },
     "stage_rows": [
      {
@@ -406,12 +406,12 @@
       "segments": 2272.0,
       "points": 2274.0,
       "crossings": 4.0,
-      "bytes_per_point": 1765.2066842568163,
-      "grow_unstable": 0.012512082001194358,
-      "grow_stable": 0.012331255013123155,
-      "compute_intersections": 0.024775728990789503,
-      "trim_and_bridges": 0.0010483699734322727,
-      "infer_iterate_table": 1.3515003956854343e-05
+      "bytes_per_point": 1822.8460861917326,
+      "grow_unstable": 0.012628063035663217,
+      "grow_stable": 0.012571562023367733,
+      "compute_intersections": 0.027456076990347356,
+      "trim_and_bridges": 0.000992132001556456,
+      "infer_iterate_table": 1.1114985682070255e-05
      },
      {
       "k": 2.8,
@@ -421,12 +421,12 @@
       "segments": 4755.0,
       "points": 4757.0,
       "crossings": 6.0,
-      "bytes_per_point": 1345.8162707588817,
-      "grow_unstable": 0.03765443403972313,
-      "grow_stable": 0.012050466029904783,
-      "compute_intersections": 0.054660891997627914,
-      "trim_and_bridges": 0.0021418299875222147,
-      "infer_iterate_table": 1.2877979315817356e-05
+      "bytes_per_point": 1383.7023334034054,
+      "grow_unstable": 0.03755446302238852,
+      "grow_stable": 0.01258746295934543,
+      "compute_intersections": 0.05934090801747516,
+      "trim_and_bridges": 0.0022692159982398152,
+      "infer_iterate_table": 1.4998018741607666e-05
      },
      {
       "k": 2.8,
@@ -436,12 +436,12 @@
       "segments": 18121.0,
       "points": 18123.0,
       "crossings": 10.0,
-      "bytes_per_point": 1144.9724659272747,
-      "grow_unstable": 0.1651179799810052,
-      "grow_stable": 0.012327489966992289,
-      "compute_intersections": 0.23976704600499943,
-      "trim_and_bridges": 0.008419377962127328,
-      "infer_iterate_table": 1.4501041732728481e-05
+      "bytes_per_point": 1149.9447111405395,
+      "grow_unstable": 0.16578995500458404,
+      "grow_stable": 0.012642577989026904,
+      "compute_intersections": 0.25434914004290476,
+      "trim_and_bridges": 0.008194672991521657,
+      "infer_iterate_table": 1.905299723148346e-05
      },
      {
       "k": 2.8,
@@ -451,12 +451,12 @@
       "segments": 408844.0,
       "points": 408846.0,
       "crossings": 18.0,
-      "bytes_per_point": 1058.658800624196,
-      "grow_unstable": 4.641294947999995,
-      "grow_stable": 0.01297570503083989,
-      "compute_intersections": 6.5486202869797125,
-      "trim_and_bridges": 0.1749932849779725,
-      "infer_iterate_table": 1.70299899764359e-05
+      "bytes_per_point": 1058.9894092152058,
+      "grow_unstable": 4.636225045949686,
+      "grow_stable": 0.012650463031604886,
+      "compute_intersections": 7.0264492250280455,
+      "trim_and_bridges": 0.1704827809589915,
+      "infer_iterate_table": 1.819600583985448e-05
      },
      {
       "k": 2.8,
@@ -466,12 +466,12 @@
       "segments": 1027.0,
       "points": 1029.0,
       "crossings": 6.0,
-      "bytes_per_point": 2758.530612244898,
-      "grow_unstable": 0.009962470037862659,
-      "grow_stable": 0.003993932972662151,
-      "compute_intersections": 0.011888250999618322,
-      "trim_and_bridges": 0.0005426210118457675,
-      "infer_iterate_table": 1.9962957594543695e-05
+      "bytes_per_point": 2834.161321671526,
+      "grow_unstable": 0.01004765200195834,
+      "grow_stable": 0.00397786102257669,
+      "compute_intersections": 0.013643698999658227,
+      "trim_and_bridges": 0.0005488059832714498,
+      "infer_iterate_table": 1.3159995432943106e-05
      },
      {
       "k": 2.8,
@@ -481,12 +481,12 @@
       "segments": 3917.0,
       "points": 3919.0,
       "crossings": 10.0,
-      "bytes_per_point": 1697.347282470018,
-      "grow_unstable": 0.03768223198130727,
-      "grow_stable": 0.003764647990465164,
-      "compute_intersections": 0.04485616204328835,
-      "trim_and_bridges": 0.001884066965430975,
-      "infer_iterate_table": 1.626700395718217e-05
+      "bytes_per_point": 1726.6118907884666,
+      "grow_unstable": 0.03812301397556439,
+      "grow_stable": 0.003863506019115448,
+      "compute_intersections": 0.04932225402444601,
+      "trim_and_bridges": 0.0018705870024859905,
+      "infer_iterate_table": 1.4766003005206585e-05
      },
      {
       "k": 2.8,
@@ -496,12 +496,12 @@
       "segments": 86405.0,
       "points": 86407.0,
       "crossings": 18.0,
-      "bytes_per_point": 1096.5867117247444,
-      "grow_unstable": 0.9297655099653639,
-      "grow_stable": 0.004032296012155712,
-      "compute_intersections": 1.2669216030044481,
-      "trim_and_bridges": 0.03305425797589123,
-      "infer_iterate_table": 1.8709979485720396e-05
+      "bytes_per_point": 1087.4852268913398,
+      "grow_unstable": 0.9356507119955495,
+      "grow_stable": 0.004261044028680772,
+      "compute_intersections": 1.3509624740108848,
+      "trim_and_bridges": 0.03341742203338072,
+      "infer_iterate_table": 1.8255028408020735e-05
      },
      {
       "k": 4.0,
@@ -511,12 +511,12 @@
       "segments": 2798.0,
       "points": 2800.0,
       "crossings": 4.0,
-      "bytes_per_point": 1677.8971428571429,
-      "grow_unstable": 0.015167179983109236,
-      "grow_stable": 0.014997151040006429,
-      "compute_intersections": 0.031194142007734627,
-      "trim_and_bridges": 0.0009758369997143745,
-      "infer_iterate_table": 1.4187011402100325e-05
+      "bytes_per_point": 1724.7085714285715,
+      "grow_unstable": 0.015157996967900544,
+      "grow_stable": 0.014885134994983673,
+      "compute_intersections": 0.03382040996802971,
+      "trim_and_bridges": 0.000994737958535552,
+      "infer_iterate_table": 1.230696216225624e-05
      },
      {
       "k": 4.0,
@@ -526,12 +526,12 @@
       "segments": 8292.0,
       "points": 8294.0,
       "crossings": 6.0,
-      "bytes_per_point": 1344.7562093079334,
-      "grow_unstable": 0.0678547520074062,
-      "grow_stable": 0.014554946043062955,
-      "compute_intersections": 0.09618376899743453,
-      "trim_and_bridges": 0.002464554039761424,
-      "infer_iterate_table": 1.558696385473013e-05
+      "bytes_per_point": 1360.5594405594406,
+      "grow_unstable": 0.06847546598874032,
+      "grow_stable": 0.014887430996168405,
+      "compute_intersections": 0.10163003898924217,
+      "trim_and_bridges": 0.0025779379648156464,
+      "infer_iterate_table": 1.6062986105680466e-05
      },
      {
       "k": 4.0,
@@ -541,12 +541,12 @@
       "segments": 90475.0,
       "points": 90477.0,
       "crossings": 12.0,
-      "bytes_per_point": 1076.322159222786,
-      "grow_unstable": 0.9813487619976513,
-      "grow_stable": 0.015228962001856416,
-      "compute_intersections": 1.3308118850109167,
-      "trim_and_bridges": 0.014329625992104411,
-      "infer_iterate_table": 2.112099900841713e-05
+      "bytes_per_point": 1092.8461376924522,
+      "grow_unstable": 0.9814926780527458,
+      "grow_stable": 0.01485571899684146,
+      "compute_intersections": 1.3614743409561925,
+      "trim_and_bridges": 0.01395223499275744,
+      "infer_iterate_table": 1.7439015209674835e-05
      },
      {
       "k": 6.0,
@@ -556,12 +556,12 @@
       "segments": 2438.0,
       "points": 2440.0,
       "crossings": 4.0,
-      "bytes_per_point": 1791.160655737705,
-      "grow_unstable": 0.012932204001117498,
-      "grow_stable": 0.012984437984414399,
-      "compute_intersections": 0.027124142041429877,
-      "trim_and_bridges": 0.0010780980228446424,
-      "infer_iterate_table": 1.4681019820272923e-05
+      "bytes_per_point": 1851.5934426229508,
+      "grow_unstable": 0.01332037296378985,
+      "grow_stable": 0.012973717006389052,
+      "compute_intersections": 0.029833965003490448,
+      "trim_and_bridges": 0.0011134669766761363,
+      "infer_iterate_table": 1.3293989468365908e-05
      },
      {
       "k": 6.0,
@@ -571,12 +571,12 @@
       "segments": 5744.0,
       "points": 5746.0,
       "crossings": 8.0,
-      "bytes_per_point": 1367.234249912983,
-      "grow_unstable": 0.04511362995253876,
-      "grow_stable": 0.012196007010061294,
-      "compute_intersections": 0.06578874797560275,
-      "trim_and_bridges": 0.003114791994448751,
-      "infer_iterate_table": 1.4992023352533579e-05
+      "bytes_per_point": 1400.0250609119387,
+      "grow_unstable": 0.0457891559926793,
+      "grow_stable": 0.012467362976167351,
+      "compute_intersections": 0.07114684901898727,
+      "trim_and_bridges": 0.0029159230180084705,
+      "infer_iterate_table": 1.7617945559322834e-05
      },
      {
       "k": 6.0,
@@ -586,27 +586,12 @@
       "segments": 36728.0,
       "points": 36730.0,
       "crossings": 16.0,
-      "bytes_per_point": 1127.096977947182,
-      "grow_unstable": 0.3751442169887014,
-      "grow_stable": 0.01251564803533256,
-      "compute_intersections": 0.4885717810248025,
-      "trim_and_bridges": 0.022914395027328283,
-      "infer_iterate_table": 2.2360996808856726e-05
-     },
-     {
-      "k": 6.0,
-      "cutoff": 1e-07,
-      "steps": 11,
-      "outcome": "ok",
-      "segments": 2195522.0,
-      "points": 2195524.0,
-      "crossings": 32.0,
-      "bytes_per_point": 1081.237033163837,
-      "grow_unstable": 24.63742415100569,
-      "grow_stable": 0.013243890018202364,
-      "compute_intersections": 43.2180898389779,
-      "trim_and_bridges": 1.8799277910147794,
-      "infer_iterate_table": 2.056802622973919e-05
+      "bytes_per_point": 1113.1574190035394,
+      "grow_unstable": 0.3800614570500329,
+      "grow_stable": 0.012764858023729175,
+      "compute_intersections": 0.5452764200163074,
+      "trim_and_bridges": 0.023055615951307118,
+      "infer_iterate_table": 2.1202024072408676e-05
      },
      {
       "k": 10.0,
@@ -616,12 +601,12 @@
       "segments": 4320.0,
       "points": 4322.0,
       "crossings": 4.0,
-      "bytes_per_point": 1549.5048588616382,
-      "grow_unstable": 0.021482747979462147,
-      "grow_stable": 0.02058911503991112,
-      "compute_intersections": 0.049243321001995355,
-      "trim_and_bridges": 0.0013440310140140355,
-      "infer_iterate_table": 1.4490040484815836e-05
+      "bytes_per_point": 1579.8315594632115,
+      "grow_unstable": 0.021431490953546017,
+      "grow_stable": 0.02074245800031349,
+      "compute_intersections": 0.05321111500961706,
+      "trim_and_bridges": 0.0013658749521709979,
+      "infer_iterate_table": 1.3890035916119814e-05
      },
      {
       "k": 10.0,
@@ -631,12 +616,12 @@
       "segments": 15651.0,
       "points": 15653.0,
       "crossings": 8.0,
-      "bytes_per_point": 1254.2086500990226,
-      "grow_unstable": 0.12631792097818106,
-      "grow_stable": 0.02066040103090927,
-      "compute_intersections": 0.21448264498030767,
-      "trim_and_bridges": 0.0046564710210077465,
-      "infer_iterate_table": 2.1841959096491337e-05
+      "bytes_per_point": 1259.7038267424775,
+      "grow_unstable": 0.12411825399613008,
+      "grow_stable": 0.020692816004157066,
+      "compute_intersections": 0.22562364296754822,
+      "trim_and_bridges": 0.004564734001178294,
+      "infer_iterate_table": 1.3352022506296635e-05
      },
      {
       "k": 10.0,
@@ -646,24 +631,24 @@
       "segments": 522661.0,
       "points": 522663.0,
       "crossings": 16.0,
-      "bytes_per_point": 1058.9618779213374,
-      "grow_unstable": 5.955792543012649,
-      "grow_stable": 0.02109455200843513,
-      "compute_intersections": 8.283170314971358,
-      "trim_and_bridges": 0.051374751958064735,
-      "infer_iterate_table": 1.6689009498804808e-05
+      "bytes_per_point": 1059.063756187065,
+      "grow_unstable": 6.0170166729949415,
+      "grow_stable": 0.02144920901628211,
+      "compute_intersections": 8.755395893007517,
+      "trim_and_bridges": 0.05067432997748256,
+      "infer_iterate_table": 1.8441001884639263e-05
      }
     ]
    },
    "notes": [
-    "non-ok records: {'oom': 3, 'ok': 19}"
+    "non-ok records: {'exception': 5, 'ok': 17}"
    ],
    "source": "full",
    "file": "e03_scaling.jsonl",
    "records": 22,
    "outcomes": {
-    "oom": 3,
-    "ok": 19
+    "exception": 5,
+    "ok": 17
    }
   },
   "e04_area_cutoff": {
@@ -1744,6 +1729,7 @@
     "SweepStageTrellisPips": 71,
     "SweepOutcomeOk": 71,
     "SweepOutcomeException": 24,
+    "SweepOutcomePointBudget": 0,
     "SweepOutcomeTimeout": 0,
     "SweepOutcomeOom": 3,
     "SweepOutcomeInvariantAssert": 0,
@@ -2371,11 +2357,11 @@
   },
   "e07_breaking": {
    "findings": {
-    "EscapeOutcome": "oom",
+    "EscapeOutcome": "exception",
     "EscapeStepsDone": 9,
     "EscapeBlowupStep": 9,
     "EscapePeakPoints": 9881.0,
-    "EscapePeakRssMb": 20495.546875,
+    "EscapePeakRssMb": 2757.81640625,
     "EscapeMaxCoord": 1987.5110895533078,
     "EscapeStopArclengthPoints": 478,
     "EscapeStopArclengthThreePoints": 9881,
@@ -2406,8 +2392,8 @@
      "topology_outcome": "ok",
      "topology_error": null,
      "is_reliable": false,
-     "n_classes": 32,
-     "n_unresolved": 7,
+     "n_classes": 27,
+     "n_unresolved": 5,
      "n_virtual": 2
     },
     "blasts_p3": {
@@ -2478,10 +2464,10 @@
       "error": null
      },
      "18": {
-      "outcome": "oom",
+      "outcome": "exception",
       "topology": null,
       "reliable": null,
-      "error": "RSS exceeded 20 GB"
+      "error": "PointBudgetExceeded: one growth step or bridge image would create more than 2,000,000 points (stopped while refining after 1,111,304; largest |coordinate| 2.57e+12). A huge coordinate means an escaping arm: grow with a stop condition (grow_until_bounded and the other grow_until_* drivers); otherwise use fewer steps or blasts, a coarser area_cutoff, or a larger max_points_per_step (None disables it). The session is not resumable; rebuild it."
      }
     },
     "depth_inversion": {
@@ -2489,13 +2475,13 @@
       "outcome": "ok",
       "topology": "invariant_assert",
       "reliable": null,
-      "error": "AssertionError: crossing 0 at stable cdist 0.0 on ('stable', 0, 0) is owned by 0 partition elements [], expected exactly one"
+      "error": "AssertionError: crossing 0 at stable cdist 0.0 on ('stable', 0, 0) is owned by 0 partition elements [], expected exactly one; candidates "
      },
      "5": {
       "outcome": "ok",
       "topology": "invariant_assert",
       "reliable": null,
-      "error": "AssertionError: crossing 0 at stable cdist 0.0 on ('stable', 0, 0) is owned by 0 partition elements [], expected exactly one"
+      "error": "AssertionError: crossing 0 at stable cdist 0.0 on ('stable', 0, 0) is owned by 0 partition elements [], expected exactly one; candidates "
      },
      "6": {
       "outcome": "ok",
@@ -2504,16 +2490,16 @@
       "error": null
      },
      "7": {
-      "outcome": "oom",
+      "outcome": "exception",
       "topology": null,
       "reliable": null,
-      "error": "RSS exceeded 20 GB"
+      "error": "PointBudgetExceeded: one growth step or bridge image would create more than 2,000,000 points (stopped while refining after 1,534,781; largest |coordinate| 9.98e+12). A huge coordinate means an escaping arm: grow with a stop condition (grow_until_bounded and the other grow_until_* drivers); otherwise use fewer steps or blasts, a coarser area_cutoff, or a larger max_points_per_step (None disables it). The session is not resumable; rebuild it."
      },
      "8": {
-      "outcome": "oom",
+      "outcome": "exception",
       "topology": null,
       "reliable": null,
-      "error": "RSS exceeded 20 GB"
+      "error": "PointBudgetExceeded: one growth step or bridge image would create more than 2,000,000 points (stopped while refining after 1,534,781; largest |coordinate| 9.98e+12). A huge coordinate means an escaping arm: grow with a stop condition (grow_until_bounded and the other grow_until_* drivers); otherwise use fewer steps or blasts, a coarser area_cutoff, or a larger max_points_per_step (None disables it). The session is not resumable; rebuild it."
      }
     }
    },
@@ -2522,7 +2508,7 @@
    "file": "e07_breaking.jsonl",
    "records": 92,
    "outcomes": {
-    "oom": 4,
+    "exception": 4,
     "ok": 88
    }
   },
@@ -2597,9 +2583,9 @@
     "IsectExtraUnexplained": 0.0,
     "IsectUUTotal": 4,
     "IsectUUSkipped": 2,
-    "IsectLibraryExponent": 1.038884234406355,
-    "IsectBruteExponent": 1.3228147132881773,
-    "IsectBruteOverLibraryMax": 1.9322636886940383
+    "IsectLibraryExponent": 1.0268377862549338,
+    "IsectBruteExponent": 1.348067400881371,
+    "IsectBruteOverLibraryMax": 1.9131154205469831
    },
    "details": {},
    "notes": [],
@@ -2719,11 +2705,11 @@
     "DeepMaxBlasts": 20,
     "DeepBlasts": 886,
     "DeepSnapshots": 939,
-    "DeepSnapshotsOk": 802,
+    "DeepSnapshotsOk": 896,
     "DeepStopMaxBlasts": 22,
-    "DeepStopBudget": 8,
-    "DeepStopMemoryBudget": 23,
-    "DeepWallMin": 24.021361446380617,
+    "DeepStopBudget": 9,
+    "DeepStopMemoryBudget": 22,
+    "DeepWallMin": 25.295116261641184,
     "DeepSameStability": 0,
     "DeepCdistDecreasing": 0,
     "DeepLawViolations": 0,
@@ -2733,17 +2719,14 @@
     "DeepLobeRatioMaxWhere": null,
     "DeepLobeRatioMaxReference": 0.05143479811034157,
     "DeepLobeSignFlips": 4,
-    "DeepStructureSteps": 490,
+    "DeepStructureSteps": 586,
     "DeepRelabelSteps": 3,
-    "DeepNoChangeSteps": 256,
-    "DeepErrorSnapshots": 137,
-    "DeepErrorConfigs": 23,
-    "DeepErrorClasses": 4,
-    "DeepErrorAsserts": 136,
+    "DeepNoChangeSteps": 254,
+    "DeepErrorSnapshots": 43,
+    "DeepErrorConfigs": 6,
+    "DeepErrorClasses": 3,
+    "DeepErrorAsserts": 42,
     "DeepErrorExceptions": 1,
-    "DeepErrZeroWidthSnapshots": 94,
-    "DeepErrZeroWidthConfigs": 17,
-    "DeepErrZeroWidthBlasts": null,
     "DeepErrOuterFacesSnapshots": 1,
     "DeepErrOuterFacesConfigs": 1,
     "DeepErrOuterFacesBlasts": null,
@@ -2758,46 +2741,46 @@
     "DeepCrossingsStartKTwoEight": 4,
     "DeepCrossingsEndKTwoEight": 7792,
     "DeepClassesStartKTwoEight": 3,
-    "DeepClassesEndKTwoEight": 57,
+    "DeepClassesEndKTwoEight": 51,
     "DeepClassesEndBlastKTwoEight": 15,
-    "DeepActiveEndKTwoEight": 52,
+    "DeepActiveEndKTwoEight": 46,
     "DeepInertEndKTwoEight": 5,
     "DeepFirstStructureKTwoEight": 1,
-    "DeepStructureChangesKTwoEight": 4,
+    "DeepStructureChangesKTwoEight": 10,
     "DeepJumpBlastKTwoEight": 8,
     "DeepJumpBeforeKTwoEight": 4,
     "DeepJumpAfterKTwoEight": 20,
     "DeepCrossingGrowthKTwoEight": 1.6137408397409272,
     "DeepPointGrowthKTwoEight": 1.648880837814118,
-    "DeepTimeGrowthKTwoEight": 1.6872091525459527,
-    "DeepLastBlastSKTwoEight": 74.44588124001166,
-    "DeepPeakRssGbKTwoEight": 9.014358520507812,
+    "DeepTimeGrowthKTwoEight": 1.708166235808569,
+    "DeepLastBlastSKTwoEight": 81.57091150904307,
+    "DeepPeakRssGbKTwoEight": 9.04568099975586,
     "DeepUnresolvedEndKTwoEight": 12,
     "DeepVirtualEndKTwoEight": 1,
     "DeepAmbiguousEndKTwoEight": 3,
     "DeepReliableEndKTwoEight": false,
     "DeepProvisionalStartKTwoEight": true,
     "DeepFirstProvisionalKTwoEight": 8,
-    "DeepErrorsKTwoEight": 6,
+    "DeepErrorsKTwoEight": 0,
     "DeepErrorBlastsKTwoEight": null,
-    "DeepErrorCellsKTwoEight": 11,
+    "DeepErrorCellsKTwoEight": 2,
     "DeepCellsKTwoEight": 12,
     "DeepSeparationIdenticalKTwoEight": null,
     "DeepRepeatIdenticalKTwoEight": null,
-    "DeepCutoffEightWordsKTwoEight": null,
+    "DeepCutoffEightWordsKTwoEight": 9,
     "DeepCutoffEightCrossingsKTwoEight": 9,
-    "DeepCutoffEightOutcomeKTwoEight": 9,
-    "DeepCutoffEightClassesKTwoEight": 39,
+    "DeepCutoffEightOutcomeKTwoEight": null,
+    "DeepCutoffEightClassesKTwoEight": 31,
     "DeepCutoffEightBlastsKTwoEight": 13,
-    "DeepCutoffSixWordsKTwoEight": 15,
+    "DeepCutoffSixWordsKTwoEight": 9,
     "DeepCutoffSixCrossingsKTwoEight": 10,
-    "DeepCutoffSixOutcomeKTwoEight": 9,
-    "DeepCutoffSixClassesKTwoEight": 57,
+    "DeepCutoffSixOutcomeKTwoEight": null,
+    "DeepCutoffSixClassesKTwoEight": 56,
     "DeepCutoffSixBlastsKTwoEight": 17,
     "DeepCutoffFiveWordsKTwoEight": 7,
     "DeepCutoffFiveCrossingsKTwoEight": 11,
-    "DeepCutoffFiveOutcomeKTwoEight": 9,
-    "DeepCutoffFiveClassesKTwoEight": 69,
+    "DeepCutoffFiveOutcomeKTwoEight": null,
+    "DeepCutoffFiveClassesKTwoEight": 63,
     "DeepCutoffFiveBlastsKTwoEight": 17,
     "DeepDoubleCrossingsAgreeKTwoEight": 4,
     "DeepDoubleWordsSameKTwoEight": null,
@@ -2809,45 +2792,48 @@
     "DeepCrossingsStartKThreeTwo": 4,
     "DeepCrossingsEndKThreeTwo": 6757,
     "DeepClassesStartKThreeTwo": 3,
-    "DeepClassesEndKThreeTwo": 37,
-    "DeepClassesEndBlastKThreeTwo": 8,
-    "DeepActiveEndKThreeTwo": 32,
-    "DeepInertEndKThreeTwo": 5,
+    "DeepClassesEndKThreeTwo": 36,
+    "DeepClassesEndBlastKThreeTwo": 14,
+    "DeepActiveEndKThreeTwo": 25,
+    "DeepInertEndKThreeTwo": 11,
     "DeepFirstStructureKThreeTwo": 1,
-    "DeepStructureChangesKThreeTwo": 8,
+    "DeepStructureChangesKThreeTwo": 14,
     "DeepJumpBlastKThreeTwo": 8,
-    "DeepJumpBeforeKThreeTwo": 15,
+    "DeepJumpBeforeKThreeTwo": 14,
     "DeepJumpAfterKThreeTwo": 37,
+    "DeepDropBlastKThreeTwo": 13,
+    "DeepDropBeforeKThreeTwo": 50,
+    "DeepDropAfterKThreeTwo": 34,
     "DeepCrossingGrowthKThreeTwo": 1.6688476180008418,
     "DeepPointGrowthKThreeTwo": 1.701570298257678,
-    "DeepTimeGrowthKThreeTwo": 1.7497346891156351,
-    "DeepLastBlastSKThreeTwo": 72.02438128896756,
-    "DeepPeakRssGbKThreeTwo": 7.589946746826172,
-    "DeepUnresolvedEndKThreeTwo": 2,
-    "DeepVirtualEndKThreeTwo": 1,
-    "DeepAmbiguousEndKThreeTwo": 0,
+    "DeepTimeGrowthKThreeTwo": 1.7583535470188927,
+    "DeepLastBlastSKThreeTwo": 73.61281436803984,
+    "DeepPeakRssGbKThreeTwo": 7.620475769042969,
+    "DeepUnresolvedEndKThreeTwo": 9,
+    "DeepVirtualEndKThreeTwo": 0,
+    "DeepAmbiguousEndKThreeTwo": 2,
     "DeepReliableEndKThreeTwo": false,
     "DeepProvisionalStartKThreeTwo": true,
     "DeepFirstProvisionalKThreeTwo": 6,
-    "DeepErrorsKThreeTwo": 6,
+    "DeepErrorsKThreeTwo": 0,
     "DeepErrorBlastsKThreeTwo": null,
-    "DeepErrorCellsKThreeTwo": 8,
+    "DeepErrorCellsKThreeTwo": 0,
     "DeepCellsKThreeTwo": 10,
     "DeepSeparationIdenticalKThreeTwo": null,
     "DeepCutoffEightWordsKThreeTwo": 6,
     "DeepCutoffEightCrossingsKThreeTwo": 9,
-    "DeepCutoffEightOutcomeKThreeTwo": 9,
-    "DeepCutoffEightClassesKThreeTwo": 27,
+    "DeepCutoffEightOutcomeKThreeTwo": null,
+    "DeepCutoffEightClassesKThreeTwo": 24,
     "DeepCutoffEightBlastsKThreeTwo": 13,
     "DeepCutoffSixWordsKThreeTwo": 6,
     "DeepCutoffSixCrossingsKThreeTwo": 10,
-    "DeepCutoffSixOutcomeKThreeTwo": 9,
-    "DeepCutoffSixClassesKThreeTwo": 92,
+    "DeepCutoffSixOutcomeKThreeTwo": null,
+    "DeepCutoffSixClassesKThreeTwo": 71,
     "DeepCutoffSixBlastsKThreeTwo": 16,
     "DeepCutoffFiveWordsKThreeTwo": 6,
     "DeepCutoffFiveCrossingsKThreeTwo": 10,
-    "DeepCutoffFiveOutcomeKThreeTwo": 9,
-    "DeepCutoffFiveClassesKThreeTwo": 89,
+    "DeepCutoffFiveOutcomeKThreeTwo": null,
+    "DeepCutoffFiveClassesKThreeTwo": 77,
     "DeepCutoffFiveBlastsKThreeTwo": 16,
     "DeepDoubleCrossingsAgreeKThreeTwo": 4,
     "DeepDoubleWordsSameKThreeTwo": null,
@@ -2871,9 +2857,9 @@
     "DeepClassStepPThree": 2,
     "DeepCrossingGrowthPThree": 1.0828360597207556,
     "DeepPointGrowthPThree": 1.059158650019204,
-    "DeepTimeGrowthPThree": 0.8015573150184666,
-    "DeepLastBlastSPThree": 0.01097774796653539,
-    "DeepPeakRssGbPThree": 0.38140106201171875,
+    "DeepTimeGrowthPThree": 0.9222474410639409,
+    "DeepLastBlastSPThree": 0.012113496020901948,
+    "DeepPeakRssGbPThree": 0.38185882568359375,
     "DeepUnresolvedEndPThree": 1,
     "DeepVirtualEndPThree": 1,
     "DeepAmbiguousEndPThree": 0,
@@ -2889,7 +2875,7 @@
     "DeepCutoffEightWordsPThree": 6,
     "DeepCutoffEightCrossingsPThree": 9,
     "DeepCutoffEightOutcomePThree": null,
-    "DeepCutoffEightClassesPThree": 51,
+    "DeepCutoffEightClassesPThree": 49,
     "DeepCutoffEightBlastsPThree": 20,
     "DeepCutoffSixWordsPThree": 4,
     "DeepCutoffSixCrossingsPThree": 7,
@@ -2899,7 +2885,7 @@
     "DeepCutoffFiveWordsPThree": 3,
     "DeepCutoffFiveCrossingsPThree": 6,
     "DeepCutoffFiveOutcomePThree": 6,
-    "DeepCutoffFiveClassesPThree": 50,
+    "DeepCutoffFiveClassesPThree": 48,
     "DeepCutoffFiveBlastsPThree": 20,
     "DeepDoubleCrossingsAgreePThree": 10,
     "DeepDoubleWordsSamePThree": null,
@@ -2925,9 +2911,9 @@
     "DeepDropAfterNestedOuter": 11,
     "DeepCrossingGrowthNestedOuter": 1.656144795943029,
     "DeepPointGrowthNestedOuter": 1.6800015696264867,
-    "DeepTimeGrowthNestedOuter": 1.7661769835401022,
-    "DeepLastBlastSNestedOuter": 76.24502856400795,
-    "DeepPeakRssGbNestedOuter": 7.494453430175781,
+    "DeepTimeGrowthNestedOuter": 1.753228599429239,
+    "DeepLastBlastSNestedOuter": 77.14907626801869,
+    "DeepPeakRssGbNestedOuter": 7.525306701660156,
     "DeepUnresolvedEndNestedOuter": 0,
     "DeepVirtualEndNestedOuter": 0,
     "DeepAmbiguousEndNestedOuter": 0,
@@ -2939,7 +2925,7 @@
     "DeepErrorCellsNestedOuter": 0,
     "DeepCellsNestedOuter": 9,
     "DeepSeparationIdenticalNestedOuter": null,
-    "DeepCutoffEightWordsNestedOuter": null,
+    "DeepCutoffEightWordsNestedOuter": 9,
     "DeepCutoffEightCrossingsNestedOuter": 12,
     "DeepCutoffEightOutcomeNestedOuter": null,
     "DeepCutoffEightClassesNestedOuter": 11,
@@ -2976,9 +2962,9 @@
     "DeepClassStepNestedInner": 2,
     "DeepCrossingGrowthNestedInner": 1.0778180677127258,
     "DeepPointGrowthNestedInner": 1.0243518475198192,
-    "DeepTimeGrowthNestedInner": 1.274554449019057,
-    "DeepLastBlastSNestedInner": 0.06005682295653969,
-    "DeepPeakRssGbNestedInner": 0.3985176086425781,
+    "DeepTimeGrowthNestedInner": 0.9271566666307894,
+    "DeepLastBlastSNestedInner": 0.013198886008467525,
+    "DeepPeakRssGbNestedInner": 0.3998565673828125,
     "DeepUnresolvedEndNestedInner": 1,
     "DeepVirtualEndNestedInner": 1,
     "DeepAmbiguousEndNestedInner": 0,
@@ -2994,7 +2980,7 @@
     "DeepCutoffEightWordsNestedInner": 6,
     "DeepCutoffEightCrossingsNestedInner": 9,
     "DeepCutoffEightOutcomeNestedInner": null,
-    "DeepCutoffEightClassesNestedInner": 55,
+    "DeepCutoffEightClassesNestedInner": 53,
     "DeepCutoffEightBlastsNestedInner": 20,
     "DeepCutoffSixWordsNestedInner": 4,
     "DeepCutoffSixCrossingsNestedInner": 7,
@@ -3004,7 +2990,7 @@
     "DeepCutoffFiveWordsNestedInner": 3,
     "DeepCutoffFiveCrossingsNestedInner": 6,
     "DeepCutoffFiveOutcomeNestedInner": 6,
-    "DeepCutoffFiveClassesNestedInner": 54,
+    "DeepCutoffFiveClassesNestedInner": 52,
     "DeepCutoffFiveBlastsNestedInner": 20,
     "DeepDoubleCrossingsAgreeNestedInner": 5,
     "DeepDoubleWordsSameNestedInner": null,
@@ -3012,13 +2998,13 @@
     "DeepDoubleComparedNestedInner": 11,
     "DeepDoubleBlastsNestedInner": 20,
     "DeepCutoffCells": 15,
-    "DeepCutoffWordsFirst": 12,
-    "DeepUnresolvedUnreachable": 44,
-    "DeepUnresolvedSingleton": 2,
+    "DeepCutoffWordsFirst": 14,
+    "DeepUnresolvedUnreachable": 127,
+    "DeepUnresolvedSingleton": 0,
     "DeepUnresolvedSingletonStart": 3,
     "DeepUnresolvedOtherStart": 0,
-    "DeepUnresolvedUnreachableEndKTwoEight": 10,
-    "DeepUnresolvedSingletonEndKTwoEight": 2,
+    "DeepUnresolvedUnreachableEndKTwoEight": 12,
+    "DeepUnresolvedSingletonEndKTwoEight": 0,
     "DeepCoarseCells": 6,
     "DeepCoarseTimeStops": 6,
     "DeepCoarseBlasts": null,
@@ -3026,224 +3012,52 @@
     "DeepRefCutoffCells": 19,
     "DeepRefCutoffTimeStops": 2,
     "DeepRefCutoffMemoryStops": 17,
-    "DeepMeanBlastSPThree": 0.01100974050059449,
-    "DeepProcRssGbPThree": 0.4220428466796875,
+    "DeepMeanBlastSPThree": 0.013428100856253877,
+    "DeepProcRssGbPThree": 0.3820457458496094,
     "DeepPointsStartPThree": 908,
     "DeepPointsEndPThree": 4332,
-    "DeepMeanBlastSNestedInner": 0.013017684151418508,
-    "DeepProcRssGbNestedInner": 0.4670753479003906,
+    "DeepMeanBlastSNestedInner": 0.011382215199409984,
+    "DeepProcRssGbNestedInner": 0.4000511169433594,
     "DeepPointsStartNestedInner": 6122,
     "DeepPointsEndNestedInner": 9546,
     "DeepAtESevenCrossingsKTwoEight": 712,
-    "DeepAtESevenOutcomeKTwoEight": null
+    "DeepAtESevenOutcomeKTwoEight": null,
+    "DeepUnresolvedCrossingsMax": 96,
+    "DeepUnresolvedCrossingsCells": 52,
+    "DeepFirstUnresolvedKTwoEight": 9,
+    "DeepUnresolvedLastKTwoEight": 15,
+    "DeepFirstUnresolvedKThreeTwo": 9,
+    "DeepUnresolvedLastKThreeTwo": 15,
+    "DeepFirstUnresolvedPThree": 15,
+    "DeepUnresolvedLastPThree": 3,
+    "DeepFirstUnresolvedNestedOuter": 9,
+    "DeepUnresolvedLastNestedOuter": 21,
+    "DeepFirstUnresolvedNestedInner": 15,
+    "DeepUnresolvedLastNestedInner": 3,
+    "DeepPassBlastsKTwoEight": 11,
+    "DeepPassFirstHitKTwoEight": 8,
+    "DeepPassHitsEndKTwoEight": 104760,
+    "DeepPassCostEndKTwoEight": 1.577120533470027,
+    "DeepPassBlastsKThreeTwo": 11,
+    "DeepPassFirstHitKThreeTwo": 8,
+    "DeepPassHitsEndKThreeTwo": 170192,
+    "DeepPassCostEndKThreeTwo": 1.7555222906333856,
+    "DeepPassBlastsNestedOuter": 12,
+    "DeepPassFirstHitNestedOuter": 8,
+    "DeepPassHitsEndNestedOuter": 589693,
+    "DeepPassCostEndNestedOuter": 1.9608393297167814,
+    "DeepPassBlastsPThree": 20,
+    "DeepPassFirstHitPThree": 13,
+    "DeepPassHitsEndPThree": 160,
+    "DeepPassCostEndPThree": 0.7441983783045465,
+    "DeepPassBlastsNestedInner": 20,
+    "DeepPassFirstHitNestedInner": 13,
+    "DeepPassHitsEndNestedInner": 160,
+    "DeepPassCostEndNestedInner": 0.31445780153536246,
+    "DeepPassCells": 5
    },
    "details": {
     "errors": {
-     "zero-width iterated element": {
-      "where": "PartitionFamily.from_minimal",
-      "outcomes": [
-       "invariant_assert"
-      ],
-      "snapshots": 94,
-      "cells": [
-       [
-        "reference (sep 1e-05)",
-        "k28",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep none",
-        "k28",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep 1e-06",
-        "k28",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep 0.0001",
-        "k28",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep 0.001",
-        "k28",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep 0.01",
-        "k28",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "2 iterations / blast",
-        "k28",
-        [
-         5,
-         6,
-         7
-        ]
-       ],
-       [
-        "repeat 1",
-        "k28",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "repeat 2",
-        "k28",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "reference (sep 1e-05)",
-        "k32",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep none",
-        "k32",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep 1e-06",
-        "k32",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep 0.0001",
-        "k32",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep 0.001",
-        "k32",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "sep 0.01",
-        "k32",
-        [
-         9,
-         10,
-         11,
-         12,
-         13,
-         14
-        ]
-       ],
-       [
-        "cutoff 1e-08",
-        "k32",
-        [
-         12,
-         13
-        ]
-       ],
-       [
-        "2 iterations / blast",
-        "k32",
-        [
-         5,
-         6,
-         7,
-         8,
-         9
-        ]
-       ]
-      ]
-     },
      "several outer faces": {
       "where": "DualGraph (arrangement component)",
       "outcomes": [
@@ -3361,9 +3175,9 @@
    "notes": [],
    "source": "full",
    "file": "e11_blast_depth.jsonl",
-   "records": 53,
+   "records": 58,
    "outcomes": {
-    "ok": 53
+    "ok": 58
    }
   }
  }

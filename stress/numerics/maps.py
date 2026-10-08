@@ -55,7 +55,7 @@ def henon_session(
         henon_jacobian(k, b) if jacobian else None,
     )
     if area_cutoff is not None:
-        session.workbench._man_machine.area_cutoff = area_cutoff
+        session.area_cutoff = area_cutoff
     if gpu:
         tanglepack.enable_gpu(session, min_batch_points=min_batch_points)
     return session
@@ -312,3 +312,31 @@ def lobe_polygon(session_or_workbench: Any, curves: dict, a: int, b: int) -> Opt
     if u is None or s is None:
         return None
     return np.vstack([ia.get_point(), u, ib.get_point(), s])
+
+
+# --------------------------------------------------------------------------- #
+# The library's resolution flags (2026-10-07; shared by e07 / e09 / e11)
+# --------------------------------------------------------------------------- #
+def resolution_metrics(report: Any, registry: Any) -> dict[str, Any]:
+    """Small JSON summary of a ``diagnostics.ResolutionReport``.
+
+    ``unresolved`` counts registered crossings below the workbench's
+    resolution-ratio threshold; the ``same_stability_*`` counts split the
+    polygon artifacts by stability and by whether they lie in the padded box
+    of the registered crossings (where the library WARNs) or outside it (an
+    escaping arm, INFO only). Both are flags, never failures.
+    """
+    ratios = [ix.resolution_ratio for _id, ix in registry if ix.resolution_ratio is not None]
+    hits = report.same_stability_crossings
+    inside = [hit for hit in hits if hit.in_tangle_region]
+    return {
+        "resolution_threshold": report.threshold,
+        "unresolved": len(report.unresolved_crossings),
+        "min_resolution_ratio": min(ratios) if ratios else None,
+        "same_stability_unstable_in": sum(hit.stability == "unstable" for hit in inside),
+        "same_stability_stable_in": sum(hit.stability == "stable" for hit in inside),
+        "same_stability_out": len(hits) - len(inside),
+        "min_suggested_area_cutoff": (
+            min(hit.suggested_area_cutoff for hit in inside) if inside else None
+        ),
+    }
