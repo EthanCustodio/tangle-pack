@@ -26,8 +26,10 @@ Dev Notes:
   propagated hole's side was read against the nearest vertex of its whole
   containing bridge, on another fold. Fixed 2026-10-02 (sides are read on the
   image sub-arc; since WP4 the signs decide the openings and every class
-  walks); those runs now reach the symbolic dynamics but are not reliable (a
-  virtual ``new1``, PK-1), so the default stays at 13.
+  walks). Since WP7 they are reliable too: past the reference switch (BCG-4)
+  the words name the classes of images of image bridges, and the symbolic
+  dynamics closes the alphabet under the word map (43-49 classes instead of
+  9, PK-1). The default stays at 13, before the reference switch.
 * Each nested zone blasts only its own fixed point (2026-10-02): blasting
   both from either zone also iterated the other tangle's bridges, made the
   result depend on blast order and collapsed the period-3 pseudoneighbors at

@@ -28,7 +28,7 @@ The most serious situations:
 2. **The hole set depends on depth (BCG-4, PK-1).** Deep tip or blast-child crossings land in the fundamental window and replace the primary pseudoneighbor pairs. The new reference punches about log(c_u)/log β holes, so p3 goes 12→42 holes at blast 6 or at 15 steps. That makes p3 unreliable: an unreachable class and a virtual `new1`.
 3. **Inversion is wrong by construction, and no fixture can show it (INV-1/2/4/5/6).** Four anchors sit at one point. The pseudoneighbor lap factor is λ_u instead of λ_u². The zone ring is keyed by orbit index. The side and partition model is per branch. The only fixture has no holes.
 4. **The heteroclinic path has never run (NEST-1/2).** No fixture has an A(u)×B(s) crossing. A hand-built case is unreliable, and heteroclinic pseudoneighbors are rejected by construction.
-5. **The dual-graph walk fails where it must succeed (INT-1, PK-1).** Walks come back "unreachable" or "ambiguous" and virtual `new*` classes appear. Under D3 the walk IS the word and must always exist, so each of these is a construction bug (WP7).
+5. **The dual-graph walk fails where it must succeed (INT-1, PK-1).** Walks come back "unreachable" or "ambiguous" and virtual `new*` classes appear. Under D3 the walk IS the word and must always exist, so each of these is a construction bug (WP7). **WP7:** the virtual classes were the alphabet not being closed under the word map; it is closed now and virtual classes are gone. The one unreachable walk left (inversion x period 2 at 10 steps, not a law case) needs the stable manifold cut at the pip orbit (DEC-20).
 
 ---
 
@@ -173,7 +173,7 @@ Note that inversion has det J = +1. Earlier notes conflate "inversion" with "ori
 ## Period-k orbits
 
 ### PK-1: p3 at ≥15 unstable steps or ≥6 blasts is unreliable: an unreachable class, a virtual `new1`, and "crossing abuts no hole"
-**Status:** open, strict xfail `open_p3_deep_runs` (`p3_15`, `p3_16`, `p3_6_blasts`) | **Severity:** high | **Related:** BCG-4, PK-3, PK-5, NEST-3, DEC-1 | **WP:** WP7
+**Status:** closed (WP7) | **Severity:** high | **Related:** BCG-4, PK-3, PK-5, NEST-3, DEC-1 | **WP:** WP7
 
 At 11-14 steps and 0-5 blasts: 9 classes, 3 active, reliable. At 15 steps there are four tip crossings with neither a −1 nor a +1 link inside the ray-1.0 window:
 - They break the adjacency of `(18,34)`.
@@ -187,6 +187,8 @@ E11 has exactly 1 unresolved and 1 virtual class at every blast from 6 to 20 (p3
 **WP4:** the unreachable class `t` was the geometric hole openings: with the signs deciding them, the deep runs gain 3 elements (81 -> 84, 89 -> 92, 81 -> 84) and every class walks (new test `test_deep_p3_every_class_walks`); the virtual `new1` remains (strict xfail `open_p3_deep_runs`, WP7). Replayed E11 p3 / nested_inner at 1e-5: 0 unresolved / 1 virtual at blasts 6-8, then 3 unresolved / 2 virtual from blast 9 (WP7). Inversion x period 2 at 10/10 steps no longer fails `openings_*` or the library row check; `backward_holes_keep_bridge_side` (its oracle re-measures a carried point that escapes the 3-node reference lobe), `bridge_endpoints_on_own_branch` (WP7-D1) and the symbolic laws still fail there.
 
 **WP6 (for WP7): the alphabet is not closed under the word map.** In deep runs an image-bridge class that is not a hole-bridge class has a word naming the class of the image's image, which the minimal trellis does not keep: p3 from blast 7 (`u = {(40,41), (44,45)}` maps to `w = {(46,47), (50,51)}`), k28 at blast 8 (`e` maps to `g`). Those were lettered blast children before WP6 and are virtual classes now (p3 deep 1 `new1`, k28 blast 8 2, was 3). Rooting it out (keep the images of active image-bridge classes, or show the walk never needs them) changes the minimal trellis's definition: D3, WP7.
+
+**WP7: root cause and fix.** Every walk exists on the deep runs since WP4; the only failing symbolic law was "no virtual class". The walk does not read the wrong elements: the virtual pair is the class of the IMAGE of an image-bridge class, a real bridge `f(B)` of `W^u` that the minimal trellis (hole bridges + the FIRST images of active hole bridges) does not keep. On `p3_6_blasts` class `t` (a hole bridge at iterate −1 of the window references) reads `aa u^-1 ab u aa^-1`; `aa = {R(0.0)#1, R(1.0)#27}` is the class of the image bridges `(40,41)`, `(44,45)` of hole bridge `(38,39)`, and its trivial walk names `{R(1.0)#1, R(2.0)#25}`, which was `new1`. On `p3_16` that class is in the evidence table: its members `(18,35)`, `(29,57)` are exactly the registered images of `aa`'s members. Fix (C9): `symbolic_dynamics` closes the alphabet under the word map. A class a word names is walked in turn, copies its evidence entry when a bridge spans it, is lettered by the session (`letter_for`) and records `named_by`. The closure is the hole-bridge transport chain one element further out (the next layer of the tangle the deep reference switch exposes, BCG-4). Classes 23 -> 43 (`p3_15`, `p3_6_blasts`), 27 -> 49 (`p3_16`); every class resolves, `is_reliable` is True on all three, and on `p3_16` the two closure classes with registered members verify against them. Virtual-class support is deleted. "Crossing abuts no hole" on `p3_6_blasts` is crossing 44, an excursion of the image chain of `(38,39)` across s(1.0); it blocks no walk (PK-4, slice 2). Laws still failing on the deep runs, also on base and not WP7's: `partition_covers_branch` (BCG-4 hole chains, WP8) and `dual_face_side_is_geometry` (representative points of long anchor faces, INT-10 / WP10).
 
 **WP3 evidence (inversion x period 2):** the `inversion_period2` law case (k=4.1, 9/9 steps) passes every law. One step deeper (10/10 steps, 47 crossings) eleven laws fail on the WP3 branch, every one also failing on main (which fails sixteen): `bridge_endpoints_on_own_branch`, `bridge_rows_consistent`, `partition_covers_branch`, `backward_holes_keep_bridge_side`, `openings_missing_only_at_anchor_or_tail`, `alphabet_inside_minimal_trellis`, `iterated_cut_provenance`, `every_active_class_walks` (an unreachable walk), `no_virtual_class`, `landings_contained`, `refined_children_inherit_word`. Deep period-k evidence for WP5 / WP7 / WP10; the law case stays at 9 steps. **WP5:** at 10/10 steps it is not a WP5 gap. Seven laws fail on main `3e12d53` (`bridge_endpoints_on_own_branch`, `partition_covers_branch`, `backward_holes_keep_bridge_side`, `alphabet_inside_minimal_trellis`, `every_active_class_walks`, `no_virtual_class`, `landings_contained`). `partition_covers_branch` fails on an element of s(0.0) left opened at both ends by two holes of ONE origin a lap apart (iterates -3 and -7), the -3 one on a cross-branch container through the inversion point: the INT-2 whole-bridge convention meeting the law's one-hole-per-open-element reading, not the missing `+3` hole. The landing failures are outermost elements whose image runs past the next branch's partition (INT-8). Owners WP7 / WP8; not a law case.
 
@@ -225,12 +227,16 @@ These cases only warn and do nothing:
 
 `BridgeClass` cannot place image endpoints that sit on different unstable branches. The only checks are ownership invariants. This matters for period-k and inversion, where image chains switch branches.
 
+**WP7 evidence (slice 2, needs the author's rule):** on `p3_6_blasts` "crossing abuts no hole" is crossing 44. The image chain of hole bridge `(38,39)` (`40..45`) leaves its base branch s(0.0) for an excursion across s(1.0) (41-44, crossings with `S \ f(S)`, no `−1` link), and `_empty_stretches` pairs chords on the base branch only. Sorted along s(1.0) the excursion reads 43 (0.973) < 42 (1.025) < 41 (1.158) < 44 (1.285). By Jordan alternation `f(lobe) ∩ s(1.0) = [43,42] ∪ [41,44]`, where `[43,42]` is the stretch of the window hole (42,43), so the missing empty stretch is the chord `(41,44)` and 44 belongs to the element outward of it. That pairs a foreign branch by STABLE order, while the author's base-branch rule pairs by unstable order (`(x1,x2),(x3,x4)`). It changes refinement labels only (`aa_1` / `aa_2` stay distinct, and the trellis word of `t` verifies either way) and blocks no walk.
+
 **Evidence:** `src/tanglepack/topology/PartitionFamily.py:714-717` (Dev Note), `:727, 774, 799, 813, 941, 955, 976`; `src/tanglepack/topology/BridgeClass.py:735, 798`; `CLAUDE.md` "Partition families"; memory `minimal-dual-graph-2026-09` ("cross-branch cut is the open point")
 
 ### PK-5: The fundamental segment is unified only on the pip's branch; the other k−1 branches are walls everywhere
 **Status:** decided 2026-10-07 (kept 2026-09-30) | **Severity:** low | **Related:** PK-1, DEC-6 | **WP:** WP7
 
 A walk that needs to cross another branch's window becomes "unreachable". This is one plausible contributor to the p3 unreachable class.
+
+**WP7 evidence (DEC-20):** the only unreachable walk left anywhere is inversion x period 2 at 10/10 steps (class `n = {L(0.1)#1, R(0.0)#5}`: its start face has no unified exit). There the stable branches run PAST the strong pip's orbit (s(1.0) ends at 4.41, q0 = 1.75), so the pip window `(f^4 q0, q0] = (0.504, 1.749]` is not where `f(W^s)` stops. The image of a bridge crosses the trellis's stable manifold only at the images of its ends and in `S \ f(S)`. Per branch that is `(c_s(f(end of the previous branch)), end]`: `(0.577, 4.413]` on s(1.0), empty elsewhere. Unifying `S \ f(S)` instead makes `n` walk. On every law case and the three deep runs `S \ f(S)` equals the pip window exactly, because every builder trims the stable manifold at the pip orbit. Either fix (unify `S \ f(S)`, or cut S at the pip orbit in the partition and dual graph as the chalkboard's stage 3 does) reverses the 2026-09-14 "the pip moves the unified set without trimming" design, so WP7 only states the precondition: law `dual_unified_is_where_f_of_s_stops`, and one DualGraph WARNING per branch where the two differ (regression `test_unified_segment_precondition`). The choice is DEC-20.
 
 **Evidence:** `src/tanglepack/topology/DualGraph.py:583-611`; `src/tanglepack/topology/DualWalk.py:757-760`
 
@@ -303,7 +309,9 @@ Two consecutive heteroclinic crossings on B's stable branch carry A's unstable k
 **Evidence:** `src/tanglepack/topology/Pseudoneighbor.py:535-540`
 
 ### NEST-3: Nested is reliable only for outer ≥2 and inner ≤4 blasts; nested_outer loses classes and holes as it is blasted
-**Status:** open | **Severity:** medium | **Related:** PK-1, BCG-5 | **WP:** WP7
+**Status:** partly closed (WP7) | **Severity:** medium | **Related:** PK-1, BCG-5 | **WP:** WP7
+
+**WP7:** inner ≥6 blasts is exactly PK-1 and closes with it (27 -> 47 and 28 -> 49 classes at 6 / 7 inner blasts, no virtual class, reliable). The unresolved outer class at 0 outer blasts is a singleton landing whose members have no registered image: D3's f(bridge) path needs the registered chain, so "grow or blast" stays, by design. The nested_outer loss under blasting is BCG-5 (WP8).
 
 - **0 outer blasts:** the outer class `e` is a singleton with no registered chain.
 - **Inner ≥6 blasts, or p3 at 15 steps:** the run inherits PK-1 exactly (27 classes, 42 p3 holes); E11 nested_inner goes 13→55.
@@ -430,7 +438,9 @@ A new hole renumbers every element. None of the 9 class names from blast 0 survi
 Cross-references, catalogued elsewhere: loop folding by preimage (BCG-2), element identity (BCG-7), window reference rule (PK-2), inversion anchor (INV-1), λ_u lap factor (INV-2).
 
 ### INT-1: The word is the shortest dual-graph walk between midpoint landings, not the homotopy class of the registered image chain
-**Status:** open / decided 2026-10-07 | **Severity:** high | **Related:** INT-8, PK-1, DEC-3 | **WP:** WP7
+**Status:** closed (WP7) | **Severity:** high | **Related:** INT-8, PK-1, DEC-3 | **WP:** WP7
+
+**WP7:** under D3 a disagreement between the walk and a registered image is a construction or evidence fault, and it now says which. The WARNING is one per disagreeing member, and `ImageEvidence.diagnosis` is an `EvidenceDiagnosis`: the first differing token, the walked and registered occurrences there, and a cause. The cause is `"stable end"` when two consecutive crossings of the registered chain on one stable branch share a crossing sign, else `"walk"`. It still counts against `is_reliable`. The measured case is k28 at 6 / 7 blasts: class `a` member `(44,45)` has image chain `[(74,75),(75,76),(76,77)]` with three consecutive crossings on s(0.0) of sign −1. The image arc passes around the end of the trimmed stable manifold, its crossings with the trimmed-away part are not registered, and the pairing shifts by one. Resolution ratios are 30-8400, so this is not under-resolution: the walk is right and the evidence is incomplete. Regression `test_evidence_diagnosis`.
 
 The homotopy class of f(bridge) relative to the holes is determined by its crossing sequence. That is `trellis_itinerary`, which is used only for singletons and as "evidence". The answer comes instead from `land_element` midpoint probes plus `shortest_walks`. Shortest equals homotopic only where the dual graph is tree-like; elsewhere the result is `ambiguous`, `unreachable` or virtual `new*`, and the code admits "the shortest walk can be topologically wrong where nothing is registered".
 
@@ -493,14 +503,18 @@ The registry is replaced and `reindex_from` re-matches by `cdist_tol` (absolute 
 **Evidence:** `src/tanglepack/numerics/IntersectionRegistry.py:241-330, 863`; `src/tanglepack/topology/Trellis.py:24-30`; `docs/dual_graph_symbolic_dynamics_plan.md:324`; `.refactor/knowledge/testing.md` ("Registry ids are NOT reproducible")
 
 ### INT-8: A landing span that straddles a cut still feeds a word (midpoint owner, `contained=False`) instead of being unresolved
-**Status:** open | **Severity:** medium | **Related:** INT-1, INV-6 | **WP:** WP7
+**Status:** closed (WP7) | **Severity:** medium | **Related:** INT-1, INV-6 | **WP:** WP7
+
+**WP7:** a straddling landing still resolves to its midpoint owner, so the walk exists (D3), but it counts against `is_reliable` (a construction inconsistency). No law case straddles. The only straddles measured are off the law cases, on the under-resolved `p3_coarse_blasts`: `R(2.0)#1 -> (0, c(47))` covers four s(0.0) elements because crossing 40, an iterated cut, lies inside the image.
 
 Under a correct partition, a homotopy element's image lies inside one iterated element, so a straddle signals a partition or cdist-estimate problem. The current output is a wrong word with a WARNING. Strict xfail on inversion.
 
 **Evidence:** `src/tanglepack/topology/DualWalk.py:270-380`; `tests/cases.py:812-815`; `CLAUDE.md` ("Landing")
 
 ### INT-9: Pairs with no spanning Bridge object drop holes and image bridges; the trellis has no notion of an "unstable arc" independent of Bridge objects
-**Status:** open | **Severity:** medium | **Related:** NUM-16, BCG-1 | **WP:** WP7
+**Status:** closed (WP7; filling escape-lobe images deferred) | **Severity:** medium | **Related:** NUM-16, BCG-1 | **WP:** WP7
+
+**WP7: root cause.** Over the law cases every consecutive unstable pair with no Bridge has its two crossings on DIFFERENT computed curves (`Intersection.unstable_manifold`): k28_one 1, k28_two 2, nested_inner_blasts 4, inversion_one 2, inversion_two 5, and 0 on k10 / p3. Each is the uncomputed image of a bridge the blast did not iterate (outside the zone; e.g. inversion_two_blasts `(32,33) = f((26,27))`, where `(26,27)` was never iterated), or the gap between the grown tip and a blast image. `Trellis.is_computed_arc(lo, hi)` says whether a Bridge spans the pair or both crossings lie on one computed curve (an anchor lies on every curve rooted at it). The dense arrangement draws an unstable arc only there; a gap's two ends dangle. All seven arrangement strict xfails pass (`arrangement_euler` x `inversion_two_blasts` and the six NUM-16 entries). Law-case words, matrices and reliability are unchanged. Dense region counts drop on the blasted cases: k28_one 5 -> 4, k28_two 9 -> 7, nested 33 -> 31, nested_inner 37 -> 33, inversion_one 16 -> 15, inversion_two 20 -> 17. The `punch_holes` "no spanning bridge" WARNING on inversion_two_blasts is the `+1` appearance `(32,33)` of reference `(26,27)`, whose own bridge escapes the zone. That is D9's category (an image not computed), not a construction error; the WARNING stays and now names the cause, and so does the minimal trellis's. Computing those images means iterating escaping lobes (WP9 / WP10). The virtual classes this issue listed were PK-1's closure gap.
 
 After a blast there is no Bridge between a parent crossing and a blast-child crossing:
 - `punch_holes` skips the pair, and propagation restarts from the most-backward punched pair ("open gap in the punching layer").
@@ -761,7 +775,7 @@ Recipe depth should scale with 1/ln λ_u. These are first-campaign numbers.
 **Evidence:** `stress/numerics/report/report.tex:823-826, 864-871, 883-889`; `stress/numerics/report/numbers_extra.tex:199-213`
 
 ### NUM-16: Arrangement: a zero-area region after a blast reports a representative point inside its neighbour
-**Status:** open (strict xfail on k28_one_blast and k28_two_blasts) | **Severity:** medium | **Related:** INT-9 | **WP:** WP10
+**Status:** closed (WP7, root cause INT-9) | **Severity:** medium | **Related:** INT-9 | **WP:** WP10
 
 It is bounded by an unstable arc that no Bridge spans; this is a sparse/full arrangement mismatch at a blast child.
 
@@ -1001,7 +1015,7 @@ The same paragraph also notes that runs at 6+ blasts are unreliable, so the "bla
 
 ## Decision questions raised by the audit
 
-Every question of the audit is now answered or deferred; see "Author decisions" below. DEC-19 was raised later by WP5 and answered on 2026-10-08 (D9).
+Every question of the audit is now answered or deferred; see "Author decisions" below. DEC-19 was raised later by WP5 and answered on 2026-10-08 (D9). DEC-20 was raised by WP7 and is open.
 
 | ID | Question | Blocks | Resolved by |
 |---|---|---|---|
@@ -1023,6 +1037,7 @@ Every question of the audit is now answered or deferred; see "Author decisions" 
 | DEC-16 | **Dissipative maps (b ≠ ±1) in scope?** Today they run unvalidated with one \|det J\| WARNING, and the area laws silently do not hold. | NUM-15 | deferred |
 | DEC-17 | **`image_of` misses:** expected (unregistered image crossings), or should union-valued images be supported? | NUM-17 | deferred |
 | DEC-18 | **Demote the bridge-row assertion to a resolution flag when the signs alternate?** Keep the assertion when the signs are equal. | NUM-1 | D6 |
+| DEC-20 | **Where the walk may cross S** (raised by WP7): the image of a bridge crosses the stable manifold only at the images of its ends and in `S \ f(S)`, but the dual graph unifies the strong pip's window. They agree when S is trimmed at the pip orbit (every law case); inversion x period 2 at 10 steps runs past it and a walk is unreachable. (a) unify `S \ f(S)` per branch (pip-free); (b) cut S at the pip orbit in the partition and dual graph (the chalkboard's stage 3); (c) keep the 2026-09-14 design and warn (WP7 slice 1). (a) and (b) are no-ops on every law case. | PK-5 | open |
 | DEC-19 | **Period-k stagger** (raised by WP5): a reference trajectory on the outermost lap of the longest unstable branch has no `+j` image in the trellis. (a) accept and warn (WP5 slice 1); (b) trim N to crossings whose `+1..+(k-1)` images are registered (an unstable-side cut, making every reference Z_k-complete; changes the deep p3 / inversion references, BCG-4); (c) virtual partition boundaries at the predicted landings (invents holes, rejected). Orphan window pairs are not pairs (NUM-18). | PK-3 | D9 (accept) |
 
 ## Author decisions (2026-10-07)
@@ -1051,6 +1066,7 @@ Taken under D8 (Claude's call, revisit if wrong):
 | C6 | `blast_zone(max_points)` is a per-call budget. | DEC-13 |
 | C7 | At an anchor a bridge of `u(o, b)` meets `s(o, b)` (same orbit point and branch index: equivariant under the map, and the pair carries the anchor's own sign). Elements are NOT glued across the periodic point: every branch keeps its own two sides (WP3). | DEC-4 |
 | C8 | One resonance zone per fixed point: `ResonanceZone.key` is the fixed point; an inversion zone is the union of its two loops (WP3). | DEC-4 |
+| C9 | The alphabet (the minimal trellis's classes, D2) is CLOSED under the word map: a class a word names is added, walked, lettered by the session and records `named_by`. Every pair of a walk is the class of a real piece of `f(B)`, so this keeps D3 (a walk always exists, no virtual class) without growing the minimal trellis. A closure class with no registered bridge counts as active (WP7). | D2, D3 |
 
 Deferred: DEC-14 (which blasting cutoff defines the result; re-measured in WP12), DEC-15 (validated arithmetic), DEC-16 (dissipative maps), DEC-17 (union-valued `image_of`).
 
@@ -1083,7 +1099,7 @@ Each strict xfail below is a `cases.KNOWN_ISSUES` entry naming the WP that turns
 |---|---|---|
 | `cross_side_only_within_a_branch` (D4; replaces `itinerary_pairs_same_side`) | none (WP3) | — |
 | `every_active_class_walks` (D3) | none (not applicable on p3 and k28_one_blast: singleton words) | — |
-| `no_virtual_class` (D3) | none (WP3) | — |
+| `no_virtual_class` (D3; replaced by `alphabet_closed_under_words`, WP7) | none (WP3) | — |
 | `alphabet_inside_minimal_trellis` (D2; an iff over the evidence table since WP6) | none (WP6) | — |
 | `series_class_count_never_decreases` (D1) | none (WP2) | — |
 | `series_class_count_constant_while_holes_constant` (D1, D2) | none (WP6) | — |
@@ -1101,5 +1117,7 @@ The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases
 **WP5** (KNOWN_ISSUES 21 -> 21, one reason re-tagged): D5's period-k rule is kept and stated (`_is_forward_beyond_fundamental(pair)`), and no branch is left without its window holes silently. A missing `+j` appearance is a crossing past the computed unstable branch (the stagger of a period-k chain); `extend_pseudoneighbor_trajectories` names each such stable branch in one WARNING with the `image_cdist` prediction, and nothing is invented. The strong pip's k cuts are placed by `image_cdist` (PK-6), the hole-chain step cap is gone (PK-9), and an inert class mapping onto inert classes is silent (PK-8). PK-2, PK-6, PK-8 and PK-9 are closed; PK-3 is slice 1 done, with DEC-19 open for slice 2. New law `window_holes_on_every_branch` (passes on every law case) and regression `test_period_k_window_gaps`. Measured gap WARNINGs per build: inversion 1, inversion_one_blast 1, inversion_period2 3, p3_15 / p3_6_blasts / p3_coarse_blasts 2 each; k10, k28 x2, p3, nested, nested_inner_blasts and inversion_two_blasts 0. Law cases are unchanged (holes with openings, partitions, classes, words). `("anchor_bridge_class_leads_its_tangle", "inversion")` stays a strict xfail tagged WP5: its hole cannot be made without inventing one (DEC-19).
 
 **WP6** (KNOWN_ISSUES 21 -> 13): the alphabet is the minimal trellis's classes (D2). `bridge_classes` is the evidence table, the minimal trellis reads activity from it and keeps it (`MinimalTrellis.classes`), and `MinimalTrellis.alphabet` is what the session letters; registered evidence never adds a symbol. Loops fold FORWARD into their image-chain parent's class (one parent per pair, asserted); orphans are logged and unclassed. One letter generator, `topology.letter`, over disjoint digit sets. BCG-1, BCG-2, BCG-6 (decided D2) and SIMP-6 are closed. All eight WP6 entries XPASSed and were removed (`alphabet_inside_minimal_trellis` x 3 inversion cases, `series_class_count_constant_while_holes_constant` x k28_series / p3_series, `series_alphabet_inside_minimal_trellis` x 3 series). New law `loops_fold_forward`; the classing laws read the evidence table, `alphabet_inside_minimal_trellis` is an iff; two NOT_APPLICABLE entries on `inversion` (`every_active_class_walks`, `matrix_is_token_counts`: its alphabet is one inert class until DEC-19). Regression `test_blast_children_are_evidence_only`. Law cases change only on the inversion cases (4 -> 1, 10 -> 9, 10 -> 9 classes). Open for WP7: the alphabet is not closed under the word map in deep runs (PK-1).
+
+**WP7** (KNOWN_ISSUES 13 -> 2): the walk exists wherever the stable manifold stops at the pip orbit. Two root causes explain every walk-side failure. (1) The alphabet was not closed under the word map: the virtual `new1` of the deep p3 runs is the class of the image of an image bridge, a real bridge the minimal trellis does not keep (PK-1, NEST-3). `symbolic_dynamics` now closes it (C9), and virtual classes are deleted. (2) The dense arrangement drew arcs over manifold that was never computed (INT-9 -> NUM-16); `Trellis.is_computed_arc` decides, and a gap dangles. Evidence disagreements carry an `EvidenceDiagnosis` (INT-1), and a straddling landing is unreliable (INT-8). The dual graph warns where its unified span is not `S \ f(S)` (PK-5, DEC-20). Removed from KNOWN_ISSUES: `arrangement_euler` x `inversion_two_blasts`; `arrangement_regions_disjoint` x k28_one_blast / k28_two_blasts / inversion_one_blast / inversion_two_blasts / nested_inner_blasts and `arrangement_regions_sound` x nested_inner_blasts (NUM-16, root cause INT-9); `open_p3_deep_runs` x 3; `anchor_bridge_class_leads_its_tangle` x `inversion`, which became NOT_APPLICABLE. That law is re-scoped by D9 to tangles whose every stable branch carries a hole: on `inversion` s(0.1) has none, the anchor bridge of u(0.1) is a loop, and the anchor bridge of u(0.0) maps onto it. New laws: `alphabet_closed_under_words` (replaces `no_virtual_class`) and `dual_unified_is_where_f_of_s_stops`; both pass on all 10 law cases. Law-case words, refined words, matrices, letters and reliability are identical to base. Left for later: PK-4 (slice 2, foreign-branch chords), DEC-20, escape-lobe images (WP9 / WP10), word-based inertness of closure classes, k28 at 8+ blasts (2 ambiguous closure walks over 173 u x u artifacts, WP10), and the deep-run residual laws (WP8 / WP10).
 
 Verification of the "possibly stale" items (WP0): DOC-3 is confirmed open (the MinimalTrellis "definition is changing", TrellisBranch `return_period`, ResonanceZone "no inversion example", PartitionFamily "concurrent edit" and StrongPip "legitimately None" notes are all still present). PK-7 is confirmed dead code (WP2 deletes it). INV-10, NUM-19 and DOC-4 need a run; they are checked by the WP that owns them.

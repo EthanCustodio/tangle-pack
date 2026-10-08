@@ -279,3 +279,52 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   k28 blast 8 `e` -> `g`); those symbols are virtual now (p3 deep 1, k28 blast 8 2, was 3).
 - Inversion (0 blasts) has no active class: its alphabet is the inert class of the hole bridge
   `(22,10)`; the anchor bridges carry no hole because s(0.1) has no window hole (PK-3 / DEC-19).
+
+## Open-issues round WP7 (2026-10-08, branch `oi/wp07-walk-exists`, base `e883720`)
+
+- Closure (C9, PK-1). Every walk already existed on the deep runs after WP4; the virtual `new1`
+  was the class of the IMAGE of an image-bridge class (`p3_6_blasts`: `t -> aa u^-1 ab u aa^-1`,
+  `aa = {R(0.0)#1, R(1.0)#27}` = the images `(40,41)`, `(44,45)` of hole bridge `(38,39)`, whose
+  trivial walk names `{R(1.0)#1, R(2.0)#25}`). A walk pair is the class of a real piece of
+  `f(B)`, so `symbolic_dynamics` closes the alphabet under the word map: the driver iterates
+  `entries` while appending; a named class copies its `MinimalTrellis.classes` entry
+  (`replace(..., letter=None)`, members and inertness kept, so its members verify it) or is a
+  bare active `BridgeClassEntry`; active ones are lettered by `letter_for` (the session passes
+  `BridgeAlphabet.letter_for`), else the next unused letter of their series;
+  `ClassDynamics.named_by`. Translation runs once the table is closed
+  (`SymbolicDynamics.table` = seed then closure in discovery order); `session.bridge_classes()`
+  stays the seed. Measured: p3_15 / p3_6_blasts 23 -> 43, p3_16 27 -> 49 (two closure classes
+  with registered members, both verified), nested inner 6 / 7 blasts 27 -> 47 / 28 -> 49, k28 8
+  blasts 15 -> 23 (2 ambiguous closure walks, 173 u x u artifacts there, WP10). Law cases: no
+  closure class; words / matrices / letters / reliability identical (`wp07impl/words_sig.py`).
+- Virtual classes deleted: `SymbolKind` is `active | inert`; a class outside the closed table
+  (only evidence can name one) is named by its label and counted active; `transition_graph`
+  asserts every edge target is a node; `plot_transition_graph` has no dashed sinks.
+- `EvidenceDiagnosis` (INT-1): `ImageEvidence.chain` / `.diagnosis`; cause `"stable end"` = the
+  first run of >= 2 consecutive chain crossings with equal `(manifold_b_key, crossing_sign)`
+  (`crossings` = that run), else `"walk"`. k28 at 6 blasts: `a` member `(44,45)`, run
+  `(74,75,76)` on s(0.0), ratios 30-8400 (not under-resolution). One WARNING per disagreeing
+  member (the old length-mismatch WARNING is folded in).
+- `is_reliable` also needs every non-None landing `contained` (INT-8; no law case straddles;
+  `p3_coarse_blasts` does).
+- INT-9 / NUM-16: `Trellis.is_computed_arc(lo, hi)` = a Bridge spans the pair, or both
+  crossings' `unstable_manifold` is one object (None = an anchor, on every curve). Dense
+  `Arrangement._build_unstable_arcs` skips other pairs (DEBUG lists them); their slots get the
+  usual stubs. Gaps per law case: k28_one 1, k28_two 2, nested_inner_blasts 4, inversion_one 2,
+  inversion_two 5. Sparse mode unchanged. The two "no spanning bridge" WARNINGs
+  (`punch_holes`, minimal trellis) name the cause (D9: the image of a bridge no blast iterated).
+- PK-5 / DEC-20: `DualGraph._check_where_f_of_s_stops` WARNs per stable branch of a pip's fixed
+  point whose unified span is not `S \ f(S) = (c_s(f(end of previous branch)), end]`
+  (`image_cdist(last, 1, "stable", branch=previous)`, tol `cdist_tol` from the table, else
+  `SCALING_RTOL * end`). Equal on every law case and deep run (all from the table, exact);
+  inversion x period 2 at 10/10 steps warns on s(1.0) (`(0.577, 4.413]` vs `(0.504, 1.749]`),
+  the one remaining unreachable walk (class `n`).
+- PK-4 (slice 2, author): crossing 44 on `p3_6_blasts` is a foreign-branch chord of the lobe
+  excursion 41-44 across s(1.0); by Jordan alternation the empty stretch is `(41,44)` (stable
+  order), not the base-branch unstable-order pairing. Moves refinement labels only.
+- Residual laws on the deep runs (also on base): `partition_covers_branch` (BCG-4, WP8),
+  `dual_face_side_is_geometry` (INT-10, WP10). Inversion x period 2 at 10 steps also fails
+  `partition_covers_branch`, `bridge_endpoints_on_own_branch`, `backward_holes_keep_bridge_side`
+  (WP8 / WP10).
+- Deferred: word-based inertness of closure classes (a closure class with no registered bridge
+  is active by the no-evidence convention), escape-lobe images (WP9 / WP10).

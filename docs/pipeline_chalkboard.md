@@ -56,10 +56,12 @@ Inversion, period-k and several saddles are **no special case** below, except at
    - If both ends are in one element, the bridge is a loop. It is folded FORWARD into the class of the bridge whose image contains it (D2).
    - A class is inert iff every image is a loop or inert.
    - The class set is finite and grouped by tangle.
-   - The alphabet uses the minimal trellis's bridges only (D2).
+   - The alphabet uses the minimal trellis's bridges only (D2), CLOSED under the word map (stage 8).
 
 8. **Minimal trellis, dual graph, word.** The minimal trellis keeps the hole bridges plus the images of the active ones. The iterated partition is the homotopy partition cut by those images. The dual graph has faces as nodes, plus one stable node per edge side, unified only on the fundamental segment.
    - **The word of a class is the shortest walk** in the dual graph from the landing of one end to the landing of the other (D3). The walk always exists; an unreachable walk or a virtual class is a construction bug.
+   - Every pair of a walk is the class of one piece of f(B), a real bridge of W^u. A word naming a class outside the alphabet adds it, and that class is walked in turn (C9). The closure is finite because element pairs are.
+   - The walk may cross S only where an image can: at the images of its ends and in S \ f(S). That is the pip window exactly when S stops at the pip orbit (stage 3); otherwise the dual graph warns (DEC-20).
    - At every crossing the walk reads the entry element, then the exit element. Disjoint consecutive pairs are classes or their inverses, and loops drop out.
    - Singletons cannot walk; their word is f(bridge) read off the registered image chain. Everywhere else that chain is the cross-check.
    - ★ Cross-side (D4) is a flag only for a pair on the SAME branch.
@@ -82,5 +84,6 @@ From the audit; the details and evidence are in `open_issues.md`.
 | 4 | Missing table links leave branches without holes | PK-3 | warned (WP5); filling is DEC-19 |
 | 5-6 | Holes and rows read from polyline geometry, not signs | INT-3 | fixed (WP4) |
 | 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | fixed (WP6) |
-| 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | WP7 |
+| 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | fixed (WP7) |
+| 3, 8 | The partition and dual graph do not cut S at the pip orbit (unified window ≠ S \ f(S) when S runs past it) | PK-5 | DEC-20 |
 | 10 | Element identity is a positional index | BCG-7 | WP8 |

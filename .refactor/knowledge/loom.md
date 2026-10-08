@@ -95,3 +95,9 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
   second rebuild of the minimal trellis).
 - `BridgeAlphabet.letter_for` uses `topology.SymbolicDynamics.letter` (active `a..t, aa, ...`);
   `loom.letter` is gone (no shim, D8). Session caches stay hand-rolled (SIMP-8, WP8).
+
+## Open-issues round WP7 (2026-10-08, branch `oi/wp07-walk-exists`)
+
+- `TangleSession.symbolic_dynamics` passes `letter_for=self.bridge_alphabet.letter_for`, so an
+  active class the closure adds (a class a word names outside `bridge_classes()`, C9) keeps its
+  letter across rebuilds; `bridge_classes()` stays the seed alphabet, `dyn.table` is closed.

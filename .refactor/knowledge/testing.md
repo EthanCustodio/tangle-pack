@@ -334,3 +334,50 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   virtual class, every word symbol in the alphabet, matrix nodes = the active alphabet's refined
   symbols. Fails on base.
 - `test_class_count_under_blasting.py` unchanged in code: 9 passed, 0 xfailed.
+
+## Open-issues round WP7 (2026-10-08, branch `oi/wp07-walk-exists`, base `e883720`)
+
+- Suite: 951 passed, 28 skipped, 3 deselected, 2 xfailed, ~106 s (base 938 passed / 27 skipped
+  / 13 xfailed). KNOWN_ISSUES 13 -> 2: removed `arrangement_euler` x `inversion_two_blasts`
+  (WP7), `_NUM16` with its six entries (`arrangement_regions_disjoint` x k28_one_blast /
+  k28_two_blasts / inversion_one_blast / inversion_two_blasts / nested_inner_blasts,
+  `arrangement_regions_sound` x nested_inner_blasts: root cause INT-9), `open_p3_deep_runs` x 3,
+  `anchor_bridge_class_leads_its_tangle` x `inversion`. Left: `orientation_reversing_case_builds`
+  (C3), `three_tangles_take_three_families` (WP9). NOT_APPLICABLE +1:
+  `anchor_bridge_class_leads_its_tangle` on `inversion` (D9: s(0.1) has no hole).
+- Laws: `alphabet_closed_under_words` replaces `no_virtual_class` (every rule symbol in
+  `dyn.table`, `dyn.classes` in table order, seed iff `named_by is None`, a closure class is
+  named in its `named_by`'s word and has an itinerary; returns symbols + classes).
+  `matrix_is_token_counts` lost its virtual-sink branch (every active token is a node). NEW
+  `dual_unified_is_where_f_of_s_stops` (dual-graph layer; helper `helpers.laws.where_f_of_s_stops`
+  computes `S \ f(S)` per pip-owning branch from the branch ends). `anchor_bridge_class_leads_its_tangle`
+  checks only tangles whose every stable branch carries a hole (`Hole.openings` branch keys,
+  D9 / DEC-19), the rule the probe found (scoping by the anchor's own branch does not work:
+  s(0.0) has the window hole and u(0.0)'s anchor class is still inert). All pass on the 10 law
+  cases; the anchor law is non-vacuous on the 9 others.
+- Regression: `test_open_p3_deep_runs.py` has no xfail (`test_deep_p3_alphabet_is_closed`
+  x3: every rule symbol in the table, nothing unresolved, reliable; the sink test is deleted);
+  NEW `test_closure_predicts_registered_images.py` (p3_16: a closure class with a registered
+  member chain exists and every such class is verified), `test_evidence_diagnosis.py` (k28 at 6
+  blasts, ~3 s: each disagreeing `ImageEvidence` has a diagnosis whose cause matches an
+  independent equal-sign scan of its chain; agreeing ones have none; unreliable),
+  `test_unified_segment_precondition.py` (`build_inversion_period2(unstable_steps=10,
+  stable_steps=10)` under `np.errstate(over="ignore")`: one DualGraph WARNING per independently
+  differing branch, naming it; p3 / k10 silent). `test_blast_children_are_evidence_only.py`
+  reads `dyn.table` and checks seed iff `named_by is None`. `helpers/names.py` no longer looks
+  up virtual names.
+- Unit: `test_symbolic_dynamics.py` — `test_a_class_outside_the_table_is_named_by_its_label`
+  (was the virtual `new1` test), `test_a_straddling_landing_is_unreliable`, and a monkeypatched
+  driver harness (`_drive`: `ElementNaming`, `land_element`, `_resolve_itinerary`,
+  `_member_pair`, `_image_chain`, `trellis_itinerary`, a `_Crossings` trellis stand-in) for
+  `test_a_word_naming_a_new_class_closes_the_alphabet` (active via `letter_for`; inert from an
+  evidence entry) and `test_evidence_disagreement_names_a_stable_end` (both causes).
+  `test_arrangement.py` — `test_is_computed_arc_truth_table`,
+  `test_a_gap_between_two_curves_is_two_dangling_ends`, and `test_arrangement_survives_a_blast`
+  rewritten (a gap exists after the k10 blast, it is no arc, every drawn arc is computed, Euler
+  per component).
+- `build_inversion_period2(*, unstable_steps=9, stable_steps=9, through=...)` (law case
+  unchanged).
+- Base check: the branch tests copied onto a detached base worktree
+  (`../tp-oi-wp07-walk-exists-base`) fail 31 there (every new test above, the arrangement laws
+  on the five blasted cases, the symbolic laws on all ten).
