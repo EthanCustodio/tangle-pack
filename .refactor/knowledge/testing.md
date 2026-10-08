@@ -34,3 +34,26 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   (2,4),(2,6),(0,6)) plus outer-first (4,4); (2,2) order-dependent; (6,0),(8,0) silently corrupt
   period 3 (a,b unresolved, `c -> b^-1`). Branch: all 20 match each tangle alone; order checks at
   (2,2),(4,4),(8,4) identical (itinerary tables identical apart from the title).
+
+## Numerics stress campaign (branch `numerics-stress`, `stress/numerics/`, audited 2026-10-07)
+
+- Map: `harness.py` (subprocess per config, RSS watchdog, outcome ok/exception/invariant_assert/
+  oom/timeout/crash), `e01..e10_*.py`, `results/*.jsonl`, `report/` (`report.tex`,
+  `make_figures.py`, `analysis.py`, `make_numbers*.py` -> `numbers*.tex` macros, `tables/`).
+- E7 `blasts` (`e07_breaking.py:261`): ONE config per case (k28, p3 max 10; nested 8), one cutoff,
+  fixed `min_separation`; topology probed ONLY on the final state (`run_topology`, :131) ->
+  no per-blast series of classes/words. Final: k28 32 classes / 7 unresolved / 2 virtual;
+  p3 31/1/1; nested 13/0/0. E7 `depth`: p3 classes 9 (11-14 steps) -> 23, 30, 36 (15-17),
+  is_reliable False from 15; inversion 4,5 = genuine topology AssertionError ("owned by 0
+  partition elements"), 6 = ok but is_reliable False (1 virtual), 7,8 OOM.
+- AUTHOR RULE 2026-10-07 for any write-up: topology changing under blasting / deeper growth
+  (new crossings, classes, holes, splits, words, letters) is EXPECTED, never a failure.
+  Three tiers: (a) topology change = new information; (b) library provisional flags
+  (`is_reliable` False, ambiguous, unresolved, virtual `newN`) = symbolic stage incomplete,
+  open question; (c) genuine errors = exception, AssertionError, OOM/timeout, physical-law
+  violation. `is_reliable` (`SymbolicDynamics.py:826`) = every class has an itinerary, none
+  ambiguous, none contradicted by registered evidence.
+- Report framing smells (as of 2026-10-07): scorecard Blasting row "topology unreliable",
+  taxonomy row "Unreliable topology", `make_numbers.py:428` "(unreliable)" macro suffix,
+  `make_figures.py:816,888` legend strings "unreliable"/"topology unreliable", section
+  "Failure modes and breaking points" holding blasts + depth.
