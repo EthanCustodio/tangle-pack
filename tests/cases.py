@@ -58,10 +58,14 @@ Cases:
   times: a crossing sits a sliver narrower than ``2 * cdist_tol`` past the pip
   (stress campaign E11, 2026-10-07; the exact-ownership regression).
 
+The blast series (:data:`SERIES`, :func:`blast_series`) run the D1 loop --
+blast once, recompute the topology from scratch, compare -- from the zone
+stage of ``k28`` (8 blasts), ``p3`` (9) and ``inversion`` (2).
+
 Dev Notes:
 
 * ``henon_cases`` has no stage parameter (and ``src/`` is not changed by the
-  test refactor), so a nested build stopped before the partition
+  test refactor), so a nested or period-3 build stopped before the partition
   (``through="zones"``) is a local copy of the ``henon_cases`` recipe; only the
   full ``"partitioned"`` build delegates.
 * Registry ids are NOT reproducible between two builds in one process (P6:
@@ -261,6 +265,8 @@ def _blast(
     zone: "ResonanceZone",
     fixed_points: list,
     pips: list,
+    *,
+    diagnose: bool = True,
 ) -> None:
     """One single-iteration blast of ``zone`` at ``ZONE_MIN_SEPARATION``, the pips restored."""
     session.blast_zone(
@@ -268,6 +274,7 @@ def _blast(
         num_iterations=1,
         fixed_point=fixed_points,
         min_separation=ZONE_MIN_SEPARATION,
+        diagnose=diagnose,
     )
     _repin(session, fixed_points, pips)
 
@@ -423,12 +430,15 @@ def build_period3(
     area_cutoff: float = 1e-7,
     blasts: int = 0,
     min_separation: float = 1e-5,
+    through: Literal["zones", "partitioned"] = "partitioned",
 ) -> Case:
     """
-    The inner period-3 orbit alone, partitioned.
+    The inner period-3 orbit alone.
 
-    Delegates to :func:`tanglepack.examples.henon_cases.build_period3` with
-    every keyword explicit.
+    ``"partitioned"`` delegates to
+    :func:`tanglepack.examples.henon_cases.build_period3` with every keyword
+    explicit; ``"zones"`` runs the local copy of its recipe and stops at the
+    repinned zone, unblasted (the blast series starts there).
 
     Args:
         unstable_steps: Unstable growth steps (13; 15 and 16 are the known
@@ -437,10 +447,18 @@ def build_period3(
         area_cutoff: The manifold machine's refinement area cutoff.
         blasts: Single-iteration blasts of the zone.
         min_separation: The blasts' ``min_separation``.
+        through: ``"zones"`` or ``"partitioned"``.
 
     Returns:
         The case.
+
+    Raises:
+        ValueError: ``"zones"`` was asked for together with blasts.
     """
+    if through == "zones":
+        if blasts:
+            raise ValueError("a period-3 build stopped at its zone takes no blasts")
+        return _period3_zone(unstable_steps, stable_steps, area_cutoff)
     build = henon_cases.build_period3(
         unstable_steps=unstable_steps,
         stable_steps=stable_steps,
@@ -460,6 +478,38 @@ def build_period3(
         pips=list(build.pips),
         expect=CaseExpect(periods=(3,), area_cutoff=area_cutoff, blasts=blasts),
         zones=list(build.session.resonance_zones.values()),
+    )
+
+
+def _period3_zone(unstable_steps: int, stable_steps: int, area_cutoff: float) -> Case:
+    """The ``henon_cases.build_period3`` recipe stopped at the repinned zone."""
+    session = TangleSession(
+        henon_map(*HENON_P3),
+        henon_map_inverse(*HENON_P3),
+        henon_jacobian(*HENON_P3),
+        area_cutoff=area_cutoff,
+    )
+    fp3 = session.construct_fixed_point([list(p) for p in P3_ORBIT_SEED])
+    session.orient_eigenvectors(fp3, _orientation(PERIOD3_ORIENTATION))
+    session.initialize_both_manifolds(fp3)
+    session.grow_n_times(fp3, "unstable", num_iterations=unstable_steps)
+    session.grow_n_times(fp3, "stable", num_iterations=stable_steps)
+    session.compute_intersections([fp3])
+    session.trim_stable_manifolds(fp3)
+    session.create_bridges(fp3)
+    session.infer_iterate_table()
+    session.classify_strong_pips()
+    pip = session.trellis(fp3).strong_pip
+    zone = session.resonance_zone(pip)
+    _repin(session, [fp3], [pip])
+    return Case(
+        name="p3_unblasted",
+        session=session,
+        fixed_points=[fp3],
+        pips=[pip],
+        expect=CaseExpect(periods=(3,), area_cutoff=area_cutoff),
+        zones=[zone],
+        stage="zones",
     )
 
 
@@ -835,6 +885,86 @@ def build_near_tangency() -> Case:
 
 
 # --------------------------------------------------------------------------- #
+# The blast series (D1): blast, recompute the topology from scratch, compare
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class SeriesStep:
+    """
+    One recompute of the D1 loop.
+
+    Attributes:
+        blasts: Single-iteration blasts so far.
+        holes: ``(bounding_ids, iterate, bridge_side)`` of every hole; ids
+            persist across the blasts of one session, so two steps compare.
+        classes: ``len(session.bridge_classes())``, active and inert together.
+        active: The active classes (a diagnostic, never compared).
+        inert: The inert classes (a diagnostic, never compared).
+        outside_minimal: Classes with no member in ``minimal_trellis().kept_bridge_ids``.
+    """
+
+    blasts: int
+    holes: frozenset
+    classes: int
+    active: int
+    inert: int
+    outside_minimal: int
+
+
+#: ``name -> (zone-stage builder, blasts)``. k28 switches its reference pair at
+#: blasts 2 and 8, p3 at blast 6; inversion stops at 2 (INV-2 until WP2).
+SERIES: Mapping[str, tuple[Callable[[], Case], int]] = MappingProxyType(
+    {
+        "k28_series": (lambda: build_k28(blasts=0, through="zones"), 8),
+        "p3_series": (lambda: build_period3(through="zones"), 9),
+        "inversion_series": (lambda: build_inversion(through="zones"), 2),
+    }
+)
+
+
+def blast_series(name: str) -> tuple[SeriesStep, ...]:
+    """
+    The D1 loop on one session: recompute the topology, blast once, repeat.
+
+    Each blast is one iteration at ``ZONE_MIN_SEPARATION`` with
+    ``diagnose=False``, the pips restored after it.
+
+    Args:
+        name: A key of :data:`SERIES`.
+
+    Returns:
+        One step per recompute, the unblasted one first.
+    """
+    build, blasts = SERIES[name]
+    case = build()
+    session = case.session
+    (zone,) = case.zones
+    steps = []
+    for blast in range(blasts + 1):
+        if blast:
+            _blast(session, zone, case.fixed_points, case.pips, diagnose=False)
+        _partition(session)
+        table = session.bridge_classes()
+        kept = set(session.minimal_trellis().kept_bridge_ids)
+        steps.append(
+            SeriesStep(
+                blasts=blast,
+                holes=frozenset(
+                    (hole.bounding_ids, hole.iterate, hole.bridge_side)
+                    for fp in case.fixed_points
+                    for hole in session.trellis(fp).holes
+                ),
+                classes=len(table),
+                active=len(table.active),
+                inert=len(table.inert),
+                outside_minimal=sum(
+                    not any(m.bridge_id in kept for m in entry.members) for entry in table
+                ),
+            )
+        )
+    return tuple(steps)
+
+
+# --------------------------------------------------------------------------- #
 # Registries: law cases, known issues, not-applicable pairs
 # --------------------------------------------------------------------------- #
 #: The cases every physical law runs on (decision 9).
@@ -1024,6 +1154,25 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
                 "WP2",
             ),
         ),
+        **_each(
+            ("series_class_count_constant_while_holes_constant",),
+            ("k28_series", "p3_series"),
+            KnownIssue(
+                "BCG-1/BCG-2: blast children with no image are classed and orphan loops "
+                "stand alone, so the class count grows while the hole set is constant",
+                "WP6",
+            ),
+        ),
+        ("series_class_count_never_decreases", "inversion_series"): KnownIssue(
+            "INV-2: the lap factor lambda_u loses every hole at blast 2, and classes go "
+            "down with them",
+            "WP2",
+        ),
+        ("series_class_count_constant_while_holes_constant", "inversion_series"): KnownIssue(
+            "INV-2: vacuous today, no two consecutive recomputes share a hole set",
+            "WP2",
+        ),
+        **_each(("series_alphabet_inside_minimal_trellis",), tuple(SERIES), _BCG1),
     }
 )
 

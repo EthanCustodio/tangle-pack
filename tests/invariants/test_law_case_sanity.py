@@ -26,14 +26,20 @@ from pathlib import Path
 
 import pytest
 
-from cases import BUILDERS, KNOWN_ISSUES, LAW_CASES, NOT_APPLICABLE, issue_marks
+from cases import BUILDERS, KNOWN_ISSUES, LAW_CASES, NOT_APPLICABLE, SERIES, issue_marks
 from helpers import laws
 from helpers.law_tier import assert_non_vacuous, build_products, layer_tests
 
 test_case_sanity_laws, test_case_sanity_set_aside = layer_tests("case_sanity")
 
 #: Known-issue ids that are tests of their own, not ``helpers.laws`` checks.
-_STANDALONE_ISSUES = {"orientation_reversing_case_builds", "open_p3_deep_runs"}
+_STANDALONE_ISSUES = {
+    "orientation_reversing_case_builds",
+    "open_p3_deep_runs",
+    "series_class_count_never_decreases",
+    "series_class_count_constant_while_holes_constant",
+    "series_alphabet_inside_minimal_trellis",
+}
 
 
 @pytest.mark.parametrize(
@@ -77,7 +83,7 @@ def test_every_law_runs_in_the_tier() -> None:
     assert not missing, missing
 
     ids = {laws.law_id(check) for check in layered}
-    standalone_cases = set(BUILDERS)
+    standalone_cases = {*BUILDERS, *SERIES, "hand_built"}
     unknown = [
         (law, case)
         for law, case in (*KNOWN_ISSUES, *NOT_APPLICABLE)
