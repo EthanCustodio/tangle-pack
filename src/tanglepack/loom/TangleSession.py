@@ -24,7 +24,7 @@ from ..numerics.budget import DEFAULT_MAX_POINTS_PER_STEP
 from ..numerics.geometry import polyline_midpoint
 from ..topology import plotting
 from ..topology.Arrangement import Arrangement
-from ..topology.BridgeClass import BridgeClassEntry, BridgeClassTable, zone_label
+from ..topology.BridgeClass import BridgeClassTable
 from ..topology.DualGraph import DualGraph
 from ..topology.MinimalTrellis import MinimalTrellis
 from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
@@ -233,10 +233,9 @@ class TangleSession:
         Returns:
             The Trellis for the requested fixed point(s).
         """
-        key = self._cache_key(fixed_points)
+        key, selected = self._selection(fixed_points)
         trellis = self._trellises.get(key)
         if rebuild or trellis is None or self._is_stale(trellis):
-            selected = [fp for fp in self.workbench.fixed_points if id(fp) in key]
             trellis = self._trellises[key] = Trellis.from_workbench(self.workbench, selected)
             if len(selected) == 1 and selected[0] in self._strong_pips:
                 trellis.classify_strong_pips(choose_default=False)
@@ -309,8 +308,7 @@ class TangleSession:
             ValueError: A selected fixed point's chosen strong pip is no
                 longer a candidate (choose another with :meth:`set_strong_pip`).
         """
-        key = self._cache_key(fixed_points)
-        selected = [fp for fp in self.workbench.fixed_points if id(fp) in key]
+        key, selected = self._selection(fixed_points)
         topology = self._topologies.get(key)
         if (
             rebuild
@@ -320,23 +318,6 @@ class TangleSession:
         ):
             topology = self._topologies[key] = Topology(self, selected)
         return topology
-
-    def _recompute_holes(self, fixed_point: "FixedPoint") -> Trellis:
-        """Stages 3-6 of one fixed point, from scratch on its trellis, at its pip."""
-        trellis = self.trellis(fixed_point)
-        if trellis.strong_pip is None:
-            if fixed_point in self._strong_pips:
-                raise ValueError(
-                    f"the chosen strong pip of {fixed_point!r} is no longer a "
-                    "strong-pip candidate; choose another with set_strong_pip()"
-                )
-            trellis.classify_strong_pips()
-        if trellis.strong_pip is not None:
-            self._strong_pips[fixed_point] = trellis.strong_pip_intersection
-        trellis.compute_pseudoneighbors()
-        trellis.punch_holes()
-        trellis.partition_stable_manifold()
-        return trellis
 
     def bridge_classes(
         self,
@@ -368,27 +349,6 @@ class TangleSession:
             table order (grouped by tangle, smallest member cdist first).
         """
         return self.topology(fixed_points, rebuild=rebuild).classes
-
-    def _zone_key_of_entry(self, entry: BridgeClassEntry) -> Optional["FixedPoint"]:
-        """
-        The zone key shared by every member bridge of an entry, or None.
-
-        Each member is placed by :meth:`classify_bridge`; the entry's zone is the
-        one they agree on. Members in different zones (or some in none) log a
-        WARNING and leave the entry without a zone.
-        """
-        keys = set()
-        for member in entry.members:
-            zone = self.classify_bridge(self.workbench.bridge(member.bridge_id))
-            keys.add(None if zone is None else zone.key)
-        if len(keys) > 1:
-            logger.warning(
-                "bridge class %s straddles resonance zones: members fall in %s",
-                entry.bridge_class.label,
-                sorted("none" if key is None else zone_label(key) for key in keys),
-            )
-            return None
-        return next(iter(keys), None)
 
     def describe_bridge_classes(
         self,
@@ -992,9 +952,11 @@ class TangleSession:
         """Whether a cached Trellis snapshot predates the workbench's current state."""
         return trellis._built_generation != self.workbench.generation
 
-    def _cache_key(self, fixed_points) -> frozenset:
-        """A selection as a set of fixed-point identities (None: every fixed point)."""
-        return frozenset(id(fp) for fp in self._resolve_fixed_points(fixed_points))
+    def _selection(self, fixed_points) -> tuple[frozenset, list["FixedPoint"]]:
+        """A selection's cache key (its fixed-point identities, a SET) and its
+        fixed points in workbench order (None: every fixed point)."""
+        key = frozenset(id(fp) for fp in self._resolve_fixed_points(fixed_points))
+        return key, [fp for fp in self.workbench.fixed_points if id(fp) in key]
 
     def _resolve_fixed_points(
         self, fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]"
@@ -1099,8 +1061,9 @@ class TangleSession:
         For each selected fixed point this builds (or reuses) its per-fixed-point
         Trellis and runs :meth:`Trellis.classify_strong_pips`, so the inner and
         outer tangles of a nested session are each classified against their own
-        crossings. A fixed point whose pip was chosen before gets it back (a
-        WARNING when it is no longer a candidate); otherwise the default
+        crossings. A fixed point whose pip was chosen before gets it back, or
+        is left without one (one WARNING) when it is no longer a candidate:
+        a chosen pip is never replaced by the default. Otherwise the default
         choice is remembered (API-1).
 
         Args:
@@ -1108,7 +1071,8 @@ class TangleSession:
                 list), an iterable of them, or None for every fixed point on the
                 workbench (→ returns a ``{fixed_point: candidates}`` dict).
             **kwargs: Forwarded to :meth:`Trellis.classify_strong_pips` (``tol``,
-                ``collision_rtol``, ``choose_default``).
+                ``collision_rtol``, ``choose_default``; the last only for a
+                fixed point with no chosen pip).
 
         Returns:
             A candidate-id list for a single fixed point, or a dict mapping each
@@ -1117,28 +1081,34 @@ class TangleSession:
         results = {}
         for fp in self._resolve_fixed_points(fixed_point):
             trellis = self.trellis(fp)
-            results[fp] = trellis.classify_strong_pips(**kwargs)
-            if fp in self._strong_pips:
-                self._restore_strong_pip(trellis)
+            remembered = fp in self._strong_pips
+            found = trellis.strong_pip is not None  # a lost pip was warned at the rebuild
+            results[fp] = trellis.classify_strong_pips(
+                **({**kwargs, "choose_default": False} if remembered else kwargs)
+            )
+            if remembered:
+                self._restore_strong_pip(trellis, warn=found)
             if trellis.strong_pip is not None:
                 self._strong_pips[fp] = trellis.strong_pip_intersection
         if _is_single_fixed_point(fixed_point):
             return results[fixed_point]
         return results
 
-    def _restore_strong_pip(self, trellis: Trellis) -> None:
-        """Choose the remembered pip on a classified single-fixed-point trellis."""
+    def _restore_strong_pip(self, trellis: Trellis, *, warn: bool = True) -> None:
+        """Choose the remembered pip on a classified single-fixed-point trellis,
+        leaving it unset (with a WARNING when ``warn``) if it is no longer a candidate."""
         (fixed_point,) = trellis.fixed_points
         chosen = self._strong_pips[fixed_point]
         pip = trellis.registry.find(chosen)
         if pip in trellis.strong_pip_candidates:
             trellis.set_strong_pip(pip)
             return
-        logger.warning(
-            "the chosen strong pip of %r (stable cdist %.6g on %s) is no longer a "
-            "strong-pip candidate; choose another with set_strong_pip()",
-            fixed_point, chosen.stable_cdist, chosen.manifold_b_key[1:],
-        )
+        if warn:
+            logger.warning(
+                "the chosen strong pip of %r (stable cdist %.6g on %s) is no longer a "
+                "strong-pip candidate; choose another with set_strong_pip()",
+                fixed_point, chosen.stable_cdist, chosen.manifold_b_key[1:],
+            )
 
     def set_strong_pip(self, fixed_point: "FixedPoint", intersection_id: int) -> int:
         """Choose ``intersection_id`` as the strong pip of ``fixed_point``, for
@@ -1151,6 +1121,11 @@ class TangleSession:
     def strong_pip(self, fixed_point: "FixedPoint") -> Optional[int]:
         """The chosen strong-pip id for ``fixed_point``'s trellis (or None)."""
         return self.trellis(fixed_point).strong_pip
+
+    def chosen_strong_pip(self, fixed_point: "FixedPoint") -> Optional["Intersection"]:
+        """The pip the session carries for ``fixed_point`` across generations, as a
+        crossing (it may no longer be a candidate), or None when none was chosen."""
+        return self._strong_pips.get(fixed_point)
 
     def strong_pip_candidates(self, fixed_point: "FixedPoint") -> list[int]:
         """The strong-pip candidate ids for ``fixed_point``'s trellis."""

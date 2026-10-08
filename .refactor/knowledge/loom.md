@@ -105,22 +105,24 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
 ## Open-issues round WP8 (2026-10-08, branch `oi/wp08-recompute-identity`, base `083f910`)
 
 - `loom/Topology.py`: `Topology(session, fixed_points)` = one recompute (D1, SIMP-8). Its
-  constructor runs `session._recompute_holes(fp)` per selected fixed point (classify when no pip,
+  constructor runs `Topology._stages_3_to_6(fp)` per selected fixed point (classify when no pip,
   pseudoneighbors, holes, partition, on the per-fixed-point trellis, from scratch) and copies the
   holes / partitions into its own lists (a later manual stage call clears the trellis slots in
   place). Lazy `cached_property` stages: `homotopy`, `minimal`, `classes` (alphabet lettered by
-  `identity`, zoned through `session._zone_key_of_entry`), `iterated`, `dual_graph` (pips with
+  `identity`, zoned by `Topology._zone_key` through the public `session.classify_bridge`), `iterated`, `dual_graph` (pips with
   None filtered), `dynamics` (`letter_for=self.letter_for`). `identity(bridge_class)` =
   frozenset of the two elements' `PartitionInterval.identity`.
 - `TangleSession`: `_trellises` / `_topologies` keyed by `frozenset(id(fp))` of the resolved
-  selection (`_cache_key` is a method now; `trellis(fp) is trellis([fp])`, a one-fixed-point
+  selection (`_selection(fixed_points)` returns the key and the fixed points in workbench order; `trellis(fp) is trellis([fp])`, a one-fixed-point
   session's `trellis() is trellis(fp)`), the trellis built with the selection in WORKBENCH order.
   `topology()` rebuilds on `rebuild`, a new generation, or `topology.strong_pips !=
   tuple(self.strong_pip(fp) ...)`. The six product accessors are one-line delegates.
 - Pip memory (API-1): `_strong_pips[fp] = Intersection`, written by `set_strong_pip`,
   `resonance_zone` (the zone's pip, read from the registry BEFORE the trim; `add_resonance_zones`
-  goes through it), `classify_strong_pips` (fan-out: re-applies a remembered pip, else remembers
-  the default) and `_recompute_holes` (a pip set directly on the trellis is adopted). A rebuilt
+  goes through it), `classify_strong_pips` (fan-out: re-applies a remembered pip with `choose_default=False`, so a
+  lost one stays unset after ONE WARNING and is never replaced by the default; else remembers the
+  default) and `Topology._stages_3_to_6` (a pip set directly on the trellis is adopted through
+  `set_strong_pip`; a lost chosen pip, read by the public `chosen_strong_pip(fp)`, raises). A rebuilt
   single-fixed-point trellis is classified (`choose_default=False`) and the remembered pip found
   by `registry.find`; not a candidate -> WARNING, left unset, `topology()` raises ValueError.
 - Deleted: `_bridge_classes`, `_dual_graphs`, `_minimal_trellises`, `_iterated_partitions`,

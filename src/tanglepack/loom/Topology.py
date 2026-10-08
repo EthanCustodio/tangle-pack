@@ -26,10 +26,17 @@ Dev Notes:
 
 from __future__ import annotations
 
+import logging
 from functools import cached_property
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 
-from ..topology.BridgeClass import BridgeClass, BridgeClassTable, bridge_classes
+from ..topology.BridgeClass import (
+    BridgeClass,
+    BridgeClassEntry,
+    BridgeClassTable,
+    bridge_classes,
+    zone_label,
+)
 from ..topology.DualGraph import DualGraph
 from ..topology.MinimalTrellis import MinimalTrellis, minimal_trellis
 from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
@@ -40,6 +47,9 @@ if TYPE_CHECKING:
     from ..topology.TopologyResults import StablePartitionResult
     from ..topology.Trellis import Trellis
     from .TangleSession import TangleSession
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class Topology:
@@ -73,13 +83,33 @@ class Topology:
         self.generation = session.workbench.generation
         self.fixed_points = tuple(fixed_points)
         self.trellis: "Trellis" = session.trellis(self.fixed_points)
-        recomputed = [session._recompute_holes(fp) for fp in self.fixed_points]
+        recomputed = [self._stages_3_to_6(fp) for fp in self.fixed_points]
         self.strong_pips = tuple(t.strong_pip for t in recomputed)
         # New lists: a later manual stage call clears the trellis slots in place.
         self.holes = [hole for t in recomputed for hole in t.holes]
         self.partitions: list["StablePartitionResult"] = [
             result for t in recomputed for result in t.stable_partitions
         ]
+
+    def _stages_3_to_6(self, fixed_point: "FixedPoint") -> "Trellis":
+        """Pseudoneighbors, holes and partition of one fixed point, from scratch
+        on its trellis, at the pip the session carries (the default, remembered,
+        when none was chosen)."""
+        session = self._session
+        trellis = session.trellis(fixed_point)
+        if trellis.strong_pip is None:
+            session.classify_strong_pips(fixed_point)
+        if trellis.strong_pip is not None:
+            session.set_strong_pip(fixed_point, trellis.strong_pip)  # one set on the trellis is adopted
+        elif session.chosen_strong_pip(fixed_point) is not None:
+            raise ValueError(
+                f"the chosen strong pip of {fixed_point!r} is no longer a "
+                "strong-pip candidate; choose another with set_strong_pip()"
+            )
+        trellis.compute_pseudoneighbors()
+        trellis.punch_holes()
+        trellis.partition_stable_manifold()
+        return trellis
 
     @cached_property
     def homotopy(self) -> HomotopyPartition:
@@ -101,8 +131,25 @@ class Topology:
         for entry in table:
             if entry.active:
                 entry.letter = self.letter_for(entry.bridge_class)
-            entry.zone_key = self._session._zone_key_of_entry(entry)
+            entry.zone_key = self._zone_key(entry)
         return table
+
+    def _zone_key(self, entry: BridgeClassEntry) -> Optional["FixedPoint"]:
+        """The resonance zone every member bridge of a class lies in, or None
+        (with a WARNING when the members disagree)."""
+        session = self._session
+        keys = set()
+        for member in entry.members:
+            zone = session.classify_bridge(session.workbench.bridge(member.bridge_id))
+            keys.add(None if zone is None else zone.key)
+        if len(keys) > 1:
+            logger.warning(
+                "bridge class %s straddles resonance zones: members fall in %s",
+                entry.bridge_class.label,
+                sorted("none" if key is None else zone_label(key) for key in keys),
+            )
+            return None
+        return next(iter(keys), None)
 
     @cached_property
     def iterated(self) -> IteratedHomotopyPartition:

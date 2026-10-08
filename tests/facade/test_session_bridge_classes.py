@@ -95,11 +95,11 @@ def test_a_class_straddling_zones_warns_and_gets_no_zone(k10_partitioned, caplog
         return _FakeZone() if bridge.id == target else None
 
     session.classify_bridge = classify
-    with caplog.at_level(logging.WARNING, logger="tanglepack.loom.TangleSession"):
+    with caplog.at_level(logging.WARNING, logger="tanglepack.loom.Topology"):
         rebuilt = session.bridge_classes(rebuild=True)
 
     assert rebuilt.active[0].zone_key is None
-    assert_logged(caplog, logging.WARNING, "tanglepack.loom.TangleSession")
+    assert_logged(caplog, logging.WARNING, "tanglepack.loom.Topology")
 
 
 # --------------------------------------------------------------------------- #
@@ -129,6 +129,23 @@ def test_a_pip_trimmed_away_warns_and_raises(k10_session, caplog):
             session.bridge_classes()
 
     assert_logged(caplog, logging.WARNING, "tanglepack.loom.TangleSession")
+
+
+def test_a_pip_trimmed_away_is_not_replaced_by_classifying(k10_session, caplog):
+    """Classifying again after the trim warns once and leaves the pip unset:
+    the default never takes the chosen pip's place."""
+    session, fp = k10_session
+    session.classify_strong_pips()
+    q0 = session.strong_pip(fp)
+    define_resonance_zone(session.workbench, session.trellis(fp).iterate(q0, 1))
+
+    with caplog.at_level(logging.WARNING, logger="tanglepack.loom.TangleSession"):
+        session.classify_strong_pips()
+
+    assert_logged(caplog, logging.WARNING, "tanglepack.loom.TangleSession", count=1)
+    assert session.strong_pip(fp) is None
+    with pytest.raises(ValueError, match="no longer a strong-pip candidate"):
+        session.bridge_classes()
 
 
 # --------------------------------------------------------------------------- #
