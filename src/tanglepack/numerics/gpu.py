@@ -7,12 +7,31 @@ that, when they are handed a batch of points, the batch is evaluated on the GPU
 via `CuPy <https://cupy.dev>`_ and the result is copied back to host memory. The
 linked-list / refinement / intersection logic stays on the CPU.
 
-The win comes entirely from the *vectorized* map call: every per-layer
-refinement sweep and every manifold iteration maps a whole ``(2, N)`` batch in a
-single call (see :meth:`DynamicalSystem.map_batch`), and that single call is what
-runs on the device. Per-point evaluations (a single ``(2,)`` point, as used by
-the initializer and the fixed-point solver) stay on the CPU to avoid paying the
+Only the *vectorized* map call is accelerated: every per-layer refinement sweep
+and every manifold iteration maps a whole ``(2, N)`` batch in a single call (see
+:meth:`DynamicalSystem.map_batch`), and that single call is what runs on the
+device. Per-point evaluations (a single ``(2,)`` point, as used by the
+initializer and the fixed-point solver) stay on the CPU to avoid paying the
 host<->device transfer for two numbers.
+
+Measured result
+---------------
+GPU acceleration is opt-in and, as measured by the numerics stress campaign
+(2026-10-07, experiments E1/E2 in ``stress/numerics/report/report.pdf``), gives
+**no gain**:
+
+* end to end the GPU runs at 0.96-1.00x the CPU speed (median of three repeats:
+  k=2.8 0.999x, period 3 0.975x, k=10 0.958x);
+* the map is at most 0.84% of unstable-growth CPU time (cProfile), so Amdahl's
+  law caps any map accelerator at 1.008x; refinement and the linked list
+  (Python ``Point`` objects, pointer walks) take the rest;
+* the device path is transfer-dominated (88% of GPU time at ``N = 10^7``), and
+  through ``map_batch`` it only breaks even somewhere between ~6e5 and ~4e6
+  points per batch, so ``min_batch_points`` has nothing to tune.
+
+It could pay only once refinement and the linked list themselves live on the
+device as arrays, so that a growth step no longer round-trips through host
+memory batch by batch. Until then leave it off.
 
 Map requirements
 ----------------
@@ -115,6 +134,14 @@ def enable_gpu(target: Any, min_batch_points: int = 64) -> DynamicalSystem:
 
     Returns:
         The underlying :class:`DynamicalSystem` (for chaining).
+
+    Raises:
+        ImportError: CuPy cannot be imported.
+        TypeError: ``target`` holds no reachable :class:`DynamicalSystem`.
+
+    Note:
+        Measured as no end-to-end gain (see the module docstring); it stays
+        opt-in and is not deprecated.
     """
     system = _resolve_system(target)
     cp = _import_cupy()
@@ -133,7 +160,9 @@ def enable_gpu(target: Any, min_batch_points: int = 64) -> DynamicalSystem:
     system._map_inv_batchable = None
 
     logger.info(
-        "GPU acceleration enabled for system %r (min_batch_points=%d).",
+        "GPU acceleration enabled for system %r (min_batch_points=%d); measured as "
+        "no end-to-end gain (map <= 0.84%% of growth time), see the "
+        "tanglepack.numerics.gpu module docstring.",
         system.name,
         min_batch_points,
     )
