@@ -284,6 +284,24 @@ def check_k_value_matches_inversion(case: "Case") -> int:
     return len(case.fixed_points)
 
 
+def check_fixed_point_minimal_period(case: "Case") -> int:
+    """Every fixed point's ``period`` is the minimal period of its coordinates.
+
+    A seed that slid to a lower-period orbit would repeat its points and carry a
+    wrong ``k_value``; ``construct_fixed_point`` refuses it, this re-checks the
+    fixtures independently of that guard.
+    """
+    for fp in case.fixed_points:
+        orbit = np.asarray(fp.coordinates, dtype=float)
+        assert orbit.shape == (fp.period, 2)
+        scale = max(1.0, float(np.max(np.abs(orbit))))
+        for d in range(1, fp.period):
+            if fp.period % d == 0:
+                gap = float(np.max(np.abs(np.roll(orbit, -d, axis=0) - orbit)))
+                assert gap > 1e-6 * scale, f"{fp.label}: period {fp.period} repeats every {d}"
+    return len(case.fixed_points)
+
+
 def check_every_branch_is_built(case: "Case") -> int:
     """Every key of every branch cycle is a manifold of the workbench, keyed by itself."""
     count = 0
@@ -1931,6 +1949,7 @@ LAYERS: dict[str, list[LawCheck]] = {
     "case_sanity": [
         check_case_builds,
         check_k_value_matches_inversion,
+        check_fixed_point_minimal_period,
         check_every_branch_is_built,
         check_every_branch_crosses,
     ],
