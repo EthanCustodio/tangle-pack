@@ -60,6 +60,13 @@ Dev Notes:
 * A sparse component may have no closed face at all (a stable branch with no
   kept bridge). Its single open face is merged into the unbounded node with a
   WARNING rather than raising.
+* A component with two or more positive faces raises :class:`OuterFaceError`
+  (2026-10-07: kept raising, its message lists every positive face's corners,
+  area and ratio to the largest). Deep blasts reach it on self-intersecting
+  slivers, where no area is trustworthy: :attr:`Region.area` and the
+  area check in :meth:`Arrangement.image_of` are unreliable on a polygon that
+  crosses itself, so a small positive face is NOT evidence that it is
+  spurious, and no demotion threshold is offered.
 """
 
 from __future__ import annotations
@@ -101,6 +108,38 @@ FaceKind = Literal["region", "open", "outer"]
 
 #: Which side(s) of its stable edge a stable node faces.
 NodeSide = Literal["left", "right", "both"]
+
+
+class OuterFaceError(ValueError):
+    """
+    A component of the sparse arrangement has more than one outer face.
+
+    Exactly one face per component winds positively; two or more means the
+    arrangement is not a planar subdivision at this resolution (typically a
+    self-intersecting sliver). It stays an error (the 2026-10-07 rule files
+    invariant failures as genuine errors).
+
+    Attributes:
+        component: The arrangement component.
+        positive_faces: ``(face index, corners, traversal area)`` of every
+            positive face, largest area first.
+    """
+
+    def __init__(
+        self, component: int, positive_faces: list[tuple[int, tuple[int, ...], float]]
+    ) -> None:
+        self.component = component
+        self.positive_faces = sorted(positive_faces, key=lambda face: -face[2])
+        largest = self.positive_faces[0][2]
+        listing = "; ".join(
+            f"face {index} corners {corners} area {area:.3g} "
+            f"({area / largest:.3g} of the largest)"
+            for index, corners, area in self.positive_faces
+        )
+        super().__init__(
+            f"component {component} has {len(self.positive_faces)} faces of "
+            f"positive traversal area (expected exactly one outer face): {listing}"
+        )
 
 
 def _position_of(
@@ -718,6 +757,11 @@ class DualGraph:
         global root when nothing contains it. A component with no positive-area
         face (only open faces: a stable branch with no kept bridge) has all of
         its faces merged into the root, with a WARNING.
+
+        Raises:
+            OuterFaceError: If a component has a closed face but not exactly
+                one positive face (a ``ValueError`` listing each positive
+                face's corners and area).
         """
         faces = self.arrangement.faces
         root = len(faces)
@@ -749,11 +793,9 @@ class DualGraph:
                     union.union(index, root)
                 continue
             if len(outer) != 1:
-                own_areas = [round(areas[index], 6) for index in members]
-                raise ValueError(
-                    f"component {component} has {len(outer)} faces of positive "
-                    f"traversal area (expected exactly one outer face); its "
-                    f"face areas are {own_areas}"
+                raise OuterFaceError(
+                    component,
+                    [(index, faces[index].corners, areas[index]) for index in outer],
                 )
             host = self._innermost_container(
                 outer[0], component, node_ids, containing, components, areas

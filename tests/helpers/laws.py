@@ -886,10 +886,15 @@ def check_partition_singletons(case: "Case") -> int:
 
 
 def check_holes_are_classified(case: "Case") -> int:
-    """Every hole has a bridge side, its anchorward bound first, finite coordinates and an orbit."""
+    """Every hole has a bridge side, its anchorward bound first, finite coordinates and an orbit.
+
+    A direct hole's side comes from its crossing signs, a propagated hole's is
+    carried along its orbit (author, 2026-10-07).
+    """
     count = 0
     for trellis, hole in _holes(case):
         assert hole.bridge_side in ("left", "right")
+        assert hole.side_source == ("signs" if hole.pair is not None else "carried")
         near, far = hole.bounding_ids
         assert hole.near_intersection_id == near
         assert float(trellis.intersection(near).stable_cdist) <= float(

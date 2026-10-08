@@ -3,7 +3,8 @@
 ``Trellis.punch_holes`` asserts the two topological invariants itself, once per
 call: I2 (``check_bridge_rows_consistent``) on every bridge that carries a hole,
 and I1 (``check_holes_share_bridge_side``) on all holes with the trellis's
-orientation. ``DualGraph`` runs its structural self-check on construction. These
+orientation -- since propagated holes carry their side (2026-10-07), I1's teeth
+are each propagated hole's measured side. ``DualGraph`` runs its structural self-check on construction. These
 tests spy on those call sites (both checks are imported inside ``punch_holes``,
 so a module-attribute patch reaches them) instead of repeating the checks; the
 invariants themselves run on every law case in ``tests/invariants/`` and the
@@ -104,6 +105,64 @@ def test_punch_holes_raises_on_a_corrupted_hole_side(
     monkeypatch.setattr(stable_partition, "propagate_reference_holes", corrupted)
     with pytest.raises(AssertionError):
         trellis.punch_holes()
+
+
+def test_propagated_holes_carry_their_orbit_side(p3: Case) -> None:
+    """D2 (author, 2026-10-07): a direct hole reads its side off its crossing
+    signs, a propagated one carries its orbit's and keeps the curves' reading as
+    ``measured_side``, which agrees wherever it is defined."""
+    (fp,) = p3.fixed_points
+    trellis = p3.session.trellis(fp)
+    assert trellis.orientation_preserving
+    direct = {hole.origin: hole.bridge_side for hole in trellis.holes if hole.pair is not None}
+    propagated = [hole for hole in trellis.holes if hole.pair is None]
+    assert propagated, "the period-3 case propagates holes"
+    assert {hole.side_source for hole in trellis.holes if hole.pair is not None} == {"signs"}
+    for hole in propagated:
+        assert hole.side_source == "carried"
+        assert hole.bridge_side == direct[hole.origin]
+        assert hole.measured_side in (None, hole.bridge_side)
+
+
+def test_punch_holes_raises_on_a_contradicting_measured_side(
+    p3: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The carried side makes the orbit check hold by construction; the measured
+    side is what keeps ``punch_holes`` a geometric guard."""
+    (fp,) = p3.fixed_points
+    trellis = p3.session.trellis(fp)
+    real = stable_partition.propagate_reference_holes
+
+    def contradicted(*args: Any, **kwargs: Any) -> list:
+        holes = real(*args, **kwargs)
+        hole = next(hole for hole in holes if hole.measured_side is not None)
+        hole.measured_side = "left" if hole.measured_side == "right" else "right"
+        return holes
+
+    monkeypatch.setattr(stable_partition, "propagate_reference_holes", contradicted)
+    with pytest.raises(AssertionError):
+        trellis.punch_holes()
+
+
+def test_two_outer_faces_raise_with_every_positive_face(
+    p3: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A component with more than one positively winding face keeps raising a
+    ``ValueError``, now carrying every positive face (largest first)."""
+    real = dual_graph_module.DualGraph._traversal_area
+    monkeypatch.setattr(
+        dual_graph_module.DualGraph,
+        "_traversal_area",
+        lambda self, face: abs(real(self, face)),
+    )
+    with pytest.raises(dual_graph_module.OuterFaceError) as caught:
+        p3.session.dual_graph()
+    assert isinstance(caught.value, ValueError)
+    faces = caught.value.positive_faces
+    assert len(faces) > 1
+    areas = [area for _index, _corners, area in faces]
+    assert areas == sorted(areas, reverse=True) and areas[-1] > 0.0
+    assert all(corners for _index, corners, _area in faces)
 
 
 def test_dual_graph_construction_runs_its_self_check(

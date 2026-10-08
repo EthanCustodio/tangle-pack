@@ -56,6 +56,8 @@ logger.addHandler(logging.NullHandler())
 # facade all name the same thing.
 Side = Literal["left", "right"]
 Endpoint = Literal["first", "second"]
+#: Where a hole's ``bridge_side`` came from (see :class:`Hole`).
+SideSource = Literal["signs", "carried", "fallback"]
 
 OPPOSITE_SIDE: dict[Side, Side] = {"left": "right", "right": "left"}
 
@@ -97,15 +99,25 @@ class Hole:
             with the bridge oriented by the unstable dynamical direction —
             forward flow away from the fixed point, i.e. increasing unstable
             canonical distance. Standing on the bridge looking along that
-            direction, positive cross(tangent, displacement) = left. Classified
-            once at punch time: a direct hole from its own coordinates, a
-            propagated hole from the backward-carried point. None when the
-            geometry is degenerate (unorientable bridge or a point on the arc).
-            Invariant: all holes sharing an ``origin`` share this side, since
-            an orientation-preserving map carries a bridge's dynamical
-            orientation to its image's (it alternates with the parity of
-            ``iterate`` when the map reverses orientation). Checked by
-            :func:`topology.StablePartition.check_holes_share_bridge_side`.
+            direction, positive cross(tangent, displacement) = left. A direct
+            hole reads it off its crossing signs; a propagated hole CARRIES it
+            from the hole it was propagated from (author, 2026-10-07): the map
+            carries a bridge's dynamical orientation to its image's, so the side
+            is unchanged along the backward chain under an orientation-preserving
+            map and alternates with the parity of the step under a reversing one.
+            None only when there was no side to carry.
+        measured_side: A propagated hole's side MEASURED on the curves: the
+            reference hole's coordinates carried back by the real inverse map,
+            read against the image sub-arc of the containing bridge. None for a
+            direct hole, or when the point sits on the arc. It must agree with
+            ``bridge_side``; :func:`topology.StablePartition.check_holes_share_bridge_side`
+            asserts it, together with the orbit invariant (all holes of one
+            ``origin`` share ``bridge_side``, up to the parity flip).
+        side_source: Where ``bridge_side`` came from: ``"signs"`` (a direct
+            hole, from its crossing signs), ``"carried"`` (a propagated hole,
+            from its orbit's side) or ``"fallback"`` (a propagated hole with no
+            side to carry; its openings default to the inward pair). None for a
+            hand-built hole.
         bounding_ids: Registry IDs of the two intersections defining the bridge
             the hole belongs to — the pair's own bridge for a directly punched
             hole, the containing bridge for a propagated one. These are the
@@ -133,6 +145,8 @@ class Hole:
     openings: Optional[list[tuple[int, str, str]]] = None
     iterate: Optional[int] = None
     origin: Optional[tuple[int, int]] = None
+    measured_side: Optional[Side] = None
+    side_source: Optional[SideSource] = None
 
 
 @dataclass

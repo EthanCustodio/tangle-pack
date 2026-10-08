@@ -71,6 +71,7 @@ from .BridgeClass import (
 )
 from .DualGraph import (
     DualGraph,
+    OuterFaceError,
     FaceNode,
     StableNode,
 )
@@ -113,7 +114,11 @@ from .SymbolicDynamics import (
     translate_itinerary,
 )
 from .StablePartition import (
+    RowDiagnosis,
+    RowEnd,
+    SideDiagnosis,
     bridge_for_pair,
+    bridge_row_diagnosis,
     bridge_row_violation,
     bridge_side_violations,
     check_bridge_rows_consistent,
@@ -124,6 +129,7 @@ from .StablePartition import (
     punch_holes,
     row_of_end,
     rows_of_bridge,
+    side_diagnoses,
     span_contains,
 )
 
@@ -145,6 +151,7 @@ __all__ = [
     "BridgeClassTable",
     "BridgeMember",
     "DualGraph",
+    "OuterFaceError",
     "FaceNode",
     "SIDE_LETTER",
     "ElementName",
@@ -183,8 +190,13 @@ __all__ = [
     "forward_unstable_branch_cycle",
     "bridge_classes",
     "bridge_for_pair",
+    "RowDiagnosis",
+    "RowEnd",
+    "SideDiagnosis",
+    "bridge_row_diagnosis",
     "bridge_row_violation",
     "bridge_side_violations",
+    "side_diagnoses",
     "check_bridge_rows_consistent",
     "check_holes_share_bridge_side",
     "class_sort_key",
