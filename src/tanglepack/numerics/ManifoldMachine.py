@@ -68,6 +68,15 @@ included. Prefer the ``grow_until_*`` drivers (``grow_until_bounded`` stops on
 ``max|x|``, the only condition shown to stop before take-off) over
 ``grow_n_times`` with a large count.
 
+The default cutoff is 1e-7 (2026-10-07, was 1e-4): the stress campaign's E4
+found it the cheapest cutoff converged on every case tested (at 1e-4 the
+period-3 crossing count still moves with the cutoff at fixed depth; a coarse
+polygon both misses true crossings and makes spurious ones). It costs ~8-12x
+the points of 1e-4 per step, so the escape cliff sits ~10x closer in memory:
+the point budget is what makes the finer default safe. A recipe tuned at 1e-4
+(the k=10 tests and scripts grow 9-10 steps) passes ``area_cutoff=1e-4``
+explicitly; the topology there is the same at both.
+
 Open questions:
 
 * ``iterate_manifold`` maps exactly one step and takes no ``num_iterations``
@@ -102,8 +111,9 @@ from .geometry import curvature_area_batch
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-#: Library default for :attr:`ManifoldMachine.area_cutoff`.
-DEFAULT_AREA_CUTOFF = 1e-4
+#: Library default for :attr:`ManifoldMachine.area_cutoff` (1e-4 before
+#: 2026-10-07; see the module Dev Notes).
+DEFAULT_AREA_CUTOFF = 1e-7
 
 
 class ManifoldMachine:
@@ -157,7 +167,8 @@ class ManifoldMachine:
 
         Args:
             system (DynamicalSystem): The dynamical system to grow with.
-            area_cutoff (float): Refinement threshold (see the class docs).
+            area_cutoff (float): Refinement threshold (see the class docs);
+                :data:`DEFAULT_AREA_CUTOFF` (1e-7) by default.
             max_points_per_step (Optional[int]): Per-call point budget; ``None``
                 disables it.
         """

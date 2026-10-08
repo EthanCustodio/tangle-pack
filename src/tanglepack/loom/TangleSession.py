@@ -117,7 +117,8 @@ class TangleSession:
             dynamical_map: The forward map.
             dynamical_map_inverse: Its inverse.
             jacobian_function: Optional analytic Jacobian.
-            area_cutoff: The workbench's refinement threshold.
+            area_cutoff: The workbench's refinement threshold (1e-7 by
+                default, see :data:`~.numerics.ManifoldMachine.DEFAULT_AREA_CUTOFF`).
             max_points_per_step: The workbench's per-step point budget; ``None``
                 disables it.
             escape_radius: ``max|coordinate|`` above which a growth step warns;
