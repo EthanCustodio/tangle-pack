@@ -66,8 +66,9 @@ depth; the rest of the layer is described in `CLAUDE.md`.
 - `numerics/ManifoldMachine.py:285-295,438`: non-contiguous `old_iterated_points` crash in
   `merge_manifolds` when a bridge's end nodes were iterated by neighbour bridges. No longer
   reached by `build_nested`; bug remains.
-- `SymbolicDynamics` warns "inert class u has the non-empty word 'v'" on period-3 runs (inert ->
-  next branch's inert class); expected, noisy.
+- CLOSED (WP5, PK-8): `SymbolicDynamics` warned "inert class u has the non-empty word 'v'" on
+  period-3 runs (inert -> next branch's inert class); it now warns only for an inert word naming
+  a non-inert symbol.
 
 ## Features
 
@@ -193,3 +194,49 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   the PK-1 symbolic laws (WP7). Hole PLACEMENT (`_stable_arc_midpoint`, `_nearest_arc_point`,
   `_step_into`, `_image_arc_midpoint`) stays geometric: it places plotted coordinates and the
   carried point, nothing decides on it.
+
+## Open-issues round WP5 (2026-10-08, branch `oi/wp05-period-k-holes`, base `3e12d53`)
+
+- Period-k stagger (PK-3 root cause). With WP2's exact table every missing `+j` link is an
+  image crossing NOT COMPUTED: a period-k chain is grown one map step per branch, so each
+  unstable branch reaches beta further than the one before it in the cycle, and a reference on
+  the outermost lap of the longest branch has no forward image. Landings (`image_cdist`,
+  unstable) vs the target branch's last crossing: inversion `+1` 55.5 vs 13.2 on u(0.0);
+  inversion_period2 `+1..+3` 1.13 / 1.55 / 2.11 vs 0.38 / 0.52 / 0.71; p3_6_blasts `+1` 4097 vs
+  1662, `+2` 6355 vs 2579. Every gap on every builder is "past its last crossing".
+- `extend_pseudoneighbor_trajectories` walks `for steps in count(1)`; a FORWARD walk that stops at
+  `steps < k_value` records the branches `advance_key(ref.branch_key, j)`, `j = steps .. k-1`
+  (the `key in seen` break is not a gap). After the loop: ONE WARNING per stable branch on
+  `tanglepack.topology.Pseudoneighbor`, naming each reference that misses it and, per unlinked
+  member, its predicted landing against the unstable branch's last crossing (helpers
+  `_missing_appearance`, `_branch_text` -> `A:s(2.0)`; StablePartition imports `_branch_text`).
+  Counts: inversion 1, inversion_one_blast 1, inversion_period2 3, p3_15 / p3_6_blasts /
+  p3_coarse_blasts 2; 0 on k10, k28, p3, nested, nested_inner_blasts, inversion_two_blasts.
+- Orphan window pairs (why the gap is not filled by walking each branch's window): the gap
+  branches do have consecutive "pairs" in their windows (p3_6_blasts s(2.0) `(15,23)`, s(0.0)
+  `(18,20)`; inversion s(0.1) `(17,3)`), but each one's open STABLE interval holds the
+  predicted images of the tip crossings (s(2.0) `(0.4966, 0.9546)` holds 0.6275, 0.661,
+  0.7466), so they are no pairs by the definition; they pass only because the stable-side check
+  reads registered crossings alone (NUM-18, deferred). Filling is DEC-19 (WP5 slice 2; option
+  (b), an unstable-side cut of N, changes the deep references, BCG-4).
+- `_strong_pip_cuts(trellis) -> {stable key: cdist}` from `image_cdist(pip, j, "stable")`,
+  `j < k_value`: one cut per branch always; a cut not from the table is flagged in one WARNING
+  (PK-6). Never fires on a builder (cuts complete everywhere). `_cut_ids` and both
+  `_pair_fixed_point` copies are deleted.
+- `_is_forward_beyond_fundamental(pair)`: `iterate is not None and iterate >= k_value` (D5, kept;
+  every forward pair carries `branch_key`). `punch_holes` partitions `forward` / `pairs` by two
+  comprehensions; the no-spanning-bridge WARNING names each skipped pair, iterate, origin and
+  branch (INT-9 stays WP7's).
+- PK-9: `propagate_reference_holes` has no `max_steps`; it loops `count(1)` and ends because
+  every step stops or adds a new bridge id to `visited` (finite). Longest chain seen: 21 steps.
+- PK-8: `_edges` warns only when an inert class's word holds a non-inert symbol.
+- Symmetric per-branch hole counts are NOT a WP5 property: p3 4/4/4 at 0-5 blasts, 16/14/12 at
+  6; p3_16 (no gap) 14/16/16 because the backward chain has 20 steps per origin, not a multiple
+  of k = 3 (BCG-4, WP8).
+- Inversion x period 2 at 10 steps is not a WP5 gap: 7 laws fail on main; `partition_covers_branch`
+  is an element of s(0.0) opened at both ends by two holes of one origin a lap apart (iterates
+  -3 and -7), the -3 one on a cross-branch container (INT-2 convention vs the law's reading);
+  the landing failures are outermost elements whose image runs past the next branch (INT-8).
+  Owners WP7 / WP8. Not a law case.
+- Behaviour: law cases unchanged (holes with openings and sides, partitions, class counts,
+  words; probes `wp04/holeset.py`, `wp04/partsig.py`, `wp05/impl/holeopen.py`).

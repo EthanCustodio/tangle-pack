@@ -40,9 +40,10 @@ Cases:
 * ``inversion_period2`` -- inversion on a period-k orbit: the ``k=4.1``
   period-2 orbit ``(-2.0488, -0.0488) <-> (0.0488, 2.0488)``, both ``DM^2``
   eigenvalues negative (-1.863 / -0.537), ``k_value = 4``; 9 unstable / 9
-  stable steps at ``area_cutoff = 1e-5``, no zone (at 10 steps four laws fail
-  on deep period-k crossings, recorded for WP5/WP7; it escapes past ~8 steps
-  at k=4.25).
+  stable steps at ``area_cutoff = 1e-5``, no zone (at 10 steps seven laws fail,
+  none of them a period-k hole gap: an element opened by two holes of one
+  origin a lap apart, one on a cross-branch container, and landings past the
+  next branch's partition -- WP7 / WP8; it escapes past ~8 steps at k=4.25).
 * ``k10_inversion`` -- the ``k=10`` map's inversion saddle at ``(-2.3166,
   2.3166)``, 6 unstable / 5 stable steps at ``area_cutoff = 1e-4``: the
   numerics fixture behind ``henon_inversion*`` only (it escapes at 7 steps and
@@ -1179,8 +1180,10 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "WP7",
         ),
         ("anchor_bridge_class_leads_its_tangle", "inversion"): KnownIssue(
-            "PK-3: the reference pair has no registered +1 iterate, so stable branch 0.1 "
-            "gets no hole and the anchor bridge's image is a loop (an inert anchor class)",
+            "PK-3 / DEC-19: the reference pair's +1 image lies past the computed u(0.0) "
+            "(the inversion halves are grown one map step apart, a stagger), so s(0.1) "
+            "gets no window hole (named in a WARNING since WP5) and the anchor bridge's "
+            "image is a loop (an inert anchor class)",
             "WP5",
         ),
         **_each(("alphabet_inside_minimal_trellis",), _INVERSION, _BCG1),

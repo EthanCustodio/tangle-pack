@@ -47,8 +47,8 @@ Implementation notes:
   so its unstable branches are staggered: each reaches beta further than the
   one before it in the cycle. A reference on the outermost lap of the longest
   branch therefore has no computed +j image (inversion: the +1 image of the
-  window pair lies at unstable cdist 55.5 on u(0.0), which ends at 21.1; p3
-  at 6 blasts: 4097 against a last crossing at 1662), and its appearance on
+  window pair lies at unstable cdist 55.5 on u(0.0), whose last crossing is
+  at 13.2; p3 at 6 blasts: 4097 against 1662), and its appearance on
   that branch is not in the trellis. extend_pseudoneighbor_trajectories names
   every stable branch left without it in ONE WARNING per branch, with each
   missing member's image_cdist prediction; nothing is matched or invented.

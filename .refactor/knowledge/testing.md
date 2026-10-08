@@ -261,3 +261,36 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   `test_bridge_span_reads_the_branch_from_the_bridges_own_key` (covered by law
   `propagated_holes_land_on_predicted_branch`), `test_backward_endpoint_prefers_the_table_then_scales`
   (`image_cdist`'s table-first rule is pinned in `test_image_cdist.py`).
+
+## Open-issues round WP5 (2026-10-08, branch `oi/wp05-period-k-holes`, base `3e12d53`)
+
+- Suite: 921 passed, 25 skipped, 3 deselected, 21 xfailed, ~104 s (base 910 passed / 25
+  skipped / 21 xfailed). KNOWN_ISSUES stays 21: `("anchor_bridge_class_leads_its_tangle",
+  "inversion")` keeps `wp="WP5"` with its reason re-tagged (PK-3 / DEC-19: the `+1` image lies
+  past the computed u(0.0), a stagger; its hole cannot be made without inventing one). No entry
+  added or removed.
+- Law `window_holes_on_every_branch` (partition layer, after `no_direct_hole_beyond_fundamental`;
+  D5's positive half): for every reference and `j < k_value` whose `+j` image pair is registered
+  and spanned, a direct (`side_source == "signs"`) hole with that origin, iterate and bounding
+  pair exists, on `advance_key(branch, j)`. Coverage that was missing, not a fix: passes on base
+  and branch on all 10 law cases (counts 1/2/1/6/7/7/1/3/3/2); `j = 0` keeps it non-vacuous, no
+  NOT_APPLICABLE. `test_law_partition.py` and the `no_direct_hole_beyond_fundamental` docstring
+  no longer call the `+1..+(k-1)` rule provisional; `conftest.py` Dev Notes drop it from
+  "Provisional rules".
+- Regression `test_period_k_window_gaps.py` (PK-3): gaps by rule from the table (first `j` with
+  an unlinked member -> branches `advance_key(branch, j..k-1)`); on `inversion`,
+  `inversion_period2`, `p3_6_blasts` a rerun of `trellis.compute_pseudoneighbors()` logs exactly
+  one Pseudoneighbor WARNING per gap branch and no direct hole of a gapped reference sits on its
+  gap branch; on `p3`, `k28_one_blast` (no gap, asserted) it logs none. Base: 0 records, the
+  gap test fails.
+- Unit, rewritten (FAIL on base, pass on branch): `test_missing_pip_iterates_are_cut_at_their_predicted_cdist`
+  (PK-6; replaces `test_strong_pip_cuts_warn_when_branches_are_left_uncut`; a crossing on
+  `s(1,0)` past the predicted cut 2.0 would puncture the first window pair if uncut),
+  `test_missing_forward_appearance_warns_once_per_branch` (PK-3; 1 / 2 / 0 WARNINGs for a
+  period-3 `+2` gap, a period-3 unlinked reference, a period-1 reference),
+  `test_inert_class_mapping_onto_inert_classes_is_silent` (PK-8; replaces
+  `test_inert_class_with_word_warns_and_stays_out`). New, passes on both:
+  `test_inert_class_naming_an_active_class_warns_and_stays_out`. Stable partition: the
+  forward-pair kernel takes `(pair)` and gains the firm rows `(3, 1, False)`, `(3, 2, False)`.
+- `p3_6_blasts` / `inversion_period2` builds take under a second each here; the regression adds
+  ~2 s.

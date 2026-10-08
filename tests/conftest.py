@@ -76,12 +76,6 @@ Dev Notes:
     Provisional rules, tested only in their firm part (author decision 3,
     2026-10-05). Revisit these tests when the author settles a rule:
 
-    * The ``+1 .. +(k_value - 1)`` forward-hole exemption (holes propagate
-      backward only; ``_is_forward_beyond_fundamental``). Tested: a recorded
-      pair at forward iterate ``>= k_value`` is never punched
-      (``invariants/test_law_partition.py``,
-      ``unit/topology/test_stable_partition.py``). Untested: that the
-      ``+1 .. +(k-1)`` iterates ARE punched.
     * The refined-point cdist. Tested: a refined node's cdist lies strictly
       between its neighbours' (``unit/numerics/test_refinement.py``).
       Untested: that it is the mean of the neighbours.

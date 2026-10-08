@@ -1539,7 +1539,8 @@ def _is_forward_beyond_fundamental(pair: PseudoneighborPair) -> bool:
     other branches and do (D5, 2026-10-07, kept). References and backward
     iterates return False.
     """
-    return pair.iterate is not None and pair.iterate >= pair.branch_key[0].k_value
+    forward = pair.iterate is not None and pair.iterate > 0
+    return forward and pair.iterate >= pair.branch_key[0].k_value
 
 
 def _containing_bridge(

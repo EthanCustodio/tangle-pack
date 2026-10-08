@@ -37,7 +37,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
 
 4. **Pseudoneighbors** (`Pseudoneighbor_Algorithm.pdf`). Consecutive crossings x, x′ on a stable branch are a pair iff the unstable arc between them contains no point of X = ∪_n Mⁿ(N).
    - Reference pairs are the pairs in F, plus their +1..+(k−1) iterates on the other branches of a period-k orbit.
-   - D5: a missing table link is predicted by `image_cdist`; it never silently drops a branch.
+   - D5: a missing `+j` is predicted by `image_cdist`, never invented: its branch is named in a WARNING (the stagger of a period-k chain); a missing pip cut is placed by `image_cdist`.
    - ★ Heteroclinic (D7): a pair of heteroclinic crossings on B's stable branch can be a pair of B's tangle.
 
 5. **Holes** (`Stable_Manifold_Partition_Algorithm`). Each reference pair puts one hole in its lobe. A reference bridge is mapped BACKWARD until it maps into a bridge already visited; each backward image lies inside one existing bridge, and that bridge gets the hole. Forward iterates (≥ k) get no hole.
@@ -79,7 +79,7 @@ From the audit; the details and evidence are in `open_issues.md`.
 | 1 | Four coincident anchors at an inversion point | INV-1 | fixed (WP3) |
 | 2 | Iterate table filled by a 5% cdist heuristic, never after a blast | INT-6, BCG-3 | fixed (WP2) |
 | 4 | Lap factor λ_u instead of β^k | INV-2 | fixed (WP2) |
-| 4 | Missing table links leave branches without holes | PK-3 | WP5 |
+| 4 | Missing table links leave branches without holes | PK-3 | warned (WP5); filling is DEC-19 |
 | 5-6 | Holes and rows read from polyline geometry, not signs | INT-3 | fixed (WP4) |
 | 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | WP6 |
 | 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | WP7 |
