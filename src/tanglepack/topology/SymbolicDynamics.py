@@ -61,8 +61,11 @@ Dev Notes:
 * Inert classes are NOT nodes of the transition graph or the matrix (author,
   2026-09-23): they contribute nothing to the dynamics, and their symbols
   are still visible in the words. A token naming an inert class is dropped
-  from the edges (an inert class with a non-empty word of its own is
-  reported at WARNING when the graph is built). Virtual symbols stay as
+  from the edges. An inert class whose word names only inert symbols is
+  inertness holding (on a period-k orbit an inert class maps to the next
+  branch's inert class) and is silent; one whose word names an ACTIVE or
+  virtual symbol contradicts the table's inertness and is reported at WARNING
+  when the graph is built (PK-8, WP5). Virtual symbols stay as
   sinks — they mark an arc no bridge spans yet — with zero matrix rows, so
   the graph and the matrix agree.
 """
@@ -880,9 +883,10 @@ class SymbolicDynamics:
         ``{(source, target): (weight, inverse count)}`` over the rules.
 
         Only active symbols are sources; tokens naming an inert class are
-        dropped (inert classes are not in the graph). An inert class with a
-        non-empty word of its own is reported at WARNING. Virtual targets
-        are kept (sinks).
+        dropped (inert classes are not in the graph). An inert class whose
+        word names a non-inert symbol contradicts its inertness and is
+        reported at WARNING; one mapping onto inert classes is silent (PK-8).
+        Virtual targets are kept (sinks).
         """
         nodes = {node.name: node for node in self.symbol_nodes(refined=refined)}
         inert_names = {cd.letter for cd in self.classes.values() if cd.kind == "inert"}
@@ -891,10 +895,10 @@ class SymbolicDynamics:
             node = nodes.get(name)
             if node is None:
                 base = name.split("_", 1)[0] if refined else name
-                if base in inert_names and symbols:
+                if base in inert_names and any(symbol.kind != "inert" for symbol in symbols):
                     logger.warning(
-                        "inert class %s has the non-empty word %r; inert classes are "
-                        "not part of the transition graph",
+                        "inert class %s has the word %r, which names a non-inert class; "
+                        "inert classes are not part of the transition graph",
                         name,
                         " ".join(symbol.text for symbol in symbols),
                     )
