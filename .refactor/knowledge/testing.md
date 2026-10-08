@@ -391,8 +391,8 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 
 ## Open-issues round WP8 (2026-10-08, branch `oi/wp08-recompute-identity`, base `083f910`)
 
-- Suite: 969 passed, 28 skipped, 3 deselected, 2 xfailed, ~120 s (base 952 passed / 28 skipped /
-  2 xfailed). KNOWN_ISSUES 2 -> 2 (C3, WP9); NOT_APPLICABLE unchanged.
+- Suite: 972 passed, 28 skipped, 3 deselected, 2 xfailed, ~120 s after the review fixes (969
+  before them; base 952 passed / 28 skipped / 2 xfailed). KNOWN_ISSUES 2 -> 2 (C3, WP9); NOT_APPLICABLE unchanged.
 - Registry ids are reproducible (INT-7): `test_registry_ids_are_reproducible` (two
   `build_k28(blasts=2)` in one process, same `id -> (keys, cdists)` map). Tests still never pin ids.
 - Builders: `cases._repin` / `_partition` gone; `_blast(session, zone, fixed_points, *, diagnose)`
@@ -426,5 +426,15 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   (detached `083f910`) fail 24 there (the frame unit test for the right reason; the rest mostly
   on the missing `topology()` / pip memory). Right-reason probes on base: `wp08/ids.py 16` two
   digests, `nested10.py 10` holes `[0, 12]` / 9 classes, `letters.py p3_series` 3 re-lettered.
+- Review fixes: `reference_witness` rejects a frame-n witness whose own registered chain lies
+  OUTSIDE the pair's images in another frame (the map preserves order along a branch; nested
+  blast 10's `725 = M(439)` between `M(37)`, `M(38)` was a 4e-6 noise flip), so with the frame fix
+  reverted `test_deep_reference_survives_noise` fails on the WITNESS assertion, not only on the
+  class count. New unit `test_endpoint_own_unlinked_orbit_is_not_a_puncture` x2 (an endpoint's
+  unlinked orbit a 1e-6 hair inside a placed frame end; both signs fail before the fix). New facade
+  `test_a_pip_trimmed_away_is_not_replaced_by_classifying` (one WARNING, pip stays None,
+  `bridge_classes()` raises; failed before: two warnings, the default took over). The straddling-zone
+  WARNING moved to the `tanglepack.loom.Topology` logger (its test follows). Law-case and deep-run
+  signatures (`wp08/lawsig.py`) identical before and after the review fixes.
 - Probe trap: `stress/numerics/harness.py` puts MAIN's `src` first on `sys.path`; import
   `tanglepack` before the harness or a probe silently runs main.
