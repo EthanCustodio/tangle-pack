@@ -20,8 +20,10 @@ Fixtures:
   interchangeable).
 * ``k10_session`` / ``k10_partitioned`` -- ``(session, fp)`` at the bridges
   and the partitioned stage.
-* ``henon_inversion_initialized`` / ``henon_inversion`` -- the inversion saddle
-  at ``(-2.3166, 2.3166)``, seeded / grown 6 + 5 steps with crossings.
+* ``henon_inversion_initialized`` / ``henon_inversion`` -- the k=10 inversion
+  saddle at ``(-2.3166, 2.3166)`` (``cases.build_k10_inversion``, a numerics
+  fixture only; the inversion LAW cases are the k=4 saddle), seeded / grown
+  6 + 5 steps with crossings.
 * ``henon_p3_session`` -- the unblasted nested tangle stopped at its resonance
   zones (outer saddle at ``area_cutoff = 1e-4``), ``(session, fp3, fp1,
   largest zone)``; ``p3_partitioned`` -- the same map partitioned through
@@ -36,19 +38,24 @@ process): locate crossings by cdist order or structure, never by id.
 Layout (tiers; every test basename is unique, no ``__init__.py``):
 
 * ``invariants/`` -- the physical-law tier: one test per (layer, case) over
-  :data:`cases.LAW_CASES` (author, 2026-10-05), each running every check of
-  its layer and reporting every failing check in one error; a known issue is
-  left out of its layer and has its own ``xfail(strict=True)`` test. A
-  module-scoped read-only build per case behind a fingerprint guard; the
-  checks live in ``helpers/laws.py``, the plumbing in ``helpers/law_tier.py``.
+  :data:`cases.LAW_CASES` (author, 2026-10-05: ``k10``, ``k28_one_blast``,
+  ``k28_two_blasts``, ``p3``, ``nested``, ``nested_inner_blasts`` and the k=4
+  ``inversion`` at 0, 1 and 2 blasts), each running every check of its layer
+  and reporting every failing check in one error. Every known-issue or
+  not-applicable pair is left out of its layer and has a set-aside test of
+  its own (``test_<layer>_set_aside``). A module-scoped read-only build per
+  case behind a fingerprint guard; the checks live in ``helpers/laws.py``, the
+  plumbing in ``helpers/law_tier.py``.
 * ``unit/numerics``, ``unit/topology``, ``unit/loom`` -- rules and kernels of
   each layer, public API first (private access only for the pure kernels the
   2026-10-05 policy allows).
 * ``facade/`` -- ``TangleSession``: cache freshness (every product x event equals a
   direct build; reuse only on no change), session = direct build, fan-outs,
   delegates and reports.
-* ``regression/`` -- fixed bugs that need their own build, and the open deep
-  period-3 runs.
+* ``regression/`` -- fixed bugs that need their own build, the open deep
+  period-3 runs, and the D1 blast-series laws (``cases.SERIES``: the class
+  count never decreases, is constant while the hole set is, and every class
+  has a member in the minimal trellis).
 * ``plotting/`` -- smoke plus topological properties of the drawings.
 * ``helpers/`` (checks, fakes, letter-free name spellers for comparing two
   builds, the cache-free direct build of every session product, log
@@ -80,7 +87,8 @@ Dev Notes:
       Untested: that it is the mean of the neighbours.
     * The anchor faces-closed limitation of ``grow_until_faces_closed`` (the
       anchor's faces never close in the arrangement). Untested; noted in
-      ``unit/numerics/test_grow_until.py``.
+      ``unit/numerics/test_grow_until.py``. It goes with the anchor model
+      (INV-1/API-5, WP3).
 
     Dead API: the code stays, its tests were dropped (author decision 4), and
     ``_tools/coverage_guard.py`` whitelists it:
@@ -92,30 +100,17 @@ Dev Notes:
     ``FixedPoint.branch_cycle``), and ``BoundaryArc`` (already gone from
     ``src/``).
 
-    KNOWN_ISSUES index (:data:`cases.KNOWN_ISSUES`, every one
-    ``xfail(strict=True)``; an XPASS fails the run, so a fix must remove its
-    entry). Fixing them is a source change, out of the test refactor's scope:
+    Known issues: see :data:`cases.KNOWN_ISSUES`. Every entry is
+    ``xfail(strict=True)``, cites its catalog issue id
+    (``docs/open_issues.md``) and names the WP that fixes it
+    (``KnownIssue.wp``); an XPASS fails the run, so a fix must remove its entry.
 
-    * ``one_anchor_per_unstable_branch`` on ``inversion``: the k=10 inversion
-      saddle registers one (0,0) anchor per (unstable, stable) branch pair,
-      i.e. two per unstable branch; the author's rule is one.
-    * Probably downstream of it, all on ``inversion``:
-      ``anchor_bridge_class_leads_its_tangle``, ``arrangement_euler``,
-      ``itinerary_pairs_same_side``, ``landings_contained``.
-    * ``arrangement_regions_disjoint`` on ``k28_one_blast`` and
-      ``k28_two_blasts``: a zero-area region bounded by an unstable arc no
-      ``Bridge`` spans reports a representative point inside its neighbour.
-    * ``orientation_reversing_case_builds`` (``raises=ValueError``): the b = -1
-      placeholder; ``det J < 0`` is not supported yet. (The inversion saddle
-      has ``det J = +1``; it is NOT orientation reversing.)
-    * ``open_p3_deep_runs`` on ``p3_15``, ``p3_16``, ``p3_6_blasts``
-      (``regression/test_open_p3_deep_runs.py``): an unreachable class and a
-      virtual ``new1``.
-
-    Not-applicable pairs (:data:`cases.NOT_APPLICABLE`) are left out of
-    their layer test with a reason (not counted, never xfails); a layer with
-    nothing applicable on a case is a skip. The law-tier known issues each
-    have their own ``test_<layer>_known_issue[<law>-<case>]`` test. The running record of every deleted test and every
+    Not-applicable pairs (:data:`cases.NOT_APPLICABLE`) are left out of their
+    layer test like known issues, but their set-aside test runs the law,
+    insists it still checks nothing and reports a visible skip ("not
+    applicable: <law> on <case>: <reason>"); a law that starts to apply fails
+    there until its pair is removed. A layer with nothing applicable on a case
+    is a skip. The running record of every deleted test and every
     deviation is ``docs/test_suite_refactor_ledger.md``.
 """
 
@@ -144,8 +139,8 @@ from tanglepack.examples import (  # noqa: E402
 )
 
 from cases import (  # noqa: E402
-    build_inversion,
     build_k10,
+    build_k10_inversion,
     build_k28,
     build_nested,
 )
@@ -262,7 +257,7 @@ def k10_partitioned() -> tuple[TangleSession, object]:
 @pytest.fixture
 def henon_inversion_initialized() -> tuple[TangleWorkbench, object]:
     """``(workbench, fp)`` with the inversion saddle's fundamental segments only."""
-    case = build_inversion(through="seeded")
+    case = build_k10_inversion(through="seeded")
     return case.workbench, case.fixed_point
 
 
@@ -270,7 +265,7 @@ def henon_inversion_initialized() -> tuple[TangleWorkbench, object]:
 def henon_inversion() -> tuple[TangleWorkbench, object]:
     """``(workbench, fp)``: the inversion saddle grown 6 unstable / 5 stable
     steps on both branches, crossings computed."""
-    case = build_inversion(through="intersected")
+    case = build_k10_inversion(through="intersected")
     return case.workbench, case.fixed_point
 
 

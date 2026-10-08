@@ -9,7 +9,8 @@ bridge is a ``+1`` member of an active class that leads its group; the table gro
 by tangle (connecting classes last) and orders by smallest member cdist; a
 class mixes fixed points only as a connecting class; the classes of a fixed
 point reach every stable branch of its cycle; only active classes are
-lettered.
+lettered; and every class has a member the minimal trellis keeps (D2: the
+alphabet is the minimal trellis's bridges).
 """
 
 from __future__ import annotations

@@ -2,8 +2,8 @@
 
 Each case builds through the full pipeline (every product non-empty) at the
 ``area_cutoff`` its builder froze (never the library default), its
-``k_value`` is ``2 * period`` exactly on an inversion point (the k=10 saddle
-at ``(-2.3166, 2.3166)``: both eigenvalues negative, det J = +1, NOT
+``k_value`` is ``2 * period`` exactly on an inversion point (the k=4 saddle at
+``(1 - sqrt5, sqrt5 - 1)``: both eigenvalues negative, det J = +1, NOT
 orientation reversing), the map is area preserving at every orbit point
 (``|det J| = 1``, so ``construct_fixed_point`` never warns), every branch of
 every cycle is built and grown, and every unstable and stable branch crosses

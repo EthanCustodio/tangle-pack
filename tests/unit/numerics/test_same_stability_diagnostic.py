@@ -18,7 +18,7 @@ import time
 import numpy as np
 import pytest
 
-from cases import build_inversion
+from cases import build_k10_inversion
 from helpers import laws
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
@@ -150,7 +150,7 @@ def test_the_diagnostic_costs_at_most_half_a_compute_intersections():
     """On the largest law build (the inversion case's ~5e4 points, its escaping
     arm crossing itself thousands of times outside the tangle box) the pass
     stays vectorised: at most half the time of the crossing computation."""
-    case = build_inversion(through="grown")
+    case = build_k10_inversion(through="grown")
     workbench, fixed_points = case.workbench, case.fixed_points
 
     def best_of_three(call) -> float:

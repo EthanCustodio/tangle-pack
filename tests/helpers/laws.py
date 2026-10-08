@@ -1436,6 +1436,16 @@ def check_only_active_classes_lettered(case: "Case") -> int:
     return len(table)
 
 
+def check_alphabet_inside_minimal_trellis(case: "Case") -> int:
+    """D2: the alphabet is the minimal trellis's bridges: every class has a member the
+    minimal trellis keeps (blast children are image evidence only)."""
+    kept = set(case.session.minimal_trellis().kept_bridge_ids)
+    table = case.session.bridge_classes()
+    for entry in table:
+        assert any(m.bridge_id in kept for m in entry.members), entry.bridge_class.label
+    return len(table)
+
+
 # --------------------------------------------------------------------------- #
 # Iterated partition, element names and the minimal trellis
 # --------------------------------------------------------------------------- #
@@ -1882,17 +1892,45 @@ def check_itineraries_even(case: "Case") -> int:
     return count
 
 
-def check_itinerary_pairs_same_side(case: "Case") -> int:
-    """Every itinerary pair is two elements of ONE side (a bridge connects same-side
-    elements, possibly on different branches); no token is flagged cross-side."""
+def check_cross_side_only_within_a_branch(case: "Case") -> int:
+    """D4: an itinerary pair on ONE stable branch joins two elements of one side, and
+    only such a pair may be flagged cross-side; a pair across two branches never is (at
+    an inversion point L of 0.0 is R of 0.1)."""
     dyn = case.session.symbolic_dynamics()
     count = 0
     for cd in _resolved(dyn):
         for x, y in zip(cd.itinerary[::2], cd.itinerary[1::2]):
-            assert x.side == y.side, (cd.letter, x.label, y.label)
+            if x.branch_key == y.branch_key:
+                assert x.side == y.side, (cd.letter, x.label, y.label)
             count += 1
-        assert not any(symbol.cross_side for symbol in cd.symbols), cd.letter
+        for symbol in cd.symbols:
+            x, y = symbol.occurrence
+            assert not (symbol.cross_side and x.branch_key != y.branch_key), (
+                cd.letter, x.label, y.label)
     return count
+
+
+def check_every_active_class_walks(case: "Case") -> int:
+    """D3: the shortest dual-graph walk IS the word, so it exists: every active class
+    whose landings are not singletons has a ``unique`` or ``trivial`` walk (a singleton
+    takes ``f(bridge)``, the trellis itinerary)."""
+    dyn = case.session.symbolic_dynamics()
+    count = 0
+    for cd in dyn.classes.values():
+        if cd.kind != "active" or any(l is not None and l.singleton for l in cd.landings):
+            continue
+        assert cd.search is not None and cd.search.status in ("unique", "trivial"), (
+            cd.letter, cd.status, cd.unresolved_reason)
+        count += 1
+    return count
+
+
+def check_no_virtual_class(case: "Case") -> int:
+    """D3: no itinerary names a class no bridge spans (a virtual ``new*`` class is a
+    construction bug, never a state)."""
+    dyn = case.session.symbolic_dynamics()
+    assert not dyn.virtual_classes, sorted(dyn.virtual_classes.values())
+    return len(dyn.classes)
 
 
 def check_itinerary_pairs_are_classes(case: "Case") -> int:
@@ -2066,6 +2104,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_classes_do_not_mix_tangles,
         check_classes_use_every_orbit_branch,
         check_only_active_classes_lettered,
+        check_alphabet_inside_minimal_trellis,
     ],
     "iterated": [
         check_iterated_child_inside_parent,
@@ -2086,7 +2125,9 @@ LAYERS: dict[str, list[LawCheck]] = {
     ],
     "symbolic": [
         check_itineraries_even,
-        check_itinerary_pairs_same_side,
+        check_cross_side_only_within_a_branch,
+        check_every_active_class_walks,
+        check_no_virtual_class,
         check_itinerary_pairs_are_classes,
         check_landings_contained,
         check_refined_children_inherit_word,
