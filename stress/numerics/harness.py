@@ -25,7 +25,10 @@ JSON line in ``results/<experiment>.jsonl``:
      gpu_peak_mb, git_sha, host, started}
 
 ``outcome`` is one of ``ok | timeout | oom | exception | invariant_assert |
-crash``. Failures are data: the sweep always continues.
+crash``. Failures are data: the sweep always continues. A
+``PointBudgetExceeded`` (the library's per-step point cap) is an
+``exception`` whose budget, points created, stage and largest coordinate are
+kept in ``metrics["point_budget"]``.
 """
 
 from __future__ import annotations
@@ -219,6 +222,11 @@ def _worker(module_globals: dict, config: dict, out_path: str) -> None:
     except BaseException as exc:  # noqa: BLE001 - failures are data
         outcome, error = "exception", f"{type(exc).__name__}: {exc}"[:500]
         tb = traceback.format_exc()[-3000:]
+        if type(exc).__name__ == "PointBudgetExceeded":
+            # The library's per-step cap (2026-10-07): the run stopped where it
+            # would otherwise have met the RSS watchdog.
+            rec.metric("point_budget", {name: getattr(exc, name) for name in
+                                        ("budget", "points_created", "stage", "max_abs_coord")})
     rec.stop()
     dump()
 

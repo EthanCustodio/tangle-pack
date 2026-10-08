@@ -42,7 +42,7 @@ import numpy as np
 import psutil
 
 import harness
-from maps import henon_session, max_abs_coord, saddle_session, total_points
+from maps import henon_session, max_abs_coord, resolution_metrics, saddle_session, total_points
 
 sys.path.insert(0, str(harness.REPO / "tests"))
 
@@ -304,7 +304,9 @@ def run_depth(config: dict, rec: harness.Recorder) -> None:
         session.orient_eigenvectors(fp, {s: np.array(v) for s, v in PERIOD3_ORIENTATION.items()})
         stable_steps = 9
     else:
-        session = henon_session(10, 1)
+        # The cutoff the first campaign used (the library default until
+        # 2026-10-07; tests/cases.build_inversion freezes the same value).
+        session = henon_session(10, 1, area_cutoff=1e-4)
         fp = session.construct_fixed_point(list(K10_INVERSION_SEED))
         stable_steps = 5
     session.initialize_both_manifolds(fp)
@@ -398,8 +400,17 @@ def run_tangency(config: dict, rec: harness.Recorder) -> None:
     rec.metric("max_abs", max_abs_coord(session))
     rec.checkpoint()
 
+    # The library's own resolution pass runs inside (diagnose=True, the default)
+    # and logs its WARNINGs, which the harness counts; the report is re-read here.
     with rec.stage("intersections"):
-        session.compute_intersections([fp])
+        registry = session.compute_intersections([fp])
+    with rec.stage("check_resolution"):
+        report = wb.check_resolution([fp])
+    for name, value in resolution_metrics(report, registry).items():
+        rec.metric(name, value)
+    ratios = sorted(ix.resolution_ratio for _id, ix in registry
+                    if ix.resolution_ratio is not None)
+    rec.metric("resolution_ratios", ratios[:2000])
     sines = crossing_sines(session)
     rec.metric("crossings", len(wb.intersection_registry))
     rec.metric("non_anchor_crossings", len(sines))

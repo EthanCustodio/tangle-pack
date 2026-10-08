@@ -133,7 +133,8 @@ import traceback
 import numpy as np
 
 import harness
-from maps import curve_arrays, lobe_polygon, max_abs_coord, saddle_session, total_points
+from maps import (curve_arrays, lobe_polygon, max_abs_coord, resolution_metrics, saddle_session,
+                  total_points)
 
 EXPERIMENT = "e11_blast_depth"
 TIMEOUT = 900
@@ -462,7 +463,7 @@ def run(config: dict, rec: harness.Recorder) -> None:
     with rec.stage("build"):
         session, fixed_points, pips, zone = build(config["case"])
     rec.metric("build_s", rec.stages["build"])
-    session.workbench._man_machine.area_cutoff = config["area_cutoff"]
+    session.area_cutoff = config["area_cutoff"]
     wb = session.workbench
     budget = config.get("_budget", float("inf"))
 
@@ -470,7 +471,9 @@ def run(config: dict, rec: harness.Recorder) -> None:
     curves, curve_size = curve_arrays(session), total_points(session)
     max_abs = max_abs_coord(session)
     previous, _ = record_topology(rec, session, fixed_points, pips, None)
-    blast_step = dict(blast=0, blast_s=0.0, new_crossings=0, interior_bridges=0)
+    blast_step = dict(blast=0, blast_s=0.0, new_crossings=0, interior_bridges=0,
+                      resolution_s=0.0, **resolution_metrics(
+                          wb.report_resolution(fixed_points), wb.intersection_registry))
     totals = dict(topology_errors=0, law_violations=0, topology_changes=0, structure_changes=0)
     first_change, stop_reason, last_cost = None, "max_blasts", 0.0
 
@@ -500,8 +503,12 @@ def run(config: dict, rec: harness.Recorder) -> None:
         crossings_before = len(wb.intersection_registry)
         result = session.blast_zone(zone, num_iterations=config["num_iterations"],
                                     fixed_point=[zone.fixed_point],
-                                    min_separation=config["min_separation"])
+                                    min_separation=config["min_separation"], diagnose=False)
         t1 = time.perf_counter()
+        # What blast_zone's own end-of-call pass would log (it WARNs the same way),
+        # kept per blast: the registered same_stability law above is tautological.
+        report = wb.report_resolution(fixed_points)
+        resolution_s = time.perf_counter() - t1
         new_bridges = [b for b in wb.bridges if id(b) not in known]
         known |= {id(b) for b in new_bridges}
         if total_points(session) != curve_size:
@@ -512,7 +519,9 @@ def run(config: dict, rec: harness.Recorder) -> None:
                 max_abs = max(max_abs, float(np.nanmax(np.abs(points))))
         blast_step = dict(blast=blast, blast_s=t1 - t_blast,
                           new_crossings=len(wb.intersection_registry) - crossings_before,
-                          interior_bridges=len(result.all_interior_bridges()))
+                          interior_bridges=len(result.all_interior_bridges()),
+                          resolution_s=resolution_s,
+                          **resolution_metrics(report, wb.intersection_registry))
         append_numerics(new_bridges)
         snapshot, delta = record_topology(rec, session, fixed_points, pips, previous)
         changed = any(bool(v) for v in delta.values())
