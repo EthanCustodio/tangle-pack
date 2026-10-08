@@ -229,6 +229,11 @@ class ElementRef:
     :class:`~tanglepack.numerics.FixedPoint.FixedPoint` by identity — two refs
     are equal exactly when they name the same element of the same live orbit.
 
+    A ref names an element WITHIN one recompute: ``element_id`` is positional,
+    so a new hole renumbers every element after it. Two recomputes compare
+    elements by :attr:`PartitionInterval.identity`, their bounding crossings
+    (C2, WP8).
+
     Attributes:
         branch_key: Manifold key of the stable branch the element lies on.
         side: Which side's partition the element belongs to.
@@ -341,9 +346,22 @@ class PartitionInterval:
     cut_by: Optional["BridgeId"] = None
 
     @property
+    def identity(self) -> tuple:
+        """
+        This element across recomputes: ``(branch_key, side, lo_id, hi_id)`` (C2).
+
+        Each stable branch is cut at the endpoints of every hole bridge, so
+        ``lo_id`` and ``hi_id`` are hole-bridge endpoints (or None at the
+        anchor and the end of the branch), and registry ids persist across the
+        recomputes of one session. Two recomputes therefore compare elements
+        by this tuple; ``element_id`` only orders them within one.
+        """
+        return (self.branch_key, self.side, self.lo_id, self.hi_id)
+
+    @property
     def ref(self) -> ElementRef:
         """
-        This element's global identity.
+        This element's global identity within one recompute.
 
         Returns:
             The :class:`ElementRef` naming this element.

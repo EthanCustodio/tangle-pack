@@ -3,17 +3,19 @@ The persistent alphabet that names bridge classes.
 
 A :class:`~tanglepack.topology.BridgeClass.BridgeClass` is a symbol; an
 alphabet gives it a letter. The alphabet lives on the session and outlives any
-one classing: a class seen before keeps its letter, a class never seen before
+one recompute: a class seen before keeps its letter, a class never seen before
 takes the next unused one, so growing, blasting or re-partitioning "moves
 through the alphabet" rather than reshuffling it.
 
 Dev Notes:
 
-* Identity is the class object (its two ``ElementRef`` s, compared componentwise
-  with the fixed point by identity). A re-partition that renumbers element ids
-  changes the pair, so the "same" homotopy class comes back as a new class with
-  a new letter. Carrying identity across a refinement is the refined-symbols
-  work, not this module's.
+* A class is named by its IDENTITY, the pair of its two elements'
+  :attr:`~tanglepack.topology.TopologyResults.PartitionInterval.identity`
+  (their bounding crossings; ``loom.Topology.identity``), never by the
+  ``BridgeClass`` object: an ``ElementRef``'s ``element_id`` is positional,
+  so a new hole renumbered every element after it and re-lettered classes
+  that had not changed (BCG-7). A class keeps its letter while its two
+  elements keep their bounding crossings (C2, WP8). Any hashable works.
 * Letters run ``a``..``t`` then ``aa``, ``ab``, ... (the active series of
   :func:`~tanglepack.topology.SymbolicDynamics.letter`), so ``a`` and ``aa``
   never collide with a refined symbol such as ``a_1``.
@@ -26,12 +28,9 @@ Dev Notes:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Hashable
 
 from ..topology.SymbolicDynamics import letter
-
-if TYPE_CHECKING:
-    from ..topology.BridgeClass import BridgeClass
 
 
 class BridgeAlphabet:
@@ -39,52 +38,54 @@ class BridgeAlphabet:
     Letters for bridge classes, assigned once and remembered.
 
     Attributes:
-        assigned: The letter of every class named so far, in assignment order.
+        assigned: The letter of every class identity named so far, in
+            assignment order.
     """
 
     def __init__(self) -> None:
         """Start with no letters assigned."""
-        self.assigned: dict["BridgeClass", str] = {}
+        self.assigned: dict[Hashable, str] = {}
 
     def __len__(self) -> int:
         return len(self.assigned)
 
-    def __contains__(self, bridge_class: object) -> bool:
-        return bridge_class in self.assigned
+    def __contains__(self, identity: object) -> bool:
+        return identity in self.assigned
 
-    def letter_for(self, bridge_class: "BridgeClass") -> str:
+    def letter_for(self, identity: Hashable) -> str:
         """
-        The class's letter, assigning the next unused one on first sight.
+        The letter of a class identity, assigning the next unused one on first sight.
 
         Args:
-            bridge_class: The class to name.
+            identity: The class to name, by its identity (the session passes
+                ``Topology.identity(bridge_class)``).
 
         Returns:
             Its letter.
         """
-        existing = self.assigned.get(bridge_class)
+        existing = self.assigned.get(identity)
         if existing is not None:
             return existing
         new = letter(len(self.assigned))
-        self.assigned[bridge_class] = new
+        self.assigned[identity] = new
         return new
 
-    def class_of(self, letter_: str) -> "BridgeClass":
+    def class_of(self, letter_: str) -> Hashable:
         """
-        The class a letter names.
+        The class identity a letter names.
 
         Args:
             letter_: A letter previously handed out.
 
         Returns:
-            The class.
+            The identity.
 
         Raises:
             KeyError: If no class carries that letter.
         """
-        for bridge_class, assigned in self.assigned.items():
+        for identity, assigned in self.assigned.items():
             if assigned == letter_:
-                return bridge_class
+                return identity
         raise KeyError(f"no bridge class is lettered {letter_!r}")
 
     def reset(self) -> None:
