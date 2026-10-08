@@ -1125,19 +1125,16 @@ class RowDiagnosis:
 
     def describe(self) -> str:
         """The diagnosis as text: the bridge, both ends, and the verdict."""
+        key = self.branch_key
+        branch = "None" if key is None else f"({key[1]}, {key[2]}, {key[3]})"
         return "\n".join(
             [
-                f"bridge {self.bridge_id} on stable branch {_key_label(self.branch_key)}: "
+                f"bridge {self.bridge_id} on stable branch {branch}: "
                 f"{self.n_nodes} node(s), chord {self.chord:.3g}",
                 *(f"  {end.describe()}" for end in self.ends),
                 f"  verdict: {self.verdict}",
             ]
         )
-
-
-def _key_label(key: Optional["ManifoldKey"]) -> str:
-    """A manifold key without its fixed point's repr: ``(stable, orbit, branch)``."""
-    return "None" if key is None else f"({key[1]}, {key[2]}, {key[3]})"
 
 
 def bridge_row_diagnosis(

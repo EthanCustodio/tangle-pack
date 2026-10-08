@@ -109,18 +109,23 @@ def test_punch_holes_raises_on_a_corrupted_hole_side(
 
 def test_propagated_holes_carry_their_orbit_side(p3: Case) -> None:
     """D2 (author, 2026-10-07): a direct hole reads its side off its crossing
-    signs, a propagated one carries its orbit's and keeps the curves' reading as
+    signs, a propagated one carries its orbit's (parity-flipped per step under an
+    orientation-reversing map) and keeps the curves' reading as
     ``measured_side``, which agrees wherever it is defined."""
     (fp,) = p3.fixed_points
     trellis = p3.session.trellis(fp)
-    assert trellis.orientation_preserving
-    direct = {hole.origin: hole.bridge_side for hole in trellis.holes if hole.pair is not None}
-    propagated = [hole for hole in trellis.holes if hole.pair is None]
-    assert propagated, "the period-3 case propagates holes"
-    assert {hole.side_source for hole in trellis.holes if hole.pair is not None} == {"signs"}
-    for hole in propagated:
+    flips = not trellis.orientation_preserving
+    direct = {hole.origin: hole for hole in trellis.holes if hole.pair is not None}
+    for hole in trellis.holes:
+        if hole.pair is not None:
+            assert hole.side_source == "signs"
+            continue
         assert hole.side_source == "carried"
-        assert hole.bridge_side == direct[hole.origin]
+        source = direct[hole.origin]
+        expected = source.bridge_side
+        if flips and (source.iterate - hole.iterate) % 2:
+            expected = "left" if expected == "right" else "right"
+        assert hole.bridge_side == expected
         assert hole.measured_side in (None, hole.bridge_side)
 
 
@@ -142,6 +147,16 @@ def test_punch_holes_raises_on_a_contradicting_measured_side(
     monkeypatch.setattr(stable_partition, "propagate_reference_holes", contradicted)
     with pytest.raises(AssertionError):
         trellis.punch_holes()
+
+
+def test_outer_face_error_without_a_positive_face_lists_the_members() -> None:
+    """A component with a closed face and no positive face still raises a
+    ``ValueError`` that builds its own message (no ratio to a missing largest)."""
+    members = [(4, (1, 2, 3), -0.5), (5, (2, 3), 0.0)]
+    error = dual_graph_module.OuterFaceError(3, [], members)
+    assert isinstance(error, ValueError)
+    assert error.positive_faces == [] and error.members == members
+    assert dual_graph_module.OuterFaceError(3, []).positive_faces == []
 
 
 def test_two_outer_faces_raise_with_every_positive_face(

@@ -60,9 +60,10 @@ Dev Notes:
 * A sparse component may have no closed face at all (a stable branch with no
   kept bridge). Its single open face is merged into the unbounded node with a
   WARNING rather than raising.
-* A component with two or more positive faces raises :class:`OuterFaceError`
-  (2026-10-07: kept raising, its message lists every positive face's corners,
-  area and ratio to the largest). Deep blasts reach it on self-intersecting
+* A component with a closed face but not exactly one positive face raises
+  :class:`OuterFaceError` (2026-10-07: kept raising, its message lists every
+  positive face's corners, area and ratio to the largest, or every member
+  face when none is positive). Deep blasts reach it on self-intersecting
   slivers, where no area is trustworthy: :attr:`Region.area` and the
   area check in :meth:`Arrangement.image_of` are unreliable on a polygon that
   crosses itself, so a small positive face is NOT evidence that it is
@@ -112,24 +113,41 @@ NodeSide = Literal["left", "right", "both"]
 
 class OuterFaceError(ValueError):
     """
-    A component of the sparse arrangement has more than one outer face.
+    A component of the sparse arrangement does not have exactly one outer face.
 
-    Exactly one face per component winds positively; two or more means the
-    arrangement is not a planar subdivision at this resolution (typically a
-    self-intersecting sliver). It stays an error (the 2026-10-07 rule files
-    invariant failures as genuine errors).
+    Exactly one face per component with a closed face winds positively; two or
+    more means the arrangement is not a planar subdivision at this resolution
+    (typically a self-intersecting sliver), and none means every face winds the
+    wrong way. It stays an error (the 2026-10-07 rule files invariant failures
+    as genuine errors).
 
     Attributes:
         component: The arrangement component.
         positive_faces: ``(face index, corners, traversal area)`` of every
-            positive face, largest area first.
+            positive face, largest area first (empty when there is none).
+        members: The same triples for every face of the component, given
+            when there is no positive face to list.
     """
 
     def __init__(
-        self, component: int, positive_faces: list[tuple[int, tuple[int, ...], float]]
+        self,
+        component: int,
+        positive_faces: list[tuple[int, tuple[int, ...], float]],
+        members: Sequence[tuple[int, tuple[int, ...], float]] = (),
     ) -> None:
         self.component = component
         self.positive_faces = sorted(positive_faces, key=lambda face: -face[2])
+        self.members = list(members)
+        if not self.positive_faces:
+            listing = "; ".join(
+                f"face {index} corners {corners} area {area:.3g}"
+                for index, corners, area in self.members
+            )
+            super().__init__(
+                f"component {component} has a closed face but no face of positive "
+                f"traversal area (expected exactly one outer face): {listing}"
+            )
+            return
         largest = self.positive_faces[0][2]
         listing = "; ".join(
             f"face {index} corners {corners} area {area:.3g} "
@@ -761,7 +779,8 @@ class DualGraph:
         Raises:
             OuterFaceError: If a component has a closed face but not exactly
                 one positive face (a ``ValueError`` listing each positive
-                face's corners and area).
+                face's corners and area, or every member face when none is
+                positive).
         """
         faces = self.arrangement.faces
         root = len(faces)
@@ -793,9 +812,13 @@ class DualGraph:
                     union.union(index, root)
                 continue
             if len(outer) != 1:
+                described = {
+                    index: (index, faces[index].corners, areas[index]) for index in members
+                }
                 raise OuterFaceError(
                     component,
-                    [(index, faces[index].corners, areas[index]) for index in outer],
+                    [described[index] for index in outer],
+                    described.values(),
                 )
             host = self._innermost_container(
                 outer[0], component, node_ids, containing, components, areas
