@@ -11,8 +11,11 @@ side of the stable manifold": a backward hole's stable-manifold row may
 differ from its origin's, and no law compares rows along an orbit. A direct
 hole's side is the side of its bridge its coordinates sit on. The openings
 law: a direct hole opens its inward pair on its own bridge's row; every
-opening sits on the row of ITS OWN bridge at that bound; a bound opens
-nothing only at an anchor or the branch end. Propagated holes land on the
+opening sits on the row of ITS OWN bridge at that bound, on the branch the
+record names; at an anchor (one point on every branch, D4) the signs pick the
+branch, and the opened branch's first node lies on the hole's side of its
+bridge (D6, checked by geometry); a bound opens nothing only at an anchor or
+the branch end. Propagated holes land on the
 branch the cycle predicts and stop at periodicity; nothing at iterate
 ``>= k_value`` is punched (the firm half of holes-backward-only; the
 ``+1 .. +(k-1)`` exemption is provisional and untested); reference pairs are

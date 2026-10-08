@@ -99,17 +99,43 @@ def law_id(check: LawCheck) -> str:
 # --------------------------------------------------------------------------- #
 # Small readers
 # --------------------------------------------------------------------------- #
-def _anchor_ids(case: "Case") -> list[int]:
-    """Registry ids of the synthetic anchors (both cdists exactly 0, no segments)."""
-    return [
-        intersection_id
-        for intersection_id, ix in case.registry
-        if ix.seg_ids is None
+def _is_anchor(ix) -> bool:
+    """A synthetic crossing at canonical distance exactly (0, 0): a periodic point."""
+    return (
+        ix.seg_ids is None
         and ix.unstable_cdist is not None
         and ix.stable_cdist is not None
         and float(ix.unstable_cdist) == 0.0
         and float(ix.stable_cdist) == 0.0
-    ]
+    )
+
+
+def _anchor_ids(case: "Case") -> list[int]:
+    """Registry ids of the synthetic anchors (both cdists exactly 0, no segments)."""
+    return [intersection_id for intersection_id, ix in case.registry if _is_anchor(ix)]
+
+
+def _stable_branch_at(case: "Case", bridge_id, intersection_id: int):
+    """The stable branch a bridge meets at one end, written independently of the
+    library: the crossing's own, or at an anchor (one point on every branch, D4)
+    ``s(o, b)`` of the bridge's ``u(o, b)`` (C7), read off the bridge's other end."""
+    ix = case.registry[intersection_id]
+    if not _is_anchor(ix):
+        return ix.manifold_b_key
+    other = bridge_id[1] if bridge_id[0] == intersection_id else bridge_id[0]
+    fp, _, orbit_index, branch_index = case.registry[other].manifold_a_key
+    return (fp, "stable", orbit_index, branch_index)
+
+
+def _anchor_row(case: "Case", bridge, stable_key) -> str:
+    """The row of a bridge at its anchor on one stable branch, from the signs alone:
+    the anchor carries the sign of its home pair ``(u(o, 0), s(o, 0))``, and each
+    branch index off that pair (the bridge's own, the stable one) runs the other way."""
+    anchor = case.registry[bridge.id[0]]
+    flips = (bridge.manifold_key[3] != anchor.manifold_a_key[3]) + (
+        stable_key[3] != anchor.manifold_b_key[3]
+    )
+    return "left" if anchor.crossing_sign * (-1) ** flips > 0 else "right"
 
 
 def _tol(case: "Case") -> float:
@@ -809,17 +835,45 @@ def check_recompute_is_idempotent(case: "Case") -> int:
 # --------------------------------------------------------------------------- #
 # Anchors
 # --------------------------------------------------------------------------- #
-def check_one_anchor_per_unstable_branch(case: "Case") -> int:
-    """Every unstable branch carries exactly one anchor (author rule, 2026-10-05)."""
-    per_branch: dict = defaultdict(list)
+def check_one_anchor_per_periodic_point(case: "Case") -> int:
+    """D4: each periodic point is ONE anchor, and every branch attached to it (both
+    stabilities) starts there (replaces ``one_anchor_per_unstable_branch``)."""
+    at_point: dict = defaultdict(list)
     for intersection_id in _anchor_ids(case):
-        per_branch[case.registry[intersection_id].manifold_a_key].append(intersection_id)
+        fp, _, orbit_index, _ = case.registry[intersection_id].manifold_a_key
+        at_point[id(fp), orbit_index].append(intersection_id)
     count = 0
-    for key in case.workbench.manifolds:
-        if key[1] != "unstable":
-            continue
-        ids = per_branch.get(key, [])
-        assert len(ids) == 1, f"{len(ids)} anchors on unstable branch {key[1:]}: {ids}"
+    for key, branch in _full(case).branches.items():
+        ids = at_point.get((id(key[0]), key[2]), [])
+        assert len(ids) == 1, f"{len(ids)} anchors at the point of branch {key[1:]}: {ids}"
+        assert branch.intersection_ids[0] == ids[0], (key[1:], branch.intersection_ids[:2])
+        count += 1
+    return count
+
+
+def check_anchor_rays_are_its_branches(case: "Case") -> int:
+    """D4: the real arcs of the arrangement leaving an anchor are exactly one per
+    trellis branch of its point that holds a crossing past it (one degree-4 node at
+    an inversion point, never four coincident ones)."""
+    trellis = _full(case)
+    leaving: dict = defaultdict(set)
+    for face in case.session.arrangement().faces:
+        for arc in face.arcs:
+            if arc is None:
+                continue
+            for end in (arc.lo_id, arc.hi_id):
+                leaving[end].add((arc.kind, arc.branch_key, frozenset((arc.lo_id, arc.hi_id))))
+    count = 0
+    for intersection_id in _anchor_ids(case):
+        fp, _, orbit_index, _ = case.registry[intersection_id].manifold_a_key
+        expected = {
+            key
+            for key, branch in trellis.branches.items()
+            if key[0] is fp and key[2] == orbit_index and len(branch) >= 2
+        }
+        rays = leaving[intersection_id]
+        assert {branch_key for _kind, branch_key, _ends in rays} == expected, intersection_id
+        assert len(rays) == len(expected), (intersection_id, sorted(r[1][1:] for r in rays))
         count += 1
     return count
 
@@ -852,26 +906,21 @@ def check_bridge_partial_iff_no_id(case: "Case") -> int:
 
 
 def check_bridge_id_in_unstable_order(case: "Case") -> int:
-    """``BridgeId = (first, second)`` is its endpoints in strictly increasing unstable cdist.
-
-    The one exempt tie is a zero-length bridge between two anchors, which
-    only the known two-anchors-per-branch issue creates (see the anchor law).
-    """
+    """``BridgeId = (first, second)`` is its endpoints in strictly increasing unstable cdist."""
     registry = case.registry
-    anchors = set(_anchor_ids(case))
     count = 0
     for bridge in _identified_bridges(case):
         assert bridge.id == (bridge.first_intersection, bridge.second_intersection)
         first, second = (registry[i] for i in bridge.id)
-        if set(bridge.id) <= anchors:
-            continue
         assert float(first.unstable_cdist) < float(second.unstable_cdist), bridge.id
         count += 1
     return count
 
 
 def check_bridge_endpoints_on_own_branch(case: "Case") -> int:
-    """A bridge's two crossings lie on ITS unstable branch, inside its cdist span.
+    """A bridge's two crossings lie on ITS unstable branch, inside its cdist span; an
+    anchor end is the anchor of the bridge's own periodic point (one point on every
+    branch, D4).
 
     The codebase-audit regression (2026-09): a registry-wide nearest-cdist
     lookup handed the first bridge of one period-3 branch another branch's
@@ -886,12 +935,17 @@ def check_bridge_endpoints_on_own_branch(case: "Case") -> int:
         tail_u = float(bridge.tail.get_cdist("unstable"))
         lo, hi = sorted((root_u, tail_u))
         for end in (first, second):
-            assert end.manifold_a_key == bridge.manifold_key, (
-                f"bridge {bridge.id} on {bridge.manifold_key[1:]} got an endpoint "
-                f"from {end.manifold_a_key[1:]}"
-            )
+            if _is_anchor(end):
+                fp, _, orbit_index, _ = end.manifold_a_key
+                assert (fp, orbit_index) == (bridge.manifold_key[0], bridge.manifold_key[2])
+                assert end is first, bridge.id
+            else:
+                assert end.manifold_a_key == bridge.manifold_key, (
+                    f"bridge {bridge.id} on {bridge.manifold_key[1:]} got an endpoint "
+                    f"from {end.manifold_a_key[1:]}"
+                )
             assert _within(float(end.unstable_cdist), lo, hi, tol), bridge.id
-        count += 2
+            count += 1
     return count
 
 
@@ -989,7 +1043,10 @@ def check_partition_covers_branch(case: "Case") -> int:
             frozenset(hole.bounding_ids)
             for hole in trellis.holes
             if hole.bounding_ids is not None
-            and any(row == result.side for _iid, _which, row in (hole.openings or []))
+            and any(
+                (row, key) == (result.side, result.branch_key)
+                for _iid, _which, row, key in (hole.openings or [])
+            )
         }
         assert open_spans <= hole_spans, open_spans - hole_spans
         count += 1
@@ -1156,12 +1213,25 @@ def check_direct_hole_opens_inward_pair(case: "Case") -> int:
         near, far = hole.bounding_ids
         bridge = bridge_for_pair(trellis, hole.pair)
         assert hole.openings, hole.bounding_ids
-        for intersection_id, which, row in hole.openings:
+        for intersection_id, which, row, key in hole.openings:
             assert which == ("outward" if intersection_id == near else "anchorward")
-            endpoint = "first" if intersection_id == bridge.id[0] else "second"
-            assert row == row_of_end(trellis, bridge.id, endpoint), (hole.bounding_ids, row)
+            assert row == _opening_row(case, trellis, bridge, intersection_id, key), (
+                hole.bounding_ids,
+                row,
+            )
         count += 1
     return count
+
+
+def _opening_row(case: "Case", trellis, bridge, intersection_id: int, key) -> str:
+    """The row an opening at one bound must sit on: its own bridge's row there, on the
+    branch the record opens -- the crossing's own branch, or at an anchor the one the
+    signs pick (:func:`_anchor_row`)."""
+    if _is_anchor(case.registry[intersection_id]):
+        return _anchor_row(case, bridge, key)
+    assert key == case.registry[intersection_id].manifold_b_key, (bridge.id, intersection_id)
+    endpoint = "first" if intersection_id == bridge.id[0] else "second"
+    return row_of_end(trellis, bridge.id, endpoint)
 
 
 def check_openings_on_own_bridge_row(case: "Case") -> int:
@@ -1172,9 +1242,31 @@ def check_openings_on_own_bridge_row(case: "Case") -> int:
     for trellis, hole in _holes(case):
         bridge = trellis.bridge_between(*hole.bounding_ids)
         assert bridge is not None and bridge.id is not None, hole.bounding_ids
-        for intersection_id, _which, row in hole.openings or []:
-            endpoint = "first" if intersection_id == bridge.id[0] else "second"
-            assert row == row_of_end(trellis, bridge.id, endpoint), (hole.bounding_ids, row)
+        for intersection_id, _which, row, key in hole.openings or []:
+            assert row == _opening_row(case, trellis, bridge, intersection_id, key), (
+                hole.bounding_ids,
+                row,
+            )
+            count += 1
+    return count
+
+
+def check_anchor_opening_faces_its_hole(case: "Case") -> int:
+    """D6 at the anchor: a hole opening there opens the stable branch whose first node
+    past the anchor lies on the hole's side of its own oriented bridge (geometry as
+    the independent check of the sign rule)."""
+    count = 0
+    for trellis, hole in _holes(case):
+        bridge = trellis.bridge_between(*hole.bounding_ids)
+        for intersection_id, which, _row, key in hole.openings or []:
+            if not _is_anchor(case.registry[intersection_id]):
+                continue
+            assert which == "outward", hole.bounding_ids
+            first_node = np.asarray(case.workbench.manifolds[key].get_point_array()[1], dtype=float)
+            assert _point_side_of_bridge(case, bridge, first_node) == hole.bridge_side, (
+                hole.bounding_ids,
+                key[1:],
+            )
             count += 1
     return count
 
@@ -1183,7 +1275,7 @@ def check_openings_missing_only_at_anchor_or_tail(case: "Case") -> int:
     """Openings law (3): a hole bound opens nothing only at an anchor or a trimmed tail."""
     count = 0
     for trellis, hole in _holes(case):
-        opened = {iid for iid, _w, _r in hole.openings or []}
+        opened = {iid for iid, _which, _row, _key in hole.openings or []}
         tol = float(trellis.registry.cdist_tol)
         for intersection_id in hole.bounding_ids:
             if intersection_id in opened:
@@ -1372,7 +1464,7 @@ def _element_ends(case: "Case", bridge_id) -> tuple:
     refs = []
     for endpoint, intersection_id in zip(("first", "second"), bridge_id):
         row = row_of_end(trellis, bridge_id, endpoint)
-        result = by_branch_side[(trellis.intersection(intersection_id).manifold_b_key, row)]
+        result = by_branch_side[(_stable_branch_at(case, bridge_id, intersection_id), row)]
         refs.append(result.ref(result.element_of_intersection[intersection_id]))
     return tuple(refs)
 
@@ -1444,7 +1536,7 @@ def check_bridge_rows_consistent(case: "Case") -> int:
         if bridge.id is None:
             continue
         assert bridge_row_violation(trellis, bridge) is None, bridge.id
-        keys = [trellis.intersection(i).manifold_b_key for i in bridge.id]
+        keys = [_stable_branch_at(case, bridge.id, i) for i in bridge.id]
         if keys[0] != keys[1]:
             continue
         first, second = rows_of_bridge(trellis, bridge.id)
@@ -1610,7 +1702,7 @@ def check_iterated_keeps_homotopy_boundaries(case: "Case") -> int:
     image_ends: dict = defaultdict(set)
     for bid in minimal.image_bridge_ids:
         for endpoint, which in zip(bid, ("first", "second")):
-            key = (full.intersection(endpoint).manifold_b_key, row_of_end(full, bid, which))
+            key = (_stable_branch_at(case, bid, endpoint), row_of_end(full, bid, which))
             image_ends[key].add(endpoint)
     count = 0
     for key, result in iterated.results.items():
@@ -1659,9 +1751,8 @@ def check_iterated_cut_provenance(case: "Case") -> int:
     full = minimal.trellis
     count = 0
     for bid in minimal.image_bridge_ids:
-        a, b = bid
-        branch = full.intersection(a).manifold_b_key
-        if branch != full.intersection(b).manifold_b_key:
+        branch = _stable_branch_at(case, bid, bid[0])
+        if branch != _stable_branch_at(case, bid, bid[1]):
             continue
         row = row_of_end(full, bid, "first")
         if row != row_of_end(full, bid, "second"):
@@ -2180,7 +2271,11 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_iterate_links_pass_the_map_gate,
         check_iterate_table_complete,
     ],
-    "anchors": [check_one_anchor_per_unstable_branch, check_anchor_sign_matches_eigendirections],
+    "anchors": [
+        check_one_anchor_per_periodic_point,
+        check_anchor_rays_are_its_branches,
+        check_anchor_sign_matches_eigendirections,
+    ],
     "bridges": [
         check_bridge_partial_iff_no_id,
         check_bridge_id_in_unstable_order,
@@ -2199,6 +2294,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_direct_hole_side_is_coordinate_side,
         check_direct_hole_opens_inward_pair,
         check_openings_on_own_bridge_row,
+        check_anchor_opening_faces_its_hole,
         check_openings_missing_only_at_anchor_or_tail,
         check_propagated_holes_land_on_predicted_branch,
         check_propagation_terminates,
