@@ -337,7 +337,7 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 
 ## Open-issues round WP7 (2026-10-08, branch `oi/wp07-walk-exists`, base `e883720`)
 
-- Suite: 951 passed, 28 skipped, 3 deselected, 2 xfailed, ~106 s (base 938 passed / 27 skipped
+- Suite: 952 passed, 28 skipped, 3 deselected, 2 xfailed, ~104 s after the review fix (base 938 passed / 27 skipped
   / 13 xfailed). KNOWN_ISSUES 13 -> 2: removed `arrangement_euler` x `inversion_two_blasts`
   (WP7), `_NUM16` with its six entries (`arrangement_regions_disjoint` x k28_one_blast /
   k28_two_blasts / inversion_one_blast / inversion_two_blasts / nested_inner_blasts,
