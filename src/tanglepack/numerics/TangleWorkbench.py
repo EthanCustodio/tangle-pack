@@ -29,6 +29,7 @@ the accumulated ``edist`` would make it exact.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Callable, Literal, Iterable, Optional, Sequence, Union
 
 import numpy as np
@@ -52,6 +53,60 @@ from .IterateInference import IterateInference
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+#: How much a stable segment must be stretched (log of the factor) before it
+#: turns around: rounds * ln(stretch per round) measured 14.8-17.1 on the Hénon
+#: saddle over k = 0.3 .. 10 from the default ~5e-6 seed (2026-10-07), with margin.
+TURNAROUND_LOG_STRETCH = 18.0
+
+
+class MaxIterationsReached(ValueError):
+    """
+    A ``grow_until_*`` driver hit its iteration cap before its stop condition.
+
+    One growth round stretches a branch by ``stretch_per_round`` (``lambda_u``
+    per map step on an area-preserving map), so the depth a stop condition
+    needs scales with ``1 / ln(stretch_per_round)``: a small ``lambda_u``
+    (Hénon at small ``k``) needs more rounds than the default cap of 10.
+
+    Attributes:
+        max_iterations: The cap that was reached.
+        stretch_per_round: The canonical-distance factor of one growth round on
+            the grown manifold.
+        suggested_max_iterations: ``ceil(log_stretch / ln(stretch_per_round))``
+            for the stretch the condition is estimated to need, at least one
+            more than the cap.
+    """
+
+    def __init__(
+        self,
+        max_iterations: int,
+        stretch_per_round: float,
+        log_stretch: float,
+        what: str,
+    ) -> None:
+        """
+        Build the error and its message.
+
+        Args:
+            max_iterations: The cap that was reached.
+            stretch_per_round: The grown manifold's factor per growth round.
+            log_stretch: Natural log of the total stretch the stop condition is
+                estimated to need, counted from the start of the call.
+            what: The stop condition that was not met, for the message.
+        """
+        self.max_iterations = max_iterations
+        self.stretch_per_round = stretch_per_round
+        self.suggested_max_iterations = max(
+            math.ceil(log_stretch / math.log(stretch_per_round)), max_iterations + 1
+        )
+        super().__init__(
+            f"Max iterations ({max_iterations}) reached without {what}. One growth "
+            f"round stretches the branch by {stretch_per_round:.4g}, so the depth "
+            f"needed scales with 1/ln({stretch_per_round:.4g}); try "
+            f"max_iterations={self.suggested_max_iterations}, or stop on a "
+            f"condition of your own with grow_until(predicate)."
+        )
 
 
 class TangleWorkbench:
@@ -406,6 +461,13 @@ class TangleWorkbench:
         Note:
             Growth refines the existing curve as well as extending it, so it
             bumps the generation and drops every memoised point array.
+
+            One iteration stretches a branch by ``per_step_beta("unstable")``
+            (``lambda_u`` per map step), so the depth a tangle needs scales with
+            ``1 / ln(lambda_u)``. A fixed count that works at one parameter can
+            leave a weakly hyperbolic saddle (Hénon at small ``k``) with ZERO
+            crossings: that is a depth problem, not a bug. Grow on a stop
+            condition (``grow_until_*``, ``grow_until(predicate)``) instead.
         """
 
         self._require_manifold(fixed_point, stability, branch_index)
@@ -467,8 +529,9 @@ class TangleWorkbench:
                 Defaults to 0.
 
         Raises:
-            ValueError: If the manifold has not been initialized, or if the cap
-                is reached before a turnaround is detected.
+            ValueError: If the manifold has not been initialized.
+            MaxIterationsReached: A ``ValueError`` raised when the cap is reached
+                before a turnaround is detected; it carries ``suggested_max_iterations``.
         """
 
         manifold = self._require_manifold(fixed_point, stability, branch_index)
@@ -501,10 +564,10 @@ class TangleWorkbench:
             if dot_product < 0:
                 return None
 
-        else:
-            raise ValueError(
-                "Max iterations reached, choose a higher cap or a different method."
-            )
+        raise self._cap_reached(
+            fixed_point, stability, max_iterations, TURNAROUND_LOG_STRETCH,
+            "a turnaround",
+        )
 
     def grow_until_arclength(
         self,
@@ -526,8 +589,9 @@ class TangleWorkbench:
             branch_index (int): Which eigenvector branch to grow. Defaults to 0.
 
         Raises:
-            ValueError: If the manifold has not been initialized, or if the cap is
-                reached before the tail passes ``length``.
+            ValueError: If the manifold has not been initialized.
+            MaxIterationsReached: A ``ValueError`` raised when the cap is reached
+                before the tail passes ``length``; it carries ``suggested_max_iterations``.
         """
 
         self._require_manifold(fixed_point, stability, branch_index)
@@ -535,6 +599,7 @@ class TangleWorkbench:
         def tail_distance() -> float:
             return self.manifolds[(fixed_point, stability, 0, branch_index)].tail.cdist
 
+        start_distance = tail_distance()
         for _ in range(max_iterations):
 
             if tail_distance() >= length:
@@ -547,8 +612,9 @@ class TangleWorkbench:
         if tail_distance() >= length:
             return None
 
-        raise ValueError(
-            "Max iterations reached, choose a higher cap or a shorter length."
+        raise self._cap_reached(
+            fixed_point, stability, max_iterations,
+            math.log(length / start_distance), f"the tail reaching cdist {length:g}",
         )
 
     def grow_until_intersection(
@@ -569,8 +635,9 @@ class TangleWorkbench:
             branch_index (int): Which eigenvector branch to grow. Defaults to 0.
 
         Raises:
-            ValueError: If the manifold has not been initialized, or if the cap is
-                reached without a new crossing.
+            ValueError: If the manifold has not been initialized.
+            MaxIterationsReached: A ``ValueError`` raised when the cap is reached
+                before a new crossing appears; it carries ``suggested_max_iterations``.
         """
 
         self._require_manifold(fixed_point, stability, branch_index)
@@ -592,7 +659,10 @@ class TangleWorkbench:
             if num_current_intersections > num_initial_intersections:
                 return None
 
-        raise ValueError("Max iterations reached, no intersection found")
+        raise self._cap_reached(
+            fixed_point, stability, max_iterations, TURNAROUND_LOG_STRETCH,
+            "a new crossing",
+        )
 
     # ── predicate-driven growth ──────────────────────────────────────────────
 
@@ -1627,6 +1697,20 @@ class TangleWorkbench:
                 continue
 
             manifold.tail = new_tail
+
+    @staticmethod
+    def _cap_reached(
+        fixed_point: FixedPoint,
+        stability: Stability,
+        max_iterations: int,
+        log_stretch: float,
+        what: str,
+    ) -> MaxIterationsReached:
+        """The cap error of a ``grow_until_*`` driver, with its suggested cap."""
+        beta = fixed_point.per_step_beta(stability)
+        # stable growth runs the inverse map, which stretches by 1 / beta_s
+        stretch = beta if stability == "unstable" else 1.0 / beta
+        return MaxIterationsReached(max_iterations, stretch, log_stretch, what)
 
     def _require_manifold(
         self,
