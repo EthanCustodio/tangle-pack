@@ -155,6 +155,11 @@ class TangleSession:
         # has a single branch (one zone); an inversion point has two. Insertion order
         # is preserved so plotting/shading is deterministic.
         self.resonance_zones: dict[tuple["FixedPoint", int], ResonanceZone] = {}
+        # The last blast iteration's growth factor (new points per frontier
+        # point) per zone key: blast_zone(max_points=...) predicts a call's
+        # first iteration from it, since blasts usually come one iteration at
+        # a time. Stale once the zone changes; the budget is opt-in.
+        self._blast_stats: dict[tuple["FixedPoint", int], float] = {}
 
     # ── attribute delegation ─────────────────────────────────────────────────
 
@@ -1930,6 +1935,8 @@ class TangleSession:
         strict: bool = False,
         min_separation: Optional[float] = None,
         diagnose: bool = True,
+        max_points: Optional[int] = None,
+        predict: bool = True,
     ) -> BlastResult:
         """
         Repeatedly iterate the bridges inside a resonance zone.
@@ -1950,6 +1957,13 @@ class TangleSession:
                 of near-coincident unstable curves (default: disabled).
             diagnose: Finish with one resolution report on the workbench logger
                 (default; see :func:`~tanglepack.loom.Blast.blast_zone`).
+            max_points: Opt-in point budget of the whole blast; it stops
+                BETWEEN iterations on a resumable state with
+                ``stop_reason == "point_budget"`` (default: no budget).
+            predict: Refuse an iteration whose predicted cost (frontier points
+                times the zone's last growth factor) would exceed
+                ``max_points`` (default); False stops only once the budget is
+                reached.
 
         Returns:
             A :class:`~tanglepack.loom.Blast.BlastResult` genealogy of the blast.
@@ -1973,6 +1987,8 @@ class TangleSession:
             strict=strict,
             min_separation=min_separation,
             diagnose=diagnose,
+            max_points=max_points,
+            predict=predict,
         )
 
     def plot_resonance_zones(
