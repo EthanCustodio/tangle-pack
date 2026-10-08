@@ -25,15 +25,19 @@ is ``build_k10()`` except for ``generation_bump``:
 * ``no_change`` -- reads only (bridges, registry orderings, partitions).
 * ``rebuild`` -- the product asked for again with ``rebuild=True``.
 * ``generation_bump`` -- on ``build_k28(blasts=1)``, one more blast of its
-  zone, the pip restored and the partition redone through the session
-  fan-outs. Blast 1 -> 2 switches the reference pair, so the direct view of
-  every product changes, and the cell asserts that it did (TEST-5: on ``k10``
-  one ``iterate_bridge`` changed nothing and the cell was blind).
-* ``partition_signature`` -- a re-partition at the SAME generation (the
-  trellis's results cleared and redone against another strong pip, then the
-  original pip restored). It changes every product from the bridge classes on.
-* ``pip_change`` -- ``set_strong_pip`` to another candidate, nothing else. It
-  changes the dual graph and the symbolic dynamics.
+  zone and nothing else (the session carries the pip and recomputes the
+  holes, API-1). Blast 1 -> 2 switches the reference pair, so the direct view
+  of every product changes, and the cell asserts that it did (TEST-5: on
+  ``k10`` one ``iterate_bridge`` changed nothing and the cell was blind).
+* ``manual_repartition`` -- a re-partition of the per-fixed-point trellis at
+  the SAME generation (its results cleared and redone against another strong
+  pip, then the original pip restored). The trellis's own partition changes;
+  no product follows it, since the topology is recomputed from the state and
+  the pips alone (D1, WP8; it used to change every product from the bridge
+  classes on).
+* ``pip_change`` -- ``session.set_strong_pip`` to another candidate, nothing
+  else. The holes are recomputed at the new pip, so every product from the
+  bridge classes on follows it.
 
 Further tests check the trellis is fresh after every workbench mutation path
 (growth, ``iterate_bridge``, ``rebuild_bridges``, ``add_resonance_zones``, a
@@ -48,7 +52,7 @@ from typing import Any, Callable
 
 import pytest
 
-from cases import ZONE_MIN_SEPARATION, Case, build_k10, build_k28, build_nested
+from cases import ZONE_MIN_SEPARATION, Case, _class_identity, build_k10, build_k28, build_nested
 from helpers.direct import direct_view, trellis_view, view_of
 from helpers.zones import define_inner_zone
 from tanglepack import TangleSession
@@ -67,7 +71,7 @@ EVENTS: tuple[str, ...] = (
     "no_change",
     "rebuild",
     "generation_bump",
-    "partition_signature",
+    "manual_repartition",
     "pip_change",
 )
 
@@ -97,29 +101,33 @@ def _reads(case: Case) -> None:
 
 
 def _bump_generation(case: Case) -> None:
-    """One more blast of the case's zone, its pip restored, the partition redone."""
+    """One more blast of the case's zone, nothing else."""
     session, fp = case.session, case.fixed_point
     generation = session.workbench.generation
 
     session.blast_zone(
         case.zones[0], num_iterations=1, fixed_point=[fp], min_separation=ZONE_MIN_SEPARATION
     )
-    session.classify_strong_pips()
-    session.set_strong_pip(fp, case.pips[0])
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
 
     assert session.workbench.generation != generation
 
 
-def _change_partition_signature(case: Case) -> None:
-    """Re-partition against another pip at the same generation, then restore the pip."""
+def _own_partition(trellis) -> tuple:
+    """The per-fixed-point trellis's own partition boundaries."""
+    return tuple(
+        (result.branch_key, result.side, tuple((i.lo_id, i.hi_id) for i in result.intervals))
+        for result in trellis.stable_partitions
+    )
+
+
+def _repartition_by_hand(case: Case) -> None:
+    """Re-partition the trellis against another pip at the same generation, then
+    restore the pip."""
     session, fp = case.session, case.fixed_point
     generation = session.workbench.generation
-    signature = session.homotopy_partition().signature()
     trellis = session.trellis(fp)
     original = trellis.strong_pip
+    partition = _own_partition(trellis)
 
     trellis.clear_results()
     trellis.classify_strong_pips()
@@ -130,7 +138,7 @@ def _change_partition_signature(case: Case) -> None:
     trellis.set_strong_pip(original)
 
     assert session.workbench.generation == generation
-    assert session.homotopy_partition().signature() != signature
+    assert _own_partition(trellis) != partition
     assert session.strong_pip(fp) == original
 
 
@@ -139,7 +147,7 @@ def _change_pip(case: Case) -> None:
     session, fp = case.session, case.fixed_point
     pip = session.strong_pip(fp)
 
-    session.trellis(fp).set_strong_pip(_alternate_pip(session, fp))
+    session.set_strong_pip(fp, _alternate_pip(session, fp))
 
     assert session.strong_pip(fp) != pip
 
@@ -147,7 +155,7 @@ def _change_pip(case: Case) -> None:
 _EVENT_ACTIONS: dict[str, Callable[[Case], None]] = {
     "no_change": _reads,
     "generation_bump": _bump_generation,
-    "partition_signature": _change_partition_signature,
+    "manual_repartition": _repartition_by_hand,
     "pip_change": _change_pip,
 }
 
@@ -279,9 +287,10 @@ def test_every_fixed_point_selection_is_fresh(product: str) -> None:
     _assert_fresh(case, product, accessor(case.fixed_point), case.fixed_point)
 
 
-def test_bridge_class_letters_survive_rebuilds_and_repartitions() -> None:
-    """The alphabet outlives every cache entry: a rebuild keeps each letter, and
-    after a re-partition every lettered class carries the alphabet's letter."""
+def test_bridge_class_letters_survive_rebuilds_and_pip_changes() -> None:
+    """The alphabet outlives every recompute: a rebuild keeps each letter, and
+    after a pip change every lettered class carries the letter of its identity
+    (the bounding crossings of its two elements)."""
     case = build_k10()
     session = case.session
     first = session.bridge_classes()
@@ -292,8 +301,10 @@ def test_bridge_class_letters_survive_rebuilds_and_repartitions() -> None:
     assert [e.letter for e in rebuilt] == [e.letter for e in first]
     assert len(session.bridge_alphabet) == alphabet_size
 
-    _change_partition_signature(case)
+    _change_pip(case)
+    family = session.homotopy_partition()
     for entry in session.bridge_classes():
         if entry.letter is not None:
-            assert session.bridge_alphabet.assigned[entry.bridge_class] == entry.letter
+            identity = _class_identity(family, entry.bridge_class)
+            assert session.bridge_alphabet.assigned[identity] == entry.letter
     assert len(session.bridge_alphabet) >= alphabet_size

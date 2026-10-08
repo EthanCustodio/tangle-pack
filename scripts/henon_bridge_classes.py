@@ -188,19 +188,12 @@ def build(case: Case) -> tuple[TangleSession, object, np.ndarray]:
             raise ValueError(f"{case.title}: the default strong pip has no registered image")
     logger.info("%s: candidates %s, chosen pip %d", case.title, trellis.strong_pip_candidates, pip)
 
-    # Trim at the pip and recompute; the recompute rebuilds the trellis, so
-    # classify and set the pip again. Same after every blast.
+    # Trim at the pip (the session remembers it as the chosen pip), blast, and
+    # recompute the topology from it.
     zone = session.resonance_zone(pip)
-    session.classify_strong_pips()
-    session.set_strong_pip(fp, pip)
     for _ in range(case.blasts):
         session.blast_zone(zone, num_iterations=1, fixed_point=[fp], min_separation=1e-5)
-        session.classify_strong_pips()
-        session.set_strong_pip(fp, pip)
-
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
+    session.topology()
     return session, fp, stable_points
 
 

@@ -1,13 +1,14 @@
 """Direct builds of every cached session product, and structural views of them.
 
-:class:`~tanglepack.TangleSession` is a facade: it gathers partitions, holes
-and strong pips from its per-fixed-point trellises and hands them to the
-topology functions. :class:`DirectBuild` assembles the same products WITHOUT
-any session cache -- from the public topology constructors over the
-partitions, holes and pips read off the per-fixed-point trellises (the
-current state) -- and :func:`session_view` / :func:`direct_view` reduce a
-product to a structural, letter-free signature so two builds can be compared
-by content, never by object identity.
+:class:`~tanglepack.TangleSession` is a facade: its ``topology()``
+recomputes the holes and partitions of the selected fixed points from their
+strong pips and hands them to the topology functions. :class:`DirectBuild`
+assembles the same products WITHOUT the session -- its own per-fixed-point
+trellises of the current workbench state, classified, set to the session's
+chosen pips, punched and partitioned, then the public topology constructors
+-- and :func:`view_of` / :func:`direct_view` reduce a product to a
+structural, letter-free signature so two builds can be compared by content,
+never by object identity.
 
 Shared by ``tests/facade/test_session_equivalence.py`` (a session product
 equals a direct build) and ``tests/facade/test_session_caches.py`` (it still
@@ -49,11 +50,11 @@ class DirectBuild:
         case: The built case.
         selected: The fixed points of the selection.
         trellis: A fresh trellis of the workbench over the selection.
-        partitions: Every per-fixed-point stable partition (of EVERY fixed
-            point, as the session gathers them), one per ``(branch_key, side)``.
+        partitions: The stable partitions of the selected fixed points, one per
+            ``(branch_key, side)``.
         holes: Every hole of the selected fixed points.
-        strong_pips: The chosen strong pip of every selected fixed point that
-            has one.
+        strong_pips: The session's chosen strong pip of every selected fixed
+            point.
     """
 
     def __init__(
@@ -61,10 +62,10 @@ class DirectBuild:
         case: "Case",
         fixed_points: Optional["FixedPoint | Iterable[FixedPoint]"] = None,
     ) -> None:
-        """Read the per-fixed-point results off the case's session.
+        """Recompute stages 3-6 of every selected fixed point on fresh trellises.
 
         Args:
-            case: A case built through the ``partitioned`` stage.
+            case: A case whose pips are chosen.
             fixed_points: The selection (None for every fixed point), as the
                 session accessors take it.
         """
@@ -77,17 +78,17 @@ class DirectBuild:
         else:
             self.selected = [fixed_points]
         self.trellis = Trellis.from_workbench(session.workbench, fixed_points)
-        seen: dict[tuple, Any] = {}
-        for fp in case.fixed_points:
-            for result in session.trellis(fp).stable_partitions:
-                seen.setdefault((result.branch_key, result.side), result)
-        self.partitions = list(seen.values())
-        self.holes = [hole for fp in self.selected for hole in session.trellis(fp).holes]
-        self.strong_pips = [
-            session.trellis(fp).strong_pip
-            for fp in self.selected
-            if session.trellis(fp).strong_pip is not None
-        ]
+        self.partitions, self.holes, self.strong_pips = [], [], []
+        for fp in self.selected:
+            trellis = Trellis.from_workbench(session.workbench, fp)
+            trellis.classify_strong_pips()
+            trellis.set_strong_pip(session.strong_pip(fp))
+            trellis.compute_pseudoneighbors()
+            trellis.punch_holes()
+            trellis.partition_stable_manifold()
+            self.partitions += trellis.stable_partitions
+            self.holes += trellis.holes
+            self.strong_pips.append(trellis.strong_pip)
 
     def homotopy(self) -> HomotopyPartition:
         """The homotopy partition family."""
@@ -102,13 +103,21 @@ class DirectBuild:
         return minimal_trellis(self.trellis, self.holes, self.evidence())
 
     def classes(self):
-        """The alphabet (the minimal trellis's classes, D2), lettered from a FRESH
-        alphabet (letters are a session annotation; every view here is letter-free)."""
+        """The alphabet (the minimal trellis's classes, D2), lettered by element
+        bounds from a FRESH alphabet (letters are a session annotation; every
+        view here is letter-free)."""
         table = self.minimal().alphabet
+        homotopy = self.homotopy()
         alphabet = BridgeAlphabet()
         for entry in table:
             if entry.active:
-                entry.letter = alphabet.letter_for(entry.bridge_class)
+                bounds = (
+                    homotopy.element(ref)
+                    for ref in (entry.bridge_class.source, entry.bridge_class.target)
+                )
+                entry.letter = alphabet.letter_for(
+                    frozenset((e.branch_key, e.side, e.lo_id, e.hi_id) for e in bounds)
+                )
         return table
 
     def iterated(self) -> IteratedHomotopyPartition:
@@ -148,8 +157,7 @@ def classes_view(table) -> list:
 
 
 def family_view(family) -> list:
-    """A partition family's signature, order-free (the session gathers its
-    per-fixed-point partitions in trellis-cache order)."""
+    """A partition family's signature, order-free."""
     return sorted(family.signature(), key=lambda entry: (repr(entry[0]), entry[1]))
 
 

@@ -402,12 +402,11 @@ class PartitionFamily:
 
     def signature(self) -> tuple:
         """
-        A structural signature of this family, for cache keying.
+        A structural signature of this family, for comparing two builds.
 
         Returns:
             One ``(branch_key, side, ((lo_id, hi_id, closed_lo, closed_hi),
-            ...))`` entry per result, in order — the same tuple
-            ``TangleSession._partition_signature`` builds for a gathered list.
+            ...))`` entry per result, in order.
         """
         return tuple(
             (

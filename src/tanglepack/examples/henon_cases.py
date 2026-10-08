@@ -1,4 +1,4 @@
-"""Higher-period and nested Hénon tangles, built up to the stable partition.
+"""Higher-period and nested Hénon tangles, built up to their topology.
 
 Two recipes on the nested Hénon map ``HENON_P3 = (2, 1)``, shared by the
 figure scripts and the test fixtures so the two can never drift apart:
@@ -7,9 +7,9 @@ figure scripts and the test fixtures so the two can never drift apart:
 * :func:`build_nested` -- the outer period-1 saddle and the inner period-3
   orbit together, one resonance zone each.
 
-Both stop after ``partition_stable_manifold``; everything downstream
-(minimal trellis, iterated partition, dual graph, symbolic dynamics) is a
-session call away.
+Both end at ``session.topology()`` (holes, partition, classes, minimal
+trellis, dual graph and words of every fixed point, from the pips the zones
+were cut at).
 
 Dev Notes:
 
@@ -39,8 +39,9 @@ Dev Notes:
   blast the outer class ``e`` is unresolved (a singleton landing with no
   registered chain); after two blasts every class resolves and the outer
   classes reproduce the k=2.8 two-blast words, with real (``unique``) walks.
-* Registry ids are not reproducible between builds, so the pips are the
-  default strong pips, never pinned by id.
+* The pips are the default strong pips, never pinned by id. The session
+  carries them across every blast (API-1, WP8): a zone remembers the pip it
+  was cut at, and each recompute finds it again by its cdists and keys.
 """
 
 from __future__ import annotations
@@ -75,7 +76,7 @@ PERIOD1_ORIENTATION: dict[str, NDArray[np.float64]] = {
 @dataclass
 class TangleBuild:
     """
-    One built tangle, partitioned and ready for the topology layer.
+    One built tangle and its topology.
 
     Attributes:
         session: The :class:`~tanglepack.loom.TangleSession.TangleSession`.
@@ -148,20 +149,6 @@ def _intersect_and_bridge(session, fixed_points) -> None:
         session.create_bridges(fp)
 
 
-def _repin(session, fixed_points, pips) -> None:
-    """Classify again (the trellis was rebuilt) and restore the chosen pips."""
-    session.classify_strong_pips()
-    for fp, pip in zip(fixed_points, pips):
-        session.set_strong_pip(fp, pip)
-
-
-def _partition(session) -> None:
-    """Pseudoneighbors, holes and the stable partition on every trellis."""
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-
-
 def build_period3(
     *,
     unstable_steps: int = 13,
@@ -181,7 +168,7 @@ def build_period3(
         min_separation: The blasts' ``min_separation``.
 
     Returns:
-        The :class:`TangleBuild` (one fixed point), partitioned.
+        The :class:`TangleBuild` (one fixed point), its topology computed.
     """
     session = _session()
     fp3 = _grow_period3(session, unstable_steps, stable_steps, area_cutoff)
@@ -191,15 +178,13 @@ def build_period3(
     session.classify_strong_pips()
     pip = session.trellis(fp3).strong_pip
     zone = session.resonance_zone(pip)
-    _repin(session, [fp3], [pip])
     sizes: list[int] = []
     for _ in range(blasts):
         result = session.blast_zone(
             zone, num_iterations=1, fixed_point=[fp3], min_separation=min_separation
         )
         sizes.append(len(result.all_interior_bridges()))
-        _repin(session, [fp3], [pip])
-    _partition(session)
+    session.topology()
     blasted = f", {blasts} blast(s)" if blasts else ""
     return TangleBuild(
         session=session,
@@ -242,7 +227,7 @@ def build_nested(
 
     Returns:
         The :class:`TangleBuild`, fixed points ``[fp1, fp3]`` (outermost
-        first), partitioned.
+        first), its topology computed.
     """
     session = _session()
     fp3 = _grow_period3(session, p3_unstable_steps, p3_stable_steps, p3_area_cutoff)
@@ -256,7 +241,6 @@ def build_nested(
     session.add_resonance_zones(pips)
     zones = sorted(session.resonance_zones.values(), key=lambda zone: zone.area)
     inner, outer = zones[0], zones[-1]
-    _repin(session, fixed_points, pips)
     sizes: list[int] = []
     for zone, count in ((inner, inner_blasts), (outer, outer_blasts)):
         for _ in range(count):
@@ -267,8 +251,7 @@ def build_nested(
                 min_separation=min_separation,
             )
             sizes.append(len(result.all_interior_bridges()))
-            _repin(session, fixed_points, pips)
-    _partition(session)
+    session.topology()
     blasted = []
     if inner_blasts:
         blasted.append(f"{inner_blasts} inner")

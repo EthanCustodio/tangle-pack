@@ -224,7 +224,6 @@ def build(case: str):
         trellis = session.trellis(fp)
         pip = trellis.iterate(trellis.strong_pip, 1)
         zone = session.resonance_zone(pip)
-        hc._repin(session, [fp], [pip])
         return session, [fp], [pip], zone
 
     session = hc._session()
@@ -234,7 +233,6 @@ def build(case: str):
         session.classify_strong_pips()
         pip = session.trellis(fp3).strong_pip
         zone = session.resonance_zone(pip)
-        hc._repin(session, [fp3], [pip])
         return session, [fp3], [pip], zone
 
     fp1 = hc._grow_period1(session, 11, BUILD_CUTOFF)
@@ -245,13 +243,11 @@ def build(case: str):
     session.add_resonance_zones(pips)
     zones = sorted(session.resonance_zones.values(), key=lambda zone: zone.area)
     inner, outer = zones[0], zones[-1]
-    hc._repin(session, fixed_points, pips)
     if case == "nested_outer":
         return session, fixed_points, pips, outer
     for _ in range(2):
         session.blast_zone(outer, num_iterations=1, fixed_point=[outer.fixed_point],
                            min_separation=1e-4)
-        hc._repin(session, fixed_points, pips)
     return session, fixed_points, pips, inner
 
 

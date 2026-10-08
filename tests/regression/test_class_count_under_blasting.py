@@ -16,7 +16,11 @@ pinned count:
   inert ones (``docs/open_issues.md``, TEST-2);
 * while the hole set stays the same between two recomputes, so does the class
   count (at least one such pair must exist, or the law checked nothing);
-* every class has a member the minimal trellis keeps.
+* every class has a member the minimal trellis keeps;
+* a reference pair is only ever lost to a witness the definition names,
+  read off the table alone (BCG-4: a switch is a discovery, not a defect);
+* a class keeps its letter while its two elements keep their bounding
+  crossings, and no two such identities share a letter (C2, BCG-7).
 
 The per-kind counts are printed in every failure message as diagnostics.
 
@@ -76,3 +80,23 @@ def test_alphabet_inside_minimal_trellis_under_blasting(name: str) -> None:
     """D2 after every blast: every class has a member the minimal trellis keeps."""
     steps = _series(name)
     assert all(s.outside_minimal == 0 for s in steps), _table(steps)
+
+
+@pytest.mark.parametrize("name", _params("series_lost_references_are_witnessed"))
+def test_lost_references_are_witnessed(name: str) -> None:
+    """BCG-4: every reference a blast removes is killed by a point of X the table names."""
+    steps = _series(name)
+    for step in steps:
+        assert not step.unwitnessed, (step.blasts, sorted(step.unwitnessed), _table(steps))
+
+
+@pytest.mark.parametrize("name", _params("series_letters_follow_element_identity"))
+def test_letters_follow_element_identity(name: str) -> None:
+    """C2: a class identified by its elements' bounding crossings keeps its letter
+    across recomputes, and a letter names one identity."""
+    steps = _series(name)
+    seen: dict = {}
+    for step in steps:
+        for identity, letter in step.letters:
+            assert seen.setdefault(identity, letter) == letter, (step.blasts, letter, seen[identity])
+    assert len(set(seen.values())) == len(seen), "two identities share a letter"

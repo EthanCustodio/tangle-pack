@@ -13,6 +13,7 @@ loom sits on top of both.
 Entry points:
     * :class:`TangleSession` — the user-friendly facade tying both layers together.
     * :func:`define_resonance_zone` / :class:`ResonanceZone` — the first loom algorithm.
+    * :class:`Topology` — one recompute of the topology (stages 3-9) for a state and pip choice.
     * :class:`BridgeAlphabet` — the persistent letters of the session's bridge classes.
 """
 
@@ -27,9 +28,11 @@ from .ResonanceZone import (
 from .Blast import BlastResult, BlastStep, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
 from .TangleSession import TangleSession
+from .Topology import Topology
 
 __all__ = [
     "TangleSession",
+    "Topology",
     "ResonanceZone",
     "BoundaryArc",
     "define_resonance_zone",

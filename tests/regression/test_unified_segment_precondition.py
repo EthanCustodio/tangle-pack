@@ -38,7 +38,8 @@ def test_a_stable_manifold_past_the_pip_orbit_is_warned(caplog):
     differing = _differing_branches(session)
     assert differing, "the 10-step build no longer runs past the pip orbit"
     caplog.clear()
-    with caplog.at_level(logging.WARNING, logger=_LOGGER):
+    # A rebuild recomputes the holes, whose geometric cross-check maps the escaping arms.
+    with caplog.at_level(logging.WARNING, logger=_LOGGER), np.errstate(over="ignore"):
         session.dual_graph(rebuild=True)
     records = assert_logged(caplog, logging.WARNING, _LOGGER, count=len(differing))
     for key in differing:

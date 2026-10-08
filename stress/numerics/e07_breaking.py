@@ -252,7 +252,6 @@ def blast_setup(case: str):
         session.classify_strong_pips()
         pip = session.trellis(fp3).strong_pip
         zone = session.resonance_zone(pip)
-        hc._repin(session, [fp3], [pip])
         return session, [fp3], [pip], zone
 
     fp1 = hc._grow_period1(session, 11, 1e-7)
@@ -262,7 +261,6 @@ def blast_setup(case: str):
     pips = [session.trellis(fp).strong_pip for fp in fixed_points]
     session.add_resonance_zones(pips)
     outer = max(session.resonance_zones.values(), key=lambda zone: zone.area)
-    hc._repin(session, fixed_points, pips)
     return session, fixed_points, pips, outer
 
 

@@ -18,8 +18,8 @@ Cases:
   start of the suite).
 * ``k28_one_blast`` / ``k28_two_blasts`` -- ``k=2.8``: 10 unstable steps at
   ``area_cutoff = 1e-7``, the stable manifold trimmed at the pip ``f(q0)`` (a
-  resonance zone), then one or two single-iteration blasts of that zone with
-  ``min_separation = 1e-5``, the pip restored after each
+  resonance zone, which the session remembers as the pip), then one or two
+  single-iteration blasts of that zone with ``min_separation = 1e-5``
   (:func:`_zone_at_image_pip`).
 * ``p3`` -- the inner period-3 orbit of the nested map ``(2, 1)`` alone,
   delegated to :func:`tanglepack.examples.henon_cases.build_period3` with every
@@ -76,10 +76,13 @@ Dev Notes:
   test refactor), so a nested or period-3 build stopped before the partition
   (``through="zones"``) is a local copy of the ``henon_cases`` recipe; only the
   full ``"partitioned"`` build delegates.
-* Registry ids are NOT reproducible between two builds in one process (P6:
-  three ``build_k10()`` calls give three permutations of the same crossings),
-  so a test never compares ids across builds and never picks "the lowest id"
-  as a canonical choice.
+* Registry ids are reproducible since WP8 (crossings are registered along
+  each unstable branch in cdist order, INT-7; before, three ``build_k10()``
+  calls in one process gave three permutations). Tests still never pin an id
+  and never pick "the lowest id" as a canonical choice.
+* The session carries the strong pips across every blast (API-1, WP8): a
+  zone remembers the pip it was cut at, so no builder restores pips by hand,
+  and ``session.topology()`` recomputes the holes and the partition from them.
 """
 
 from __future__ import annotations
@@ -101,6 +104,8 @@ from tanglepack.examples import (
 )
 from tanglepack.examples import henon_cases
 
+from helpers.laws import reference_witness
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from tanglepack import FixedPoint, IntersectionRegistry, TangleWorkbench
     from tanglepack.loom.ResonanceZone import ResonanceZone
@@ -111,7 +116,8 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 #: growth only), ``grown`` (both manifolds), ``intersected``
 #: (``compute_intersections``), ``bridges`` (trim, bridges, iterate table),
 #: ``pips`` (strong pips classified), ``zones`` (resonance zones, blasts),
-#: ``partitioned`` (pseudoneighbors, holes, stable partition).
+#: ``partitioned`` (``session.topology()``: pseudoneighbors, holes, stable
+#: partition and every later stage).
 Stage = Literal[
     "empty",
     "fixed_point",
@@ -262,29 +268,14 @@ def _orientation(hints: Mapping[str, tuple[int, int]]) -> dict[str, np.ndarray]:
     return {stability: np.array(vector) for stability, vector in hints.items()}
 
 
-def _partition(session: TangleSession) -> None:
-    """Pseudoneighbors, holes and the stable partition through the fan-outs."""
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-
-
-def _repin(session: TangleSession, fixed_points: list, pips: list) -> None:
-    """Classify the rebuilt trellis again and restore the chosen pips."""
-    session.classify_strong_pips()
-    for fp, pip in zip(fixed_points, pips):
-        session.set_strong_pip(fp, pip)
-
-
 def _blast(
     session: TangleSession,
     zone: "ResonanceZone",
     fixed_points: list,
-    pips: list,
     *,
     diagnose: bool = True,
 ) -> None:
-    """One single-iteration blast of ``zone`` at ``ZONE_MIN_SEPARATION``, the pips restored."""
+    """One single-iteration blast of ``zone`` at ``ZONE_MIN_SEPARATION``."""
     session.blast_zone(
         zone,
         num_iterations=1,
@@ -292,7 +283,6 @@ def _blast(
         min_separation=ZONE_MIN_SEPARATION,
         diagnose=diagnose,
     )
-    _repin(session, fixed_points, pips)
 
 
 def _zone_at_image_pip(
@@ -301,16 +291,15 @@ def _zone_at_image_pip(
     """The k=2.8 zone recipe: the zone trimmed at the pip ``f(q0)``, blasted ``blasts`` times.
 
     Returns:
-        ``(pip, zone)``; the pip is restored after the trim and after every blast.
+        ``(pip, zone)``; the session remembers the pip the zone was cut at.
     """
     session.classify_strong_pips()
     trellis = session.trellis(fp)
     pip = trellis.iterate(trellis.strong_pip, 1)
     assert pip is not None, "the default strong pip must have a registered image"
     zone = session.resonance_zone(pip)
-    _repin(session, [fp], [pip])
     for _ in range(blasts):
-        _blast(session, zone, [fp], [pip])
+        _blast(session, zone, [fp])
     return pip, zone
 
 
@@ -373,7 +362,7 @@ def build_k10(
     case.pips = [session.strong_pip(fp)]
     if not _reached(through, "partitioned"):
         return case
-    _partition(session)
+    session.topology()
     return case
 
 
@@ -396,7 +385,7 @@ def build_k28(
             ``K28_ANALYTIC_SADDLE_SEED``).
 
     Returns:
-        The case, the pip ``f(q0)`` restored after every blast.
+        The case, the pip ``f(q0)`` carried by the session through every blast.
 
     Raises:
         ValueError: ``through`` is neither ``"zones"`` nor ``"partitioned"``.
@@ -420,7 +409,7 @@ def build_k28(
     session.create_bridges(fp)
     pip, zone = _zone_at_image_pip(session, fp, blasts)
     if through == "partitioned":
-        _partition(session)
+        session.topology()
     return Case(
         name={0: "k28_unblasted", 1: "k28_one_blast", 2: "k28_two_blasts"}.get(
             blasts, f"k28_{blasts}_blasts"
@@ -452,7 +441,7 @@ def build_period3(
     ``"partitioned"`` delegates to
     :func:`tanglepack.examples.henon_cases.build_period3` with every keyword
     explicit; ``"zones"`` runs the local copy of its recipe and stops at the
-    repinned zone, unblasted (the blast series starts there).
+    zone, unblasted (the blast series starts there).
 
     Args:
         unstable_steps: Unstable growth steps (13; 15 and 16 are the known
@@ -496,7 +485,7 @@ def build_period3(
 
 
 def _period3_zone(unstable_steps: int, stable_steps: int, area_cutoff: float) -> Case:
-    """The ``henon_cases.build_period3`` recipe stopped at the repinned zone."""
+    """The ``henon_cases.build_period3`` recipe stopped at the zone."""
     session = TangleSession(
         henon_map(*HENON_P3),
         henon_map_inverse(*HENON_P3),
@@ -514,7 +503,6 @@ def _period3_zone(unstable_steps: int, stable_steps: int, area_cutoff: float) ->
     session.classify_strong_pips()
     pip = session.trellis(fp3).strong_pip
     zone = session.resonance_zone(pip)
-    _repin(session, [fp3], [pip])
     return Case(
         name="p3_unblasted",
         session=session,
@@ -532,8 +520,8 @@ def build_period3_coarse_blasts(*, blasts: int = 6, area_cutoff: float = 1e-5) -
 
     The zone is built at 1e-7 (:func:`build_period3` ``through="zones"``), then
     ``blasts`` single-iteration blasts refine at ``area_cutoff`` with
-    ``min_separation = 1e-5`` (no same-stability pass), the pips restored after
-    each, and the stable manifold is partitioned. At 1e-5 and 6 blasts some hole
+    ``min_separation = 1e-5`` (no same-stability pass), and the topology is
+    computed. At 1e-5 and 6 blasts some hole
     bridges hold 2-4 nodes, where a polyline reading of their rows disagrees with
     the crossing signs (NUM-1).
 
@@ -553,8 +541,7 @@ def build_period3_coarse_blasts(*, blasts: int = 6, area_cutoff: float = 1e-5) -
             zone, num_iterations=1, fixed_point=case.fixed_points,
             min_separation=1e-5, diagnose=False,
         )
-        _repin(session, case.fixed_points, case.pips)
-    _partition(session)
+    session.topology()
     case.name = "p3_coarse_blasts"
     case.expect = CaseExpect(periods=(3,), area_cutoff=area_cutoff, blasts=blasts)
     case.stage = "partitioned"
@@ -570,7 +557,7 @@ def _nested_through(
     p1_unstable_steps: int,
     p1_area_cutoff: float,
 ) -> Case:
-    """The ``henon_cases.build_nested`` recipe stopped before the repin and blasts."""
+    """The ``henon_cases.build_nested`` recipe stopped before the blasts."""
     session = TangleSession(
         henon_map(*HENON_P3), henon_map_inverse(*HENON_P3), henon_jacobian(*HENON_P3)
     )
@@ -649,7 +636,7 @@ def build_nested(
         through: ``"partitioned"`` delegates to
             :func:`tanglepack.examples.henon_cases.build_nested`; an earlier
             stage (at most ``"zones"``, and only without blasts) runs the
-            local copy of its recipe and stops there, before the repin.
+            local copy of its recipe and stops there.
 
     Returns:
         The case, fixed points ``[fp1, fp3]``.
@@ -717,7 +704,7 @@ def build_inversion(*, blasts: int = 0, through: Stage = "partitioned") -> Case:
         through: ``"zones"`` (the blast series starts there) or ``"partitioned"``.
 
     Returns:
-        The case, the pip ``f(q0)`` restored after every blast.
+        The case, the pip ``f(q0)`` carried by the session through every blast.
 
     Raises:
         ValueError: ``through`` is neither ``"zones"`` nor ``"partitioned"``.
@@ -741,7 +728,7 @@ def build_inversion(*, blasts: int = 0, through: Stage = "partitioned") -> Case:
     session.create_bridges(fp)
     pip, zone = _zone_at_image_pip(session, fp, blasts)
     if through == "partitioned":
-        _partition(session)
+        session.topology()
     return Case(
         name={0: "inversion", 1: "inversion_one_blast", 2: "inversion_two_blasts"}.get(
             blasts, f"inversion_{blasts}_blasts"
@@ -807,7 +794,7 @@ def build_inversion_period2(
     if through == "partitioned":
         session.classify_strong_pips()
         case.pips = [session.strong_pip(fp)]
-        _partition(session)
+        session.topology()
     return case
 
 
@@ -876,7 +863,7 @@ def build_k10_inversion(
     case.pips = [session.strong_pip(fp)]
     if not _reached(through, "partitioned"):
         return case
-    _partition(session)
+    session.topology()
     return case
 
 
@@ -937,7 +924,7 @@ def build_orientation_reversing(*, through: Stage = "partitioned") -> Case:
     session.classify_strong_pips()
     case.pips = [session.strong_pip(fp)]
     if _reached(through, "partitioned"):
-        _partition(session)
+        session.topology()
     return case
 
 
@@ -1001,6 +988,13 @@ class SeriesStep:
         active: The active classes (a diagnostic, never compared).
         inert: The inert classes (a diagnostic, never compared).
         outside_minimal: Classes with no member in ``minimal_trellis().kept_bridge_ids``.
+        references: The reference pseudoneighbor pairs, as id pairs.
+        unwitnessed: The references of the previous step that are gone with no
+            witness in this one (``helpers.laws.reference_witness``).
+        letters: ``(identity, letter)`` of every lettered class, the identity
+            being the pair of its elements' ``(branch_key, side, lo_id, hi_id)``
+            read off ``session.homotopy_partition()`` here, never through the
+            library's own identity.
     """
 
     blasts: int
@@ -1009,6 +1003,9 @@ class SeriesStep:
     active: int
     inert: int
     outside_minimal: int
+    references: frozenset
+    unwitnessed: frozenset
+    letters: frozenset
 
 
 #: ``name -> (zone-stage builder, blasts)``. k28 switches its reference pair at
@@ -1027,7 +1024,7 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
     The D1 loop on one session: recompute the topology, blast once, repeat.
 
     Each blast is one iteration at ``ZONE_MIN_SEPARATION`` with
-    ``diagnose=False``, the pips restored after it.
+    ``diagnose=False``; the session carries the pip.
 
     Args:
         name: A key of :data:`SERIES`.
@@ -1039,20 +1036,22 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
     case = build()
     session = case.session
     (zone,) = case.zones
-    steps = []
+    (fp,) = case.fixed_points
+    steps: list[SeriesStep] = []
     for blast in range(blasts + 1):
         if blast:
-            _blast(session, zone, case.fixed_points, case.pips, diagnose=False)
-        _partition(session)
+            _blast(session, zone, case.fixed_points, diagnose=False)
         table = session.bridge_classes()
         kept = set(session.minimal_trellis().kept_bridge_ids)
+        family = session.homotopy_partition()
+        trellis = session.trellis(fp)
+        references = frozenset(p.as_tuple() for p in trellis.reference_pseudoneighbors)
+        lost = steps[-1].references - references if steps else frozenset()
         steps.append(
             SeriesStep(
                 blasts=blast,
                 holes=frozenset(
-                    (hole.bounding_ids, hole.iterate, hole.bridge_side)
-                    for fp in case.fixed_points
-                    for hole in session.trellis(fp).holes
+                    (hole.bounding_ids, hole.iterate, hole.bridge_side) for hole in trellis.holes
                 ),
                 classes=len(table),
                 active=len(table.active),
@@ -1060,9 +1059,24 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
                 outside_minimal=sum(
                     not any(m.bridge_id in kept for m in entry.members) for entry in table
                 ),
+                references=references,
+                unwitnessed=frozenset(
+                    pair for pair in lost if reference_witness(trellis, pair) is None
+                ),
+                letters=frozenset(
+                    (_class_identity(family, entry.bridge_class), entry.letter)
+                    for entry in table
+                    if entry.letter is not None
+                ),
             )
         )
     return tuple(steps)
+
+
+def _class_identity(family, bridge_class) -> frozenset:
+    """The pair of the class's elements, each by its branch, side and bounding crossings."""
+    elements = (family.element(ref) for ref in (bridge_class.source, bridge_class.target))
+    return frozenset((e.branch_key, e.side, e.lo_id, e.hi_id) for e in elements)
 
 
 # --------------------------------------------------------------------------- #

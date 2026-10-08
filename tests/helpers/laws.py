@@ -1422,6 +1422,45 @@ def check_reference_pairs_valid(case: "Case") -> int:
     return count
 
 
+def reference_witness(trellis, pair: tuple[int, int]) -> Optional[str]:
+    """
+    Why a reference pair of an earlier recompute is no pair of ``trellis`` (BCG-4).
+
+    The definition (``Pseudoneighbor_Algorithm.pdf``) kills a pair when its open
+    stable or unstable interval holds a point of X = every iterate of a
+    crossing. Read off the snapshot's orderings and the iterate table alone (no
+    scaling, no tolerance): a crossing strictly between the two on either
+    branch, or strictly between their registered images ``M^n(x0)``,
+    ``M^n(x1)`` on either branch (the image of an interval is an interval).
+
+    Args:
+        trellis: The later recompute's per-fixed-point trellis.
+        pair: The two crossing ids.
+
+    Returns:
+        The witness, described, or None when the table names none.
+    """
+    def between(x: int, y: int) -> Optional[str]:
+        for stability in ("stable", "unstable"):
+            branch = trellis.branch_containing(x, stability)
+            if branch is None or y not in branch.intersection_ids:
+                continue
+            ids = branch.intersection_ids
+            i, j = sorted((ids.index(x), ids.index(y)))
+            if j - i > 1:
+                return f"{ids[i + 1:j]} between {x} and {y} on their {stability} branch"
+        return None
+
+    frames = [pair]
+    for step in (1, -1):
+        x, y = pair
+        while (x := trellis.iterate(x, step)) is not None and (
+            y := trellis.iterate(y, step)
+        ) is not None:
+            frames.append((x, y))
+    return next((witness for x, y in frames if (witness := between(x, y))), None)
+
+
 # --------------------------------------------------------------------------- #
 # Arrangement
 # --------------------------------------------------------------------------- #

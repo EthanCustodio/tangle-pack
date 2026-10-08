@@ -24,24 +24,17 @@ from ..numerics.budget import DEFAULT_MAX_POINTS_PER_STEP
 from ..numerics.geometry import polyline_midpoint
 from ..topology import plotting
 from ..topology.Arrangement import Arrangement
-from ..topology.BridgeClass import (
-    BridgeClassEntry,
-    BridgeClassTable,
-    bridge_classes as _bridge_classes,
-    zone_label,
-)
+from ..topology.BridgeClass import BridgeClassEntry, BridgeClassTable, zone_label
 from ..topology.DualGraph import DualGraph
-from ..topology.MinimalTrellis import MinimalTrellis, minimal_trellis as _minimal_trellis
+from ..topology.MinimalTrellis import MinimalTrellis
 from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
-from ..topology.SymbolicDynamics import (
-    SymbolicDynamics,
-    symbolic_dynamics as _symbolic_dynamics,
-)
+from ..topology.SymbolicDynamics import SymbolicDynamics
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone, ring_cycles
 from .Blast import BlastResult, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
+from .Topology import Topology
 
 if TYPE_CHECKING:
     import networkx
@@ -51,9 +44,10 @@ if TYPE_CHECKING:
 
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
+    from ..numerics.Intersection import Intersection
     from ..topology.DualWalk import Walk
     from ..topology.plotting import CartoonLayout
-    from ..topology.TopologyResults import Endpoint, Hole, Side, StablePartitionResult
+    from ..topology.TopologyResults import Endpoint, Side
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -94,10 +88,10 @@ class TangleSession:
         >>> session.grow_n_times(fp, "unstable", num_iterations=7)
         >>> session.grow_until_turnaround(fp, "stable")
         >>> session.compute_intersections(fp)
-        >>> T = session.trellis(fp)                               # built + cached
-        >>> T.classify_strong_pips()
-        >>> rz = session.resonance_zone(T.strong_pip)             # trim + recompute
-        >>> T = session.trellis(fp, rebuild=True)                 # registry changed
+        >>> session.classify_strong_pips()                        # default pip, remembered
+        >>> rz = session.resonance_zone(session.strong_pip(fp))   # trim + recompute
+        >>> topo = session.topology()                             # holes .. words, one pass
+        >>> topo.classes, topo.dual_graph, topo.dynamics
     """
 
     def __init__(
@@ -132,26 +126,16 @@ class TangleSession:
             max_points_per_step=max_points_per_step,
             escape_radius=escape_radius,
         )
-        self._trellises: dict = {}
-        # (minimal trellis, its lettered alphabet) per trellis-selection cache
-        # key; see bridge_classes().
-        self._bridge_classes: dict = {}
-        # The letters of the bridge classes seen so far. Outlives every cache
-        # entry so a class keeps its letter across growth, blasts and
-        # re-partitions and a new class takes the next unused one.
+        # One Trellis snapshot and one Topology per fixed-point selection.
+        self._trellises: dict[frozenset, Trellis] = {}
+        self._topologies: dict[frozenset, Topology] = {}
+        # The chosen strong pip of each fixed point, carried across generations
+        # as a crossing (its cdists and keys), never as an id (API-1).
+        self._strong_pips: dict["FixedPoint", "Intersection"] = {}
+        # The letters of the bridge classes seen so far, keyed by class identity
+        # (Topology.identity). Outlives every recompute so a class keeps its
+        # letter across growth and blasts and a new class takes the next one.
         self.bridge_alphabet = BridgeAlphabet()
-        # (workbench.generation, partition signature, strong pips, graph) per
-        # trellis-selection cache key; see dual_graph().
-        self._dual_graphs: dict = {}
-        # (workbench.generation, partition signature, minimal trellis) and
-        # (..., iterated partition) per cache key; see minimal_trellis() and
-        # iterated_partition(). The dual graph is built over these two.
-        self._minimal_trellises: dict = {}
-        self._iterated_partitions: dict = {}
-        # (workbench.generation, partition signature, strong pips, dynamics) per
-        # trellis-selection cache key; see symbolic_dynamics(). Built over the
-        # dual graph and the bridge classes, so it shares the dual graph's key.
-        self._symbolic_dynamics: dict = {}
         # One resonance zone per fixed point (C8): an inversion point's zone is the
         # union of its two loops. Insertion order is preserved so plotting/shading
         # is deterministic.
@@ -233,27 +217,31 @@ class TangleSession:
         recompute (which swaps in a fresh registry), a blast adding crossings to
         the same registry, a re-cut, a trim, a resonance zone or its restore —
         advances that counter, so the cached snapshot is dropped and rebuilt on
-        the next call. No caller has to invalidate by hand. The
-        candidate/strong-pip slots of the rebuilt Trellis start empty; re-run
-        classification (or use the session-level :meth:`classify_strong_pips`,
-        which does so for you).
+        the next call. No caller has to invalidate by hand. A rebuilt
+        single-fixed-point trellis gets its fixed point's chosen strong pip back
+        (API-1): it is classified and the remembered pip is found again by its
+        cdists and keys; a pip that is no longer a candidate is left unset with
+        a WARNING.
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None for all
-                of the workbench's fixed points. The cache key is by identity.
+                of the workbench's fixed points. A selection is a SET (by
+                identity): ``trellis(fp)`` and ``trellis([fp])`` are one
+                snapshot, its fixed points in workbench order.
             rebuild: Force a rebuild even if a cached Trellis exists.
 
         Returns:
             The Trellis for the requested fixed point(s).
         """
-        cache_key = self._cache_key(fixed_points)
-        cached = self._trellises.get(cache_key)
-        stale = cached is not None and self._is_stale(cached)
-        if rebuild or cached is None or stale:
-            self._trellises[cache_key] = Trellis.from_workbench(
-                self.workbench, fixed_points
-            )
-        return self._trellises[cache_key]
+        key = self._cache_key(fixed_points)
+        trellis = self._trellises.get(key)
+        if rebuild or trellis is None or self._is_stale(trellis):
+            selected = [fp for fp in self.workbench.fixed_points if id(fp) in key]
+            trellis = self._trellises[key] = Trellis.from_workbench(self.workbench, selected)
+            if len(selected) == 1 and selected[0] in self._strong_pips:
+                trellis.classify_strong_pips(choose_default=False)
+                self._restore_strong_pip(trellis)
+        return trellis
 
     def arrangement(
         self,
@@ -288,6 +276,68 @@ class TangleSession:
             trellis._arrangement = None
         return trellis.arrangement
 
+    def topology(
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        rebuild: bool = False,
+    ) -> Topology:
+        """
+        The topology of a selection: stages 3-9 of the chalkboard, recomputed (D1).
+
+        One :class:`~tanglepack.loom.Topology.Topology` per selection, rebuilt
+        when the workbench generation or the selection's strong pips change:
+        pseudoneighbors, holes and the stable partition of every selected
+        fixed point are recomputed from scratch from its chosen pip (the
+        default pip, remembered, when none was chosen), and the bridge
+        classes, minimal trellis, iterated partition, dual graph and words
+        are its lazy stages. A manual stage call on a per-fixed-point trellis
+        (``punch_holes(...)`` with custom arguments, say) fills that trellis
+        for plotting but never feeds a product.
+
+        Args:
+            fixed_points: A single FixedPoint, an iterable of them, or None (the
+                default) for all of them. Partitions, holes and pips come from
+                the selection only, so a heteroclinic bridge needs both its
+                fixed points selected.
+            rebuild: Force a recompute at the same state.
+
+        Returns:
+            The topology.
+
+        Raises:
+            ValueError: A selected fixed point's chosen strong pip is no
+                longer a candidate (choose another with :meth:`set_strong_pip`).
+        """
+        key = self._cache_key(fixed_points)
+        selected = [fp for fp in self.workbench.fixed_points if id(fp) in key]
+        topology = self._topologies.get(key)
+        if (
+            rebuild
+            or topology is None
+            or topology.generation != self.workbench.generation
+            or topology.strong_pips != tuple(self.strong_pip(fp) for fp in selected)
+        ):
+            topology = self._topologies[key] = Topology(self, selected)
+        return topology
+
+    def _recompute_holes(self, fixed_point: "FixedPoint") -> Trellis:
+        """Stages 3-6 of one fixed point, from scratch on its trellis, at its pip."""
+        trellis = self.trellis(fixed_point)
+        if trellis.strong_pip is None:
+            if fixed_point in self._strong_pips:
+                raise ValueError(
+                    f"the chosen strong pip of {fixed_point!r} is no longer a "
+                    "strong-pip candidate; choose another with set_strong_pip()"
+                )
+            trellis.classify_strong_pips()
+        if trellis.strong_pip is not None:
+            self._strong_pips[fixed_point] = trellis.strong_pip_intersection
+        trellis.compute_pseudoneighbors()
+        trellis.punch_holes()
+        trellis.partition_stable_manifold()
+        return trellis
+
     def bridge_classes(
         self,
         fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
@@ -295,78 +345,29 @@ class TangleSession:
         rebuild: bool = False,
     ) -> BridgeClassTable:
         """
-        The ALPHABET of a trellis: its minimal trellis's classes, lettered and zoned.
+        The ALPHABET of a selection: its minimal trellis's classes, lettered and zoned.
 
-        D2: the alphabet is the classes of :meth:`minimal_trellis`'s
-        ``kept_bridge_ids`` (``MinimalTrellis.alphabet``); every other bridge
-        is image evidence only, and ``minimal_trellis().classes`` holds every
-        bridge's class (the evidence table, see
+        A stage of :meth:`topology`. D2: the alphabet is the classes of the
+        minimal trellis's ``kept_bridge_ids``; ``minimal_trellis().classes``
+        holds every bridge's class (the evidence table, see
         :func:`tanglepack.topology.BridgeClass.bridge_classes` for the class
-        semantics: unordered element pairs oriented anchor outward, loops
-        folded forward, inert classes). Partitions are gathered from every
-        cached per-fixed-point trellis, because a heteroclinic bridge's ends sit
-        against another fixed point's partitions.
-
-        The session annotates the alphabet: every ACTIVE class gets its letter
-        from :attr:`bridge_alphabet` (a class seen before keeps its letter, a
-        new one takes the next unused; inert classes stay unlettered), and
-        every class records the resonance zone its member bridges lie in
-        (:meth:`classify_bridge`, unanimous over the members, else a WARNING and
-        no zone). An evidence class outside the alphabet is never lettered.
-
-        Cached with the minimal trellis it is drawn from, so it follows that
-        cache: :attr:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.generation`
-        and the :meth:`_partition_signature` of the gathered partitions (a
-        re-partition is a Trellis-level mutation the generation cannot see).
+        semantics). Every ACTIVE class gets its letter from
+        :attr:`bridge_alphabet` by its identity (the bounding crossings of its
+        two elements, C2): a class seen before keeps its letter across
+        recomputes, a new one takes the next unused, inert classes stay
+        unlettered. Every class records the resonance zone its member bridges
+        lie in (:meth:`classify_bridge`, unanimous over the members, else a
+        WARNING and no zone).
 
         Args:
-            fixed_points: A single FixedPoint, an iterable of them, or None (the
-                default) for all of them — selects which trellis's bridges are
-                classed.
-            rebuild: Force a recompute (of the minimal trellis too). Letters are
-                stable across rebuilds (the alphabet persists).
+            fixed_points: The selection, as for :meth:`topology`.
+            rebuild: Recompute the topology first.
 
         Returns:
             A :class:`~tanglepack.topology.BridgeClass.BridgeClassTable` in
-            table order (grouped by tangle, smallest member cdist first, so the
-            anchor class is lettered ``a`` on first sight), each entry carrying
-            its members with directions, its ``letter`` and its ``zone_key``.
-
-        Raises:
-            ValueError: Propagated from
-                :func:`tanglepack.topology.BridgeClass.bridge_classes` when a
-                bridge end needs a partition that no gathered
-                :class:`~tanglepack.topology.TopologyResults.StablePartitionResult`
-                covers.
-
-        Note:
-            Call :meth:`partition_stable_manifold` (directly or via the session
-            fan-out) on every fixed point of interest first — with nothing
-            partitioned yet, every bridge end fails to resolve and this raises.
-            A branch missing a partition on either side is logged as a WARNING,
-            naming which side(s), before that happens.
-
-            A re-partition renumbers element ids, so a class whose element pair
-            changed is a NEW class to the alphabet and takes a new letter; the
-            old letter stays reserved. Carrying a class's identity across a
-            refinement is the refined-symbols work, not the alphabet's.
+            table order (grouped by tangle, smallest member cdist first).
         """
-        minimal = self.minimal_trellis(fixed_points, rebuild=rebuild)
-        cache_key = self._cache_key(fixed_points)
-        cached = self._bridge_classes.get(cache_key)
-        if cached is not None and cached[0] is minimal:
-            return cached[1]
-        table = minimal.alphabet
-        self._annotate_bridge_classes(table)
-        self._bridge_classes[cache_key] = (minimal, table)
-        return table
-
-    def _annotate_bridge_classes(self, table: BridgeClassTable) -> None:
-        """Letter the active entries from the alphabet and record each entry's zone."""
-        for entry in table:
-            if entry.active:
-                entry.letter = self.bridge_alphabet.letter_for(entry.bridge_class)
-            entry.zone_key = self._zone_key_of_entry(entry)
+        return self.topology(fixed_points, rebuild=rebuild).classes
 
     def _zone_key_of_entry(self, entry: BridgeClassEntry) -> Optional["FixedPoint"]:
         """
@@ -401,140 +402,25 @@ class TangleSession:
 
         Returns:
             :meth:`~tanglepack.topology.BridgeClass.BridgeClassTable.describe`
-            of the (cached) table.
+            of the table.
         """
         return self.bridge_classes(fixed_points).describe()
-
-    @staticmethod
-    def _partition_signature(partitions: list["StablePartitionResult"]) -> tuple:
-        """
-        A structural signature of a gathered partition list, for cache keying.
-
-        Two gathered-partition lists compare equal under this signature exactly
-        when they name the same ``(branch_key, side)`` pairs with the same
-        interval boundaries (endpoint ids and open/closed flags) in the same
-        order — the fields :func:`tanglepack.topology.BridgeClass.bridge_classes`
-        actually reads to resolve a bridge end to an element. Used by
-        :meth:`bridge_classes` to detect a re-partition that leaves the
-        workbench generation untouched (partitioning is a Trellis-level
-        mutation); the dual-graph cache reuses it for the same reason, hence
-        its generality (no dependence on anything bridge-class-specific).
-
-        Args:
-            partitions: The gathered
-                :class:`~tanglepack.topology.TopologyResults.StablePartitionResult` s
-                (see :meth:`_gathered_partitions`).
-
-        Returns:
-            A hashable, order-sensitive tuple: one
-            ``(branch_key, side, (interval boundaries, ...))`` entry per result,
-            each interval boundary itself a ``(lo_id, hi_id, closed_lo,
-            closed_hi)`` tuple.
-        """
-        return tuple(
-            (
-                result.branch_key,
-                result.side,
-                tuple(
-                    (interval.lo_id, interval.hi_id, interval.closed_lo, interval.closed_hi)
-                    for interval in result.intervals
-                ),
-            )
-            for result in partitions
-        )
-
-    def _gathered_partitions(self) -> list["StablePartitionResult"]:
-        """
-        Every stable partition of every cached, still-valid per-fixed-point trellis.
-
-        Walks :attr:`_trellises` — the same scan :meth:`partition_element_for`
-        does — skipping any snapshot :meth:`_is_stale` has flagged (its
-        partitions are keyed by ids the workbench may have renumbered since),
-        and concatenates the survivors' :attr:`~tanglepack.topology.Trellis.Trellis.stable_partitions`.
-        Deduplicated by ``(branch_key, side)``, keeping the first result seen for
-        a given key — cache iteration order is insertion order, so this favors
-        whichever trellis was built (and cached) first.
-
-        Note:
-            General on purpose: the dual-graph gathering reuses this helper
-            rather than re-implementing the scan.
-
-        Returns:
-            The deduplicated list of :class:`~tanglepack.topology.TopologyResults.StablePartitionResult`.
-        """
-        gathered: dict[tuple, "StablePartitionResult"] = {}
-        for trellis in self._trellises.values():
-            if self._is_stale(trellis):
-                continue
-            for result in trellis.stable_partitions:
-                key = (result.branch_key, result.side)
-                gathered.setdefault(key, result)
-        return list(gathered.values())
-
-    @staticmethod
-    def _warn_unpartitioned_branches(
-        trellis: Trellis, partitions: list["StablePartitionResult"]
-    ) -> None:
-        """Log a WARNING naming every stable branch of ``trellis`` missing a
-        partition on either side, and which side(s) are missing."""
-        covered = {(result.branch_key, result.side) for result in partitions}
-        missing = []
-        for branch in trellis.stable_branches:
-            missing_sides = [
-                side for side in ("left", "right") if (branch.key, side) not in covered
-            ]
-            if missing_sides:
-                missing.append((branch.key, missing_sides))
-        if missing:
-            logger.warning(
-                "%d stable branch(es) missing a partition on at least one side: %s",
-                len(missing),
-                ", ".join(f"{key[1:]} missing {sides}" for key, sides in missing),
-            )
-
-    def _gathered_holes(
-        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
-    ) -> list["Hole"]:
-        """
-        Every punched hole of every cached, non-stale per-fixed-point trellis
-        whose fixed point falls inside ``fixed_points``.
-
-        The same scan as :meth:`_gathered_strong_pips`; the holes name the
-        hole bridges of the minimal trellis through their ``bounding_ids``.
-        """
-        selected = {id(fp) for fp in self._resolve_fixed_points(fixed_points)}
-        holes: list["Hole"] = []
-        for trellis in self._trellises.values():
-            if self._is_stale(trellis) or len(trellis.fixed_points) != 1:
-                continue
-            if id(trellis.fixed_points[0]) not in selected:
-                continue
-            holes.extend(trellis.holes)
-        return holes
 
     def homotopy_partition(
         self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
     ) -> HomotopyPartition:
         """
-        The gathered stable partitions as a
-        :class:`~tanglepack.topology.PartitionFamily.HomotopyPartition`.
-
-        Wraps :meth:`_gathered_partitions` without recomputing anything, so
-        its ``signature()`` is the cache signature every other accessor keys
-        on. Cheap; not cached.
+        The selection's stable partitions as a
+        :class:`~tanglepack.topology.PartitionFamily.HomotopyPartition`; a
+        stage of :meth:`topology`.
 
         Args:
-            fixed_points: The trellis selection whose full trellis resolves
-                tolerances and crossings (all fixed points by default). The
-                partitions themselves are gathered from every cached
-                per-fixed-point trellis regardless.
+            fixed_points: The selection, as for :meth:`topology`.
 
         Returns:
             The family.
         """
-        return HomotopyPartition.from_results(
-            self._gathered_partitions(), trellis=self.trellis(fixed_points)
-        )
+        return self.topology(fixed_points).homotopy
 
     def minimal_trellis(
         self,
@@ -543,55 +429,20 @@ class TangleSession:
         rebuild: bool = False,
     ) -> MinimalTrellis:
         """
-        Build (and cache) the :class:`~tanglepack.topology.MinimalTrellis.MinimalTrellis`
-        of a trellis selection.
-
-        Reduces the selected trellis to its hole bridges (from
-        :meth:`_gathered_holes`) and the first images of those in an active
-        class. Activity is read from the EVIDENCE table, every bridge's class
-        over the gathered partitions
-        (:func:`tanglepack.topology.BridgeClass.bridge_classes`), kept as
-        ``MinimalTrellis.classes``; :meth:`bridge_classes` is its restriction
-        to the kept bridges (D2).
-
-        Cached on ``(workbench.generation, partition signature)``.
+        The :class:`~tanglepack.topology.MinimalTrellis.MinimalTrellis` of a
+        selection: its hole bridges and the first images of those in an
+        active class; a stage of :meth:`topology`. Activity is read from the
+        evidence table (every bridge's class), kept as
+        ``MinimalTrellis.classes``.
 
         Args:
-            fixed_points: A single FixedPoint, an iterable of them, or None (the
-                default) for all of them.
-            rebuild: Force a rebuild.
+            fixed_points: The selection, as for :meth:`topology`.
+            rebuild: Recompute the topology first.
 
         Returns:
             The minimal trellis.
-
-        Raises:
-            ValueError: Propagated from
-                :func:`tanglepack.topology.BridgeClass.bridge_classes` when a
-                bridge end needs a partition no gathered result covers (an
-                unpartitioned branch is named in a WARNING first).
-
-        Note:
-            Needs every fixed point of interest classified, pseudoneighbored,
-            punched and partitioned first (the session fan-outs).
         """
-        cache_key = self._cache_key(fixed_points)
-        trellis = self.trellis(fixed_points)
-        partitions = self._gathered_partitions()
-        signature = self._partition_signature(partitions)
-        cached = self._minimal_trellises.get(cache_key)
-        if (
-            not rebuild
-            and cached is not None
-            and cached[0] == self.workbench.generation
-            and cached[1] == signature
-        ):
-            return cached[2]
-        self._warn_unpartitioned_branches(trellis, partitions)
-        minimal = _minimal_trellis(
-            trellis, self._gathered_holes(fixed_points), _bridge_classes(trellis, partitions)
-        )
-        self._minimal_trellises[cache_key] = (self.workbench.generation, signature, minimal)
-        return minimal
+        return self.topology(fixed_points, rebuild=rebuild).minimal
 
     def iterated_partition(
         self,
@@ -600,41 +451,18 @@ class TangleSession:
         rebuild: bool = False,
     ) -> IteratedHomotopyPartition:
         """
-        Build (and cache) the
-        :class:`~tanglepack.topology.PartitionFamily.IteratedHomotopyPartition`:
-        the homotopy partition cut by the image bridges of :meth:`minimal_trellis`.
-
-        Cached on ``(workbench.generation, partition signature)``.
+        The :class:`~tanglepack.topology.PartitionFamily.IteratedHomotopyPartition`:
+        the homotopy partition cut by the image bridges of
+        :meth:`minimal_trellis`; a stage of :meth:`topology`.
 
         Args:
-            fixed_points: The trellis selection.
-            rebuild: Force a rebuild of the partition over the CURRENT cached
-                minimal trellis (rebuild that first, through
-                :meth:`minimal_trellis`, to refresh both).
+            fixed_points: The selection, as for :meth:`topology`.
+            rebuild: Recompute the topology first.
 
         Returns:
             The refined family.
         """
-        cache_key = self._cache_key(fixed_points)
-        signature = self._partition_signature(self._gathered_partitions())
-        cached = self._iterated_partitions.get(cache_key)
-        if (
-            not rebuild
-            and cached is not None
-            and cached[0] == self.workbench.generation
-            and cached[1] == signature
-        ):
-            return cached[2]
-        iterated = IteratedHomotopyPartition.from_minimal(
-            self.minimal_trellis(fixed_points),
-            self.homotopy_partition(fixed_points),
-        )
-        self._iterated_partitions[cache_key] = (
-            self.workbench.generation,
-            signature,
-            iterated,
-        )
-        return iterated
+        return self.topology(fixed_points, rebuild=rebuild).iterated
 
     def describe_iterated_partition(
         self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
@@ -657,101 +485,26 @@ class TangleSession:
         rebuild: bool = False,
     ) -> DualGraph:
         """
-        Build (and cache) the :class:`~tanglepack.topology.DualGraph.DualGraph`
-        of a trellis selection.
+        The :class:`~tanglepack.topology.DualGraph.DualGraph` of a selection;
+        a stage of :meth:`topology`.
 
-        The graph is built over :meth:`minimal_trellis` (its sparse
-        arrangement) and :meth:`iterated_partition` (the elements on each side
-        of every stable edge), both cached on the same key. The strong pips
-        passed to it — each declares the fundamental segment of its own
-        stable branch, ``(f^k(q0), q0]``, where the two side nodes of a stable
-        edge unify into one traversable node — are gathered one per cached
-        per-fixed-point trellis whose fixed point falls inside the selection
-        (see :meth:`_gathered_strong_pips`).
-
-        Cached on ``(workbench.generation, partition signature, gathered strong
-        pips)``: the first two exactly as :meth:`minimal_trellis` (the same
-        :meth:`_partition_signature` catches a re-partition that leaves the
-        workbench generation untouched), the third because a pip choice moves
-        the unified nodes.
+        Built over the minimal trellis's sparse arrangement and the iterated
+        partition; each selected fixed point's strong pip declares the
+        fundamental segment ``(f^k(q0), q0]`` of its own stable branch, where
+        the two side nodes of a stable edge unify into one traversable node.
 
         Args:
-            fixed_points: A single FixedPoint, an iterable of them, or None (the
-                default) for all of them.
-            rebuild: Force a rebuild (of the minimal trellis and the iterated
-                partition too).
+            fixed_points: The selection, as for :meth:`topology`.
+            rebuild: Recompute the topology first.
 
         Returns:
-            The :class:`~tanglepack.topology.DualGraph.DualGraph`.
+            The dual graph.
 
         Raises:
-            ValueError: Propagated from the constructor when a stable edge's
-                branch has no partition on a side, or when an arrangement
+            ValueError: Propagated from the constructor when an arrangement
                 component fails the graph's own topological checks.
-
-        Note:
-            Needs every fixed point of interest already partitioned; only
-            trellises still cached at call time contribute their partitions,
-            holes and strong pips. Calling
-            :meth:`~tanglepack.topology.Trellis.Trellis.set_strong_pip` on a
-            cached per-fixed-point trellis changes the gathered pips and so
-            the next call rebuilds the graph with the new fundamental segment.
-            A selection with no classified pip builds a graph that unifies
-            nothing (the constructor warns).
         """
-        cache_key = self._cache_key(fixed_points)
-        trellis = self.trellis(fixed_points)
-        partitions = self._gathered_partitions()
-        signature = self._partition_signature(partitions)
-        strong_pips = tuple(self._gathered_strong_pips(fixed_points))
-
-        cached = self._dual_graphs.get(cache_key)
-        if (
-            not rebuild
-            and cached is not None
-            and cached[0] == self.workbench.generation
-            and cached[1] == signature
-            and cached[2] == strong_pips
-        ):
-            return cached[3]
-
-        self._warn_unpartitioned_branches(trellis, partitions)
-        minimal = self.minimal_trellis(fixed_points, rebuild=rebuild)
-        iterated = self.iterated_partition(fixed_points, rebuild=rebuild)
-        dg = DualGraph(minimal, iterated, strong_pips=strong_pips)
-
-        self._dual_graphs[cache_key] = (
-            self.workbench.generation,
-            signature,
-            strong_pips,
-            dg,
-        )
-        return dg
-
-    def _gathered_strong_pips(
-        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]"
-    ) -> list[int]:
-        """
-        The chosen strong pip of every cached, non-stale per-fixed-point trellis
-        whose fixed point falls inside ``fixed_points``.
-
-        Walks :attr:`_trellises` like :meth:`_gathered_partitions`, but keeps
-        only trellises built for exactly one fixed point (an all-fixed-points
-        trellis carries no strong pip of its own) and skips a trellis with no
-        strong pip chosen yet.
-        """
-        selected = {id(fp) for fp in self._resolve_fixed_points(fixed_points)}
-        pips: list[int] = []
-        for trellis in self._trellises.values():
-            if self._is_stale(trellis):
-                continue
-            if len(trellis.fixed_points) != 1:
-                continue
-            if id(trellis.fixed_points[0]) not in selected:
-                continue
-            if trellis.strong_pip is not None:
-                pips.append(trellis.strong_pip)
-        return pips
+        return self.topology(fixed_points, rebuild=rebuild).dual_graph
 
     def symbolic_dynamics(
         self,
@@ -760,76 +513,25 @@ class TangleSession:
         rebuild: bool = False,
     ) -> SymbolicDynamics:
         """
-        Compute (and cache) the
-        :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics` of a
-        trellis selection.
+        The :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics` of
+        a selection; a stage of :meth:`topology`.
 
-        The dynamics is read off :meth:`dual_graph` (the walks between the
-        one-step images of each class's two elements) and
-        :meth:`bridge_classes` (the alphabet, lettered by
-        :attr:`bridge_alphabet`), both cached on their own keys; see
+        Read off :meth:`dual_graph` and :meth:`bridge_classes`; see
         :func:`~tanglepack.topology.SymbolicDynamics.symbolic_dynamics` for the
-        algorithm (landing, singleton/trellis path, itinerary, word, closure
-        of the alphabet under the word map, refinement, transition
-        structure). An active class the closure adds takes its letter from
-        :attr:`bridge_alphabet` too, so it persists; the session alphabet
-        stays active-only, and :meth:`bridge_classes` stays the alphabet
-        handed in (the dynamics' ``table`` is the closed one).
-
-        Cached on ``(workbench.generation, partition signature, gathered strong
-        pips)``, exactly the key of :meth:`dual_graph`: the dynamics depends on
-        the dual graph's unified nodes, so a pip change rebuilds it too.
+        algorithm. An active class the closure of the alphabet adds takes its
+        letter from :attr:`bridge_alphabet` by identity too, so it persists;
+        :meth:`bridge_classes` stays the alphabet handed in (the dynamics'
+        ``table`` is the closed one). A class whose image is not registered
+        is left unresolved with a WARNING: grow or blast and call again.
 
         Args:
-            fixed_points: A single FixedPoint, an iterable of them, or None (the
-                default) for all of them.
-            rebuild: Force a rebuild (of the dual graph, its pieces and the
-                bridge-class table too). Letters are stable across rebuilds.
+            fixed_points: The selection, as for :meth:`topology`.
+            rebuild: Recompute the topology first.
 
         Returns:
-            The :class:`~tanglepack.topology.SymbolicDynamics.SymbolicDynamics`.
-
-        Raises:
-            ValueError: Propagated from :meth:`dual_graph` or
-                :meth:`bridge_classes` when the selection is not fully
-                partitioned.
-
-        Note:
-            Needs every fixed point of interest classified, punched and
-            partitioned first, as :meth:`dual_graph` does. A class whose image
-            is not registered (no walk, no image chain) is left unresolved
-            with a WARNING rather than raising — grow or blast and call again.
+            The symbolic dynamics.
         """
-        cache_key = self._cache_key(fixed_points)
-        self.trellis(fixed_points)
-        partitions = self._gathered_partitions()
-        signature = self._partition_signature(partitions)
-        strong_pips = tuple(self._gathered_strong_pips(fixed_points))
-
-        cached = self._symbolic_dynamics.get(cache_key)
-        if (
-            not rebuild
-            and cached is not None
-            and cached[0] == self.workbench.generation
-            and cached[1] == signature
-            and cached[2] == strong_pips
-        ):
-            return cached[3]
-
-        dual = self.dual_graph(fixed_points, rebuild=rebuild)
-        dynamics = _symbolic_dynamics(
-            dual,
-            self.bridge_classes(fixed_points),
-            letter_for=self.bridge_alphabet.letter_for,
-        )
-
-        self._symbolic_dynamics[cache_key] = (
-            self.workbench.generation,
-            signature,
-            strong_pips,
-            dynamics,
-        )
-        return dynamics
+        return self.topology(fixed_points, rebuild=rebuild).dynamics
 
     def describe_symbolic_dynamics(
         self,
@@ -1290,14 +992,9 @@ class TangleSession:
         """Whether a cached Trellis snapshot predates the workbench's current state."""
         return trellis._built_generation != self.workbench.generation
 
-    @staticmethod
-    def _cache_key(fixed_points):
-        """A hashable cache key for a trellis selection."""
-        if fixed_points is None:
-            return None
-        if isinstance(fixed_points, (list, tuple, set, frozenset)):
-            return frozenset(id(fp) for fp in fixed_points)
-        return id(fixed_points)
+    def _cache_key(self, fixed_points) -> frozenset:
+        """A selection as a set of fixed-point identities (None: every fixed point)."""
+        return frozenset(id(fp) for fp in self._resolve_fixed_points(fixed_points))
 
     def _resolve_fixed_points(
         self, fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]"
@@ -1402,9 +1099,9 @@ class TangleSession:
         For each selected fixed point this builds (or reuses) its per-fixed-point
         Trellis and runs :meth:`Trellis.classify_strong_pips`, so the inner and
         outer tangles of a nested session are each classified against their own
-        crossings. Routing through :meth:`trellis` means a trellis left stale by a
-        resonance-zone recompute is rebuilt and reclassified rather than silently
-        reusing dropped candidates.
+        crossings. A fixed point whose pip was chosen before gets it back (a
+        WARNING when it is no longer a candidate); otherwise the default
+        choice is remembered (API-1).
 
         Args:
             fixed_point: A single FixedPoint (→ returns that fixed point's candidate
@@ -1417,11 +1114,39 @@ class TangleSession:
             A candidate-id list for a single fixed point, or a dict mapping each
             fixed point to its candidate-id list.
         """
-        return self._fanout_call("classify_strong_pips", fixed_point, **kwargs)
+        results = {}
+        for fp in self._resolve_fixed_points(fixed_point):
+            trellis = self.trellis(fp)
+            results[fp] = trellis.classify_strong_pips(**kwargs)
+            if fp in self._strong_pips:
+                self._restore_strong_pip(trellis)
+            if trellis.strong_pip is not None:
+                self._strong_pips[fp] = trellis.strong_pip_intersection
+        if _is_single_fixed_point(fixed_point):
+            return results[fixed_point]
+        return results
+
+    def _restore_strong_pip(self, trellis: Trellis) -> None:
+        """Choose the remembered pip on a classified single-fixed-point trellis."""
+        (fixed_point,) = trellis.fixed_points
+        chosen = self._strong_pips[fixed_point]
+        pip = trellis.registry.find(chosen)
+        if pip in trellis.strong_pip_candidates:
+            trellis.set_strong_pip(pip)
+            return
+        logger.warning(
+            "the chosen strong pip of %r (stable cdist %.6g on %s) is no longer a "
+            "strong-pip candidate; choose another with set_strong_pip()",
+            fixed_point, chosen.stable_cdist, chosen.manifold_b_key[1:],
+        )
 
     def set_strong_pip(self, fixed_point: "FixedPoint", intersection_id: int) -> int:
-        """Choose ``intersection_id`` as the strong pip for ``fixed_point``'s trellis."""
-        return self.trellis(fixed_point).set_strong_pip(intersection_id)
+        """Choose ``intersection_id`` as the strong pip of ``fixed_point``, for
+        every later generation too (it is remembered as a crossing)."""
+        trellis = self.trellis(fixed_point)
+        trellis.set_strong_pip(intersection_id)
+        self._strong_pips[fixed_point] = trellis.strong_pip_intersection
+        return intersection_id
 
     def strong_pip(self, fixed_point: "FixedPoint") -> Optional[int]:
         """The chosen strong-pip id for ``fixed_point``'s trellis (or None)."""
@@ -1788,7 +1513,8 @@ class TangleSession:
 
         The zone is stored in :attr:`resonance_zones` keyed by its fixed point
         (one zone per fixed point, inversion included), so a later call for a
-        different fixed point does not overwrite it.
+        different fixed point does not overwrite it. The zone's pip becomes
+        that fixed point's chosen strong pip (the zone is cut at it).
         Trims are cumulative (each sets a manifold's tail), so building zones for
         several fixed points nests correctly — the inner zone ends up a subset of the
         outer one. A recompute advances the workbench generation, so any cached
@@ -1805,10 +1531,12 @@ class TangleSession:
         Returns:
             The stored :class:`ResonanceZone`.
         """
+        pip = self.workbench.intersection_registry[intersection_id]
         rz = define_resonance_zone(
             self.workbench, intersection_id, fixed_points, recompute=recompute
         )
         self.resonance_zones[rz.key] = rz
+        self._strong_pips[rz.key] = pip
         return rz
 
     def add_resonance_zones(

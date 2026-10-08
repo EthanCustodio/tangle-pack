@@ -1,11 +1,11 @@
 """A.4 -- TangleSession.bridge_classes: describe, zones, warnings, the alphabet.
 
-:meth:`TangleSession.bridge_classes` gathers the per-fixed-point partitions,
+:meth:`TangleSession.bridge_classes` is a stage of the session's topology: it
 letters the active classes from its persistent :class:`BridgeAlphabet` and
 records the resonance zone each class lies in. This module checks the
 describe report, the zone annotation after trimming at a pip, the warnings
-(a class straddling zones, an unpartitioned branch) and the alphabet on its
-own. The cache contract and letter stability across rebuilds are
+(a class straddling zones, a pip trimmed away), that the products need no
+manual stage call, and the alphabet on its own. The cache contract and letter stability across rebuilds are
 ``tests/facade/test_session_caches.py``; session = direct build is
 ``tests/facade/test_session_equivalence.py``.
 """
@@ -21,6 +21,7 @@ import pytest
 
 from cases import build_k10
 from helpers.logs import assert_logged
+from tanglepack.loom import define_resonance_zone
 from tanglepack.loom.BridgeAlphabet import BridgeAlphabet
 
 
@@ -102,13 +103,29 @@ def test_a_class_straddling_zones_warns_and_gets_no_zone(k10_partitioned, caplog
 
 
 # --------------------------------------------------------------------------- #
-# (b) no partitions: ValueError from A.3, and the warning
+# (b) D1: the products need only the numerics and a pip
 # --------------------------------------------------------------------------- #
-def test_no_partitions_raises_and_warns(k10_session, caplog):
-    session, _fp = k10_session
+def test_products_need_only_the_numerics(k10_session):
+    """No manual stage call: the default pip is taken, remembered, and the
+    holes and partition are recomputed from it (D1, API-1)."""
+    session, fp = k10_session
+
+    assert session.bridge_classes()
+    pip = session.strong_pip(fp)
+    assert pip is not None
+    assert session.topology().strong_pips == (pip,)
+
+
+def test_a_pip_trimmed_away_warns_and_raises(k10_session, caplog):
+    """A remembered pip that is no longer a candidate is never replaced silently."""
+    session, fp = k10_session
+    session.classify_strong_pips()
+    q0 = session.strong_pip(fp)
+    # Trimmed at f(q0) behind the session's back: q0 lies beyond the cut.
+    define_resonance_zone(session.workbench, session.trellis(fp).iterate(q0, 1))
 
     with caplog.at_level(logging.WARNING, logger="tanglepack.loom.TangleSession"):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="no longer a strong-pip candidate"):
             session.bridge_classes()
 
     assert_logged(caplog, logging.WARNING, "tanglepack.loom.TangleSession")

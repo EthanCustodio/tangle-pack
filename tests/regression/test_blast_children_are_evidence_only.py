@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from cases import SERIES, _blast, _partition
+from cases import SERIES, _blast
 
 _BLASTS = 6
 
@@ -27,8 +27,7 @@ def k28_blasted():
     case = build()
     (zone,) = case.zones
     for _ in range(_BLASTS):
-        _blast(case.session, zone, case.fixed_points, case.pips, diagnose=False)
-    _partition(case.session)
+        _blast(case.session, zone, case.fixed_points, diagnose=False)
     return case
 
 
