@@ -437,25 +437,6 @@ def _within_cut(ix, cut_cdists: dict[ManifoldKey, float], tol: float) -> bool:
     return cut is None or ix.stable_cdist <= cut + tol
 
 
-def _placed_end(
-    trellis: "Trellis",
-    x: int,
-    steps: int,
-    r: Intersection,
-    collision_rtol: float,
-    tol: float,
-) -> Optional[float]:
-    """The unstable cdist of ``M^steps(x)`` placed by scaling, or None when r
-    2D-collides with it (x's own unlinked orbit up to cdist noise)."""
-    u = trellis.image_cdist(x, steps, "unstable")[1]
-    s = trellis.image_cdist(x, steps, "stable")[1]
-    collides = (
-        abs(r.unstable_cdist - u) <= collision_rtol * u + tol
-        and abs(r.stable_cdist - s) <= collision_rtol * s + tol
-    )
-    return None if collides else u
-
-
 def _unstable_interval_is_clear(
     trellis: "Trellis",
     x0: int,
@@ -561,13 +542,20 @@ def _unstable_interval_is_clear(
             # cdist is exact.
             images = [trellis.iterate(x, -steps) for x in (x0, x1)]
             if any(image is not None for image in images):
-                ends = [
-                    trellis.intersection(image).unstable_cdist
-                    if image is not None
-                    else _placed_end(trellis, x, -steps, r, collision_rtol, tol)
-                    for x, image in zip((x0, x1), images)
-                ]
-                if r_id in images or None in ends:
+                ends = []
+                for x, image in zip((x0, x1), images):
+                    if image is not None:
+                        ends.append(trellis.intersection(image).unstable_cdist)
+                        continue
+                    _, u_e, _ = trellis.image_cdist(x, -steps, "unstable")
+                    _, s_e, _ = trellis.image_cdist(x, -steps, "stable")
+                    if (
+                        abs(r.unstable_cdist - u_e) <= collision_rtol * u_e + tol
+                        and abs(r.stable_cdist - s_e) <= collision_rtol * s_e + tol
+                    ):
+                        continue  # r is x's own unlinked orbit (2D collision)
+                    ends.append(u_e)
+                if r_id in images or len(ends) < 2:
                     continue  # an endpoint itself, or its own unlinked orbit
                 lo_r, hi_r = sorted(ends)
                 if lo_r < r.unstable_cdist < hi_r:
