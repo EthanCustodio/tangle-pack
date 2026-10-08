@@ -120,7 +120,7 @@ import math
 from itertools import count
 from typing import Iterable, Optional, TYPE_CHECKING
 
-from ..numerics.Intersection import ManifoldKey
+from ..numerics.Intersection import Intersection, ManifoldKey
 from .TopologyResults import PseudoneighborPair
 
 if TYPE_CHECKING:
@@ -437,6 +437,25 @@ def _within_cut(ix, cut_cdists: dict[ManifoldKey, float], tol: float) -> bool:
     return cut is None or ix.stable_cdist <= cut + tol
 
 
+def _placed_end(
+    trellis: "Trellis",
+    x: int,
+    steps: int,
+    r: Intersection,
+    collision_rtol: float,
+    tol: float,
+) -> Optional[float]:
+    """The unstable cdist of ``M^steps(x)`` placed by scaling, or None when r
+    2D-collides with it (x's own unlinked orbit up to cdist noise)."""
+    u = trellis.image_cdist(x, steps, "unstable")[1]
+    s = trellis.image_cdist(x, steps, "stable")[1]
+    collides = (
+        abs(r.unstable_cdist - u) <= collision_rtol * u + tol
+        and abs(r.stable_cdist - s) <= collision_rtol * s + tol
+    )
+    return None if collides else u
+
+
 def _unstable_interval_is_clear(
     trellis: "Trellis",
     x0: int,
@@ -458,7 +477,8 @@ def _unstable_interval_is_clear(
     so its identity (is it x0 or x1?) and its unstable cdist are exact. An
     unlinked landing is read in r's own frame when the table knows an image
     of x0 or x1 there: r punctures iff its registered cdist lies strictly
-    between the pair's images (one may be placed by ``image_cdist``). Only
+    between the pair's images (one may be placed by ``image_cdist``, and an r
+    that 2D-collides with a placed end is that endpoint's own orbit). Only
     when neither image is registered is the landing placed by scaling: its
     unstable cdist by ``beta ** steps``, its stable one by
     ``Trellis.image_cdist``. There the open interval is strict and the landing is
@@ -541,20 +561,23 @@ def _unstable_interval_is_clear(
             # cdist is exact.
             images = [trellis.iterate(x, -steps) for x in (x0, x1)]
             if any(image is not None for image in images):
-                lo_r, hi_r = sorted(
+                ends = [
                     trellis.intersection(image).unstable_cdist
                     if image is not None
-                    else trellis.image_cdist(x, -steps, "unstable")[1]
+                    else _placed_end(trellis, x, -steps, r, collision_rtol, tol)
                     for x, image in zip((x0, x1), images)
-                )
-                if r_id in images or not lo_r < r.unstable_cdist < hi_r:
-                    continue
-                logger.debug(
-                    "Pair (%d, %d) punctured by %d in its own frame "
-                    "(cdist %.9g in (%.9g, %.9g))",
-                    x0, x1, r_id, r.unstable_cdist, lo_r, hi_r,
-                )
-                return False
+                ]
+                if r_id in images or None in ends:
+                    continue  # an endpoint itself, or its own unlinked orbit
+                lo_r, hi_r = sorted(ends)
+                if lo_r < r.unstable_cdist < hi_r:
+                    logger.debug(
+                        "Pair (%d, %d) punctured by %d in its own frame "
+                        "(cdist %.9g in (%.9g, %.9g))",
+                        x0, x1, r_id, r.unstable_cdist, lo_r, hi_r,
+                    )
+                    return False
+                continue
 
             _, s_value, _ = trellis.image_cdist(r_id, steps, "stable")
             if any(

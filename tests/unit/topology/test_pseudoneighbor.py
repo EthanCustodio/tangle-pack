@@ -730,3 +730,36 @@ def test_unlinked_landing_is_read_against_the_pairs_images(r_unstable, survives)
 
     assert (r_n, x1) in pairs
     assert ((x1, r_end) in pairs) is survives
+
+
+@pytest.mark.parametrize("noise", [1e-6, -1e-6], ids=["outward", "inward"])
+def test_endpoint_own_unlinked_orbit_is_not_a_puncture(noise):
+    """The third case of the frame reading above: r_end's images are LINKED,
+    so the frame holds, but x1's own images are registered UNLINKED a noise
+    hair off ``2 * 4**n``. In r's frame x1's end is placed by scaling, and its
+    own orbit sitting a hair inside that placed end is x1 again (a 2D
+    collision), not a puncture: both pairs survive at either sign."""
+    fp = _fixed_point(1, 4.0)
+    stable = (fp, "stable", 0, 0)
+    unstable = (fp, "unstable", 0, 0)
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    previous = r_end
+    for n in (1, 2, 3):
+        image = reg.add_synthetic(
+            (1.0 / 4**n, 4.0 * 4**n), unstable_cdist=4.0 * 4**n, stable_cdist=1.0 / 4**n,
+            manifold_a_key=unstable, manifold_b_key=stable,
+        )
+        reg.register_iterate(previous, 1, image)
+        previous = image
+    for n in (1, 2, 3):
+        u = 2.0 * 4**n * (1 + noise)
+        reg.add_synthetic(
+            (3.0 / 4**n, u), unstable_cdist=u, stable_cdist=3.0 / 4**n,
+            manifold_a_key=unstable, manifold_b_key=stable,
+        )
+
+    pairs = [(p.intersection_a, p.intersection_b) for p in compute_pseudoneighbors(_trellis(reg, fp))]
+
+    assert (r_n, x1) in pairs
+    assert (x1, r_end) in pairs
