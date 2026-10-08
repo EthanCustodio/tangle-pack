@@ -92,11 +92,12 @@ The entry point for programmatic use is `TangleSession` (a facade over one `Tang
 import numpy as np, tanglepack
 from tanglepack.examples.henon import henon_map, henon_map_inverse, henon_jacobian, saddle_guesses
 
-session = tanglepack.TangleSession(henon_map(10), henon_map_inverse(10), henon_jacobian(10))
+session = tanglepack.TangleSession(henon_map(10), henon_map_inverse(10), henon_jacobian(10),
+                                   area_cutoff=1e-4)   # also max_points_per_step (2,000,000; None = off)
 fp = session.construct_fixed_point(saddle_guesses(10, 1)["saddle"])
 session.orient_eigenvectors(fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])})
 session.initialize_both_manifolds(fp)
-session.grow_n_times(fp, "unstable", num_iterations=8)
+session.grow_n_times(fp, "unstable", num_iterations=8)   # fixed count: no notion of escape, only the point budget
 session.grow_until_turnaround(fp, "stable")
 session.compute_intersections([fp])          # registers anchors + crossings, infers iterates
 session.trim_stable_manifolds(fp)
@@ -120,11 +121,11 @@ S = session.symbolic_dynamics()              # itineraries, words, refined class
 |---|---|---|---|
 | numerics | `DynamicalSystem` | `DynamicalSystem.py` | Wraps `map`, `map_inv`, optional `jacobian` (axis-0 batches) |
 | numerics | `FixedPoint`, `FixedPointSolver` | `FixedPoint.py`, `FixedPointSolver.py` | Periodic orbit, eigendata, `k_value`, `advance_key`, `per_step_beta`, `branch_cycle`, `label` (display letter, `position_letter`); Newton/fsolve locator with saddle validation and an `orient` hook |
-| numerics | `ManifoldInitializer`, `ManifoldMachine` | same names | Fundamental segments ("Kevin way", chain-walked with `advance_key`); growth by one map step with refinement |
+| numerics | `ManifoldInitializer`, `ManifoldMachine` | same names | Fundamental segments ("Kevin way", chain-walked with `advance_key`); growth by one map step with refinement at `area_cutoff` (`DEFAULT_AREA_CUTOFF`). ONE machine per workbench: the initializer refines the initial segments of a `k_value > 1` orbit with the workbench's machine. Each top-level call (a growth step of the whole chain, one bridge image) counts the points it creates and raises `PointBudgetExceeded` (`budget.py`) BEFORE the map call that would exceed `max_points_per_step` (default 2,000,000; `None` disables) |
 | numerics | `BaseManifold`, `Bridge` | `BaseManifold.py`, `Bridge.py` | Linked-list manifold; `Bridge` = unstable arc between two consecutive crossings, `Bridge.id: BridgeId = (first_id, second_id)` ordered by unstable cdist, `None` when `partial` |
 | numerics | `Intersection`, `IntersectionRegistry`, `IterateTable` | same names | THE single store of crossings (ids, cdists, keys, `crossing_sign`, `unstable_segment`); `generation` counter; sorted cdist arrays; per-branch `graph(bridges=)`; `iterate_table[id, n]` |
 | numerics | `Tangle` | `Tangle.py` | R-tree index of segments (index state only); `resolve_crossings()`; `create_bridges(crossings)` cuts at the exact registry crossings |
-| numerics | `TangleWorkbench` | `TangleWorkbench.py` | Orchestrator: fixed points, manifolds, growth (`grow_n_times`, `grow_until_*`, `grow_until(predicate)`), `compute_intersections` (registers one synthetic **anchor** per (unstable branch, stable branch) pair at cdist (0,0)), bridges by id (`bridge`, `bridges_at`), `generation` |
+| numerics | `TangleWorkbench` | `TangleWorkbench.py` | Orchestrator: fixed points, manifolds, growth (`grow_n_times`, `grow_until_*`, `grow_until(predicate)`, `grow_until_bounded(radius)` -- the escape stop), `area_cutoff` / `max_points_per_step` / `escape_radius` (ctor kwargs and properties; `TangleSession` has explicit setters too, since `__getattr__` only delegates reads), `growth_stats` (last step's `points_created`, `growth_factor`, `max_abs_coord`; a WARNING hints before a step predicted over budget), `compute_intersections` (registers one synthetic **anchor** per (unstable branch, stable branch) pair at cdist (0,0)), bridges by id (`bridge`, `bridges_at`), `generation` |
 | numerics | `BridgeIterator`, `IterateInference`, `graphviz` | same names | Bridge forward images and derived genealogy (`image_bridges`/`preimage_bridges`); iterate inference (both cdists compared individually, never the product); networkx/matplotlib views |
 | numerics | `geometry` | `geometry.py` | `arc_polyline`, `oriented_bridge_polyline`, `signed_polygon_area`, `point_in_polygon`, `polyline_midpoint`, `polygon_interior_point` |
 | topology | `Trellis`, `TrellisBranch` | same names | Per-generation snapshot of registry + bridges + per-branch orderings; strong pips, pseudoneighbors, holes, partitions, `element_for`, `image_of_element`, lazy `arrangement`; `image_cdist(id, n, stability)` (table first, else `advance_key`/`per_step_beta`) and `iterate(id, n)` (composes `n = ±1` table links when the direct entry is missing) |
@@ -144,6 +145,8 @@ S = session.symbolic_dynamics()              # itineraries, words, refined class
 | loom | `ResonanceZone`, `blast_zone` | `ResonanceZone.py`, `Blast.py` | Zone = stable manifold trimmed at a strong pip and its iterates; boundary is a list of `Arc`s; blasting iterates interior bridges |
 
 **Invariants the code asserts (keep them):** cdist non-decreasing along a manifold; every registered crossing is unstable × stable; every bridge is an arc between consecutive crossings on one unstable branch; holes of one origin share `bridge_side` (parity-flipped under an orientation-reversing map); a bridge whose crossings share a stable branch has the same row at both ends; exactly one partition element owns each crossing per side; `image_of(region)` preserves area; every itinerary has even length and splits into disjoint same-side pairs (`trellis_itinerary` asserts the length; a cross-side pair is flagged and logged, not asserted); refined classes never change `BridgeClass` identity.
+
+**Point budget (a resource guard, not an invariant).** `PointBudgetExceeded` is an exception type, never an `assert`, and never feeds `is_reliable` or the provisional flags. It is raised mid-step and the state is NOT resumable (a growth chain partly mapped and under-refined; a blasted bridge's points linked to a half-refined image while `iterated` stays False, so `iterate_bridge` refuses that bridge again): rebuild with fewer steps, a stop condition (`grow_until_bounded`), a coarser `area_cutoff` or a larger budget. The generation still advances. `blast_zone` never swallows it.
 
 **Generation counter.** `IntersectionRegistry.generation` bumps on every registry mutation; `TangleWorkbench.generation` is a monotone token over its own mutations, the registry generation and every manifold's `version`. A `Trellis` records `_built_generation`; `TangleSession.trellis()` / `arrangement()` rebuild when it differs. There is no manual invalidation (`invalidate_trellises()` is a deprecated no-op).
 
