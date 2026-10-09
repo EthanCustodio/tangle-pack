@@ -17,6 +17,8 @@ landings and flagged "no computed bridge yet" (D11, WP8b). What holds there:
   word names a class of the table, every class the closure added is spanned by
   a registered bridge or flagged as spanned by none, and the dynamics is
   reliable.
+* every non-mutating law of the law tier (WP10), on these runs and on
+  ``p3_16_12`` and ``inversion_period2_10``.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ import logging
 import pytest
 
 from cases import BUILDERS, Case
+from helpers.law_tier import build_products, run_layer
+from helpers.laws import LAYERS
 from tanglepack.topology import check_holes_share_bridge_side
 
 #: The deep runs (``tests/cases.py``): 15 and 16 unstable steps, 6 blasts.
@@ -79,3 +83,13 @@ def test_deep_p3_every_class_walks(name: str) -> None:
     dyn = _build(name).session.symbolic_dynamics()
     for cd in dyn.classes.values():
         assert cd.itinerary is not None, cd.letter
+
+
+@pytest.mark.parametrize("name", DEEP_RUNS + ("p3_16_12", "inversion_period2_10"))
+def test_every_law_holds_on_the_deep_runs(name: str) -> None:
+    """Every non-mutating law holds deep into the tangle (WP10: bridges bracketed
+    across a shared segment, the partition and face-side laws restated)."""
+    case = _build(name)
+    build_products(case)
+    for layer in LAYERS:
+        run_layer(layer, case)

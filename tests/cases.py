@@ -31,9 +31,9 @@ Cases:
 * ``heteroclinic`` -- the nested recipe with period 3 grown 16 unstable / 10
   stable steps (two outer blasts, ``1e-7`` on both): the inner orbit's unstable
   manifold reaches across the outer saddle's stable manifold, four ``A(u) x
-  B(s)`` crossings, two inside both pip-orbit cuts (NEST-1, WP9). 16 / 9 and
-  16 / 12 also fail ``dual_face_side_is_geometry``, as p3 at 16 / 9 does alone
-  (WP10), so 16 / 10 keeps that unrelated failure out of the case.
+  B(s)`` crossings, two inside both pip-orbit cuts (NEST-1, WP9). 16 / 10 was
+  chosen while ``dual_face_side_is_geometry`` was a half-plane test that failed
+  at 16 / 9 and 16 / 12 (WP10 made it a local probe); the case keeps 16 / 10.
 * ``nested_unblasted`` -- the nested map with no blast and the outer saddle
   grown at ``p1_area_cutoff = 1e-4`` (the old ``henon_p3_session`` recipe, kept
   as a parameter: Phase 0 probe P6 showed the cutoff changes the outer tangle).
@@ -63,6 +63,10 @@ Cases:
   reference switch (BCG-4): their words name classes outside the minimal
   trellis's alphabet, which the symbolic dynamics closes under the word map
   (PK-1, WP7).
+* ``p3_16_12`` / ``inversion_period2_10`` -- period 3 at 16 unstable / 12
+  stable steps, and the inversion x period-2 orbit at 10 / 10 steps: the deep
+  runs every non-mutating law holds on since WP10 (two crossings on one segment
+  used to cut a bridge past its own end there; two laws over-claimed on p3).
 * ``near_tangency`` -- the period-1 ``b = 1`` saddle at ``k = -0.999``, close to
   the saddle-centre bifurcation at ``k = -1`` where the splitting angle is
   exponentially small, each arm grown to 20 fixed-point separations of
@@ -1193,6 +1197,12 @@ LAW_CASES: tuple[str, ...] = (
     "heteroclinic",
 )
 
+def _named(case: Case, name: str) -> Case:
+    """``case`` under its BUILDERS name, where its builder's own name would be a law case's."""
+    case.name = name
+    return case
+
+
 #: Every named case and its frozen builder.
 BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
     {
@@ -1214,6 +1224,10 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         "p3_15": lambda: build_period3(unstable_steps=15),
         "p3_16": lambda: build_period3(unstable_steps=16),
         "p3_6_blasts": lambda: build_period3(blasts=6),
+        "p3_16_12": lambda: _named(build_period3(unstable_steps=16, stable_steps=12), "p3_16_12"),
+        "inversion_period2_10": lambda: _named(
+            build_inversion_period2(unstable_steps=10, stable_steps=10), "inversion_period2_10"
+        ),
         "p3_coarse_blasts": build_period3_coarse_blasts,
         "near_tangency": build_near_tangency,
         "k28_deep_blast_sliver": lambda: build_k28(blasts=9, seed=K28_ANALYTIC_SADDLE_SEED),
@@ -1257,11 +1271,6 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "saddle with exactly one negative eigenvalue",
             "C3",
             raises=ValueError,
-        ),
-        ("partition_covers_branch", "heteroclinic"): KnownIssue(
-            "deep-run residual law: p3 at 16 unstable steps has open elements that are "
-            "no single hole's stretch (fails on p3 16u alone; WP8 note)",
-            "WP10",
         ),
         ("every_active_class_walks", "heteroclinic"): KnownIssue(
             "NEST-1 / DEC-23: two shortest walks of equal length pass either side of the "

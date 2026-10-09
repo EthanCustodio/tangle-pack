@@ -1035,7 +1035,10 @@ def check_bridge_image_round_trip(case: "Case") -> int:
 # --------------------------------------------------------------------------- #
 def check_partition_covers_branch(case: "Case") -> int:
     """Each side's partition runs anchor to branch end in contiguous, positional elements,
-    and every open element is a punched hole region of that side."""
+    and a non-singleton element is open at an end iff a hole of that side opens that
+    crossing on that half (stage 6, D6; WP10: an element open at both ends need not be
+    ONE hole's span -- between consecutive U-arcs it is a stretch of the face holding a
+    hole of the other bridge, as on p3 at 16 unstable steps)."""
     count = 0
     for trellis, result in _partitions(case):
         tol = float(trellis.registry.cdist_tol)
@@ -1050,21 +1053,18 @@ def check_partition_covers_branch(case: "Case") -> int:
             assert result.element(interval.element_id) is interval
         for prev, nxt in zip(intervals, intervals[1:]):
             assert prev.hi_cdist == pytest.approx(nxt.lo_cdist, abs=tol)
-        open_spans = {
-            frozenset((iv.lo_id, iv.hi_id))
-            for iv in intervals
-            if not iv.closed_lo and not iv.closed_hi and iv.lo_id != iv.hi_id
-        }
-        hole_spans = {
-            frozenset(hole.bounding_ids)
+        opened = {
+            (iid, half)
             for hole in trellis.holes
-            if hole.bounding_ids is not None
-            and any(
-                (row, key) == (result.side, result.branch_key)
-                for _iid, _which, row, key in (hole.openings or [])
-            )
+            for iid, half, row, key in hole.openings or ()
+            if (row, key) == (result.side, result.branch_key)
         }
-        assert open_spans <= hole_spans, open_spans - hole_spans
+        for iv in intervals:
+            if iv.lo_id == iv.hi_id:
+                continue  # a pinched singleton is closed at its one crossing
+            for iid, closed, half in ((iv.lo_id, iv.closed_lo, "outward"), (iv.hi_id, iv.closed_hi, "anchorward")):
+                if iid is not None:
+                    assert (not closed) == ((iid, half) in opened), (result.branch_key[1:], result.side, iid, half)
         count += 1
     return count
 
@@ -2270,40 +2270,52 @@ def check_dual_face_nodes(case: "Case") -> int:
     return len(dual.face_nodes)
 
 
-def _anchorward_tangent(node, trellis) -> Optional[np.ndarray]:
-    """The unit direction toward the anchor at a stable edge's midpoint vertex."""
-    poly = node.arc.polyline(trellis)
-    if len(poly) < 2:
-        return None
-    middle = len(poly) // 2
-    tangent = np.asarray(poly[max(middle - 1, 0)], dtype=float) - np.asarray(
-        poly[min(middle + 1, len(poly) - 1)], dtype=float
-    )
-    norm = float(np.linalg.norm(tangent))
-    return tangent / norm if norm > 0.0 else None
+def _distance_to_segments(point: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> float:
+    """The distance from a point to the nearest of some segments."""
+    along = ends - starts
+    t = np.clip(((point - starts) * along).sum(1) / np.maximum((along * along).sum(1), 1e-300), 0.0, 1.0)
+    return float(np.linalg.norm(starts + t[:, None] * along - point, axis=1).min())
 
 
 def check_dual_face_side_is_geometry(case: "Case") -> int:
-    """A face attaches to the side node of the stable edge it geometrically lies on."""
+    """A face attaches to the side node of the stable edge it geometrically lies on: a
+    probe just off the edge's middle segment, on the node's side, lies in the face.
+
+    The probe is LOCAL (WP10): pushed off the middle segment by a quarter of its
+    distance to every OTHER segment of the face's boundary (the edge's own arc
+    included, which can fold back as a hairpin), so it cannot leave the face through
+    another wall. A half-plane test against the face's representative point failed on
+    slivers and non-convex faces (p3 at 16 unstable steps).
+    """
     dual = case.session.dual_graph()
     trellis = dual.arrangement.trellis
     count = 0
     checkable = 0
     for region in dual.arrangement.regions:
         face = dual.face_of(region)
-        inside = region.representative_point
         checkable += len(region.stable_arcs)
+        boundary = np.asarray(region.boundary_points, dtype=float)
+        walls = np.stack([boundary, np.roll(boundary, -1, axis=0)], axis=1)
         for arc in region.stable_arcs:
             side = "right" if arc.reverse else "left"
             node = dual.nodes_of_edge(arc.edge_key)[side]
-            look = _anchorward_tangent(node, trellis)
-            if look is None:
+            poly = np.asarray(node.arc.polyline(trellis), dtype=float)
+            if len(poly) < 2:
                 continue
-            poly = node.arc.polyline(trellis)
-            midpoint = poly[len(poly) // 2]
-            assert _side_of(look, np.asarray(inside) - midpoint) == node.side_of(face), (
-                region.corners, arc.lo_id, arc.hi_id,
+            middle = max(1, len(poly) // 2)
+            below, above = poly[middle - 1], poly[middle]  # the polyline runs anchor outward
+            look = (below - above) / np.linalg.norm(below - above)
+            left = np.array([-look[1], look[0]])
+            midpoint = 0.5 * (below + above)
+            starts, ends = walls[:, 0], walls[:, 1]
+            itself = ((starts == below).all(1) & (ends == above).all(1)) | (
+                (starts == above).all(1) & (ends == below).all(1)
             )
+            others = walls[~itself]
+            clearance = _distance_to_segments(midpoint, others[:, 0], others[:, 1]) if len(others) else np.inf
+            push = 0.25 * min(clearance, float(np.linalg.norm(above - below)))
+            probe = midpoint + (1.0 if node.side_of(face) == "left" else -1.0) * push * left
+            assert region.contains(probe, tol=0.0), (region.corners, arc.lo_id, arc.hi_id)
             assert node.faces[side] is face
             count += 1
     assert count == checkable, "every (region, stable edge) pair is checkable"

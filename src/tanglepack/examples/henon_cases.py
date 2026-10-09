@@ -49,11 +49,13 @@ Dev Notes:
   ``build_nested`` on 2026-10-08): period 3 at 13-15 unstable steps (any stable
   growth 9-12) has NO heteroclinic crossing; at 16 unstable steps it has four
   ``W^u(p3) x W^s(p1)`` crossings (0.6-0.8 s), two inside both pip-orbit cuts
-  (the other two past p3's unstable cut: points of X). 16 / 10 is used because
-  16 / 9 and 16 / 12 also fail the law ``dual_face_side_is_geometry``, as p3 at
-  16 / 9 does alone (a WP10 residual law). 17 / 9 has 22 heteroclinic crossings
-  but builds in 34 s; 13 / 15 has seven ``W^u(p1) x W^s(p3)`` crossings but a
-  near-duplicate pair (NUM-4) makes the arrangement assert. None of the four
+  (the other two past p3's unstable cut: points of X). 16 / 10 was chosen while
+  the law ``dual_face_side_is_geometry`` was a half-plane test that failed at
+  16 / 9 and 16 / 12 (WP10 made it a local probe, which passes there); it is
+  kept. 17 / 9 has 22 heteroclinic crossings but builds in 34 s; 13 / 15 has
+  seven ``W^u(p1) x W^s(p3)`` crossings, two of them on one unstable segment,
+  which cut a bridge past its own end until WP10 bracketed the cut (it builds
+  now; its iterate links fail the beta and area laws, NUM-20). None of the four
   crossings has an iterate link (the preimage lies past p1's stable trim, the
   image past p3's unstable cut: escape-lobe images, WP10).
 * The pips are the default strong pips, never pinned by id. The session
