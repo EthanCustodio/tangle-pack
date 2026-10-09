@@ -1,33 +1,39 @@
 # numerics — knowledge file
 
-Created 2026-10-08 (open-issues round WP2, branch `oi/wp02-exact-iterates`, base `f39f617`). Only
-the crossing / iterate-table path is described; growth, refinement and budgets are in `CLAUDE.md`.
+Created 2026-10-08 (open-issues round WP2, branch `oi/wp02-exact-iterates`, base `f39f617`); last
+updated 2026-10-09 (WP12, branch `oi/wp12-reverify`, base `a2e0e65`; line numbers on that branch).
+Only the crossing / iterate-table path is described; growth, refinement and budgets are in
+`CLAUDE.md`.
 
 ## Map (crossings and the iterate table)
 
-- `numerics/Tangle.py` — rtree of segments. `resolve_crossings` :247 iterates a `set` of segment-id
-  pairs (:265), `_resolve_crossing_pair` builds each `Intersection` with both keys
-  (`_key_of` asserts a key on EVERY curve since WP2), `unstable_segment` and `stable_segment`
-  (the two nodes either side of the crossing on each curve), `crossing_sign`, `resolution_ratio`.
+- `numerics/Tangle.py` — one rtree of segments PER STABILITY (WP10). `resolve_crossings` :220
+  resolves each u x s segment pair; `_resolve_crossing_pair` builds each `Intersection` with both
+  keys (`_key_of` asserts a key on EVERY curve since WP2), `unstable_segment` and
+  `stable_segment` (the two nodes either side of the crossing on each curve), `crossing_sign`,
+  `resolution_ratio`; registration is in unstable-cdist order per branch (reproducible ids, WP8).
 - `numerics/Intersection.py` — the crossing record; `stable_segment` added in WP2.
 - `numerics/IntersectionRegistry.py` — the store. `DEDUP_RTOL = 1e-9` :35 and `_find_collision`
-  :774 (keys equal AND both cdists equal to 1e-9 relative; an anchor at exactly `(0, 0)` matches
+  :762 (keys equal AND both cdists equal to 1e-9 relative; an anchor at exactly `(0, 0)` matches
   only another exact `(0, 0)`); `register_iterate` :546 asserts the partial bijection;
-  `reindex_from` :256 re-gives re-detected crossings their old ids (rematch by `_find_collision`).
-  `cdist_tol` (absolute 1e-6) is no longer the dedup rule; it is the topology's slack.
+  `reindex_from` :261 re-gives re-detected crossings their old ids (rematch by `_find_collision`).
+  `cdist_tol` (absolute 1e-6) is only the slack of degenerate bridge cuts and polyline clipping
+  (C15, WP11).
 - `numerics/IterateInference.py` — the EXACT rule (module docstring is the statement):
-  `infer_iterates(sources=None)` :107 → anchors by `_register_anchor_iterate` :161 (advanced keys
-  at `(0, 0)`, `registry.find`), everything else by `_bracketed_image` :220 (carry `U(x)` by the
-  unstable curve's `stretch_param`, `S(x)` by `1/stretch_s` of the stable manifold; candidates =
-  a bisected window of the advanced stable branch widened by its widest stable bracket
-  `_widest_stable_brackets` :207; unique match on both brackets with `BRACKET_PAD = 1e-12`), then
-  `_map_gated` :258 (ONE `map_batch` call over `[x, p0, p1]` per source; keep iff
-  `|f(x) - y| <= |f(p1) - f(p0)| + |q1 - q0|`).
-- Callers: `TangleWorkbench.compute_intersections` :1380, `BridgeIterator.iterate_bridge` :394
+  `infer_iterates(workbench, sources=None)` :82 (a module function since WP11) → anchors by
+  `_register_anchor_iterate` :138 (advanced keys at `(0, 0)`, `registry.find`), everything else by
+  `_bracketed_image` :199 (carry `U(x)` by the unstable curve's `stretch_param`, `S(x)` by
+  `1/stretch_s` of the stable manifold; candidates = a bisected window of the advanced stable
+  branch widened by its widest stable bracket `_widest_stable_brackets` :185; unique match on both
+  brackets with `BRACKET_PAD = 1e-12`), then `_map_gated` :238 (ONE `map_batch` call over
+  `[x, p0, p1]` per source; keep iff `|f(x) - y| <= |f(p1) - f(p0)| + |q1 - q0|`).
+- Callers: `TangleWorkbench.compute_intersections` :1264, `BridgeIterator.iterate_bridge` :264
   (sources = the parent's endpoints + the crossings just born, searched against the whole
-  registry), `iterate_all_bridges` :437 and `loom/Blast.blast_zone` :498 (registry-wide, after the
-  loop, whatever the stop reason; not after a raised `PointBudgetExceeded`).
-  `TangleWorkbench.infer_iterate_table()` is a forwarder kept for ~15 scripts.
+  registry), `iterate_all_bridges` :419 and `loom/Blast.blast_zone` (:463, registry-wide, after
+  the loop, whatever the stop reason; not after a raised `PointBudgetExceeded`).
+- Growth and trims (C22, WP12): `grow_n_times` re-finds every branch's physical end in its
+  `finally` (`_find_tail`), so stable growth undoes a stable trim (`trim_stable_at` moves only the
+  tail pointer); a resonance zone's `restore` never shortens a branch growth has run past.
 
 ## Why it works (and the probes that showed it)
 

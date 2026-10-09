@@ -1,72 +1,78 @@
 # loom — knowledge file
 
-Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch at `3b33baa`).
+Last updated 2026-10-09 (open-issues round WP12, branch `oi/wp12-reverify`, base `a2e0e65`; line
+numbers on that branch). The dated sections below are each WP's notes, kept as the record.
 
 ## Map
 
-- `loom/TangleSession.py` (~2000 lines) — the facade. Trellis cache per fixed-point selection
-  keyed by `workbench.generation` (`trellis` :158); downstream caches (`bridge_classes`,
-  `minimal_trellis`, `iterated_partition`, `dual_graph` :618, `symbolic_dynamics` :721) keyed on
-  `(generation, partition signature[, gathered strong pips])`; zones (`resonance_zone` :1737,
-  `add_resonance_zones` :1772, `classify_bridge` :1825 = innermost containing zone by area);
-  `blast_zone` :1871 is a pure forward to `Blast.blast_zone`; `cartoon_zones` :1061.
-- `loom/Blast.py` — `blast_zone(session, zone, n, fixed_point=, strict=, min_separation=)`,
-  `BlastResult`/`BlastStep` genealogy, `_seen_key` (BridgeId or id()), proximity guard
-  (`_interior_points`, cKDTree on every existing bridge interior), `_resolve_zone`.
-- `loom/ResonanceZone.py` — `ResonanceZone` (cut intersections kept as `Intersection` objects,
-  frozen `boundary_vertices` polygon, `contains_point`, `restore`), `define_resonance_zone`
-  (trim each stable branch at pip + k-1 iterates, recompute with `preserve_ids`, rebuild bridges,
-  capture boundary), `_anchor_id`/`_live_id` = `registry.find(...)` against the live registry.
-- `examples/henon_cases.py` — `build_period3`, `build_nested`, `TangleBuild`; helpers `_repin`
-  (classify + set_strong_pip per fp) and `_partition` (pseudoneighbors, holes, partition).
-  Since 2026-10-02 `build_nested` blasts each zone with `fixed_point=[zone.fixed_point]` (:264),
-  so blast order does not matter; default `blast_sizes` is `[3, 3]` (was `[32, 7]`), p3 bridges 27
-  (was 31), words unchanged.
+- `loom/TangleSession.py` (1735 lines) — the facade. One trellis snapshot per fixed-point SET
+  keyed by `workbench.generation` (`trellis` :200; a selection of several is cut at their pips on
+  every read); `topology` :289 = one `loom.Topology` per `(generation, selection, pips)`, every
+  product accessor a delegate; pip memory (`classify_strong_pips` :1048, `_restore_strong_pip`
+  :1092, `set_strong_pip` :1109); zones (`resonance_zone` :1474, `add_resonance_zones` :1512,
+  `classify_bridge` :1565 = innermost containing zone); `blast_zone` :1611 forwards to
+  `Blast.blast_zone`; `cartoon_zones` :780.
+- `loom/Topology.py` (205 lines) — one recompute (D1): stage 3 per fixed point, stages 4-6 on the
+  selection's trellis, lazy `homotopy`, `minimal`, `classes`, `iterated`, `dual_graph`,
+  `dynamics`; `identity` / `letter_for` (C10).
+- `loom/Blast.py` — `blast_zone(session, zone, n, fixed_point=, min_separation=, diagnose=,
+  max_points=, predict=)` :185, `BlastResult` :134 (`stop_reason`, `points_created`,
+  `fixed_points`), `in_zone` :271 (innermost zone, C4), proximity guard (`_interior_points` :85,
+  `_min_interior_distance` :100), `_seen_key` :72.
+- `loom/ResonanceZone.py` — `ResonanceZone` (cut crossings kept as `Intersection` objects, frozen
+  polygon, `contains_point`, `restore` :328), `ring_cycles` :383 / `ring_order` :417 (full keys,
+  C7), `define_resonance_zone` :498 (trim each stable branch at the pip orbit with
+  `workbench.trim_stable_at`, recompute with `preserve_ids`, rebuild bridges).
+- `examples/henon_cases.py` — `TangleBuild`; `build_period3` :177 (slug `_period3_slug` :226),
+  `build_nested` :250 (`_nested_slug` :239), `build_heteroclinic` :327, `build_inversion` :350
+  (WP12: the law-case recipe; raises when f(q0) is not registered); helpers `_session`, `_orbit`,
+  `_grow`, `_intersect_and_bridge`. Every builder ends at `session.topology()`; nothing repins.
 
 ## How it works
 
-- Blast step: frontier = un-iterated bridges passing `fp_ok` (fixed-point filter) and `in_zone`
-  (bridge midpoint inside the zone's FROZEN polygon, boundary inclusive). Each parent ->
-  `workbench.iterate_bridge`; children already `seen` are skipped; children out of zone are
-  discarded; children within `min_separation` of any existing bridge interior are dropped.
-  `AttributeError`/`ValueError` from the forward map are tolerated (WARNING, counted `skipped`).
-- Containment uses `zone.contains_point` only — NOT `classify_bridge`'s innermost-zone rule. An
-  outer-zone blast therefore includes every bridge inside the inner zone (and in the annulus).
-- Any registry mutation moves the generation; the rebuilt trellis has empty strong-pip slots, hence
-  `_repin` after blasts. Intermediate `_repin`s between blasts do not change the result (verified
-  2026-10-02, nested 4+4 own-fp: identical classes and words); only the final one matters.
+- Blast step: frontier = un-iterated bridges of the filter's fixed points whose innermost zone is
+  the blasted one (C4). Each parent -> `workbench.iterate_bridge`; children already `seen` are
+  skipped, children out of zone discarded, children within `min_separation` of an existing bridge
+  interior dropped; any iterate failure propagates (NUM-10). The image curves stay computed
+  manifold (C20): every later recompute keeps the blast.
+- The session carries each fixed point's pip as an `Intersection` across generations (API-1);
+  a rebuilt trellis finds it by `registry.find`, tests it alone, and is cut at its orbit (D10).
+- A zone's trim is a VIEW (C22, WP12): `grow_n_times` re-finds every branch's physical end, so
+  stable growth un-trims the zone; the topology does not care (the trellis is cut at the pip
+  orbit), and `ResonanceZone.restore` never shortens a branch growth has run past (before WP12
+  it cut k=2.8 two blasts back from 362.9 to the pre-zone tail 42.25). A zone that re-trims
+  itself after growth is D8 API work.
 
 ## Invariants relied on
 
 - The zone polygon is frozen at definition; later trims/recomputes do not move it.
-- Registry ids survive `compute_intersections(preserve_ids=True)`; zones never store ids.
+- Registry ids survive `compute_intersections(preserve_ids=True)` and are reproducible (WP8);
+  zones never store ids.
 
 ## Smells
 
-- FIXED 2026-10-02: `build_nested` blasted both zones with both fixed points, so an outer blast
-  iterated p3's exterior (order dependence, a `merge_manifolds` crash logged as "skipped", p3
-  pseudoneighbor collapse at >= 6 outer blasts). Guarded by `test_nested_blast_order_does_not_matter`,
-  `test_nested_inner_words_are_the_period3_words`, `test_nested_outer_blasts_leave_the_inner_bridges_alone`.
-  The underlying `Blast` behaviour (containment by polygon only, any fixed point the caller passes)
-  is unchanged: a caller passing both fixed points to an outer blast still gets the old effect.
-- `henon_cases.py:282` constant slug `nested_p1_p3` whatever the blast counts (figure overwrite).
-- `henon_cases.py:142-146,192,260` `_repin` after every blast is dead work; the real issue is that
-  the session forgets the pip choice on every generation bump (design: trellis slots start empty).
-- `Blast.py:226-236` hand-rolled fixed-point normalisation duplicates
-  `TangleSession._resolve_fixed_points`. `Blast.py:289` imports cKDTree inside the loop although
-  `_min_interior_distance` already imports it (with a scipy-missing fallback that cannot happen).
-- `BlastResult.fixed_point` stores the raw filter argument (FixedPoint, list or None) — typed
-  `Optional[FixedPoint]`, wrong for lists.
+- Fixed since the 2026-10-02 audit: the constant nested slug (API-7, WP11), `_repin` after every
+  blast (API-1, WP8), the hand-rolled fixed-point normalisation and the in-loop cKDTree import in
+  `Blast.py` (SIMP-7, WP11), `BlastResult.fixed_point` (now `fixed_points`, WP11), the
+  polygon-only blast containment (C4, WP9), the period-3 slug collision (WP12).
+- PERF-2 (WP12, accepted): blasting past the freeze of N costs most of the time. k28 at 1e-7:
+  blasts 10-13 take 88 % of 13 blasts' blasting time (x1.67 per blast, 3.6 GB peak) while N stays
+  at 422 from blast 9; k32 the same from blast 9 (4.9 GB at 13). A "blast until T(q0) stops
+  growing" driver, or blasting only T(q0)'s bridges, belongs to the D8 API plan.
+- Open for the D8 API plan: `blast_zone`'s filter could default to the zone's own fixed point;
+  `partition_element_for` could read the topology instead of scanning snapshots.
 
 ## Features
 
-- Blasting a single zone, repeated single-iteration blasts: p1 alone 0..8 and p3 alone 0..5
-  reach reliable symbolic dynamics (verified by probe, 2026-10-02); p3 >= 6 runs but is
-  unreliable, see topology.md.
-- Nested (branch, verified by the 2026-10-02 audit probe): all 16 cells outer {0,2,4,8} x inner
-  {0,2,4,8} run; outer words = p1 alone and inner words = p3 alone at the same counts in every
-  cell; outer-first = inner-first for (2,2), (4,4), (8,4). Reliable iff outer >= 2 and inner <= 4.
-- Resonance zone define/restore: `tests/test_loom_blast_restore.py`, `test_resonance_zone_region.py`.
+- Blasting a single zone (re-measured by E12, WP12, at 1e-7): k28 to 13 blasts reliable from
+  blast 1 (C21); k32 reliable to blast 8, then INT-11 kind 2 (resolution floor); p3 to 20 blasts
+  reliable throughout, the alphabet plateaus at 25 from blast 8; inversion drops at blast 6
+  (BCG-8). (The 2026-10-02 notes said p3 >= 6 blasts was unreliable: fixed by WP4-WP8b.)
+- Nested: nested_outer 12 -> 13 classes, flat to 12 blasts, reliable from blast 1; nested_inner
+  (2 outer blasts, then the inner zone) 13 -> 29 at blasts 6-8, flat to 12, reliable throughout.
+  (The old "reliable iff outer >= 2 and inner <= 4" no longer holds: every class walks since
+  WP7 / WP8b.)
+- Resonance zone define/restore: `tests/unit/loom/test_blast_restore.py`, `tests/unit/loom/test_resonance_zone.py`.
 - Cost: blasting dominates (p1 8 blasts ~4 s; nested 8+8 ~5 s); every topology stage after it is
   < 0.2 s even at 400 crossings. Inside `iterate_bridge`: `Tangle.add_manifold` segment
   bookkeeping + rtree queries ~50 %, `refine_manifold` ~30 % (cProfile, p1 8 blasts).
@@ -209,3 +215,17 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
 - `henon_cases._nested_slug(outer, inner)`: non-default blast counts in the slug (API-7).
 - Deferred: `partition_element_for` reading the topology instead of scanning snapshots (changes a
   public answer, D8 API plan).
+
+## Open-issues round WP12 (2026-10-09, branch `oi/wp12-reverify`, base `a2e0e65`)
+
+- C22: `ResonanceZone.restore` restores a tail only when it lies past the current one (INFO
+  otherwise); `grow_n_times` / `trim_stable_at` docstrings say growth undoes a trim. Test
+  `test_restore_after_stable_growth_never_shortens` (fails on base).
+- `henon_cases.build_inversion` (the k=4 saddle, `HENON_K4` / `saddle_guesses(4, 1)["inversion"]`
+  in `examples/henon.py`) and `_period3_slug` (`p3[_u<n>][_s<n>][_blast<n>]`; the 16-step build
+  used to land in the 13-step folder). `test_henon_slugs.py` checks the folders and that the
+  example inversion recipe's `describe()` and holes equal the law case's.
+- E12 (`stress/numerics/e12_reverify.py`): every case from the frozen `tests/cases.py` builders
+  (`e11_blast_depth.build`), one `session.topology()` per blast; all 31 cells ok. Series at 1e-7:
+  non-decreasing seed counts and plateaus on every case but inversion (one drop at blast 6, BCG-8 /
+  DEC-25); nested_outer 13 flat to 12 blasts, nested_inner 29 from blast 8 to 12, both reliable.

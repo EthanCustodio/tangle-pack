@@ -186,3 +186,45 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   crossed fewer than twice is held whole as a partial piece. A recompute, a growth round or
   a zone (re)definition after a blast keeps every crossing, bridge, partial piece and
   `iterated` flag, and blast / recompute / blast equals blasting straight.
+
+## 2026-10-09 — WP12 (re-verify and document), Claude's calls
+
+Revisable by the author; recorded so later runs know they are calls, not the author's words.
+
+- **C21 (under D3) — an order flip at a member end is noise, no verdict.** The twin of C11. An
+  evidence (a registered member image) whose word parts from the walk, where a member end and a
+  bound of that end's own element have registered `+1` images in the REVERSE stable order on
+  one branch, is diagnosed `"order flip"`: the map preserves the order along a branch, so the
+  registered cdists contradict the dynamics there (k=2.8 at 9 blasts: end 8.5e-6 outward of its
+  bound, images 1.2e-6 the other way, both crossings resolution ratio ~1e4: a deep lambda-lemma
+  copy hugging the hole-bridge end). `word_agrees` None, INFO, never a reliability failure.
+  Lookup only. Effect: k=2.8 at 9-13 blasts reliable; k=3.2 from 9 blasts still unreliable
+  (INT-11 kind 2: no registered preimage to prove a flip, the resolution floor, NUM-3/4).
+  Law cases unchanged.
+- **C22 (under D1 / D8) — growth un-trims a zone; restore never shortens.** A stable trim is a
+  view: `grow_n_times` re-finds every branch's physical end (keeping a trim across growth would
+  hide every crossing the growth was meant to discover, D1), and the topology never depends on
+  the trim (the trellis is cut at the pip orbit, D10). `ResonanceZone.restore` leaves a branch
+  that growth has run past alone (it used to cut it back: k=2.8 two blasts 362.9 -> 42.25). A
+  zone that re-trims itself after growth is D8 API work.
+- **Reporting only — the unmarked lobe.** A crossing on the image lobe of a hole with no
+  stretch of its own marks nothing by the author's 2026-09-23 rule; it is now skipped as
+  `"unmarked lobe"` at INFO instead of the "grow or blast" WARNING (the fold IS registered).
+  No partition, class or word changes.
+- **DEC-25 raised (BCG-8, open): the inversion series loses classes at blast 6.** The
+  references `(23,24), (26,27)` are replaced by `(56,57)` alone, a clean witness (0.16 / 0.26 in
+  stable cdist), no noise; its `+1` pair is never spanned because the reference bridge lies
+  outside the zone (NUM-21), so the second stable branch has no window hole (D9's stagger):
+  holes 9 -> 5, seed 9 -> 6, two classes ambiguous and contradicted. D12 does not stop it (the
+  pip-orbit laps keep deepening). It contradicts D1's "a decrease is a bug" while following the
+  pseudoneighbor definition. Options: (a) accept (the count converges as N deepens; D1 holds up
+  to reference switches that are pure discoveries); (b) compute the reference arcs' images even
+  outside the zone (needs growth, the image is partial); (c) refine old reference pairs rather
+  than replace them (DEC-1's open sub-question). Also for the author: does D1 bind the CLOSED
+  alphabet across a switch? (k=3.2 at blast 9: closed 45 -> 39 while the seed stays at 34 and
+  the holes grow 56 -> 58.)
+- **DEC-14 recommendation (the author's call): the default blasting cutoff 1e-7 defines the
+  symbolic result.** At 1e-5 the seed decreases on k28, k32, p3 and nested_inner (E12); the k28
+  drop is a lambda-lemma copy 5.6e-6 from a pair end that the coarse polyline orders on the
+  wrong side, a pair-ordering resolution limit the per-crossing ratio (183) does not see. Coarse
+  blasting cutoffs are for exploration only.

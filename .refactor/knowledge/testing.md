@@ -1,10 +1,13 @@
 # testing — knowledge file
 
-Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own-blast` at `f8a6d73`).
+Last updated 2026-10-09 (WP12, branch `oi/wp12-reverify`, base `a2e0e65`): suite 1122 passed, 26 skipped, 5 deselected, 1 xfailed (C3).
+Run: `MPLBACKEND=Agg env/bin/python -m pytest -q -rxX -p no:cacheprovider` (~150 s; `-m perf` adds the 5 timing tests).
 
-- Suite at `2315204`: 782 passed, 1 skipped (CuPy); on the branch 795 passed, 1 skipped; ~50 s, `MPLBACKEND=Agg env/bin/python -m
-  pytest -q`. No pytest-xdist in env.
-- Higher-period fixtures: `tests/test_higher_period_cartoon.py` (`p3_built` = `build_period3()`,
+- Suite history: 782 at `2315204` (2026-10-02); 833 / 11 xfail after the stress integration
+  (2026-10-07); 1114 / 26 skipped / 5 deselected / 1 xfailed at main `a2e0e65` (WP10b); 1122 after
+  WP12 (+8 tests: restore, unmarked lobe, image end asserts, order flip, slugs, inversion recipe).
+  KNOWN_ISSUES = 1 (C3, det J < 0 out of scope). No pytest-xdist in env.
+- Higher-period fixtures (2026-10-02 notes; the file now lives under `tests/plotting/`): `test_higher_period_cartoon.py` (`p3_built` = `build_period3()`,
   `nested_built` = `build_nested()` = outer 2 / inner 0), all `@pytest.mark.slow` but fast (~2 s).
   Since the branch: p3 at 4 blasts (words), p3 at 6 blasts and 15 steps (runs, I1 holds, not
   reliable), nested inner words == p3 alone (2 outer + 4 inner), nested 4+4 order independence
@@ -41,8 +44,8 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 - Map: `harness.py` (subprocess per config, RSS watchdog, outcome ok/exception/invariant_assert/
   oom/timeout/crash), `e01..e10_*.py`, `results/*.jsonl`, `report/` (`report.tex`,
   `make_figures.py`, `analysis.py`, `make_numbers*.py` -> `numbers*.tex` macros, `tables/`).
-- E7 `blasts` (`e07_breaking.py:261`): ONE config per case (k28, p3 max 10; nested 8), one cutoff,
-  fixed `min_separation`; topology probed ONLY on the final state (`run_topology`, :131) ->
+- E7 `blasts` (`e07_breaking.py` `run_blasts`): ONE config per case (k28, p3 max 10; nested 8), one cutoff,
+  fixed `min_separation`; topology probed ONLY on the final state (`run_topology`) ->
   no per-blast series of classes/words. Final: k28 32 classes / 7 unresolved / 2 virtual;
   p3 31/1/1; nested 13/0/0. E7 `depth`: p3 classes 9 (11-14 steps) -> 23, 30, 36 (15-17),
   is_reliable False from 15; inversion 4,5 = genuine topology AssertionError ("owned by 0
@@ -66,12 +69,14 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   Three tiers: (a) topology change = new information; (b) library provisional flags
   (`is_reliable` False, ambiguous, unresolved, virtual `newN`) = symbolic stage incomplete,
   open question; (c) genuine errors = exception, AssertionError, OOM/timeout, physical-law
-  violation. `is_reliable` (`SymbolicDynamics.py:826`) = every class has an itinerary, none
-  ambiguous, none contradicted by registered evidence.
-- Report framing smells (as of 2026-10-07): scorecard Blasting row "topology unreliable",
-  taxonomy row "Unreliable topology", `make_numbers.py:428` "(unreliable)" macro suffix,
-  `make_figures.py:816,888` legend strings "unreliable"/"topology unreliable", section
-  "Failure modes and breaking points" holding blasts + depth.
+  violation. `is_reliable` (`SymbolicDynamics.is_reliable`) = every class has an itinerary, none
+  ambiguous, none contradicted by registered evidence (a `"walk"` diagnosis), no straddling
+  landing; D11 flags and C11 / C21 evidence never count.
+- Report framing smells (as of 2026-10-07; CLOSED, DOC-2): the "unreliable" legends and macros
+  were renamed "(provisional)" in the second edition; the last smell, the "why the bursts fall
+  there, not checked" / "fixed number of new classes per blast" paragraph, is answered by the
+  third edition (WP12: reference switches at a pip-orbit lap; the per-blast step was BCG-1
+  bookkeeping, gone since WP6).
 
 ## Stress-report recommendations integrated (2026-10-07, WP1-WP10, main 12d5600)
 
@@ -723,3 +728,34 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   137.9 s back to back; a first branch run at 152.7 s led to slimming the new regressions);
   `-m perf` 5 passed in 44.9 s.
 
+
+## Open-issues round WP12 (2026-10-09, branch `oi/wp12-reverify`, base `a2e0e65`)
+
+- The stress harnesses were BROKEN on main: `e11_blast_depth.build` called the deleted
+  `hc._grow_period3` / `hc._grow_period1`, `topology_snapshot` / `e07.run_topology` read the
+  deleted `dynamics.virtual_classes`, `e07.blast_setup` used the deleted growers and
+  `run_depth` called `session.infer_iterates()`. Fixed: every case is a frozen `tests/cases.py`
+  builder (`e11.build` also builds `inversion` and `heteroclinic`), `repin` deleted (the session
+  carries the pips), snapshots read ONE `session.topology()` and record `n_closed`,
+  `n_trellis_crossings` (N), `n_flagged` (D11), `n_disagree`, `n_straddle`; PERF-5: the cheap
+  `unresolved` counts the blasted fixed point's crossings only, `e07 run_tangency` runs the
+  resolution pass once (`compute_intersections(diagnose=False)` then `check_resolution`). The
+  `--quick` grids of e07 / e11 / e12 end all `ok` (run to scratch `--out` files so the second
+  edition's `results/e07_*.jsonl`, `e11_*.jsonl` stay untouched).
+- E12 (`stress/numerics/e12_reverify.py`, results `results/e12_reverify.jsonl`, 31 cells, all
+  ok, ~4 min wall at 8 workers): series to depth at 1e-7 and 1e-5, NUM-6 / NUM-7 two-iteration
+  cells, growth depth. Report: `analysis.e12_*`, `make_figures.fig_e12_classes` /
+  `fig_e12_cost`, `make_numbers.e12` (`tables/e12_summary.tex`, `e12_iterations.tex`,
+  `e12_depth.tex`, `\NumWpTwelve*` macros), the third-edition section of `report.tex`; built with
+  `~/.local/bin/tectonic report.tex` (no latexmk / pdflatex on this machine).
+- New tests (each fails on a `git archive` copy of base with the new tests copied in):
+  `test_restore_after_stable_growth_never_shortens`, `test_an_unmarked_lobe_is_skipped_by_design`,
+  `test_an_image_end_off_its_branch_asserts`, `test_an_order_flip_gives_no_verdict` (~8 s,
+  `build_k28(blasts=9)`), `test_every_period3_build_gets_its_own_folder`,
+  `test_the_example_inversion_recipe_is_the_law_cases[0, 1]`,
+  `test_every_inversion_build_gets_its_own_folder`; extended (passes on base):
+  `test_disagreeing_evidence_carries_its_cause` (independent order-flip scan) and the allowed
+  reasons of `test_cuts_record_the_far_end_of_the_empty_stretch`. The synthetic `_drive` harness
+  of `test_symbolic_dynamics.py` gives its homotopy elements no bounds (no order flip to read).
+- No law changed, no series extended: an `inversion_series` to 6 blasts would need a new
+  KNOWN_ISSUES entry naming DEC-25 (BCG-8). KNOWN_ISSUES stays 1.

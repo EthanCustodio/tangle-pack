@@ -1,97 +1,62 @@
 # topology — knowledge file
 
-Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`; line numbers are on branch
-`refactor/hole-side-and-own-blast` at `3b33baa`). Only the hole/partition path was studied in
-depth; the rest of the layer is described in `CLAUDE.md`.
+Last updated 2026-10-09 (open-issues round WP12, branch `oi/wp12-reverify`, base `a2e0e65`; line
+numbers on that branch). The top sections describe the current state; the dated sections below
+are each WP's notes, kept as the record. The whole layer is described in `CLAUDE.md` and
+`docs/pipeline_chalkboard.md`.
 
-## Map (studied parts)
+## Map (the hole / partition path)
 
-- `topology/StablePartition.py` — `punch_holes` :256 (direct holes, one per recorded pair except
-  forward iterates >= k_value; side from crossing signs :349-356), `propagate_reference_holes`
-  :378 (backward chain per reference, containing bridge by unstable-cdist span, carried hole point
-  by the real inverse map), `_punch_in_bridge` :1488 (passes `span` to the side read :1546),
-  `_image_arc_midpoint` :1562, side helpers `_arc_side_of` :726, `_bridge_side_of(trellis,
-  bridge, point, span=None)` :789, `_hole_openings` :1148, invariants
-  `check_bridge_rows_consistent` :1036 and `check_holes_share_bridge_side` :1124, combinatorial
-  rows `row_of_end` :901.
-- `Trellis.punch_holes` (Trellis.py ~1080-1150) wraps punch + propagate, then asserts I2 per hole
-  bridge and I1 over all holes.
+- `topology/StablePartition.py` — `punch_holes` :276 (direct holes, one per recorded pair except
+  forward iterates >= k_value; side from crossing signs), `propagate_reference_holes` :407
+  (backward chain per reference: the start bridge's ids moved by `image_cdist`, container by a
+  bisect over the branch's crossing order, side CARRIED), `_punch_in_bridge` :1561,
+  `_image_arc_midpoint` :1633, `_bridge_side_of` :747 (the measured side, a flag),
+  `_hole_openings` :1343 (sign arithmetic, D6), invariants `check_bridge_rows_consistent` :1083
+  (I2, sign form) and `check_holes_share_bridge_side` :1258 (I1), rows `row_of_end` :794.
+- `Trellis.punch_holes` (Trellis.py :1178) wraps punch + propagate, then asserts I2 per hole
+  bridge and I1 over all holes; `diagnose=True` adds the geometric flags.
 
 ## How it works
 
-- Hole side (`Hole.bridge_side`) = side of the hole's bridge, bridge oriented by increasing
-  unstable cdist.
-  - Direct holes (since 2026-10-02, author-approved): COMBINATORIAL, no geometry. `first` = lower
-    unstable cdist end; `outward = +1 if second.stable_cdist > first.stable_cdist else -1`;
-    `left iff first.crossing_sign * outward > 0`. Reason: the bridge leaves `first` along u+, the
-    lobe's stable segment leaves `first` along s+ when it heads outward, and
-    `crossing_sign = sign(cross(u+, s+))`. Openings are still `inward=True`, so this side only
-    feeds I1 and plots. Reproduces the old measured side on every direct hole of k10, k28,
-    k28 two blasts and p3 (test `test_direct_hole_side_is_the_side_of_its_coordinates`).
-  - Propagated holes: measured from the backward-carried reference point against the IMAGE
-    SUB-ARC only (`span` slice of the oriented polyline, one node of margin each side, by
-    `bisect` over sorted node cdists — valid because node cdists are monotone along a bridge,
-    probed by the reviewer). The side chooses the openings -> partition.
-- `_arc_side_of(poly, p)`: nearest polyline VERTEX, tangent from its two neighbours, cross sign;
-  returns None for fewer than 3 points.
+- Hole side (`Hole.bridge_side`) = side of the hole's OWN bridge, in the dynamical orientation.
+  A direct hole reads it off its crossing signs (2026-10-02, author-approved); a propagated hole
+  CARRIES it from the hole it propagates from (2026-10-07, `side_source = "carried"`), flipped
+  only under an orientation-reversing map (`side_after`, C16). The geometry (`measured_side`,
+  read at the nearest segment of the image sub-arc) is a resolution flag, never an assertion
+  (NUM-2, WP4).
+- Openings: at each non-anchor bound the hole opens the `outward` half iff `(crossing_sign > 0)
+  == (bridge_side == "left")` (D6, WP4).
 
 ## Invariants
 
-- I1: holes of one origin share `bridge_side` (orientation-preserving map). I2: same row at both
-  ends of a same-branch hole bridge. Both still asserted; the 2026-10-02 fix changed the
-  measurement, not the invariant.
+- I1: holes of one origin share `bridge_side` (parity-flipped under an orientation-reversing
+  map). I2: a hole bridge with both ends on one stable branch has alternating signs (one row).
 
-## Smells / open issues
+## Smells / open issues (current)
 
-- FIXED 2026-10-02: whole-bridge nearest vertex for propagated holes (p3 15 steps / 6 blasts,
-  iterates -3/-5/-6 read "left" from a far fold) and the nearest-vertex misread of direct holes on
-  tiny +1/+2 lobes. Guarded by `test_deep_p3_holes_share_bridge_side_through_symbolic_dynamics`
-  [6_blasts, 15_steps]; removing `span` turns exactly those two red.
-- CLOSED (WP4, INT-5): if a `span` lies strictly inside one polyline segment the slice is 2
-  points and `_arc_side_of` returned None. Observed off the law cases (inversion x period 2 at
-  10/10 steps: 19 of 26 propagated holes). The measured side is now read at the nearest
-  SEGMENT, which answers on two points.
-- CLOSED (WP4, INT-4): `_hole_openings` used the same whole-polyline nearest vertex for the
-  stable nodes flanking each defining crossing; not latent, it opened nothing (or one half at
-  both ends) on p3 at 6 blasts / 15-16 steps. The openings are sign arithmetic now.
-- OPEN: p3 >= 6 blasts (or >= 15 steps) now runs but is unreliable. A new reference orbit
-  appears (holes 12 -> 42 at 6 blasts), the partition is re-indexed so NONE of the 9 b0 class
-  names survive, ~23-27 classes, class `t` unreachable (`R#2 -> R#3` on branch 0.0), a virtual
-  `new1`, `PartitionFamily` warns "crossing abuts no hole". Words at b6, b7, b8 all differ.
-  Verified by the 2026-10-02 audit probe. Needs the author's view.
-  The figure maker's `p3_b6/cartoon.png` (branch) shows the shape: ~25 elements on every R row,
-  1 (or 3 on 1.0) on the L rows, i.e. the new holes are all on the right side; the word for `c`
-  changes letter each blast (`a w^-1 d^-1`, `a y^-1 d^-1`, `a uu^-1 d^-1`) with a long chain
-  `d->e->f->...`. Same at `min_separation` 1e-4 and 1e-5.
-- `numerics/ManifoldMachine.py:285-295,438`: non-contiguous `old_iterated_points` crash in
-  `merge_manifolds` when a bridge's end nodes were iterated by neighbour bridges. No longer
-  reached by `build_nested`; bug remains.
-- CLOSED (WP5, PK-8): `SymbolicDynamics` warned "inert class u has the non-empty word 'v'" on
-  period-3 runs (inert -> next branch's inert class); it now warns only for an inert word naming
-  a non-inert symbol.
+- The 2026-10-02 list is closed: whole-bridge nearest vertex (fixed 2026-10-02), INT-4 / INT-5
+  (WP4), p3 >= 6 blasts unreliable (every class walks since WP7, flagged classes since WP8b,
+  reliable to 20 blasts in E12), `merge_manifolds` non-contiguous images (NUM-9, WP10), the
+  noisy inert-word WARNING (PK-8, WP5).
+- Open (deferred / waiting): BCG-8 / DEC-25 (inversion loses classes at blast 6 by a genuine
+  reference switch whose `+1` pair is never spanned, the reference arc lying outside the zone);
+  INT-11 kind 2 = NUM-3 / NUM-4 (an image crossing the window 1e-7..1e-6 from a hole-bridge end
+  at a crossing with no registered preimage: k32 from 9 blasts); the k32 closed alphabet drops
+  45 -> 39 at blast 9 while the seed and holes grow (no law binds the closed alphabet across a
+  switch; question for the author, with DEC-25).
 
 ## Features
 
-- p3 alone 0..5 blasts: words `a -> b -> c -> a u^-1 w^-1`, reliable, identical at every count
-  (verified 2026-10-02 on the branch; pinned at 4 blasts by `test_p3_words_survive_four_blasts`,
-  hole sides pinned by `test_p3_hole_sides_are_pinned`).
-- p1 alone (probe recipe, `min_separation=1e-4`): b0 class unresolved (singleton), b1
-  `a -> a u^-1 v^-1`, b2/b4/b8 identical (verified).
+- Re-measured by E12 (WP12, 1e-7): p3 9 classes to blast 5, 23 / 24 / 25 at blasts 6-8, then 25
+  flat to 20, reliable throughout; k28 3, 3, 4 x 6, 15 from blast 8, reliable from blast 1;
+  heteroclinic 57 seed / 81 closed flat to 8 blasts.
 
 ## Deferred / open
 
-- CLOSED (WP3, 2026-10-08, C1): a stable branch with ONLY its anchor is one element
-  `[anchor, end]` (`_build_intervals`, INFO on the `StablePartition` logger); regression
-  `test_inversion_before_the_tangle_forms` (k10 inversion at 4 and 5 steps).
-- FIXED 2026-10-07 (WP4 part A): tolerance-based ownership of registry cdists. Partition
-  boundaries are registry floats, so crossings are owned by id / exact cdist, the iterated parent
-  by exact containment (`PartitionFamily._parent_interval`) and `interval_at` is exact first. The
-  E11 "zero-width iterated element" was a real sliver `(pip, outer]` of width 1.1e-6 beyond the
-  pip whose midpoint fell within `cdist_tol` of the closed pip singleton (regression
-  `tests/regression/test_deep_blast_sliver_beyond_pip.py`, builder `k28_deep_blast_sliver`:
-  the analytic seed reproduces it, the `(4,-4)` seed does not). Still tolerant by design:
-  `Trellis.image_of_element` and `DualWalk._end_tolerance` (estimated cdists). Open: a relative
-  `cdist_tol` for deduplication (a numerics question).
+- CLOSED (WP3, C1): a stable branch with ONLY its anchor is one element `[anchor, end]`.
+- FIXED 2026-10-07 (WP4 part A) and WP11 (C15): ownership, containment and `interval_at` are
+  exact; the topology reads no absolute cdist slack.
 
 ## Open-issues round WP2 (2026-10-08, branch `oi/wp02-exact-iterates`)
 
@@ -629,3 +594,30 @@ flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py
   `sorted({float(c) ...})` of the partition boundaries, `_rank_of(representatives, cdist)` exact
   (every cartoon artist identical, `wp11/cartoon_sig.py`). `span_contains` / `owns_cdist` docstrings
   name their real slack.
+
+## Open-issues round WP12 (2026-10-09, branch `oi/wp12-reverify`, base `a2e0e65`)
+
+- C21 (INT-11 kind 1): `SymbolicDynamics._order_flip(trellis, homotopy, cls, evidence)`, called by
+  `_diagnose` after the stable-end test: a member end and a bound of its OWN element (the class's
+  homotopy element at that end, read through `homotopy.element`) whose registered `+1` images
+  run in the reverse stable order on one branch. The map preserves order along a branch, so the
+  registered cdists contradict the dynamics: noise, `cause = "order flip"`, `crossings = (end,
+  bound)`, `word_agrees` None, INFO with the two gaps. Lookup only. Measured: k28 member
+  (246, 247) at 9 blasts, end 8.5e-6 outward of bound 4, images 1.2e-6 the other way, both
+  resolution ratios ~1e4. k28 at 9-13 blasts becomes reliable; k32 at 9+ stays unreliable through
+  kind 2. Test `test_an_order_flip_gives_no_verdict` (`build_k28(blasts=9)`, fails on base) and
+  the independent cause scan of `test_disagreeing_evidence_carries_its_cause`. The synthetic
+  `_drive` harness gives its homotopy elements no bounds.
+- Unmarked lobe (`PartitionFamily`): a crossing abutting no empty stretch that lies on the image
+  chain of a hole bridge whose hole has no stretch (`_unmarked_lobes`, computed lazily on that
+  path; `_hole_stretches` is the shared stretch set) is skipped as `"unmarked lobe"` at INFO, the
+  author's 2026-09-23 rule; anything else stays the `"no empty stretch"` WARNING without the old
+  "grow or blast" advice (the fold IS registered). Every occurrence on the law cases and deep
+  builders is this kind (inversion_two_blasts 1, k28_deep_blast_sliver 13; 13 / 47 per recompute
+  on k28 / k32 at depth). Test `test_an_unmarked_lobe_is_skipped_by_design` (fails on base).
+- `BridgeClass._image_chain` asserts an image end on the advanced branch (was a WARNING + None,
+  never fired: table links pass the map gate onto `advance_key`); `_collect_image_evidence` lets
+  `ends(pair)` raise like a member's (the try/except never fired). Test
+  `test_an_image_end_off_its_branch_asserts` (fails on base).
+- DOC-3: the `TopologyResults` "is a Hole a coordinate" note is settled (a hole is a marker beside
+  its own bridge, D13).
