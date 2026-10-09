@@ -85,3 +85,8 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
 - **C12 (under D8) — the law tier builds each case once per RUN.** `law_case` is session
   scoped (was module scoped: every one of ~12 law modules rebuilt all 11 cases, 40 s of
   setup); the fingerprint guard still fails a test that mutates the shared build.
+
+## 2026-10-09 — DEC-23, equal shortest walks (raised by WP9)
+
+- **Said:** chose "Non-crossing constraint" (offered: non-crossing constraint; registered image decides; stay ambiguous).
+- **Consequence (D13):** when equal-length shortest walks read different words, the walk is enriched with the constraint that f(bridge) cannot cross the images of the unstable arcs bounding the lobe; the side is picked combinatorially, with no registered image needed. Applies to the heteroclinic lobe tie and the same-kind ties on k28 at >= 8 blasts.
