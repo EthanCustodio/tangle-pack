@@ -411,7 +411,7 @@ Classes at fixed depth also depend on the cutoff (NUM-5).
 **Evidence:** `src/tanglepack/topology/StablePartition.py:433, 547-600, 1712-1723, 1771`; `src/tanglepack/topology/Pseudoneighbor.py:131, 505-620` (all-iterates test from :530); `stress/numerics/report/report.tex:1222-1230, 1277-1295`; `stress/numerics/report/numbers.tex:438-456, 540-564`; E11 k28 `n_holes [4x8,24,24,20,26,…]`; probes `p3probe2.py`, `probe_k28.py`, `p3_holes.py`, `k28_classes.py`; memory `hole-side-own-blast-2026-10-02:15`
 
 ### BCG-5: Holes and classes decrease under further blasting (the partition is non-monotone in depth)
-**Status:** closed (WP8: the scaling-noise punctures; WP8b, D12: the decreases left); p3 at 1e-5 -> NUM-5 (WP12); p3 blast 23 not reproduced | **Severity:** medium | **Related:** BCG-4, NEST-3, DEC-22 | **WP:** WP8, WP8b
+**Status:** closed (WP8b, D12: the decreases WP8 left; WP8 closed the scaling-noise punctures); p3 at 1e-5 -> NUM-5 (WP12); p3 blast 23 not reproduced | **Severity:** medium | **Related:** BCG-4, NEST-3, DEC-22 | **WP:** WP8, WP8b
 
 - nested_outer: classes 13→11, holes 16→12, `minimal_image` 3→0 at blast 10.
 - k32: holes 58,50,42,34,13 over blasts 9-13 (classes 50→34, iterated elements 116→42), then 0, then 36.
