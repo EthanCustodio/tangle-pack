@@ -16,6 +16,7 @@ import dataclasses
 import importlib
 import logging
 
+import cases
 from helpers.logs import assert_logged
 from tanglepack.topology.PartitionFamily import IteratedHomotopyPartition
 
@@ -78,7 +79,7 @@ def test_cuts_record_the_far_end_of_the_empty_stretch(k10_partitioned):
         if cut.opened is None:
             assert cut.reason in {
                 "existing boundary", "row invariant", "no partition",
-                "no empty stretch", "already cut",
+                "unmarked lobe", "no empty stretch", "already cut",
             }
 
 
@@ -113,3 +114,49 @@ def test_describe_mentions_parents_and_cuts(k10_partitioned):
     iterated = session.iterated_partition()
     assert iterated.describe()
     assert repr(iterated.cuts[0])
+
+
+def _image_crossings(trellis, bridge_id):
+    """Every crossing of the bridge's forward image arc: its ends' +1 iterates
+    and the crossings of the advanced unstable branch between them."""
+    images = [trellis.iterate(end, 1) for end in bridge_id]
+    if any(image not in trellis for image in images):
+        return set()
+    key = trellis.unstable_key_of(bridge_id)
+    branch = trellis.branch(key[0].advance_key(key, 1))
+    lo, hi = sorted(trellis.intersection(i).unstable_cdist for i in images)
+    return set(images) | {
+        i for i in branch.intersection_ids if lo <= trellis.intersection(i).unstable_cdist <= hi
+    }
+
+
+def test_an_unmarked_lobe_is_skipped_by_design(caplog):
+    """A crossing on the image lobe of a hole with no stretch of its own (the
+    anchor's one-sided hole, or a lobe holding other holes) marks nothing by the
+    author's 2026-09-23 rule: it is skipped as ``"unmarked lobe"``, at INFO."""
+    session = cases.build_inversion(blasts=2).session
+    minimal, homotopy = session.minimal_trellis(), session.homotopy_partition()
+    trellis = minimal.trellis
+    stretches = {
+        frozenset((iv.lo_id, iv.hi_id))
+        for result in homotopy
+        for iv in result.intervals
+        if iv.lo_id != iv.hi_id and not iv.closed_lo and not iv.closed_hi
+    }
+    on_unmarked = set().union(
+        *(
+            _image_crossings(trellis, hole_bridge)
+            for hole_bridge in minimal.hole_bridge_ids
+            if frozenset(hole_bridge) not in stretches
+        )
+    )
+    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.PartitionFamily"):
+        iterated = IteratedHomotopyPartition.from_minimal(minimal, homotopy)
+    unmarked = [cut for cut in iterated.cuts if cut.reason == "unmarked lobe"]
+    assert unmarked, "precondition: the anchor hole bridge's image lobe is cut by an image bridge"
+    assert all(cut.intersection_id in on_unmarked for cut in unmarked)
+    assert not [cut for cut in iterated.cuts if cut.reason == "no empty stretch"]
+    assert not [
+        r for r in caplog.records
+        if r.name == "tanglepack.topology.PartitionFamily" and r.levelno >= logging.WARNING
+    ]

@@ -85,10 +85,14 @@ Dev Notes:
   inclusive, the empty parts between the bends are open". It differs from the
   footprint rule only in which chains count — those of holes with a stretch —
   and from the closed cut in reading holes, not bridges.
-* A crossing that abuts no empty stretch gets no cut (WARNING, ``"no empty
-  stretch"``): the lobe fold it belongs to is not registered as a hole (the
-  anchor lobe's fold marks nothing by the author's 2026-09-23 rule), and the
-  evidence is to grow or blast, not to guess.
+* A crossing that abuts no empty stretch gets no cut. When it lies on the
+  image chain of a hole bridge whose hole has no stretch of its own (the
+  anchor's one-sided hole, or a lobe whose stable span holds other holes'
+  crossings), that is the author's 2026-09-23 rule, by design: only holes with
+  a stretch mark a base and chords (INFO, ``"unmarked lobe"``; WP12 found every
+  occurrence on the law cases and the deep builders to be this kind:
+  inversion_two_blasts, 13 on k28_deep_blast_sliver, 13 / 47 per recompute on
+  k28 / k32 at depth). Anything else is a WARNING, ``"no empty stretch"``.
 * Foreign chords (C19, WP10b; PK-4). An image chain can leave its base branch
   for an excursion across another stable branch (another orbit branch or fixed
   point: p3_6_blasts, p3_15, p3_16, heteroclinic). A lobe ``H`` (its bridge and
@@ -588,8 +592,10 @@ class Cut:
             or None when nothing changed. A crossing pinched between two
             empty stretches has one record per flank.
         reason: Why nothing changed (``"existing boundary"``, ``"row
-            invariant"``, ``"no partition"``, ``"no empty stretch"``,
-            ``"already cut"``), or None.
+            invariant"``, ``"no partition"``, ``"unmarked lobe"`` (the crossing
+            lies on the image lobe of a hole with no stretch, which marks
+            nothing by design), ``"no empty stretch"``, ``"already cut"``), or
+            None.
         partner: The far end of the empty stretch this crossing abuts (the
             other end of the hole, base or chord), or None when unknown.
     """
@@ -740,6 +746,7 @@ class IteratedHomotopyPartition(PartitionFamily):
             cuts.append(Cut(bid, iid, key[0], key[1], which, None, partner))
 
         empty = cls._empty_stretches(minimal, homotopy)
+        unmarked: Optional[dict[int, "BridgeId"]] = None
         for bid in minimal.image_bridge_ids:
             first, second = bid
             unstable_key = trellis.unstable_key_of(bid)
@@ -774,14 +781,28 @@ class IteratedHomotopyPartition(PartitionFamily):
                     continue
                 abutting = empty.get(iid, [])
                 if not abutting:
-                    cuts.append(Cut(bid, iid, key[0], key[1], None, "no empty stretch"))
-                    logger.warning(
-                        "image bridge %s: crossing %d abuts no hole and no image of a "
-                        "hole, so its element is not cut there; grow or blast until "
-                        "the lobe fold it belongs to is registered",
-                        bid,
-                        iid,
-                    )
+                    if unmarked is None:
+                        unmarked = cls._unmarked_lobes(minimal, homotopy)
+                    if iid in unmarked:
+                        cuts.append(Cut(bid, iid, key[0], key[1], None, "unmarked lobe"))
+                        logger.info(
+                            "image bridge %s: crossing %d lies on the image lobe of hole "
+                            "bridge %s, whose hole has no stretch of its own (the "
+                            "anchor's one-sided hole, or a lobe holding other holes): by "
+                            "the empty-stretch rule (author, 2026-09-23) it marks "
+                            "nothing, so its element is not cut there",
+                            bid,
+                            iid,
+                            unmarked[iid],
+                        )
+                    else:
+                        cuts.append(Cut(bid, iid, key[0], key[1], None, "no empty stretch"))
+                        logger.warning(
+                            "image bridge %s: crossing %d abuts no hole and no image of "
+                            "a hole, so its element is not cut there",
+                            bid,
+                            iid,
+                        )
                     continue
                 own_c = float(trellis.intersection(iid).stable_cdist)
                 flanks: dict[str, int] = {}
@@ -898,13 +919,7 @@ class IteratedHomotopyPartition(PartitionFamily):
             leaves its last crossing unpaired (WARNING).
         """
         trellis = minimal.trellis
-        stretches: dict[frozenset, str] = {}
-        for result in homotopy.results.values():
-            for iv in result.intervals:
-                if iv.lo_id is None or iv.hi_id is None or iv.lo_id == iv.hi_id:
-                    continue
-                if not iv.closed_lo and not iv.closed_hi:
-                    stretches.setdefault(frozenset((iv.lo_id, iv.hi_id)), "hole")
+        stretches = dict.fromkeys(_hole_stretches(homotopy), "hole")
         for hole_bridge in minimal.hole_bridge_ids:
             if frozenset(hole_bridge) not in stretches:
                 continue
@@ -959,3 +974,36 @@ class IteratedHomotopyPartition(PartitionFamily):
             empty.setdefault(a, []).append((b, kind))
             empty.setdefault(b, []).append((a, kind))
         return empty
+
+    @staticmethod
+    def _unmarked_lobes(
+        minimal: "MinimalTrellis", homotopy: HomotopyPartition
+    ) -> dict[int, "BridgeId"]:
+        """Every crossing on the image chain of a hole bridge whose hole has no
+        stretch (the anchor's one-sided hole, or a lobe whose stable span holds
+        other holes' crossings), mapped to that hole bridge: by the author's
+        2026-09-23 rule such a lobe marks no empty stretch."""
+        trellis = minimal.trellis
+        stretched = _hole_stretches(homotopy)
+        return {
+            c: hole_bridge
+            for hole_bridge in minimal.hole_bridge_ids
+            if frozenset(hole_bridge) not in stretched
+            for pair in _image_chain(trellis, hole_bridge) or ()
+            for c in pair
+        }
+
+
+def _hole_stretches(homotopy: HomotopyPartition) -> set[frozenset]:
+    """The holes' own stretches: the open intervals of the homotopy partition,
+    each as the frozenset of its two bounding crossing ids."""
+    return {
+        frozenset((iv.lo_id, iv.hi_id))
+        for result in homotopy.results.values()
+        for iv in result.intervals
+        if iv.lo_id is not None
+        and iv.hi_id is not None
+        and iv.lo_id != iv.hi_id
+        and not iv.closed_lo
+        and not iv.closed_hi
+    }
