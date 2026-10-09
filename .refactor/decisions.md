@@ -90,3 +90,24 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
 
 - **Said:** chose "Non-crossing constraint" (offered: non-crossing constraint; registered image decides; stay ambiguous).
 - **Consequence (D13):** when equal-length shortest walks read different words, the walk is enriched with the constraint that f(bridge) cannot cross the images of the unstable arcs bounding the lobe; the side is picked combinatorially, with no registered image needed. Applies to the heteroclinic lobe tie and the same-kind ties on k28 at >= 8 blasts.
+
+## 2026-10-09 — WP9b (the non-crossing rule, D13), Claude's calls
+
+Revisable by the author; recorded so later runs know they are calls, not the author's words.
+
+- **C13 (under D13) — the marker rule applies to every walk with a member lobe, not only to
+  ties.** D13 is worded for equal walks, but its physics (f is a homeomorphism, so the image of a
+  member's lobe holds exactly the images of the markers the lobe holds) binds every walk. On the
+  law case `heteroclinic` the class `bh` has a UNIQUE shortest walk (trivial, empty word) that
+  holds the wrong markers and that its registered image contradicts; a rule restricted to ties
+  would leave that contradiction (and `is_reliable` False) on a law case. Effect: `bh` reads
+  `bi bj bi^-1`, its registered word, through a two-crossing detour.
+- **C14 (under D3 / D13) — the walk runs between the landing SPANS.** D3's "from the landing of
+  one end to the landing of the other" is read exactly: the walk leaves from and arrives at the
+  stable edges the image span `f(X)` meets, not every edge of the iterated element (the hole
+  bridges bounding `X` map onto the kept image bridges at the ends of `f(X)`, which `f(b)` cannot
+  cross). This alone removes every tie on k28 at 8-13 blasts and k32 at 8-10 blasts, and is a
+  no-op on every law case.
+- **DEC-24 raised** (open): a member-less connecting class whose equal walks differ by a loop
+  around another tangle, with no heteroclinic iterate link in N (`heteroclinic`'s `bn`). See
+  `docs/open_issues.md`.

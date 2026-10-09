@@ -791,10 +791,9 @@ def lobe_image_markers(dual, entry: "BridgeClassEntry") -> Optional[dict["Marker
         members disagreeing on a marker is a WARNING: the class is not one
         homotopy class.
     """
-    kept = set(dual.minimal.kept_bridge_ids)
     lobes: list[tuple["BridgeId", dict["Marker", bool]]] = []
     for member in entry.members:
-        if member.is_loop or member.bridge_id not in kept:
+        if member.is_loop or member.bridge_id not in dual.unstable_edges:  # not kept
             continue
         curve = _lobe(dual, member.bridge_id)
         if curve is None:

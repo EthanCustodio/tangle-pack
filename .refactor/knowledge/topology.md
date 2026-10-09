@@ -459,3 +459,67 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   a quarter of its distance to every OTHER boundary segment of the region (its own arc included:
   `inversion_period2_10` has a stable hairpin region `(3, 4)` where the other leg is the nearest
   wall). `_anchorward_tangent` is gone.
+
+## Open-issues round WP9b (2026-10-09, branch `oi/wp09b-noncrossing`, base `40175fb`)
+
+The non-crossing rule (D13). Plan and probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp09b-noncrossing_plan.md`,
+`.../tmp/wp09b/` (planner: `nc.py` + `proto3.py` prototype, `truth2.py`, `geomcheck.py`, `amb.py`, `bh.py`,
+`k28_struct.py`, `span_series.py`, `hetlinks.py`, `evcheck.py`), `.../tmp/wp09b_impl/` (coder: `cmp_lobes.py`
+flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py` / `breakit2.py`, `f7.py`,
+`bn_missing.py`).
+
+- **Span ends (C14).** `shortest_walks(..., landings=)` keeps only the start / goal nodes whose edge the
+  landing span overlaps beyond its end error (`_nodes_meeting`: 0 at a table end, `SCALING_RTOL * |c|` at a
+  scaled one; none meeting -> all nodes + WARNING, never observed). This alone removes every tie of k28 at
+  8-13 blasts and k32 at 8-10 (both walks of each tie started on edges of the element the span does not meet)
+  and fixes k32 6-7's `m` (a UNIQUE walk from the wrong edge, contradicted by its image). No-op on every law
+  case and deep run.
+- **Markers (`DualGraph.markers`).** Periodic point: `("orbit", position in trellis.fixed_points, orbit
+  index)` at its anchor vertex (`("vertex", id)`). Hole: `("hole", origin, iterate)` beside its own bridge's
+  unstable arc on `bridge_side` (`("beside", edge key, side)`; `face_side(arc)` gives the side a face lies on:
+  right of each half-edge, dynamical direction hi->lo on S, lo->hi on U). (origin, iterate) is unique on every
+  law case and deep run (asserted). A hole whose image is no hole (reference iterate 0; the last +j) gets that
+  image placed beside the image chain's pair touching `iterate(near, 1)` (near is always a bound), same side
+  (opposite under a reversing map), only when that pair is a kept arc (k10: not). The trellis-LOBE-corner
+  placement (the side of the containing bridge facing its own trellis lobe) breaks the registered-image law on
+  9 of 11 law cases (`breakit.py corner`): a propagated hole sits beside its container's image SUB-ARC (INT-2).
+  A GLOBAL side flip passes the registered-image law (it is equivariant: f preserves sides) but makes `a` on
+  k10 / nested / p3 / heteroclinic `no_admissible_walk`, which `ambiguous_only_without_a_member_lobe` catches.
+  Orbit +2 passes every law (no lobe with a kept image chain separates the points of one orbit).
+- **Enclosure (`DualGraph.enclosed`).** Pieces = ring arcs, a split stable edge (a chord ends at its middle)
+  as two halves named by their end vertex. A chorded face: the ring holding both ends of every chord (else
+  None), segments between chord ends glued across each chord, `len(regions) == m + 1` or the chords cross
+  (`[]`: no simple routing). Every other boundary component of a chorded face (other rings of a merged face,
+  `"infinity"` on the unbounded node) may sit in any of the `m + 1` regions: the product of placements, one
+  dict per routing. Pieces are joined across every edge / half the curve does not run along. Outside = the root
+  of `("component", unbounded.index, "infinity")`. Two chord ends on one side of one edge -> None (one crossing
+  per edge, at its middle). Matches the prototype's flood on all 131 lobes of the 11 law cases
+  (`cmp_lobes.py`), and point-in-polygon on every periodic point (law `lobe_enclosure_is_geometry`).
+- **Lobe (`DualWalk._lobe`).** Both ends on ONE stable branch by `stable_key_at` (C7 at an anchor end), the
+  same branch the class's elements and so the walk's ends lie on. The laws close a curve along the non-anchor
+  end's branch instead (any stable path from the anchor is a Jordan curve), which adds inversion_period2's
+  anchor bridges to the physics check; the library gains nothing from it (those classes land on two branches,
+  so the walk curve cannot close: verdict None).
+- **Verdicts (`holds_markers`).** True: some routing holds every decided wanted marker exactly. False: no
+  routing does, the walk crosses an edge strictly inside sigma' (`f(b)` meets `f(sigma_b)` only at its ends),
+  or chords cross (`[]`). None: ends on two branches, an edge crossed twice, a step through the start / goal
+  edge (the midpoint model cannot draw it). A start node == goal node with no steps holds nothing. In
+  `_admissible_walks` an itinerary is kept when one of its realizations (start node, goal node, face path) is
+  True or None; None-only itineraries stay candidates (never preferred by order, so they can only make a tie).
+  The prototype DROPPED None verdicts; with "crossing chords = False" (it returned None there) the outputs are
+  identical (bh's second walk crosses its own chords in face 0).
+- **Search.** Without `wanted`: the old BFS + backtrack (unchanged results; `start == goal` is now just the
+  shared-face case, identical without landings). With `wanted`: L0 from the BFS (0 when a start face is a goal
+  face), then `_walks(length)` for L0..L0+MAX_DETOUR (DFS, faces may repeat, a node crossed once, pruned by
+  the BFS distance to the goal faces), the `max_walks` budget counting realizations (never hit on the law cases,
+  deep runs or series). Status `trivial` iff the chosen length is 0.
+- **Measured.** Law cases and deep runs: id-free signatures identical to base except `heteroclinic` (`a`
+  unambiguous, `c` -> `a d^-1 a^-1`, `bh` -> `bi bj bi^-1` via a 2-crossing detour, ambiguous -> [bn], verified
+  False -> none) and `k28_deep_blast_sliver` (reliable, hash 794bc6ac4f -> 0e8153ad32), both equal to the
+  prototype. Series: k28 8 (unreliable [ab, af] -> reliable), k32 6-7 (`m` -> reliable), 8 (44 -> 45 closed,
+  reliable), 9-10 (43 -> 39 closed, ambiguous [ck, br, ct] -> none, still unreliable through INT-11); p3,
+  inversion, nested_outer unchanged; k28 9-13 and k32 7-10 describes identical to the prototype's.
+  `symbolic_dynamics`: heteroclinic 0.04 -> 0.11 s, deep sliver 0.11 -> 0.15 s.
+- **Residue (DEC-24).** `bn` (member-less, connecting, named by `bl`): its two walks differ by a loop around
+  the B peninsula; none of the heteroclinic crossings (92, 93 in N; 108, 109 past p3's unstable cut) has any
+  iterate link (`bn_missing.py`), so no closed curve with a known image goes through it (NUM-21).

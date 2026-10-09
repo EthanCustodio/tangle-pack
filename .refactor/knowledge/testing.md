@@ -578,3 +578,33 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   Slowest left: the `k32_series` and `nested_outer_series` builds (~15 s each, shared by the
   series tests), the deep-reference regression (~9 s, a duplicate of the series at 9-10 blasts,
   kept per rubric 16) and `test_deep_blast_sliver_beyond_pip` (~10 s).
+
+## Open-issues round WP9b (2026-10-09, branch `oi/wp09b-noncrossing`, base `40175fb`)
+
+- KNOWN_ISSUES 2 -> 2: `(every_active_class_walks, heteroclinic)` stays strict (only `bn` is ambiguous now:
+  member-less, connecting, NUM-21), its reason rewritten and its tag `WP9` -> `DEC-24`. The registry test
+  accepts an open decision as a tag (`WP\d+|C\d|DEC-\d+`; `KnownIssue.wp` docstring says so).
+- New laws (all 11 law cases pass, every one non-vacuous): symbolic `walks_agree_with_registered_images`
+  (every evidence verdict agrees, no class `verified` False), `ambiguous_only_without_a_member_lobe` (a walked
+  class with a member lobe -- kept non-loop member, both ends on one branch by `_stable_branch_at` -- has a
+  `unique` or `trivial` walk: strengthened during the run from "not ambiguous" after the global-side-flip
+  break-it left classes `no_admissible_walk` unnoticed), `walk_starts_on_the_landing` (the first / last face is
+  beside a node the span meets, the span error derived in the test); dual graph `lobe_enclosure_is_geometry`
+  (flood vs `point_in_polygon` on the lobe polylines, periodic points within 1e-6 skipped),
+  `registered_images_keep_markers` (a kept bridge's lobe vs its fully kept image chain closed along S).
+  `_closed_curve` closes at an anchor along the other end's branch, so inversion_period2 counts (36 checks;
+  0 with the C7 branch).
+- Series: `SeriesStep.ambiguous` and `test_no_walk_is_ambiguous` (fails on base on `k28_series` [blast 8: 2]
+  and `k32_series` [8: 2, 9-10: 3]). Regression `test_deep_blast_sliver_beyond_pip` also checks the landing,
+  ties and evidence (fails on base at `walk_starts_on_the_landing`). Unit (`test_dual_walk.py`, FakeDual,
+  `holds_markers` monkeypatched on the module): span picks the start node (3 params: inside, touching the
+  neighbour, scaled end past it), span meeting nothing falls back with one WARNING, the markers break a tie,
+  a None verdict next to an admissible walk stays a tie, a detour through a face twice, no admissible walk.
+- Fails on base (detached `40175fb` with the new tests copied in): `test_symbolic_laws[heteroclinic]`
+  (walks_agree: `c`; ambiguous_only: `a`), `test_no_walk_is_ambiguous[k28_series, k32_series]`,
+  `test_deep_blast_sliver_beyond_pip`; every `test_dual_graph_laws[*]` with AttributeError (`enclosed`).
+- Break-its (`.../tmp/wp09b_impl/breakit.py`, `breakit2.py`): holes at the trellis-lobe corner fail
+  `registered_images_keep_markers` on 9 of 11 (not p3, inversion_period2); dropping the span restriction fails
+  the k28 series test (blast 8: 2 ambiguous) and the deep-sliver regression; flipping every hole side fails
+  `ambiguous_only_without_a_member_lobe` on k10, p3, nested, heteroclinic; orbit points mapped by +2 pass
+  everything (not observable on these fixtures).
