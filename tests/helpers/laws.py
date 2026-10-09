@@ -62,6 +62,8 @@ from tanglepack.topology.BridgeClass import (
     class_sort_key,
     oriented_class,
 )
+from tanglepack.topology.DualGraph import face_side
+from tanglepack.topology.DualWalk import walk_chords
 from tanglepack.topology.MinimalTrellis import image_chain
 from tanglepack.topology.Pseudoneighbor import compute_pseudoneighbors
 from tanglepack.topology.StablePartition import (
@@ -2698,7 +2700,75 @@ def check_alphabet_closed_under_words(case: "Case") -> int:
             assert cls in {symbol.bridge_class for symbol in namer.symbols}, cd.letter
         if cd.itinerary is None:
             assert not dyn.is_reliable, cd.letter
-    return count + len(dyn.classes)
+    # D14: a class connects two tangles only where a computed bridge does.
+    connecting = {
+        frozenset((id(cls.source.fixed_point), id(cls.target.fixed_point)))
+        for cls in dyn.classes
+        if cls.source.fixed_point is not cls.target.fixed_point
+    }
+    spanned = {
+        frozenset(id(_stable_branch_at(case, bridge.id, end)[0]) for end in bridge.id)
+        for bridge in _staged(case).bridges
+        if bridge.id is not None
+    }
+    for pair in connecting:
+        assert pair in spanned, "a class connects two tangles no computed bridge connects"
+    return count + len(dyn.classes) + len(connecting)
+
+
+def _arc_branches(case: "Case", dyn) -> dict:
+    """The unstable branches each class's arcs lie on: its members', or, for a class no
+    computed bridge spans yet, one map step past its namer's (D11; a namer comes first)."""
+    trellis = case.session.dual_graph().trellis
+    branches: dict = {}
+    for cls, cd in dyn.classes.items():
+        if cd.entry.members:
+            branches[cls] = {trellis.unstable_key_of(member.bridge_id) for member in cd.entry.members}
+        else:
+            branches[cls] = {key[0].advance_key(key, 1) for key in branches[cd.named_by]}
+    return branches
+
+
+def _chords_interleave(face, chord, other) -> bool:
+    """Four distinct chord ends on one ring of the face that alternate around it."""
+    ends = (chord[:2], chord[2:], other[:2], other[2:])
+    for region in face.faces:
+        at = {(arc.edge_key, face_side(arc)): i for i, arc in enumerate(region.arcs)}
+        if all(end in at for end in ends):
+            a, b, c, d = sorted(at[end] for end in ends[:2]) + [at[end] for end in ends[2:]]
+            return len({a, b, c, d}) == 4 and (a < c < b) != (a < d < b)
+    return False
+
+
+def check_walks_avoid_disjoint_images(case: "Case") -> int:
+    """D13, D14: the map is a homeomorphism and two unstable arcs never cross, so the
+    images of arcs on disjoint sets of unstable branches are disjoint. Two classes whose
+    arcs lie on disjoint branch sets (``_arc_branches``) have decided walks (``unique``
+    or ``trivial``) whose chords never interleave on a ring of a face both visit. Counts
+    the class pairs judged (a pair sharing no face cannot cross: a deep run may judge
+    only such pairs)."""
+    dyn = case.session.symbolic_dynamics()
+    dual = case.session.dual_graph()
+    branches = _arc_branches(case, dyn)
+    decided = [
+        (cls, cd, walk_chords(cd.search.walk))
+        for cls, cd in dyn.classes.items()
+        if cd.search is not None and cd.search.status in ("unique", "trivial")
+    ]
+    count = 0
+    for i, (x, cx, chords_x) in enumerate(decided):
+        for y, cy, chords_y in decided[i + 1:]:
+            if branches[x] & branches[y]:
+                continue
+            count += 1
+            for face, chord in chords_x:
+                for other_face, other in chords_y:
+                    if other_face is not face:
+                        continue
+                    crossing = _chords_interleave(face, chord, other)
+                    assert dual.chords_cross(face, chord, other) == crossing
+                    assert not crossing, (cx.letter, cy.letter, face.index)
+    return count
 
 
 def check_itinerary_pairs_are_classes(case: "Case") -> int:
@@ -2911,6 +2981,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_every_active_class_walks,
         check_walks_agree_with_registered_images,
         check_member_lobe_classes_have_one_walk,
+        check_walks_avoid_disjoint_images,
         check_walk_starts_on_the_landing,
         check_alphabet_closed_under_words,
         check_itinerary_pairs_are_classes,

@@ -34,6 +34,8 @@ Cases:
   B(s)`` crossings, two inside both pip-orbit cuts (NEST-1, WP9). 16 / 10 was
   chosen while ``dual_face_side_is_geometry`` was a half-plane test that failed
   at 16 / 9 and 16 / 12 (WP10 made it a local probe); the case keeps 16 / 10.
+  ``heteroclinic_17u`` grows period 3 one unstable step further, where the
+  images of the connecting bridges are computed (a perf regression, WP9c).
 * ``nested_unblasted`` -- the nested map with no blast and the outer saddle
   grown at ``p1_area_cutoff = 1e-4`` (the old ``henon_p3_session`` recipe, kept
   as a parameter: Phase 0 probe P6 showed the cutoff changes the outer tangle).
@@ -737,9 +739,13 @@ def build_nested(
     )
 
 
-def build_heteroclinic() -> Case:
+def build_heteroclinic(*, p3_unstable_steps: int = 16) -> Case:
     """
     Period 1 + period 3 with heteroclinic crossings: period 3 at 16 / 10 steps.
+
+    Args:
+        p3_unstable_steps: Unstable growth of the period-3 orbit (at 17 the
+            images of the connecting bridges are computed too).
 
     Returns:
         The case ``"heteroclinic"``, fixed points ``[fp1, fp3]``.
@@ -747,7 +753,7 @@ def build_heteroclinic() -> Case:
     case = build_nested(
         outer_blasts=2,
         inner_blasts=0,
-        p3_unstable_steps=16,
+        p3_unstable_steps=p3_unstable_steps,
         p3_stable_steps=10,
         p3_area_cutoff=1e-7,
         p1_unstable_steps=11,
@@ -1218,6 +1224,7 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         "nested": build_nested,
         "nested_inner_blasts": lambda: build_nested(inner_blasts=2),
         "heteroclinic": build_heteroclinic,
+        "heteroclinic_17u": lambda: _named(build_heteroclinic(p3_unstable_steps=17), "heteroclinic_17u"),
         "nested_unblasted": lambda: build_nested(
             outer_blasts=0, p1_area_cutoff=1e-4, through="zones"
         ),
@@ -1250,7 +1257,7 @@ class KnownIssue:
             (``docs/open_issues.md``).
         wp: The work package that fixes it (``"WP3"``), the decision that
             keeps it (``"C3"``), or the open author decision it waits on
-            (``"DEC-24"``).
+            (``"DEC-<n>"``).
         raises: The exception type the failure raises, when it is one.
     """
 
@@ -1278,13 +1285,6 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "C3",
             raises=ValueError,
         ),
-        ("every_active_class_walks", "heteroclinic"): KnownIssue(
-            "NEST-1 / DEC-24 (the DEC-23 residue after WP9b): the member-less connecting "
-            "class bn has no closed curve with a known image -- no heteroclinic crossing "
-            "of N has an iterate link in N (NUM-21) -- so the non-crossing rule cannot "
-            "pick its side of the B peninsula (ambiguous, unreliable)",
-            "DEC-24",
-        ),
     }
 )
 
@@ -1292,6 +1292,7 @@ _NO_PINCH = "no hole pair pinches a crossing"
 _NO_ANCHOR_OPENING = "no hole is bounded by the anchor"
 _NO_IMAGE_BRIDGES = "the minimal trellis maps no hole bridge forward (no image bridges)"
 _NO_REFINEMENT = "no class splits (no refined children)"
+_NO_DISJOINT_WALLS = "no two classes with decided walks have arcs on disjoint unstable branches"
 
 #: ``(law_id, case) -> reason``: the law has nothing to check on that case. The
 #: layer test leaves it out; its set-aside test runs it, insists it still checks
@@ -1326,6 +1327,10 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
                 "itinerary (D3)"
             )
             for name in ("k28_one_blast", "p3", "inversion")
+        },
+        **{
+            ("walks_avoid_disjoint_images", name): _NO_DISJOINT_WALLS
+            for name in ("k10", "k28_one_blast", "k28_two_blasts", "inversion", "inversion_period2")
         },
     }
 )

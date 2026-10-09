@@ -9,11 +9,18 @@ consecutive on B's stable branch and on A's unstable branch, so they are a
 reference pair of B: tested against A's crossings with A's branch cycle (the arc
 is A's), holed in B's partition, and its backward chain runs along A's unstable
 cycle into A's bridges. Such a pair exists only when both tangles are selected.
+
+WP9c (D13, D14): a heteroclinic bridge is a bridge like any other. A class joining
+two tangles has no member lobe, but the images of arcs on other unstable branches
+are walls its walk may not cross, and they decide its tie; one unstable step further
+(``heteroclinic_17u``, perf) the registered images of the connecting bridges agree.
 """
 
 from __future__ import annotations
 
 import logging
+
+import pytest
 
 from cases import BUILDERS
 
@@ -46,3 +53,44 @@ def test_heteroclinic_pairs_hole_the_stable_owners_partition(caplog):
         trellis.intersection(p.as_tuple()[0]).manifold_a_key[0] is stable_owner
         for p in alone.pseudoneighbors
     )
+
+
+def _connecting(dyn) -> list:
+    """The class records whose two elements lie on two fixed points."""
+    return [
+        cd for cls, cd in dyn.classes.items()
+        if cls.source.fixed_point is not cls.target.fixed_point
+    ]
+
+
+def test_a_tie_no_lobe_decides_is_broken_by_the_images_of_disjoint_arcs():
+    """WP9c (D13, D14): a heteroclinic bridge is a bridge like any other. A class whose
+    arcs join two stable branches has no member lobe, but the image of its arcs still
+    cannot cross the images of arcs on other unstable branches, so the decided walks of
+    those classes break its tie: every connecting class walks one way, and some class
+    without a lobe owes that to the walls."""
+    dyn = BUILDERS["heteroclinic"]().session.symbolic_dynamics()
+    connecting = _connecting(dyn)
+    assert connecting
+    for cd in connecting:
+        assert cd.search is not None and cd.search.status in ("unique", "trivial"), (
+            cd.letter, cd.status)
+    assert any(
+        cd.search is not None and cd.search.rejected and not cd.search.constrained
+        for cd in dyn.classes.values()
+    )
+    assert not [cd.letter for cd in dyn.classes.values() if cd.ambiguous]
+
+
+@pytest.mark.perf
+def test_registered_connecting_images_agree_with_the_wall_rule():
+    """One unstable step further the connecting bridges' images are computed: every
+    connecting class with registered evidence walks one way, and its registered images
+    never contradict the walk (the walls pick the side growth confirms)."""
+    dyn = BUILDERS["heteroclinic_17u"]().session.symbolic_dynamics()
+    judged = [cd for cd in _connecting(dyn) if cd.evidence]
+    assert judged
+    for cd in judged:
+        assert cd.search is not None and cd.search.status in ("unique", "trivial"), (
+            cd.letter, cd.status)
+        assert cd.verified is not False, cd.letter
