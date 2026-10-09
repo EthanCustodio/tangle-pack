@@ -43,6 +43,8 @@ class PointBudgetExceeded(RuntimeError):
         max_abs_coord: Largest ``|coordinate|`` among the points created so far
             in the call -- a huge value means the arm is escaping to infinity.
         manifold_key: Key of the manifold being mapped, when it has one.
+        blast_context: ``(zone key, iteration, bridge id)`` when raised inside
+            ``blast_zone`` (which fills it in before re-raising), else None.
     """
 
     def __init__(
@@ -68,6 +70,7 @@ class PointBudgetExceeded(RuntimeError):
         self.stage = stage
         self.max_abs_coord = max_abs_coord
         self.manifold_key = manifold_key
+        self.blast_context: Optional[tuple] = None
         super().__init__(
             f"one growth step or bridge image would create more than {budget:,} "
             f"points (stopped while {'mapping' if stage == 'map' else 'refining'} "

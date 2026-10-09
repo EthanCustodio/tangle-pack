@@ -55,13 +55,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
+from scipy.spatial import cKDTree
 
 from ..numerics.budget import PointBudgetExceeded
+from .ResonanceZone import ResonanceZone
 
 if TYPE_CHECKING:
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
-    from .ResonanceZone import ResonanceZone
     from .TangleSession import TangleSession
 
 logger = logging.getLogger(__name__)
@@ -101,14 +102,7 @@ def _min_interior_distance(child: "Bridge", reference: np.ndarray) -> float:
     pts = _interior_points(child)
     if len(pts) == 0 or len(reference) == 0:
         return float("inf")
-    try:
-        from scipy.spatial import cKDTree
-    except ImportError:  # pragma: no cover - scipy always present, brute-force fallback
-        diffs = pts[:, None, :] - reference[None, :, :]
-        return float(np.sqrt((diffs**2).sum(-1)).min())
-
-    tree = cKDTree(reference)
-    dists, _ = tree.query(pts)
+    dists, _ = cKDTree(reference).query(pts)
     return float(np.min(dists))
 
 
@@ -143,7 +137,8 @@ class BlastResult:
 
     Attributes:
         zone: The resonance zone that was blasted.
-        fixed_point: The fixed-point filter applied (``None`` = all fixed points).
+        fixed_points: The fixed points whose bridges took part (every fixed
+            point of the workbench when the call passed none).
         num_iterations_requested: The ``num_iterations`` argument.
         steps: One :class:`BlastStep` per iteration actually run.
         interior_bridges_by_iteration: The surviving interior frontier after each
@@ -161,7 +156,7 @@ class BlastResult:
     """
 
     zone: "ResonanceZone"
-    fixed_point: Optional["FixedPoint"]
+    fixed_points: list["FixedPoint"]
     num_iterations_requested: int
     steps: list[BlastStep] = field(default_factory=list)
     interior_bridges_by_iteration: list[list["Bridge"]] = field(default_factory=list)
@@ -257,7 +252,8 @@ def blast_zone(
             rebuild with fewer blasts or a larger budget. ``max_points`` is the
             budget that stops cleanly instead.
     """
-    zone = _resolve_zone(session, zone)
+    if not isinstance(zone, ResonanceZone):
+        zone = session.resonance_zones[zone]
     if zone.boundary_vertices is None:
         raise ValueError(
             "Resonance zone has no captured boundary; define it via "
@@ -280,20 +276,10 @@ def blast_zone(
             and not any(inner.contains_point(point) for inner in inner_zones)
         )
 
-    # Normalize the fixed-point filter to a set of allowed fixed points (or None for
-    # "all"). Accepts a single FixedPoint or any iterable of them, so a caller can
-    # blast bridges emanating from several fixed points in one pass.
-    if fixed_point is None:
-        allowed_fps = None
-    elif isinstance(fixed_point, (list, tuple, set, frozenset)):
-        allowed_fps = list(fixed_point)
-    else:
-        allowed_fps = [fixed_point]
+    fixed_points = session._resolve_fixed_points(fixed_point)
 
     def fp_ok(bridge: "Bridge") -> bool:
-        return allowed_fps is None or any(
-            bridge.fixed_point is fp for fp in allowed_fps
-        )
+        return any(bridge.fixed_point is fp for fp in fixed_points)
 
     workbench = session.workbench
     frontier = [
@@ -302,7 +288,7 @@ def blast_zone(
 
     result = BlastResult(
         zone=zone,
-        fixed_point=fixed_point,
+        fixed_points=fixed_points,
         num_iterations_requested=num_iterations,
     )
     result.interior_bridges_by_iteration.append(list(frontier))
@@ -374,8 +360,6 @@ def blast_zone(
         # Snapshot the accumulated manifold once per generation (one KDTree build,
         # not one per child). Bridges kept within this generation are still caught by
         # the same-generation ``kept_points`` cloud below.
-        from scipy.spatial import cKDTree
-
         ref_tree = (
             cKDTree(np.vstack(reference_points))
             if (min_separation is not None and reference_points)
@@ -478,16 +462,7 @@ def blast_zone(
     # the blast may only now have its image registered.
     workbench.infer_iterates()
     if diagnose:
-        workbench.report_resolution(allowed_fps, new_bridges=added)
+        workbench.report_resolution(fixed_points, new_bridges=added)
     return result
 
 
-def _resolve_zone(
-    session: "TangleSession", zone: "ResonanceZone | FixedPoint"
-) -> "ResonanceZone":
-    """Resolve ``zone`` from a ResonanceZone or its key (the fixed point)."""
-    from .ResonanceZone import ResonanceZone
-
-    if isinstance(zone, ResonanceZone):
-        return zone
-    return session.resonance_zones[zone]

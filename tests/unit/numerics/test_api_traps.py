@@ -7,6 +7,8 @@
 * ``construct_fixed_point`` logs ONE WARNING when the Jacobian says the map
   does not preserve area (``|det J| != 1``), and none for ``b = 1``; the
   ``b = -1`` determinant passes the check because ``|det J|`` is compared.
+* ``MaxIterationsReached`` and ``TURNAROUND_LOG_STRETCH`` are exported, and
+  ``PointBudgetExceeded.blast_context`` always exists (WP11, API-3).
 
 The stale-registry trap (``compute_intersections`` returns the registry it
 installs) is tested with the other registry rules in
@@ -127,3 +129,19 @@ def test_an_area_preserving_map_constructs_silently(caplog):
     caplog.set_level(logging.WARNING, logger=WORKBENCH_LOGGER)
     _henon_saddle(10)
     assert not [r for r in caplog.records if r.name == WORKBENCH_LOGGER]
+
+
+# --------------------------------------------------------------------------- #
+# WP11 (API-3): the growth-cap symbols are exported, the blast context declared
+# --------------------------------------------------------------------------- #
+def test_the_growth_cap_symbols_are_exported():
+    import tanglepack
+
+    assert tanglepack.MaxIterationsReached is MaxIterationsReached
+    assert tanglepack.TURNAROUND_LOG_STRETCH == TURNAROUND_LOG_STRETCH
+
+
+def test_the_blast_context_is_declared():
+    from tanglepack import PointBudgetExceeded
+
+    assert PointBudgetExceeded(1, 2, "map", 0.0).blast_context is None
