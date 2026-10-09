@@ -183,3 +183,16 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
   (`trellis.plot_holes`), not the per-fixed-point fan-out (which is empty for nested now).
 - Later (D8 API plan): defaulting `blast_zone`'s filter to the zone's own fixed point;
   `partition_element_for` could read the selection trellis directly (WP11).
+
+## Open-issues round WP10 slice 1 (2026-10-08, branch `oi/wp10-numerics-leftovers`, base `3f27456`)
+
+- `Blast.blast_zone`: no `strict`, no `BlastStep.skipped` / `BlastResult.skipped`; any iterate
+  failure propagates (NUM-10). The growth factor divides by `frontier_points` (nothing skipped).
+  It collects the bridges it ADDED (the `held` bookkeeping) and ends with
+  `report_resolution(allowed_fps, new_bridges=added)` (C5).
+- `TangleSession.trellis` no longer classifies on a rebuild: `_restore_strong_pip` finds the
+  remembered crossing and tests it alone (`Trellis._is_candidate`), then sets `trellis.strong_pip`
+  directly (set_strong_pip would test it a second time). `Topology._choose_pip` ->
+  `session.set_strong_pip` -> `Trellis.set_strong_pip` skips validation when the id is already the
+  chosen pip. One `is_strong_pip` call per remembered pip per recompute
+  (`test_a_rebuild_tests_only_the_remembered_pip`).

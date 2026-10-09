@@ -70,3 +70,18 @@ What the author has decided. Binding on every later run. Newest last.
 - **DEC-20, said:** "Cut S at the pip orbit." **Consequence (D10):** the partition and the dual graph use the stable manifold cut at the strong pip's orbit (chalkboard stage 3, as pseudoneighbors already do); this replaces the 2026-09-14 "the pip moves the unified set without trimming" rule.
 - **DEC-21, said:** "I'm not sure this is an issue? We do not need computed bridges to find words, we strictly use the dual graph unless it is a singleton. That allows us to potentially find words even though we haven't computed the actual iterates. A word can include the class itself and any other classes." Confirmed on follow-up: "Yes, but mark them." **Consequence (D11):** a walk pair no computed bridge spans is a legitimate class: lettered, walked from its elements' landings, NOT a reliability failure, and marked "no computed bridge yet" (informational). Supersedes C9's "a pair no bridge spans is never a class".
 - **DEC-22, said:** "Balanced trellis." **Consequence (D12):** cut the crossing set at an unstable depth matched to the stable cut at the pip, so blasting cannot reshape the fundamental segment at depth; the class count then never drops under blasting.
+
+## 2026-10-08 — WP10 (numerics and performance leftovers, slice 1), Claude's calls under D3 / D8
+
+Revisable by the author; recorded so later runs know they are calls, not the author's words.
+
+- **C11 (under D3) — incomplete evidence gives no verdict.** A registered image chain whose
+  word parts from the walk because the image passes the end of the computed stable branch
+  (diagnosis `"stable end"`: two consecutive chain crossings on one stable branch with one
+  sign) misses its crossings with the trimmed-away part, so it is incomplete: `word_agrees`
+  is None, the diagnosis is kept and logged at INFO, and it never makes `verified` False or
+  the dynamics unreliable. A `"walk"` disagreement stays a WARNING and a reliability failure.
+  Effect: k28 at 6-7 blasts is reliable; at 8+ blasts the DEC-23 ties keep it unreliable.
+- **C12 (under D8) — the law tier builds each case once per RUN.** `law_case` is session
+  scoped (was module scoped: every one of ~12 law modules rebuilt all 11 cases, 40 s of
+  setup); the fingerprint guard still fails a test that mutates the shared build.

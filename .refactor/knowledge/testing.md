@@ -538,3 +538,31 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   >= 13 (the old closest pair is 13.4; the first third family had 7.1 and 8.1).
 - Probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp09_impl/` (`het_sig.py` base vs branch,
   `sig_base.txt` / `sig_branch.txt` from the planner's `wp09/sig.py`).
+
+## Open-issues round WP10 slice 1 (2026-10-08, branch `oi/wp10-numerics-leftovers`, base `3f27456`)
+
+- KNOWN_ISSUES 3 -> 2: `(partition_covers_branch, heteroclinic)` removed (XPASS after the law
+  restatement). Left: C3 `orientation_reversing`, WP9 slice 2 `every_active_class_walks` x
+  `heteroclinic` (DEC-23).
+- `law_case` is session scoped (C12): law tier 35.7 -> 11.2 s. Fingerprint guard unchanged.
+- `tests/regression/test_deep_reference_survives_noise.py` was vacuous (per-fixed-point trellises
+  carry no stage output since WP9, empty witness loop); rewritten on
+  `session.topology().trellis`. Break-it (WP8 frame fix reverted, `if False and any(image ...)` in
+  `Pseudoneighbor`): the full suite fails only
+  `test_unlinked_landing_is_read_against_the_pairs_images[below_c]`; no `nested_outer_series`
+  test fails, so the regression is kept (plan rubric 16). It duplicates the series at blasts 9-10.
+- New builders `p3_16_12`, `inversion_period2_10` (`cases._named` keeps them off the law-case
+  names their builders would give).
+- New tests, each failing on a detached `3f27456` worktree with the new tests copied in (base
+  laws, branch builders where needed): `test_a_same_stability_pair_is_never_formed` (all four
+  params), `test_crossings_sharing_a_segment_are_bracketed[2,3]`,
+  `test_a_bridge_off_its_branch_is_refused`, `test_blast_through_a_shared_straddle`,
+  `test_every_iterate_failure_escapes[ValueError, AttributeError]` (the AssertionError param
+  passes on base by design), `test_a_rebuild_tests_only_the_remembered_pip[k28, nested]`,
+  `test_outer_faces_do_not_read_areas` (4 params), `test_every_law_holds_on_the_deep_runs` (5
+  params), `test_arclength_stops_on_arc_length`, `test_default_cap_scales_with_the_stretch`,
+  `test_the_count_is_the_listing_of_the_new_curves` and `test_a_blast_counts_and_remembers_nothing`
+  (the count function / report field do not exist on base). `test_the_budget_is_per_call` passes
+  on base (it pins C6). The ninth-blast k28 count check is `perf` (~9 s).
+- Reworded to new rules: `test_same_stability_discard.py` (never formed), the evidence tests
+  (C11), `test_blast_restore` / `test_blast_monotonicity` / `test_blast_budget` (no `strict`).

@@ -113,3 +113,32 @@ the crossing / iterate-table path is described; growth, refinement and budgets a
   fixed point is rebuilt (the survivors' ids would name other crossings). `create_bridges`
   stamps the epoch only from an empty set, which the stale path guarantees. Recutting a
   fixed point twice reproduces its ids and adds no partial piece.
+
+## Open-issues round WP10 slice 1 (2026-10-08, branch `oi/wp10-numerics-leftovers`, base `3f27456`)
+
+- `Tangle` keeps one rtree per stability (`_rtrees`, `_segment_index`): `_insert_segment` inserts
+  into its own stability's index and queries only the other; `add_manifolds` stream-loads both and
+  queries each unstable segment against the stable index (each u x s pair once, the lower-id dedup
+  is gone). `_resolve_crossing_pair` asserts u x s; `_discard_same_stability`, its counter and the
+  INFO summary are deleted. `k32_series` 18.0 -> 14.5 s with identical outputs.
+- `create_bridges` brackets every crossing on the CURRENT polyline first: a run of crossings on one
+  ORIGINAL segment gets a separator spliced after the previous crossing's lower bracket
+  (`_insert_crossing_separator(after, p0, p1, ...)`, cdist still interpolated on `[p0, p1]`), then
+  bridge `(k, k+1)` = `(below(k), above(k+1))`. Consecutive bridges overlap on the two bracket
+  nodes of their shared crossing, as for any crossing. No law case has two crossings on one
+  segment (bridge node totals identical).
+- `ManifoldMachine._image_chains(manifold, images)`: the existing images as contiguous chains,
+  split where the walk from the first image breaks (to the curve's end or past the last image's
+  cdist); unreached images in between are merge-dropped duplicates, skipped as the one-chain merge
+  did. Both the partly mapped and the all-images-exist paths merge chain by chain. The rejected
+  alternative (one chain per run of iterated nodes) changed k28 at 6 blasts.
+- `TangleWorkbench._register_bridge` asserts the bridge invariants (NUM-14). `DEDUP_RTOL` slack.
+- `diagnostics._hits` is the one array core; `same_stability_crossings` builds objects from it,
+  `count_same_stability_crossings(workbench, bridges)` counts (only pairs with a new segment:
+  `_candidate_pairs(a, b, new)` filters `new[i] | new[j]` inside each block). `_curves` returns
+  `(name, nodes, bridge)`; a partial image bridge is named `partial image bridge 0x...` (unique).
+  `report_resolution(new_bridges=)` reports the count (`_report_count`) and stores nothing.
+- Growth drivers: `_stretch_per_round`, `_default_cap` (`max(10, ceil(log_stretch / ln s) + 1)`),
+  `grow_until_arclength` on polyline arc length; module Dev Note rewritten.
+- Probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp10/` (planner) and `.../tmp/wp10c/` (coder:
+  `sig.py`, `series_time.py`, `alllaws.py`, `prof_topo.py` with worktree-relative paths).

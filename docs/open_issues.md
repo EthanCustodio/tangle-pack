@@ -14,12 +14,12 @@ Every issue carries the work package (WP) that owns it; the plan is in the "Work
 | Bridge-class growth (BCG) | 4 | 3 | 0 | 7 |
 | Intent vs code (INT) | 1 | 7 | 2 | 10 |
 | Unnecessary complexity (SIMP) | 0 | 1 | 12 | 13 |
-| Resolution & numerics (NUM) | 0 | 11 | 8 | 19 |
+| Resolution & numerics (NUM) | 0 | 11 | 10 | 21 |
 | Performance (PERF) | 1 | 1 | 3 | 5 |
 | Tests & coverage (TEST) | 0 | 2 | 5 | 7 |
 | API traps (API) | 0 | 2 | 5 | 7 |
 | Docs drift (DOC) | 0 | 0 | 5 | 5 |
-| **Total** | **16** | **36** | **47** | **99** |
+| **Total** | **16** | **36** | **49** | **101** |
 
 The audit raised 18 decision questions (DEC-1..18); all are answered or deferred below. Five issues are marked "possibly stale — verify": INV-10, PK-7, NUM-19, DOC-3 and DOC-4.
 
@@ -287,7 +287,7 @@ A deeper reference chain would be cut silently.
 ### NEST-1: No fixture has a heteroclinic crossing; connecting classes, the merged outer node and cross-tangle walks have never run, and a hand-built case is unreliable
 **Status:** partly closed (WP9) | **Severity:** high | **Related:** NEST-2, INT-10, TEST-1, DEC-7, DEC-23 | **WP:** WP9
 
-**WP9:** the heteroclinic path runs end to end. `henon_cases.build_heteroclinic()` (p3 16u / 10s, p1 11u, two outer blasts, 1e-7, ~0.7 s) is the law case `heteroclinic`: four `W^u(p3) x W^s(p1)` crossings, two inside both pip-orbit cuts (a thin lobe across p1's window); the other two are past p3's unstable cut (points of X). With D7 (NEST-2) the lobe pair is a reference of p1, its chain holes p3's partition, and connecting classes (`entry.tangle is None`), the merged outer face (the sparse arrangement is ONE component), cross-tangle walks and `HETEROCLINIC_COLORS` all run; every law passes but two strict xfails: `every_active_class_walks` (DEC-23: two shortest walks of equal length pass either side of the lobe's hole on p1's window, so three classes are ambiguous and the dynamics unreliable; slice 2, needs the author) and `partition_covers_branch` (inherited from p3 at 16 unstable steps alone, WP10). Open: DEC-23; escape-lobe images (none of the four crossings has an iterate link: the preimage lies past p1's stable trim, the image past p3's unstable cut; WP10); the `W^u(p1) x W^s(p3)` recipe (p3 13u / 15s) hits a NUM-4 near-duplicate crossing (WP10).
+**WP9:** the heteroclinic path runs end to end. `henon_cases.build_heteroclinic()` (p3 16u / 10s, p1 11u, two outer blasts, 1e-7, ~0.7 s) is the law case `heteroclinic`: four `W^u(p3) x W^s(p1)` crossings, two inside both pip-orbit cuts (a thin lobe across p1's window); the other two are past p3's unstable cut (points of X). With D7 (NEST-2) the lobe pair is a reference of p1, its chain holes p3's partition, and connecting classes (`entry.tangle is None`), the merged outer face (the sparse arrangement is ONE component), cross-tangle walks and `HETEROCLINIC_COLORS` all run; every law passes but two strict xfails: `every_active_class_walks` (DEC-23: two shortest walks of equal length pass either side of the lobe's hole on p1's window, so three classes are ambiguous and the dynamics unreliable; slice 2, needs the author) and `partition_covers_branch` (inherited from p3 at 16 unstable steps alone, WP10). Open: DEC-23; escape-lobe images (none of the four crossings has an iterate link: the preimage lies past p1's stable trim, the image past p3's unstable cut; WP10); the `W^u(p1) x W^s(p3)` recipe (p3 13u / 15s) hits a NUM-4 near-duplicate crossing (WP10). **WP10:** the escape-lobe images are NUM-21 (accepted, D9's category); the "near-duplicate" was two crossings on one segment (NUM-19), and the recipe builds now; its heteroclinic iterate links fail the beta and area laws (NUM-20, deferred).
 
 `build_nested()` has 0 A×B crossings (only A×A 30 and B×B 10) and 0 connecting classes. Never run on real data:
 - the merged outer node, which is "over-generous once two tangles are linked heteroclinically"
@@ -553,13 +553,15 @@ After a blast there is no Bridge between a parent crossing and a blast-child cro
 **Evidence:** `src/tanglepack/topology/StablePartition.py:190-196, 239-244, 428`; `src/tanglepack/topology/MinimalTrellis.py:280, 323`; `src/tanglepack/topology/SymbolicDynamics.py:494`; `src/tanglepack/numerics/BridgeIterator.py:141-156`; `docs/regions_bridge_identity_and_cleanup_plan.md:196`
 
 ### INT-10: Face nesting is decided by geometry (point-in-polygon and signed area), so OuterFaceError fires on slivers
-**Status:** open | **Severity:** medium | **Related:** NEST-1, NUM-1 | **WP:** WP10
+**Status:** closed (WP10) | **Severity:** medium | **Related:** NEST-1, NUM-1 | **WP:** WP10
 
 `_merge_faces`/`_innermost_container` test every node with `point_in_polygon` and signed areas. E11 k28 at 1e-6, blast 16: one component has three positively wound faces, which a planar subdivision cannot have; a self-intersecting sliver is suspected. The rotation system already determines the faces, and the chalkboard needs one containment test per fixed point. There is also a "component with no closed face" WARNING.
 
 **Evidence:** `src/tanglepack/topology/DualGraph.py:597-604, 771, 808-810, 842-875`; `stress/numerics/report/report.tex:1667-1673, 1912`; `stress/numerics/report/numbers.tex:412-416`
 
 **WP4 evidence:** with the openings and row check on the signs, the cells that used to stop in the partition now stop here: the E11 2-iteration cells (p3 at 1e-7 from blast 15, nested_inner from blast 17) and k28 at 1e-5 / 1e-6 blasts 16-17.
+
+**WP10:** a component's outer face is read off the rotation system (`DualGraph._outer_face`: the face whose sector at the component's easternmost polyline vertex holds due east), never an area; nesting stays one point-in-polygon test per component. `OuterFaceError` is gone; `test_outer_faces_do_not_read_areas` fakes every traversal area (all positive, all flipped) and the face nodes of p3 and nested do not change (base raises). Same outer faces as the area rule on every law case and p3 16u. k28 at 1e-5, 17 single blasts, no longer reproduces the error on main (D10 / D12 cut the trellis at the pip orbit); the E11 2-iteration cells were not replayed (WP12). The pip restore cost that made those deep recomputes slow is fixed too: a rebuild tests only the remembered pip (k28 at 1e-5, 12 blasts: recompute 4.6 -> 0.8 s).
 
 ---
 
@@ -758,47 +760,61 @@ Reference cells peak at 0.0514 (median 1.2e-5). The excess falls on the first bl
 **Evidence:** `src/tanglepack/numerics/IntersectionRegistry.py:85-95`; `src/tanglepack/topology/StablePartition.py:200-206`; `stress/numerics/report/report.tex:1645-1649, 2003-2005`
 
 ### NUM-9: `ManifoldMachine.merge_manifolds` crashes on non-contiguous `old_iterated_points` (None head when a bridge reaches the grown tip)
-**Status:** open | **Severity:** medium | **Related:** NUM-10, NEST-4 | **WP:** WP10
+**Status:** closed (WP10) | **Severity:** medium | **Related:** NUM-10, NEST-4 | **WP:** WP10
 
 `build_nested` no longer reaches it, but the bug remains.
 
 **Evidence:** `src/tanglepack/numerics/ManifoldMachine.py:391-404, 516`; `.refactor/knowledge/topology.md`; `.refactor/decisions.md` 2026-10-02; memory `loom-and-subpackages:76-77`
 
+**WP10:** root cause: a bridge sharing its two straddle nodes with a neighbour that was iterated first has its existing images on TWO curves (`IIIIIII.....II`: the grown manifold's tip, then the start of the neighbour's image); `_iterate_manifold` merged them as ONE chain and walked off the first curve's tail into `None` (repro: `build_nested(outer_blasts=0, through="zones")`, two inner blasts, one unfiltered outer blast, bridge `(31,32)`). `ManifoldMachine._image_chains` splits the images where the walk from the first one breaks (images the walk passes over without reaching are the duplicates a merge dropped, skipped as before; "one chain per run of iterated nodes" changed k28 at 6 blasts and was rejected). Regression `test_blast_through_a_shared_straddle` (fails on base). Law cases, deep runs and series unchanged.
+
 ### NUM-10: Blast silently counts AttributeError/ValueError iterate failures as "skipped"
-**Status:** open | **Severity:** medium | **Related:** NUM-9 | **WP:** WP10
+**Status:** closed (WP10) | **Severity:** medium | **Related:** NUM-9 | **WP:** WP10
 
 About 5 failures per blast in Phase 6 ("'NoneType' object has no attribute 'cdist'"). The count varies by run and was never examined, so it can hide NUM-9.
 
 **Evidence:** `docs/regions_bridge_identity_and_cleanup_plan.md:339`; `.refactor/knowledge/loom.md`
 
+**WP10:** with NUM-9 fixed no law case, series or deep run skips a bridge; the tolerance, `strict`, `BlastStep.skipped` and `BlastResult.skipped` are gone and every iterate failure propagates (`test_every_iterate_failure_escapes`, three error types).
+
 ### NUM-11: Escape to infinity: `grow_n_times` has no notion of escape, and PointBudgetExceeded leaves a session that cannot be resumed
-**Status:** open | **Severity:** medium | **Related:** INV-4, TEST-1 | **WP:** WP10
+**Status:** closed (WP10: no recipe escapes into its budget; measured) | **Severity:** medium | **Related:** INV-4, TEST-1 | **WP:** WP10
 
 One step multiplies points by up to 40× once |x| > ~100. p3 at 18 steps and inversion at 7-8 steps hit the budget. Recipes and tests still use fixed step counts instead of `grow_until_bounded`.
 
 **Evidence:** `stress/numerics/report/report.tex:404-452, 899-934, 2003-2004`; `stress/numerics/report/numbers_extra.tex:63-131, 259-265`
 
+**WP10:** no recipe or test grows into its point budget (`escape.py`): the escaping arms reach |x| 2574 (k10 u, 1503 points), 154 (k28, 4398), 235 (nested / heteroclinic p1, 6071), 478 (inversion, 1182); p3 and inversion_period2 stay inside |x| <= 10. The escape stop (`grow_until_bounded`), `escape_radius` and the point budget landed 2026-10-07; switching the frozen builders would change law cases for no measured gain. The stress recipes that hit the budget (E3/E7) are rerun by WP12.
+
 ### NUM-12: Growth after a blast recuts the bridge set and clears the `iterated` flags (blast genealogy lost)
-**Status:** open | **Severity:** low | **Related:** BCG-3 | **WP:** WP10
+**Status:** open (WP10 slice 2) | **Severity:** low | **Related:** BCG-3 | **WP:** WP10
 
 **Evidence:** `src/tanglepack/numerics/TangleWorkbench.py:1071-1080`
 
+**WP10 slice 1 (plan):** `compute_intersections` re-indexes MANIFOLDS only, so every crossing born on a blast image curve vanishes from the new registry, and `rebuild_bridges` cuts only manifolds. The fix keeps the blast's image curves, re-indexes them query-only against the stable index inside `compute_intersections` and lets `create_bridges` cut them; flags carry by id under `preserve_ids`. Medium size, touches the recompute every recipe runs: slice 2. The WARNING in `_recut_bridges_after_growth` stays.
+
 ### NUM-13: `grow_until_arclength` stops on canonical distance, not arc length
-**Status:** open | **Severity:** low | **Related:** — | **WP:** WP10
+**Status:** closed (WP10) | **Severity:** low | **Related:** — | **WP:** WP10
 
 **Evidence:** `src/tanglepack/numerics/TangleWorkbench.py:21-26, 823`
 
+**WP10:** `grow_until_arclength` stops on the polyline arc length of the grown branch (`test_arclength_stops_on_arc_length`: on base the tail's cdist passes the length a step before the polyline does).
+
 ### NUM-14: `iterate_bridge` does not re-assert Bridge invariants
-**Status:** open | **Severity:** low | **Related:** INT-9 | **WP:** WP10
+**Status:** closed (WP10) | **Severity:** low | **Related:** INT-9 | **WP:** WP10
 
 **Evidence:** `src/tanglepack/numerics/ManifoldMachine.py:80-90`
 
+**WP10:** every bridge enters through `TangleWorkbench._register_bridge`, which asserts a non-anchor end lies on the bridge's own branch inside its node span (to `DEDUP_RTOL`) and an anchor end comes first and is the bridge's own periodic point. Holds on every law case, deep run and series; it fired on base for the separator builds of NUM-19 (`test_a_bridge_off_its_branch_is_refused`).
+
 ### NUM-15: Small-k recipes: MaxIterationsReached for k ≤ 0.545, and 26/50 b=1 saddles give trivial tangles (fixed 8-step recipe)
-**Status:** open | **Severity:** low | **Related:** NUM-11 | **WP:** WP10
+**Status:** closed (WP10) | **Severity:** low | **Related:** NUM-11 | **WP:** WP10
 
 Recipe depth should scale with 1/ln λ_u. These are first-campaign numbers.
 
 **Evidence:** `stress/numerics/report/report.tex:823-826, 864-871, 883-889`; `stress/numerics/report/numbers_extra.tex:199-213`
+
+**WP10:** `grow_until_turnaround` / `_bounded` / `_arclength` / `_intersection` default to `max_iterations=None` = `max(10, ceil(log_stretch / ln stretch) + 1)` with the driver's own needed stretch, never below the old 10, so no recipe changes (`test_default_cap_scales_with_the_stretch`: the k = 0.3 saddle turns around). The fixed 8-step recipe is the stress harness's E6 (WP12).
 
 ### NUM-16: Arrangement: a zero-area region after a blast reports a representative point inside its neighbour
 **Status:** closed (WP7, root cause INT-9) | **Severity:** medium | **Related:** INT-9 | **WP:** WP10
@@ -806,6 +822,8 @@ Recipe depth should scale with 1/ln λ_u. These are first-campaign numbers.
 It is bounded by an unstable arc that no Bridge spans; this is a sparse/full arrangement mismatch at a blast child.
 
 **Evidence:** `tests/cases.py:816-825`; `docs/regions_bridge_identity_and_cleanup_plan.md:196`
+
+**WP10:** verified: `arrangement_regions_disjoint` passes on all 11 law cases, with no KNOWN_ISSUES or NOT_APPLICABLE entry.
 
 ### NUM-17: Arrangement `image_of` misses 39 of 86 regions; union-valued images are undefined
 **Status:** decided 2026-10-07 | **Severity:** low | **Related:** DEC-17 | **WP:** deferred
@@ -822,19 +840,33 @@ None found for k10, unblasted k28 or inversion (first-campaign numbers). `arrang
 ### NUM-19: Small deferred plan findings
 **Status:** possibly stale — verify | **Severity:** low | **Related:** — | **WP:** WP0 → owners (verify in the WP touching each file)
 
-- `_insert_crossing_separator` stale edge bounds.
+- `_insert_crossing_separator` stale edge bounds. **Closed (WP10):** two or more crossings on one segment are bracketed on the current polyline before cutting (a separator after each previous crossing's lower bracket), and bridge `(a, b)` runs from below `a` to above `b`; before, the separator became the TAIL of `(a, b)` (crossing `b` outside the bridge: WP7-D1, `bridge_endpoints_on_own_branch` on inversion x period 2 at 10 / 10 steps, bridge `(18,19)`) and a third crossing put its separator before the second (cdist decreasing: p3 13u / 16s). The p1(u) x p3(s) recipe (p3 13u / 15s), whose "near-duplicate crossing" was two crossings on one segment, builds now (`test_crossings_sharing_a_segment_are_bracketed`).
 - `_validate_saddle` may reject near-parabolic period-k saddles.
 - `bridge_classes` silently accepts a reversed BridgeId.
 - The walk and the class decide ownership by different rules.
 
 **Evidence:** `docs/regions_bridge_identity_and_cleanup_plan.md:319-320, 335`; `docs/dual_graph_symbolic_dynamics_plan.md:328, 332`
 
+
+### NUM-20: Heteroclinic iterate links on the p1(u) x p3(s) recipes fail the beta and area laws
+**Status:** open | **Severity:** low | **Related:** NEST-1, INT-6 | **WP:** deferred (found by WP10)
+
+`build_nested(p3_unstable_steps=13, p3_stable_steps=15)` and `(13, 16)` build since WP10's separator fix, but `area_along_iterate_links` and `iterate_link_scales_by_beta` fail on links `7 -> 215` (area 3.1e5 -> 1.06e6) and `5 -> 9`: a `W^u(p1) x W^s(p3)` crossing is linked to a wrong image by the exact rule. Not a law case. Needs its own root cause in `IterateInference` for a `W^u(A) x W^s(B)` crossing.
+
+**Evidence:** WP10 plan F13; `alllaws.py "build_nested(p3_unstable_steps=13, p3_stable_steps=15)"`
+
+### NUM-21: Escape-lobe images are never computed
+**Status:** accepted (D9 category) | **Severity:** low | **Related:** NEST-1, D9 | **WP:** — (documented by WP10)
+
+A blast never iterates a bridge outside its zone (by design: exterior bridges grow exponentially), and the heteroclinic crossings of the law case have no iterate links (the preimage lies past p1's stable trim, the image past p3's unstable cut). This is D9's category, an image not computed: the topology never invents it, and growing or blasting further registers it. No code.
+
+**Evidence:** WP7 / WP9 notes (NEST-1); WP10 plan F14
 ---
 
 ## Performance
 
 ### PERF-1: The blast-end same-stability diagnostic does not scale past ~10 blasts
-**Status:** decided 2026-10-07 | **Severity:** high | **Related:** DEC-12 | **WP:** WP10
+**Status:** closed (WP10, C5) | **Severity:** high | **Related:** DEC-12 | **WP:** WP10
 
 `blast_zone(diagnose=True)` is the default and materialises every u×u hit:
 - k28: 104,760 hits (1.58× the blast time)
@@ -844,6 +876,8 @@ None found for k10, unblasted k28 or inversion (first-campaign numbers). `arrang
 It cut reachable depth by 3-4 blasts. The hits are near-parallel image arcs at about 1e-4. Options: count instead of storing, check only new image bridges, or default `diagnose=False` when blasting.
 
 **Evidence:** `src/tanglepack/numerics/TangleWorkbench.py:1495-1525`; `src/tanglepack/numerics/diagnostics.py`; `stress/numerics/report/report.tex:232-234, 1532-1564, 1594-1603, 1986-1997`; `.refactor/knowledge/testing.md` (OPEN)
+
+**WP10:** the blast-end pass only COUNTS the same-stability hits of the bridges the blast added (`count_same_stability_crossings`, `report_resolution(new_bridges=)`, `ResolutionReport.same_stability_count`): one vectorised core shared with the full listing, testing only the candidate pairs holding a new segment and building no per-hit object, remembering nothing (every hit involves a curve new to the blast). Measured before (`perf1.py`, k28 zone at 1e-7): free to blast 7, then 1 405 hits at blast 8, 27 850 at 9, 189 341 at 10 (3.9 s against a 5.6 s blast), 826 877 at 11 (11.8 s against 9.9 s); every hit involved an image bridge and the old x old ones were the previous blast's, re-found. The full listing stays for on-demand use (`check_resolution`). Also (F6) the Tangle keeps one rtree per stability, so the 269 k of 270.5 k exact tests on `k32_series` that were same-stability pairs are never formed (`k32_series` 18.0 -> 14.5 s, `nested_outer_series` 19.3 -> 15.5 s, outputs identical).
 
 ### PERF-2: Blast cost grows geometrically, about 1.6-1.7× per blast in period-1 zones
 **Status:** open | **Severity:** medium | **Related:** BCG-1, TEST-7 | **WP:** WP12
@@ -933,9 +967,11 @@ The 15+ laws switched off on inversion, and the k10/p3/k28 exclusions, never app
 **Evidence:** `tests/_tools/coverage_guard.py`; memory `stress-recs-plan-2026-10-07`
 
 ### TEST-7: `blast_zone(max_points=...)` (WP5) is never exercised by the harness
-**Status:** open | **Severity:** low | **Related:** DEC-13, PERF-2 | **WP:** WP10
+**Status:** closed (WP10) | **Severity:** low | **Related:** DEC-13, PERF-2 | **WP:** WP10
 
 **Evidence:** `stress/numerics/report/report.tex:1970`; `.refactor/knowledge/testing.md`
+
+**WP10:** `test_the_budget_is_per_call` pins C6: a budget an earlier call spent in full does not stop the next call's iteration.
 
 ---
 
@@ -1072,7 +1108,7 @@ Every question of the audit is now answered or deferred; see "Author decisions" 
 | DEC-20 | **Where the walk may cross S** (raised by WP7): the image of a bridge crosses the stable manifold only at the images of its ends and in `S \ f(S)`, but the dual graph unifies the strong pip's window. They agree when S is trimmed at the pip orbit (every law case); inversion x period 2 at 10 steps runs past it and a walk is unreachable. (a) unify `S \ f(S)` per branch (pip-free); (b) cut S at the pip orbit in the partition and dual graph (the chalkboard's stage 3); (c) keep the 2026-09-14 design and warn (WP7 slice 1). (a) and (b) are no-ops on every law case. | PK-5 | D10 (implemented WP8b) |
 | DEC-21 | **A walk pair no bridge spans** (raised by WP7): past the reference switch the word of an image-bridge class names the class of ITS image, a piece of `f(B)` no computed bridge spans (deep p3 runs, nested with 6 inner blasts, k=2.8 at 8 blasts). Today that class is unresolved with a WARNING and the dynamics is not reliable (D3: a construction error). (a) The minimal trellis also keeps the images of active image-bridge classes, iterating them when no bridge exists (map calls in loom; the minimal trellis grows by layers); (b) keep it a warned construction error and grow or blast until a bridge spans the pair; (c) letter the pair from the walk alone (the rejected first WP7 closure, against D2). | PK-1 | D11 (implemented WP8b) |
 | DEC-22 | **Class-count decreases at depth: noise or definition?** (raised by WP8, reworded after its review): the remaining decreases are reference losses to a witness within a hair of a window crossing on the stable branch, unlinked both ways. Only k32 blast 10 is clearly definitional (a lambda-lemma copy 1.25e-2 inside the pair, error bar 2e-6). The others sit INSIDE the placement error bar `min(l_u, l_s) / ratio` (the ratio measures the crossing angle, not cdist placement): nested_outer blast 11 (1.0e-6 and 2.8e-6 from 38, bar 3.4e-6; the outer tangle is left with no reference; 4e-6 cross-frame order inconsistency measured on the same pair at blast 10), k32 blast 11 (1.55e-5, bars up to 2.1e-5), k32 blast 13 (1.1e-6 and 2.2e-6, bars 2.3e-6..4.5e-6), so noise is NOT ruled out, and under D1 a decrease is a bug unless root-caused. (a) A witness closer to a pair end than the end's placement error bar does not kill the reference (a tolerance, read off the registry; keeps the noise cases); (b) accept: a decrease is legitimate exactly when every lost reference is witnessed by an order-consistent witness (the law `series_lost_references_are_witnessed` checks this); (c) keep monotonicity by persistence: a reference stays one while its only witnesses are deeper (in unstable cdist) than the trellis it was found in -- phrased as "pairs of the truncation `{c_u <= U}`" to stay history-free (needs a mathematical check); (d) balance the trellis: cut N at an unstable depth matched to the stable cut at the pip, so blasting stops re-shaping the window at depth. A real-map refinement of the witness (Newton on the two curves) would settle each case but calls the map, so it belongs in numerics. | BCG-5 | D12 (implemented WP8b) |
-| DEC-23 | **Equal shortest walks around a heteroclinic lobe** (raised by WP9): with D7 the lobe's hole splits B's window element, and two shortest walks of EQUAL length pass the lobe on either side (crossing B's window at the edge above vs below it); they read different words, so three classes are ambiguous and `is_reliable` is False on `heteroclinic`. The faces on each side of the window are the same face (the lobe and the A bubble across it are bays of the stable manifold); the walks differ by a loop around the lobe's hole. The registered member images do not agree on a side (one class's image matches the first walk, another's the second; the closure class has none). D3 does not say how to break the tie: (a) by the registered member image, unreliable where none is registered; (b) keep it ambiguous until growth or blasting registers the images; (c) enrich the walk with the non-crossing constraint of the images of the A arcs bounding the lobe (f(b) cannot cross f(W^u_A)). WP9 slice 1 keeps (b) as a strict xfail (`every_active_class_walks` x `heteroclinic`). | NEST-1 | open (WP9 slice 2) |
+| DEC-23 | **Equal shortest walks around a heteroclinic lobe** (raised by WP9): with D7 the lobe's hole splits B's window element, and two shortest walks of EQUAL length pass the lobe on either side (crossing B's window at the edge above vs below it); they read different words, so three classes are ambiguous and `is_reliable` is False on `heteroclinic`. The faces on each side of the window are the same face (the lobe and the A bubble across it are bays of the stable manifold); the walks differ by a loop around the lobe's hole. The registered member images do not agree on a side (one class's image matches the first walk, another's the second; the closure class has none). D3 does not say how to break the tie: (a) by the registered member image, unreliable where none is registered; (b) keep it ambiguous until growth or blasting registers the images; (c) enrich the walk with the non-crossing constraint of the images of the A arcs bounding the lobe (f(b) cannot cross f(W^u_A)). WP9 slice 1 keeps (b) as a strict xfail (`every_active_class_walks` x `heteroclinic`). WP10: the two ambiguous classes of k28 at 8 blasts are this kind (two walks of equal length crossing the window at different edges; none of the six faces they visit holds a u x u hit point, so they are not resolution artifacts). | NEST-1 | open (WP9 slice 2) |
 | DEC-19 | **Period-k stagger** (raised by WP5): a reference trajectory on the outermost lap of the longest unstable branch has no `+j` image in the trellis. (a) accept and warn (WP5 slice 1); (b) trim N to crossings whose `+1..+(k-1)` images are registered (an unstable-side cut, making every reference Z_k-complete; changes the deep p3 / inversion references, BCG-4); (c) virtual partition boundaries at the predicted landings (invents holes, rejected). Orphan window pairs are not pairs (NUM-18). | PK-3 | D9 (accept) |
 
 ## Author decisions (2026-10-07)
@@ -1152,7 +1188,7 @@ Each strict xfail below is a `cases.KNOWN_ISSUES` entry naming the WP that turns
 | `tangles_in_case_order` (NEST-6; WP9) | none (fails on base on `nested`, `nested_inner_blasts`, `heteroclinic`) | — |
 | `case_heteroclinic` (WP9) | none | — |
 | `every_active_class_walks` on the new case `heteroclinic` | heteroclinic | WP9 (DEC-23) |
-| `partition_covers_branch` on the new case `heteroclinic` | heteroclinic | WP10 |
+| `partition_covers_branch` on the new case `heteroclinic` | none (WP10: the law's last clause was restated to stage 6's rule) | — |
 
 The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases `one_anchor_per_unstable_branch`, `arrangement_euler`, `anchor_bridge_class_leads_its_tangle`, `partition_singletons` and `stable_nodes_never_own_a_singleton` (WP3, INV-1), `arrangement_regions_disjoint` (WP10, NUM-16) and, on `inversion_two_blasts`, the 15 hole-dependent laws that are vacuous with 0 holes (WP2, INV-2); on `nested_inner_blasts` `arrangement_regions_sound` and `arrangement_regions_disjoint` (WP10, NUM-16). WP2 must add `stable_nodes_never_own_a_singleton` on `inversion_two_blasts` (WP3) once holes appear there.
 
@@ -1175,3 +1211,5 @@ The new law cases also put existing laws in KNOWN_ISSUES: on the inversion cases
 **WP9** (KNOWN_ISSUES 2 -> 3; NOT_APPLICABLE unchanged): nested and heteroclinic tangles. (1) NEST-1 / NEST-2 / D7: a crossing is in a trellis only when both its branches are selected (a tangle alone holds no heteroclinic crossing; its arcs are joined across them), the pair test reads the cycle, `k` and β of the ARC's fixed point (its two 2D endpoint collisions, scaled and own-frame, skip only a candidate on the pair's own stable manifold), and stages 4-6 run on the selection's trellis (`loom.Topology`; stage 3, the pip, stays per fixed point). The selection cut at both pips is `T(q0_A) ∪ T(q0_B)`; D10 / D12 needed no change. (2) NEST-4 / C4: a blast iterates the bridges whose innermost zone it is, read against the stored zones of the OTHER fixed points, so a zone the session does not store (`define_resonance_zone`, a replaced or copied handle) still blasts its own bridges (review: comparing `classify_bridge(bridge) is zone` blasted nothing there). (3) NEST-5: `clear_bridges` / `rebuild_bridges` per fixed point. (4) NEST-6: the recipes construct the outermost fixed point first. (5) TEST-5(c): a third colour family. New law case `heteroclinic` (`henon_cases.build_heteroclinic`: p3 16u / 10s, p1 11u, two outer blasts, 1e-7, 0.7 s): on base refs 3, holes 50, classes 31, closed 53, 0 connecting, reliable; on the branch refs 4 (one heteroclinic reference on p1's window), holes 77, classes 57, closed 81, 2 connecting, NOT reliable (DEC-23). New laws `trellis_crossings_belong_to_its_selection` (partition layer; fails on base on `heteroclinic`), `tangles_in_case_order` (classes; fails on base on `nested`, `nested_inner_blasts`, `heteroclinic`), `case_heteroclinic` (case sanity); `trellis_is_cut_at_the_pip_orbit` now skips a crossing unless BOTH its keys are branches of the trellis (the selection rule). Removed from KNOWN_ISSUES: `three_tangles_take_three_families` x `hand_built`; added, on the new case: `every_active_class_walks` (WP9 slice 2, DEC-23) and `partition_covers_branch` (WP10: fails on p3 at 16 unstable steps alone). Regressions `test_heteroclinic_pairs_hole_the_stable_owners_partition`, `test_an_unfiltered_outer_blast_iterates_only_its_innermost_bridges`, `test_an_unfiltered_nested_blast_does_not_depend_on_order` (all fail on base), `test_an_unstored_zone_blasts_the_bridges_inside_it`, `test_a_copy_of_a_stored_zone_blasts_like_the_stored_zone` (review), unit `test_rebuilding_one_fixed_points_bridges_keeps_the_others` (fails on base), `test_collision_on_another_stable_manifold_still_punctures` (review; each parameter fails without its gate). Behaviour changes: every other law case and `p3_15` / `p3_16` / `p3_6_blasts` are identical to base (id-free `describe()` signatures, `PYTHONHASHSEED=0`); `nested` / `nested_inner_blasts` keep refs 3, holes 16, classes 13, closed 13, reliable, but p1 is now `A` and tangle 0 (its classes first, registry ids renumbered); after `topology()` of several fixed points the per-fixed-point trellises carry no stage output (`topology(fp)` fills one); the "missing from the branch cycle" WARNING is gone. Suite 1017 passed / 21 skipped / 3 xfailed, 177.6 s (base 1000 / 21 / 2, 162.1 s, same machine); after the review round 1022 / 21 / 3 (the five new tests take ~0.6 s; 211 s measured under a load average of 2.6). Left: DEC-23 (slice 2); escape-lobe images, `partition_covers_branch` and `dual_face_side_is_geometry` at p3 16u, NUM-9 through an unfiltered outer blast's annulus bridges, the p1(u) x p3(s) recipe (WP10).
 
 Verification of the "possibly stale" items (WP0): DOC-3 is confirmed open (the MinimalTrellis "definition is changing", TrellisBranch `return_period`, ResonanceZone "no inversion example", PartitionFamily "concurrent edit" and StrongPip "legitimately None" notes are all still present). PK-7 is confirmed dead code (WP2 deletes it). INV-10, NUM-19 and DOC-4 need a run; they are checked by the WP that owns them.
+
+**WP10 slice 1** (KNOWN_ISSUES 3 -> 2; NOT_APPLICABLE unchanged): numerics and performance leftovers. (1) F6: the Tangle keeps one rtree per stability and queries a segment only against the other, so no same-stability pair is ever formed (`_discard_same_stability` and its INFO line are gone). (2) F3 / NUM-19: crossings sharing one segment are bracketed before cutting, so a bridge contains both its crossings and cdist stays monotone (inversion x period 2 at 10 / 10, p3 13u / 16s, and the p1(u) x p3(s) recipe, which builds now). (3) NUM-9: a curve's existing images are merged chain by chain. (4) NUM-10: iterate failures propagate; `strict` and `skipped` are gone. (5) NUM-14: `_register_bridge` asserts the bridge invariants. (6) PERF-1 / C5: a blast's resolution report counts its new image bridges' same-stability hits only. (7) F7: the strong-pip candidates are classified on first read and a rebuild tests only the remembered pip (k28 1e-5 at 12 blasts: recompute 4.6 -> 0.8 s). (8) INT-10: outer faces from the rotation system; `OuterFaceError` is gone. (9) Laws: `partition_covers_branch` restated to stage 6 (an element end is open iff a hole of that side opens that crossing on that half; the old last clause over-claimed on p3 16u, where two adjacent reference pairs hole both sides of the same bridges), `dual_face_side_is_geometry` a local probe (the half-plane test failed on slivers, non-convex faces and a stable hairpin); `(partition_covers_branch, heteroclinic)` XPASSed and was removed. (10) C11 (proposed, under D3): stable-end evidence is incomplete and gives no verdict (k28 at 6-7 blasts reliable; at 8+ the DEC-23 ties remain). (11) NUM-13 / NUM-15: `grow_until_arclength` stops on arc length; the drivers' caps scale with the stretch. (12) TEST-7: C6 pinned. (13) Suite: the law tier builds each case once per run (C12, proposed); `test_deep_reference_survives_noise` read the per-fixed-point trellises, which carry no stage output since WP9 (an empty witness loop), and is rewritten on the selection's trellis (the WP8 frame-fix break-it fails only `test_unlinked_landing_is_read_against_the_pairs_images`, no series test, so it is kept). New tests: `test_blast_through_a_shared_straddle`, `test_crossings_sharing_a_segment_are_bracketed`, `test_every_law_holds_on_the_deep_runs` (`p3_15`, `p3_16`, `p3_6_blasts` and the new builders `p3_16_12`, `inversion_period2_10`), `test_the_count_is_the_listing_of_the_new_curves`, `test_a_blast_counts_and_remembers_nothing` (plus the ninth-blast k28 check under `perf`), the rewritten `test_a_same_stability_pair_is_never_formed`, `test_a_bridge_off_its_branch_is_refused`, `test_every_iterate_failure_escapes`, `test_a_rebuild_tests_only_the_remembered_pip`, `test_outer_faces_do_not_read_areas`, `test_arclength_stops_on_arc_length`, `test_default_cap_scales_with_the_stretch`, `test_the_budget_is_per_call`. Behaviour: law cases, deep runs and the five series are identical to base (id-free signatures, `PYTHONHASHSEED=0`) except `k28_deep_blast_sliver`, where one class's `verified` reads True instead of False (its only disagreement was stable-end evidence; still unreliable). Deferred: NUM-12 (slice 2), NUM-20, NUM-21 (accepted), `row_of_end_is_geometry` at 16 stable steps (resolution), the E11 2-iteration cells (WP12), vectorised rtree queries (PERF-2 / PERF-3), DEC-23.

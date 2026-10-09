@@ -23,7 +23,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
    - ★ Inversion: the two branches of one stability are the two halves of ONE smooth curve through z, and M^p swaps them.
 
 1. **Trellis.** Input: finite pieces of the manifolds. Output: the finite crossing set N, each crossing = (unstable branch, c_u, stable branch, c_s, sign = sgn(u+ × s+)), plus the anchors.
-   - Law: u×u, s×s and self-crossings cannot happen. When one shows up it is a numerical artifact, never a crossing.
+   - Law: u×u, s×s and self-crossings cannot happen. When one shows up it is a numerical artifact, never a crossing. The index never pairs two segments of one stability (one rtree per stability, WP10); a transversal same-stability polyline crossing is only a resolution flag.
    - The rotation at every node is fixed by `sign` alone.
    - ★ Inversion: the anchor is ONE point with two stable and two unstable branches attached. Each branch has its own left and right side; the left of stable branch 0.0 is the same region as the right of 0.1. A bridge of u(o,b) leaving the anchor meets s(o,b) there (C7), whose sign is the anchor's own.
 
@@ -73,7 +73,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
 
 10. **Recompute (D1).** Topology is a pure function of the numerical state. Any growth or blast recomputes stages 1-9 from scratch. Successive recomputes are compared by element identity (the bounding crossings of each element: hole-bridge endpoints, whose ids persist in a session; C10), and the class count may only go up: N is T(q₀)'s (D12), so a lap the pip orbit has not completed, a lambda-lemma copy deeper than M^m q₀, is not in N and cannot reshape the fundamental segment. While the hole set stays the same, so does the alphabet closed under the word map (D11).
 
-★ **Several saddles.** A heteroclinic crossing is a node of both tangles, and of neither alone: the topology of several saddles is computed on ONE trellis, the selection's (stage 3). Nesting of tangles needs ONE containment test per fixed point, and a zone's blast iterates the bridges whose innermost zone it is (C4). Nothing else changes.
+★ **Several saddles.** A heteroclinic crossing is a node of both tangles, and of neither alone: the topology of several saddles is computed on ONE trellis, the selection's (stage 3). Nesting of tangles is the rotation system's outer face of each component (the face holding due east at its easternmost vertex, never an area, WP10) plus ONE containment test per component, and a zone's blast iterates the bridges whose innermost zone it is (C4). Nothing else changes.
 
 ## Where the code diverged on 2026-10-07
 

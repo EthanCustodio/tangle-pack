@@ -437,3 +437,23 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   `dual_face_side_is_geometry` on p3 16u/9s and 16u/12s (half-plane test against a non-convex
   face's representative point; 16/10 avoids it, not fixed); escape-lobe images (the four
   heteroclinic crossings carry no iterate links, WP10).
+
+## Open-issues round WP10 slice 1 (2026-10-08, branch `oi/wp10-numerics-leftovers`, base `3f27456`)
+
+- `Trellis.strong_pip_candidates` is a property (`_candidates`, None until read): classified with
+  the default slack over the COMPUTED crossings (`_computed[0]`, never the cut set; is_strong_pip
+  reads the raw registry/iterate so the cut does not matter for the test itself).
+  `classify_strong_pips()` keeps its eager behaviour; `clear_results` resets to None.
+- `DualGraph._outer_face(members)`: easternmost vertex of the members' traversal rings
+  (`_traversal_ring`: arcs stitched, consecutive duplicates and the closing vertex dropped), the
+  face whose sector there (clockwise from `next - v` to `prev - v`; the whole circle at a stub tip)
+  holds due east; asserted unique. `OuterFaceError` and the area-sign rule are deleted;
+  `_traversal_area` survives only for `_innermost_container`'s magnitude.
+- `SymbolicDynamics._compare_evidence`: `"stable end"` evidence -> `word_agrees` None + INFO;
+  `"walk"` -> False + WARNING; `verified` over the evidence with a verdict (C11).
+- Laws (tests/helpers/laws.py): `check_partition_covers_branch` last clause = stage 6 (an end is
+  open iff a hole of that side opens that crossing on that half; pinched singletons skipped);
+  `check_dual_face_side_is_geometry` = a local probe off the stable edge's middle segment pushed by
+  a quarter of its distance to every OTHER boundary segment of the region (its own arc included:
+  `inversion_period2_10` has a stable hairpin region `(3, 4)` where the other leg is the nearest
+  wall). `_anchorward_tangent` is gone.
