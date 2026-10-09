@@ -679,7 +679,9 @@ def _detected_links(case: "Case") -> list[tuple[int, int]]:
 
 
 def check_area_along_iterate_links(case: "Case", *, rtol: float = AREA_LINK_RTOL) -> int:
-    """``unstable_cdist * stable_cdist`` is preserved by every registered ``+1`` link.
+    """``unstable_cdist * stable_cdist`` is preserved by every registered homoclinic
+    ``+1`` link, and scaled by ``beta_A / beta_B`` on a heteroclinic
+    ``W^u(A) x W^s(B)`` link: each side moves on its own saddle (NUM-20).
 
     Compared LINK BY LINK, not against the head of the chain, so the error of
     a long chain (period 3 runs a dozen links) does not accumulate. The
@@ -697,7 +699,8 @@ def check_area_along_iterate_links(case: "Case", *, rtol: float = AREA_LINK_RTOL
                 _brackets(crossing), (crossing.unstable_cdist, crossing.stable_cdist)
             )
         )
-        before = float(ix.unstable_cdist) * float(ix.stable_cdist)
+        factor = ix.manifold_a_key[0].per_step_beta("unstable") * ix.manifold_b_key[0].per_step_beta("stable")
+        before = float(ix.unstable_cdist) * float(ix.stable_cdist) * factor
         after = float(image.unstable_cdist) * float(image.stable_cdist)
         assert after == pytest.approx(before, rel=rtol + widths), (
             f"area not preserved on the link {source} -> {target}: {before!r} -> {after!r}"
@@ -707,8 +710,9 @@ def check_area_along_iterate_links(case: "Case", *, rtol: float = AREA_LINK_RTOL
 
 
 def check_iterate_link_scales_by_beta(case: "Case") -> int:
-    """A ``+1`` link scales the unstable cdist by ``per_step_beta`` and the stable by its inverse,
-    and lands on the branch ``advance_key`` names.
+    """A ``+1`` link scales the unstable cdist by the ``per_step_beta`` of its unstable
+    saddle and the stable cdist by that of its stable saddle (NUM-20: on a
+    heteroclinic link they differ), and lands on the branches ``advance_key`` names.
 
     The slack is ``SCALING_RTOL`` of the prediction plus the two crossings'
     bracket widths (the source's carried one step).
@@ -717,19 +721,19 @@ def check_iterate_link_scales_by_beta(case: "Case") -> int:
     count = 0
     for source, target in _detected_links(case):
         ix, image = registry[source], registry[target]
-        fp = ix.manifold_a_key[0]
-        beta = fp.per_step_beta("unstable")
-        assert image.manifold_a_key == fp.advance_key(ix.manifold_a_key, 1), source
-        assert image.manifold_b_key == ix.manifold_b_key[0].advance_key(ix.manifold_b_key, 1)
+        a, b = ix.manifold_a_key[0], ix.manifold_b_key[0]
+        beta_u, beta_s = a.per_step_beta("unstable"), b.per_step_beta("stable")
+        assert image.manifold_a_key == a.advance_key(ix.manifold_a_key, 1), source
+        assert image.manifold_b_key == b.advance_key(ix.manifold_b_key, 1)
         (u_lo, u_hi), (s_lo, s_hi) = _brackets(ix)
         (iu_lo, iu_hi), (is_lo, is_hi) = _brackets(image)
-        predicted_u = beta * float(ix.unstable_cdist)
-        predicted_s = float(ix.stable_cdist) / beta
+        predicted_u = beta_u * float(ix.unstable_cdist)
+        predicted_s = beta_s * float(ix.stable_cdist)
         assert abs(float(image.unstable_cdist) - predicted_u) <= (
-            SCALING_RTOL * predicted_u + beta * (u_hi - u_lo) + (iu_hi - iu_lo)
+            SCALING_RTOL * predicted_u + beta_u * (u_hi - u_lo) + (iu_hi - iu_lo)
         ), (source, target)
         assert abs(float(image.stable_cdist) - predicted_s) <= (
-            SCALING_RTOL * predicted_s + (s_hi - s_lo) / beta + (is_hi - is_lo)
+            SCALING_RTOL * predicted_s + beta_s * (s_hi - s_lo) + (is_hi - is_lo)
         ), (source, target)
         count += 1
     return count

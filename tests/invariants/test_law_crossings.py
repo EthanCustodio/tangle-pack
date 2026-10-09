@@ -6,8 +6,9 @@ key, and no two unstable (or two stable) curves cross geometrically, within
 one branch, across branches or across fixed points. A crossing's cdists are
 defined and bracketed by the segment it was found on, its sign is the cross
 product of the two increasing-cdist directions, and every registered ``+1``
-link preserves the canonical area and scales the cdists by
-``per_step_beta``. Recomputing the crossings keeps the topology (D1, NUM-12),
+link scales each cdist by the ``per_step_beta`` of its own saddle (so a
+homoclinic link preserves the canonical area and a heteroclinic one scales it
+by ``beta_A / beta_B``, NUM-20). Recomputing the crossings keeps the topology (D1, NUM-12),
 keeps every id and is idempotent (the ``recompute`` layer: one fresh build per
 case, since these laws mutate the session).
 """
