@@ -217,8 +217,8 @@ class Trellis:
         holes: Output slot — holes punched for pseudoneighbor pairs.
         stable_partitions: Output slot — stable-manifold partitions built from
             the holes (one per branch and side).
-        strong_pip_candidates: Output slot — IDs of every intersection that
-            qualifies as a strong pip.
+        strong_pip_candidates: IDs of every intersection that qualifies as a
+            strong pip, classified on first read (or by classify_strong_pips()).
         strong_pip: The single chosen strong pip (an intersection ID), or None.
             Chosen from strong_pip_candidates via set_strong_pip(); choosing it
             cuts the trellis at its orbit (:meth:`cut_at_pip_orbit`).
@@ -300,8 +300,10 @@ class Trellis:
         # Every intersection that *qualifies* as a strong pip is a candidate.
         # A trellis has exactly one actual strong pip — a unique choice made from
         # the candidates (default: smallest unstable cdist; user-overridable via
-        # set_strong_pip()).
-        self.strong_pip_candidates: list[int] = []
+        # set_strong_pip()). Classifying them all is O(N^2) over the registry, so
+        # it waits for the first read (F7, WP10): restoring a remembered pip
+        # tests that one crossing only.
+        self._candidates: Optional[list[int]] = None
         self.strong_pip = None
 
         # Cache for the orientation_preserving property (see below).
@@ -698,6 +700,35 @@ class Trellis:
     def intersection_ids(self) -> list[int]:
         """All intersection IDs in the trellis (insertion order)."""
         return self.registry.all_ids()
+
+    @property
+    def strong_pip_candidates(self) -> list[int]:
+        """
+        Every crossing of the computed trellis that qualifies as a strong pip.
+
+        Classified (default slack) on first read, over the computed trellis's
+        crossings, never one cut at a pip; :meth:`classify_strong_pips`
+        reclassifies with explicit options and chooses.
+        """
+        if self._candidates is None:
+            from .StrongPip import classify_strong_pips as _classify_strong_pips
+
+            computed = sorted({iid for ids in self._computed[0].values() for iid in ids})
+            self._candidates = sorted(
+                iid for iid, r in _classify_strong_pips(self, computed).items() if r.is_strong_pip
+            )
+        return self._candidates
+
+    def _is_candidate(self, intersection_id: int) -> bool:
+        """Whether a crossing is a strong-pip candidate; while the candidates are not
+        classified, only this one crossing is tested."""
+        if self._candidates is not None:
+            return intersection_id in self._candidates
+        from .StrongPip import classify_strong_pips as _classify_strong_pips
+
+        computed = any(intersection_id in ids for ids in self._computed[0].values())
+        result = _classify_strong_pips(self, [intersection_id]).get(intersection_id) if computed else None
+        return result is not None and result.is_strong_pip
 
     @property
     def own_intersection_ids(self) -> list[int]:
@@ -1134,10 +1165,8 @@ class Trellis:
         results = _classify_strong_pips(
             self, intersection_ids, tol=tol, collision_rtol=collision_rtol
         )
-        self.strong_pip_candidates = sorted(
-            iid for iid, r in results.items() if r.is_strong_pip
-        )
-        if choose_default and self.strong_pip_candidates:
+        self._candidates = sorted(iid for iid, r in results.items() if r.is_strong_pip)
+        if choose_default and self._candidates:
             self.select_default_strong_pip()
         return list(self.strong_pip_candidates)
 
@@ -1156,7 +1185,8 @@ class Trellis:
             ValueError: If the ID is not among the classified candidates. Run
                 classify_strong_pips() first, or pick from strong_pip_candidates.
         """
-        if intersection_id not in self.strong_pip_candidates:
+        # The chosen pip was validated when chosen; choosing it again tests nothing.
+        if intersection_id != self.strong_pip and not self._is_candidate(intersection_id):
             raise ValueError(
                 f"Intersection {intersection_id} is not a strong-pip candidate. "
                 f"Candidates: {self.strong_pip_candidates}. "
@@ -1664,7 +1694,7 @@ class Trellis:
         self.pseudoneighbors.clear()
         self.holes.clear()
         self.stable_partitions.clear()
-        self.strong_pip_candidates.clear()
+        self._candidates = None
         self.strong_pip = None
 
     def strong_pip_cut_points(self) -> list[int]:

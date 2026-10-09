@@ -219,9 +219,9 @@ class TangleSession:
         advances that counter, so the cached snapshot is dropped and rebuilt on
         the next call. No caller has to invalidate by hand. A rebuilt
         single-fixed-point trellis gets its fixed point's chosen strong pip back
-        (API-1): it is classified and the remembered pip is found again by its
-        cdists and keys; a pip that is no longer a candidate is left unset with
-        a WARNING. Once a pip is chosen the trellis is cut at its orbit
+        (API-1): the remembered pip is found again by its cdists and keys and
+        tested alone (the other candidates are classified only when read, WP10);
+        a pip that is no longer a candidate is left unset with a WARNING. Once a pip is chosen the trellis is cut at its orbit
         (``Trellis.cut_at_pip_orbit``, D10, D12): a single fixed point's when
         the pip is set or restored, a selection of several at the pips of its
         fixed points on every read (a no-op while they are unchanged), so the
@@ -246,7 +246,6 @@ class TangleSession:
         if rebuild or trellis is None or self._is_stale(trellis):
             trellis = self._trellises[key] = Trellis.from_workbench(self.workbench, selected)
             if len(selected) == 1 and selected[0] in self._strong_pips:
-                trellis.classify_strong_pips(choose_default=False)
                 self._restore_strong_pip(trellis)
         if len(selected) > 1:
             trellis.cut_at_pip_orbit(
@@ -1113,13 +1112,14 @@ class TangleSession:
         return results
 
     def _restore_strong_pip(self, trellis: Trellis, *, warn: bool = True) -> None:
-        """Choose the remembered pip on a classified single-fixed-point trellis,
-        leaving it unset (with a WARNING when ``warn``) if it is no longer a candidate."""
+        """Choose the remembered pip on a single-fixed-point trellis, leaving it
+        unset (with a WARNING when ``warn``) if it is no longer a candidate. Only
+        that crossing is tested (F7): the candidates stay unclassified until read."""
         (fixed_point,) = trellis.fixed_points
         chosen = self._strong_pips[fixed_point]
         pip = trellis.registry.find(chosen)
-        if pip in trellis.strong_pip_candidates:
-            trellis.set_strong_pip(pip)
+        if pip is not None and trellis._is_candidate(pip):
+            trellis.strong_pip = pip  # tested just now: set_strong_pip would test it again
             return
         if warn:
             logger.warning(

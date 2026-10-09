@@ -116,3 +116,30 @@ def test_gathering_follows_the_selection(first: str):
 
     assert all(key[0] is fp3 for key in session.homotopy_partition(fp3).branch_keys)
     assert view_of("dual_graph", graph) == direct_view(case, "dual_graph", fp3)
+
+
+@pytest.mark.parametrize("builder", [lambda: build_k28(blasts=1), lambda: build_nested()], ids=["k28", "nested"])
+def test_a_rebuild_tests_only_the_remembered_pip(builder, monkeypatch):
+    """F7 (WP10): after a blast the recompute tests each remembered pip alone, not
+    every crossing; the candidates, read later, are those of a fresh classification."""
+    from tanglepack import Trellis
+    from tanglepack.topology import StrongPip
+
+    case = builder()
+    session = case.session
+    session.topology()
+    _blast(session, case.zones[0], case.fixed_points)
+
+    tested = []
+    is_strong_pip = StrongPip.is_strong_pip
+    monkeypatch.setattr(
+        StrongPip, "is_strong_pip", lambda trellis, iid, **kw: tested.append(iid) or is_strong_pip(trellis, iid, **kw)
+    )
+    session.topology()
+    remembered = [fp for fp in case.fixed_points if session.chosen_strong_pip(fp) is not None]
+    assert remembered and len(tested) == len(remembered)
+    monkeypatch.undo()
+
+    for fp in case.fixed_points:
+        fresh = Trellis.from_workbench(session.workbench, [fp])
+        assert session.strong_pip_candidates(fp) == fresh.classify_strong_pips(choose_default=False)
