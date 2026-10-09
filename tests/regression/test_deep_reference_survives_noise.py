@@ -11,6 +11,12 @@ recomputes has a witness the iterate table names, consistent in every frame
 it is registered in (an order flip made by cdist noise -- 725 = M(439)
 between M(37) and M(38) while 439 lies outside (37, 38) -- is no witness),
 and the class count does not decrease (D1); no id or count is pinned.
+
+Since WP9 stages 4-6 run on the selection's trellis, so the references are
+read there (WP10: the per-fixed-point trellises carry no stage output, which
+had left the witness loop empty). Since D12 (WP8b) the deep witnesses that
+made the frame fix necessary lie past the pip orbit, so these states no longer
+exercise it; ``test_unlinked_landing_is_read_against_the_pairs_images`` does.
 """
 
 from __future__ import annotations
@@ -34,14 +40,9 @@ def _outer_blast(case, zone) -> None:
     )
 
 
-def _references(case) -> dict:
-    """The reference pairs of each fixed point, after a recompute."""
-    session = case.session
-    session.topology()
-    return {
-        fp: {pair.as_tuple() for pair in session.trellis(fp).reference_pseudoneighbors}
-        for fp in case.fixed_points
-    }
+def _references(case) -> set:
+    """The reference pairs of the selection's trellis, after a recompute."""
+    return {pair.as_tuple() for pair in case.session.topology().trellis.reference_pseudoneighbors}
 
 
 def test_a_deep_blast_loses_no_reference_to_noise():
@@ -54,8 +55,8 @@ def test_a_deep_blast_loses_no_reference_to_noise():
     _outer_blast(case, outer)
     after, classes_after = _references(case), len(case.session.bridge_classes())
 
-    for fp in case.fixed_points:
-        trellis = case.session.trellis(fp)
-        for pair in before[fp] - after[fp]:
-            assert reference_witness(trellis, pair) is not None, (fp, pair)
+    assert before and after, "the selection's trellis carries the references"
+    trellis = case.session.topology().trellis
+    for pair in before - after:
+        assert reference_witness(trellis, pair) is not None, pair
     assert classes_before <= classes_after
