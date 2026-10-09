@@ -109,3 +109,13 @@ def test_machine_budget_propagates_with_context(caplog):
     zone_key, iteration, _bridge_id = exc.blast_context
     assert zone_key == zone.key and iteration == 1
     assert not [r for r in caplog.records if r.name == "tanglepack.loom.Blast"]
+
+
+def test_the_budget_is_per_call():
+    """C6: ``max_points`` budgets ONE call. A budget an earlier call already spent
+    in full does not stop this one: it completes its iteration."""
+    case, zone = _k28_zone()
+    spent = _blast(case, zone, 1).points_created
+    assert spent > 0
+    result = _blast(case, zone, 1, max_points=spent, predict=False)
+    assert result.completed_iterations == 1
