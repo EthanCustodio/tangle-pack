@@ -163,8 +163,36 @@ the crossing / iterate-table path is described; growth, refinement and budgets a
   `get_initial_fundamental_segment` is one code path.
 - Dead code deleted: `IterateTable.backward_chain` / `all_registered_ids`, the registry's
   `unstable_order_array` / `stable_order_array`, the scalar `_curvature_area` and its three helpers
-  (`_parabolic_fit` stays: unit-tested kernel), three `Intersection.synthetic` keywords;
+  (`_parabolic_fit` stayed then; deleted in WP10b, it had no caller), three `Intersection.synthetic` keywords;
   `reindex_from` returns None. `from_branch(b)` holds the anchor for every b (D4).
 - `PointBudgetExceeded.blast_context` declared; `MaxIterationsReached`, `TURNAROUND_LOG_STRETCH`
   exported.
 - `cdist_tol` (registry) is documented as geometry-only: degenerate bridge cuts and polyline clipping.
+
+## Open-issues round WP10b (2026-10-09, branch `oi/wp10b-leftovers`, base `f9d1be0`)
+
+- NUM-12 / C20: a blast's image curves are computed manifold. `iterate_bridge` wraps the machine's
+  image as a `Bridge` with the advanced key BEFORE indexing it and appends it to
+  `TangleWorkbench._image_curves`; a partial piece is that curve object itself (so its `iterated`
+  flag lives on the curve and survives a rebuild). `compute_intersections` re-indexes every image
+  curve of a selected fixed point query-only right after the bulk load and drops a curve that adds
+  no segment of its own (`Tangle.add_manifold` now returns the count of new segments: 0 means growth
+  merged the curve into a branch, edges are deduped by point identity). `create_bridges` cuts image
+  curves like any curve and holds a curve of an indexed fixed point (one with an anchor in the
+  registry) crossed fewer than twice as one partial piece. `clear_bridges` releases only id-carrying
+  bridges: a partial piece is computed manifold and stays indexed. `_recut_bridges_after_growth`
+  (flag clearing + WARNING) is gone; `grow_until` calls `rebuild_bridges`.
+- Before: ANY recompute after a blast dropped every crossing on an image curve (k28 two blasts
+  10 -> 4 crossings, classes 4 -> 3; p3_6_blasts 23 -> 9 classes); now a recompute + rebuild leaves
+  bridges, flags, holes, classes and the exact `describe()` unchanged on every law case,
+  `k28_deep_blast_sliver` and `p3_6_blasts`, and blast / recompute / blast equals blasting straight.
+  Cost: recompute after 9 k28 blasts 1.4 -> 3.8 s.
+- Deferred (found here): growing the STABLE manifold after a zone trim un-trims the zone
+  (`grow_n_times` ends with `_find_tail()` on every manifold of the grown stability); topology
+  unaffected (D10), the zone object goes stale. WP12 / D8 API plan.
+- NUM-19: `_register_bridge` asserts a `BridgeId` runs in unstable-cdist order (an anchor end
+  first). `_validate_saddle` near-parabolic: not a bug (re-measured, `num19_solver.py`).
+- NUM-20: `IterateInference` was right (each side advances on its own saddle); the laws
+  `area_along_iterate_links` / `iterate_link_scales_by_beta` now read each side's own
+  `per_step_beta` (product factor `beta_u(A) * beta_s(B)`, exactly 1 homoclinic).
+- `ManifoldMachine._parabolic_fit` deleted with its pinning test (no caller).

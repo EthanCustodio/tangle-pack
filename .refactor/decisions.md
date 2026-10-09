@@ -163,3 +163,26 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
 - **C18 (under D14) — what is tested.** D14 is tested as "a class connects two tangles only where
   a computed bridge in the trellis connects them" (the clause in `alphabet_closed_under_words`),
   not as "every connecting class has a computed member", which contradicts D11 (`bl`, `bn`).
+
+## 2026-10-09 — WP10b (leftovers), Claude's calls
+
+Revisable by the author; recorded so later runs know they are calls, not the author's words.
+
+- **C19 (under D8; PK-4) — foreign chords pair in STABLE order.** A hole's image chain can
+  leave its base branch for an excursion across another stable branch (another orbit
+  branch or fixed point). The lobe H (bridge plus the stable segment between its ends)
+  holds no point of any stable branch of the trellis, so f(H) holds no anchor; walking any
+  OTHER branch from its anchor, the branch enters and leaves f(H) at successive crossings
+  with the image chain (Jordan alternation), so the empty stretches there are its crossings
+  paired in stable order. The base branch keeps the author's chain-order pairing
+  (2026-09-23). The base is read at a non-anchor end (an anchor lies on every branch, D4),
+  and the two "cannot happen" branches (a base across two branches; a non-anchor crossing
+  abutting a stretch on another branch) are assertions. Checked by point-in-polygon on
+  p3_6_blasts, p3_15, p3_16 and heteroclinic; changes refinement labels only (class tables,
+  holes, words, refined rules and matrices identical).
+- **C20 (under D1; NUM-12) — blast image curves are computed manifold.** The workbench keeps
+  every image curve a blast computes and re-indexes it (query-only) in every recompute until
+  growth has merged it into a branch; `create_bridges` cuts it like any curve, and one
+  crossed fewer than twice is held whole as a partial piece. A recompute, a growth round or
+  a zone (re)definition after a blast keeps every crossing, bridge, partial piece and
+  `iterated` flag, and blast / recompute / blast equals blasting straight.

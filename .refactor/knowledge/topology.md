@@ -328,6 +328,7 @@ depth; the rest of the layer is described in `CLAUDE.md`.
 - PK-4 (slice 2, author): crossing 44 on `p3_6_blasts` is a foreign-branch chord of the lobe
   excursion 41-44 across s(1.0); by Jordan alternation the empty stretch is `(41,44)` (stable
   order), not the base-branch unstable-order pairing. Moves refinement labels only.
+  **Resolved in WP10b (C19).**
 - Residual laws on the deep runs (also on base): `partition_covers_branch` (BCG-4, WP8),
   `dual_face_side_is_geometry` (INT-10, WP10). Inversion x period 2 at 10 steps also fails
   `partition_covers_branch`, `bridge_endpoints_on_own_branch`, `backward_holes_keep_bridge_side`
@@ -596,3 +597,35 @@ flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py
   0.104 -> 0.105 s; k32 / nested_outer series 14.0 / 14.7 s unchanged.
 - **Deferred.** Walls from LATER classes (a second pass; never needed); same-branch disjointness (distinct kept
   bridges of one branch; measured identical, not needed); NUM-20 / NUM-21 untouched, no longer needed for words.
+
+## Open-issues round WP10b (2026-10-09, branch `oi/wp10b-leftovers`, base `f9d1be0`)
+
+- PK-4 / C19: `IteratedHomotopyPartition._empty_stretches` pairs a lobe image's interior crossings
+  per stable branch: chain order on the base branch (author, 2026-09-23), STABLE order on any other.
+  Proof: a lobe H (bridge + stable segment between its ends) holds no point of any stable branch of
+  the trellis (a bridge crosses none in its interior), so f(H) holds no anchor (f(H) holds z_j iff
+  H holds f^-1(z_j)); a branch walked from its anchor starts outside f(H) and enters / leaves at
+  each crossing with f(b). At an inversion anchor that is a corner of f(H) the other half of the
+  stable curve leaves on the opposite side of the sector, so it starts outside too. Measured by
+  point-in-polygon (`test_foreign_chords.py`, `pk4_geom.py`): p3_6_blasts, p3_15, p3_16,
+  heteroclinic all read out, IN, out, IN, out from the anchor.
+- The base is read at a NON-anchor end (an anchor's `stable_key_at` is the C7 row rule, which on
+  `inversion_period2` named the other half: three "ends on another stable branch" WARNINGs) and
+  asserted to lie on one branch; the "no flank" skip in `from_minimal` is an assertion for a
+  non-anchor crossing (every empty stretch lies on one branch).
+- Effect: only the iterated partitions of heteroclinic / p3_15 / p3_16 / p3_6_blasts (+3 elements
+  each: a chord cut at its outward end and a pinched singleton at the inward end), hence iterated
+  names, iterated itineraries and refined-pair labels; class tables, holes, words, refined rules,
+  matrices and reliability identical (`sig.py`, `rr.py`). PartitionFamily WARNINGs 2 -> 0 on those
+  four, 3 -> 0 on inversion_period2; inversion_two_blasts keeps its one "no empty stretch" (the
+  anchor lobe's fold, by the author's rule).
+- Left: the `BridgeClass` cross-branch skips (`_image_chain` off-branch image end,
+  `_collect_image_evidence`'s uncovered branch) fire on nothing measured; assertion candidates for
+  the D8 API pass. The "no empty stretch" text is misleading at the anchor lobe (WP12 docs pass).
+- NUM-19 bullet 4 (walk vs class ownership) is stale since C15: both read
+  `element_of_intersection` / `owner_of_intersection` or the exact `interval_at`; the only slack is a
+  scaled landing end's relative error.
+- Plotting: `CartoonLayout.tol` / `ZoneLayout.tol` and `_cluster` deleted; ranks are
+  `sorted({float(c) ...})` of the partition boundaries, `_rank_of(representatives, cdist)` exact
+  (every cartoon artist identical, `wp11/cartoon_sig.py`). `span_contains` / `owns_cdist` docstrings
+  name their real slack.

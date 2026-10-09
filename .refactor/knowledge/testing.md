@@ -683,3 +683,43 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   `bn` / `bm` ambiguous); the existing tests of those files pass.
 - Suite 1102 passed / 26 skipped / 5 deselected / 1 xfailed in 132.0 s after the review fix round (WP11 base: 1088 / 21 / 4 / 2 in 132 s).
 
+## Open-issues round WP10b (2026-10-09, branch `oi/wp10b-leftovers`, base `f9d1be0`)
+
+- KNOWN_ISSUES 1 -> 1, NOT_APPLICABLE unchanged.
+- Mutating law tier (`MUTATING_LAYERS["recompute"]`): NEW first law `recompute_keeps_the_topology`
+  (D1, NUM-12: snapshot of sorted `(bridge id, iterated)`, the number of partial pieces, sorted
+  `(hole.bounding_ids, iterate, bridge_side)`, `bridge_classes().describe()` and
+  `symbolic_dynamics().describe()`, around `compute_intersections(preserve_ids=True)` +
+  `rebuild_bridges()`; counts bridges); `recompute_preserves_ids` STRENGTHENED to every crossing
+  back under its own id (`set(after) == set(before)` and `_same_crossing` per id; the "may drop out"
+  caveat is gone). On base both fail on k28_one_blast, k28_two_blasts, nested, nested_inner_blasts,
+  inversion_one_blast, inversion_two_blasts, heteroclinic (the layer reports the first; the ids law
+  alone was checked with `.../tmp/wp10b/ids_law_base.py`).
+- Laws `area_along_iterate_links` / `iterate_link_scales_by_beta` (NUM-20) read each side's own
+  saddle: product factor `beta_u(A) * beta_s(B)` (exactly 1 homoclinic), stable prediction
+  `beta_s(B) * s`. No law case has a heteroclinic link (NUM-21).
+- Regressions: `test_growth_after_a_blast.py` (k28 grown in both stabilities, nested in its stable
+  manifolds only: p1's unstable arm escapes and costs 2 s; every pre-growth crossing re-found within
+  its own unstable segment length, class / closed counts non-decreasing; one blast + recompute +
+  blast == two blasts, id-free `describe()`), `test_heteroclinic_iterate_links.py` (unblasted
+  `build_nested(outer_blasts=0, 13u, 16s, through="intersected")`: 12 heteroclinic links, base laws
+  fail on 4 -> 8), `test_foreign_chords.py` (`p3_6_blasts`, `p3_15`, `p3_16`, `heteroclinic`: no
+  "no empty stretch" cut; Jordan check by point-in-polygon on the lobe image, each IN stretch an
+  empty stretch; non-vacuous on all four).
+- Unit: `test_iterated_cut.py` rewritten to C19 (`_FakeTrellis` crossings carry `stable_cdist`,
+  `is_anchor`, `manifold_a_key`): stable-order foreign chords with the p3_6_blasts cdists, the base
+  read at a non-anchor end (inversion_period2 pattern), a base across two branches asserts, the
+  foreign-far-end injection on nested now asserts. `test_grow_until.py`:
+  `test_a_growth_round_keeps_the_blast` replaces `test_grow_until_clears_the_iterated_flag_it_invalidates`
+  (the old test pinned the WARNING that disappears). `test_bridge_identity.py`:
+  `test_a_reversed_bridge_id_is_refused`. `test_stable_trim.py`: exact-node and past-the-end cases
+  (pass on base). `test_plot_topology.py`: ranks strictly increasing (no `layout.tol`). Deleted:
+  `test_closed_form_curvature.py` (with `_parabolic_fit`).
+- Base check: every new / edited test file copied over a `git archive` of `f9d1be0`
+  (`.../tmp/wp10b/basecheck`): 26 failures (7 recompute-layer cases, growth x2 + order, foreign
+  chords x8, grow_until, iterated cut x4, reversed id) and the heteroclinic-link regression with
+  the base `laws.py`; the stable-trim and plotting tests pass there.
+- Suite 1113 passed / 26 skipped / 5 deselected / 1 xfailed in 143.8 s (base 1102 / 26 / 5 / 1 in
+  137.9 s back to back; a first branch run at 152.7 s led to slimming the new regressions);
+  `-m perf` 5 passed in 44.9 s.
+
