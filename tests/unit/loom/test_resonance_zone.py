@@ -8,15 +8,13 @@ regions use.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from cases import build_k10, build_period3
 from helpers.fakes import bare_fixed_point
-from tanglepack.loom.ResonanceZone import ring_cycles
-from tanglepack.loom.TangleSession import _zone_ring_order
+from tanglepack.loom.ResonanceZone import ring_cycles, ring_order
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.geometry import polyline_midpoint
 from tanglepack.topology.TopologyResults import Arc
@@ -211,8 +209,7 @@ def test_a_missing_iterate_leaves_the_ring_open():
     fp = bare_fixed_point(3)
     cuts = [_cut(fp, (0, 0), (1, 0)), _cut(fp, (1, 0), (2, 0))]
     assert ring_cycles(cuts) == [[0, 1]]
-    open_zone = SimpleNamespace(boundary_intersections=cuts)
-    assert _zone_ring_order(open_zone) == []
+    assert ring_order(cuts) == []
 
 
 def test_p3_ring_order_visits_each_stable_branch_once_in_ring_order():
@@ -220,7 +217,7 @@ def test_p3_ring_order_visits_each_stable_branch_once_in_ring_order():
     the same orbit point and branch index."""
     session = build_period3().session
     (zone,) = session.resonance_zones.values()
-    order = _zone_ring_order(zone)
+    order = ring_order(zone.boundary_intersections)
     assert sorted(order, key=lambda key: key[2:]) == zone.fixed_point.branch_cycle("stable")
     by_stable = {cut.manifold_b_key: cut for cut in zone.boundary_intersections}
     for key, following in zip(order, order[1:] + order[:1]):

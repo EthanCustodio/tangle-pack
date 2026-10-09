@@ -50,7 +50,7 @@ from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
 from .BaseManifold import BaseManifold
 from .Bridge import Bridge, BridgeId
-from .Intersection import Intersection, Stability
+from .Intersection import Intersection, ManifoldKey, Stability
 from .IntersectionRegistry import DEDUP_RTOL, IntersectionRegistry
 from .IterateInference import infer_iterates
 from .diagnostics import (
@@ -2107,10 +2107,46 @@ class TangleWorkbench:
         for i, bridge in enumerate(bridges):
             bridge.plot(color=palette[i % len(palette)])
 
+    def trim_stable_at(self, key: ManifoldKey, cdist: float) -> BaseManifold:
+        """
+        Cut a stable branch at the first node past its root at or beyond ``cdist``.
+
+        The one stable trim: :meth:`trim_stable_manifolds` cuts at the outermost
+        crossing, a resonance zone at its pip. The node is the one the crossing's
+        own stable segment ends at, so the crossing stays on the branch. Only the
+        tail pointer moves; recompute the intersections afterwards.
+
+        Args:
+            key: The stable branch.
+            cdist: The stable canonical distance to keep.
+
+        Returns:
+            The (trimmed) stable manifold. A branch with no node at or past
+            ``cdist`` is left untrimmed, with a WARNING.
+        """
+        manifold = self.manifolds[key]
+        new_tail = next(
+            (
+                node
+                for node in manifold._walk_nodes(stop_at_final=False)
+                if node is not manifold.root and node.get_cdist("stable") >= cdist
+            ),
+            None,
+        )
+        if new_tail is None:
+            logger.warning(
+                "trim_stable_at: %s has no node at or past stable cdist %r; leaving it "
+                "untrimmed",
+                key,
+                cdist,
+            )
+        else:
+            manifold.tail = new_tail
+        return manifold
+
     def trim_stable_manifolds(self, fixed_point: FixedPoint) -> None:
         """
-        Trims the stable manifolds attached to the fixed point
-        to just after the last intersection point.
+        Trim each stable branch of a fixed point just past its outermost crossing.
 
         Args:
             fixed_point (FixedPoint): fixed point manifolds will be
@@ -2124,25 +2160,16 @@ class TangleWorkbench:
 
         Note:
             The outermost crossing is read off the registry (grouped by the stable
-            branch key each crossing records), not off the segment index: the
-            registry is the single source of truth for resolved crossings. The new
-            tail is then the first node of the branch at or past that crossing --
-            the same node the old segment-based lookup returned.
+            branch key each crossing records), the single source of truth for
+            resolved crossings; the cut is :meth:`trim_stable_at`.
         """
-
-        outermost: dict[tuple, float] = {}
+        outermost: dict[ManifoldKey, float] = {}
         for _iid, intersection in self._intersection_registry:
             key = intersection.manifold_b_key
-            if key is None:
-                continue
-            cdist = float(intersection.stable_cdist)
-            if cdist > outermost.get(key, -np.inf):
-                outermost[key] = cdist
+            outermost[key] = max(outermost.get(key, -np.inf), float(intersection.stable_cdist))
 
         for manifold in self._iter_manifolds(fixed_point, "stable"):
-
             target = outermost.get(manifold.manifold_key)
-
             # A branch whose only crossing is the anchor (stable cdist 0) has no
             # outermost crossing to trim to: trimming there would collapse the
             # manifold onto its own root and destroy the branch.
@@ -2153,28 +2180,7 @@ class TangleWorkbench:
                     manifold.manifold_key,
                 )
                 continue
-
-            # the first node at or past the outermost crossing -- the node the
-            # crossing's own segment ends at. get_cdist takes the stability because
-            # the branch point carries one cdist per stability.
-            new_tail = None
-            for node in manifold._walk_nodes(stop_at_final=False):
-                if node is manifold.root:
-                    continue
-                if node.get_cdist("stable") >= target:
-                    new_tail = node
-                    break
-
-            if new_tail is None:
-                logger.warning(
-                    "trim_stable_manifolds: %s has no node at or past its outermost "
-                    "crossing (stable cdist %r); leaving it untrimmed",
-                    manifold.manifold_key,
-                    target,
-                )
-                continue
-
-            manifold.tail = new_tail
+            self.trim_stable_at(manifold.manifold_key, target)
 
     @staticmethod
     def _stretch_per_round(fixed_point: FixedPoint, stability: Stability) -> float:

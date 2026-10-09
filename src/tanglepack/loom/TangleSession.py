@@ -30,7 +30,7 @@ from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartit
 from ..topology.SymbolicDynamics import SymbolicDynamics
 from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
-from .ResonanceZone import ResonanceZone, define_resonance_zone, ring_cycles
+from .ResonanceZone import ResonanceZone, define_resonance_zone, ring_order
 from .Blast import BlastResult, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
 from .Topology import Topology
@@ -851,7 +851,7 @@ class TangleSession:
 
         arc_order: dict = {}
         for zone in zones:
-            order = _zone_ring_order(zone)
+            order = ring_order(zone.boundary_intersections)
             vertices = zone.boundary_vertices
             if not order or vertices is None or len(vertices) < 3:
                 continue
@@ -1733,17 +1733,3 @@ class TangleSession:
         return handles
 
 
-def _zone_ring_order(zone: ResonanceZone) -> list:
-    """
-    The stable branch keys of a zone's boundary in ring order (see
-    :func:`~tanglepack.loom.ResonanceZone.ring_cycles`).
-
-    Returns:
-        The branch keys, cycle after cycle; empty when a cycle does not close
-        (iterates missing).
-    """
-    cuts = zone.boundary_intersections
-    cycles = ring_cycles(cuts)
-    if any(cuts[cycle[-1]].manifold_b_key[2:] != cuts[cycle[0]].manifold_a_key[2:] for cycle in cycles):
-        return []
-    return [cuts[index].manifold_b_key for cycle in cycles for index in cycle]

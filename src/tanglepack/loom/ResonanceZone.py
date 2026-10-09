@@ -222,7 +222,7 @@ class ResonanceZone:
         unstable_arcs, stable_arcs = [], []
         for ix in cuts:
             pip = ix.coords
-            pip_id = _live_id(registry, ix)
+            pip_id = registry.find(ix)
             unstable_arcs.append(
                 arc(ix.manifold_a_key, "unstable", ix.unstable_cdist, pip, pip_id)
             )
@@ -277,7 +277,7 @@ class ResonanceZone:
             The pip's current registry id, or None if the crossing is no longer in
             the registry (it can be trimmed away by a later zone).
         """
-        return _live_id(workbench.intersection_registry, self.boundary_intersection)
+        return workbench.intersection_registry.find(self.boundary_intersection)
 
     @property
     def area(self) -> float:
@@ -391,6 +391,23 @@ def ring_cycles(cuts: list[Intersection]) -> list[list[int]]:
     return cycles
 
 
+def ring_order(cuts: list[Intersection]) -> list[ManifoldKey]:
+    """
+    The stable branch keys of a zone's boundary in ring order (:func:`ring_cycles`).
+
+    Args:
+        cuts: The zone's cut crossings (:attr:`ResonanceZone.boundary_intersections`).
+
+    Returns:
+        The branch keys, cycle after cycle; empty when a cycle does not close
+        (iterates missing).
+    """
+    cycles = ring_cycles(cuts)
+    if any(cuts[cycle[-1]].manifold_b_key[2:] != cuts[cycle[0]].manifold_a_key[2:] for cycle in cycles):
+        return []
+    return [cuts[index].manifold_b_key for cycle in cycles for index in cycle]
+
+
 def _anchor_id(
     registry: "IntersectionRegistry", key: ManifoldKey
 ) -> Optional[int]:
@@ -430,60 +447,15 @@ def _anchor_id(
     )
 
 
-def _live_id(
-    registry: "IntersectionRegistry", intersection: Intersection
-) -> Optional[int]:
-    """The id of ``intersection`` in the CURRENT registry, matched not assumed.
-
-    Args:
-        registry: The registry to resolve against.
-        intersection: The crossing to find, by canonical distances and branch keys.
-
-    Returns:
-        Its current registry id, or None if it is no longer registered.
-    """
-    return registry.find(intersection)
-
-
-def _trim_stable_at(workbench: "TangleWorkbench", ix: Intersection) -> "BaseManifold":
-    """Trim the stable branch of intersection ``ix`` to just past it. See
-    :func:`trim_stable_at_intersection`."""
-    key = ix.manifold_b_key
-    if key is None:
-        raise ValueError(
-            "Intersection has no stable side (manifold_b_key); cannot trim a stable "
-            "manifold at it."
-        )
-    manifold = workbench.manifolds[key]
-    tangle = workbench.Tangle
-    seg_ids = tangle._manifold_segs.get(manifold)
-    if not seg_ids:
-        raise ValueError(
-            f"Stable manifold {key} has no indexed segments; run "
-            "compute_intersections() before trimming."
-        )
-
-    target = ix.stable_cdist
-    tol = workbench.intersection_registry.cdist_tol
-    far = [(seg, tangle._seg_lookup[sid].p0_seg1.get_cdist("stable"))
-           for sid, seg in ((s, tangle._seg_lookup[s]) for s in seg_ids)]
-    beyond = [(seg, cdist) for seg, cdist in far if cdist >= target - tol]
-    seg, _ = (min(beyond, key=lambda sc: sc[1]) if beyond
-              else max(far, key=lambda sc: sc[1]))
-    manifold.tail = seg.p0_seg1
-    return manifold
-
-
 def trim_stable_at_intersection(
     workbench: "TangleWorkbench", intersection_id: int
 ) -> "BaseManifold":
     """
     Truncate the stable manifold carrying an intersection to just past it.
 
-    Resolves the stable branch from the intersection's ``manifold_b_key``, finds the
-    segment whose far endpoint is the first one at or beyond the intersection's stable
-    canonical distance, and sets ``manifold.tail`` to that endpoint — the chosen-pip
-    generalization of :meth:`TangleWorkbench.trim_stable_manifolds`.
+    Cuts the stable branch of the intersection's ``manifold_b_key`` at its stable
+    canonical distance (:meth:`TangleWorkbench.trim_stable_at`, the one stable trim
+    :meth:`TangleWorkbench.trim_stable_manifolds` uses too).
 
     The trim only moves the tail pointer; call ``workbench.compute_intersections(...)``
     afterward (as :func:`define_resonance_zone` does) to rebuild crossings on the
@@ -495,11 +467,9 @@ def trim_stable_at_intersection(
 
     Returns:
         The trimmed stable BaseManifold.
-
-    Raises:
-        ValueError: If the intersection has no stable side or its manifold is not indexed.
     """
-    return _trim_stable_at(workbench, workbench.intersection_registry[intersection_id])
+    ix = workbench.intersection_registry[intersection_id]
+    return workbench.trim_stable_at(ix.manifold_b_key, ix.stable_cdist)
 
 
 def define_resonance_zone(
@@ -552,7 +522,7 @@ def define_resonance_zone(
         if bkey is None or bkey in previous_tails:
             continue
         previous_tails[bkey] = workbench.manifolds[bkey].tail
-        _trim_stable_at(workbench, ix)
+        workbench.trim_stable_at(bkey, ix.stable_cdist)
 
     intersection_ids: list[int] = []
     if recompute:
