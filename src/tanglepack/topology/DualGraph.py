@@ -45,7 +45,8 @@ Dev Notes:
 * A face's side of an edge is combinatorial: the arrangement traverses every
   face with the face on the RIGHT of each half-edge, and a stable arc traversed
   ``hi -> lo`` runs in the stable dynamical direction, so ``reverse`` alone
-  gives the side (``"right" if arc.reverse else "left"``).
+  gives the side (:func:`face_side`, which reads an unstable arc the same way
+  in ITS dynamical direction, ``lo -> hi``).
 * The fundamental segment is declared by the strong pip, exactly as the old
   fill was: on the pip's own stable branch, the arcs meeting
   ``(cdist(f^k(q0)), cdist(q0)]`` with ``k = k_value``, via
@@ -72,19 +73,42 @@ Dev Notes:
   Nesting is then one point-in-polygon test per component
   (:meth:`DualGraph._innermost_container`), the chalkboard's one containment
   test per tangle.
+* Markers and enclosure (D13, WP9b). The map is a homeomorphism, so a closed
+  curve made of manifold pieces holds a marker -- a periodic point or a hole
+  -- exactly when its image holds the marker's image. :attr:`DualGraph.markers`
+  places them combinatorially: a periodic point at its anchor vertex (``f``
+  moves it to the next orbit point), a hole BESIDE ITS OWN BRIDGE on its
+  bridge side (``f`` moves hole ``(origin, n)`` to ``(origin, n + 1)``). The
+  hole sits beside its own bridge, not in the trellis lobe between the bridge
+  and the stable manifold, because a propagated hole lies beside the image
+  SUB-ARC of its containing bridge (INT-2): the lobe-corner placement got 2 of
+  83 member images wrong, all iterate ``-1`` holes. An unstable arc is never
+  cut by a curve (curves cross the stable manifold only), so beside it is one
+  piece of one face. A hole whose image is no hole (a reference, or the last
+  ``+j`` of a period-k orbit) has that image placed beside the registered image
+  chain of its bridge, at the image of the crossing it hugs (table only;
+  nothing when the chain is not kept). :meth:`DualGraph.enclosed` floods the
+  faces cut by a curve; a curve that crosses a face with several boundary
+  components (a merged face, or the unbounded one with infinity) may pass each
+  component on either side, so every placement is returned and the caller
+  asks whether SOME routing holds the right markers: the routing is free
+  because nothing but the markers and the walls is known inside a face.
 """
 
 from __future__ import annotations
 
+import itertools
 import logging
 from dataclasses import dataclass, field
-from typing import Iterable, Literal, Optional, Sequence, TYPE_CHECKING
+from functools import cached_property
+from typing import Hashable, Iterable, Literal, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
 
 from ..numerics.geometry import point_in_polygon, signed_polygon_area
 from .ElementNaming import ElementName, ElementNaming
+from .MinimalTrellis import image_chain
 from .TopologyResults import (
     Arc,
     ElementRef,
@@ -113,6 +137,27 @@ FaceKind = Literal["region", "open", "outer"]
 
 #: Which side(s) of its stable edge a stable node faces.
 NodeSide = Literal["left", "right", "both"]
+
+#: A point the map carries along an orbit (D13): ``("orbit", fixed-point
+#: position, orbit index)`` for a periodic point, ``("hole", origin, iterate)``
+#: for a hole.
+Marker = tuple
+
+#: Where a curve runs through a face: ``(edge key in, side in, edge key out,
+#: side out)``, each end at the middle of a stable edge, on the side of the edge
+#: the face lies on.
+Chord = tuple
+
+
+def face_side(arc: Arc) -> Side:
+    """
+    The side of an arc the face traversing it lies on, in the arc's dynamical direction.
+
+    A face lies on the RIGHT of every half-edge it traverses, and the dynamical
+    direction runs ``hi -> lo`` on a stable arc (toward the anchor) and
+    ``lo -> hi`` on an unstable one (away from it).
+    """
+    return "right" if arc.reverse == (arc.kind == "stable") else "left"
 
 
 def _position_of(
@@ -403,13 +448,13 @@ class FaceNode:
 
 
 class _UnionFind:
-    """Union-find over face indices, with a synthetic root for the unbounded face."""
+    """Union-find over hashable items (face indices, face pieces); items are added on first use."""
 
     def __init__(self) -> None:
-        """Build an empty structure; items are added on first use."""
-        self._parent: dict[int, int] = {}
+        """Build an empty structure."""
+        self._parent: dict[Hashable, Hashable] = {}
 
-    def find(self, item: int) -> int:
+    def find(self, item: Hashable) -> Hashable:
         """The representative of an item's class (adding the item if new)."""
         self._parent.setdefault(item, item)
         while self._parent[item] != item:
@@ -417,7 +462,7 @@ class _UnionFind:
             item = self._parent[item]
         return item
 
-    def union(self, a: int, b: int) -> None:
+    def union(self, a: Hashable, b: Hashable) -> None:
         """Merge the classes of two items."""
         root_a, root_b = self.find(a), self.find(b)
         if root_a != root_b:
@@ -892,7 +937,7 @@ class DualGraph:
             for arc in face.arcs:
                 if arc.kind != "stable":
                     continue
-                side: Side = "right" if arc.reverse else "left"
+                side = face_side(arc)
                 stable_node = self._nodes_of_edge[arc.edge_key][side]
                 previous = stable_node.faces.get(side)
                 assert previous is None or previous is node, (
@@ -1078,6 +1123,271 @@ class DualGraph:
             return None
         image = self.arrangement.image_of(face.faces[0], n)
         return None if image is None else self._face_node_of.get(id(image))
+
+    # ── markers and enclosure (D13) ─────────────────────────────────────────
+
+    @cached_property
+    def unstable_edges(self) -> dict["BridgeId", tuple]:
+        """The edge key of each kept bridge's unstable arc, by :data:`BridgeId`."""
+        return {
+            tuple(arc.bridge_id): arc.edge_key
+            for face in self.arrangement.faces
+            for arc in face.arcs
+            if arc.kind == "unstable"
+        }
+
+    @cached_property
+    def markers(self) -> dict[Marker, tuple]:
+        """
+        Where each marker sits on the sparse arrangement (see the module Dev Notes).
+
+        Returns:
+            ``{marker: place}``, ``place`` being ``("vertex", crossing id)`` for a
+            periodic point (its anchor) and ``("beside", unstable edge key, side)``
+            for a hole (beside its own bridge on its bridge side), or for the
+            image of a hole whose image is no hole (beside the kept image chain
+            of its bridge, at the image of the crossing it hugs).
+        """
+        trellis = self.trellis
+        places: dict[Marker, tuple] = {}
+        for crossing_id, crossing in trellis.registry:
+            if crossing.is_anchor and crossing_id in trellis:
+                key = crossing.manifold_a_key
+                orbit = ("orbit", _position_of(key[0], trellis.fixed_points), key[2])
+                places[orbit] = ("vertex", crossing_id)
+        holes = {(hole.origin, hole.iterate): hole for hole in self.minimal.holes}
+        assert len(holes) == len(self.minimal.holes), "two holes share one orbit step"
+        flip = not trellis.orientation_preserving
+        for (origin, iterate), hole in holes.items():
+            bridge = trellis.bridge_between(*hole.bounding_ids)
+            edge = self.unstable_edges.get(bridge.id) if bridge is not None else None
+            if edge is None:
+                continue
+            places[("hole", origin, iterate)] = ("beside", edge, hole.bridge_side)
+            if (origin, iterate + 1) in holes:
+                continue
+            image = trellis.iterate(hole.near_intersection_id, 1)
+            for pair in image_chain(trellis, bridge.id) or ():
+                if image in pair and pair in self.unstable_edges:
+                    side = OPPOSITE_SIDE[hole.bridge_side] if flip else hole.bridge_side
+                    places[("hole", origin, iterate + 1)] = ("beside", self.unstable_edges[pair], side)
+        return places
+
+    def image_marker(self, marker: Marker) -> Optional[Marker]:
+        """
+        The image of a marker under one map step.
+
+        Args:
+            marker: A key of :attr:`markers`.
+
+        Returns:
+            The next point of a periodic orbit, or the hole one step forward
+            on its orbit; None when that hole is neither a hole nor placed.
+        """
+        if marker[0] == "orbit":
+            _kind, position, orbit_index = marker
+            period = self.trellis.fixed_points[position].period
+            return ("orbit", position, (orbit_index + 1) % period)
+        image = ("hole", marker[1], marker[2] + 1)
+        return image if image in self.markers else None
+
+    def enclosed(
+        self,
+        along: Iterable[tuple],
+        chords: Iterable[tuple[FaceNode, Chord]] = (),
+        along_halves: Iterable[tuple] = (),
+    ) -> Optional[list[dict[Marker, Optional[bool]]]]:
+        """
+        Which markers a closed curve holds.
+
+        The curve runs along whole edges (``along``), along halves of the
+        stable edges it ends a chord on (``along_halves``, each named
+        ``(edge key, the end vertex of that half)``) and through faces
+        (``chords``). The faces are flooded across every edge the curve does
+        not run along; a chord cuts its face's ring at the middles of its two
+        edges.
+
+        Args:
+            along: Edge keys the curve runs along.
+            chords: ``(face node, chord)`` per face crossing.
+            along_halves: Halves of split stable edges the curve runs along.
+
+        Returns:
+            One ``{marker: inside}`` per routing (``None`` for a marker on the
+            curve); an EMPTY list when two chords of one face cross, so no
+            routing keeps the curve simple; None when the curve is beyond this
+            model: two chord ends on one side of one edge (one crossing per
+            edge, at its middle), a chord whose ends lie on two boundary
+            components, or chords on two components of one face.
+        """
+        along, halves = set(along), set(along_halves)
+        by_face: dict[int, list[Chord]] = {}
+        for face, chord in chords:
+            by_face.setdefault(face.index, []).append(chord)
+        ends = [end for chords_ in by_face.values() for c in chords_ for end in (c[:2], c[2:])]
+        if len(set(ends)) < len(ends):
+            return None
+        split = {edge for edge, _side in ends}
+        rings: dict[int, int] = {}
+        for index, face_chords in by_face.items():
+            ring = self._ring_of(self.face_nodes[index], face_chords)
+            if ring is None:
+                return None
+            rings[index] = ring
+        slots = [
+            (index, component)
+            for index, ring in rings.items()
+            for component in self._components(self.face_nodes[index])
+            if component != ring
+        ]
+        options = [range(len(by_face[index]) + 1) for index, _component in slots]
+        routings = []
+        for choice in itertools.product(*options):
+            flood = self._flood(along, halves, by_face, rings, split, dict(zip(slots, choice)))
+            if flood is None:
+                return []
+            union, outside, pieces_at = flood
+            held: dict[Marker, Optional[bool]] = {}
+            for marker, place in self.markers.items():
+                roots = {union.find(piece) for piece in pieces_at.get(place, ())}
+                held[marker] = roots.pop() != outside if len(roots) == 1 else None
+            routings.append(held)
+        return routings
+
+    @staticmethod
+    def _components(face: FaceNode) -> list:
+        """A face node's boundary components: its rings, and infinity on the unbounded node."""
+        return list(range(len(face.faces))) + (["infinity"] if face.is_unbounded else [])
+
+    @staticmethod
+    def _ring_of(face: FaceNode, chords: list[Chord]) -> Optional[int]:
+        """The one ring of a face holding both ends of every chord, or None."""
+        holding = {
+            r
+            for r, region in enumerate(face.faces)
+            if all(
+                any(arc.edge_key == edge and face_side(arc) == side for arc in region.arcs)
+                for chord in chords
+                for edge, side in (chord[:2], chord[2:])
+            )
+        }
+        return holding.pop() if len(holding) == 1 else None
+
+    def _flood(
+        self,
+        along: set,
+        halves: set,
+        by_face: dict[int, list[Chord]],
+        rings: dict[int, int],
+        split: set,
+        placement: dict[tuple, int],
+    ) -> Optional[tuple[_UnionFind, Hashable, dict[tuple, list]]]:
+        """
+        Flood the faces cut by one routing of a curve.
+
+        A piece of a face ring is a whole arc, or the half of a split stable
+        edge at one end vertex. Pieces of one face are joined unless a chord
+        separates them; pieces on the two sides of an edge (or half) the curve
+        does not run along are joined across it.
+
+        Returns:
+            ``(union-find, the root of infinity, pieces at each marker place)``,
+            or None when two chords of one ring cross.
+        """
+        union = _UnionFind()
+
+        def pieces(index: int, r: int, i: int, arc: Arc) -> list[tuple]:
+            if arc.edge_key in split:
+                return [(index, r, i, "tail"), (index, r, i, "head")]
+            return [(index, r, i, "whole")]
+
+        for face in self.face_nodes:
+            components = self._components(face)
+            ring = rings.get(face.index)
+            for r, region in enumerate(face.faces):
+                if r != ring:
+                    for i, arc in enumerate(region.arcs):
+                        for piece in pieces(face.index, r, i, arc):
+                            union.union(piece, ("component", face.index, r))
+            if ring is None:
+                for component in components:
+                    union.union(("component", face.index, component), ("component", face.index, components[0]))
+                continue
+            regions = self._cut_ring(union, face, ring, by_face[face.index], pieces)
+            if regions is None:
+                return None
+            for component in components:
+                if component != ring:
+                    union.union(
+                        ("component", face.index, component),
+                        regions[placement[(face.index, component)]],
+                    )
+
+        pieces_at: dict[tuple, list] = {}
+        for face in self.face_nodes:
+            for r, region in enumerate(face.faces):
+                for i, arc in enumerate(region.arcs):
+                    for piece in pieces(face.index, r, i, arc):
+                        part = piece[3]
+                        vertices = {
+                            "whole": (arc.tail_id, arc.head_id),
+                            "tail": (arc.tail_id,),
+                            "head": (arc.head_id,),
+                        }[part]
+                        for vertex in vertices:
+                            pieces_at.setdefault(("vertex", vertex), []).append(piece)
+                        if arc.kind == "unstable":
+                            pieces_at.setdefault(("beside", arc.edge_key, face_side(arc)), []).append(piece)
+                        half = (arc.edge_key, "whole" if part == "whole" else vertices[0])
+                        if arc.edge_key not in along and half not in halves:
+                            union.union(piece, ("edge",) + half)
+        return union, union.find(("component", self.unbounded.index, "infinity")), pieces_at
+
+    @staticmethod
+    def _cut_ring(
+        union: _UnionFind, face: FaceNode, ring: int, chords: list[Chord], pieces
+    ) -> Optional[list[tuple]]:
+        """
+        Cut one ring by its chords: ``m`` chords that do not cross leave ``m + 1`` regions.
+
+        The chord ends cut the ring into segments, each running from the head
+        half of one cut edge to the tail half of the next. A chord from ``t``
+        to ``u`` glues the segment ending at ``t`` to the one starting at
+        ``u``, and the one starting at ``t`` to the one ending at ``u``.
+
+        Returns:
+            One representative per region, in ring order, or None when two
+            chords cross.
+        """
+        arcs = face.faces[ring].arcs
+        chord_at = {
+            next(i for i, arc in enumerate(arcs) if arc.edge_key == edge and face_side(arc) == side): k
+            for k, chord in enumerate(chords)
+            for edge, side in (chord[:2], chord[2:])
+        }
+        cuts = sorted(chord_at)
+        before: dict[int, tuple] = {}
+        after: dict[int, tuple] = {}
+        for j, (start, stop) in enumerate(zip(cuts, cuts[1:] + cuts[:1])):
+            segment = ("segment", face.index, j)
+            union.union((face.index, ring, start, "head"), segment)
+            i = (start + 1) % len(arcs)
+            while i != stop:
+                for piece in pieces(face.index, ring, i, arcs[i]):
+                    union.union(piece, segment)
+                i = (i + 1) % len(arcs)
+            union.union((face.index, ring, stop, "tail"), segment)
+            after[start] = before[stop] = segment
+        for k in range(len(chords)):
+            t, u = (i for i in cuts if chord_at[i] == k)
+            union.union(before[t], after[u])
+            union.union(after[t], before[u])
+        regions: dict[Hashable, tuple] = {}
+        for start in cuts:
+            regions.setdefault(union.find(after[start]), after[start])
+        if len(regions) != len(chords) + 1:
+            return None
+        return list(regions.values())
 
     # ── views ───────────────────────────────────────────────────────────────
 

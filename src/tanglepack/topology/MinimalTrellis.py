@@ -108,6 +108,8 @@ class MinimalTrellis:
             bridges only, sharing the parent's registry and manifolds).
         classes: The evidence table activity was read from (every bridge's
             class); :attr:`alphabet` is its restriction to the kept bridges.
+        holes: The holes it was reduced by: the markers of the non-crossing
+            rule (D13, :attr:`~.DualGraph.DualGraph.markers`).
     """
 
     trellis: Trellis
@@ -122,6 +124,7 @@ class MinimalTrellis:
     dropped_bridge_ids: list["BridgeId"]
     sparse: Trellis
     classes: "BridgeClassTable"
+    holes: list["Hole"]
     _arrangement: Optional[Arrangement] = field(default=None, repr=False)
 
     # ── membership ──────────────────────────────────────────────────────────
@@ -286,6 +289,7 @@ def minimal_trellis(
         spans are each logged as a WARNING and skipped, never invented.
     """
     tol = trellis.registry.cdist_tol
+    holes = list(holes)
 
     # 1. Hole bridges.
     hole_ids: dict[frozenset, "BridgeId"] = {}
@@ -430,6 +434,7 @@ def minimal_trellis(
         dropped_bridge_ids=dropped,
         sparse=sparse,
         classes=classes,
+        holes=holes,
     )
     logger.info("%s", minimal.summary())
     return minimal
