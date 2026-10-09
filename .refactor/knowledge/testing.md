@@ -716,7 +716,7 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   (pass on base). `test_plot_topology.py`: ranks strictly increasing (no `layout.tol`). Deleted:
   `test_closed_form_curvature.py` (with `_parabolic_fit`).
 - Base check: every new / edited test file copied over a `git archive` of `f9d1be0`
-  (`.../tmp/wp10b/basecheck`): 26 failures (7 recompute-layer cases, growth x2 + order, foreign
+  (`.../tmp/wp10b/basecheck`): 24 failures (7 recompute-layer cases, growth x2 + order, foreign
   chords x8, grow_until, iterated cut x4, reversed id) and the heteroclinic-link regression with
   the base `laws.py`; the stable-trim and plotting tests pass there.
 - Suite 1113 passed / 26 skipped / 5 deselected / 1 xfailed in 143.8 s (base 1102 / 26 / 5 / 1 in
