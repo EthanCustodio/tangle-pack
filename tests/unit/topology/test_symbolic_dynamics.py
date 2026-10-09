@@ -474,7 +474,8 @@ def test_a_straddling_landing_is_unreliable(layout):
 # The driver on the synthetic layout: closure and evidence diagnosis
 # --------------------------------------------------------------------------- #
 class _Crossings:
-    """A trellis stand-in: fixed points and ``intersection(id)`` with key and sign."""
+    """A trellis stand-in: fixed points, ``intersection(id)`` with key and sign, and
+    every arc on the first fixed point's first unstable branch."""
 
     def __init__(self, fixed_points, crossings: dict) -> None:
         self.fixed_points = fixed_points
@@ -483,6 +484,9 @@ class _Crossings:
     def intersection(self, crossing_id):
         key, sign = self._crossings[crossing_id]
         return SimpleNamespace(manifold_b_key=key, crossing_sign=sign)
+
+    def unstable_key_of(self, _pair):
+        return (self.fixed_points[0], "unstable", 0, 0)
 
 
 def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
@@ -495,7 +499,7 @@ def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
             (ref,), None,
         )
 
-    def resolve(_dual, _iterated, cd, _max_walks):
+    def resolve(_dual, _iterated, cd, _max_walks, _walls=()):
         cd.itinerary, cd.source = tuple(walks[cd.bridge_class]), "walk"
 
     def owner_pair(*_args):
@@ -649,3 +653,26 @@ def test_unresolved_class_carries_a_reason_and_warns(caplog):
     for cd in dyn.classes.values():
         if cd.itinerary is not None:
             assert len(cd.itinerary) % 2 == 0
+
+
+# --------------------------------------------------------------------------- #
+# The unstable branches a class's arcs lie on (the walls, D13 / D14)
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("period, inversion", [(3, False), (1, True), (2, True)])
+def test_a_memberless_class_lies_one_step_past_its_namer(period, inversion):
+    """A class no computed bridge spans yet (D11) is a piece of ``f(x)`` for ``x`` in
+    the class that named it, so its arcs lie one map step past the namer's."""
+    fp = bare_fixed_point(period, inversion=inversion)
+    namer = {(fp, "unstable", orbit, 0) for orbit in range(period)}
+    cls = BridgeClass(ElementRef((fp, "stable", 0, 0), "left", 0), ElementRef((fp, "stable", 0, 0), "left", 1))
+    branches = SD._arc_branches(None, BridgeClassEntry(cls), frozenset(namer))
+    assert branches == {fp.advance_key(key, 1) for key in namer}
+
+
+def test_a_class_with_members_lies_on_its_members_branches():
+    fp = bare_fixed_point(3)
+    on = {(1, 2): (fp, "unstable", 2, 0), (3, 4): (fp, "unstable", 0, 0)}
+    trellis = SimpleNamespace(unstable_key_of=on.__getitem__)
+    cls = BridgeClass(ElementRef((fp, "stable", 0, 0), "left", 0), ElementRef((fp, "stable", 0, 0), "left", 1))
+    entry = BridgeClassEntry(cls, [BridgeMember((1, 2), +1), BridgeMember((3, 4), -1)])
+    assert SD._arc_branches(trellis, entry, frozenset({(fp, "unstable", 1, 0)})) == set(on.values())

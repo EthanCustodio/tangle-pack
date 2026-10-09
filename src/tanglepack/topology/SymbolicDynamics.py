@@ -88,14 +88,24 @@ Dev Notes:
   exactly the images of the markers the lobe holds
   (:func:`~tanglepack.topology.DualWalk.lobe_image_markers`). It applies to
   EVERY such class, not only to ties (C13): a unique shortest walk can break
-  it (the heteroclinic ``bh``). A class with no member lobe (member-less,
-  D11, or connecting two tangles) keeps the plain shortest walk; a tie there
-  stays ambiguous, feeds the first candidate in the walk search's
-  deterministic order into the refinement and the graph, and
-  :attr:`SymbolicDynamics.is_reliable` is False (DEC-24). No walk up to the
-  detour cap holding the markers leaves the class unresolved
-  (``"no_admissible_walk"``), and so does the walk budget running out
-  before any judged walk held them (``"truncated"``).
+  it (the heteroclinic ``bh``). No walk up to the detour cap holding the
+  markers leaves the class unresolved (``"no_admissible_walk"``), and so does
+  the walk budget running out before any judged walk held them
+  (``"truncated"``).
+* Walls (D13's own words, "f(bridge) cannot cross the images of the unstable
+  arcs"; WP9c, C17). Every class's arcs lie on known unstable branches: its
+  members' (``Trellis.unstable_key_of``), or, for a class no computed bridge
+  spans yet (D11), one map step past the arcs of the class that named it.
+  Arcs on different unstable branches are disjoint, so are their images, so
+  the decided walk (``unique`` / ``trivial``) of a class walked EARLIER whose
+  branches are disjoint from this class's is a wall: a tie loses the walks
+  whose chords cross one (``shortest_walks(walls=)``). Every bridge is the
+  same (D14): a class joining two stable branches or two tangles has no member
+  lobe, but it has arcs, so the walls apply to it like to any other; its
+  ``tangle`` follows the table's rule with the arcs' branches for the
+  members'. A tie no rule decides stays ambiguous, feeds the first candidate
+  in the walk search's deterministic order into the refinement and the
+  graph, and :attr:`SymbolicDynamics.is_reliable` is False.
 * Inert classes are NOT nodes of the transition graph or the matrix (author,
   2026-09-23): they contribute nothing to the dynamics, and their symbols
   are still visible in the words. A token naming an inert class is dropped
@@ -136,6 +146,7 @@ from .DualWalk import (
     lobe_image_markers,
     shortest_walks,
     trellis_itinerary,
+    walk_chords,
 )
 from .ElementNaming import ElementNaming
 from .TopologyResults import ElementRef
@@ -145,7 +156,8 @@ if TYPE_CHECKING:
 
     from ..numerics.Bridge import BridgeId
     from ..numerics.FixedPoint import FixedPoint
-    from .DualGraph import DualGraph
+    from ..numerics.Intersection import ManifoldKey
+    from .DualGraph import Chord, DualGraph, FaceNode
     from .PartitionFamily import PartitionFamily
     from .Trellis import Trellis
 
@@ -1075,11 +1087,22 @@ def _homotopy_of(partition: "PartitionFamily") -> "PartitionFamily":
     return homotopy if homotopy is not None else partition
 
 
+def _arc_branches(
+    trellis: "Trellis", entry: BridgeClassEntry, namer_branches: frozenset["ManifoldKey"]
+) -> frozenset["ManifoldKey"]:
+    """The unstable branches a class's arcs lie on: its members', or, for a class no
+    computed bridge spans yet (D11), one map step past the arcs of the class that named it."""
+    if entry.members:
+        return frozenset(trellis.unstable_key_of(member.bridge_id) for member in entry.members)
+    return frozenset(key[0].advance_key(key, 1) for key in namer_branches)
+
+
 def _resolve_itinerary(
     dual_graph: "DualGraph",
     iterated: "PartitionFamily",
     cd: ClassDynamics,
     max_walks: int,
+    walls: Sequence[tuple["FaceNode", "Chord"]] = (),
 ) -> None:
     """Fill a class's itinerary: landing check, then the trellis or the walk path."""
     trellis = dual_graph.trellis
@@ -1139,6 +1162,7 @@ def _resolve_itinerary(
         max_walks=max_walks,
         landings=(source_landing, target_landing),
         wanted=lobe_image_markers(dual_graph, cd.entry),
+        walls=walls,
     )
     cd.search = search
     walk = search.walk
@@ -1282,7 +1306,10 @@ def symbolic_dynamics(
         if named in evidence_table:
             entry = replace(evidence_table[named], letter=None)
         else:
+            # The table's tangle rule, the arcs' branches standing in for the members'.
+            arcs = _arc_branches(trellis, BridgeClassEntry(named), branches[named_by])
             owners = {id(named.source.fixed_point), id(named.target.fixed_point)}
+            owners |= {id(key[0]) for key in arcs}
             tangle = next(
                 (i for i, fp in enumerate(fixed_points) if {id(fp)} == owners), None
             )
@@ -1302,8 +1329,13 @@ def symbolic_dynamics(
         return entry
 
     records: dict[BridgeClass, ClassDynamics] = {}
+    # D13 / D14: images of disjoint arcs are disjoint, so the decided walk of a class
+    # whose arcs lie on other unstable branches is a wall for every later class.
+    branches: dict[BridgeClass, frozenset] = {}
+    decided: list[tuple[frozenset, list]] = []
     for entry in entries:  # the list grows while the words name new classes
         cls = entry.bridge_class
+        branches[cls] = mine = _arc_branches(trellis, entry, branches.get(closure.get(cls), frozenset()))
         kind: Literal["active", "inert"] = "active" if entry.active else "inert"
         landings = tuple(
             land_element(trellis, homotopy, iterated, ref) for ref in (cls.source, cls.target)
@@ -1311,7 +1343,10 @@ def symbolic_dynamics(
         cd = ClassDynamics(
             entry, letters[cls], kind, (landings[0], landings[1]), named_by=closure.get(cls)
         )
-        _resolve_itinerary(dual_graph, iterated, cd, max_walks)
+        walls = [wall for theirs, chords in decided if not theirs & mine for wall in chords]
+        _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls)
+        if cd.search is not None and cd.search.status in ("unique", "trivial"):
+            decided.append((mine, walk_chords(cd.search.walk)))
         itinerary = cd.itinerary or ()
         named = [
             oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
