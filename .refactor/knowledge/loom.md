@@ -140,12 +140,18 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
 ## Open-issues round WP8b (2026-10-08, branch `oi/wp08b-d10-d12`, base `014ea4b`)
 
 - `Topology.__init__` runs stages 3-6 per fixed point FIRST (each per-fixed-point trellis is cut
-  at its pip by `set_strong_pip`), then takes the selection trellis and
-  `cut_at_pip_orbit(pips)` (a no-op for one fixed point: the same object). So
-  `session.trellis()` of several fixed points is cut only once `topology()` ran; a per-fixed-point
-  trellis is cut as soon as its pip is set or restored (rebuild path of `session.trellis`).
+  at its pip by `set_strong_pip`; a default pip is chosen there), then takes the selection
+  trellis. `TangleSession.trellis` cuts a selection of SEVERAL fixed points at their pips
+  (`self.trellis(fp).strong_pip`) on EVERY read, a no-op while they are unchanged; a
+  per-fixed-point trellis is cut as soon as its pip is set or restored (rebuild path). Review fix:
+  the cut used to live in `Topology.__init__`, so `session.trellis()` of several fixed points
+  showed the computed N until a product ran (nested_outer_series after 10 outer blasts: 736
+  crossings / 525 bridges before `topology()`, 448 / 322 after; probe
+  `/home/dezhu/.claude/jobs/c5c98371/tmp/wp08b_review/hist.py`).
 - A class member can be a JOINED arc of the cut (not a workbench bridge): `Topology._zone_key`
   and `TangleSession.cartoon_enclosures` resolve bridges through `trellis.bridge_between`
+  (`cartoon_enclosures(trellis, bridge_ids, parents)`: the plotted dual graph's own trellis,
+  `graph.trellis`, so a missing bridge asserts; it used to read `self.trellis()` and skip)
   (`workbench.bridge` would raise KeyError).
 - Choosing an inner pip candidate on k10 can now raise the I2 row assertion in `topology()`
   (candidate 2: the anchor bridge wraps the end of the cut stable branch), exactly as a

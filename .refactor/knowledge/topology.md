@@ -379,8 +379,8 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   pseudoneighbor all-iterates test keeps raw landings (`_unstable_interval_is_clear`).
 - `Pseudoneighbor._strong_pip_cuts` / `_within_cut` deleted (check set = `own_intersection_ids`).
   `DualGraph._check_where_f_of_s_stops` deleted (vacuous: the unified window is `S \ f(S)`).
-  `Topology.__init__`: stages first, then the selection trellis cut at every pip (a no-op for one
-  fixed point, the same object).
+  `Topology.__init__`: stages first, then the selection trellis, which `TangleSession.trellis`
+  cuts at every selected pip on each read (review fix: no longer cut by `Topology`).
 - Why D12 is the BCG-5 fix: every decrease happened when N held crossings deeper than the
   deepest registered pip-orbit point (the pip lap stalls when its bridge falls under the blast's
   `min_separation`: k32 at blast 9 / `f^10(q0)`, nested_outer at blast 10). Measured

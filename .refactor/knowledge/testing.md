@@ -443,7 +443,7 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 
 ## Open-issues round WP8b (2026-10-08, branch `oi/wp08b-d10-d12`, base `014ea4b`)
 
-- Suite: 994 passed, 21 skipped, 3 deselected, 2 xfailed, ~165 s (base 974 passed / 28 skipped /
+- Suite: 1000 passed, 21 skipped, 3 deselected, 2 xfailed, ~161 s (994 before the review fixes) (base 974 passed / 28 skipped /
   2 xfailed). KNOWN_ISSUES 2 -> 2. NOT_APPLICABLE 28 -> 21: removed on `inversion`
   `anchor_bridge_class_leads_its_tangle`, `matrix_is_token_counts`, `partition_singletons`,
   `anchor_opening_faces_its_hole`, `backward_holes_keep_bridge_side`,
@@ -485,6 +485,13 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   `014ea4b`) fail there: 3 series monotone, 2 closed-alphabet, 6 deep-run, the D11 unit test, the
   placed-cut unit test, the cut law on the 3 inversion cases, `test_pip_orbit_cut` x4 (k10
   candidates 2 and 3 differ, p2inv10 differs and `n` unreachable, no joined arc).
+- Review fixes: facade `test_the_selection_trellis_is_cut_before_any_product` (nested zones, one
+  outer blast, the anchor-nearest alternate pip: `trellis_view(session.trellis())` before
+  `topology()` equals the view after it) and series law `series_session_trellis_is_history_free`
+  (`SeriesStep.history_free`: `session.trellis()` read before the recompute vs the topology's
+  trellis after it; fails on the previous head on `nested_outer_series` at blasts 10, 11; the
+  facade test fails there too). `test_nested_inner_circle_sits_inside_the_outer_one` passes the
+  minimal trellis's own trellis to `cartoon_enclosures` and checks a sub-selection too.
 - Probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp08b_impl/` (`replay.py` rubric 10,
   `lawsig.py` id-free signatures, `deep.py` deep runs).
 
