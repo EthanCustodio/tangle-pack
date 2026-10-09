@@ -489,6 +489,20 @@ def test_a_wall_crossing_every_walk_keeps_the_tie(key, tie, caplog):
     assert_logged(caplog, logging.WARNING, LOGGER)
 
 
+def test_a_walk_standing_for_several_face_paths_is_never_rejected_by_a_wall(key, tie, caplog):
+    """A second node carrying ``L_1`` gives that itinerary two face paths: which one the
+    image runs through is unknown, so a wall crossing both rejects neither."""
+    tie.unified(tie.faces[0], tie.faces[1], L(key, 1), R(key, 1))
+    through_1 = {node.edge_key for node in tie.stable_nodes_of(L(key, 1))}
+    tie.chords_cross = lambda face, chord, wall: chord[2] in through_1
+    walls = [(tie.faces[0], ("wall chord",))]
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        search = shortest_walks(tie, L(key, 0), L(key, 3), walls=walls)
+    assert search.status == "ambiguous" and search.rejected == 0
+    assert sorted(walk.multiplicity for walk in search.walks) == [1, 2]
+    assert_logged(caplog, logging.WARNING, LOGGER)
+
+
 def test_no_walls_and_walls_elsewhere_change_nothing(key, tie):
     """Without walls, or with walls only in a face no walk visits, the tie is the old one."""
     (through_1,) = tie.stable_nodes_of(L(key, 1))

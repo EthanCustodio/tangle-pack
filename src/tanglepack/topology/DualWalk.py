@@ -84,8 +84,10 @@ Dev Notes:
   (:meth:`~tanglepack.topology.DualGraph.DualGraph.chords_cross`); it counts
   in :attr:`WalkSearch.rejected`. This is the rule for a class with no member
   lobe (member-less, D11, or with its ends on two branches or two tangles),
-  and it applies to member-lobe ties too. When every walk crosses a wall the
-  tie stands (never observed).
+  and it applies to member-lobe ties too. A walk standing for several face
+  paths (``multiplicity > 1``) is never rejected, and its class makes no
+  wall: which face the image runs through is unknown. When every walk crosses
+  a wall the tie stands (never observed).
 * When the ``max_walks`` cap cuts the enumeration short the status still
   says ``"unique"`` or ``"ambiguous"`` for the itineraries that survived and
   :attr:`WalkSearch.truncated` is set (with a WARNING), because a truncated
@@ -1008,15 +1010,6 @@ def _admissible_walks(
     return [], rejected, None
 
 
-def _crosses_a_wall(dual, walk: Walk, walls: Sequence[tuple["FaceNode", "Chord"]]) -> bool:
-    """Whether a chord of the walk crosses a wall in the same face."""
-    return any(
-        wall_face is face and dual.chords_cross(face, chord, wall)
-        for face, chord in walk_chords(walk)
-        for wall_face, wall in walls
-    )
-
-
 def shortest_walks(
     dual,
     start: ElementRef,
@@ -1076,7 +1069,8 @@ def shortest_walks(
             (:func:`lobe_image_markers`), or None for no constraint.
         walls: ``(face, chord)`` per face of the decided walks of classes
             whose arcs lie on other unstable branches (:func:`walk_chords`);
-            with them, ``dual`` needs ``chords_cross`` too.
+            with them, ``dual`` needs ``chords_cross`` too. A walk of
+            ``multiplicity > 1`` is never rejected by a wall.
 
     Returns:
         The :class:`WalkSearch`. ``"no_start_node"`` / ``"no_goal_node"``
@@ -1233,16 +1227,27 @@ def shortest_walks(
         key=lambda walk: tuple(element_sort_key(ref, context) for ref in walk.itinerary),
     )
     if len(walks) > 1 and walls:
-        clear = [walk for walk in walks if not _crosses_a_wall(dual, walk, walls)]
+        # A walk standing for several face paths is never judged on one of them.
+        clear = [
+            walk
+            for walk in walks
+            if walk.multiplicity > 1
+            or not any(
+                wall_face is face and dual.chords_cross(face, chord, wall)
+                for face, chord in walk_chords(walk)
+                for wall_face, wall in walls
+            )
+        ]
         if clear and len(clear) < len(walks):
+            crossing = len(walks) - len(clear)
             logger.info(
-                "walk %s -> %s: %d itinerar%s cross the image of a disjoint arc",
+                "walk %s -> %s: %d %s the image of a disjoint arc",
                 start.label,
                 goal.label,
-                len(walks) - len(clear),
-                "y" if len(walks) - len(clear) == 1 else "ies",
+                crossing,
+                "itinerary crosses" if crossing == 1 else "itineraries cross",
             )
-            rejected += len(walks) - len(clear)
+            rejected += crossing
             walks = clear
     if truncated:
         logger.warning(

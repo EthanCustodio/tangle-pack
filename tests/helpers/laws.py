@@ -2744,7 +2744,8 @@ def check_walks_avoid_disjoint_images(case: "Case") -> int:
     """D13, D14: the map is a homeomorphism and two unstable arcs never cross, so the
     images of arcs on disjoint sets of unstable branches are disjoint. Two classes whose
     arcs lie on disjoint branch sets (``_arc_branches``) have decided walks (``unique``
-    or ``trivial``) whose chords never interleave on a ring of a face both visit. Counts
+    or ``trivial``, of multiplicity 1: a walk standing for several face paths names
+    none of them) whose chords never interleave on a ring of a face both visit. Counts
     the class pairs judged (a pair sharing no face cannot cross: a deep run may judge
     only such pairs)."""
     dyn = case.session.symbolic_dynamics()
@@ -2753,7 +2754,9 @@ def check_walks_avoid_disjoint_images(case: "Case") -> int:
     decided = [
         (cls, cd, walk_chords(cd.search.walk))
         for cls, cd in dyn.classes.items()
-        if cd.search is not None and cd.search.status in ("unique", "trivial")
+        if cd.search is not None
+        and cd.search.status in ("unique", "trivial")
+        and cd.search.walk.multiplicity == 1
     ]
     count = 0
     for i, (x, cx, chords_x) in enumerate(decided):

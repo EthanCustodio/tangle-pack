@@ -1346,8 +1346,10 @@ def symbolic_dynamics(
         )
         walls = [wall for theirs, chords in decided if not theirs & mine for wall in chords]
         _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls)
-        if cd.search is not None and cd.search.status in ("unique", "trivial"):
-            decided.append((mine, walk_chords(cd.search.walk)))
+        # A walk standing for several face paths names none of them: no wall.
+        search = cd.search
+        if search and search.status in ("unique", "trivial") and search.walk.multiplicity == 1:
+            decided.append((mine, walk_chords(search.walk)))
         itinerary = cd.itinerary or ()
         named = [
             oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
