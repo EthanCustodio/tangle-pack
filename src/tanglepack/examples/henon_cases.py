@@ -371,6 +371,10 @@ def build_inversion(
     Returns:
         The :class:`TangleBuild` (one fixed point, the pip ``f(q0)``), its
         topology computed, slug ``inversion`` (plus ``_blast<n>``).
+
+    Raises:
+        ValueError: If the default strong pip has no registered image (too
+            little growth: 8 unstable steps).
     """
     from ..loom.TangleSession import TangleSession
 
@@ -390,6 +394,11 @@ def build_inversion(
     session.classify_strong_pips()
     trellis = session.trellis(fp)
     pip = trellis.iterate(trellis.strong_pip, 1)
+    if pip is None:
+        raise ValueError(
+            f"the strong pip has no registered image at {unstable_steps} unstable steps, "
+            "so the zone at f(q0) cannot be cut; grow deeper"
+        )
     zone = session.resonance_zone(pip)
     sizes: list[int] = []
     for _ in range(blasts):

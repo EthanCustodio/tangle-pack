@@ -20,9 +20,10 @@ Studies (``study``)
   with single blast ``2n``.
 * ``depth`` -- growth instead of blasting: p3 at 11..18 unstable steps (9
   stable) and inversion (k=4) at 8..12 unstable steps (11 stable, 1e-5);
-  the topology of the final state. Step 12 of the inversion arm escapes into
-  the library's per-step point budget, recorded as ``stop_reason =
-  "point_budget"`` (a datum, not a failure).
+  the topology of the final state. A growth step that runs into the library's
+  per-step point budget (the inversion arm at 12 steps, p3 at 18) is recorded
+  as ``stop_reason = "point_budget"``, and an inversion build too shallow to
+  register f(q0) (8 steps) as ``"no_zone"`` (data, not failures).
 
 Not rerun (numerics untouched since the second edition): E1-E6, E8-E10, the
 E7 escape and tangency studies and the full 58-cell E11 grid (separations
@@ -176,6 +177,10 @@ def run_depth(config: dict, rec: harness.Recorder) -> None:
         except PointBudgetExceeded as exc:
             rec.metric("stop_reason", "point_budget")
             rec.metric("point_budget_error", str(exc)[:300])
+            return
+        except ValueError as exc:  # the inversion recipe needs a registered f(q0)
+            rec.metric("stop_reason", "no_zone")
+            rec.metric("recipe_error", str(exc)[:300])
             return
     rec.metric("stop_reason", "done")
     session = built.session
