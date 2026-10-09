@@ -36,6 +36,7 @@ EXPERIMENTS = {
     "e09": "e09_intersections",
     "e10": "e10_determinism",
     "e11": "e11_blast_depth",
+    "e12": "e12_reverify",
 }
 OUTCOMES = ("ok", "exception", "point_budget", "timeout", "oom", "invariant_assert", "crash")
 
@@ -869,3 +870,68 @@ def e11_label(record: dict) -> str:
     if kind == "iterations":
         return "2 iterations / blast"
     return f"repeat {value}"
+
+
+
+# --------------------------------------------------------------------------- #
+# E12 -- the WP12 re-verification (third edition)
+# --------------------------------------------------------------------------- #
+#: the series cases, in table order
+E12_CASES = ("k28", "k32", "p3", "nested_outer", "nested_inner", "inversion", "heteroclinic")
+
+
+def e12_series(cutoff: Optional[float] = None, iterations: int = 1) -> list[dict]:
+    """The E12 blast series (``study == "series"``), by case order then cutoff (fine first)."""
+    out = [r for r in load("e12") if r["config"].get("study") == "series"
+           and r["config"]["num_iterations"] == iterations
+           and (cutoff is None or r["config"]["area_cutoff"] == cutoff)]
+    return sorted(out, key=lambda r: (E12_CASES.index(r["config"]["case"]), r["config"]["area_cutoff"]))
+
+
+def e12_depth() -> list[dict]:
+    """The E12 growth-depth cells (``study == "depth"``), by case then steps."""
+    return sorted((r for r in load("e12") if r["config"].get("study") == "depth"),
+                  key=lambda r: (r["config"]["case"], r["config"]["unstable_steps"]))
+
+
+def e12_decreases(values: list) -> list[int]:
+    """The indices (blasts) where a series drops below its previous value (None skipped)."""
+    out, last = [], None
+    for i, v in enumerate(values):
+        if v is None:
+            continue
+        if last is not None and v < last:
+            out.append(i)
+        last = v
+    return out
+
+
+def e12_constant_from(values: list) -> Optional[int]:
+    """The first index from which a series stays at its final value (None if empty)."""
+    values = [v for v in values]
+    if not values or values[-1] is None:
+        return None
+    i = len(values) - 1
+    while i > 0 and values[i - 1] == values[-1]:
+        i -= 1
+    return i
+
+
+def e12_runs(flags: list) -> str:
+    """The indices where ``flags`` is truthy, as compact ranges (``0-8, 10``), or ``none``."""
+    idx = [i for i, f in enumerate(flags) if f]
+    if not idx:
+        return "none"
+    runs, start = [], idx[0]
+    for a, b in zip(idx, idx[1:] + [None]):
+        if b != a + 1:
+            runs.append(str(start) if start == a else f"{start}-{a}")
+            start = b
+    return ", ".join(runs)
+
+
+def e12_growth(times: list, last: int = 3) -> Optional[float]:
+    """Geometric mean of the last ``last`` blast-to-blast time ratios."""
+    t = [x for x in times[1:] if x]
+    ratios = [b / a for a, b in zip(t, t[1:]) if a > 0][-last:]
+    return float(np.exp(np.mean(np.log(ratios)))) if ratios else None

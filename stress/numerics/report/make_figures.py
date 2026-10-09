@@ -43,7 +43,8 @@ RAMP = LinearSegmentedColormap.from_list("blue_ramp", ["#cde2fb", "#0d366b"])
 
 CPU, GPU = BLUE, ORANGE
 CASE_COLORS = {"k28": BLUE, "p3": AQUA, "k10": VIOLET, "nested": MAGENTA, "inversion": YELLOW,
-               "k32": ORANGE, "nested_outer": MAGENTA, "nested_inner": GREEN}
+               "k32": ORANGE, "nested_outer": MAGENTA, "nested_inner": GREEN,
+               "heteroclinic": RED}
 STATUS_COLORS = {"ok": GREEN, "exception": RED, "point_budget": ORANGE, "timeout": YELLOW, "oom": VIOLET,
                  "invariant_assert": MAGENTA, "crash": INK}
 STATUS_LABELS = {"ok": "ok", "exception": "exception", "point_budget": "point budget (library)",
@@ -1462,6 +1463,71 @@ def fig_e11_provisional() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# E12 -- the WP12 re-verification (third edition)
+# --------------------------------------------------------------------------- #
+def fig_e12_classes() -> None:
+    """Seed and closed alphabets per blast, one panel per case; 1e-7 solid, 1e-5 dashed."""
+    records = A.e12_series()
+    if not records:
+        raise Skip("no e12 series")
+    fig, axes = plt.subplots(2, 4, figsize=(6.3, 3.6), sharex=False)
+    axes = axes.ravel()
+    for ax, case, letter in zip(axes, A.E12_CASES, "abcdefg"):
+        color = CASE_COLORS[case]
+        for r in (r for r in records if r["config"]["case"] == case):
+            s, ls = r["series"], "-" if r["config"]["area_cutoff"] == 1e-7 else "--"
+            blast = A.arr(s["blast"])
+            ax.plot(blast, A.arr(s["n_classes"]), color=color, ls=ls, lw=1.1)
+            ax.plot(blast, A.arr(s["n_closed"]), color=INK2, ls=ls, lw=0.8)
+            frozen = A.e12_constant_from(s["n_trellis_crossings"])
+            if ls == "-" and frozen is not None and frozen < len(blast) - 1:
+                ax.axvline(frozen, color=LIGHT, lw=0.8, zorder=0)
+            for i in A.e12_decreases(s["n_classes"]):
+                ax.plot(blast[i], s["n_classes"][i], ls="", marker="v", ms=4, color=RED)
+        ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        ax.tick_params(labelsize=6)
+        panel(ax, letter, case.replace("_", " "))
+    axes[-1].axis("off")
+    handles = [Line2D([], [], color=INK, ls="-", label="seed, cutoff $10^{-7}$"),
+               Line2D([], [], color=INK, ls="--", label="seed, cutoff $10^{-5}$"),
+               Line2D([], [], color=INK2, lw=0.8, label="closed alphabet"),
+               Line2D([], [], color=LIGHT, label="N frozen from ($10^{-7}$)"),
+               Line2D([], [], ls="", marker="v", color=RED, label="a decrease")]
+    axes[-1].legend(handles=handles, loc="center", fontsize=6.5, frameon=False)
+    fig.supxlabel("blasts done", fontsize=8)
+    fig.supylabel("classes", fontsize=8)
+    save(fig, "e12_classes")
+
+
+def fig_e12_cost() -> None:
+    """Blast time and registry size per blast at 1e-7; the stretch after N froze shaded."""
+    records = A.e12_series(1e-7)
+    if not records:
+        raise Skip("no e12 series")
+    fig, axes = plt.subplots(1, 2, figsize=WIDE)
+    for r in records:
+        case, s = r["config"]["case"], r["series"]
+        blast, color = A.arr(s["blast"]), CASE_COLORS[case]
+        keep = blast > 0
+        axes[0].plot(blast[keep], A.arr(s["blast_s"])[keep], color=color, marker="o", ms=2, label=case)
+        axes[1].plot(blast, A.arr(s["crossings"]), color=color, marker="o", ms=2)
+        frozen = A.e12_constant_from(s["n_trellis_crossings"])
+        if case in ("k28", "k32") and frozen is not None and frozen < len(blast) - 1:
+            for ax in axes:
+                ax.axvspan(frozen, blast[-1], color=color, alpha=0.08, lw=0)
+    for ax, letter, title, label in zip(axes, "ab", ("time per blast", "registered crossings"),
+                                        ("time of the blast (s)", "crossings in the registry")):
+        ax.set_yscale("log")
+        ax.set_xlabel("blasts done")
+        ax.set_ylabel(label)
+        ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        panel(ax, letter, title)
+    fig.legend(loc="outside lower center", ncol=4, fontsize=6.5)
+    save(fig, "e12_cost")
+
+
+# --------------------------------------------------------------------------- #
 # Overview
 # --------------------------------------------------------------------------- #
 def scorecard() -> list[tuple[str, float, float]]:
@@ -1593,6 +1659,7 @@ FIGURE_FUNCTIONS = [
     fig_e10_determinism,
     fig_e11_evolution, fig_e11_events, fig_e11_cost, fig_e11_parameters, fig_e11_agreement, fig_e11_resolution,
     fig_e11_provisional,
+    fig_e12_classes, fig_e12_cost,
     fig_overview,
 ]
 

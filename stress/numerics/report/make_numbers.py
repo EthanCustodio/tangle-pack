@@ -570,6 +570,94 @@ def e10() -> None:
 # --------------------------------------------------------------------------- #
 # E11
 # --------------------------------------------------------------------------- #
+# E12 -- the WP12 re-verification (third edition)
+# --------------------------------------------------------------------------- #
+E12_WORDS = {"k28": "KTwoEight", "k32": "KThreeTwo", "p3": "PThree", "nested_outer": "NestedOuter",
+             "nested_inner": "NestedInner", "inversion": "Inversion", "heteroclinic": "Heteroclinic"}
+
+
+def e12() -> None:
+    series = A.e12_series()
+    put("e12", "WpTwelveConfigs", len(A.load("e12")), "configs", "int")
+    put("e12", "WpTwelveConfigsOk", sum(r["outcome"] == "ok" for r in A.load("e12")), "configs with outcome ok", "int")
+    put("e12", "WpTwelveTopologyErrors",
+        sum(o != "ok" for r in A.load("e12") for o in r["series"].get("topology_outcome", [])),
+        "topology snapshots that raised, every config", "int")
+    rows = []
+    for r in series:
+        c, s, m = r["config"], r["series"], r["metrics"]
+        case, cutoff = c["case"], c["area_cutoff"]
+        seed, closed = s["n_classes"], s["n_closed"]
+        drops = A.e12_decreases(seed)
+        frozen = A.e12_constant_from(s["n_trellis_crossings"])
+        plateau = A.e12_constant_from(seed)
+        growth = A.e12_growth(s["blast_s"])
+        rows.append([case.replace("_", "\\_"), f"\\ensuremath{{{sci_tex(cutoff, 1)}}}", str(m.get("blasts_done", 0)),
+                     f"{seed[-1]} / {closed[-1]}", str(plateau), ", ".join(map(str, drops)) or "none",
+                     A.e12_runs(s["is_reliable"]),
+                     str(frozen) if frozen is not None and frozen < len(seed) - 1 else "no",
+                     f"{s['blast_s'][-1]:.1f}", f"{growth:.2f}" if growth else "n/a",
+                     f"{A.nanmax(s['rss_mb']) / 1024:.1f}"])
+        word = E12_WORDS[case] + ("Fine" if cutoff == 1e-7 else "Coarse")
+        put("e12", f"WpTwelve{word}Seed", ", ".join(map(str, seed)), f"{case} at {cutoff:g}: seed series",
+            text=", ".join(map(str, seed)))
+        put("e12", f"WpTwelve{word}Closed", closed[-1], f"{case} at {cutoff:g}: final closed alphabet", "int")
+        put("e12", f"WpTwelve{word}Drops", len(drops), f"{case} at {cutoff:g}: seed decreases", "int")
+        detail("e12", f"{case}@{cutoff:g}", {"seed": seed, "closed": closed, "holes": s["n_holes"],
+                                              "N": s["n_trellis_crossings"], "reliable": s["is_reliable"],
+                                              "blast_s": s["blast_s"], "registry": s["crossings"]})
+    fine = A.e12_series(1e-7)
+    put("e12", "WpTwelveFineMonotone", sum(not A.e12_decreases(r["series"]["n_classes"]) for r in fine),
+        "1e-7 single-iteration series whose seed count never decreases", "int")
+    put("e12", "WpTwelveFineSeries", len(fine), "1e-7 single-iteration series", "int")
+    k28 = next((r for r in fine if r["config"]["case"] == "k28"), None)
+    if k28:
+        s = k28["series"]
+        frozen = A.e12_constant_from(s["n_trellis_crossings"])
+        after = sum(s["blast_s"][frozen + 1:]) if frozen is not None else None
+        put("e12", "WpTwelveKTwoEightFrozenFrom", frozen, "k28 1e-7: first blast with N at its final value", "int")
+        put("e12", "WpTwelveKTwoEightFrozenShare", 100 * after / sum(s["blast_s"]) if after else None,
+            "k28 1e-7: share of the blasting time after N froze (%)")
+    write_table("e12_summary", "llrrrrlrrrr",
+                ["case", "cutoff", "blasts", "seed / closed", "plateau", "drops", "reliable at", "N frozen",
+                 "last s", "growth", "peak GB"], rows,
+                "E12 series: final seed / closed alphabet, the blast from which the seed is constant, the "
+                "blasts where it decreases, the blasts where the words are reliable, the blast from which N "
+                "(the crossings of T(q0)) is constant, the last blast's time, its per-blast growth factor and "
+                "the peak RSS")
+
+    rows = []
+    keys = ("n_classes", "n_closed", "n_holes", "is_reliable")
+    for r in A.e12_series(1e-7, iterations=2):
+        case = r["config"]["case"]
+        single = next((x for x in fine if x["config"]["case"] == case), None)
+        s = r["series"]
+        calls = [n for n in range(1, len(s["blast"])) if single and 2 * n < len(single["series"]["blast"])]
+        agree = sum(all(s[k][n] == single["series"][k][2 * n] for k in keys) for n in calls)
+        n_agree = sum(s["n_trellis_crossings"][n] == single["series"]["n_trellis_crossings"][2 * n] for n in calls)
+        both = [r] + ([single] if single else [])
+        ratio = A.nanmax(x for x in both for x in x["series"]["lobe_ratio_max"])
+        flips = sum(sum(x["series"]["lobe_sign_flips"]) for x in both)
+        rows.append([case.replace("_", "\\_"), str(len(calls)), f"{agree} / {len(calls)}",
+                     f"{n_agree} / {len(calls)}", tex(ratio), str(flips)])
+        put("e12", f"WpTwelve{E12_WORDS[case]}IterAgree", agree, f"{case}: two-iteration calls agreeing with 2n single blasts", "int")
+    write_table("e12_iterations", "lrrrrr",
+                ["case", "calls", "topology agrees", "N agrees", "max |A'/A-1|", "sign flips"], rows,
+                "E12 NUM-6 / NUM-7: call n of two iterations against single blast 2n (seed, closed, holes, "
+                "reliability; and N), and the lobe-area probe over both cells")
+
+    rows = []
+    for r in A.e12_depth():
+        c, m = r["config"], r["metrics"]
+        rows.append([c["case"], str(c["unstable_steps"]), m.get("stop_reason", r["outcome"]).replace("_", " "),
+                     tex(m.get("n_classes"), "int"), tex(m.get("n_closed"), "int"), tex(m.get("n_holes"), "int"),
+                     tex(m.get("is_reliable")), tex(m.get("n_trellis_crossings"), "int")])
+    write_table("e12_depth", "lrlrrrlr",
+                ["case", "unstable steps", "stop", "seed", "closed", "holes", "reliable", "N"], rows,
+                "E12 growth depth: the topology of the final state")
+
+
+# --------------------------------------------------------------------------- #
 DEEP_CASE_WORDS = {"k28": "KTwoEight", "k32": "KThreeTwo", "p3": "PThree", "nested_outer": "NestedOuter",
                    "nested_inner": "NestedInner"}
 CUTOFF_WORDS = {1e-5: "Five", 1e-6: "Six", 1e-8: "Eight"}
@@ -942,7 +1030,7 @@ def main() -> None:
     TABLES.mkdir(parents=True, exist_ok=True)
     for exp, fn in (("e01", e01), ("e02", e02), ("e03", e03), ("e04", e04), ("e05", e05),
                     ("e06", e06), ("e07", e07), ("e08", e08), ("e09", e09), ("e10", e10),
-                    ("e11", e11)):
+                    ("e11", e11), ("e12", e12)):
         print(exp)
         try:
             fn()
