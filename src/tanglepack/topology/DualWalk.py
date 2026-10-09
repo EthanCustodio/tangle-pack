@@ -332,12 +332,14 @@ def land_element(
         The :class:`ElementLanding`. It is unresolved (``target is None``,
         ``reason`` set, WARNING logged) when a singleton's image crossing is
         not a crossing of the trellis, or when the iterated partition has no
-        single owner for the probe point. A span that straddles a cut is resolved to its
-        midpoint owner with ``contained=False`` and ``covering`` filled
-        (WARNING).
+        single owner for the probe point. A span that straddles a cut is
+        resolved to its midpoint owner with ``contained=False`` and
+        ``covering`` filled (WARNING).
 
     Raises:
         ValueError: If ``ref`` names no element of ``homotopy``.
+        AssertionError: If an image end lands on a branch other than
+            ``advance_key``'s (the iterate table links only there).
     """
     interval = homotopy.element(ref)
     fixed_point: "FixedPoint" = ref.branch_key[0]

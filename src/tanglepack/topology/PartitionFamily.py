@@ -136,7 +136,6 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-
 class PartitionFamily:
     """
     One partition of the stable manifold, one result per ``(branch, side)``.

@@ -69,7 +69,6 @@ from __future__ import annotations
 import logging
 from typing import Iterable, Optional, Union, TYPE_CHECKING
 
-
 from ..numerics.Intersection import Intersection, ManifoldKey, Stability
 from ..numerics.IntersectionRegistry import IntersectionRegistry
 from . import plotting
@@ -237,7 +236,6 @@ class Trellis:
         # tests that one crossing only.
         self._candidates: Optional[list[int]] = None
         self.strong_pip = None
-
 
     # ── the trellis of the pip (stage 3) ────────────────────────────────────
 
