@@ -1220,8 +1220,8 @@ class TangleWorkbench:
         The arrangement is rebuilt each round over the same fixed points the
         recompute used, rather than taken from a session cache -- every round moves
         the workbench generation, so a cache would miss every time anyway. It is
-        deliberately not a single-fixed-point snapshot: that would cut a
-        heteroclinic partner's arcs off and turn real faces into open ones.
+        deliberately not a single-fixed-point snapshot: that holds no heteroclinic
+        crossing and none of the partner's arcs, turning real faces into open ones.
 
         Args:
             fixed_point: The fixed point whose manifolds are grown.
@@ -1742,9 +1742,9 @@ class TangleWorkbench:
         self._bump_generation(invalidate_walks=True)
         return [self._register_bridge(bridge) for bridge in bridges]
 
-    def clear_bridges(self) -> None:
+    def clear_bridges(self, fixed_point: Optional[FixedPoint] = None) -> None:
         """
-        Discard every registered bridge (e.g. before recutting after a retrim).
+        Discard the registered bridges (e.g. before recutting after a retrim).
 
         A bridge owns the segments it was cut over (it shares them with the
         unstable manifold it came from), so discarding it must also release those
@@ -1758,19 +1758,31 @@ class TangleWorkbench:
             on an empty index. It matters on the direct path (``clear_bridges`` or
             ``rebuild_bridges`` with no recompute in between), which is exactly the
             path that used to leak.
+
+        Args:
+            fixed_point: If given, discard only that fixed point's bridges (and
+                partial pieces); the others keep their objects and ids.
         """
+        def dropped(bridge: Bridge) -> bool:
+            return fixed_point is None or bridge.fixed_point is fixed_point
+
         for bridge in self.bridges:
-            self.Tangle.release_manifold(bridge)
-        self._bridges.clear()
-        self._partial_bridges.clear()
+            if dropped(bridge):
+                self.Tangle.release_manifold(bridge)
+        for bid in [bid for bid, bridge in self._bridges.items() if dropped(bridge)]:
+            del self._bridges[bid]
+        self._partial_bridges[:] = [b for b in self._partial_bridges if not dropped(b)]
         self._bridges_at.clear()
+        for bid in self._bridges:
+            for endpoint in bid:
+                self._bridges_at.setdefault(endpoint, []).append(bid)
         self._bump_generation()
 
     def rebuild_bridges(
         self, fixed_point: Optional[FixedPoint] = None
     ) -> list[Bridge]:
         """
-        Clear all existing bridges and recut them against the current crossings.
+        Clear the existing bridges and recut them against the current crossings.
 
         Bridges are segments of an unstable manifold between consecutive crossings, so
         trimming a stable manifold (e.g. to define a resonance zone) and recomputing
@@ -1795,16 +1807,13 @@ class TangleWorkbench:
 
         Args:
             fixed_point: If given, only rebuild bridges for that fixed point's unstable
-                manifolds; otherwise rebuild for every indexed unstable manifold.
+                manifolds (the other fixed points' bridges stay, same objects and
+                ids); otherwise rebuild for every indexed unstable manifold. After a
+                renumbering recompute every fixed point is rebuilt: the surviving
+                bridges' ids no longer name their crossings.
 
         Returns:
             The freshly created bridges.
-
-        Note:
-            The CLEAR is global even when ``fixed_point`` is given: every registered
-            bridge is discarded and only the named fixed point's are recut, so a
-            per-fixed-point rebuild drops the other fixed points' bridges. That is
-            pre-existing behaviour and every production caller rebuilds everything.
         """
         carried: dict[BridgeId, bool] = {}
         if self._bridge_id_epoch == self._registry_id_epoch:
@@ -1813,13 +1822,15 @@ class TangleWorkbench:
             logger.debug(
                 "rebuild_bridges: the intersection registry was renumbered since the "
                 "%d registered bridge id(s) were cut (id epoch %d -> %d), so they no "
-                "longer name the same crossings; dropping the per-bridge metadata",
+                "longer name the same crossings; rebuilding every fixed point's "
+                "bridges and dropping the per-bridge metadata",
                 len(self._bridges),
                 self._bridge_id_epoch,
                 self._registry_id_epoch,
             )
+            fixed_point = None
 
-        self.clear_bridges()
+        self.clear_bridges(fixed_point)
         rebuilt = self.create_bridges(fixed_point)
         for bid, bridge in self._bridges.items():
             if bid in carried:
