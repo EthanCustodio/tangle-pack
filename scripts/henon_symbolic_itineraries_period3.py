@@ -9,7 +9,7 @@ fixture: guess ``[[0, 1], [-1, 0], [-1, 1]]``, orientation unstable
 stable steps -- trims it at its default strong pip (a resonance zone with one
 boundary pip per branch), optionally blasts the zone, partitions, and draws
 the six symbolic-itinerary panels into
-``figures/henon_symbolic_itineraries/p3[_blastN]/`` (PNG, SVG and a pickled
+``figures/henon_symbolic_itineraries/p3[_uN][_sN][_blastN]/`` (PNG, SVG and a pickled
 figure each; see ``symbolic_figures.py``).
 
 The cartoon panel is the hexagon of the period-3 zone: three stable arcs
@@ -20,12 +20,13 @@ Run with ``PYTHONPATH=src python3 scripts/henon_symbolic_itineraries_period3.py`
 (``--blasts N``, ``--unstable-steps N``, ``--stable-steps N``).
 
 Dev Notes:
-    At the default growth the trellis is CLOSED: every active hole bridge's
-    image is already a hole bridge on the next branch, so the words read
-    ``a -> b``, ``b -> c``, ``c -> a u^-1 w^-1`` and blasting changes
-    nothing topologically. Growing to 16 unstable steps, or blasting six
-    times at the default growth (four and five are fine), currently trips
-    the hole ``bridge_side`` invariant (see ``henon_cases.py``).
+    At the default growth the trellis is closed up to 5 blasts: every active
+    hole bridge's image is already a hole bridge on the next branch, so the
+    words read ``a -> b``, ``b -> c``, ``c -> a u^-1 w^-1``. At 6 blasts (or
+    15 unstable steps) the reference pair switches (BCG-4: 12 -> 42 holes)
+    and the alphabet plateaus at 25 classes from 8 blasts; every class walks
+    and the run is reliable (WP12 re-measured it to 20 blasts). Every growth
+    and blast count gets its own folder (``p3_u16_blast8``, ...).
 """
 
 from __future__ import annotations

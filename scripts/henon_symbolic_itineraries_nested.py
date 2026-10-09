@@ -11,24 +11,29 @@ unstable steps and ``grow_until_turnaround`` on the stable side -- one
 resonance zone per fixed point at its default strong pip, blasts the inner
 zone (default none) and then the outer zone (default twice, the k=2.8
 recipe), partitions everything, and draws the six symbolic-itinerary panels
-into ``figures/henon_symbolic_itineraries/nested_p1_p3/`` (PNG, SVG and a
-pickled figure each; see ``symbolic_figures.py``).
+into ``figures/henon_symbolic_itineraries/nested_p1_p3[_outerN][_innerM]/``
+(PNG, SVG and a pickled figure each; see ``symbolic_figures.py``). With
+``--heteroclinic`` the period-3 orbit is grown to 16 / 10 steps
+(``build_heteroclinic``), far enough to cross the outer saddle's stable
+manifold; the folder is ``heteroclinic_p1_p3[...]``.
 
-Element names carry the fixed point's letter (``A`` = the period-3 orbit,
-constructed first; ``B`` = the period-1 saddle). The cartoon panel draws the
+Element names carry the fixed point's letter (``A`` = the period-1 saddle,
+constructed first, outermost; ``B`` = the period-3 orbit). The cartoon panel draws the
 period-3 zone's circle (three stable arcs) INSIDE the period-1 zone's circle
 (one stable arc), because the inner orbit lies in the outer zone.
 
 Run with ``PYTHONPATH=src python3 scripts/henon_symbolic_itineraries_nested.py``
-(``--outer-blasts N``, ``--inner-blasts N``, ``--p1-area-cutoff X``; the
-``henon_p3_session`` fixture grows the period-1 manifolds at 1e-4).
+(``--outer-blasts N``, ``--inner-blasts N``, ``--p1-area-cutoff X``,
+``--heteroclinic``; the ``henon_p3_session`` fixture grows the period-1
+manifolds at 1e-4).
 
 Dev Notes:
     Without the outer blasts the outer class ``e`` is unresolved (a
     singleton landing with no registered image chain); after two it
-    resolves and the outer classes read like k=2.8 two blasts. No
-    heteroclinic crossing is computed by this recipe (the two tangles do
-    not meet at this growth), so no walk or bridge joins the two circles.
+    resolves and the outer classes read like k=2.8 two blasts. The nested
+    recipe computes no heteroclinic crossing (the two tangles do not meet
+    at 13 period-3 steps), so no walk or bridge joins the two circles; the
+    heteroclinic recipe does (a connecting class, WP9).
 """
 
 from __future__ import annotations
@@ -46,7 +51,7 @@ from symbolic_figures import (
     report,
 )  # noqa: E402
 
-from tanglepack.examples.henon_cases import build_nested  # noqa: E402
+from tanglepack.examples.henon_cases import build_heteroclinic, build_nested  # noqa: E402
 
 
 def main() -> None:
@@ -65,10 +70,16 @@ def main() -> None:
         default=1e-7,
         help="area cutoff while growing the period-1 manifolds",
     )
+    parser.add_argument(
+        "--heteroclinic",
+        action="store_true",
+        help="grow period 3 to 16 / 10 steps, across the outer stable manifold",
+    )
     args = parser.parse_args()
     configure_logging()
 
-    built = build_nested(
+    build = build_heteroclinic if args.heteroclinic else build_nested
+    built = build(
         outer_blasts=args.outer_blasts,
         inner_blasts=args.inner_blasts,
         p1_area_cutoff=args.p1_area_cutoff,
