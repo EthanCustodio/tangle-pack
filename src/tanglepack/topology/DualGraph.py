@@ -68,7 +68,8 @@ Dev Notes:
   (INT-10, WP10): it is the face whose sector at the component's EASTERNMOST
   polyline vertex holds due east, since everything else lies west of that
   vertex. The positive-traversal-area rule it replaces raised on the
-  self-intersecting slivers of deep blasts, where no area is trustworthy. Nesting is then one point-in-polygon test per component
+  self-intersecting slivers of deep blasts, where no area is trustworthy.
+  Nesting is then one point-in-polygon test per component
   (:meth:`DualGraph._innermost_container`), the chalkboard's one containment
   test per tangle.
 """

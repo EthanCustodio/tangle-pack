@@ -221,7 +221,8 @@ class TangleSession:
         single-fixed-point trellis gets its fixed point's chosen strong pip back
         (API-1): the remembered pip is found again by its cdists and keys and
         tested alone (the other candidates are classified only when read, WP10);
-        a pip that is no longer a candidate is left unset with a WARNING. Once a pip is chosen the trellis is cut at its orbit
+        a pip that is no longer a candidate is left unset with a WARNING. Once
+        a pip is chosen the trellis is cut at its orbit
         (``Trellis.cut_at_pip_orbit``, D10, D12): a single fixed point's when
         the pip is set or restored, a selection of several at the pips of its
         fixed points on every read (a no-op while they are unchanged), so the

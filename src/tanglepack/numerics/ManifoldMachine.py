@@ -396,9 +396,9 @@ class ManifoldMachine:
         if not chains:
             raise ValueError("No points in manifold to iterate")
         image = chains[0]
+        for chain in chains[1:]:
+            image = self.merge_manifolds(image, chain)
         if len(chains) > 1:
-            for chain in chains[1:]:
-                image = self.merge_manifolds(image, chain)
             self.refine_manifold(image)
 
         piece = dict(
