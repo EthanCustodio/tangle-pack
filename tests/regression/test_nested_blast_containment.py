@@ -11,9 +11,12 @@ zones come from the tests-only :mod:`cases` builder.
 
 from __future__ import annotations
 
+import copy
 from collections import Counter
 
-from cases import build_nested
+from cases import build_k10, build_nested
+from tanglepack import define_resonance_zone
+from tanglepack.numerics.geometry import polyline_midpoint
 
 
 def _zones(case):
@@ -39,6 +42,39 @@ def test_an_unfiltered_outer_blast_iterates_only_its_innermost_bridges():
     parents = result.steps[0].interior_parents
     assert parents and all(session.classify_bridge(bridge) is outer for bridge in parents)
     assert not [bridge.id for bridge in inner_bridges if bridge.iterated]
+
+
+def test_an_unstored_zone_blasts_the_bridges_inside_it():
+    """The blasted zone need not be one the session stores (C4 review, WP9):
+    a ``define_resonance_zone`` zone, with no zone stored, iterates every
+    un-iterated bridge whose midpoint it holds."""
+    case = build_k10(through="pips")
+    session, fixed_point = case.session, case.fixed_points[0]
+    zone = define_resonance_zone(session.workbench, session.strong_pip(fixed_point))
+    assert not session.resonance_zones
+    inside = {
+        bridge.id for bridge in session.workbench.uniiterated_bridges
+        if zone.contains_point(polyline_midpoint(bridge.get_point_array()))
+    }
+    result = session.blast_zone(zone, num_iterations=1, fixed_point=[fixed_point])
+    assert inside
+    assert {bridge.id for bridge in result.steps[0].interior_parents} == inside
+
+
+def test_a_copy_of_a_stored_zone_blasts_like_the_stored_zone():
+    """A handle that is not the stored object (a replaced or copied zone) still
+    iterates exactly the bridges whose innermost stored zone it stands for."""
+    case = build_nested(outer_blasts=0, through="zones")
+    session = case.session
+    _inner, outer = _zones(case)
+    expected = {
+        bridge.id for bridge in session.workbench.uniiterated_bridges
+        if bridge.fixed_point is outer.fixed_point and session.classify_bridge(bridge) is outer
+    }
+    result = session.blast_zone(copy.copy(outer), num_iterations=1,
+                                fixed_point=[outer.fixed_point], min_separation=1e-4)
+    assert expected
+    assert {bridge.id for bridge in result.steps[0].interior_parents} == expected
 
 
 def _signature(case) -> tuple:

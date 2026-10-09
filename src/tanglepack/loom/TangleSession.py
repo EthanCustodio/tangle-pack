@@ -1649,7 +1649,8 @@ class TangleSession:
         (:meth:`classify_bridge`, C4) forward (cutting the image into child bridges
         at its new stable-manifold crossings) and keeps the children that land back
         in it, recursing up to ``num_iterations`` times. An outer zone's blast never
-        iterates a bridge inside an inner zone, so nested blasting does not depend
+        iterates a bridge inside a smaller stored zone of another fixed point (the
+        blasted zone itself need not be stored), so nested blasting does not depend
         on the order of the zones; with ``fixed_point=None`` it still iterates an
         inner tangle's bridges in the annulus between them (they are the outer
         zone's). Bridges that leave the zone are never re-iterated — iterating

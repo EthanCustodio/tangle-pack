@@ -10,8 +10,9 @@ the process recurses up to ``num_iterations`` times.
 
 Zones nest (C4, WP9): a bridge belongs to the smallest zone containing its midpoint
 (:meth:`TangleSession.classify_bridge`), so an outer zone's blast never iterates a
-bridge inside an inner zone, and nested blasting does not depend on the order of the
-zones. With ``fixed_point=None`` an outer blast still iterates an inner tangle's bridges
+bridge inside a smaller zone of another fixed point stored on the session, and nested
+blasting does not depend on the order of the zones. The blasted zone itself need not
+be stored (:func:`define_resonance_zone`, a handle the session has since replaced). With ``fixed_point=None`` an outer blast still iterates an inner tangle's bridges
 lying in the annulus between the two zones: they are the outer zone's bridges. The
 recipes pass the zone's own fixed point, which leaves them alone.
 
@@ -283,8 +284,21 @@ def blast_zone(
             "session.resonance_zone()/add_resonance_zones() before blasting."
         )
 
+    # C4: a bridge belongs to its INNERMOST zone. The blasted zone need not be
+    # stored (define_resonance_zone, a replaced handle), so it is compared with
+    # the stored zones of the OTHER fixed points rather than looked up.
+    inner_zones = [
+        other for other in session.resonance_zones.values()
+        if other.key is not zone.key and other.area < zone.area
+    ]
+
     def in_zone(bridge: "Bridge") -> bool:
-        return session.classify_bridge(bridge) is zone  # innermost containing zone (C4)
+        point = session._bridge_test_point(bridge)
+        return (
+            point is not None
+            and zone.contains_point(point)
+            and not any(inner.contains_point(point) for inner in inner_zones)
+        )
 
     # Normalize the fixed-point filter to a set of allowed fixed points (or None for
     # "all"). Accepts a single FixedPoint or any iterable of them, so a caller can
