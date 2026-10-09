@@ -82,11 +82,6 @@ Open questions:
 * ``iterate_manifold`` maps exactly one step and takes no ``num_iterations``
   input. An old TODO asked for one; repeated iteration is the caller's loop
   (``grow_x_times``), so the extra parameter is not wanted.
-* ``iterate_bridge`` hands back whatever ``iterate_manifold`` produced without
-  re-asserting the :class:`~.Bridge.Bridge` invariants on it (root and tail are
-  not crossings; the two endpoint ids are set by the caller). Whether the image
-  should be validated as a bridge here, or constructed as one by ``Bridge``
-  itself, is undecided.
 """
 
 from __future__ import annotations
@@ -375,30 +370,15 @@ class ManifoldMachine:
                 manifold_key=None,
             )
 
-        # if there were points that needed to be mapped
-        if not len(non_iterated_coords) == 0:
+        # The images that already exist may lie on several curves (NUM-9): merge
+        # each contiguous chain of them in turn.
+        chains = self._image_chains(manifold, old_points)
 
-            # Only create old_iterated_points if there are some
-            if len(old_points) > 0:
-                old_iterated_points = BaseManifold(
-                    old_points[0],
-                    manifold.stability,
-                    manifold.stretch_param,
-                    manifold.fixed_point,
-                    tail=old_points[-1],
-                    branch_index=manifold.branch_index,
-                    manifold_key=None,
-                )
-
-                mapped_manifold = self.merge_manifolds(
-                    old_iterated_points, new_iterated_points
-                )
-                self.refine_manifold(mapped_manifold)
-            else:
-                # No old iterated points - this is the first iteration of this bridge
-                # Just refine the newly iterated points
-                self.refine_manifold(new_iterated_points)
-                mapped_manifold = new_iterated_points
+        if len(non_iterated_coords):
+            mapped_manifold = new_iterated_points
+            for chain in chains:
+                mapped_manifold = self.merge_manifolds(chain, mapped_manifold)
+            self.refine_manifold(mapped_manifold)
 
             # cdist is the manifold's ordering key, so the geometric list must be
             # cdist-sorted. It is only *non-decreasing*, not strictly increasing:
@@ -409,58 +389,77 @@ class ManifoldMachine:
 
             return mapped_manifold
 
-        else:
-            # All points already have iterates - collect the iterated points
-            # This happens with bridges cut from the middle of a manifold
-            if len(old_points) == 0:
-                raise ValueError("No points in manifold to iterate")
+        # Every point already has its image (a bridge cut from the middle of a grown
+        # manifold): the image is bracketed by those images directly; do NOT step one
+        # more iterate forward (that image does not exist yet). Images on two curves
+        # are joined first, as above.
+        if not chains:
+            raise ValueError("No points in manifold to iterate")
+        image = chains[0]
+        if len(chains) > 1:
+            for chain in chains[1:]:
+                image = self.merge_manifolds(image, chain)
+            self.refine_manifold(image)
 
-            # The old_points already have their iterates computed
-            # Just need to create a new manifold/bridge from those iterates
-            # The iterated points are already geometrically connected in the iterate chain
+        piece = dict(
+            root=image.root,
+            stability=manifold.stability,
+            stretch_param=manifold.stretch_param,
+            fixed_point=manifold.fixed_point,
+            tail=image.tail,
+            branch_index=manifold.branch_index,
+            manifold_key=None,
+        )
+        if isinstance(manifold, Bridge):
+            return Bridge(name=manifold.name, **piece)
+        return BaseManifold(**piece)
 
-            # ``old_points`` are already the iterates (forward images) of this
-            # manifold's points -- ``get_iterated_point_array`` returned each point's
-            # image. The iterated manifold is therefore bracketed by those images
-            # directly; do NOT step one more iterate forward (that image does not
-            # exist yet and was the source of the spurious "next_iterate is None"
-            # failure when re-iterating an already-iterated child bridge).
-            first_iterate = old_points[0]
-            last_iterate = old_points[-1]
+    def _image_chains(self, manifold: BaseManifold, images: list[Point]) -> list[BaseManifold]:
+        """
+        The existing images of a curve's points, as geometrically contiguous chains.
 
-            if first_iterate is None or last_iterate is None:
-                raise ValueError(
-                    "Points claim to have iterates but next_iterate/prev_iterate is None"
-                )
+        A bridge's images are usually one run of one curve, but a bridge whose
+        straddle nodes it shares with a neighbour that was iterated first has its
+        images on TWO curves (NUM-9: the grown manifold's tip, then the start of the
+        neighbour's image). Walking the curve from the first image, the images it
+        reaches (to the end of that curve, or past the last image's cdist) form one
+        chain from the first to the last reached; the next chain starts at the
+        first image after it. An image the walk passes over without reaching (a
+        node a merge dropped as a duplicate cdist keeps its preimage's link) is
+        skipped, as one merged chain always skipped it.
 
-            # Check if the input was a Bridge - if so, return a Bridge
-            # I might want to do this for the other case as well, not just
-            # if none of the points had already been iterated
-            if isinstance(manifold, Bridge):
-                iterated_bridge = Bridge(
-                    root=first_iterate,
-                    stability=manifold.stability,
-                    stretch_param=manifold.stretch_param,
-                    fixed_point=manifold.fixed_point,
-                    tail=last_iterate,
-                    name=manifold.name,
-                    branch_index=manifold.branch_index,
-                    manifold_key=None,
-                )
-                return iterated_bridge
-            else:
-                # Construct a new BaseManifold
-                iterated_manifold = BaseManifold(
-                    root=first_iterate,
-                    stability=manifold.stability,
-                    stretch_param=manifold.stretch_param,
-                    fixed_point=manifold.fixed_point,
-                    tail=last_iterate,
-                    branch_index=manifold.branch_index,
-                    manifold_key=None,
-                )
+        Args:
+            manifold: The curve being iterated (its stability and branch walk the images).
+            images: The existing images, in the curve's order.
 
-                return iterated_manifold
+        Returns:
+            One manifold per chain, in cdist order; empty when there are no images.
+        """
+        def chain(first: Point, last: Point) -> BaseManifold:
+            return BaseManifold(
+                first,
+                manifold.stability,
+                manifold.stretch_param,
+                manifold.fixed_point,
+                tail=last,
+                branch_index=manifold.branch_index,
+                manifold_key=None,
+            )
+
+        if not len(images):
+            return []
+        walker = chain(images[0], images[-1])
+        bound = images[-1].cdist
+        chains, i = [], 0
+        while i < len(images):
+            reached, previous, node = set(), None, images[i]
+            while node is not None and node.cdist <= bound:
+                reached.add(id(node))
+                previous, node = node, walker.walk_fwd(previous, node)
+            last = max(j for j in range(i, len(images)) if id(images[j]) in reached)
+            chains.append(chain(images[i], images[last]))
+            i = last + 1
+        return chains
 
     def iterate_bridge(self, manifold: Bridge) -> BaseManifold:
         """
