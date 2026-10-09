@@ -19,9 +19,10 @@ algorithms produce.
 Intersections are referenced by their integer registry ID rather than by object
 so that a result survives a registry rebuild and is cheap to serialise.
 
-Open question: a Hole is currently a single phase-space coordinate. We may
-eventually want a Hole to also reference the bounding bridge(s) or the
-enclosed region directly, rather than just via ``bounding_ids``.
+A Hole is a marker beside its OWN bridge (D13): ``bounding_ids`` names that
+bridge's crossings and ``bridge_side`` the side it sits on, which is all the
+partition, the marker law and the plots read; its coordinate is only a drawing
+aid (settled, WP12).
 """
 
 from __future__ import annotations

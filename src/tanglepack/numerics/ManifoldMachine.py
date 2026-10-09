@@ -77,11 +77,9 @@ the point budget is what makes the finer default safe. A recipe tuned at 1e-4
 (the k=10 tests and scripts grow 9-10 steps) passes ``area_cutoff=1e-4``
 explicitly; the topology there is the same at both.
 
-Open questions:
-
-* ``iterate_manifold`` maps exactly one step and takes no ``num_iterations``
-  input. An old TODO asked for one; repeated iteration is the caller's loop
-  (``grow_x_times``), so the extra parameter is not wanted.
+``iterate_manifold`` maps exactly one step and takes no ``num_iterations``:
+repeated iteration is the caller's loop (``grow_n_times``), settled (an old
+TODO asked for the parameter; it is not wanted).
 """
 
 from __future__ import annotations
