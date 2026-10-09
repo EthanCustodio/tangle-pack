@@ -663,7 +663,7 @@ def test_a_memberless_class_lies_one_step_past_its_namer(period, inversion):
     """A class no computed bridge spans yet (D11) is a piece of ``f(x)`` for ``x`` in
     the class that named it, so its arcs lie one map step past the namer's."""
     fp = bare_fixed_point(period, inversion=inversion)
-    namer = {(fp, "unstable", orbit, 0) for orbit in range(period)}
+    namer = {(fp, "unstable", 0, 0)}
     cls = BridgeClass(ElementRef((fp, "stable", 0, 0), "left", 0), ElementRef((fp, "stable", 0, 0), "left", 1))
     branches = SD._arc_branches(None, BridgeClassEntry(cls), frozenset(namer))
     assert branches == {fp.advance_key(key, 1) for key in namer}

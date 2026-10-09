@@ -575,13 +575,17 @@ flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py
   17u the connecting class `bm` has two registered members and is ambiguous on base.
 - **The rule (C17, walls).** `SymbolicDynamics._arc_branches` (`SymbolicDynamics.py:1090`): a class's arcs lie on
   its members' unstable branches (`Trellis.unstable_key_of`, loops included), or one `advance_key` step past
-  its namer's. In `symbolic_dynamics` (`:1347-1350`) the decided walks (`unique` / `trivial`) of the classes
+  its namer's. In `symbolic_dynamics` (`:1347-1352`) the decided walks (`unique` / `trivial`) of the classes
   walked EARLIER whose branches are disjoint from this class's are its walls (`walk_chords`,
-  `DualWalk.py:829`); `shortest_walks(walls=)` (`DualWalk.py:1235`) drops, from a tie only, the walks with a
-  chord crossing a wall in its face (`_crosses_a_wall`, `DualGraph.chords_cross` `DualGraph.py:1372`: four
+  `DualWalk.py:831`); `shortest_walks(walls=)` (`DualWalk.py:1229`) drops, from a tie only, the walks with a
+  chord crossing a wall in its face (`DualGraph.chords_cross` `DualGraph.py:1372`: four
   distinct ends on one ring, alternating; `_ring_index` shared with `_cut_ring`), INFO, counted in
   `WalkSearch.rejected`; when every walk crosses a wall the tie stands (never observed). The walls apply to
-  member-lobe ties too (after the marker filter). The member-less entry's `tangle` takes the namer's fixed
+  member-lobe ties too (after the marker filter). Only a walk of `multiplicity == 1` is a wall or is judged
+  by one (fix round, reviewer: a trivial walk's face is `shared[0]` of `len(shared)`, a unique itinerary
+  counts its other paths, so the chord read is an arbitrary representative; heteroclinic had u, bj at x5 and
+  v..y at x2 as walls, latent). The filter is a comprehension in `shortest_walks` (`_crosses_a_wall`
+  removed); `DualGraph._ring_of` reads `_ring_index`. The member-less entry's `tangle` takes the namer's fixed
   points into the table's rule (a no-op everywhere).
 - **Measured.** Id-free and exact `describe()` signatures (`wp11/sig.py`, `PYTHONHASHSEED=0`) of the 11 law
   cases, `p3_15`, `p3_16`, `p3_6_blasts`, `p3_16_12`, `inversion_period2_10`, `k28_deep_blast_sliver` identical

@@ -156,7 +156,8 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   disjoint from this class's is a wall, and a tie loses the walks whose chords interleave with a
   wall's on a face ring (`shortest_walks(walls=)`, `walk_chords`, `DualGraph.chords_cross`). A tie
   filter only (a unique walk is never second-guessed); when every walk crosses a wall the tie
-  stands. Effect: `heteroclinic`'s `bn` resolved with the word base printed first, the dynamics
+  stands. Only a walk of multiplicity 1 is a wall or is judged by one: a walk standing for
+  several face paths names none of them (review fix). Effect: `heteroclinic`'s `bn` resolved with the word base printed first, the dynamics
   reliable; at 17u the connecting class `bm` resolved to its registered word; nothing else moves
   on any law case, deep run or series step.
 - **C18 (under D14) — what is tested.** D14 is tested as "a class connects two tangles only where

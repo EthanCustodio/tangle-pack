@@ -652,7 +652,8 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 - KNOWN_ISSUES 2 -> 1: `(every_active_class_walks, heteroclinic)` XPASSed (the walls decide `bn`) and was
   removed; left `(orientation_reversing_case_builds, orientation_reversing)` (C3). NOT_APPLICABLE +5.
 - New symbolic law `walks_avoid_disjoint_images` (D13, D14): two classes with decided walks whose arcs lie on
-  disjoint unstable-branch sets (re-derived in the test, `laws._arc_branches`: members' branches, or one
+  disjoint unstable-branch sets (decided = `unique` / `trivial` of `multiplicity == 1`, the library's
+  rule; re-derived in the test, `laws._arc_branches`: members' branches, or one
   `advance_key` step past the namer's) have no chords interleaving on a face ring (`walk_chords`, checked
   with `DualGraph.chords_cross` AND an independent ring-position test, `_chords_interleave`). It counts the
   CLASS pairs judged, not the chord pairs: `test_every_law_holds_on_the_deep_runs` runs every law on
@@ -668,11 +669,13 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   ambiguous; `is_reliable` is not pinned, conftest policy) and, under `perf`,
   `test_registered_connecting_images_agree_with_the_wall_rule` on the new builder `heteroclinic_17u`
   (`build_heteroclinic(p3_unstable_steps=17)`, 27 s; reproduces `wp09c_17u_base.txt`: `bm` ambiguous on base).
-- Unit: `test_dual_walk.py` (a wall breaks the `tie`, a wall crossing every walk keeps it, no walls / walls in
+- Unit: `test_dual_walk.py` (a wall breaks the `tie`, a wall crossing every walk keeps it, a walk of
+  multiplicity 2 is never rejected (fails with the multiplicity guard removed), no walls / walls in
   an unvisited face change nothing, `walk_chords` end to end; `chords_cross` stubbed on the `FakeDual`
   instance), `test_enclosure.py` (`chords_cross` interleaved / nested / shared end edge / apart, both orders,
   and the same verdict as `enclosed(...) == []`), `test_symbolic_dynamics.py` (`_arc_branches`: a member-less
-  class one step past its namer on period 3 and inversion periods 1 / 2; a member class on its members').
+  class one step past its namer on period 3 and inversion periods 1 / 2, namer = one branch so every
+  parameter fails without the step; a member class on its members').
   Scaffolding updated: the synthetic `_Crossings` trellis answers `unstable_key_of`, and the `_resolve_itinerary`
   stub takes `walls`.
 - Base check: the new and extended test files plus `cases.py` copied over a `git archive` of base

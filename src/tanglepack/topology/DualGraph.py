@@ -1247,9 +1247,9 @@ class DualGraph:
             r
             for r, region in enumerate(face.faces)
             if all(
-                any(arc.edge_key == edge and face_side(arc) == side for arc in region.arcs)
+                _ring_index(region.arcs, end) is not None
                 for chord in chords
-                for edge, side in (chord[:2], chord[2:])
+                for end in (chord[:2], chord[2:])
             )
         }
         return holding.pop() if len(holding) == 1 else None
