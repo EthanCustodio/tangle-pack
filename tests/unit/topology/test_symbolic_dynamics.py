@@ -513,7 +513,10 @@ def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
     monkeypatch.setattr(SD, "trellis_itinerary", lambda _t, _i, chain, _d: registered[tuple(chain)])
     dual = SimpleNamespace(
         trellis=_Crossings(layout.fixed_points, crossings or {}),
-        partition=SimpleNamespace(homotopy=object()),
+        # Elements with no bounding crossings: no order flip to read (C21).
+        partition=SimpleNamespace(
+            homotopy=SimpleNamespace(element=lambda _ref: SimpleNamespace(lo_id=None, hi_id=None))
+        ),
         minimal=SimpleNamespace(classes=evidence),
     )
     return symbolic_dynamics(dual, alphabet, letter_for=letter_for)
