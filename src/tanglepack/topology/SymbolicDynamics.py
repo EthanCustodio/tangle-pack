@@ -23,7 +23,7 @@ Dev Notes:
   WP6): active classes ``a..t, aa, ab, ...``, inert ones ``u..z, uu, uv, ...``,
   so the two series never collide and nothing is skipped. Inert classes are
   lettered by THIS layer only; the session's ``BridgeAlphabet`` letters the
-  active ones with the same :func:`letter` (topology never imports loom).
+  active ones with the same :func:`letter` (topology does not depend on loom).
 * The ALPHABET is the table handed in -- normally ``MinimalTrellis.alphabet``,
   the classes of the minimal trellis's bridges, lettered by the session (D2) --
   closed under the word map (WP7, C9). Every pair of a walk is the class of one
