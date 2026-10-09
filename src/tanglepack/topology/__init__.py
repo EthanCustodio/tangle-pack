@@ -30,12 +30,10 @@ from .TopologyResults import (
 from .StrongPip import (
     is_strong_pip,
     classify_strong_pips,
-    forward_stable_branch_cycle,
 )
 from .Pseudoneighbor import (
     compute_pseudoneighbors,
     extend_pseudoneighbor_trajectories,
-    forward_unstable_branch_cycle,
 )
 from .plotting import (
     CartoonLayout,
@@ -195,10 +193,8 @@ __all__ = [
     "StrongPipResult",
     "is_strong_pip",
     "classify_strong_pips",
-    "forward_stable_branch_cycle",
     "compute_pseudoneighbors",
     "extend_pseudoneighbor_trajectories",
-    "forward_unstable_branch_cycle",
     "bridge_classes",
     "bridge_for_pair",
     "RowDiagnosis",

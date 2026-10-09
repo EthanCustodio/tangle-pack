@@ -114,7 +114,7 @@ Implementation notes:
   iterates sit exactly at the (scaled) endpoints up to canonical-distance
   noise and are recognised by a 2D endpoint collision (both the landing's
   unstable AND stable positions match an endpoint within collision_rtol —
-  the StrongPip same-point test; never the product). A blanket relative
+  ``Trellis.same_point``, shared with StrongPip; never the product). A blanket relative
   shrink of the interval was tried first and swallowed GENUINE interior
   crossings on deep blast levels, where interval widths are small relative
   to the cdist magnitude.
@@ -139,6 +139,7 @@ from typing import Iterable, Optional, TYPE_CHECKING
 
 from ..numerics.Intersection import ManifoldKey
 from .TopologyResults import PseudoneighborPair
+from .Trellis import same_point
 
 if TYPE_CHECKING:
     from .Trellis import Trellis
@@ -147,23 +148,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-
-def forward_unstable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey]:
-    """
-    Return the fixed point's unstable branches in forward-iteration (M) order.
-
-    Thin wrapper around :meth:`FixedPoint.branch_cycle`, which is the single
-    source of truth for the chain of manifold pieces one map step walks.
-
-    Args:
-        fixed_point: The fixed point whose unstable branches to order.
-
-    Returns:
-        List of manifold keys (fixed_point, "unstable", orbit_index,
-        branch_index) in forward-iteration order, of length ``k_value``.
-    """
-    return fixed_point.branch_cycle("unstable")
 
 
 def compute_pseudoneighbors(
@@ -423,7 +407,7 @@ def _unstable_interval_is_clear(
     ``Trellis.image_cdist``. There the open interval is strict and the landing is
     skipped only when it 2D-collides with an endpoint (both the scaled
     unstable and stable positions match within ``collision_rtol``) — x0/x1's
-    own orbit up to cdist noise, the same-point test StrongPip uses.
+    own orbit up to cdist noise, ``Trellis.same_point``.
 
     The arc is the unstable arc of the pair, so the cycle, ``k`` and ``beta`` are
     those of ITS fixed point: A's for a heteroclinic pair of ``W^u(A)`` crossings
@@ -438,8 +422,7 @@ def _unstable_interval_is_clear(
         return False  # no single unstable arc connects the pair (see Dev Notes)
 
     owner = u_key[0]
-    cycle = forward_unstable_branch_cycle(owner)
-    pos_map, k = {key: i for i, key in enumerate(cycle)}, len(cycle)
+    pos_map, k = owner.branch_position_map("unstable")
     beta = owner.per_step_beta("unstable")
     pos_target = pos_map[u_key]
 
@@ -514,10 +497,8 @@ def _unstable_interval_is_clear(
                         continue
                     _, u_e, _ = trellis.image_cdist(x, -steps, "unstable")
                     _, s_e, _ = trellis.image_cdist(x, -steps, "stable")
-                    if (
-                        same_stable
-                        and abs(r.unstable_cdist - u_e) <= collision_rtol * u_e
-                        and abs(r.stable_cdist - s_e) <= collision_rtol * s_e
+                    if same_stable and same_point(
+                        r.unstable_cdist, r.stable_cdist, u_e, s_e, collision_rtol
                     ):
                         continue  # r is x's own unlinked orbit (2D collision)
                     ends.append(u_e)
@@ -535,9 +516,7 @@ def _unstable_interval_is_clear(
 
             _, s_value, _ = trellis.image_cdist(r_id, steps, "stable")
             if same_stable and any(
-                abs(value - u_e) <= collision_rtol * u_e
-                and abs(s_value - s_e) <= collision_rtol * s_e
-                for u_e, s_e in endpoints
+                same_point(value, s_value, u_e, s_e, collision_rtol) for u_e, s_e in endpoints
             ):
                 continue  # the endpoint's own orbit (2D collision on one stable manifold)
             logger.debug(

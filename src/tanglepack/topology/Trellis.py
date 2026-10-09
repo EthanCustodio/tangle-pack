@@ -107,6 +107,26 @@ logger.addHandler(logging.NullHandler())
 SCALING_RTOL = 1e-2
 
 
+def same_point(u: float, s: float, u0: float, s0: float, rtol: float) -> bool:
+    """
+    Whether two placements ``(u, s)`` and ``(u0, s0)`` of a crossing are one point.
+
+    Used only for an UNLINKED crossing (one the iterate table cannot name),
+    whose scaled cdists carry the scaling law's relative error. Both cdists
+    must agree -- a 2-D coincidence -- never their product, which two different
+    iterate chains share.
+
+    Args:
+        u, s: The unstable and stable cdists of one placement.
+        u0, s0: The other placement's.
+        rtol: The relative error each cdist may carry.
+
+    Returns:
+        True when both cdists agree to ``rtol``.
+    """
+    return abs(u - u0) <= rtol * u0 and abs(s - s0) <= rtol * s0
+
+
 class Trellis:
     """
     The finite trellis T = T^U ∩ T^S: the topological view of a computed tangle.

@@ -68,7 +68,7 @@ Lookup first: a crossing's backward representative is the iterate table's answer
 when it has one, and otherwise Trellis.image_cdist -- the one crossing-level scaling
 path (table first, then per_step_beta).
 
-Branch cycle / inversion: forward_stable_branch_cycle() follows advance_key, so the
+Branch cycle / inversion: FixedPoint.branch_position_map follows advance_key, so the
 inversion ordering (k_value == 2*period, branch_index flips after each full orbit)
 needs no special case; it is exercised by the inversion law cases (the k=4 saddle
 at 0/1/2 blasts and the k=4.1 period-2 orbit).
@@ -80,49 +80,14 @@ import logging
 import math
 from typing import Iterable, Optional, TYPE_CHECKING
 
-from ..numerics.Intersection import ManifoldKey
 from .TopologyResults import StrongPipResult
+from .Trellis import same_point
 
 if TYPE_CHECKING:
     from .Trellis import Trellis
-    from ..numerics.FixedPoint import FixedPoint
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-
-def forward_stable_branch_cycle(fixed_point: "FixedPoint") -> list[ManifoldKey]:
-    """
-    Return the fixed point's stable branches in forward-iteration (M) order.
-
-    Thin wrapper around :meth:`FixedPoint.branch_cycle`, which is the single
-    source of truth for the chain of manifold pieces one map step walks. Element
-    j maps to element j+1 (mod len) under one application of M; the cycle has
-    length ``fixed_point.k_value``. The stable manifold of z_i maps under M to
-    the stable manifold of M(z_i), so the stable branches cycle in the same
-    (forward) orbit order the unstable ones do -- growing the stable manifold
-    backwards is a different question and does not enter here.
-
-    Args:
-        fixed_point: The fixed point whose stable branches to order.
-
-    Returns:
-        List of manifold keys (fixed_point, "stable", orbit_index, branch_index)
-        in forward-iteration order.
-    """
-    return fixed_point.branch_cycle("stable")
-
-
-def _branch_position_map(
-    fixed_point: "FixedPoint",
-) -> tuple[dict[ManifoldKey, int], int]:
-    """Return (position-of-each-stable-branch, cycle length k_value).
-
-    Thin wrapper around the memo on :meth:`FixedPoint.branch_position_map`,
-    which is the single source of truth for the chain; the returned mapping is
-    shared and must not be mutated.
-    """
-    return fixed_point.branch_position_map("stable")
 
 
 def is_strong_pip(
@@ -183,7 +148,7 @@ def is_strong_pip(
     fixed_point = branch_key[0]
     s0 = q0.stable_cdist
     u0 = q0.unstable_cdist
-    pos_map, k = _branch_position_map(fixed_point)
+    pos_map, k = fixed_point.branch_position_map("stable")
 
     pos_B = pos_map.get(branch_key)
     if pos_B is None:
@@ -239,9 +204,7 @@ def is_strong_pip(
             # q0's genuine iterates are skipped; a distinct chain that merely
             # shares q0's stable OR unstable cdist — or an equal "action"
             # product — is not mistaken for q0.
-            collides_s = abs(stable_rep - s0) <= collision_rtol * s0
-            collides_u = abs(unstable_rep - u0) <= collision_rtol * u0
-            if collides_s and collides_u:
+            if same_point(unstable_rep, stable_rep, u0, s0, collision_rtol):
                 continue
 
         if stable_rep < s0 and unstable_rep < u0 and unstable_rep < best_rep:

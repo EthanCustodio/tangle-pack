@@ -182,7 +182,7 @@ fixed in conversation with the author (July 2026):
   anchor is told by identity (``Intersection.is_anchor``, synthetic at
   exactly 0.0), ownership and containment are exact, and the one slack left
   is the RELATIVE error of a scaled cdist (``SCALING_RTOL`` at a scaled
-  landing end, ``collision_rtol`` in the same-point test). Forcing the slack
+  landing end, ``collision_rtol`` in ``Trellis.same_point``). Forcing the slack
   to 0 moved no output on any fixture. ``cdist_tol`` survives only as
   geometry -- clipping a polyline to its arc (``Arc._interior_polyline``,
   ``_oriented_bridge_polyline``) -- never as identity or ownership.
