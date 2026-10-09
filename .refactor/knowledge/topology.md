@@ -484,7 +484,7 @@ flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py
   placement (the side of the containing bridge facing its own trellis lobe) breaks the registered-image law on
   9 of 11 law cases (`breakit.py corner`): a propagated hole sits beside its container's image SUB-ARC (INT-2).
   A GLOBAL side flip passes the registered-image law (it is equivariant: f preserves sides) but makes `a` on
-  k10 / nested / p3 / heteroclinic `no_admissible_walk`, which `ambiguous_only_without_a_member_lobe` catches.
+  k10 / nested / p3 / heteroclinic `no_admissible_walk`, which `member_lobe_classes_have_one_walk` catches.
   Orbit +2 passes every law (no lobe with a kept image chain separates the points of one orbit).
 - **Enclosure (`DualGraph.enclosed`).** Pieces = ring arcs, a split stable edge (a chord ends at its middle)
   as two halves named by their end vertex. A chorded face: the ring holding both ends of every chord (else
@@ -511,8 +511,12 @@ flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py
 - **Search.** Without `wanted`: the old BFS + backtrack (unchanged results; `start == goal` is now just the
   shared-face case, identical without landings). With `wanted`: L0 from the BFS (0 when a start face is a goal
   face), then `_walks(length)` for L0..L0+MAX_DETOUR (DFS, faces may repeat, a node crossed once, pruned by
-  the BFS distance to the goal faces), the `max_walks` budget counting realizations (never hit on the law cases,
-  deep runs or series). Status `trivial` iff the chosen length is 0.
+  the BFS distance to the goal faces). The `max_walks` budget counts JUDGEMENTS (`holds_markers` calls): once an
+  itinerary has a True realization its other realizations only add to its multiplicity (review fix: the first
+  cut charged every realization and truncated the k32 series' trivial `u` at 6 blasts, 132 node pairs, and `ba`
+  at 10, words unchanged; now never hit on the law cases, deep runs or series). Out of budget with nothing
+  admitted = status `truncated`, no walk (was mislabelled `no_admissible_walk`). Status `trivial` iff the chosen
+  length is 0.
 - **Measured.** Law cases and deep runs: id-free signatures identical to base except `heteroclinic` (`a`
   unambiguous, `c` -> `a d^-1 a^-1`, `bh` -> `bi bj bi^-1` via a 2-crossing detour, ambiguous -> [bn], verified
   False -> none) and `k28_deep_blast_sliver` (reliable, hash 794bc6ac4f -> 0e8153ad32), both equal to the

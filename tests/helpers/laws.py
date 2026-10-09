@@ -2619,11 +2619,12 @@ def check_walks_agree_with_registered_images(case: "Case") -> int:
     return count
 
 
-def check_ambiguous_only_without_a_member_lobe(case: "Case") -> int:
+def check_member_lobe_classes_have_one_walk(case: "Case") -> int:
     """D13: a walked class with a member lobe -- a non-loop member the minimal trellis
-    keeps whose two ends lie on one stable branch -- has its side picked by the
-    non-crossing rule, so only a class without one may stay ambiguous; and since the
-    image of the member is a walk that holds the right markers, one is found."""
+    keeps whose two ends lie on one stable branch -- has exactly one walk (``unique``
+    or ``trivial``): the non-crossing rule picks its side, so only a class without one
+    may stay ambiguous, and the image of the member is a walk holding the right
+    markers, so one is found (no ``no_admissible_walk``, no ``truncated``)."""
     dyn = case.session.symbolic_dynamics()
     kept = set(case.session.minimal_trellis().kept_bridge_ids)
     count = 0
@@ -2911,7 +2912,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_cross_side_only_within_a_branch,
         check_every_active_class_walks,
         check_walks_agree_with_registered_images,
-        check_ambiguous_only_without_a_member_lobe,
+        check_member_lobe_classes_have_one_walk,
         check_walk_starts_on_the_landing,
         check_alphabet_closed_under_words,
         check_itinerary_pairs_are_classes,

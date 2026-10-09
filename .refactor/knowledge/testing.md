@@ -585,7 +585,7 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   member-less, connecting, NUM-21), its reason rewritten and its tag `WP9` -> `DEC-24`. The registry test
   accepts an open decision as a tag (`WP\d+|C\d|DEC-\d+`; `KnownIssue.wp` docstring says so).
 - New laws (all 11 law cases pass, every one non-vacuous): symbolic `walks_agree_with_registered_images`
-  (every evidence verdict agrees, no class `verified` False), `ambiguous_only_without_a_member_lobe` (a walked
+  (every evidence verdict agrees, no class `verified` False), `member_lobe_classes_have_one_walk` (a walked
   class with a member lobe -- kept non-loop member, both ends on one branch by `_stable_branch_at` -- has a
   `unique` or `trivial` walk: strengthened during the run from "not ambiguous" after the global-side-flip
   break-it left classes `no_admissible_walk` unnoticed), `walk_starts_on_the_landing` (the first / last face is
@@ -606,5 +606,18 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 - Break-its (`.../tmp/wp09b_impl/breakit.py`, `breakit2.py`): holes at the trellis-lobe corner fail
   `registered_images_keep_markers` on 9 of 11 (not p3, inversion_period2); dropping the span restriction fails
   the k28 series test (blast 8: 2 ambiguous) and the deep-sliver regression; flipping every hole side fails
-  `ambiguous_only_without_a_member_lobe` on k10, p3, nested, heteroclinic; orbit points mapped by +2 pass
-  everything (not observable on these fixtures).
+  `member_lobe_classes_have_one_walk` on k10, p3, nested, heteroclinic; orbit points mapped by +2 pass
+  every law (not observable on these fixtures; the unit test below guards it).
+- Review fix: the law first named `ambiguous_only_without_a_member_lobe` is `member_lobe_classes_have_one_walk`
+  (it asks for `unique` / `trivial`, so it also catches `no_admissible_walk` and `truncated`). New unit tests on
+  rules the laws could not see (the reviewer's mutants all survived the law tiers): `test_enclosure.py`
+  (real `Arc` / `Region` / `FaceNode` objects around one bridge lobe on a `DualGraph` made with
+  `object.__new__`: the lobe holds the hole beside its bridge and not the anchor, nested chords give one
+  routing, interleaved chords `[]`, an orbit marker maps to the orbit index `FixedPoint.advance_key` names on
+  periods 1-3 with and without inversion, a hole marker to its next iterate only when placed), and in
+  `test_dual_walk.py` the `sigma'` rule (a `FakeDual` whose enclosure holds nothing, so only `sigma'` can
+  reject: the walk across `[1, 2]` is False and loses to the one round the goal), a budget spent with nothing
+  admitted is `truncated`, and an admitted itinerary's other walks are counted, not judged. `FakeDual` nodes
+  now carry real `Arc`s (no geometry) and the dual has `stable_nodes_on`. Mutants killed: `sigma'` -> True,
+  `enclosed` crossing -> `[{}]`, `_cut_ring` crossing check removed, orbit `+0` / `+2`. (`return []` ->
+  `continue` in `enclosed` is equivalent: `_cut_ring` does not depend on the routing.)
