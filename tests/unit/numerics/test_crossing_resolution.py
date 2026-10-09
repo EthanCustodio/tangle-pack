@@ -201,3 +201,101 @@ def test_a_multi_bridge_blast_warns_at_most_once_per_call(caplog):
     caplog.clear()
     session.blast_zone(zone, num_iterations=1, fixed_point=[fp], diagnose=False)
     assert_logged(caplog, logging.WARNING, WORKBENCH, count=0)
+
+
+
+def _image_bridge(fp, points):
+    """A partial image bridge through ``points`` on ``fp``'s unstable branch 0.0."""
+    from tanglepack import Bridge, Point
+
+    nodes = [Point(x, y, float(k)) for k, (x, y) in enumerate(points)]
+    for node, following in zip(nodes, nodes[1:]):
+        node.insert_point_forward(following)
+    return Bridge(
+        root=nodes[0], stability="unstable", stretch_param=1.0, fixed_point=fp,
+        tail=nodes[-1], branch_index=0, manifold_key=(fp, "unstable", 0, 0),
+    )
+
+
+def _involved_hits(workbench, fixed_points, bridges):
+    """The full listing's unstable hits naming one of ``bridges``."""
+    from tanglepack.numerics.diagnostics import same_stability_crossings
+
+    names = {f"image bridge {bridge.id}" for bridge in bridges if bridge.id is not None}
+    names |= {f"partial image bridge {id(bridge):#x}" for bridge in bridges if bridge.id is None}
+    return [
+        hit
+        for hit in same_stability_crossings(workbench, fixed_points)
+        if hit.stability == "unstable" and {hit.curve_a, hit.curve_b} & names
+    ]
+
+
+def test_the_count_is_the_listing_of_the_new_curves():
+    """C5: ``count_same_stability_crossings`` counts exactly the full listing's hits
+    that name one of the new curves, in and out of the tangle region; the hits among
+    old curves only are not counted."""
+    from tanglepack.numerics.diagnostics import count_same_stability_crossings
+
+    fp = bare_fixed_point(label="A")
+    workbench = polyline_workbench(fp, {
+        (fp, "unstable", 0, 0): [(0, 0), (30, 0)],
+        (fp, "stable", 0, 0): [(1, -1), (1, 1)],   # the two crossings span the tangle box
+        (fp, "stable", 0, 1): [(9, -1), (9, 1)],
+    })
+    workbench.compute_intersections([fp], infer_iterates=False)
+    old = _image_bridge(fp, [(2, -0.5), (2.5, 0.5)])
+    new = [_image_bridge(fp, [(3, -0.5), (3.5, 0.5)]), _image_bridge(fp, [(20, -1), (20, 1)])]
+    for bridge in [old, *new]:
+        workbench._register_bridge(bridge)
+
+    count = count_same_stability_crossings(workbench, new)
+    involved = _involved_hits(workbench, [fp], new)
+    assert count.in_region == sum(hit.in_tangle_region for hit in involved) == 1
+    assert count.outside == sum(not hit.in_tangle_region for hit in involved) == 1
+    assert count.suggested_area_cutoff is not None
+    assert count_same_stability_crossings(workbench, [old]).in_region == 1
+
+
+def test_a_blast_counts_and_remembers_nothing(monkeypatch):
+    """A blast's report carries the count over the bridges it added and stores no
+    same-stability hit (every hit it can find involves a curve new to it)."""
+    from tanglepack.numerics.diagnostics import count_same_stability_crossings
+
+    case = build_k28(blasts=0, through="zones")
+    workbench = case.workbench
+    before = {id(bridge) for bridge in workbench.bridges}
+    remembered = set(workbench._reported_artifacts)
+    reports = []
+    report_resolution = workbench.report_resolution
+    monkeypatch.setattr(
+        workbench,
+        "report_resolution",
+        lambda *args, **kwargs: reports.append(report_resolution(*args, **kwargs)) or reports[-1],
+    )
+
+    case.session.blast_zone(case.zones[0], 1, fixed_point=case.fixed_points, diagnose=True)
+
+    added = [bridge for bridge in workbench.bridges if id(bridge) not in before]
+    (report,) = reports
+    assert added and report.same_stability_crossings == ()
+    assert report.same_stability_count == count_same_stability_crossings(workbench, added)
+    assert workbench._reported_artifacts == remembered
+
+
+@pytest.mark.perf
+def test_blast_count_is_the_new_bridges_hits():
+    """C5 on a real deep blast (k=2.8, the ninth blast, where the hits appear): the
+    count is the full listing's hits naming the bridges the blast added (~10 s)."""
+    from tanglepack.numerics.diagnostics import count_same_stability_crossings
+
+    case = build_k28(blasts=8, through="zones")
+    workbench, fixed_points = case.workbench, case.fixed_points
+    before = {id(bridge) for bridge in workbench.bridges}
+    case.session.blast_zone(case.zones[0], 1, fixed_point=fixed_points, diagnose=False)
+
+    added = [bridge for bridge in workbench.bridges if id(bridge) not in before]
+    count = count_same_stability_crossings(workbench, added)
+    involved = _involved_hits(workbench, fixed_points, added)
+    assert count.in_region == sum(hit.in_tangle_region for hit in involved)
+    assert count.outside == sum(not hit.in_tangle_region for hit in involved)
+    assert count.in_region or count.outside, "nine blasts of k=2.8 must leave a hit to count"

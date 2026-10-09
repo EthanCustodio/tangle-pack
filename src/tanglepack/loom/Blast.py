@@ -227,8 +227,9 @@ def blast_zone(
             pass over the blasted fixed points: deep blasting is where
             under-resolved crossings and same-stability polyline crossings
             appear, and ``iterate_bridge`` never passes through
-            ``compute_intersections``. It logs on the workbench's logger, never on
-            this module's.
+            ``compute_intersections``. Its same-stability part only COUNTS the
+            hits of the bridges this blast added (C5). It logs on the workbench's
+            logger, never on this module's.
         max_points: Opt-in point budget of the whole blast (points its new
             bridges hold). Checked BETWEEN iterations: the blast stops, without
             an exception and on a consistent, resumable state, before an
@@ -341,6 +342,7 @@ def blast_zone(
     # (an image piece resolving to one of them adds no points) and the growth
     # factor of the zone's last blast iteration, this call's or a previous one's.
     held: set["BridgeId | int"] = {_seen_key(b) for b in workbench.bridges}
+    added: list["Bridge"] = []
     factor: Optional[float] = session._blast_stats.get(zone.key)
 
     for iteration in range(1, num_iterations + 1):
@@ -458,6 +460,7 @@ def blast_zone(
         for child in produced:
             if _seen_key(child) not in held:
                 held.add(_seen_key(child))
+                added.append(child)
                 new_points += len(child.get_point_array())
         result.points_created += new_points
         if frontier_points > 0:
@@ -482,7 +485,7 @@ def blast_zone(
     # the blast may only now have its image registered.
     workbench.infer_iterates()
     if diagnose:
-        workbench.report_resolution(allowed_fps)
+        workbench.report_resolution(allowed_fps, new_bridges=added)
     return result
 
 

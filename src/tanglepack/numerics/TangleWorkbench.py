@@ -50,7 +50,13 @@ from .Bridge import Bridge, BridgeId
 from .Intersection import Intersection, ManifoldKey, Stability
 from .IntersectionRegistry import DEDUP_RTOL, IntersectionRegistry
 from .IterateInference import IterateInference
-from .diagnostics import ResolutionReport, SameStabilityCrossing, same_stability_crossings
+from .diagnostics import (
+    ResolutionReport,
+    SameStabilityCount,
+    SameStabilityCrossing,
+    count_same_stability_crossings,
+    same_stability_crossings,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -250,7 +256,7 @@ class TangleWorkbench:
         # What report_resolution has already logged, so a repeated pass (a zone
         # recompute, the next blast) only speaks about NEW findings: the flagged
         # crossing ids with the registry id epoch they belong to, and the
-        # same-stability hits.
+        # same-stability hits of a full listing (a blast only counts its own, C5).
         self._reported_flags: tuple[int, frozenset[int]] = (0, frozenset())
         self._reported_artifacts: set[tuple] = set()
         # Bridges are keyed by their topological identity (the ordered endpoint
@@ -1409,35 +1415,18 @@ class TangleWorkbench:
             (:func:`~.diagnostics.same_stability_crossings`). Both are flags:
             nothing is discarded, and neither feeds any reliability verdict.
         """
-        if fixed_points is None:
-            selected = list(self.fixed_points)
-        elif isinstance(fixed_points, FixedPoint):
-            selected = [fixed_points]
-        else:
-            selected = list(fixed_points)
-        threshold = self.resolution_ratio_threshold
-        registry = self._intersection_registry
-        unresolved = (
-            ()
-            if threshold is None
-            else tuple(
-                iid
-                for iid in registry.unresolved_crossings(threshold)
-                if any(
-                    fp is chosen
-                    for fp in registry[iid].fixed_points
-                    for chosen in selected
-                )
-            )
-        )
+        selected = self._selection(fixed_points)
         return ResolutionReport(
-            threshold=threshold,
-            unresolved_crossings=unresolved,
+            threshold=self.resolution_ratio_threshold,
+            unresolved_crossings=self._unresolved_crossings(selected),
             same_stability_crossings=tuple(same_stability_crossings(self, selected)),
         )
 
     def report_resolution(
-        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None
+        self,
+        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
+        *,
+        new_bridges: Optional[Iterable[Bridge]] = None,
     ) -> ResolutionReport:
         """
         :meth:`check_resolution`, logging what no earlier report has said.
@@ -1452,14 +1441,53 @@ class TangleWorkbench:
 
         Args:
             fixed_points: As in :meth:`check_resolution`.
+            new_bridges: A blast's new image bridges (C5): the same-stability
+                part is then only COUNTED, over the hits these bridges take part
+                in (:func:`~.diagnostics.count_same_stability_crossings`), and
+                nothing is remembered -- every such hit is new. A blast adds no
+                stable curve and every hit it can add involves one of its images,
+                so the full listing would re-find the earlier blasts' hits.
 
         Returns:
-            The report.
+            The report; with ``new_bridges`` its ``same_stability_crossings``
+            is empty and ``same_stability_count`` holds the count.
         """
-        report = self.check_resolution(fixed_points)
+        if new_bridges is None:
+            report = self.check_resolution(fixed_points)
+            self._report_artifacts(report.same_stability_crossings)
+        else:
+            count = count_same_stability_crossings(self, new_bridges)
+            report = ResolutionReport(
+                threshold=self.resolution_ratio_threshold,
+                unresolved_crossings=self._unresolved_crossings(self._selection(fixed_points)),
+                same_stability_crossings=(),
+                same_stability_count=count,
+            )
+            self._report_count(count)
         self._report_unresolved(report.unresolved_crossings, report.threshold)
-        self._report_artifacts(report.same_stability_crossings)
         return report
+
+    def _selection(
+        self, fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]"
+    ) -> list[FixedPoint]:
+        """The fixed points a resolution check covers (None: all of them)."""
+        if fixed_points is None:
+            return list(self.fixed_points)
+        if isinstance(fixed_points, FixedPoint):
+            return [fixed_points]
+        return list(fixed_points)
+
+    def _unresolved_crossings(self, selected: list[FixedPoint]) -> tuple[int, ...]:
+        """The selection's crossings below the resolution-ratio threshold."""
+        threshold = self.resolution_ratio_threshold
+        if threshold is None:
+            return ()
+        registry = self._intersection_registry
+        return tuple(
+            iid
+            for iid in registry.unresolved_crossings(threshold)
+            if any(fp is chosen for fp in registry[iid].fixed_points for chosen in selected)
+        )
 
     def pending_resolution_flags(self) -> list[int]:
         """The unresolved crossings no report has logged yet, in unstable cdist order."""
@@ -1538,6 +1566,27 @@ class TangleWorkbench:
                 len(outside),
             )
         self._reported_artifacts.update(key(hit) for hit in hits)
+
+    def _report_count(self, count: SameStabilityCount) -> None:
+        """One WARNING for a blast's same-stability hits in the tangle region, one INFO outside."""
+        if count.in_region:
+            pairs = count.curve_pairs
+            logger.warning(
+                "%d same-stability polyline crossing(s) of the new image bridges in "
+                "the tangle region (%s): two curves of one stability never cross, so "
+                "these are polygon artifacts of under-resolved polylines; an "
+                "area_cutoff below %.3g is needed to refine them at all (current %.3g)",
+                count.in_region,
+                "; ".join(pairs[:5]) + (" ..." if len(pairs) > 5 else ""),
+                count.suggested_area_cutoff,
+                self._man_machine.area_cutoff,
+            )
+        if count.outside:
+            logger.info(
+                "%d same-stability polyline crossing(s) of the new image bridges "
+                "outside the tangle region: an escaping arm is under-resolved",
+                count.outside,
+            )
 
     def _register_anchors(self, fixed_points: Iterable[FixedPoint]) -> list[int]:
         """

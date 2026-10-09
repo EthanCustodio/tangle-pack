@@ -14,8 +14,11 @@ things go silently wrong where the polylines are too coarse for the geometry:
   curves never cross, nor do two stable ones, and no curve crosses itself. A
   polyline that does -- a Z-kink of one manifold, two branches, a blast's image
   bridge over another curve -- is a polygon ARTIFACT, never a real crossing.
-  ``Tangle`` never even tests a manifold against itself, so these were not
-  detected before; :func:`same_stability_crossings` finds them.
+  ``Tangle`` never pairs two segments of one stability, so these were not
+  detected before; :func:`same_stability_crossings` finds them, and
+  :func:`count_same_stability_crossings` counts the ones a blast's new image
+  bridges take part in (C5: a blast adds no stable curve, and every hit it can
+  add involves one of its images).
 
 Both are FLAGS. Nothing here discards a crossing or changes the tangle: a real
 near-tangent crossing exists, only the count of crossings near a tangency is
@@ -51,6 +54,7 @@ from .Intersection import Stability
 
 if TYPE_CHECKING:
     from .BaseManifold import BaseManifold
+    from .Bridge import Bridge
     from .FixedPoint import FixedPoint
     from .TangleWorkbench import TangleWorkbench
 
@@ -100,6 +104,25 @@ class SameStabilityCrossing:
 
 
 @dataclass(frozen=True)
+class SameStabilityCount:
+    """
+    The unstable polyline crossings some new curves take part in, counted (C5).
+
+    Attributes:
+        in_region: Hits inside the padded box of the registered crossings.
+        outside: Hits outside it.
+        suggested_area_cutoff: Half the smallest in-region local area (see
+            :class:`SameStabilityCrossing`); None without an in-region hit.
+        curve_pairs: The distinct in-region curve pairs, ``"a x b"``, sorted.
+    """
+
+    in_region: int
+    outside: int
+    suggested_area_cutoff: Optional[float]
+    curve_pairs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ResolutionReport:
     """
     Everything the polylines fail to resolve, on demand.
@@ -108,18 +131,24 @@ class ResolutionReport:
         threshold: The resolution-ratio threshold used (None: not checked).
         unresolved_crossings: Registry ids whose resolution ratio is below
             ``threshold``, in unstable cdist order.
-        same_stability_crossings: Every same-stability polyline crossing.
+        same_stability_crossings: Every same-stability polyline crossing (empty
+            when only a count was taken).
+        same_stability_count: The count of the hits a blast's new image bridges
+            take part in, when the report was a blast's (C5); else None.
     """
 
     threshold: Optional[float]
     unresolved_crossings: tuple[int, ...]
     same_stability_crossings: tuple[SameStabilityCrossing, ...]
+    same_stability_count: Optional[SameStabilityCount] = None
 
     @property
     def clean(self) -> bool:
         """No unresolved crossing and no same-stability crossing in the tangle region."""
-        return not self.unresolved_crossings and not any(
-            hit.in_tangle_region for hit in self.same_stability_crossings
+        return (
+            not self.unresolved_crossings
+            and not any(hit.in_tangle_region for hit in self.same_stability_crossings)
+            and not (self.same_stability_count and self.same_stability_count.in_region)
         )
 
 
@@ -166,6 +195,44 @@ def same_stability_crossings(
     ]
 
 
+def count_same_stability_crossings(
+    workbench: "TangleWorkbench", bridges: Iterable["Bridge"], *, pad: float = 0.1
+) -> SameStabilityCount:
+    """
+    Count the unstable polyline crossings that involve one of ``bridges`` (C5).
+
+    The field is every unstable curve of the bridges' fixed points, as in
+    :func:`same_stability_crossings`; only the segment pairs with a segment of
+    one of ``bridges`` are tested, and nothing is materialised per hit, so a
+    deep blast pays for its own images only.
+
+    Args:
+        workbench: The workbench holding the curves.
+        bridges: The new curves (a blast's image bridges).
+        pad: The tangle-box padding, as in :func:`same_stability_crossings`.
+
+    Returns:
+        The count; the hits are exactly those of the full listing naming one of
+        ``bridges``.
+    """
+    bridges = list(bridges)
+    fixed_points = list({id(bridge.fixed_point): bridge.fixed_point for bridge in bridges}.values())
+    curves = _curves(workbench, fixed_points, "unstable")
+    new = {id(bridge) for bridge in bridges}
+    owner_a, owner_b, *_rest, local_area, inside = _hits(
+        curves,
+        _tangle_box(workbench, fixed_points, pad),
+        new=np.array([id(bridge) in new for _name, _nodes, bridge in curves], dtype=bool),
+    )
+    pairs = np.unique(np.stack([owner_a[inside], owner_b[inside]], axis=1), axis=0)
+    return SameStabilityCount(
+        in_region=int(inside.sum()),
+        outside=int((~inside).sum()),
+        suggested_area_cutoff=0.5 * float(local_area[inside].min()) if inside.any() else None,
+        curve_pairs=tuple(sorted(f"{curves[p][0]} x {curves[q][0]}" for p, q in pairs)),
+    )
+
+
 def _tangle_box(
     workbench: "TangleWorkbench", fixed_points: list["FixedPoint"], pad: float
 ) -> Optional[tuple[NDArray[np.float64], NDArray[np.float64]]]:
@@ -187,15 +254,16 @@ def _tangle_box(
 
 def _curves(
     workbench: "TangleWorkbench", fixed_points: list["FixedPoint"], stability: Stability
-) -> list[tuple[str, list]]:
-    """The named node lists of one stability's curves."""
+) -> list[tuple[str, list, Optional["Bridge"]]]:
+    """The named node lists of one stability's curves, each with its image bridge
+    (None for a manifold)."""
     nodes_of = {
         key: manifold.get_point_array(return_nodes=True)
         for key, manifold in workbench.manifolds.items()
         if key[1] == stability
     }
     curves = [
-        (_manifold_name(key), nodes)
+        (_manifold_name(key), nodes, None)
         for key, nodes in nodes_of.items()
         if any(key[0] is fp for fp in fixed_points)
     ]
@@ -207,7 +275,8 @@ def _curves(
             continue
         nodes = bridge.get_point_array(return_nodes=True)
         if not any(id(node) in manifold_nodes for node in nodes):
-            curves.append((f"image bridge {bridge.id}", nodes))
+            name = f"image bridge {bridge.id}" if bridge.id is not None else f"partial image bridge {id(bridge):#x}"
+            curves.append((name, nodes, bridge))
     return curves
 
 
@@ -218,18 +287,46 @@ def _manifold_name(key: tuple) -> str:
 
 
 def _crossings_among(
-    curves: list[tuple[str, list]],
+    curves: list[tuple[str, list, Optional["Bridge"]]],
     stability: Stability,
     box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
 ) -> list[SameStabilityCrossing]:
-    """The transversal interior crossings among the segments of some curves.
+    """The transversal interior crossings among the segments of some curves."""
+    return [
+        SameStabilityCrossing(
+            stability=stability,
+            curve_a=curves[p][0],
+            curve_b=curves[q][0],
+            seg_a=int(seg_p),
+            seg_b=int(seg_q),
+            point=(float(x), float(y)),
+            sin=float(sin),
+            local_area=float(area),
+            suggested_area_cutoff=0.5 * float(area),
+            in_tangle_region=bool(inside),
+        )
+        for p, q, seg_p, seg_q, (x, y), sin, area, inside in zip(*_hits(curves, box))
+    ]
 
-    A hit is in the tangle region when it lies in ``box`` (never, for None).
+
+def _hits(
+    curves: list[tuple[str, list, Optional["Bridge"]]],
+    box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
+    new: Optional[NDArray[np.bool_]] = None,
+) -> tuple[NDArray, ...]:
+    """The transversal interior crossings among the segments of some curves, as arrays.
+
+    Returns, one entry per hit: the two segments' curve indices and positions
+    along their curves, the crossing point, ``|sin|`` of the angle, the larger
+    curvature area of the two segments, and whether the point lies in ``box``
+    (never, for None). With ``new`` (one flag per curve) only the segment pairs
+    with a segment of a new curve are tested.
     """
-    rows = [_segment_rows(k, nodes) for k, (_name, nodes) in enumerate(curves)]
+    rows = [_segment_rows(k, nodes) for k, (_name, nodes, _bridge) in enumerate(curves)]
     rows = [row for row in rows if row is not None]
     if not rows:
-        return []
+        none = np.empty(0, dtype=np.int64)
+        return none, none, none, none, np.empty((0, 2)), np.empty(0), np.empty(0), np.empty(0, dtype=bool)
     a, b, left, right, node_a, node_b, owner, position = (
         np.concatenate(column) for column in zip(*rows)
     )
@@ -241,7 +338,7 @@ def _crossings_among(
         column[keep] for column in (a, b, left, right, node_a, node_b, owner, position)
     )
 
-    i, j = _candidate_pairs(a, b)
+    i, j = _candidate_pairs(a, b, None if new is None else new[owner])
     shared = (
         (node_a[i] == node_a[j])
         | (node_a[i] == node_b[j])
@@ -276,24 +373,7 @@ def _crossings_among(
         if box is None
         else np.all((box[0] <= point) & (point <= box[1]), axis=1)
     )
-
-    return [
-        SameStabilityCrossing(
-            stability=stability,
-            curve_a=curves[owner[p]][0],
-            curve_b=curves[owner[q]][0],
-            seg_a=int(position[p]),
-            seg_b=int(position[q]),
-            point=(float(x), float(y)),
-            sin=float(s),
-            local_area=float(area_pq),
-            suggested_area_cutoff=0.5 * float(area_pq),
-            in_tangle_region=bool(inside),
-        )
-        for p, q, (x, y), s, area_pq, inside in zip(
-            i, j, point, sin, local_area, in_region
-        )
-    ]
+    return owner[i], owner[j], position[i], position[j], point, sin, local_area, in_region
 
 
 def _segment_rows(owner: int, nodes: list) -> Optional[tuple[NDArray, ...]]:
@@ -317,9 +397,10 @@ def _segment_rows(owner: int, nodes: list) -> Optional[tuple[NDArray, ...]]:
 
 
 def _candidate_pairs(
-    a: NDArray[np.float64], b: NDArray[np.float64]
+    a: NDArray[np.float64], b: NDArray[np.float64], new: Optional[NDArray[np.bool_]] = None
 ) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
-    """Every pair of segments whose bounding boxes overlap, by sweep and prune.
+    """Every pair of segments whose bounding boxes overlap, by sweep and prune
+    (with ``new``, one flag per segment, only the pairs holding a new segment).
 
     The boxes are sorted along the axis on which fewer of them overlap, each is
     paired with the boxes that start before it ends, and the pairs that also
@@ -350,6 +431,8 @@ def _candidate_pairs(
         )
         i, j = order[first], order[first + offset + 1]
         overlap = (mins[i, other] <= maxs[j, other]) & (mins[j, other] <= maxs[i, other])
+        if new is not None:
+            overlap &= new[i] | new[j]
         firsts.append(i[overlap])
         seconds.append(j[overlap])
     return np.concatenate(firsts), np.concatenate(seconds)
