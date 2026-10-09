@@ -268,11 +268,13 @@ def test_image_of_element_accepts_partitions_from_another_trellis(p3_partitioned
             checked += 1
     assert checked
 
-    # Without the partitions it has none to find, so it says so.
+    # A fresh all-fixed-points trellis has no partitions to find, so it says so
+    # (the session's own carries the topology's since stages 4-6 run on it, WP9).
     result, interval = next(_bounded_elements(session.trellis(fp3)))
-    assert not combined.stable_partitions
+    fresh = Trellis.from_workbench(session.workbench)
+    assert not fresh.stable_partitions
     with pytest.raises(ValueError):
-        combined.image_of_element(result, interval.element_id, 1)
+        fresh.image_of_element(result, interval.element_id, 1)
 
 
 def test_image_of_element_covers_both_endpoint_images(p3_partitioned):

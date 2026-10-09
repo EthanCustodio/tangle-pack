@@ -153,18 +153,21 @@ def _per_fp_trellises(case: "Case") -> list:
     return [case.session.trellis(fp) for fp in case.fixed_points]
 
 
+def _staged(case: "Case"):
+    """The trellis stages 4-6 ran on: the topology's, the selection's (WP9)."""
+    return case.session.topology().trellis
+
+
 def _holes(case: "Case") -> list:
-    """``(trellis, hole)`` for every hole of every per-fixed-point trellis."""
-    return [(trellis, hole) for trellis in _per_fp_trellises(case) for hole in trellis.holes]
+    """``(trellis, hole)`` for every hole of the topology."""
+    trellis = _staged(case)
+    return [(trellis, hole) for hole in trellis.holes]
 
 
 def _partitions(case: "Case") -> list:
-    """``(trellis, result)`` for every stable partition of every per-fixed-point trellis."""
-    return [
-        (trellis, result)
-        for trellis in _per_fp_trellises(case)
-        for result in trellis.stable_partitions
-    ]
+    """``(trellis, result)`` for every stable partition of the topology."""
+    trellis = _staged(case)
+    return [(trellis, result) for result in trellis.stable_partitions]
 
 
 def _identified_bridges(case: "Case") -> list:
@@ -275,8 +278,8 @@ def check_case_builds(case: "Case") -> int:
     session = case.session
     assert len(case.fixed_points) == case.expect.n_tangles
     assert tuple(fp.period for fp in case.fixed_points) == case.expect.periods
-    for trellis in _per_fp_trellises(case):
-        assert trellis.stable_partitions, "every fixed point is partitioned"
+    partitioned = {result.branch_key[0] for _trellis, result in _partitions(case)}
+    assert partitioned == set(case.fixed_points), "every fixed point is partitioned"
     products = [
         session.arrangement(),
         session.bridge_classes(),
@@ -1159,39 +1162,39 @@ def check_backward_holes_keep_bridge_side(case: "Case") -> int:
     correct.
     """
     inverse = case.workbench.dynamical_system.map_inv
+    trellis = _staged(case)
+    preserving = trellis.orientation_preserving
+    reference = {
+        hole.origin: hole
+        for hole in trellis.holes
+        if hole.pair is not None and hole.iterate == 0
+    }
     count = 0
-    for trellis in _per_fp_trellises(case):
-        preserving = trellis.orientation_preserving
-        reference = {
-            hole.origin: hole
-            for hole in trellis.holes
-            if hole.pair is not None and hole.iterate == 0
-        }
-        for hole in trellis.holes:
-            if hole.iterate == 0 and hole.pair is not None:
-                continue
-            origin = reference.get(hole.origin)
-            assert origin is not None, f"hole {hole.bounding_ids} has no reference hole"
-            flip = not preserving and hole.iterate % 2 == 1
-            expected = origin.bridge_side
-            if flip:
-                expected = "right" if expected == "left" else "left"
-            assert hole.bridge_side == expected, (
-                f"hole of origin {hole.origin} at iterate {hole.iterate}: bridge side "
-                f"{hole.bridge_side}, origin {origin.bridge_side}"
+    for hole in trellis.holes:
+        if hole.iterate == 0 and hole.pair is not None:
+            continue
+        origin = reference.get(hole.origin)
+        assert origin is not None, f"hole {hole.bounding_ids} has no reference hole"
+        flip = not preserving and hole.iterate % 2 == 1
+        expected = origin.bridge_side
+        if flip:
+            expected = "right" if expected == "left" else "left"
+        assert hole.bridge_side == expected, (
+            f"hole of origin {hole.origin} at iterate {hole.iterate}: bridge side "
+            f"{hole.bridge_side}, origin {origin.bridge_side}"
+        )
+        if hole.pair is None:
+            point = np.asarray(origin.coords, dtype=float)
+            for _ in range(-hole.iterate):
+                point = np.asarray(inverse(point), dtype=float)
+            bridge = trellis.bridge_between(*hole.bounding_ids)
+            assert bridge is not None and bridge.id is not None, hole.bounding_ids
+            measured = _point_side_of_bridge(case, bridge, point)
+            assert measured == expected, (
+                f"origin {hole.origin}'s hole carried back {-hole.iterate} step(s) "
+                f"lies on the {measured} of bridge {bridge.id}, expected {expected}"
             )
-            if hole.pair is None:
-                point = np.asarray(origin.coords, dtype=float)
-                for _ in range(-hole.iterate):
-                    point = np.asarray(inverse(point), dtype=float)
-                bridge = trellis.bridge_between(*hole.bounding_ids)
-                assert bridge is not None and bridge.id is not None, hole.bounding_ids
-                measured = _point_side_of_bridge(case, bridge, point)
-                assert measured == expected, (
-                    f"origin {hole.origin}'s hole carried back {-hole.iterate} step(s) "
-                    f"lies on the {measured} of bridge {bridge.id}, expected {expected}"
-                )
-            count += 1
+        count += 1
     return count
 
 
@@ -1330,42 +1333,38 @@ def check_openings_follow_signs(case: "Case") -> int:
 
 def check_propagated_holes_land_on_predicted_branch(case: "Case") -> int:
     """A hole at iterate ``n`` lands in a bridge on ``cycle[(pos_ref + n) % k]``, the
-    unstable branch cycle position of its reference bridge advanced by ``n``."""
+    unstable branch cycle position of its reference bridge advanced by ``n``, the cycle
+    being the reference BRIDGE's fixed point's (A's for a heteroclinic pair on B, D7)."""
+    trellis = _staged(case)
+    reference_position = {}
+    for pair in trellis.reference_pseudoneighbors:
+        bridge = bridge_for_pair(trellis, pair)
+        assert bridge is not None
+        cycle = bridge.fixed_point.branch_cycle("unstable")
+        reference_position[pair.as_tuple()] = (cycle, cycle.index(bridge.manifold_key))
     count = 0
-    for trellis, fp in zip(_per_fp_trellises(case), case.fixed_points):
-        cycle = fp.branch_cycle("unstable")
-        k = len(cycle)
-        reference_position = {}
-        for pair in trellis.pseudoneighbors:
-            if not pair.is_reference:
-                continue
-            bridge = bridge_for_pair(trellis, pair)
-            assert bridge is not None and bridge.manifold_key in cycle
-            reference_position[pair.as_tuple()] = cycle.index(bridge.manifold_key)
-        for hole in trellis.holes:
-            if hole.pair is not None:
-                continue
-            expected = cycle[(reference_position[hole.origin] + hole.iterate) % k]
-            bridge = trellis.bridge_between(*hole.bounding_ids)
-            assert bridge.manifold_key == expected, (
-                f"hole of origin {hole.origin} at iterate {hole.iterate} landed on "
-                f"{bridge.manifold_key[1:]}, expected {expected[1:]}"
-            )
-            count += 1
+    for hole in trellis.holes:
+        if hole.pair is not None:
+            continue
+        cycle, position = reference_position[hole.origin]
+        expected = cycle[(position + hole.iterate) % len(cycle)]
+        bridge = trellis.bridge_between(*hole.bounding_ids)
+        assert bridge.manifold_key == expected, (
+            f"hole of origin {hole.origin} at iterate {hole.iterate} landed on "
+            f"{bridge.manifold_key[1:]}, expected {expected[1:]}"
+        )
+        count += 1
     return count
 
 
 def check_propagation_terminates(case: "Case") -> int:
     """No origin punches the same bounding region twice (propagation stops at periodicity)."""
+    propagated = [hole for hole in _staged(case).holes if hole.iterate not in (0, None)]
     count = 0
-    for trellis in _per_fp_trellises(case):
-        propagated = [hole for hole in trellis.holes if hole.iterate not in (0, None)]
-        for origin in {hole.origin for hole in propagated}:
-            regions = [
-                frozenset(hole.bounding_ids) for hole in propagated if hole.origin == origin
-            ]
-            assert len(regions) == len(set(regions)), origin
-            count += 1
+    for origin in {hole.origin for hole in propagated}:
+        regions = [frozenset(hole.bounding_ids) for hole in propagated if hole.origin == origin]
+        assert len(regions) == len(set(regions)), origin
+        count += 1
     return count
 
 
@@ -1373,18 +1372,19 @@ def check_no_direct_hole_beyond_fundamental(case: "Case") -> int:
     """Holes propagate backward only: nothing at iterate ``>= k_value`` is punched.
 
     The ``+1 .. +(k_value - 1)`` appearances ARE punched (D5): see
-    :func:`check_window_holes_on_every_branch`.
+    :func:`check_window_holes_on_every_branch`. ``k`` is the window's: the stable
+    fixed point of the pair (or of the hole's origin).
     """
+    trellis = _staged(case)
     count = 0
-    for trellis, fp in zip(_per_fp_trellises(case), case.fixed_points):
-        k = fp.k_value
-        for hole in trellis.holes:
-            assert hole.iterate < k, (hole.bounding_ids, hole.iterate)
+    for hole in trellis.holes:
+        k = trellis.intersection(hole.origin[0]).manifold_b_key[0].k_value
+        assert hole.iterate < k, (hole.bounding_ids, hole.iterate)
+        count += 1
+    for pair in trellis.pseudoneighbors:
+        if pair.iterate is not None and pair.iterate >= pair.branch_key[0].k_value:
+            assert pair.hole is None, pair.as_tuple()
             count += 1
-        for pair in trellis.pseudoneighbors:
-            if pair.iterate is not None and pair.iterate >= k:
-                assert pair.hole is None, pair.as_tuple()
-                count += 1
     return count
 
 
@@ -1392,21 +1392,22 @@ def check_window_holes_on_every_branch(case: "Case") -> int:
     """D5: a reference trajectory punches a direct hole on each of the k stable
     branches of its orbit wherever its ``+j`` image pair (``j < k_value``) is
     registered and spanned by a bridge; the hole lies on ``advance_key(branch, j)``."""
+    trellis = _staged(case)
+    direct = {
+        (hole.origin, hole.iterate, frozenset(hole.bounding_ids))
+        for hole in trellis.holes
+        if hole.side_source == "signs"
+    }
     count = 0
-    for trellis, fp in zip(_per_fp_trellises(case), case.fixed_points):
-        direct = {
-            (hole.origin, hole.iterate, frozenset(hole.bounding_ids))
-            for hole in trellis.holes
-            if hole.side_source == "signs"
-        }
-        for ref in trellis.reference_pseudoneighbors:
-            for j in range(fp.k_value):
-                a, b = (trellis.iterate(end, j) for end in ref.as_tuple())
-                if a is None or b is None or trellis.bridge_between(a, b) is None:
-                    continue
-                assert trellis.intersection(a).manifold_b_key == fp.advance_key(ref.branch_key, j)
-                assert (ref.as_tuple(), j, frozenset((a, b))) in direct, (ref.as_tuple(), j)
-                count += 1
+    for ref in trellis.reference_pseudoneighbors:
+        fp = ref.branch_key[0]
+        for j in range(fp.k_value):
+            a, b = (trellis.iterate(end, j) for end in ref.as_tuple())
+            if a is None or b is None or trellis.bridge_between(a, b) is None:
+                continue
+            assert trellis.intersection(a).manifold_b_key == fp.advance_key(ref.branch_key, j)
+            assert (ref.as_tuple(), j, frozenset((a, b))) in direct, (ref.as_tuple(), j)
+            count += 1
     return count
 
 
@@ -1506,15 +1507,16 @@ def check_trellis_is_cut_at_the_pip_orbit(case: "Case") -> int:
 def check_reference_pairs_valid(case: "Case") -> int:
     """A reference pair is consecutive on its stable AND its unstable branch, on the
     strong pip's own branch, inside the reference window ``[f^k(q0), q0]``."""
+    trellis = _staged(case)
+    tol = float(trellis.registry.cdist_tol)
     count = 0
-    for trellis, fp in zip(_per_fp_trellises(case), case.fixed_points):
-        pip = trellis.strong_pip
-        tol = float(trellis.registry.cdist_tol)
+    for fp in case.fixed_points:
+        pip = trellis.pips[fp]
         pip_ix = trellis.intersection(pip)
         top = float(pip_ix.stable_cdist)
         _key, bottom, _from_table = trellis.image_cdist(pip, fp.k_value, "stable")
-        for pair in trellis.pseudoneighbors:
-            if not pair.is_reference:
+        for pair in trellis.reference_pseudoneighbors:
+            if pair.branch_key[0] is not fp:
                 continue
             a, b = pair.as_tuple()
             assert pair.branch_key == pip_ix.manifold_b_key

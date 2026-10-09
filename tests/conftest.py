@@ -286,9 +286,13 @@ def henon_p3_session() -> tuple[TangleSession, object, object, object]:
 
 @pytest.fixture
 def p3_partitioned() -> tuple[TangleSession, object, object]:
-    """``(session, fp3, fp1)``: the unblasted nested tangle, every trellis partitioned."""
+    """``(session, fp3, fp1)``: the unblasted nested tangle, every per-fixed-point
+    trellis partitioned (``topology(fp)``: stages 4-6 of a selection run on its own
+    trellis, WP9)."""
     case = build_nested(outer_blasts=0, p1_area_cutoff=1e-4)
     fp1, fp3 = case.fixed_points
+    for fp in case.fixed_points:
+        case.session.topology(fp)
     assert case.session.trellis(fp3).stable_partitions
     return case.session, fp3, fp1
 

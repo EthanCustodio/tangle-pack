@@ -226,7 +226,10 @@ class TangleSession:
         the pip is set or restored, a selection of several at the pips of its
         fixed points on every read (a no-op while they are unchanged), so the
         snapshot is a function of the generation and the pips alone, never of
-        which product ran first (D1).
+        which product ran first (D1). A trellis holds a crossing only when both
+        its branches are selected: a fixed point's own trellis holds no
+        heteroclinic crossing (its arcs are joined across them), the
+        selection's holds them.
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None for all
@@ -262,8 +265,8 @@ class TangleSession:
 
         The default selection is EVERY fixed point, which is what the region layer
         wants: a heteroclinic crossing belongs to two tangles at once, and a
-        single-fixed-point arrangement would cut the other side's arcs off and turn
-        real faces into open ones.
+        single-fixed-point arrangement holds neither it nor the other tangle's
+        arcs.
 
         Cached ON the trellis, and so invalidated by exactly the same comparison:
         a Trellis is a snapshot of one workbench
@@ -295,19 +298,24 @@ class TangleSession:
 
         One :class:`~tanglepack.loom.Topology.Topology` per selection, rebuilt
         when the workbench generation or the selection's strong pips change:
-        pseudoneighbors, holes and the stable partition of every selected
-        fixed point are recomputed from scratch from its chosen pip (the
-        default pip, remembered, when none was chosen), and the bridge
-        classes, minimal trellis, iterated partition, dual graph and words
-        are its lazy stages. A manual stage call on a per-fixed-point trellis
-        (``punch_holes(...)`` with custom arguments, say) fills that trellis
-        for plotting but never feeds a product.
+        each selected fixed point's pip is chosen on its own trellis (the
+        default pip, remembered, when none was chosen), then pseudoneighbors,
+        holes and the stable partition are recomputed from scratch on the
+        SELECTION's trellis, and the bridge classes, minimal trellis, iterated
+        partition, dual graph and words are its lazy stages. A manual stage
+        call on a per-fixed-point trellis (``punch_holes(...)`` with custom
+        arguments, say) fills that trellis for plotting but never feeds a
+        product; after ``topology()`` of several fixed points the
+        per-fixed-point trellises carry no stage output (``topology(fp)``
+        fills one).
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None (the
                 default) for all of them. Partitions, holes and pips come from
                 the selection only, so a heteroclinic bridge needs both its
-                fixed points selected.
+                fixed points selected, and so does a heteroclinic pair (D7: a
+                pair of ``W^u(A)`` crossings on B's stable branch, holed in B's
+                partition, its backward chain holing A's).
             rebuild: Force a recompute at the same state.
 
         Returns:
@@ -1380,14 +1388,12 @@ class TangleSession:
         the first element found. Bridge ids and registry ids are session-wide
         (one registry), so there is no ambiguity about which bridge is meant.
 
-        This is what resolves a HETEROCLINIC bridge. A bridge of W^u(fp1) cut at
-        crossings with W^s(fp3) belongs to fp1 (a bridge is a piece of unstable
-        manifold), so it appears only in fp1's trellis — whose partitions cover
-        fp1's stable branches, not the fp3 branches its endpoints actually sit
-        on. The element lives in fp3's trellis, which does not hold the bridge.
-        Both halves are covered because :meth:`Trellis.element_for` falls back to
-        the endpoint id carried by the BridgeId itself rather than requiring the
-        bridge object to be in the snapshot.
+        A HETEROCLINIC bridge (a piece of W^u(fp1) between crossings with
+        W^s(fp3)) exists only in a trellis holding both tangles (a tangle alone
+        holds no heteroclinic crossing), so it is answered by the selection's
+        trellis once ``topology()`` has partitioned it;
+        :meth:`Trellis.element_for` reads the endpoint id carried by the
+        BridgeId itself, never the bridge object.
 
         Args:
             bridge_id: The bridge's :data:`~tanglepack.numerics.Bridge.BridgeId`.
@@ -1639,11 +1645,16 @@ class TangleSession:
         """
         Repeatedly iterate the bridges inside a resonance zone.
 
-        Each step maps every un-iterated interior bridge forward (cutting the image
-        into child bridges at its new stable-manifold crossings) and keeps the children
-        that land back inside the zone, recursing up to ``num_iterations`` times.
-        Bridges that leave the zone are never re-iterated — iterating exterior bridges
-        many times grows them exponentially. See :mod:`tanglepack.loom.Blast`.
+        Each step maps every un-iterated bridge whose INNERMOST zone is this one
+        (:meth:`classify_bridge`, C4) forward (cutting the image into child bridges
+        at its new stable-manifold crossings) and keeps the children that land back
+        in it, recursing up to ``num_iterations`` times. An outer zone's blast never
+        iterates a bridge inside an inner zone, so nested blasting does not depend
+        on the order of the zones; with ``fixed_point=None`` it still iterates an
+        inner tangle's bridges in the annulus between them (they are the outer
+        zone's). Bridges that leave the zone are never re-iterated — iterating
+        exterior bridges many times grows them exponentially. See
+        :mod:`tanglepack.loom.Blast`.
 
         Args:
             zone: A :class:`ResonanceZone` or its ``(fixed_point, branch_index)`` key.

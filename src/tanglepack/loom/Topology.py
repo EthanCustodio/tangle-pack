@@ -10,20 +10,30 @@ Dev Notes:
   (:meth:`~tanglepack.loom.TangleSession.TangleSession.topology`) instead of a
   hand-rolled cache per stage keyed on a partition signature. Stages 3-6
   (pseudoneighbors, holes, stable partition) are recomputed from scratch on
-  every selected fixed point's trellis when the object is built; stages 7-9
-  (classes, minimal trellis, iterated partition, dual graph, words) are lazy
-  and computed once.
+  the selection's trellis when the object is built; stages 7-9 (classes,
+  minimal trellis, iterated partition, dual graph, words) are lazy and
+  computed once.
 * Partitions, holes and pips come from the SELECTED fixed points only
   (API-2), and every stable branch of the selection is partitioned, so the
   old "branch missing a partition" WARNING is gone: a heteroclinic bridge's
   class needs both its fixed points selected, and ``bridge_classes`` raises
-  naming the end it cannot resolve otherwise (WP9 builds the first such case).
+  naming the end it cannot resolve otherwise (``henon_cases.build_heteroclinic``
+  is the first such case).
 * The selection's trellis is cut at every selected pip's orbit (D10, D12) by
   ``TangleSession.trellis`` itself: a per-fixed-point trellis when its pip is
-  set, a selection of several at its fixed points' pips on every read. Stages
-  3-6 run first, so a default pip is chosen before the selection is read. A class
-  member may be a joined arc of the cut, which the workbench does not hold,
-  so bridges are resolved through the trellis (``bridge_between``).
+  set, a selection of several at its fixed points' pips on every read. Stage 3
+  (the pip) runs first on each fixed point's own trellis, so a default pip is
+  chosen before the selection is read. A class member may be a joined arc of
+  the cut, which the workbench does not hold, so bridges are resolved through
+  the trellis (``bridge_between``).
+* Stages 4-6 run on the SELECTION's trellis (WP9): a heteroclinic pair of
+  ``W^u(A)`` crossings on B's stable branch is a pair of B (D7) only on a
+  trellis holding both tangles, and its backward chain runs into A's bridges.
+  So heteroclinic pairs and their holes exist only when both tangles are
+  selected, ``topology()`` and ``topology(fp)`` differ exactly where they do,
+  and after ``topology()`` of several fixed points the per-fixed-point
+  trellises carry no stage output (``topology(fp)`` fills one). For one fixed
+  point the selection's trellis IS its trellis.
 * Letters follow :meth:`Topology.identity`, the pair of the bounding crossings
   of a class's two elements, so a class keeps its letter across recomputes
   while its elements keep their bounds (C2, BCG-7). Element NAMES
@@ -69,13 +79,15 @@ class Topology:
             are the ones classed).
         strong_pips: The strong pip of each selected fixed point (None where
             a fixed point has no candidate), in the same order.
-        holes: Every hole of the selected fixed points.
+        holes: Every hole of the selection (a heteroclinic reference's chain
+            holes both tangles).
         partitions: Their stable partitions, one per ``(branch_key, side)``.
     """
 
     def __init__(self, session: "TangleSession", fixed_points: Sequence["FixedPoint"]) -> None:
         """
-        Recompute stages 3-6 of every selected fixed point from its pip.
+        Choose every selected fixed point's pip, then recompute stages 4-6 on
+        the selection's trellis.
 
         Args:
             session: The session whose workbench, pip choice, zones and
@@ -89,19 +101,18 @@ class Topology:
         self._session = session
         self.generation = session.workbench.generation
         self.fixed_points = tuple(fixed_points)
-        recomputed = [self._stages_3_to_6(fp) for fp in self.fixed_points]
-        self.strong_pips = tuple(t.strong_pip for t in recomputed)
+        self.strong_pips = tuple(self._choose_pip(fp) for fp in self.fixed_points)
         self.trellis: "Trellis" = session.trellis(self.fixed_points)  # cut at strong_pips
+        self.trellis.compute_pseudoneighbors()
+        self.trellis.punch_holes()
+        self.trellis.partition_stable_manifold()
         # New lists: a later manual stage call clears the trellis slots in place.
-        self.holes = [hole for t in recomputed for hole in t.holes]
-        self.partitions: list["StablePartitionResult"] = [
-            result for t in recomputed for result in t.stable_partitions
-        ]
+        self.holes = list(self.trellis.holes)
+        self.partitions: list["StablePartitionResult"] = list(self.trellis.stable_partitions)
 
-    def _stages_3_to_6(self, fixed_point: "FixedPoint") -> "Trellis":
-        """Pseudoneighbors, holes and partition of one fixed point, from scratch
-        on its trellis, at the pip the session carries (the default, remembered,
-        when none was chosen)."""
+    def _choose_pip(self, fixed_point: "FixedPoint") -> Optional[int]:
+        """Stage 3 on the fixed point's own trellis: the pip the session carries
+        (the default, remembered, when none was chosen)."""
         session = self._session
         trellis = session.trellis(fixed_point)
         if trellis.strong_pip is None:
@@ -113,10 +124,7 @@ class Topology:
                 f"the chosen strong pip of {fixed_point!r} is no longer a "
                 "strong-pip candidate; choose another with set_strong_pip()"
             )
-        trellis.compute_pseudoneighbors()
-        trellis.punch_holes()
-        trellis.partition_stable_manifold()
-        return trellis
+        return trellis.strong_pip
 
     @cached_property
     def homotopy(self) -> HomotopyPartition:

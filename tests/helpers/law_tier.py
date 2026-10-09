@@ -77,11 +77,8 @@ def fingerprint(case: "Case") -> dict[str, Any]:
         ),
         "bridge ids": tuple(sorted(str(bridge.id) for bridge in case.workbench.bridges)),
         "holes": tuple(
-            tuple(
-                (h.bounding_ids, h.iterate, h.bridge_side, tuple(h.openings or ()))
-                for h in trellis.holes
-            )
-            for trellis in trellises
+            (h.bounding_ids, h.iterate, h.bridge_side, tuple(h.openings or ()))
+            for h in session.topology().trellis.holes
         ),
         "pips": tuple(trellis.strong_pip for trellis in trellises),
         "partition signature": session.homotopy_partition().signature(),

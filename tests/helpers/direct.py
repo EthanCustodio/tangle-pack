@@ -4,8 +4,9 @@
 recomputes the holes and partitions of the selected fixed points from their
 strong pips and hands them to the topology functions. :class:`DirectBuild`
 assembles the same products WITHOUT the session -- its own per-fixed-point
-trellises of the current workbench state, classified, set to the session's
-chosen pips, punched and partitioned, then the public topology constructors
+trellises of the current workbench state, classified and set to the session's
+chosen pips, a selection trellis cut at them, punched and partitioned, then
+the public topology constructors
 -- and :func:`view_of` / :func:`direct_view` reduce a product to a
 structural, letter-free signature so two builds can be compared by content,
 never by object identity.
@@ -51,9 +52,9 @@ class DirectBuild:
         selected: The fixed points of the selection.
         trellis: A fresh trellis of the workbench over the selection, cut at
             the orbits of the selected pips (D10, D12).
-        partitions: The stable partitions of the selected fixed points, one per
+        partitions: The stable partitions of the selection's trellis, one per
             ``(branch_key, side)``.
-        holes: Every hole of the selected fixed points.
+        holes: Every hole of the selection's trellis.
         strong_pips: The session's chosen strong pip of every selected fixed
             point.
     """
@@ -63,7 +64,8 @@ class DirectBuild:
         case: "Case",
         fixed_points: Optional["FixedPoint | Iterable[FixedPoint]"] = None,
     ) -> None:
-        """Recompute stages 3-6 of every selected fixed point on fresh trellises.
+        """Choose every selected pip on a fresh trellis of its fixed point, then
+        recompute stages 4-6 on a fresh trellis of the selection (WP9).
 
         Args:
             case: A case whose pips are chosen.
@@ -78,19 +80,19 @@ class DirectBuild:
             self.selected = list(fixed_points)
         else:
             self.selected = [fixed_points]
-        self.trellis = Trellis.from_workbench(session.workbench, fixed_points)
-        self.partitions, self.holes, self.strong_pips = [], [], []
+        self.strong_pips = []
         for fp in self.selected:
             trellis = Trellis.from_workbench(session.workbench, fp)
             trellis.classify_strong_pips()
             trellis.set_strong_pip(session.strong_pip(fp))
-            trellis.compute_pseudoneighbors()
-            trellis.punch_holes()
-            trellis.partition_stable_manifold()
-            self.partitions += trellis.stable_partitions
-            self.holes += trellis.holes
             self.strong_pips.append(trellis.strong_pip)
+        self.trellis = Trellis.from_workbench(session.workbench, fixed_points)
         self.trellis.cut_at_pip_orbit(pip for pip in self.strong_pips if pip is not None)
+        self.trellis.compute_pseudoneighbors()
+        self.trellis.punch_holes()
+        self.trellis.partition_stable_manifold()
+        self.partitions = list(self.trellis.stable_partitions)
+        self.holes = list(self.trellis.holes)
 
     def homotopy(self) -> HomotopyPartition:
         """The homotopy partition family."""

@@ -172,12 +172,12 @@ def draw_trellis(ax, session, fixed_points, dynamics, view, title) -> None:
     )
     # Only the minimal trellis's bridges: every blast child is a class member
     # too, and drawing all members would add each blast's children here.
+    trellis = _trellis(session, fixed_points)
     drawn = plotting.plot_bridges_by_class(
-        _trellis(session, fixed_points), dynamics, ax=ax, refined=True,
-        bridge_ids=minimal.kept_bridge_ids,
+        trellis, dynamics, ax=ax, refined=True, bridge_ids=minimal.kept_bridge_ids,
     )
+    trellis.plot_holes(ax=ax)  # the topology's holes: stages 4-6 ran on this trellis
     for fp in fixed_points:
-        session.plot_holes(fp, ax=ax)
         session.plot_strong_pip(fp, ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20)
     legend = ax.get_legend()
     if legend is not None:
