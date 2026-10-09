@@ -72,6 +72,14 @@ Implementation notes:
   unstable curves (different orbit points, or the two inversion half-branches,
   which join only through their one anchor — itself a trellis point) cannot be
   connected by an open unstable arc, so such a pair is rejected outright.
+* Heteroclinic pairs (D7, WP9). Two consecutive crossings of ``W^u(A)`` on B's
+  stable branch are a pair of B's tangle when the arc between them is clear.
+  The arc is A's, so it is tested with A's branch cycle, ``k`` and ``beta``,
+  against the crossings whose unstable side is A's (A x A and A x B; B's
+  unstable crossings never land on A's unstable manifold). The pair needs a
+  trellis holding both tangles: a tangle's own trellis holds no heteroclinic
+  crossing (``Trellis.from_workbench``), so the session runs this stage on the
+  selection's trellis.
 * One map step scales an unstable canonical distance by
   FixedPoint.per_step_beta("unstable") = |lambda_u|^(1/period); a crossing's
   unlinked landing is placed by Trellis.image_cdist, the one crossing-level
@@ -112,11 +120,14 @@ Implementation notes:
   to the cdist magnitude.
 * Check set N = trellis.own_intersection_ids (the cut trellis), mirroring
   StrongPip's same-fixed-point restriction: a candidate whose unstable side
-  belongs to a different fixed point can never iterate onto this tangle's
-  unstable manifold (its key is absent from the branch cycle, so the position
-  lookup drops it). Every detected crossing carries both branch keys (Tangle
-  asserts it). Landings stay RAW table lookups: X holds the iterates of N
-  outside T(q0) too.
+  belongs to a different fixed point than the PAIR'S ARC can never iterate onto
+  that unstable manifold (its key is absent from the arc's branch cycle, so the
+  position lookup drops it). The 2D endpoint collision of a scaled landing
+  compares stable cdists, so it applies only to a candidate on the pair's own
+  stable manifold (an A x A crossing's orbit stays on W^s(A), never x0's on
+  W^s(B)). Every detected crossing carries both branch keys (Tangle asserts
+  it). Landings stay RAW table lookups: X holds the iterates of N outside
+  T(q0) too.
 """
 
 from __future__ import annotations
@@ -209,10 +220,6 @@ def compute_pseudoneighbors(
             )
             continue
 
-        cycle = forward_unstable_branch_cycle(fixed_point)
-        pos_map, k = {key: i for i, key in enumerate(cycle)}, len(cycle)
-        beta = fixed_point.per_step_beta("unstable")
-
         r_end = trellis.iterate(r_n, branch.return_period)
         if r_end is None or trellis.intersection(r_end).manifold_b_key != branch.key:
             logger.warning(
@@ -234,7 +241,7 @@ def compute_pseudoneighbors(
                 )
                 break
             if _unstable_interval_is_clear(
-                trellis, x0, x1, candidates, pos_map, k, beta, collision_rtol, tol
+                trellis, x0, x1, candidates, collision_rtol, tol
             ):
                 pair = PseudoneighborPair(
                     x0, x1, branch_key=branch.key, is_reference=True, iterate=0
@@ -372,18 +379,15 @@ def _reference_branch(
 ) -> tuple[Optional["TrellisBranch"], Optional[int]]:
     """The fixed point's single reference branch and its r_n.
 
-    The strong pip's own branch when the chosen pip belongs to this fixed
-    point — only that branch carries the reference window; the other branches
-    are cut at the pip's iterates and their trajectory appearances come from
-    extension. Without a pip, the branch holding the globally outermost
-    intersection plays the same role.
+    The branch of the pip the trellis is cut at for this fixed point — only
+    that branch carries the reference window; the other branches are cut at the
+    pip's iterates and their trajectory appearances come from extension.
+    Without a pip, the branch holding the globally outermost intersection plays
+    the same role.
     """
-    pip = trellis.strong_pip
+    pip = trellis.pips.get(fixed_point)
     if pip is not None:
-        ix = trellis.intersection(pip)
-        key = ix.manifold_b_key
-        if key is not None and key[0] is fixed_point:
-            return trellis.branch(key), pip
+        return trellis.branch(trellis.intersection(pip).manifold_b_key), pip
 
     best_branch, best_id, best_s = None, None, -math.inf
     for branch in trellis.branches_of(fixed_point, "stable"):
@@ -408,9 +412,6 @@ def _unstable_interval_is_clear(
     x0: int,
     x1: int,
     candidates: Iterable[int],
-    pos_map: dict[ManifoldKey, int],
-    k: int,
-    beta: float,
     collision_rtol: float,
     tol: float,
 ) -> bool:
@@ -432,6 +433,10 @@ def _unstable_interval_is_clear(
     skipped only when it 2D-collides with an endpoint (both the scaled
     unstable and stable positions match within ``collision_rtol``) — x0/x1's
     own orbit up to cdist noise, the same-point test StrongPip uses.
+
+    The arc is the unstable arc of the pair, so the cycle, ``k`` and ``beta`` are
+    those of ITS fixed point: A's for a heteroclinic pair of ``W^u(A)`` crossings
+    on B's stable branch (D7).
     """
     ix0 = trellis.intersection(x0)
     ix1 = trellis.intersection(x1)
@@ -440,10 +445,11 @@ def _unstable_interval_is_clear(
     if u_key is None or u_key != ix1.manifold_a_key:
         return False  # no single unstable arc connects the pair (see Dev Notes)
 
-    pos_target = pos_map.get(u_key)
-    if pos_target is None:
-        logger.warning("Unstable branch %s missing from the branch cycle", u_key)
-        return False
+    owner = u_key[0]
+    cycle = forward_unstable_branch_cycle(owner)
+    pos_map, k = {key: i for i, key in enumerate(cycle)}, len(cycle)
+    beta = owner.per_step_beta("unstable")
+    pos_target = pos_map[u_key]
 
     lo, hi = sorted((ix0.unstable_cdist, ix1.unstable_cdist))
     if hi - lo <= tol or lo <= 0.0:
@@ -534,12 +540,12 @@ def _unstable_interval_is_clear(
                 continue
 
             _, s_value, _ = trellis.image_cdist(r_id, steps, "stable")
-            if any(
+            if r.manifold_b_key[0] is ix0.manifold_b_key[0] and any(
                 abs(value - u_e) <= collision_rtol * u_e + tol
                 and abs(s_value - s_e) <= collision_rtol * s_e + tol
                 for u_e, s_e in endpoints
             ):
-                continue  # the endpoint's own orbit (2D collision), not a puncture
+                continue  # the endpoint's own orbit (2D collision on one stable manifold)
             logger.debug(
                 "Pair (%d, %d) punctured by %d at residue %d, m=%d "
                 "(scaled cdist %.6g in (%.6g, %.6g))",
