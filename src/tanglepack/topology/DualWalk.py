@@ -12,7 +12,10 @@ recording, at every crossing, the element on the side it entered from and
 then the element on the side it left to (:class:`Walk`, :class:`WalkSearch`).
 The itinerary has even length and splits into disjoint consecutive pairs,
 each of which is one bridge class (or its inverse) -- the caller
-(``SymbolicDynamics``) turns those pairs into symbols.
+(``SymbolicDynamics``) turns those pairs into symbols. Between the landing
+spans, the walk obeys the non-crossing rule (D13): :func:`lobe_image_markers`
+reads which markers a member's lobe holds and :func:`holds_markers` whether a
+walk's closed curve holds their images.
 
 A singleton element ``[x, x]`` owns no stable edge and has no dual-graph
 node, so a class with a singleton landing cannot be walked. For it
@@ -56,6 +59,27 @@ Dev Notes:
   forward chain and reversing the tuple gives the walk that traverses the
   same bridges the other way: it enters each crossing on the row the forward
   walk left it on, and leaves on the row it entered.
+* The non-crossing rule (D13, author 2026-10-09; WP9b). ``f`` is a
+  homeomorphism and an unstable arc never crosses another one, so the image
+  ``f(b)`` of a member bridge cannot cross the images of the unstable arcs
+  around it. Two consequences make it combinatorial. (1) The walk runs
+  between the landing SPANS (C14): the hole bridges bounding a homotopy
+  element ``X`` map onto the kept image bridges at the ends of ``f(X)``, so
+  ``f(b)`` leaves the stable manifold from an edge ``f(X)`` meets. (2) The
+  marker law: ``b`` and the stable segment ``sigma_b`` between its ends bound
+  a disk, and ``f(b) + f(sigma_b)`` bounds its image, so it holds the image of
+  every marker (periodic point, hole) the lobe holds and of no other. The
+  word is the shortest walk whose curve, closed by ``sigma'`` along the
+  stable manifold, does so. The rule applies to every class with a member
+  lobe, not only to ties (C13): a unique shortest walk can break it. A walk
+  is looked for up to :data:`MAX_DETOUR` crossings past the shortest one
+  (faces may then repeat); the detours found so far are two crossings long.
+  A walk crossing ``sigma'``, or whose chords cross in a face, is rejected
+  (``f(b)`` is simple and meets ``f(sigma_b)`` only at its ends; pulling it
+  tight keeps it so); one the midpoint model cannot draw (an edge crossed
+  twice) is kept but never preferred by order, so it can only make a tie.
+  A class with no member lobe (member-less, D11, or with its ends on two
+  branches) keeps the plain shortest walk.
 * ``"truncated"`` is a member of :data:`WalkStatus` for callers, but
   :func:`shortest_walks` never reports it as the status: when the
   ``max_walks`` cap cuts the enumeration short the status still says
@@ -68,7 +92,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Iterable, Literal, Optional, Sequence, TYPE_CHECKING
+from typing import Iterable, Iterator, Literal, Optional, Sequence, TYPE_CHECKING
 
 from .BridgeClass import element_sort_key
 from .StablePartition import owns_cdist, row_of_end
@@ -86,7 +110,8 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..numerics.Bridge import BridgeId
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Intersection import ManifoldKey
-    from .DualGraph import FaceNode, StableNode
+    from .BridgeClass import BridgeClassEntry
+    from .DualGraph import FaceNode, Marker, StableNode
     from .PartitionFamily import PartitionFamily
     from .Trellis import Trellis
 
@@ -487,12 +512,18 @@ class Walk:
         multiplicity: How many distinct face paths produced this itinerary
             (parallel unified nodes carrying the same elements collapse into
             one walk).
+        start_node: The stable node of the start element the walk leaves from
+            (on its first face).
+        goal_node: The stable node of the goal element it arrives at (on its
+            last face).
     """
 
     steps: list[WalkStep]
     itinerary: tuple[ElementRef, ...]
     faces: list["FaceNode"]
     multiplicity: int = 1
+    start_node: Optional["StableNode"] = None
+    goal_node: Optional["StableNode"] = None
 
     @property
     def length(self) -> int:
@@ -522,8 +553,13 @@ WalkStatus = Literal[
     "unreachable",
     "no_start_node",
     "no_goal_node",
+    "no_admissible_walk",
     "truncated",
 ]
+
+#: How many crossings longer than the shortest walk the non-crossing rule may
+#: go looking for an admissible one (D13).
+MAX_DETOUR = 4
 
 
 @dataclass
@@ -537,15 +573,22 @@ class WalkSearch:
         status: ``"trivial"`` (start and goal share a face, or are equal),
             ``"unique"`` (one distinct shortest itinerary), ``"ambiguous"``
             (several distinct shortest itineraries, all kept),
-            ``"unreachable"``, ``"no_start_node"`` or ``"no_goal_node"``.
+            ``"unreachable"``, ``"no_start_node"``, ``"no_goal_node"`` or
+            ``"no_admissible_walk"`` (the non-crossing rule rejected every
+            walk up to :data:`MAX_DETOUR` crossings past the shortest).
         walks: The distinct shortest walks in deterministic order (by the
             :func:`~tanglepack.topology.BridgeClass.element_sort_key` of
             their itineraries); empty unless the status is ``"trivial"``,
             ``"unique"`` or ``"ambiguous"``.
-        start_faces: The distinct faces on ``start``'s side of its nodes.
+        start_faces: The distinct faces on ``start``'s side of the nodes the
+            walk may leave from.
         truncated: True when the ``max_walks`` cap stopped the enumeration of
             shortest face paths, so ``walks`` (and their multiplicities) may
             be incomplete.
+        constrained: True when the markers of a member lobe were imposed
+            (the non-crossing rule, D13).
+        rejected: How many itineraries, no longer than the one chosen, broke
+            the markers.
     """
 
     start: ElementRef
@@ -554,6 +597,8 @@ class WalkSearch:
     walks: list[Walk] = field(default_factory=list)
     start_faces: list["FaceNode"] = field(default_factory=list)
     truncated: bool = False
+    constrained: bool = False
+    rejected: int = 0
 
     @property
     def walk(self) -> Optional[Walk]:
@@ -594,15 +639,15 @@ _Predecessor = tuple["FaceNode", "StableNode", Side, Side]
 
 def _bfs_layers(
     start_faces: list["FaceNode"], goal_indices: set[int]
-) -> tuple[dict[int, list[_Predecessor]], list["FaceNode"]]:
+) -> tuple[dict[int, list[_Predecessor]], list["FaceNode"], int]:
     """
     Layered BFS over faces through unified nodes.
 
     Returns:
-        ``(predecessors, goals_reached)``: every predecessor
+        ``(predecessors, goals_reached, depth)``: every predecessor
         ``(from_face, node, entry_side, exit_side)`` of each face at its
-        minimal depth, and the goal faces found in the first layer holding
-        one (empty when the search is exhausted).
+        minimal depth, the goal faces found in the first layer holding one
+        (empty when the search is exhausted) and that layer's depth.
     """
     depth: dict[int, int] = {face.index: 0 for face in start_faces}
     predecessors: dict[int, list[_Predecessor]] = {face.index: [] for face in start_faces}
@@ -632,9 +677,9 @@ def _bfs_layers(
             predecessors[index] = preds
         reached = [layer[index][0] for index in sorted(layer) if index in goal_indices]
         if reached:
-            return predecessors, reached
+            return predecessors, reached, level
         frontier = [layer[index][0] for index in sorted(layer)]
-    return predecessors, []
+    return predecessors, [], level
 
 
 class _Budget:
@@ -676,6 +721,272 @@ def _backtrack(
             stack.append((pred[0], [pred] + suffix))
 
 
+def _nodes_meeting(
+    nodes: list["StableNode"], landing: ElementLanding, ref: ElementRef
+) -> list["StableNode"]:
+    """
+    The nodes whose edge the landing span meets, or all of them (WARNING).
+
+    The span overlaps an edge by more than its end tolerance: nothing at a
+    table end, ``SCALING_RTOL * |c|`` at a scaled one, so a neighbour touched
+    by a scaled end's error is no start.
+    """
+    lo, hi = landing.span
+    tol = max(
+        (SCALING_RTOL * abs(c) for c, exact in zip(landing.span, landing.from_table) if not exact),
+        default=0.0,
+    )
+    meeting = [node for node in nodes if min(hi, node.hi_cdist) - max(lo, node.lo_cdist) > tol]
+    if meeting:
+        return meeting
+    logger.warning(
+        "the landing span [%.6g, %.6g] of %s meets none of its %d stable node(s); the "
+        "walk may leave from any of them",
+        lo,
+        hi,
+        ref.label,
+        len(nodes),
+    )
+    return nodes
+
+
+def _stable_edges_between(dual, branch_key: "ManifoldKey", lo: float, hi: float) -> set[tuple]:
+    """The edges of one stable branch inside ``[lo, hi]`` (registry cdists, compared exactly)."""
+    return {
+        node.edge_key
+        for node in dual.stable_nodes_on(branch_key)
+        if lo <= node.lo_cdist and node.hi_cdist <= hi
+    }
+
+
+def _lobe(dual, bridge_id: "BridgeId") -> Optional[set[tuple]]:
+    """A kept bridge and the stable segment between its ends, or None across two branches."""
+    trellis = dual.trellis
+    unstable_key = trellis.unstable_key_of(bridge_id)
+    branches = {trellis.stable_key_at(end, unstable_key) for end in bridge_id}
+    if len(branches) != 1:
+        return None
+    lo, hi = sorted(float(trellis.intersection(end).stable_cdist) for end in bridge_id)
+    return _stable_edges_between(dual, branches.pop(), lo, hi) | {dual.unstable_edges[bridge_id]}
+
+
+def lobe_image_markers(dual, entry: "BridgeClassEntry") -> Optional[dict["Marker", bool]]:
+    """
+    The images of the markers a member's lobe holds and leaves out (D13).
+
+    A member bridge ``b`` the minimal trellis keeps, with both ends on one
+    stable branch, closes with the stable segment ``sigma_b`` between them into
+    a Jordan curve: ``b`` meets no stable arc inside, and ``sigma_b`` no part
+    of ``b``. The map is a homeomorphism, so ``f(b) + f(sigma_b)`` holds
+    ``f(m)`` exactly when ``b + sigma_b`` holds ``m``, for every marker ``m``.
+
+    Args:
+        dual: The dual graph (its :attr:`~.DualGraph.DualGraph.markers`).
+        entry: The class whose members to read.
+
+    Returns:
+        ``{image marker: held}`` for every marker the lobe decides and whose
+        image is placed, read off the class's first such member; None when
+        the class has none (member-less, connecting, or no member kept). Two
+        members disagreeing on a marker is a WARNING: the class is not one
+        homotopy class.
+    """
+    kept = set(dual.minimal.kept_bridge_ids)
+    lobes: list[tuple["BridgeId", dict["Marker", bool]]] = []
+    for member in entry.members:
+        if member.is_loop or member.bridge_id not in kept:
+            continue
+        curve = _lobe(dual, member.bridge_id)
+        if curve is None:
+            continue
+        (held,) = dual.enclosed(curve)
+        images = {
+            dual.image_marker(marker): inside
+            for marker, inside in held.items()
+            if inside is not None and dual.image_marker(marker) is not None
+        }
+        lobes.append((member.bridge_id, images))
+    if not lobes:
+        return None
+    (first_id, first), others = lobes[0], lobes[1:]
+    for bridge_id, images in others:
+        clash = [marker for marker, inside in images.items() if first.get(marker, inside) != inside]
+        if clash:
+            logger.warning(
+                "members %s and %s of class %s hold different markers (%s); the "
+                "non-crossing rule reads %s",
+                first_id,
+                bridge_id,
+                entry.bridge_class.label,
+                ", ".join(map(str, clash)),
+                first_id,
+            )
+    return first
+
+
+def _half_toward(node: "StableNode", other: "StableNode") -> tuple:
+    """The half of a node's edge facing another node of its branch, named by its end vertex."""
+    return (node.edge_key, node.arc.hi_id if other.lo_cdist >= node.hi_cdist else node.arc.lo_id)
+
+
+def holds_markers(dual, walk: Walk, wanted: dict["Marker", bool]) -> Optional[bool]:
+    """
+    Whether a walk, closed along the stable manifold, holds the wanted markers (D13).
+
+    The walk runs from the middle of its start edge through its faces to the
+    middle of its goal edge; ``sigma'``, the stable edges between the two plus
+    the half of each end edge facing the other, closes it. The curve stands
+    for ``f(b) + f(sigma_b)``, so it must hold exactly the wanted markers.
+
+    Args:
+        dual: The dual graph.
+        walk: A walk with its ``start_node`` and ``goal_node``.
+        wanted: ``{marker: held}`` (:func:`lobe_image_markers`).
+
+    Returns:
+        True when SOME routing through the faces keeps the curve simple and
+        holds every wanted marker the curve decides and leaves out every other
+        one. False when none does, which includes a walk crossing ``sigma'``
+        (``f(b)`` meets ``f(sigma_b)`` only at its ends) and one whose chords
+        cross in a face (``f(b)`` is simple, and pulling it tight keeps it
+        so). None when the curve is beyond the model: the ends on two
+        branches, an edge crossed twice or a walk leaving and re-entering one
+        edge (one crossing per edge, at its middle). A trivial walk inside one
+        edge holds nothing.
+    """
+    start, goal = walk.start_node, walk.goal_node
+    if start.branch_key != goal.branch_key:
+        return None
+    if start is goal:
+        return None if walk.steps else not any(wanted.values())
+    lo, hi = sorted((start.lo_cdist, start.hi_cdist, goal.lo_cdist, goal.hi_cdist))[1:3]
+    between = _stable_edges_between(dual, start.branch_key, lo, hi) - {start.edge_key, goal.edge_key}
+    crossed = [step.node.edge_key for step in walk.steps]
+    if set(crossed) & between:
+        return False
+    if len(set(crossed)) < len(crossed) or {start.edge_key, goal.edge_key} & set(crossed):
+        return None
+    ends_in = [(start.edge_key, walk.itinerary[0].side)] + [
+        (step.node.edge_key, step.exit_side) for step in walk.steps
+    ]
+    ends_out = [(step.node.edge_key, step.entry_side) for step in walk.steps] + [
+        (goal.edge_key, walk.itinerary[-1].side)
+    ]
+    chords = [(face, end_in + end_out) for face, end_in, end_out in zip(walk.faces, ends_in, ends_out)]
+    routings = dual.enclosed(between, chords, {_half_toward(start, goal), _half_toward(goal, start)})
+    if routings is None:
+        return None
+    return any(
+        all(held.get(marker) in (None, inside) for marker, inside in wanted.items())
+        for held in routings
+    )
+
+
+def _distances_to(goal_faces: list["FaceNode"]) -> dict[int, int]:
+    """The fewest crossings from each face to a goal face (face adjacency is symmetric)."""
+    distance = {face.index: 0 for face in goal_faces}
+    frontier = list(goal_faces)
+    while frontier:
+        layer = []
+        for face in frontier:
+            for node in face.exits:
+                for other in node.faces.values():
+                    if other.index not in distance:
+                        distance[other.index] = distance[face.index] + 1
+                        layer.append(other)
+        frontier = layer
+    return distance
+
+
+def _walks(
+    start: ElementRef,
+    goal: ElementRef,
+    start_nodes: list["StableNode"],
+    goal_nodes: list["StableNode"],
+    length: int,
+    budget: _Budget,
+) -> Iterator[Walk]:
+    """
+    Every walk with exactly ``length`` crossings, while the budget lasts.
+
+    Faces may repeat; a node is crossed at most once and a step never stays
+    in its face. A branch is cut once the goal is out of reach in the steps
+    left.
+    """
+    goal_nodes_on: dict[int, list["StableNode"]] = {}
+    for node in goal_nodes:
+        goal_nodes_on.setdefault(node.face_on(goal.side).index, []).append(node)
+    distance = _distances_to([node.face_on(goal.side) for node in goal_nodes])
+
+    def extend(face: "FaceNode", steps: list[WalkStep]) -> Iterator[tuple[list[WalkStep], "StableNode"]]:
+        if distance.get(face.index, length + 1) > length - len(steps):
+            return
+        if len(steps) == length:
+            for goal_node in goal_nodes_on.get(face.index, ()):
+                yield steps, goal_node
+            return
+        for node in face.exits:
+            if any(step.node is node for step in steps):
+                continue
+            for entry_side in node.sides:
+                other = node.faces.get(OPPOSITE_SIDE[entry_side])
+                if node.faces.get(entry_side) is not face or other is None or other is face:
+                    continue
+                step = WalkStep(node, entry_side, OPPOSITE_SIDE[entry_side], face, other)
+                yield from extend(other, steps + [step])
+
+    for start_node in start_nodes:
+        first = start_node.face_on(start.side)
+        for steps, goal_node in extend(first, []):
+            if not budget.take():
+                return
+            itinerary = [start]
+            for step in steps:
+                itinerary += [step.entry_element, step.exit_element]
+            itinerary.append(goal)
+            faces = [first] + [step.to_face for step in steps]
+            yield Walk(steps, tuple(itinerary), faces, 1, start_node, goal_node)
+
+
+def _admissible_walks(
+    dual,
+    start: ElementRef,
+    goal: ElementRef,
+    start_nodes: list["StableNode"],
+    goal_nodes: list["StableNode"],
+    shortest: int,
+    wanted: dict["Marker", bool],
+    budget: _Budget,
+) -> tuple[list[Walk], int, Optional[int]]:
+    """
+    The admissible walks of the least length in ``[shortest, shortest + MAX_DETOUR]``.
+
+    An itinerary is admissible when one of its walks holds the wanted markers,
+    or cannot be judged (kept, so it is never passed over by order alone).
+
+    Returns:
+        ``(walks, rejected itineraries, their length)``; no walks and length
+        None when every itinerary up to the detour cap broke the markers.
+    """
+    rejected = 0
+    for length in range(shortest, shortest + MAX_DETOUR + 1):
+        judged: dict[tuple[ElementRef, ...], list[tuple[Optional[bool], Walk]]] = {}
+        for walk in _walks(start, goal, start_nodes, goal_nodes, length, budget):
+            judged.setdefault(walk.itinerary, []).append((holds_markers(dual, walk, wanted), walk))
+        kept = []
+        for verdicts in judged.values():
+            admissible = [walk for verdict, walk in verdicts if verdict] + [
+                walk for verdict, walk in verdicts if verdict is None
+            ]
+            if admissible:
+                admissible[0].multiplicity = len(admissible)
+                kept.append(admissible[0])
+        rejected += len(judged) - len(kept)
+        if kept or budget.truncated:
+            return kept, rejected, length
+    return [], rejected, None
+
+
 def shortest_walks(
     dual,
     start: ElementRef,
@@ -683,6 +994,8 @@ def shortest_walks(
     *,
     max_walks: int = 64,
     fixed_points: Optional[Sequence["FixedPoint"]] = None,
+    landings: Optional[tuple[ElementLanding, ElementLanding]] = None,
+    wanted: Optional[dict["Marker", bool]] = None,
 ) -> WalkSearch:
     """
     Every shortest walk of the dual graph from one iterated element to another.
@@ -696,20 +1009,34 @@ def shortest_walks(
     shortest face paths are then backtracked, turned into itineraries and
     deduplicated.
 
+    With ``landings``, the walk leaves from and arrives at the nodes whose
+    edges the landing SPANS meet, not every node of the iterated element: the
+    hole bridges bounding a homotopy element ``X`` map onto the kept image
+    bridges at the ends of ``f(X)``, which ``f(b)`` cannot cross (D13). With
+    ``wanted``, the non-crossing rule: the word is the shortest walk whose
+    closed curve holds exactly the wanted markers (:func:`holds_markers`),
+    looked for up to :data:`MAX_DETOUR` crossings past the shortest walk
+    (faces may then repeat).
+
     Args:
         dual: Anything with ``stable_nodes_of(ref) -> list[StableNode]``
             (a :class:`~tanglepack.topology.DualGraph.DualGraph`, or a test
-            double over synthetic nodes).
+            double over synthetic nodes); with ``wanted``, the dual graph's
+            markers and enclosure too.
         start: The iterated element to start from.
         goal: The iterated element to reach.
-        max_walks: Cap on the number of shortest face paths enumerated. When
-            it is hit ``truncated`` is set and a WARNING logged; the status
-            still reports the itineraries that survived.
+        max_walks: Cap on the number of shortest face paths enumerated (on
+            the walks enumerated, with ``wanted``). When it is hit
+            ``truncated`` is set and a WARNING logged; the status still
+            reports the itineraries that survived.
         fixed_points: The ordering context for
             :func:`~tanglepack.topology.BridgeClass.element_sort_key`. By
             default it is derived from the refs themselves (start, goal, then
             every itinerary element, in first-seen order), which is
             deterministic for a given graph.
+        landings: The landings ``start`` and ``goal`` are the targets of.
+        wanted: ``{marker: held}`` from a member lobe
+            (:func:`lobe_image_markers`), or None for no constraint.
 
     Returns:
         The :class:`WalkSearch`. ``"no_start_node"`` / ``"no_goal_node"``
@@ -717,7 +1044,9 @@ def shortest_walks(
         wrong family); ``"trivial"`` when ``start == goal`` or a start face
         is a goal face (itinerary ``(start, goal)``); ``"unique"`` for one
         distinct shortest itinerary; ``"ambiguous"`` for several (all kept,
-        WARNING); ``"unreachable"`` when the search exhausts the faces.
+        WARNING); ``"unreachable"`` when the search exhausts the faces;
+        ``"no_admissible_walk"`` when the non-crossing rule rejects every
+        walk it looked at.
     """
     start_nodes = list(dual.stable_nodes_of(start))
     if not start_nodes:
@@ -737,6 +1066,9 @@ def shortest_walks(
             goal.label,
         )
         return WalkSearch(start, goal, "no_goal_node")
+    if landings is not None:
+        start_nodes = _nodes_meeting(start_nodes, landings[0], start)
+        goal_nodes = _nodes_meeting(goal_nodes, landings[1], goal)
 
     start_faces = _distinct_faces(node.face_on(start.side) for node in start_nodes)
     goal_faces = _distinct_faces(node.face_on(goal.side) for node in goal_nodes)
@@ -751,57 +1083,102 @@ def shortest_walks(
         )
     goal_indices = {face.index for face in goal_faces}
 
-    if start == goal:
-        walk = Walk([], (start, goal), [start_faces[0]], multiplicity=len(start_faces))
-        return WalkSearch(start, goal, "trivial", [walk], start_faces)
-    shared = [face for face in start_faces if face.index in goal_indices]
-    if shared:
-        walk = Walk([], (start, goal), [shared[0]], multiplicity=len(shared))
-        return WalkSearch(start, goal, "trivial", [walk], start_faces)
+    def node_on(nodes: list["StableNode"], side: Side, face: "FaceNode") -> "StableNode":
+        return next(node for node in nodes if node.face_on(side) is face)
 
-    predecessors, reached = _bfs_layers(start_faces, goal_indices)
-    if not reached:
-        logger.warning(
-            "walk %s -> %s: unreachable; every route crosses a wall (the stable "
-            "manifold off the fundamental segment)",
-            start.label,
-            goal.label,
+    # start == goal shares every start face (without landings, which may
+    # differ between the two ends of a class landing in one element).
+    shared = [face for face in start_faces if face.index in goal_indices]
+    if shared and wanted is None:
+        walk = Walk(
+            [],
+            (start, goal),
+            [shared[0]],
+            multiplicity=len(shared),
+            start_node=node_on(start_nodes, start.side, shared[0]),
+            goal_node=node_on(goal_nodes, goal.side, shared[0]),
         )
-        return WalkSearch(start, goal, "unreachable", [], start_faces)
+        return WalkSearch(start, goal, "trivial", [walk], start_faces)
+    shortest = 0
+    if not shared:
+        predecessors, reached, shortest = _bfs_layers(start_faces, goal_indices)
+        if not reached:
+            logger.warning(
+                "walk %s -> %s: unreachable; every route crosses a wall (the stable "
+                "manifold off the fundamental segment)",
+                start.label,
+                goal.label,
+            )
+            return WalkSearch(start, goal, "unreachable", [], start_faces)
 
     budget = _Budget(max_walks)
-    by_itinerary: dict[tuple[ElementRef, ...], Walk] = {}
-    for goal_face in reached:
-        for path in _backtrack(goal_face, predecessors, budget):
-            steps = [
-                WalkStep(node, entry_side, exit_side, from_face, to_face)
-                for (from_face, node, entry_side, exit_side), to_face in zip(
-                    path, [pred[0] for pred in path[1:]] + [goal_face]
-                )
-            ]
-            itinerary: list[ElementRef] = [start]
-            for step in steps:
-                itinerary.append(step.entry_element)
-                itinerary.append(step.exit_element)
-            itinerary.append(goal)
-            key = tuple(itinerary)
-            found = by_itinerary.get(key)
-            if found is None:
-                faces = [path[0][0]] + [step.to_face for step in steps]
-                by_itinerary[key] = Walk(steps, key, faces, multiplicity=1)
-            else:
-                found.multiplicity += 1
-        if budget.truncated:
-            break
+    rejected = 0
+    if wanted is None:
+        by_itinerary: dict[tuple[ElementRef, ...], Walk] = {}
+        for goal_face in reached:
+            for path in _backtrack(goal_face, predecessors, budget):
+                steps = [
+                    WalkStep(node, entry_side, exit_side, from_face, to_face)
+                    for (from_face, node, entry_side, exit_side), to_face in zip(
+                        path, [pred[0] for pred in path[1:]] + [goal_face]
+                    )
+                ]
+                itinerary: list[ElementRef] = [start]
+                for step in steps:
+                    itinerary.append(step.entry_element)
+                    itinerary.append(step.exit_element)
+                itinerary.append(goal)
+                key = tuple(itinerary)
+                found = by_itinerary.get(key)
+                if found is None:
+                    faces = [path[0][0]] + [step.to_face for step in steps]
+                    by_itinerary[key] = Walk(
+                        steps,
+                        key,
+                        faces,
+                        1,
+                        node_on(start_nodes, start.side, faces[0]),
+                        node_on(goal_nodes, goal.side, goal_face),
+                    )
+                else:
+                    found.multiplicity += 1
+            if budget.truncated:
+                break
+        found_walks = list(by_itinerary.values())
+        length: Optional[int] = shortest
+    else:
+        found_walks, rejected, length = _admissible_walks(
+            dual, start, goal, start_nodes, goal_nodes, shortest, wanted, budget
+        )
+        if rejected:
+            logger.info(
+                "walk %s -> %s: the non-crossing rule rejected %d itinerar%s",
+                start.label,
+                goal.label,
+                rejected,
+                "y" if rejected == 1 else "ies",
+            )
+        if not found_walks:
+            logger.warning(
+                "walk %s -> %s: no walk up to %d crossings holds the markers of the "
+                "class's member lobe (%d itineraries rejected)",
+                start.label,
+                goal.label,
+                shortest + MAX_DETOUR,
+                rejected,
+            )
+            return WalkSearch(
+                start, goal, "no_admissible_walk", [], start_faces, budget.truncated, True, rejected
+            )
     truncated = budget.truncated
 
     context = (
         list(fixed_points)
         if fixed_points is not None
-        else _fixed_points_of([start, goal] + [ref for key in by_itinerary for ref in key])
+        else _fixed_points_of([start, goal] + [ref for walk in found_walks for ref in walk.itinerary])
     )
     walks = sorted(
-        by_itinerary.values(),
+        found_walks,
         key=lambda walk: tuple(element_sort_key(ref, context) for ref in walk.itinerary),
     )
     if truncated:
@@ -814,7 +1191,9 @@ def shortest_walks(
             len(walks),
             "y" if len(walks) == 1 else "ies",
         )
-    status: WalkStatus = "unique" if len(walks) == 1 else "ambiguous"
+    status: WalkStatus = (
+        "trivial" if length == 0 else "unique" if len(walks) == 1 else "ambiguous"
+    )
     if status == "ambiguous":
         logger.warning(
             "walk %s -> %s: %d distinct shortest itineraries of %d crossing(s); "
@@ -825,7 +1204,9 @@ def shortest_walks(
             walks[0].length,
             "\n  ".join(" ".join(ref.label for ref in walk.itinerary) for walk in walks),
         )
-    return WalkSearch(start, goal, status, walks, start_faces, truncated)
+    return WalkSearch(
+        start, goal, status, walks, start_faces, truncated, wanted is not None, rejected
+    )
 
 
 # --------------------------------------------------------------------------- #

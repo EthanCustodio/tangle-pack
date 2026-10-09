@@ -82,9 +82,19 @@ Dev Notes:
   (``cross_side``) with a WARNING and not asserted. Across two branches there
   is no side relation (D4: the left of an inversion point's branch 0.0 is the
   right of 0.1), so such a pair is never flagged.
-* Ambiguous classes (several shortest walks with different itineraries) feed
-  the first candidate, in the walk search's deterministic order, into the
-  refinement and the graph; :attr:`SymbolicDynamics.is_reliable` is False.
+* The non-crossing rule (D13, WP9b): the walk runs between the landing SPANS
+  and, for a class with a member lobe (a kept non-loop member with both ends
+  on one stable branch), it is the shortest walk whose closed curve holds
+  exactly the images of the markers the lobe holds
+  (:func:`~tanglepack.topology.DualWalk.lobe_image_markers`). It applies to
+  EVERY such class, not only to ties (C13): a unique shortest walk can break
+  it (the heteroclinic ``bh``). A class with no member lobe (member-less,
+  D11, or connecting two tangles) keeps the plain shortest walk; a tie there
+  stays ambiguous, feeds the first candidate in the walk search's
+  deterministic order into the refinement and the graph, and
+  :attr:`SymbolicDynamics.is_reliable` is False (DEC-24). No walk up to the
+  detour cap holding the markers leaves the class unresolved
+  (``"no_admissible_walk"``).
 * Inert classes are NOT nodes of the transition graph or the matrix (author,
   2026-09-23): they contribute nothing to the dynamics, and their symbols
   are still visible in the words. A token naming an inert class is dropped
@@ -118,7 +128,14 @@ from .BridgeClass import (
     element_sort_key,
     oriented_class,
 )
-from .DualWalk import ElementLanding, WalkSearch, land_element, shortest_walks, trellis_itinerary
+from .DualWalk import (
+    ElementLanding,
+    WalkSearch,
+    land_element,
+    lobe_image_markers,
+    shortest_walks,
+    trellis_itinerary,
+)
 from .ElementNaming import ElementNaming
 from .TopologyResults import ElementRef
 
@@ -289,8 +306,9 @@ class ClassDynamics:
         symbols: The itinerary's non-loop tokens — the class's word.
         loops: The itinerary pairs that fell into one element (dropped from
             the word).
-        ambiguous: True when several shortest walks disagree; the first
-            candidate is the primary itinerary.
+        ambiguous: True when several shortest walks disagree (after the
+            non-crossing rule, so only for a class with no member lobe); the
+            first candidate is the primary itinerary.
         unresolved_reason: Why the class has no itinerary (a failed landing,
             no walk, or a singleton landing with no registered member image),
             else ``None``. A pair no computed bridge spans unresolves nothing
@@ -1136,7 +1154,14 @@ def _resolve_itinerary(
         logger.warning("class %s unresolved: %s", cd.letter, cd.unresolved_reason)
         return
 
-    search = shortest_walks(dual_graph, start, goal, max_walks=max_walks)
+    search = shortest_walks(
+        dual_graph,
+        start,
+        goal,
+        max_walks=max_walks,
+        landings=(source_landing, target_landing),
+        wanted=lobe_image_markers(dual_graph, cd.entry),
+    )
     cd.search = search
     walk = search.walk
     if walk is None or search.status not in ("unique", "trivial", "ambiguous"):

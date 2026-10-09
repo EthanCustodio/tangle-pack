@@ -72,6 +72,7 @@ from .BridgeClass import (
 from .DualGraph import (
     DualGraph,
     FaceNode,
+    Marker,
     StableNode,
 )
 from .MinimalTrellis import (
@@ -96,7 +97,9 @@ from .DualWalk import (
     WalkSearch,
     WalkStatus,
     WalkStep,
+    holds_markers,
     land_element,
+    lobe_image_markers,
     shortest_walks,
     trellis_itinerary,
 )
@@ -154,6 +157,7 @@ __all__ = [
     "BridgeMember",
     "DualGraph",
     "FaceNode",
+    "Marker",
     "SIDE_LETTER",
     "ElementName",
     "ElementNaming",
@@ -162,7 +166,9 @@ __all__ = [
     "WalkSearch",
     "WalkStatus",
     "WalkStep",
+    "holds_markers",
     "land_element",
+    "lobe_image_markers",
     "shortest_walks",
     "trellis_itinerary",
     "ClassDynamics",
