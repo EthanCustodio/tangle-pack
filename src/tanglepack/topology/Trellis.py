@@ -58,53 +58,6 @@ and rebuilt rather than having its id-keyed tables remapped: remapping only the
 partition maps would leave the branch orderings and bridge list stale, which is
 the more dangerous half.
 
-Open items on the partition-element lookups (Phase 5), both unexercised by any
-available fixture:
-
-* ``image_of_element`` flips the requested side once per map step when the map
-  reverses orientation (det J < 0). Every fixture in the repo is
-  orientation-PRESERVING (b = 1), so that branch has never run against real
-  data; the flip mirrors the rule ``bridge_side_violations`` applies to a hole's
-  backward chain, and should be validated together with it on a det J < 0 map.
-* An element bounded by the end of the computed branch (``hi_id is None``)
-  has no image arc -- there is no crossing whose image would bound it -- so
-  ``image_of_element`` answers None there. That is the ONLY None it returns: an
-  endpoint that IS a crossing but has no registered iterate is mapped by
-  ``image_cdist``, which falls back from the iterate table to ``advance_key``
-  plus ``per_step_beta``, and an anchor end maps to the next point's anchor on
-  the advanced branch (``image_cdist(..., branch=)``: the anchor lies on every
-  branch of its point, D4). ``image_of_element(..., use_table=False)`` forces
-  the scaling branch for both endpoints; it exists so a test can pin the two
-  answers as equal wherever the table has both iterates.
-
-  That equality is not free. A canonical distance is an arc length on a
-  polyline, so ``c * per_step_beta ** n`` reproduces the registered image only
-  to about 1e-3 RELATIVE -- three orders above the registry's ``cdist_tol`` --
-  and the image branch's partition boundaries sit exactly ON the registered
-  images. A scaled endpoint therefore lands just past a boundary and would drag
-  a neighbouring element into the answer, so ``image_of_element`` snaps a scaled
-  endpoint onto a boundary it lands within ``SNAP_RTOL`` of before computing the
-  cover. Should a fixture ever put two boundaries inside one window, the nearest
-  wins and the ambiguity is logged at DEBUG.
-
-  What the snap is and is not evidence for. On BOTH repository fixtures the snap
-  never fires on the production path: every endpoint ``use_table=True`` resolves
-  by scaling (6 of them on p3) lands with no boundary inside its window, so the
-  answer there is the raw scaled span. The snap is exercised only by
-  ``use_table=False``, where scaling is forced for endpoints the table could
-  have answered and the boundary genuinely is the right target. So the
-  table-versus-scaling equality test validates the scaling LAW; it does not
-  validate the true fallback, which has no ground truth to be checked against --
-  an unregistered iterate is unregistered precisely because nothing knows where
-  it went. The real fallback is pinned by coverage alone (every bounded element
-  gets a non-empty cover on the advanced branch) and stays that way until
-  iterate inference reaches deeper than the current +/-1.
-
-  ``_snap_to_partition_boundary`` rebuilds and re-sorts the image branch's
-  boundary set on every call. That is nothing at fixture size (tens of
-  intervals, two calls per element); if the dual graph ever makes element images
-  hot, memoise the sorted boundaries per ``StablePartitionResult`` and bisect.
-
 This object deliberately contains NO algorithm logic. Compute-Pseudoneighbors,
 Is-Strong-Pip, and friends will live in their own modules and read from / write
 to a Trellis instance. The accessors here (branch lookup, orderings, cdist
@@ -125,7 +78,6 @@ from .TrellisBranch import TrellisBranch
 from .TopologyResults import (
     Endpoint,
     Hole,
-    OPPOSITE_SIDE,
     PseudoneighborPair,
     Side,
     StablePartitionResult,
@@ -154,45 +106,6 @@ logger.addHandler(logging.NullHandler())
 #: comparing a derived distance against a registered one may demand, set an
 #: order of magnitude above the observed error.
 SCALING_RTOL = 1e-2
-
-#: Half-width, relative to the distance itself, of the window inside which a
-#: SCALED canonical distance is taken to BE a partition boundary
-#: (:func:`_snap_to_partition_boundary`). Deliberately tighter than
-#: :data:`SCALING_RTOL`: this one decides an element's identity, so it wants the
-#: smallest window that still swallows the scaling error (max displacement
-#: actually taken on the fixtures: 1.35e-3) rather than the loosest one a test
-#: would tolerate. At 2e-3 the p3 and k=10 fixtures snap every forced-scaling
-#: endpoint onto the boundary the iterate table names -- 0 disagreements out of
-#: 56 and 2 respectively -- while the nearest WRONG boundary stays some 15x
-#: outside the window.
-SNAP_RTOL = 2e-3
-
-
-def _snap_to_partition_boundary(
-    cdist: float, result: StablePartitionResult, tol: float
-) -> float:
-    """Pull a scaled cdist onto a partition boundary it lands within its error of."""
-    window = max(tol, abs(cdist) * SNAP_RTOL)
-    boundaries = sorted(
-        {iv.lo_cdist for iv in result.intervals}
-        | {iv.hi_cdist for iv in result.intervals}
-    )
-    if not boundaries:
-        return cdist
-    inside = [b for b in boundaries if abs(b - cdist) <= window]
-    if not inside:
-        return cdist
-    nearest = min(inside, key=lambda b: abs(b - cdist))
-    if len(inside) > 1:
-        logger.debug(
-            "scaled cdist %.12g has %d partition boundaries within %.3g; "
-            "snapping to the nearest (%.12g)",
-            cdist,
-            len(inside),
-            window,
-            nearest,
-        )
-    return nearest
 
 
 class Trellis:
@@ -998,7 +911,7 @@ class Trellis:
         so it reproduces the table's value only to :data:`SCALING_RTOL`
         (about 1e-3 on the repository's fixtures), NOT to the registry's
         ``cdist_tol``. Callers that compare a derived distance against a
-        registered one must budget for that; :meth:`image_of_element` does.
+        registered one must budget for that.
 
         Args:
             intersection_id: Registry ID of the crossing.
@@ -1525,169 +1438,6 @@ class Trellis:
             if (result.branch_key, result.side) == (branch_key, side):
                 return result.element_of_intersection.get(intersection_id)
         return None
-
-    def image_of_element(
-        self,
-        result: StablePartitionResult,
-        element_id: int,
-        n: int = 1,
-        *,
-        use_table: bool = True,
-        partitions: Optional[Iterable[StablePartitionResult]] = None,
-    ) -> Optional[list[int]]:
-        """
-        The elements covering the ``n``-th image of one partition element.
-
-        An element spans the stable arc between two crossings, so its image
-        spans the arc between their ``n``-images on the branch ``n`` map steps
-        forward (:meth:`FixedPoint.advance_key`). Each endpoint's image is
-        located by :meth:`image_cdist`: the registry's iterate table where it is
-        populated, and the canonical-distance scaling law where it is not, so an
-        element whose iterates were never registered still has an image. The
-        answer is the elements of the image branch's partition that meet that
-        span. Side is carried through unchanged by an orientation-preserving map
-        and flips once per step otherwise.
-
-        The image partition is not a refinement of the image of this partition:
-        the hole orbits are propagated backward for finitely many steps, so the
-        image branch can be missing an innermost boundary that this branch has.
-        The answer is therefore every element of the image branch that MEETS the
-        image arc as a set (open ends included: two pieces touching at a single
-        cdist meet only when both are closed there), not only the ones the arc
-        contains. Their combined span always covers both endpoint images.
-
-        Args:
-            result: The partition result the element belongs to.
-            element_id: The element's id within ``result``.
-            n: Number of map steps; negative walks backward. Defaults to 1.
-            use_table: When False, BOTH endpoint images are taken from the
-                scaling branch of :meth:`image_cdist` even where the iterate
-                table has an entry. This is a validation hook: the two answers
-                must agree on every element whose iterates are registered, and
-                a test that pins that is what licenses the fallback elsewhere.
-                Defaults to True (table first, per endpoint).
-            partitions: Where to look for the image branch's partition result.
-                Defaults to this trellis's own :attr:`stable_partitions`; pass
-                an explicit collection when the trellis holding the geometry is
-                not the one holding the partitions (the all-fixed-points trellis
-                carries no partitions of its own, so the dual graph hands it the
-                per-fixed-point results it was built from).
-
-        Returns:
-            The image element ids in increasing stable canonical distance, or
-            ``None`` when an end of the element is unbounded (the anchor or the
-            branch end), which is the only case with no image arc to cover. An
-            empty list means the image arc lies outside the partitioned stretch
-            of the image branch (possible walking backward, which moves outward).
-
-        Raises:
-            IndexError: If ``element_id`` is not an element of ``result``.
-            ValueError: If the image branch's partition (same side, advanced
-                key) is not among ``partitions`` — partition every stable branch
-                before asking for images.
-
-        Note:
-            An endpoint image that came from the SCALING law is snapped onto a
-            partition boundary of the image branch when it lands within
-            :data:`SNAP_RTOL` of one (:func:`_snap_to_partition_boundary`). The
-            image branch's boundaries are themselves images of crossings, so a
-            scaled endpoint a discretisation error away from one IS that
-            boundary, and without the snap that ~1e-3 relative error would spill
-            the arc into a neighbouring element.
-
-            On both repository fixtures the snap never fires on the default
-            ``use_table=True`` path: no endpoint that falls back to scaling there
-            has a boundary inside its window, so those answers are the raw scaled
-            span. It fires only under ``use_table=False``, where scaling is
-            forced for endpoints the table could have answered — which is exactly
-            the comparison that pins the scaling law, and is NOT evidence about
-            the true fallback. An unregistered iterate has no ground truth to be
-            checked against; the genuine fallback is pinned by coverage alone
-            until iterate inference reaches past +/-1.
-        """
-        from .StablePartition import owns_cdist, span_contains
-
-        interval = result.element(element_id)
-        if n == 0:
-            return [element_id]
-        if interval.lo_id is None or interval.hi_id is None:
-            return None
-
-        image_ends: list[tuple[float, bool]] = []
-        for end_id in (interval.lo_id, interval.hi_id):
-            if use_table:
-                _key, cdist, from_table = self.image_cdist(
-                    end_id, n, "stable", branch=result.branch_key
-                )
-                if not from_table:
-                    logger.debug(
-                        "element %d of %s: crossing %d has no registered %d-iterate; "
-                        "scaling its stable cdist instead",
-                        element_id,
-                        result.branch_key[1:],
-                        end_id,
-                        n,
-                    )
-            else:
-                _key, cdist = self._scaled_image_cdist(end_id, n, "stable")
-                from_table = False
-            image_ends.append((cdist, from_table))
-
-        fixed_point = result.branch_key[0]
-        image_key = fixed_point.advance_key(result.branch_key, n)
-        side = result.side
-        if not self.orientation_preserving and n % 2:
-            side = OPPOSITE_SIDE[side]
-
-        candidates = (
-            self.stable_partitions if partitions is None else list(partitions)
-        )
-        image_result = next(
-            (
-                other
-                for other in candidates
-                if other.branch_key == image_key and other.side == side
-            ),
-            None,
-        )
-        if image_result is None:
-            raise ValueError(
-                f"no {side} partition stored for the image branch "
-                f"{image_key[1:]}; partition it before asking for images"
-            )
-
-        tol = self.registry.cdist_tol
-        image_cdists = [
-            cdist
-            if from_table
-            else _snap_to_partition_boundary(cdist, image_result, tol)
-            for cdist, from_table in image_ends
-        ]
-        ends = sorted(
-            (
-                (image_cdists[0], interval.closed_lo),
-                (image_cdists[1], interval.closed_hi),
-            ),
-            key=lambda end: end[0],
-        )
-        (lo, closed_lo), (hi, closed_hi) = ends
-
-        covering: list[int] = []
-        for candidate in image_result.intervals:
-            overlap_lo = max(lo, candidate.lo_cdist)
-            overlap_hi = min(hi, candidate.hi_cdist)
-            if overlap_lo > overlap_hi + tol:
-                continue
-            if overlap_hi - overlap_lo > tol:
-                covering.append(candidate.element_id)
-                continue
-            # The two only touch: they meet iff both are closed at that point.
-            point = 0.5 * (overlap_lo + overlap_hi)
-            if span_contains(lo, hi, closed_lo, closed_hi, point, tol) and owns_cdist(
-                candidate, point, tol
-            ):
-                covering.append(candidate.element_id)
-        return covering
 
     def clear_results(self) -> None:
         """Empty all algorithm-output slots, leaving the input trellis intact."""

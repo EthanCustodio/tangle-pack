@@ -197,8 +197,6 @@ class StableNode:
             partition.
         cut_by: Per faced side, the image bridge the element lies under, or
             None.
-        images: Per faced side, the elements the element maps onto under one
-            map step (empty for an element with an unbounded end).
         names: Per faced side, the element's
             :class:`~.ElementNaming.ElementName` (``R_1^2``), filled by
             :meth:`DualGraph._name_stable_nodes`.
@@ -219,7 +217,6 @@ class StableNode:
     intervals: dict[Side, PartitionInterval] = field(default_factory=dict)
     parents: dict[Side, Optional[ElementRef]] = field(default_factory=dict)
     cut_by: dict[Side, Optional["BridgeId"]] = field(default_factory=dict)
-    images: dict[Side, list[ElementRef]] = field(default_factory=dict)
     names: dict[Side, ElementName] = field(default_factory=dict)
     faces: dict[Side, "FaceNode"] = field(default_factory=dict)
 
@@ -543,7 +540,6 @@ class DualGraph:
         classes = self._merge_faces()
         self._build_face_nodes(classes)
         self._attach()
-        self._link_element_images()
         self._check()
         logger.debug("%s", self.summary())
 
@@ -946,35 +942,6 @@ class DualGraph:
                 )
                 stable_node.faces[side] = node
                 node.stable_nodes.append((stable_node, side))
-
-    # ── payload: element images ─────────────────────────────────────────────
-
-    def _link_element_images(self) -> None:
-        """Record, per node and side, the elements its element maps onto in one step."""
-        flip = not self.trellis.orientation_preserving
-        partitions = self.partition.as_list()
-        for node in self.stable_nodes.values():
-            fixed_point = node.branch_key[0]
-            image_key = fixed_point.advance_key(node.branch_key, 1)
-            for side in node.sides:
-                image_side: Side = OPPOSITE_SIDE[side] if flip else side
-                result = self.partition.result(node.branch_key, side)
-                try:
-                    covering = self.trellis.image_of_element(
-                        result, node.elements[side].element_id, 1, partitions=partitions
-                    )
-                except ValueError as error:
-                    logger.warning(
-                        "no image for element %s of stable node %s: %s",
-                        node.elements[side],
-                        node.key,
-                        error,
-                    )
-                    covering = None
-                node.images[side] = [
-                    ElementRef(image_key, image_side, element_id)
-                    for element_id in (covering or [])
-                ]
 
     # ── invariants ──────────────────────────────────────────────────────────
 

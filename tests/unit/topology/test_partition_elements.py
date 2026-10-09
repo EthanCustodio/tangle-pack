@@ -1,4 +1,4 @@
-"""Partition elements: identity, bridge lookup, and forward images (plan Phase 5).
+"""Partition elements: identity and bridge lookup (plan Phase 5).
 
 A stable partition is not just a list of spans — each of its intervals is an
 *element*, an identifiable piece of the stable branch that a region will later be
@@ -11,11 +11,9 @@ of every crossing, positional ids and singletons are laws of
   ``None`` for an endpoint that sits on a different branch;
 * the cross-trellis fan-out (:meth:`TangleSession.partition_element_for`) finds an
   element for a bridge whose endpoint lands on a stable branch belonging to a
-  *different* trellis of the same session — the gap a single trellis cannot close;
-* an element maps forward to the element(s) covering its image arc
-  (:meth:`Trellis.image_of_element`), and to ``None`` only when one of its ends
-  is unbounded — an endpoint that is a crossing without a registered iterate is
-  mapped by canonical-distance scaling instead (see ``tests/unit/topology/test_image_cdist.py``).
+  *different* trellis of the same session — the gap a single trellis cannot close.
+
+An element's forward image is ``DualWalk.land_element`` (``test_dual_walk.py``).
 """
 
 from __future__ import annotations
@@ -201,102 +199,3 @@ def test_element_for_rejects_an_unknown_endpoint_name(p3_partitioned):
 
     with pytest.raises(ValueError):
         trellis.element_for(bridge.id, "third", "left")
-
-
-# --------------------------------------------------------------------------- #
-# element -> image element
-# --------------------------------------------------------------------------- #
-def test_image_of_element_is_none_exactly_at_an_unbounded_end(p3_partitioned):
-    """Only an unbounded end has no image arc; that is the sole None.
-
-    An element bounded by the anchor (``lo_id is None``) or by the computed end of
-    the branch (``hi_id is None``) has no crossing whose image would bound its
-    image, so there is nothing to cover and the answer is None.
-    """
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
-
-    unbounded = 0
-    for result in trellis.stable_partitions:
-        for interval in result.intervals:
-            if interval.lo_id is None or interval.hi_id is None:
-                assert trellis.image_of_element(result, interval.element_id, 1) is None
-                unbounded += 1
-            else:
-                assert (
-                    trellis.image_of_element(result, interval.element_id, 1)
-                    is not None
-                )
-    assert unbounded, "the anchor/outermost elements are unbounded at one end"
-
-
-def test_image_of_element_falls_back_when_an_iterate_is_missing(p3_partitioned):
-    """A bounded element with no registered iterate is still mapped, not dropped.
-
-    This is the Phase C.2 fallback: ``image_cdist`` scales the endpoint's stable
-    canonical distance onto ``advance_key`` when the iterate table has no entry,
-    so every element with two real endpoints has an image. Both tangles of the
-    fixture are scanned: since holes propagate backward only (2026-09-16) the
-    period-3 partition is coarse enough that every one of its bounded elements
-    has registered endpoint iterates, and the unregistered ones live on the
-    period-1 saddle's outermost elements.
-    """
-    session, fp3, fp1 = p3_partitioned
-
-    fell_back = 0
-    for fixed_point in (fp3, fp1):
-        trellis = session.trellis(fixed_point)
-        for result in trellis.stable_partitions:
-            for interval in result.intervals:
-                if interval.lo_id is None or interval.hi_id is None:
-                    continue
-                if (
-                    trellis.iterate(interval.lo_id, 1) is not None
-                    and trellis.iterate(interval.hi_id, 1) is not None
-                ):
-                    continue
-                images = trellis.image_of_element(result, interval.element_id, 1)
-                assert images is not None, "a bounded element always has an image arc"
-                fell_back += 1
-    assert fell_back, "the outermost elements have no registered forward iterate"
-
-
-def test_image_of_element_rejects_an_unknown_element_id(p3_partitioned):
-    """An element id outside the result is a caller error, not an empty answer."""
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
-    result = trellis.stable_partitions[0]
-
-    with pytest.raises(IndexError):
-        trellis.image_of_element(result, len(result.intervals), 1)
-    with pytest.raises(IndexError):
-        trellis.image_of_element(result, -1, 1)
-
-
-def test_image_of_element_requires_the_image_branchs_partition(henon_p3_session):
-    """Asking for an image before the image branch is partitioned is an error."""
-    session, fp3, _fp1, _zone = henon_p3_session
-    trellis = session.trellis(fp3)
-    trellis.classify_strong_pips()
-    trellis.compute_pseudoneighbors()
-    trellis.punch_holes()
-
-    branch_key = next(
-        b.key for b in trellis.stable_branches if fp3.advance_key(b.key, 1) != b.key
-    )
-    result = trellis.partition_stable_manifold(branch_key)[0]
-    element = next(
-        iv
-        for iv in result.intervals
-        if iv.lo_id is not None
-        and iv.hi_id is not None
-        and trellis.iterate(iv.lo_id, 1) is not None
-        and trellis.iterate(iv.hi_id, 1) is not None
-    )
-
-    # n = 0 never leaves the branch, so it answers without an image partition.
-    assert trellis.image_of_element(result, element.element_id, 0) == [
-        element.element_id
-    ]
-    with pytest.raises(ValueError):
-        trellis.image_of_element(result, element.element_id, 1)

@@ -43,8 +43,6 @@ Dev Notes:
   merged face lies on both sides of a unified edge ``side_of`` answers the
   first side and ``other_face`` returns the same face, which is exactly the
   self-adjacency the walk must skip.
-* ``StableNode.images`` are images of ITERATED elements; the landing needs
-  images of HOMOTOPY elements, so it does not read them.
 * Landing does NOT cross-check the midpoint owner against the owner of a
   member endpoint's ``+1`` iterate: an image endpoint on an existing hole
   boundary (never re-cut) can be owned by the neighbour element, and the

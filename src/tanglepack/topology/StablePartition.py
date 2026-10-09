@@ -179,7 +179,7 @@ fixed in conversation with the author (July 2026):
   midpoint swallowed by the closed pip singleton, which tripped the
   child-inside-parent assertion of the iterated partition at 9 blasts. The
   tolerance survives only where a cdist is ESTIMATED (``land_element``'s
-  image spans, ``Trellis.image_of_element``): ``PartitionFamily.interval_at``
+  image spans): ``PartitionFamily.interval_at``
   tries exact first and falls back to it. The anchor is detected by its exact
   cdist 0.0 (a registered anchor is synthetic at exactly 0.0); a boundary
   within the tolerance of 0 but not on it is still taken as the anchor, at

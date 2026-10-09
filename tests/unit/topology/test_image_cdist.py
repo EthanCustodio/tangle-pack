@@ -1,6 +1,4 @@
-"""Phase C — images of crossings and elements without the iterate table.
-
-Two lookups are pinned here.
+"""Phase C — images of crossings without the iterate table.
 
 :meth:`Trellis.image_cdist` answers "where does this crossing land after ``n``
 map steps, on this side" from the registry's iterate table where the table has
@@ -13,18 +11,9 @@ That accuracy is NOT the registry's ``cdist_tol``. A canonical distance is an ar
 length measured on a polyline and the branches of one orbit are refined
 independently, so the two answers agree to about 1e-3 relative, not 1e-6 — which
 is why :data:`~tanglepack.topology.Trellis.SCALING_RTOL` (the agreement bound a
-test may demand) exists, and why :meth:`Trellis.image_of_element` snaps a scaled
-endpoint that lands within the tighter
-:data:`~tanglepack.topology.Trellis.SNAP_RTOL` of a partition boundary onto it
-before computing the cover.
-
-What that buys, precisely: forcing the scaling branch (``use_table=False``) on an
-element the table CAN answer reproduces the table's elements exactly, which pins
-the scaling law. It says nothing about the genuine fallback — an unregistered
-iterate has no ground truth to compare against. The real fallback is pinned here
-by coverage only: every bounded element gets a non-empty cover on the advanced
-branch, spanning both of its endpoint images. Whether the snap ever fires on the
-default path is deliberately NOT pinned (a fixture tripwire, removed 2026-10-05).
+test may demand) exists. The one element image the pipeline uses,
+:func:`~tanglepack.topology.DualWalk.land_element`, is tested in
+``test_dual_walk.py`` (WP11 deleted the unused ``Trellis.image_of_element``).
 """
 
 from __future__ import annotations
@@ -38,11 +27,7 @@ import pytest
 
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
-from tanglepack.topology.Trellis import (
-    SCALING_RTOL,
-    SNAP_RTOL,
-    Trellis,
-)
+from tanglepack.topology.Trellis import SCALING_RTOL, Trellis
 
 
 #: Which iterate depths to sweep. The p3 fixture only registers +/-1, so the
@@ -212,103 +197,8 @@ def test_image_cdist_rejects_an_unknown_stability():
 
 
 # --------------------------------------------------------------------------- #
-# C.2 -- the image_of_element fallback
+# C.1 -- element ends move by the stable factor
 # --------------------------------------------------------------------------- #
-def test_element_images_agree_whether_or_not_the_table_is_used(p3_partitioned):
-    """The scaling fallback names the same elements the iterate table does.
-
-    This is what licenses C.2: on every element whose two endpoint iterates ARE
-    registered, forcing the scaling branch (``use_table=False``) must reproduce
-    the table's answer exactly. It does because a scaled endpoint is snapped onto
-    the partition boundary it lands within :data:`SNAP_RTOL` of.
-
-    Read it as a test of the scaling LAW, not of the fallback in production: the
-    elements swept here are exactly the ones the table already answers.
-    """
-    session, fp3, fp1 = p3_partitioned
-
-    checked = 0
-    for fixed_point in (fp3, fp1):
-        trellis = session.trellis(fixed_point)
-        for result, interval in _bounded_elements(trellis):
-            if (
-                trellis.iterate(interval.lo_id, 1) is None
-                or trellis.iterate(interval.hi_id, 1) is None
-            ):
-                continue
-            from_table = trellis.image_of_element(result, interval.element_id, 1)
-            derived = trellis.image_of_element(
-                result, interval.element_id, 1, use_table=False
-            )
-            assert derived == from_table, (
-                f"element {interval.element_id} of {result.branch_key[1:]} "
-                f"{result.side}: table says {from_table}, scaling says {derived}"
-            )
-            checked += 1
-    assert checked, "the p3 partitions must have elements with registered iterates"
-
-
-def test_image_of_element_accepts_partitions_from_another_trellis(p3_partitioned):
-    """The all-fixed-points trellis can map elements it holds no partition for.
-
-    It carries every branch and every crossing but no partitions of its own, so
-    the caller (the dual graph) hands it the per-fixed-point results it was built
-    from. The answer must be the one that trellis gives itself.
-    """
-    session, fp3, fp1 = p3_partitioned
-    combined = session.trellis()
-
-    checked = 0
-    for fixed_point in (fp3, fp1):
-        trellis = session.trellis(fixed_point)
-        for result, interval in _bounded_elements(trellis):
-            assert combined.image_of_element(
-                result, interval.element_id, 1, partitions=trellis.stable_partitions
-            ) == trellis.image_of_element(result, interval.element_id, 1)
-            checked += 1
-    assert checked
-
-    # A fresh all-fixed-points trellis has no partitions to find, so it says so
-    # (the session's own carries the topology's since stages 4-6 run on it, WP9).
-    result, interval = next(_bounded_elements(session.trellis(fp3)))
-    fresh = Trellis.from_workbench(session.workbench)
-    assert not fresh.stable_partitions
-    with pytest.raises(ValueError):
-        fresh.image_of_element(result, interval.element_id, 1)
-
-
-def test_image_of_element_covers_both_endpoint_images(p3_partitioned):
-    """The covering elements span both endpoint images, table or fallback.
-
-    Holds for tabled elements and for the ones the fallback answers for alike
-    (the tabled-only twin was deleted in Phase 2 of the 2026-10-05 refactor).
-    """
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
-    tol = trellis.registry.cdist_tol
-
-    checked = 0
-    for result, interval in _bounded_elements(trellis):
-        image_key = fp3.advance_key(result.branch_key, 1)
-        element_ids = trellis.image_of_element(result, interval.element_id, 1)
-        assert element_ids, "a bounded element's image arc is always covered"
-
-        image_result = next(
-            r
-            for r in trellis.stable_partitions
-            if r.branch_key == image_key and r.side == result.side
-        )
-        covered = [image_result.element(e) for e in element_ids]
-        span_lo = min(iv.lo_cdist for iv in covered)
-        span_hi = max(iv.hi_cdist for iv in covered)
-        for end_id in (interval.lo_id, interval.hi_id):
-            _key, cdist, _from_table = trellis.image_cdist(end_id, 1, "stable")
-            slack = tol + abs(cdist) * SCALING_RTOL
-            assert span_lo - slack <= cdist <= span_hi + slack
-        checked += 1
-    assert checked
-
-
 def test_element_image_endpoints_scale_by_the_stable_factor(p3_partitioned):
     """The image arc of an element is its own arc contracted by ``per_step_beta``.
 
@@ -330,17 +220,6 @@ def test_element_image_endpoints_scale_by_the_stable_factor(p3_partitioned):
             assert image == pytest.approx(cdist * beta, rel=SCALING_RTOL)
             checked += 1
     assert checked
-
-
-def test_the_snap_window_is_tighter_than_the_agreement_bound():
-    """SNAP_RTOL decides identity, SCALING_RTOL only bounds a comparison.
-
-    The snap picks an element, so it takes the smallest window that still
-    swallows the scaling error; the agreement bound is what a test may demand of
-    two independently computed distances and is deliberately looser. Keeping the
-    two apart is the point of having two constants.
-    """
-    assert 0 < SNAP_RTOL < SCALING_RTOL
 
 
 # --------------------------------------------------------------------------- #
