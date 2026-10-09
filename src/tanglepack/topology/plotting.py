@@ -2131,6 +2131,122 @@ def _cartoon_itinerary(class_dynamics) -> Optional[tuple]:
     return tuple(itinerary)
 
 
+def _draw_cartoon_graph(
+    target,
+    layout,
+    dual_graph: "DualGraph",
+    dynamics: "SymbolicDynamics",
+    *,
+    arc,
+    cross,
+    track,
+    show_unified: bool,
+    show_bridges: bool,
+    show_walks: bool,
+    color_bridges: bool,
+    bridge_color: str,
+    bridge_alpha: float,
+    bridge_linewidth: Optional[float],
+    walk_linewidths: Sequence[float],
+) -> None:
+    """
+    Draw the graph part of a cartoon -- nodes, unified crossings, bridges, walks --
+    on either layout.
+
+    The two shapes differ only in three callables: ``arc(a, b, bridge_id=None)``
+    the curve between two same-side nodes (a bridge, or a walk's pair),
+    ``cross(a, b)`` the S-curve crossing the stable line between the two sides,
+    and ``track(point)`` the extent bookkeeping.
+    """
+    # Nodes: one per element per side, open = wall, filled = unified.
+    refs = [ref for ref in layout.nodes if ref not in layout.singletons]
+    xy = np.array([layout.nodes[ref] for ref in refs]).reshape(-1, 2)
+    filled = np.array([layout.unified[ref] for ref in refs], dtype=bool)
+    target.scatter(
+        xy[:, 0], xy[:, 1], s=CARTOON_NODE_SIZE,
+        facecolors=["black" if f else "white" for f in filled],
+        edgecolors="black", linewidths=1.2, zorder=8,
+    )
+
+    if show_unified:
+        pairs = {
+            (node.elements["left"], node.elements["right"])
+            for node in dual_graph.unified_nodes
+            if "left" in node.elements and "right" in node.elements
+        }
+        for left_ref, right_ref in sorted(pairs, key=lambda pair: layout.nodes[pair[0]]):
+            if left_ref in layout.nodes and right_ref in layout.nodes:
+                _add_curve(target, cross(left_ref, right_ref), gid="unified", **CARTOON_UNIFIED_STYLE)
+
+    if show_bridges:
+        palette = class_colors(dynamics, refined=True) if color_bridges else {}
+        minimal = dual_graph.minimal
+        for bridge_id in minimal.kept_bridge_ids:
+            try:
+                first, second = _bridge_end_elements(dual_graph, bridge_id)
+            except (KeyError, ValueError) as error:
+                logger.warning("bridge %s has no owned end elements (%s); not drawn", bridge_id, error)
+                continue
+            if first not in layout.nodes or second not in layout.nodes:
+                logger.warning("bridge %s ends outside the drawn partition; not drawn", bridge_id)
+                continue
+            name, inert = _bridge_symbol(dynamics, bridge_id)
+            color = palette.get(name, CLASS_UNKNOWN_COLOR) if name and color_bridges else bridge_color
+            path = arc(first, second, bridge_id)
+            _add_curve(
+                target, path, gid=f"bridge:{bridge_id[0]}-{bridge_id[1]}",
+                edgecolor=color, linestyle="--" if inert else "-",
+                linewidth=(
+                    bridge_linewidth if bridge_linewidth is not None
+                    else CARTOON_HOLE_LINEWIDTH if minimal.is_hole_bridge(bridge_id)
+                    else CARTOON_IMAGE_LINEWIDTH
+                ),
+                alpha=bridge_alpha, zorder=4,
+            )
+            track(tuple(_path_point(path, 0.5)))
+            layout.bridges_drawn += 1
+
+    if show_walks:
+        palette = class_colors(dynamics, refined=False)
+        drawn = 0
+        for class_dynamics in dynamics.classes.values():
+            itinerary = _cartoon_itinerary(class_dynamics)
+            if itinerary is None or any(ref not in layout.nodes for ref in itinerary):
+                continue
+            letter = class_dynamics.letter
+            color = palette.get(letter, CLASS_UNKNOWN_COLOR)
+            width = walk_linewidths[min(drawn, len(walk_linewidths) - 1)]
+            style = {
+                "edgecolor": color, "linewidth": width, "zorder": 10 + drawn,
+                "linestyle": ":" if class_dynamics.source == "trellis" else "-",
+            }
+            gid = f"walk:{letter}"
+            last = None
+            for index in range(0, len(itinerary), 2):
+                a, b = itinerary[index], itinerary[index + 1]
+                last = arc(a, b)
+                _add_curve(target, last, gid=gid, **style)
+                track(tuple(_path_point(last, 0.5)))
+                if index + 2 < len(itinerary):
+                    last = cross(b, itinerary[index + 2])
+                    _add_curve(target, last, gid=gid, **style)
+            start = layout.nodes[itinerary[0]]
+            target.plot(
+                start[0], start[1], marker="o", markersize=WALK_MARKER_SIZE, color=color,
+                linestyle="none", zorder=style["zorder"] + 0.5,
+            )
+            target.annotate(
+                "", xy=layout.nodes[itinerary[-1]], xytext=tuple(_path_point(last, 0.92)),
+                arrowprops={
+                    "arrowstyle": "-|>", "color": color, "linewidth": 0,
+                    "mutation_scale": 2.0 * WALK_MARKER_SIZE, "shrinkA": 0, "shrinkB": 0,
+                },
+                zorder=style["zorder"] + 0.5,
+            )
+            drawn += 1
+        layout.walks_drawn = drawn
+
+
 def plot_dual_graph_cartoon(
     dual_graph: "DualGraph",
     dynamics: "SymbolicDynamics",
@@ -2255,10 +2371,9 @@ def plot_dual_graph_cartoon(
     mirrored = layout.anchor == "right"
     y_min, y_max = 0.0, 0.0
 
-    def track(*points) -> None:
+    def track(point) -> None:
         nonlocal y_min, y_max
-        for _x, y in points:
-            y_min, y_max = min(y_min, y), max(y_max, y)
+        y_min, y_max = min(y_min, point[1]), max(y_max, point[1])
 
     for branch_key, y in layout.rows.items():
         x_from, x_to = layout.line_extent(branch_key)
@@ -2329,103 +2444,17 @@ def plot_dual_graph_cartoon(
                         )
                 track((0.0, y + sigma * CARTOON_LABEL_OFFSET))
 
-    # Nodes: one per element per side, open = wall, filled = unified.
-    refs = [ref for ref in layout.nodes if ref not in layout.singletons]
-    xy = np.array([layout.nodes[ref] for ref in refs]).reshape(-1, 2)
-    filled = np.array([layout.unified[ref] for ref in refs], dtype=bool)
-    target.scatter(
-        xy[:, 0], xy[:, 1], s=CARTOON_NODE_SIZE,
-        facecolors=["black" if f else "white" for f in filled],
-        edgecolors="black", linewidths=1.2, zorder=8,
+    _draw_cartoon_graph(
+        target, layout, dual_graph, dynamics,
+        arc=lambda a, b, bridge_id=None: _u_arc(
+            layout.nodes[a], layout.nodes[b], _side_sign(a.side), _side_sign(b.side)
+        ),
+        cross=lambda a, b: _s_curve(layout.nodes[a], layout.nodes[b]),
+        track=track,
+        show_unified=show_unified, show_bridges=show_bridges, show_walks=show_walks,
+        color_bridges=color_bridges, bridge_color=bridge_color, bridge_alpha=bridge_alpha,
+        bridge_linewidth=bridge_linewidth, walk_linewidths=walk_linewidths,
     )
-
-    if show_unified:
-        pairs = {
-            (node.elements["left"], node.elements["right"])
-            for node in dual_graph.unified_nodes
-            if "left" in node.elements and "right" in node.elements
-        }
-        for left_ref, right_ref in sorted(pairs, key=lambda pair: layout.nodes[pair[0]]):
-            _add_curve(
-                target, _s_curve(layout.nodes[left_ref], layout.nodes[right_ref]),
-                gid="unified", **CARTOON_UNIFIED_STYLE,
-            )
-
-    if show_bridges:
-        palette = class_colors(dynamics, refined=True) if color_bridges else {}
-        minimal = dual_graph.minimal
-        for bridge_id in minimal.kept_bridge_ids:
-            try:
-                first, second = _bridge_end_elements(dual_graph, bridge_id)
-            except (KeyError, ValueError) as error:
-                logger.warning("bridge %s has no owned end elements (%s); not drawn", bridge_id, error)
-                continue
-            if first not in layout.nodes or second not in layout.nodes:
-                logger.warning("bridge %s ends outside the drawn partition; not drawn", bridge_id)
-                continue
-            name, inert = _bridge_symbol(dynamics, bridge_id)
-            color = palette.get(name, CLASS_UNKNOWN_COLOR) if name and color_bridges else bridge_color
-            path = _u_arc(
-                layout.nodes[first], layout.nodes[second],
-                _side_sign(first.side), _side_sign(second.side),
-            )
-            _add_curve(
-                target, path, gid=f"bridge:{bridge_id[0]}-{bridge_id[1]}",
-                edgecolor=color, linestyle="--" if inert else "-",
-                linewidth=(
-                    bridge_linewidth if bridge_linewidth is not None
-                    else CARTOON_HOLE_LINEWIDTH if minimal.is_hole_bridge(bridge_id)
-                    else CARTOON_IMAGE_LINEWIDTH
-                ),
-                alpha=bridge_alpha,
-                zorder=4,
-            )
-            track(tuple(_cubic_point(path, 0.5)))
-            layout.bridges_drawn += 1
-
-    if show_walks:
-        palette = class_colors(dynamics, refined=False)
-        drawn = 0
-        for class_dynamics in dynamics.classes.values():
-            itinerary = _cartoon_itinerary(class_dynamics)
-            if itinerary is None or any(ref not in layout.nodes for ref in itinerary):
-                continue
-            letter = class_dynamics.letter
-            color = palette.get(letter, CLASS_UNKNOWN_COLOR)
-            width = walk_linewidths[min(drawn, len(walk_linewidths) - 1)]
-            style = {
-                "edgecolor": color, "linewidth": width, "zorder": 10 + drawn,
-                "linestyle": ":" if class_dynamics.source == "trellis" else "-",
-            }
-            gid = f"walk:{letter}"
-            last = None
-            for index in range(0, len(itinerary), 2):
-                a, b = itinerary[index], itinerary[index + 1]
-                last = _u_arc(
-                    layout.nodes[a], layout.nodes[b], _side_sign(a.side), _side_sign(b.side)
-                )
-                _add_curve(target, last, gid=gid, **style)
-                track(tuple(_cubic_point(last, 0.5)))
-                if index + 2 < len(itinerary):
-                    c = itinerary[index + 2]
-                    last = _s_curve(layout.nodes[b], layout.nodes[c])
-                    _add_curve(target, last, gid=gid, **style)
-            start = layout.nodes[itinerary[0]]
-            target.plot(
-                start[0], start[1], marker="o", markersize=WALK_MARKER_SIZE, color=color,
-                linestyle="none", zorder=style["zorder"] + 0.5,
-            )
-            end = layout.nodes[itinerary[-1]]
-            target.annotate(
-                "", xy=end, xytext=tuple(_cubic_point(last, 0.92)),
-                arrowprops={
-                    "arrowstyle": "-|>", "color": color, "linewidth": 0,
-                    "mutation_scale": 2.0 * WALK_MARKER_SIZE, "shrinkA": 0, "shrinkB": 0,
-                },
-                zorder=style["zorder"] + 0.5,
-            )
-            drawn += 1
-        layout.walks_drawn = drawn
 
     target.set_aspect("auto")
     target.set_axis_off()
@@ -3031,101 +3060,26 @@ def _plot_cartoon_circle(
                 extent.append(layout.point(branch_key, 0.5 * (t_lo + t_hi),
                                            sigma * CARTOON_LABEL_OFFSET))
 
-    refs = [ref for ref in layout.nodes if ref not in layout.singletons]
-    xy = np.array([layout.nodes[ref] for ref in refs]).reshape(-1, 2)
-    filled = np.array([layout.unified[ref] for ref in refs], dtype=bool)
-    target.scatter(
-        xy[:, 0], xy[:, 1], s=CARTOON_NODE_SIZE,
-        facecolors=["black" if f else "white" for f in filled],
-        edgecolors="black", linewidths=1.2, zorder=8,
-    )
-
-    if show_unified:
-        pairs = {
-            (node.elements["left"], node.elements["right"])
-            for node in dual_graph.unified_nodes
-            if "left" in node.elements and "right" in node.elements
-        }
-        for left_ref, right_ref in sorted(pairs, key=lambda pair: layout.nodes[pair[0]]):
-            if left_ref in layout.nodes and right_ref in layout.nodes:
-                _add_curve(target, _zone_cross_curve(layout, left_ref, right_ref),
-                           gid="unified", **CARTOON_UNIFIED_STYLE)
-
+    # A bridge whose lobe encloses a nested tangle goes the long way round; a
+    # walk's arc copies the bridge between the same two elements.
     pair_around: dict = {}
-    if show_bridges:
-        palette = class_colors(dynamics, refined=True) if color_bridges else {}
-        minimal = dual_graph.minimal
-        for bridge_id in minimal.kept_bridge_ids:
-            try:
-                first, second = _bridge_end_elements(dual_graph, bridge_id)
-            except (KeyError, ValueError) as error:
-                logger.warning("bridge %s has no owned end elements (%s); not drawn", bridge_id, error)
-                continue
-            if first not in layout.nodes or second not in layout.nodes:
-                logger.warning("bridge %s ends outside the drawn partition; not drawn", bridge_id)
-                continue
-            name, inert = _bridge_symbol(dynamics, bridge_id)
-            color = palette.get(name, CLASS_UNKNOWN_COLOR) if name and color_bridges else bridge_color
-            around = bool(set((enclosures or {}).get(bridge_id, ())) & set(
-                child for child, parent in layout.parents.items()
-                if parent == layout.arcs[first.branch_key][0]
-            ))
-            pair_around[frozenset((first, second))] = around
-            path = _zone_arc_curve(layout, first, second, around=around)
-            _add_curve(
-                target, path, gid=f"bridge:{bridge_id[0]}-{bridge_id[1]}",
-                edgecolor=color, linestyle="--" if inert else "-",
-                linewidth=(
-                    bridge_linewidth if bridge_linewidth is not None
-                    else CARTOON_HOLE_LINEWIDTH if minimal.is_hole_bridge(bridge_id)
-                    else CARTOON_IMAGE_LINEWIDTH
-                ),
-                alpha=bridge_alpha, zorder=4,
-            )
-            extent.append(tuple(_path_point(path, 0.5)))
-            layout.bridges_drawn += 1
 
-    if show_walks:
-        palette = class_colors(dynamics, refined=False)
-        drawn = 0
-        for class_dynamics in dynamics.classes.values():
-            itinerary = _cartoon_itinerary(class_dynamics)
-            if itinerary is None or any(ref not in layout.nodes for ref in itinerary):
-                continue
-            letter = class_dynamics.letter
-            color = palette.get(letter, CLASS_UNKNOWN_COLOR)
-            width = walk_linewidths[min(drawn, len(walk_linewidths) - 1)]
-            style = {
-                "edgecolor": color, "linewidth": width, "zorder": 10 + drawn,
-                "linestyle": ":" if class_dynamics.source == "trellis" else "-",
-            }
-            gid = f"walk:{letter}"
-            last = None
-            for index in range(0, len(itinerary), 2):
-                a, b = itinerary[index], itinerary[index + 1]
-                last = _zone_arc_curve(
-                    layout, a, b, around=pair_around.get(frozenset((a, b)), False)
-                )
-                _add_curve(target, last, gid=gid, **style)
-                extent.append(tuple(_path_point(last, 0.5)))
-                if index + 2 < len(itinerary):
-                    last = _zone_cross_curve(layout, b, itinerary[index + 2])
-                    _add_curve(target, last, gid=gid, **style)
-            start = layout.nodes[itinerary[0]]
-            target.plot(
-                start[0], start[1], marker="o", markersize=WALK_MARKER_SIZE, color=color,
-                linestyle="none", zorder=style["zorder"] + 0.5,
-            )
-            target.annotate(
-                "", xy=layout.nodes[itinerary[-1]], xytext=tuple(_path_point(last, 0.92)),
-                arrowprops={
-                    "arrowstyle": "-|>", "color": color, "linewidth": 0,
-                    "mutation_scale": 2.0 * WALK_MARKER_SIZE, "shrinkA": 0, "shrinkB": 0,
-                },
-                zorder=style["zorder"] + 0.5,
-            )
-            drawn += 1
-        layout.walks_drawn = drawn
+    def arc(a, b, bridge_id=None):
+        if bridge_id is not None:
+            nested = {child for child, parent in layout.parents.items()
+                      if parent == layout.arcs[a.branch_key][0]}
+            pair_around[frozenset((a, b))] = bool(set((enclosures or {}).get(bridge_id, ())) & nested)
+        return _zone_arc_curve(layout, a, b, around=pair_around.get(frozenset((a, b)), False))
+
+    _draw_cartoon_graph(
+        target, layout, dual_graph, dynamics,
+        arc=arc,
+        cross=lambda a, b: _zone_cross_curve(layout, a, b),
+        track=extent.append,
+        show_unified=show_unified, show_bridges=show_bridges, show_walks=show_walks,
+        color_bridges=color_bridges, bridge_color=bridge_color, bridge_alpha=bridge_alpha,
+        bridge_linewidth=bridge_linewidth, walk_linewidths=walk_linewidths,
+    )
 
     points = np.array(extent, dtype=float).reshape(-1, 2)
     lo, hi = points.min(axis=0), points.max(axis=0)
