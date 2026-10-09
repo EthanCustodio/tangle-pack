@@ -421,3 +421,46 @@ def test_iterating_an_anchor_rooted_inversion_bridge_cuts_identified_children(
         children = workbench.iterate_bridge(bridge)
         assert children and all(child.id is not None for child in children), bridge.id
         assert children[0].id[0] == bridge.id[0]
+
+
+# --------------------------------------------------------------------------- #
+# cutting: crossings sharing one segment (F3, WP10)
+# --------------------------------------------------------------------------- #
+# A stable zig-zag crossing the first unstable segment [(0, 0), (10, 0)] at x = 2, 4, 6.
+_ZIGZAG = [(2, 1), (2, -1), (4, -1), (4, 1), (6, 1), (6, -1)]
+
+
+@pytest.mark.parametrize("crossings_on_the_segment", [2, 3])
+def test_crossings_sharing_a_segment_are_bracketed(crossings_on_the_segment):
+    """Every bridge cut from one segment holding several crossings contains both of
+    its endpoint crossings' cdists, consecutive bridges overlap on exactly the two
+    nodes bracketing their shared crossing (a separator for an inner one), and the
+    unstable cdist stays non-decreasing along the manifold."""
+    from helpers.fakes import bare_fixed_point
+    from helpers.polylines import polyline_workbench
+
+    fp = bare_fixed_point(label="A")
+    unstable_key = (fp, "unstable", 0, 0)
+    workbench = polyline_workbench(fp, {
+        unstable_key: [(0, 0), (10, 0), (11, 0)],
+        (fp, "stable", 0, 0): _ZIGZAG[: 2 * crossings_on_the_segment],
+    })
+    workbench.compute_intersections([fp], infer_iterates=False)
+    registry = workbench.intersection_registry
+    bridges = sorted(workbench.create_bridges(fp), key=lambda bridge: bridge.id)
+    assert len(bridges) == crossings_on_the_segment - 1
+
+    for bridge in bridges:
+        cdists = [float(node.cdist) for node in bridge.get_point_array(return_nodes=True)]
+        assert cdists == sorted(cdists), (bridge.id, cdists)
+        for end in bridge.id:
+            assert cdists[0] <= registry[end].unstable_cdist <= cdists[-1], (bridge.id, end, cdists)
+    for below, above in zip(bridges, bridges[1:]):
+        above_ids = {id(node) for node in above.get_point_array(return_nodes=True)}
+        shared = [node for node in below.get_point_array(return_nodes=True) if id(node) in above_ids]
+        assert len(shared) == 2, (below.id, above.id)
+        assert shared[0].cdist <= registry[below.id[1]].unstable_cdist <= shared[1].cdist
+
+    nodes = workbench.manifolds[unstable_key].get_point_array(return_nodes=True)
+    cdists = [float(node.cdist) for node in nodes]
+    assert cdists == sorted(cdists)

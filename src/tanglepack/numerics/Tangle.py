@@ -972,10 +972,29 @@ class Tangle:
         for manifold, manifold_group in manifold_crossings.items():
             manifold_group.sort(key=lambda entry: entry[0])
 
-            for i in range(len(manifold_group) - 1):
-                cdist_a, first, p0_a, p1_a = manifold_group[i]
-                cdist_b, second, p0_b, p1_b = manifold_group[i + 1]
+            # The real points bracketing each crossing on the CURRENT polyline. A run
+            # of crossings on one segment has no node between them, so each one after
+            # the first gets a separator spliced right after the previous crossing's
+            # lower bracket: (p0, S1), (S1, S2), ..., (Sn, p1), cdist increasing.
+            brackets: list[tuple[Point, Point]] = []
+            for k, (_cdist, crossing, p0, p1) in enumerate(manifold_group):
+                previous = manifold_group[k - 1] if k else None
+                if previous is not None and previous[2] is p0 and previous[3] is p1:
+                    below = brackets[-1][0]
+                    separator = self._insert_crossing_separator(
+                        below, p0, p1, previous[1].coords, crossing.coords, manifold
+                    )
+                    brackets[-1] = (below, separator)
+                    brackets.append((separator, p1))
+                else:
+                    brackets.append((p0, p1))
 
+            # Bridge (k, k+1) runs from the node below crossing k to the node above
+            # crossing k+1. It inherits the parent's manifold_key, and its endpoints
+            # are the crossings the cut was made at.
+            for k, ((cdist_a, first, *_), (cdist_b, second, *_)) in enumerate(
+                zip(manifold_group, manifold_group[1:])
+            ):
                 if cdist_b - cdist_a <= cdist_tol:
                     logger.warning(
                         "Crossings %s and %s are only %.3g apart in unstable cdist "
@@ -988,37 +1007,17 @@ class Tangle:
                         cdist_b - cdist_a,
                         cdist_tol,
                     )
-
-                head = p0_a  # real point just below crossing i
-                tail = p1_b  # real point just above crossing i+1
-
-                # Two consecutive crossings on the SAME segment have no real point
-                # between them; refine the manifold (splice one true point on the
-                # segment, between the two crossings) so head/tail bracket distinct
-                # crossings rather than spanning both.
-                if p0_a is p0_b and p1_a is p1_b:
-                    mid = self._insert_crossing_separator(
-                        p0_a, p1_a, first.coords, second.coords, manifold
-                    )
-                    tail = mid
-
-                # A bridge is a segment of its parent unstable manifold, so it lives
-                # on the same branch: it inherits the parent's manifold_key, and every
-                # intersection later detected on this bridge (or on its forward image)
-                # records that branch. Its two endpoints are the crossings the cut was
-                # made at -- no after-the-fact nearest-cdist lookup.
-                bridge = Bridge(
-                    root=head,
+                all_bridges.append(Bridge(
+                    root=brackets[k][0],
                     stability=manifold.stability,
                     stretch_param=manifold.stretch_param,
                     fixed_point=manifold.fixed_point,
-                    tail=tail,
+                    tail=brackets[k + 1][1],
                     branch_index=manifold.branch_index,
                     manifold_key=manifold.manifold_key,
                     first_intersection=first.id,
                     second_intersection=second.id,
-                )
-                all_bridges.append(bridge)
+                ))
 
         # --- 3. Register each bridge's segments under the bridge itself ---
         # Done only after every cut, because _insert_crossing_separator may still
@@ -1032,6 +1031,7 @@ class Tangle:
 
     def _insert_crossing_separator(
         self,
+        after: Point,
         p0: Point,
         p1: Point,
         coords1: tuple[float, float],
@@ -1039,16 +1039,18 @@ class Tangle:
         manifold: BaseManifold,
     ) -> Point:
         """
-        Splice one real point into the adjacent segment ``[p0, p1]`` between two
-        crossings that share it, and return it.
+        Splice one real point between two crossings that share the ORIGINAL
+        segment ``[p0, p1]``, right after ``after``, and return it.
 
         Two consecutive crossings on the same segment have no manifold point between
         them, so neighbouring bridges cannot bracket them with distinct real points.
-        This refines the manifold by inserting a true point on the segment at the
-        midpoint of the two crossings (its cdist interpolated against the original
-        endpoints), restoring one-crossing-per-segment locally.
+        This refines the manifold by inserting a true point at the midpoint of the
+        two crossings (its cdist interpolated against the original endpoints),
+        restoring one-crossing-per-segment locally.
 
         Args:
+            after: The node the separator follows: ``p0`` for the first separator
+                on the segment, the previous separator for each later one.
             p0: Lower-cdist endpoint of the shared segment.
             p1: Higher-cdist endpoint of the shared segment.
             coords1: Coordinates of the lower crossing on the segment.
@@ -1061,10 +1063,10 @@ class Tangle:
         mid_xy = 0.5 * (np.asarray(coords1) + np.asarray(coords2))
         cdist = self._cdist_between(p0, p1, manifold.stability, mid_xy)
         separator = Point(float(mid_xy[0]), float(mid_xy[1]), cdist)
-        if isinstance(p0, BranchPoint):
-            p0.insert_point_forward(separator, manifold.branch_index)
+        if isinstance(after, BranchPoint):
+            after.insert_point_forward(separator, manifold.branch_index)
         else:
-            p0.insert_point_forward(separator)
+            after.insert_point_forward(separator)
         return separator
 
     def _cdist_at_point(self, seg: _Segment, point: np.ndarray) -> float:
