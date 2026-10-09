@@ -65,15 +65,18 @@ Dev Notes:
 * Registered member images are EVIDENCE, the walk is the answer: every
   non-loop member with a registered image chain is translated with the same
   function and compared at word level (``verified``) and at exact-itinerary
-  level (``itinerary_verified``, INFO only). A word-level disagreement is a
-  WARNING with an :class:`EvidenceDiagnosis` on the evidence and counts
-  against :attr:`SymbolicDynamics.is_reliable`: ``"stable end"`` when two
-  consecutive crossings of the registered chain on ONE stable branch share a
-  crossing sign (the image passed around the end of the computed stable
-  branch, so its crossings with the trimmed-away part are not registered and
-  the pairing shifts: k=2.8 at 6 blasts), else ``"walk"`` (no numerical
-  explanation). Evidence never adds a symbol: a class outside the closed table
-  is named by its label (D2).
+  level (``itinerary_verified``, INFO only). A word-level disagreement carries
+  an :class:`EvidenceDiagnosis`: ``"stable end"`` when two consecutive
+  crossings of the registered chain on ONE stable branch share a crossing sign
+  (the image passed around the end of the computed stable branch, so its
+  crossings with the trimmed-away part are not registered and the pairing
+  shifts: k=2.8 at 6 blasts), else ``"walk"`` (no numerical explanation). A
+  ``"walk"`` disagreement is a WARNING and counts against
+  :attr:`SymbolicDynamics.is_reliable`; ``"stable end"`` evidence is
+  INCOMPLETE and gives no verdict (C11, WP10: ``word_agrees`` None, INFO),
+  since the walk is the word and the chain is only its cross-check (D3).
+  Evidence never adds a symbol: a class outside the closed table is named by
+  its label (D2).
 * A pair whose two elements sit on
   different sides of ONE stable branch is flagged on the symbol
   (``cross_side``) with a WARNING and not asserted. Across two branches there
@@ -244,10 +247,11 @@ class ImageEvidence:
         symbols: The itinerary translated (loops dropped).
         chain: The registered image chain the itinerary was read off.
         word_agrees: True when the non-loop ``(class, direction)`` sequence
-            equals the class's primary word; ``None`` when the class has no
-            itinerary to compare with.
+            equals the class's primary word, False when it does not; ``None``
+            when the class has no itinerary to compare with, or when the
+            evidence is incomplete (a ``"stable end"`` diagnosis, C11).
         itinerary_agrees: True when the iterated refs agree exactly.
-        diagnosis: Why the word disagrees, when ``word_agrees`` is False.
+        diagnosis: Why the word disagrees, when it does.
     """
 
     bridge_id: "BridgeId"
@@ -292,8 +296,8 @@ class ClassDynamics:
             else ``None``. A pair no computed bridge spans unresolves nothing
             (D11): it is a class of its own, ``entry.spanned`` False.
         evidence: The registered member images, one record each.
-        verified: Word-level agreement of every piece of evidence; ``None``
-            without evidence or without an itinerary.
+        verified: Word-level agreement of every piece of evidence that gives a
+            verdict; ``None`` without such evidence or without an itinerary.
         itinerary_verified: Exact-itinerary agreement, reported only.
         named_by: ``None`` for a class of the alphabet handed in; for a class
             the closure added, the class whose word first named it.
@@ -1185,12 +1189,14 @@ def _compare_evidence(cd: ClassDynamics, trellis: "Trellis") -> None:
         return
     signature = _signature(cd.symbols)
     for evidence in cd.evidence:
-        evidence.word_agrees = _signature(evidence.symbols) == signature
         evidence.itinerary_agrees = tuple(evidence.itinerary) == tuple(cd.itinerary)
-        if evidence.word_agrees:
+        if _signature(evidence.symbols) == signature:
+            evidence.word_agrees = True
             continue
         evidence.diagnosis = diagnosis = _diagnose(trellis, evidence, cd.symbols)
-        logger.warning(
+        incomplete = diagnosis.cause == "stable end"
+        evidence.word_agrees = None if incomplete else False
+        (logger.info if incomplete else logger.warning)(
             "class %s: the registered image of member %s reads %r but the %s itinerary "
             "reads %r; they part at token %d: %s",
             cd.letter,
@@ -1199,13 +1205,14 @@ def _compare_evidence(cd: ClassDynamics, trellis: "Trellis") -> None:
             cd.source,
             cd.word,
             diagnosis.position,
-            f"the image passes the end of the computed stable branch at crossings "
-            f"{list(diagnosis.crossings)} (same branch, same sign), so the registered "
-            "word is incomplete"
-            if diagnosis.cause == "stable end"
+            f"incomplete: the image passes the end of the computed stable branch at "
+            f"crossings {list(diagnosis.crossings)} (same branch, same sign), so it "
+            "gives no verdict"
+            if incomplete
             else "no numerical explanation: the shortest walk is not the image's class",
         )
-    cd.verified = all(evidence.word_agrees for evidence in cd.evidence)
+    verdicts = [evidence.word_agrees for evidence in cd.evidence if evidence.word_agrees is not None]
+    cd.verified = all(verdicts) if verdicts else None
     cd.itinerary_verified = all(evidence.itinerary_agrees for evidence in cd.evidence)
     if cd.verified and not cd.itinerary_verified:
         logger.info(

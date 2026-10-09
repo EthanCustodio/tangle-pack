@@ -583,26 +583,30 @@ def test_a_pair_no_bridge_spans_is_a_flagged_class(layout, monkeypatch, caplog):
 def test_evidence_disagreement_names_a_stable_end(layout, monkeypatch, caplog, signs, cause, run):
     """INT-1: a registered word that parts from the walk carries a diagnosis: two
     consecutive chain crossings on one stable branch with one sign mean the image
-    passed the end of the computed stable branch; otherwise the walk is to blame.
-    Either way it is a WARNING and the dynamics is not reliable."""
+    passed the end of the computed stable branch, and that evidence is INCOMPLETE:
+    no verdict, INFO, the dynamics stays reliable (C11, WP10). Otherwise the walk is
+    to blame: a WARNING, and the dynamics is not reliable."""
     chain = ((10, 11), (11, 12), (12, 13))
     registered = {chain: layout.refs("R_1^1", "R_3^3", "R_3^1", "R_1^3")}  # a a^-1
     crossings = {cid: (layout.key, sign) for cid, sign in zip((10, 11, 12, 13), signs)}
     walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
-    with caplog.at_level(logging.WARNING, logger=SD.__name__):
+    with caplog.at_level(logging.INFO, logger=SD.__name__):
         dyn = _drive(
             layout, monkeypatch, layout.table, layout.table, walks,
             crossings=crossings, chains={(0, 5): list(chain)}, registered=registered,
         )
     cd = dyn.classes[layout.a]
     (evidence,) = cd.evidence
-    assert evidence.word_agrees is False and cd.verified is False
     diagnosis = evidence.diagnosis
     assert (diagnosis.cause, diagnosis.crossings, diagnosis.position) == (cause, run, 1)
     assert diagnosis.walked == layout.refs("L_1^2", "L_3")
     assert diagnosis.registered == layout.refs("R_1^3", "R_3^1")
-    assert_logged(caplog, logging.WARNING, SD.__name__, count=1)
-    assert not dyn.is_reliable
+    incomplete = cause == "stable end"
+    assert evidence.word_agrees is (None if incomplete else False)
+    assert cd.verified is (None if incomplete else False)
+    assert_logged(caplog, logging.WARNING, SD.__name__, count=0 if incomplete else 1)
+    assert any("registered image" in r.getMessage() for r in caplog.records if r.levelno == logging.INFO) == incomplete
+    assert dyn.is_reliable == incomplete
 
 
 # --------------------------------------------------------------------------- #
