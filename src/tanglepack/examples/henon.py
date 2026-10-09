@@ -38,6 +38,10 @@ HENON_K10: tuple[float, float] = (10, 1)
 #: the period-1 tangle, the fixture for every nested / higher-period test.
 HENON_P3: tuple[float, float] = (2, 1)
 
+#: Parameters of the inversion figures: the map's OTHER saddle at
+#: ``(1 - sqrt5, sqrt5 - 1)`` has both eigenvalues negative (-1.96 / -0.51).
+HENON_K4: tuple[float, float] = (4.0, 1)
+
 #: The fixed-point seeds each parameter pair is known to converge from. Keys are
 #: the ``(k, b)`` pairs; values map a name to the guess
 #: :meth:`~tanglepack.TangleWorkbench.construct_fixed_point` takes.
@@ -48,6 +52,10 @@ _SADDLE_GUESSES: dict[tuple[float, float], dict[str, list]] = {
         # (-2.3166, 2.3166): both eigenvalues negative, so k_value = 2 * period
         # and the two manifold branches are a single dynamical chain.
         "inversion": [-2.3166, 2.3166],
+    },
+    HENON_K4: {
+        # (1 - sqrt5, sqrt5 - 1): both eigenvalues negative, so k_value = 2 * period.
+        "inversion": [1 - 5**0.5, 5**0.5 - 1],
     },
     HENON_P3: {
         "period_3": [[0, 1], [-1, 0], [-1, 1]],
@@ -136,7 +144,8 @@ def saddle_guesses(
         dict[str, list]: A fresh copy of the named guesses. ``HENON_K10`` has
         ``"saddle"`` (the plain saddle at ``(4.3166, -4.3166)``) and
         ``"inversion"`` (the saddle at ``(-2.3166, 2.3166)``, whose eigenvalues
-        are both negative). ``HENON_P3`` has ``"period_3"`` (the three-point
+        are both negative). ``HENON_K4`` has ``"inversion"`` (the other saddle
+        at ``(1 - sqrt5, sqrt5 - 1)``, both eigenvalues negative). ``HENON_P3`` has ``"period_3"`` (the three-point
         orbit, as the multipoint guess ``construct_fixed_point`` expects) and
         ``"saddle"`` (the outer period-1 saddle of the nested tangle).
 

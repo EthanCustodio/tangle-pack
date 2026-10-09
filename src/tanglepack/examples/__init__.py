@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .henon import (
     HENON_K10,
+    HENON_K4,
     HENON_P3,
     MapFunction,
     henon_jacobian,
@@ -19,6 +20,7 @@ from .henon import (
 
 __all__ = [
     "HENON_K10",
+    "HENON_K4",
     "HENON_P3",
     "MapFunction",
     "henon_jacobian",

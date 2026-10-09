@@ -1,4 +1,4 @@
-"""Higher-period and nested Hénon tangles, built up to their topology.
+"""Higher-period, nested and inversion Hénon tangles, built up to their topology.
 
 Three recipes on the nested Hénon map ``HENON_P3 = (2, 1)``, shared by the
 figure scripts and the test fixtures so the two can never drift apart:
@@ -9,7 +9,12 @@ figure scripts and the test fixtures so the two can never drift apart:
 * :func:`build_heteroclinic` -- :func:`build_nested` with period 3 grown far
   enough to cross the outer saddle's stable manifold.
 
-Both end at ``session.topology()`` (holes, partition, classes, minimal
+and one on ``HENON_K4 = (4, 1)``:
+
+* :func:`build_inversion` -- the saddle with both eigenvalues negative, its
+  zone at ``f(q0)`` (the recipe of the inversion law cases).
+
+All end at ``session.topology()`` (holes, partition, classes, minimal
 trellis, dual graph and words of every fixed point, from the pips the zones
 were cut at).
 
@@ -20,19 +25,16 @@ Dev Notes:
   orientation unstable ``[0, -1]`` / stable ``[-1, -1]``, grown 13 unstable /
   9 stable steps; period 1 with unstable ``[-1, 0]`` / stable ``[0, 1]``,
   11 unstable steps and ``grow_until_turnaround`` on the stable side.
-* Period 3 is CLOSED at 13 steps: every active hole bridge's image is already
-  a hole bridge on the next branch (``a -> b -> c -> a u^-1 w^-1``), so the
-  minimal trellis has no image bridges and blasting its zone changes nothing
-  topologically. Growing to 15 or 16 unstable steps, or blasting 6 or more
-  times, used to trip ``check_holes_share_bridge_side`` (2026-09-30): a
-  propagated hole's side was read against the nearest vertex of its whole
-  containing bridge, on another fold. Fixed 2026-10-02 (sides are read on the
-  image sub-arc; since WP4 the signs decide the openings and every class
-  walks). Past the reference switch (BCG-4) the word of an image-bridge class
-  names the class of its image, a pair no computed bridge spans; since D11
-  (WP8b) that pair is a class of its own, flagged "no computed bridge yet",
-  and the runs are reliable. The default stays at 13, before the reference
-  switch.
+* Period 3 at 13 steps is closed up to 5 blasts: every active hole bridge's
+  image is already a hole bridge on the next branch (``a -> b -> c -> a u^-1
+  w^-1``), so the minimal trellis has no image bridges. At 6 blasts (or at 15
+  unstable steps) deep crossings fold onto the fundamental window and the
+  reference pair switches (BCG-4, a discovery under D1): 12 -> 42 holes, and
+  the alphabet plateaus at 25 classes from 8 blasts (re-measured to 20 blasts,
+  WP12), every class walks and the runs are reliable. A pair no computed
+  bridge spans is a class of its own, flagged "no computed bridge yet" (D11).
+  The default stays at 13 steps, unblasted. Every period-3 build has its own
+  figure folder (:func:`_period3_slug`).
 * Each nested zone blasts only its own fixed point (2026-10-02): blasting
   both from either zone also iterated the other tangle's bridges, made the
   result depend on blast order and collapsed the period-3 pseudoneighbors at
@@ -58,6 +60,12 @@ Dev Notes:
   now; its iterate links fail the beta and area laws, NUM-20). None of the four
   crossings has an iterate link (the preimage lies past p1's stable trim, the
   image past p3's unstable cut: escape-lobe images, WP10).
+* The inversion recipe is the law cases' (``tests/cases.build_inversion``):
+  11 unstable and 11 stable steps at ``area_cutoff = 1e-5`` (step 12 escapes
+  into the point budget), no ``orient_eigenvectors`` (the solver's
+  eigenvectors pick branch 0), the zone at ``f(q0)``; the blasts' separation
+  is 1e-5. Its class count drops at 6 blasts by a genuine reference switch
+  (BCG-8, DEC-25, open).
 * The pips are the default strong pips, never pinned by id. The session
   carries them across every blast (API-1, WP8): a zone remembers the pip it
   was cut at, and each recompute finds it again by its cdists and keys.
@@ -75,7 +83,7 @@ from numpy.typing import NDArray
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..loom.TangleSession import TangleSession
 
-from .henon import HENON_P3, henon_jacobian, henon_map, henon_map_inverse, saddle_guesses
+from .henon import HENON_K4, HENON_P3, henon_jacobian, henon_map, henon_map_inverse, saddle_guesses
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -210,9 +218,22 @@ def build_period3(
         pips=[pip],
         stable_points=stable_points,
         title=f"Hénon k={HENON_P3[0]:g}, period 3{blasted}",
-        slug="p3" + (f"_blast{blasts}" if blasts else ""),
+        slug=_period3_slug(unstable_steps, stable_steps, blasts),
         blast_sizes=sizes,
     )
+
+
+def _period3_slug(unstable_steps: int, stable_steps: int, blasts: int) -> str:
+    """The figure folder of a period-3 build: growth and blast counts other than
+    the default (13 / 9 steps, unblasted) are part of it."""
+    slug = "p3"
+    if unstable_steps != 13:
+        slug += f"_u{unstable_steps}"
+    if stable_steps != 9:
+        slug += f"_s{stable_steps}"
+    if blasts:
+        slug += f"_blast{blasts}"
+    return slug
 
 
 def _nested_slug(outer_blasts: int, inner_blasts: int) -> str:
@@ -324,3 +345,66 @@ def build_heteroclinic(**overrides) -> TangleBuild:
     build.title = build.title.replace("period 1 + period 3", "period 1 + period 3, heteroclinic")
     build.slug = build.slug.replace("nested", "heteroclinic", 1)
     return build
+
+
+def build_inversion(
+    *,
+    blasts: int = 0,
+    unstable_steps: int = 11,
+    stable_steps: int = 11,
+    area_cutoff: float = 1e-5,
+    min_separation: float = 1e-5,
+) -> TangleBuild:
+    """
+    The ``k=4`` saddle with inversion, its zone at ``f(q0)`` blasted.
+
+    Both eigenvalues of the saddle at ``(1 - sqrt5, sqrt5 - 1)`` are negative,
+    so ``k_value = 2`` and the two branches of each manifold are one chain.
+
+    Args:
+        blasts: Single-iteration blasts of the zone.
+        unstable_steps: Map steps to grow the unstable manifold.
+        stable_steps: Map steps to grow the stable manifold.
+        area_cutoff: Refinement area cutoff for the manifold machine.
+        min_separation: The blasts' ``min_separation``.
+
+    Returns:
+        The :class:`TangleBuild` (one fixed point, the pip ``f(q0)``), its
+        topology computed, slug ``inversion`` (plus ``_blast<n>``).
+    """
+    from ..loom.TangleSession import TangleSession
+
+    session = TangleSession(
+        henon_map(*HENON_K4),
+        henon_map_inverse(*HENON_K4),
+        henon_jacobian(*HENON_K4),
+        area_cutoff=area_cutoff,
+    )
+    fp = session.construct_fixed_point(saddle_guesses(*HENON_K4)["inversion"])
+    session.initialize_both_manifolds(fp)
+    session.grow_n_times(fp, "unstable", num_iterations=unstable_steps)
+    session.grow_n_times(fp, "stable", num_iterations=stable_steps)
+    _intersect_and_bridge(session, [fp])
+    stable_points = _stable_points(session, [fp])
+
+    session.classify_strong_pips()
+    trellis = session.trellis(fp)
+    pip = trellis.iterate(trellis.strong_pip, 1)
+    zone = session.resonance_zone(pip)
+    sizes: list[int] = []
+    for _ in range(blasts):
+        result = session.blast_zone(
+            zone, num_iterations=1, fixed_point=[fp], min_separation=min_separation
+        )
+        sizes.append(len(result.all_interior_bridges()))
+    session.topology()
+    blasted = f", {blasts} blast(s)" if blasts else ""
+    return TangleBuild(
+        session=session,
+        fixed_points=[fp],
+        pips=[pip],
+        stable_points=stable_points,
+        title=f"Hénon k={HENON_K4[0]:g}, inversion{blasted}",
+        slug="inversion" + (f"_blast{blasts}" if blasts else ""),
+        blast_sizes=sizes,
+    )
