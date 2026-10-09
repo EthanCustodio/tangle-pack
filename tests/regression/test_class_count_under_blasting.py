@@ -18,7 +18,9 @@ pinned count:
   on both sides (D10, D12), so a lambda-lemma copy deeper than the pip's own
   orbit is no crossing of it;
 * while the hole set stays the same between two recomputes, so does the class
-  count (at least one such pair must exist, or the law checked nothing);
+  count (at least one such pair must exist, or the law checked nothing), and so
+  does the alphabet closed under the word map: the closure is a function of the
+  dual graph alone, never of which bridges a blast happened to compute (D11);
 * every class has a member the minimal trellis keeps;
 * a reference pair is only ever lost to a witness the definition names,
   read off the table alone (BCG-4: a switch is a discovery, not a defect);
@@ -76,6 +78,17 @@ def test_class_count_constant_while_holes_constant(name: str) -> None:
     assert same, f"no two consecutive recomputes share a hole set: {_table(steps)}"
     for before, after in same:
         assert before.classes == after.classes, _table(steps)
+
+
+@pytest.mark.parametrize("name", _params("series_closed_alphabet_constant_while_holes_constant"))
+def test_closed_alphabet_constant_while_holes_constant(name: str) -> None:
+    """D11: the same hole set gives the same alphabet closed under the word map; a
+    class a word names counts whether or not a blast computed a bridge for it."""
+    steps = _series(name)
+    same = [(a, b) for a, b in zip(steps, steps[1:]) if a.holes == b.holes]
+    assert same, f"no two consecutive recomputes share a hole set: {_table(steps)}"
+    for before, after in same:
+        assert before.closed == after.closed, _table(steps)
 
 
 @pytest.mark.parametrize("name", _params("series_alphabet_inside_minimal_trellis"))

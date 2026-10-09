@@ -549,22 +549,31 @@ def test_a_word_naming_a_spanned_class_closes_the_alphabet(layout, monkeypatch, 
         assert dyn.is_reliable
 
 
-def test_a_pair_no_bridge_spans_is_warned_and_unreliable(layout, monkeypatch, caplog):
-    """D3: a pair of a walk that no registered bridge spans is a construction error,
-    never a class. The class whose walk names it is unresolved ("grow or blast"), one
-    WARNING names the pair and the members whose image predicts it, nothing is
-    lettered, and the dynamics is not reliable."""
+def test_a_pair_no_bridge_spans_is_a_flagged_class(layout, monkeypatch, caplog):
+    """D11: words need no computed bridge. A pair of a walk that no registered bridge
+    spans is a class all the same: added to the table, lettered by ``letter_for``,
+    walked from its elements' landings, member-less and flagged ``spanned`` False
+    ("no computed bridge yet"). Nothing is unresolved, nothing is warned, and the
+    dynamics stays reliable."""
     alphabet = BridgeClassTable([layout.table[layout.a]])
-    walks = {layout.a: layout.k10_itinerary}
+    walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
     asked = []
+
+    def letter_for(cls):
+        asked.append(cls)
+        return "q"
+
     with caplog.at_level(logging.WARNING, logger=SD.__name__):
-        dyn = _drive(layout, monkeypatch, alphabet, alphabet, walks, letter_for=asked.append)
-    assert_logged(caplog, logging.WARNING, SD.__name__, count=1)
-    assert dyn.table.classes == [layout.a] and asked == []
-    cd = dyn.classes[layout.a]
-    assert cd.status == "unresolved" and cd.unresolved_reason
-    assert dyn.unresolved == [cd]
-    assert not dyn.is_reliable
+        dyn = _drive(layout, monkeypatch, alphabet, alphabet, walks, letter_for=letter_for)
+    assert_logged(caplog, logging.WARNING, SD.__name__, count=0)
+    assert dyn.table.classes == [layout.a, layout.u] and asked == [layout.u]
+    bare = dyn.classes[layout.u]
+    assert bare.entry.members == [] and bare.entry.spanned is False
+    assert dyn.classes[layout.a].entry.spanned is True
+    assert bare.itinerary == walks[layout.u] and bare.named_by == layout.a
+    assert (bare.letter, bare.kind) == ("q", "active")
+    assert dyn.unresolved == [] and dyn.is_reliable
+    assert "no computed bridge yet" in dyn.describe()
 
 
 @pytest.mark.parametrize(
