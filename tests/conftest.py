@@ -5,7 +5,7 @@ tests-only :mod:`cases` module, where every case's parameters are frozen
 (author decision 7, 2026-10-05): a test gets a fresh build it may mutate, and
 no fixture shares state between tests. The one exception is the physical-law
 tier (``tests/invariants/conftest.py``), which builds one read-only case per
-module (``law_case``) behind a fingerprint guard.
+run (``law_case``, session scope) behind a fingerprint guard.
 
 Fixtures:
 
@@ -44,8 +44,8 @@ Layout (tiers; every test basename is unique, no ``__init__.py``):
   ``inversion`` at 0, 1 and 2 blasts), each running every check of its layer
   and reporting every failing check in one error. Every known-issue or
   not-applicable pair is left out of its layer and has a set-aside test of
-  its own (``test_<layer>_set_aside``). A module-scoped read-only build per
-  case behind a fingerprint guard; the checks live in ``helpers/laws.py``, the
+  its own (``test_<layer>_set_aside``). One read-only build per case per RUN
+  (session scope, C12) behind a fingerprint guard; the checks live in ``helpers/laws.py``, the
   plumbing in ``helpers/law_tier.py``.
 * ``unit/numerics``, ``unit/topology``, ``unit/loom`` -- rules and kernels of
   each layer, public API first (private access only for the pure kernels the

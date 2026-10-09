@@ -5,7 +5,7 @@ on a built :class:`cases.Case` and returns HOW MANY ITEMS it checked, so the
 law tier can insist that a law was not vacuous (a count of 0 is a failure
 unless the ``(law, case)`` pair is listed in ``cases.NOT_APPLICABLE``). The
 checks only read the case; they never mutate the session (the law tier shares
-one build per module and fingerprints it around every test). The two laws
+one build per case per run and fingerprints it around every test). The two laws
 that must mutate a session (a recompute) share ONE fresh build per case, the
 ``recompute`` layer of :data:`MUTATING_LAYERS`:
 :func:`check_recompute_preserves_ids` then :func:`check_recompute_is_idempotent`.
