@@ -1,25 +1,20 @@
-"""A same-stability segment pair is never a crossing (CLAUDE.md fundamental invariant).
+"""A same-stability segment pair is never formed (CLAUDE.md fundamental invariant).
 
-Two unstable manifolds (or two stable ones) can never cross, so a u x u or s x s
-pair the spatial index turns up is a near-tangency of two polygonal
-approximations: ``Tangle.resolve_crossings`` drops it and logs it at DEBUG on
-the ``tanglepack.numerics.Tangle`` logger, while an unstable x stable pair over
-the same picture still resolves. The geometric law that no registered crossing
-is same-stability runs on every case in ``tests/invariants/test_law_crossings.py``.
+Two unstable manifolds (or two stable ones) can never cross, so the Tangle keeps
+one rtree per stability and queries a segment only against the OTHER one
+(WP10): a u x u or s x s pair is never formed, however the two polylines
+straddle, while an unstable x stable pair over the same picture still resolves.
+The geometric law that no registered crossing is same-stability runs on every
+case in ``tests/invariants/test_law_crossings.py``.
 """
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
 from helpers.fakes import bare_fixed_point
-from helpers.logs import assert_logged
 from tanglepack import BaseManifold, Point
 from tanglepack.numerics.Tangle import Tangle
-
-LOGGER = "tanglepack.numerics.Tangle"
 
 
 def _polyline(points: list[tuple[float, float]], key: tuple) -> BaseManifold:
@@ -55,13 +50,12 @@ def _polyline(points: list[tuple[float, float]], key: tuple) -> BaseManifold:
     )
 
 
+@pytest.mark.parametrize("bulk", [True, False], ids=["bulk", "incremental"])
 @pytest.mark.parametrize("stability", ["unstable", "stable"])
-def test_a_same_stability_crossing_is_dropped_and_logged(
-    stability: str, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Two near-tangent same-stability curves straddling each other give no
-    crossing and one DEBUG record; the curve of the other stability through the
-    same picture still crosses both."""
+def test_a_same_stability_pair_is_never_formed(stability: str, bulk: bool) -> None:
+    """Two near-tangent same-stability curves straddling each other form no
+    segment pair, in a bulk load or added one at a time; the curve of the other
+    stability through the same picture still crosses both."""
     fp = bare_fixed_point(1)
     other = "stable" if stability == "unstable" else "unstable"
     # Two near-parallel polylines that straddle once (a polygonal artifact of a
@@ -71,12 +65,15 @@ def test_a_same_stability_crossing_is_dropped_and_logged(
     transversal = _polyline([(0.5, -1.0), (0.5, 1.0)], (fp, other, 0, 0))
 
     tangle = Tangle()
-    tangle.add_manifolds([first, second, transversal])
-    with caplog.at_level(logging.DEBUG, logger=LOGGER):
-        crossings = tangle.resolve_crossings()
+    if bulk:
+        tangle.add_manifolds([first, second, transversal])
+    else:
+        for manifold in (first, second, transversal):
+            tangle.add_manifold(manifold)
 
-    assert_logged(caplog, logging.DEBUG, LOGGER)
+    stability_of = {sid: seg.manifold.stability for sid, seg in tangle._seg_lookup.items()}
+    assert all(len({stability_of[sid] for sid in pair}) == 2 for pair in tangle._intersecting_segments)
+    crossings = tangle.resolve_crossings()
     assert len(crossings) == 2
     for crossing in crossings:
-        stabilities = {crossing.manifold_a_key[1], crossing.manifold_b_key[1]}
-        assert stabilities == {"unstable", "stable"}
+        assert {crossing.manifold_a_key[1], crossing.manifold_b_key[1]} == {"unstable", "stable"}

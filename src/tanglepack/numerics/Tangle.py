@@ -78,6 +78,15 @@ _EPS_REL = 1e-12
 _DEVIATION_FLOOR_REL = 1e-8
 
 
+def _segment_index(stream: Optional[list] = None) -> index.Index:
+    """A 2-D rtree, bulk (stream) loaded from ``(id, bounds, None)`` entries if any."""
+    properties = index.Property()
+    properties.dimension = 2
+    if stream:
+        return index.Index(stream, properties=properties)
+    return index.Index(properties=properties)
+
+
 @dataclass(slots=True)
 class _Segment:
     """
@@ -121,11 +130,15 @@ class Tangle:
     Spatial index of manifold segments that detects and resolves crossings.
 
     Every adjacent pair of points on an indexed manifold is stored as a
-    _Segment in an rtree. Candidate crossings are found by bounding-box
-    queries, resolved to true intersection points, and cut into bridges.
+    _Segment in the rtree of its stability. Candidate crossings are found by
+    querying a segment's bounding box against the OTHER stability's rtree, so
+    only unstable x stable pairs are ever formed (CLAUDE.md's fundamental
+    invariant: two curves of one stability never cross). They are resolved to
+    true intersection points and cut into bridges.
 
     Attributes:
-        _rtree: spatial rtree storing all segments by their bounding boxes.
+        _rtrees: one spatial rtree per stability (``"unstable"``, ``"stable"``),
+            storing its segments by their bounding boxes.
         _seg_lookup: Dictionary keyed by unique segment ids that stores
             segments.
         _manifold_segs: Dictionary keyed by manifolds which stores the set of
@@ -152,7 +165,8 @@ class Tangle:
         of manifolds to their segments.
 
         Attributes:
-            _rtree: spatial rtree to store all segments based on their bounding boxes
+            _rtrees: one spatial rtree per stability, storing its segments by
+                their bounding boxes
             _edge_to_sid: Maps an edge (the frozenset of its two point ids) to the
                 id of the segment already registered for it, so a manifold that
                 reuses another manifold's points (every bridge does) is given the
@@ -171,9 +185,7 @@ class Tangle:
                 crossing is resolved (and registered) exactly once
         """
 
-        p = index.Property()
-        p.dimension = 2
-        self._rtree = index.Index(properties=p)  # R-tree
+        self._rtrees = {"unstable": _segment_index(), "stable": _segment_index()}
         self._edge_to_sid: dict[frozenset[int], int] = {}
         self._seg_lookup: dict[int, _Segment] = {}
         self._manifold_segs: defaultdict[BaseManifold, set[int]] = defaultdict(set)
@@ -181,8 +193,6 @@ class Tangle:
 
         self._intersecting_segments: set[frozenset[int]] = set()
         self._processed_pairs: set[frozenset[int]] = set()
-        # same-stability pairs dropped in the current resolve pass (for its summary)
-        self._same_stability_dropped = 0
 
     @staticmethod
     def _key_of(seg: _Segment) -> ManifoldKey:
@@ -199,12 +209,7 @@ class Tangle:
         """
         Completely clear all Tangle state, useful when recomputing everything from scratch.
         """
-        # Reinitialize the rtree
-        p = index.Property()
-        p.dimension = 2
-        self._rtree = index.Index(properties=p)
-
-        # Clear all dictionaries and sets
+        self._rtrees = {"unstable": _segment_index(), "stable": _segment_index()}
         self._edge_to_sid.clear()
         self._seg_lookup.clear()
         self._manifold_segs.clear()
@@ -218,30 +223,15 @@ class Tangle:
 
         Each crossing is found from its segment PAIR (frozenset of the two segment
         ids), so a single segment may participate in many crossings without any
-        being overwritten. Only unstable x stable pairs are kept. A same-stability
-        pair (u x u or s x s) is geometrically impossible (see CLAUDE.md's
-        fundamental invariant) -- if one appears it is a polygonal/numerical
-        artifact of two near-parallel manifolds straddling, so it is logged and
-        discarded, never turned into an Intersection.
+        being overwritten. Every pair is unstable x stable: the index never pairs
+        two segments of one stability (see the class docstring).
 
         Returns:
             The freshly resolved crossings, for the caller to register. The Tangle
             keeps no copy: the registry is the single source of truth.
         """
-        self._same_stability_dropped = 0
-        resolved: list[Intersection] = []
-        for seg_id_pair in list(self._intersecting_segments):
-            intersection = self._resolve_crossing_pair(seg_id_pair)
-            if intersection is not None:
-                resolved.append(intersection)
-        if self._same_stability_dropped:
-            logger.info(
-                "Resolved %d crossings; dropped %d same-stability segment pairs "
-                "as near-tangencies",
-                len(resolved),
-                self._same_stability_dropped,
-            )
-        return resolved
+        resolved = (self._resolve_crossing_pair(pair) for pair in list(self._intersecting_segments))
+        return [intersection for intersection in resolved if intersection is not None]
 
     def _resolve_crossing_pair(
         self, seg_id_pair: frozenset[int]
@@ -256,9 +246,7 @@ class Tangle:
 
         Returns:
             The new Intersection, or None when the pair was already processed,
-            references a removed segment (dropped as stale), is a
-            same-stability near-tangency (discarded per the fundamental
-            invariant -- see resolve_crossings), or is near-parallel
+            references a removed segment (dropped as stale), or is near-parallel
             and so has no well-conditioned crossing point.
         """
         if seg_id_pair in self._processed_pairs:
@@ -273,10 +261,7 @@ class Tangle:
 
         seg_1, seg_2 = self._seg_lookup[seg1_id], self._seg_lookup[seg2_id]
 
-        # A real crossing is always one unstable + one stable segment.
-        if seg_1.manifold.stability == seg_2.manifold.stability:
-            self._discard_same_stability(seg_id_pair, seg_1, seg_2)
-            return None
+        assert seg_1.manifold.stability != seg_2.manifold.stability, seg_id_pair
 
         found = self._find_true_intersection(seg_1, seg_2)
         if found is None:
@@ -450,33 +435,6 @@ class Tangle:
         t, s = np.linalg.solve(M, rhs)  # t on AB, s on CD
         return a + t * (b - a), abs(det) / scale
 
-    def _discard_same_stability(
-        self, seg_id_pair: "frozenset[int]", seg_1: _Segment, seg_2: _Segment
-    ) -> None:
-        """
-        Drop a same-stability segment pair -- it can never be a real crossing.
-
-        By the fundamental invariant two unstable manifolds (or two stable manifolds)
-        never cross, whether they belong to the same fixed point or different ones. So
-        every same-stability pair the spatial index turns up is a near-tangency: one
-        curve folding near itself, two orbit branches sharing a resonance island, or
-        two fixed points' manifolds running close. None is a malfunction to surface --
-        it is expected geometry for a folded tangle -- so all are dropped (logged at
-        debug, not warning, and counted in the pass summary of
-        :meth:`resolve_crossings`). A *transversal* same-stability polyline crossing
-        -- including one curve crossing itself, which this index never tests -- is
-        a polygon artifact of under-resolution; it is reported by
-        :func:`~.diagnostics.same_stability_crossings`, not by flagging every
-        near-tangency here.
-        """
-        logger.debug(
-            "Dropping same-stability (%s) segment pair %s as a near-tangency",
-            seg_1.manifold.stability,
-            tuple(seg_id_pair),
-        )
-        self._same_stability_dropped += 1
-        self._processed_pairs.add(seg_id_pair)
-
     def add_manifold(
         self,
         manifold: BaseManifold,
@@ -489,15 +447,12 @@ class Tangle:
         Args:
             manifold (BaseManifold): The manifold to register.
             index_segments (bool): If True (default) each segment is also
-                inserted into the rtree so later additions can find it. Pass
-                False for an iterated bridge: a bridge is unstable manifold,
-                so by the fundamental invariant the only curves it can
-                legitimately cross are stable ones, and those are already in
-                the index. Its crossings are found by querying; inserting its
-                segments too would only let later bridges detect
-                bridge-x-bridge (unstable x unstable) pairs, which are
-                numerical artifacts that get discarded anyway. Skipping the
-                inserts is what keeps repeated bridge iteration fast.
+                inserted into the rtree of its stability so later additions can
+                find it. Pass False for an iterated bridge: a bridge is unstable
+                manifold, so the only curves it can cross are stable ones, and
+                those are already in the index. Its crossings are found by
+                querying; skipping the inserts is what keeps repeated bridge
+                iteration fast.
             detect_crossings (bool): If False, genuinely new segments are
                 registered without being queried against the rtree. Used when
                 cutting bridges out of an already-indexed manifold: every
@@ -562,29 +517,19 @@ class Tangle:
         if not new_segments:
             return
 
-        properties = index.Property()
-        properties.dimension = 2
-        self._rtree = index.Index(
-            ((seg.id, seg.bounds, None) for seg in new_segments),
-            properties=properties,
-        )
+        for stability in self._rtrees:
+            self._rtrees[stability] = _segment_index(
+                [(seg.id, seg.bounds, None) for seg in new_segments if seg.manifold.stability == stability]
+            )
 
-        # Every segment is queried, so each crossing pair comes up twice (once
-        # from each side); keeping only the lower-id side does each exact
-        # intersection test once.
+        # Each unstable segment is queried against the stable index, so every
+        # u x s pair is tested exactly once.
         for segment in new_segments:
-            for candidate_id in self._rtree.intersection(segment.bounds):
-                if candidate_id >= segment.id:
-                    continue
-
-                other = self._seg_lookup[candidate_id]
-                if other.manifold is segment.manifold:
-                    continue
-
-                if segment.intersects(other):
-                    self._intersecting_segments.add(
-                        frozenset((segment.id, candidate_id))
-                    )
+            if segment.manifold.stability != "unstable":
+                continue
+            for candidate_id in self._rtrees["stable"].intersection(segment.bounds):
+                if segment.intersects(self._seg_lookup[candidate_id]):
+                    self._intersecting_segments.add(frozenset((segment.id, candidate_id)))
 
     def populate_intersections_for_manifold(
         self, manifold: BaseManifold
@@ -741,7 +686,7 @@ class Tangle:
 
         # insert segment into the rtree and dictionary
         if index_in_rtree:
-            self._rtree.insert(sid, seg.bounds)
+            self._rtrees[seg.manifold.stability].insert(sid, seg.bounds)
         seg.in_rtree = index_in_rtree
         self._edge_to_sid[edge_key] = sid
         self._seg_lookup[sid] = seg
@@ -750,16 +695,9 @@ class Tangle:
         if not detect_crossings:
             return sid
 
-        for cand_id in self._rtree.intersection(seg.bounds):
-
-            if cand_id == sid:
-                continue
-
-            other = self._seg_lookup[cand_id]
-            if other.manifold is seg.manifold:
-                continue
-
-            if seg.intersects(other):
+        other_stability = "stable" if seg.manifold.stability == "unstable" else "unstable"
+        for cand_id in self._rtrees[other_stability].intersection(seg.bounds):
+            if seg.intersects(self._seg_lookup[cand_id]):
                 self._intersecting_segments.add(frozenset((sid, cand_id)))
 
         return sid
@@ -819,7 +757,7 @@ class Tangle:
         # Safely remove from rtree (query-only segments were never in it)
         if seg.in_rtree:
             try:
-                self._rtree.delete(sid, seg.bounds)
+                self._rtrees[seg.manifold.stability].delete(sid, seg.bounds)
             except RTreeError:
                 # Segment may have already been deleted from the rtree; anything
                 # else deserves to surface rather than be swallowed.
