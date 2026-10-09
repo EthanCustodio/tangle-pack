@@ -39,7 +39,6 @@ _STANDALONE_ISSUES = {
     "series_class_count_never_decreases",
     "series_class_count_constant_while_holes_constant",
     "series_alphabet_inside_minimal_trellis",
-    "three_tangles_take_three_families",
 }
 
 

@@ -22,7 +22,7 @@ from typing import Optional
 from matplotlib.colors import to_hex
 import pytest
 
-from cases import build_k10, build_nested, issue_marks
+from cases import build_k10, build_nested
 from tanglepack.topology import plotting
 
 _FAMILIES = [frozenset(to_hex(c) for c in family) for family in plotting.TANGLE_COLOR_FAMILIES]
@@ -128,16 +128,8 @@ def test_hand_built_family_overflow_extends_without_repeating() -> None:
     _assert_family_rule(_dynamics(big + [("t", 1, 0), ("h", None, 0)]), refined=True)
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(
-            "hand_built", marks=issue_marks("three_tangles_take_three_families", "hand_built")
-        )
-    ],
-)
-def test_hand_built_three_tangles_take_three_families(name: str) -> None:
-    """Three tangles take three distinct families (TEST-5(c): there are only two today)."""
+def test_hand_built_three_tangles_take_three_families() -> None:
+    """Three tangles take three distinct families (TEST-5(c), WP9)."""
     spec = [("a", 0, 0), ("b", 0, 0), ("c", 1, 0), ("d", 1, 0), ("e", 2, 0), ("f", 2, 0),
             ("g", None, 0)]
     _assert_family_rule(_dynamics(spec), refined=True)

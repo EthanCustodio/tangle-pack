@@ -1102,18 +1102,21 @@ CLASS_COLORS = (
 )
 
 #: One colour family per tangle when a dynamics spans several fixed points
-#: (cool for the first tangle, warm for the second, ...), and one for the
-#: classes connecting two tangles. Families never share a colour, so no two
-#: symbols of a figure do; a family that runs out is extended from its
-#: colormap (:data:`TANGLE_FAMILY_CMAPS`) rather than repeating.
+#: (cool for the first tangle, warm for the second, violet for the third, ...),
+#: and one for the classes connecting two tangles. Families never share a
+#: colour, so no two symbols of a figure do; a family that runs out is
+#: extended from its colormap (:data:`TANGLE_FAMILY_CMAPS`) rather than
+#: repeating, and a tangle past the last family draws from its colormap alone.
 TANGLE_COLOR_FAMILIES = (
     ("#1f5fbf", "#1baf7a", "#17becf", "#4a3aa7", "#6fa8dc", "#0b6e4f",
      "#8fd694", "#2c3e8f", "#5ec4d6", "#9b8fe0"),
     ("#e34948", "#eda100", "#eb6834", "#e87ba4", "#8c564b", "#c2185b",
      "#f7b267", "#a63603", "#f28e8e", "#d4a017"),
+    ("#7b1fa2", "#d81b60", "#ab47bc", "#880e4f", "#ce93d8", "#4a148c",
+     "#f06292", "#9c27b0", "#e1bee7", "#ad1457"),
 )
 HETEROCLINIC_COLORS = ("#6a3d9a", "#7f7f7f", "#b15928", "#bcbd22", "#cab2d6", "#3f3f3f")
-TANGLE_FAMILY_CMAPS = ("winter", "autumn", "cool", "summer", "spring")
+TANGLE_FAMILY_CMAPS = ("winter", "autumn", "RdPu", "summer", "spring")
 
 #: Line defaults for a classed bridge (inert classes are additionally dashed).
 CLASS_BRIDGE_STYLE = {"linewidth": 2.0, "zorder": 6, "solid_capstyle": "round"}
