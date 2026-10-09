@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from cases import _blast, build_k10, build_k28, build_nested
-from helpers.direct import direct_view, view_of
+from helpers.direct import direct_view, trellis_view, view_of
 
 #: session accessor -> its stage on the Topology.
 STAGES: dict[str, str] = {
@@ -69,6 +69,28 @@ def test_pip_choice_survives_a_blast():
 
     assert session.strong_pip(fp) == pip
     assert session.bridge_classes()
+
+
+def test_the_selection_trellis_is_cut_before_any_product():
+    """D1, D10: the trellis of several fixed points is cut at their pips when it
+    is read, so what it shows never depends on whether a product ran first."""
+    case = build_nested(outer_blasts=0, through="zones")
+    session = case.session
+    zone = max(case.zones, key=lambda zone: zone.area)
+    fp = zone.fixed_point
+    _blast(session, zone, [fp])
+    session.trellis()
+    # The anchor-nearest other candidate cuts crossings the zone's pip keeps.
+    session.set_strong_pip(fp, min(
+        (c for c in session.strong_pip_candidates(fp) if c != session.strong_pip(fp)),
+        key=lambda c: float(session.workbench.intersection_registry[c].stable_cdist),
+    ))
+    before = trellis_view(session.trellis())
+
+    session.topology()
+
+    assert trellis_view(session.trellis()) == before
+    assert session.topology().trellis is session.trellis()
 
 
 def test_one_snapshot_per_selection():

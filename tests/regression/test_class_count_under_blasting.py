@@ -25,7 +25,10 @@ pinned count:
 * a reference pair is only ever lost to a witness the definition names,
   read off the table alone (BCG-4: a switch is a discovery, not a defect);
 * a class keeps its letter while its two elements keep their bounding
-  crossings, and no two such identities share a letter (C2, BCG-7).
+  crossings, and no two such identities share a letter (C2, BCG-7);
+* ``session.trellis()`` read before the recompute already shows the
+  recomputed topology's trellis: the selection trellis is cut at the pips of
+  its fixed points when it is read, never by whichever product runs first (D1).
 
 The per-kind counts are printed in every failure message as diagnostics.
 
@@ -116,3 +119,11 @@ def test_letters_follow_element_identity(name: str) -> None:
         for identity, letter in step.letters:
             assert seen.setdefault(identity, letter) == letter, (step.blasts, letter, seen[identity])
     assert len(set(seen.values())) == len(seen), "two identities share a letter"
+
+
+@pytest.mark.parametrize("name", _params("series_session_trellis_is_history_free"))
+def test_session_trellis_is_history_free(name: str) -> None:
+    """D1, D10: what ``session.trellis()`` shows after a blast does not depend on
+    whether a product was computed first."""
+    steps = _series(name)
+    assert all(s.history_free for s in steps), [s.blasts for s in steps if not s.history_free]

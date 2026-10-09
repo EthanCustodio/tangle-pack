@@ -108,6 +108,7 @@ from tanglepack.examples import (
 )
 from tanglepack.examples import henon_cases
 
+from helpers.direct import trellis_view
 from helpers.laws import reference_witness
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -1032,6 +1033,9 @@ class SeriesStep:
             being the pair of its elements' ``(branch_key, side, lo_id, hi_id)``
             read off ``session.homotopy_partition()`` here, never through the
             library's own identity.
+        history_free: Whether ``session.trellis()`` read BEFORE the recompute
+            shows the crossings and bridges of the recomputed topology's
+            trellis (D1: the snapshot never depends on what ran first).
     """
 
     blasts: int
@@ -1044,6 +1048,7 @@ class SeriesStep:
     references: frozenset
     unwitnessed: frozenset
     letters: frozenset
+    history_free: bool
 
 
 class Series(NamedTuple):
@@ -1095,6 +1100,7 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
     for blast in range(series.blasts + 1):
         if blast:
             _blast(session, zone, [fp], diagnose=False, min_separation=series.min_separation)
+        shown = trellis_view(session.trellis())
         table = session.bridge_classes()
         kept = set(session.minimal_trellis().kept_bridge_ids)
         family = session.homotopy_partition()
@@ -1123,6 +1129,7 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
                     for entry in table
                     if entry.letter is not None
                 ),
+                history_free=shown == trellis_view(session.topology().trellis),
             )
         )
     return tuple(steps)

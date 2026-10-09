@@ -18,9 +18,10 @@ Dev Notes:
   old "branch missing a partition" WARNING is gone: a heteroclinic bridge's
   class needs both its fixed points selected, and ``bridge_classes`` raises
   naming the end it cannot resolve otherwise (WP9 builds the first such case).
-* The selection's trellis is cut at every selected pip's orbit (D10, D12):
-  each per-fixed-point trellis is cut when its pip is set, and for a single
-  fixed point it IS the selection's, so the cut is a no-op there. A class
+* The selection's trellis is cut at every selected pip's orbit (D10, D12) by
+  ``TangleSession.trellis`` itself: a per-fixed-point trellis when its pip is
+  set, a selection of several at its fixed points' pips on every read. Stages
+  3-6 run first, so a default pip is chosen before the selection is read. A class
   member may be a joined arc of the cut, which the workbench does not hold,
   so bridges are resolved through the trellis (``bridge_between``).
 * Letters follow :meth:`Topology.identity`, the pair of the bounding crossings
@@ -90,8 +91,7 @@ class Topology:
         self.fixed_points = tuple(fixed_points)
         recomputed = [self._stages_3_to_6(fp) for fp in self.fixed_points]
         self.strong_pips = tuple(t.strong_pip for t in recomputed)
-        self.trellis: "Trellis" = session.trellis(self.fixed_points)
-        self.trellis.cut_at_pip_orbit(pip for pip in self.strong_pips if pip is not None)
+        self.trellis: "Trellis" = session.trellis(self.fixed_points)  # cut at strong_pips
         # New lists: a later manual stage call clears the trellis slots in place.
         self.holes = [hole for t in recomputed for hole in t.holes]
         self.partitions: list["StablePartitionResult"] = [

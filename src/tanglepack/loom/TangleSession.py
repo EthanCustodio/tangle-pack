@@ -223,8 +223,10 @@ class TangleSession:
         cdists and keys; a pip that is no longer a candidate is left unset with
         a WARNING. Once a pip is chosen the trellis is cut at its orbit
         (``Trellis.cut_at_pip_orbit``, D10, D12): a single fixed point's when
-        the pip is set or restored, a selection of several by
-        :meth:`topology`.
+        the pip is set or restored, a selection of several at the pips of its
+        fixed points on every read (a no-op while they are unchanged), so the
+        snapshot is a function of the generation and the pips alone, never of
+        which product ran first (D1).
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None for all
@@ -243,6 +245,10 @@ class TangleSession:
             if len(selected) == 1 and selected[0] in self._strong_pips:
                 trellis.classify_strong_pips(choose_default=False)
                 self._restore_strong_pip(trellis)
+        if len(selected) > 1:
+            trellis.cut_at_pip_orbit(
+                pip for fp in selected if (pip := self.trellis(fp).strong_pip) is not None
+            )
         return trellis
 
     def arrangement(
