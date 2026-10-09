@@ -2622,7 +2622,8 @@ def check_walks_agree_with_registered_images(case: "Case") -> int:
 def check_ambiguous_only_without_a_member_lobe(case: "Case") -> int:
     """D13: a walked class with a member lobe -- a non-loop member the minimal trellis
     keeps whose two ends lie on one stable branch -- has its side picked by the
-    non-crossing rule, so only a class without one may stay ambiguous."""
+    non-crossing rule, so only a class without one may stay ambiguous; and since the
+    image of the member is a walk that holds the right markers, one is found."""
     dyn = case.session.symbolic_dynamics()
     kept = set(case.session.minimal_trellis().kept_bridge_ids)
     count = 0
@@ -2634,9 +2635,10 @@ def check_ambiguous_only_without_a_member_lobe(case: "Case") -> int:
             and member.bridge_id in kept
             and len({_stable_branch_at(case, member.bridge_id, end) for end in member.bridge_id}) == 1
         ]
-        if cd.source != "walk" or not lobes:
+        if cd.search is None or not lobes:
             continue
-        assert not cd.ambiguous, (cd.letter, [walk.itinerary for walk in cd.search.walks])
+        assert cd.search.status in ("unique", "trivial"), (
+            cd.letter, cd.search.status, [walk.itinerary for walk in cd.search.walks])
         count += 1
     return count
 
