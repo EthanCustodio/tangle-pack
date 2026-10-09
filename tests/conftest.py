@@ -89,7 +89,7 @@ Dev Notes:
       the outer envelope, or a one-eigendirection anchor with its virtual
       stubs, never closes). Untested; noted in
       ``unit/numerics/test_grow_until.py``. The four-anchor cause is gone
-      (WP3, API-5); the check-with-a-cap semantics are WP11.
+      (WP3, API-5); the check-with-a-cap semantics wait for the D8 API plan (WP11).
 
     Known issues: see :data:`cases.KNOWN_ISSUES`. Every entry is
     ``xfail(strict=True)``, cites its catalog issue id
