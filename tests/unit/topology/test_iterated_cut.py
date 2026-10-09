@@ -1,17 +1,21 @@
-"""The 2026-09-30 cross-branch rules of the iterated (empty-stretch) cut.
+"""The cross-branch rules of the iterated (empty-stretch) cut (C19, WP10b).
 
 A hole's image lobe sits on the stable branch of its BASE (the image chain's
-``(x_0, x_m)``) and folds through it along chords of consecutive interior
-crossings. Three rules keep other stable branches out of that reading:
+``(x_0, x_m)``) and folds through stable branches along chords:
 
-* only the base branch's crossings are paired into chords (an excursion of the
-  image across another orbit branch or fixed point folds nothing there);
-* a chain ending on another branch than it starts marks nothing (WARNING);
-* an empty stretch whose far end lies on another stable branch is no flank of
-  an image crossing: it is skipped at WARNING and cuts nothing.
+* on the base branch the interior crossings pair in CHAIN order (the author's
+  rule, 2026-09-23);
+* on any other stable branch they pair in STABLE order: walking that branch from
+  its anchor, which no lobe image holds, the image is entered and left in turn
+  (Jordan alternation);
+* the base lies on ONE branch (its ends are images of one branch's crossings), read
+  at a non-anchor end, since an anchor lies on every branch of its point (D4); a
+  base across two branches asserts;
+* every empty stretch lies on one branch, so only an anchor can abut one along
+  another branch (asserted).
 
-The first two read ``IteratedHomotopyPartition._empty_stretches`` (an allowed
-kernel) on synthetic chains; the third runs the public ``from_minimal`` on the
+The first three read ``IteratedHomotopyPartition._empty_stretches`` (an allowed
+kernel) on synthetic chains; the last runs the public ``from_minimal`` on the
 nested tangle with one foreign far end injected per image crossing.
 """
 
@@ -33,23 +37,35 @@ from tanglepack.topology.Trellis import Trellis
 family_module = importlib.import_module("tanglepack.topology.PartitionFamily")
 LOGGER = "tanglepack.topology.PartitionFamily"
 
+UNSTABLE = ("fp", "unstable", 0, 0)
+OWN, FOREIGN = ("fp", "stable", 0, 1), ("fp", "stable", 1, 0)
+
+
+def _crossing(branch: tuple, stable_cdist: float = 1.0) -> SimpleNamespace:
+    """A crossing of ``UNSTABLE`` with ``branch``."""
+    return SimpleNamespace(
+        manifold_a_key=UNSTABLE, manifold_b_key=branch, stable_cdist=stable_cdist, is_anchor=False
+    )
+
+
+#: The anchor of ``UNSTABLE``'s point: on every branch there, ``s(0, 0)`` by C7.
+ANCHOR = SimpleNamespace(
+    manifold_a_key=UNSTABLE, manifold_b_key=("fp", "stable", 0, 0), stable_cdist=0.0, is_anchor=True
+)
+
 
 class _FakeTrellis:
-    """Just enough trellis for ``_empty_stretches``: a crossing's stable branch."""
+    """Just enough trellis for ``_empty_stretches``: the crossings themselves."""
 
-    #: The production anchor rules (no crossing here is an anchor).
+    #: The production anchor rules.
     unstable_key_of = Trellis.unstable_key_of
     stable_key_at = Trellis.stable_key_at
 
-    def __init__(self, branches: dict[int, tuple]) -> None:
-        self._branches = branches
-        self.registry = {iid: self.intersection(iid) for iid in branches}
+    def __init__(self, crossings: dict[int, SimpleNamespace]) -> None:
+        self.registry = crossings
 
     def intersection(self, iid: int) -> SimpleNamespace:
-        """The crossing, carrying only its stable branch key."""
-        return SimpleNamespace(
-            manifold_a_key=None, manifold_b_key=self._branches[iid], is_anchor=False
-        )
+        return self.registry[iid]
 
 
 def _hole_homotopy(lo_id: int, hi_id: int, branch: tuple) -> SimpleNamespace:
@@ -61,39 +77,56 @@ def _hole_homotopy(lo_id: int, hi_id: int, branch: tuple) -> SimpleNamespace:
     return SimpleNamespace(results={(branch, "right"): SimpleNamespace(intervals=[hole])})
 
 
-def test_chords_pair_only_the_base_branchs_crossings(
+def _empty_stretches(monkeypatch, crossings: dict, chain: list) -> dict:
+    """``_empty_stretches`` of the hole ``(1, 2)`` on ``OWN`` whose image chain is ``chain``."""
+    crossings = {1: _crossing(OWN), 2: _crossing(OWN), **crossings}
+    minimal = SimpleNamespace(trellis=_FakeTrellis(crossings), hole_bridge_ids=[(1, 2)])
+    monkeypatch.setattr(family_module, "_image_chain", lambda trellis, bid: chain)
+    return IteratedHomotopyPartition._empty_stretches(minimal, _hole_homotopy(1, 2, OWN))
+
+
+def _chain(crossings: list[int]) -> list[tuple[int, int]]:
+    return list(zip(crossings, crossings[1:]))
+
+
+def test_foreign_crossings_pair_in_stable_order(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    own, foreign = ("fp", "stable", 1, 0), ("fp", "stable", 2, 0)
-    branches = {1: own, 2: own, 10: own, 11: own, 12: own, 13: own, 98: foreign, 99: foreign}
-    minimal = SimpleNamespace(trellis=_FakeTrellis(branches), hole_bridge_ids=[(1, 2)])
-    # The image of the hole bridge crosses the foreign branch twice between
-    # its two folds on its own branch.
-    chain = [(10, 11), (11, 99), (99, 98), (98, 12), (12, 13)]
-    monkeypatch.setattr(family_module, "_image_chain", lambda trellis, bid: chain)
-    with caplog.at_level(logging.INFO, logger=LOGGER):
-        empty = IteratedHomotopyPartition._empty_stretches(
-            minimal, _hole_homotopy(1, 2, own)
-        )
+    """The p3_6_blasts excursion: 41..44 on a foreign branch at stable cdists 1.158,
+    1.025, 0.973, 1.285 pair as (43, 42) and (41, 44), never in chain order; the
+    base branch's own interior crossings keep the chain order."""
+    crossings = {
+        **{iid: _crossing(OWN) for iid in (10, 11, 12, 13)},
+        41: _crossing(FOREIGN, 1.158),
+        42: _crossing(FOREIGN, 1.025),
+        43: _crossing(FOREIGN, 0.973),
+        44: _crossing(FOREIGN, 1.285),
+    }
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        empty = _empty_stretches(monkeypatch, crossings, _chain([10, 11, 41, 42, 43, 44, 12, 13]))
     assert (13, "base") in empty[10]
     assert (12, "chord") in empty[11]
-    assert 99 not in empty and 98 not in empty
-    assert_logged(caplog, logging.INFO, LOGGER)
+    assert empty[43] == [(42, "chord")] and empty[41] == [(44, "chord")]
+    assert_logged(caplog, logging.WARNING, LOGGER, count=0)
 
 
-def test_a_lobe_ending_on_another_branch_marks_nothing(
+def test_the_base_is_read_at_a_non_anchor_end(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    own, foreign = ("fp", "stable", 1, 0), ("fp", "stable", 2, 0)
-    branches = {1: own, 2: own, 10: own, 11: own, 12: foreign}
-    minimal = SimpleNamespace(trellis=_FakeTrellis(branches), hole_bridge_ids=[(1, 2)])
-    monkeypatch.setattr(family_module, "_image_chain", lambda trellis, bid: [(10, 11), (11, 12)])
+    """A chain leaving the anchor whose C7 branch is the OTHER half (the
+    inversion_period2 pattern) still has its base on the branch of its far end."""
+    crossings = {0: ANCHOR, **{iid: _crossing(OWN) for iid in (11, 12, 13)}}
     with caplog.at_level(logging.WARNING, logger=LOGGER):
-        empty = IteratedHomotopyPartition._empty_stretches(
-            minimal, _hole_homotopy(1, 2, own)
-        )
-    assert set(empty) == {1, 2}  # only the hole itself
-    assert_logged(caplog, logging.WARNING, LOGGER)
+        empty = _empty_stretches(monkeypatch, crossings, _chain([0, 11, 12, 13]))
+    assert (13, "base") in empty[0]
+    assert (12, "chord") in empty[11]
+    assert_logged(caplog, logging.WARNING, LOGGER, count=0)
+
+
+def test_a_base_across_two_branches_asserts(monkeypatch: pytest.MonkeyPatch) -> None:
+    crossings = {10: _crossing(OWN), 11: _crossing(OWN), 12: _crossing(FOREIGN)}
+    with pytest.raises(AssertionError):
+        _empty_stretches(monkeypatch, crossings, _chain([10, 11, 12]))
 
 
 @pytest.fixture
@@ -102,14 +135,13 @@ def nested() -> Case:
     return build_nested()
 
 
-def test_a_far_end_on_another_branch_is_no_flank(
-    nested: Case, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+def test_only_an_anchor_abuts_a_stretch_on_another_branch(
+    nested: Case, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An empty stretch reaching another stable branch is skipped at WARNING and
-    cuts nothing: the partition is the one without it."""
+    """Every empty stretch lies on one branch: a far end on another stable branch
+    at a non-anchor image crossing asserts (it used to be skipped at WARNING)."""
     session = nested.session
     minimal, homotopy = session.minimal_trellis(), session.homotopy_partition()
-    unpatched = session.iterated_partition()
     trellis = minimal.trellis
     assert minimal.image_bridge_ids, "the nested case carries image bridges"
     stable_ids = {
@@ -123,20 +155,13 @@ def test_a_far_end_on_another_branch_is_no_flank(
         own = trellis.intersection(iid).manifold_b_key
         return next(ids[-1] for key, ids in stable_ids.items() if key != own)
 
-    with caplog.at_level(logging.WARNING, logger=LOGGER):
-        IteratedHomotopyPartition.from_minimal(minimal, homotopy)
-    baseline = len(
-        [r for r in caplog.records if r.name == LOGGER and r.levelno == logging.WARNING]
-    )
-    caplog.clear()
     original = family_module.IteratedHomotopyPartition._empty_stretches
 
     def with_foreign_far_ends(minimal_, homotopy_):
         empty = {iid: list(v) for iid, v in original(minimal_, homotopy_).items()}
         for bid in minimal_.image_bridge_ids:
             for iid in bid:
-                other = foreign_to(iid)
-                empty.setdefault(iid, []).append((other, "base"))
+                empty.setdefault(iid, []).append((foreign_to(iid), "base"))
         return empty
 
     monkeypatch.setattr(
@@ -144,15 +169,5 @@ def test_a_far_end_on_another_branch_is_no_flank(
         "_empty_stretches",
         staticmethod(with_foreign_far_ends),
     )
-    with caplog.at_level(logging.WARNING, logger=LOGGER):
-        iterated = IteratedHomotopyPartition.from_minimal(minimal, homotopy)
-    warnings = assert_logged(caplog, logging.WARNING, LOGGER)
-    assert len(warnings) > baseline, "each foreign far end is skipped at WARNING"
-    assert iterated.signature() == unpatched.signature()
-    applied = [cut for cut in iterated.cuts if cut.opened is not None]
-    assert applied
-    assert all(
-        trellis.intersection(cut.partner).manifold_b_key
-        == trellis.intersection(cut.intersection_id).manifold_b_key
-        for cut in applied
-    )
+    with pytest.raises(AssertionError):
+        IteratedHomotopyPartition.from_minimal(minimal, homotopy)

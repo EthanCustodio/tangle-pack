@@ -86,12 +86,24 @@ Dev Notes:
   footprint rule only in which chains count — those of holes with a stretch —
   and from the closed cut in reading holes, not bridges.
 * A crossing that abuts no empty stretch gets no cut (WARNING, ``"no empty
-  stretch"``): the lobe fold it belongs to is not registered as a hole, and
-  the evidence is to grow or blast, not to guess.
+  stretch"``): the lobe fold it belongs to is not registered as a hole (the
+  anchor lobe's fold marks nothing by the author's 2026-09-23 rule), and the
+  evidence is to grow or blast, not to guess.
+* Foreign chords (C19, WP10b; PK-4). An image chain can leave its base branch
+  for an excursion across another stable branch (another orbit branch or fixed
+  point: p3_6_blasts, p3_15, p3_16, heteroclinic). A lobe ``H`` (its bridge and
+  the stable segment between the bridge's ends) holds no point of any stable
+  branch of the trellis, so ``f(H)`` holds no anchor; walking another branch
+  from its anchor therefore enters and leaves ``f(H)`` at successive crossings
+  with the image chain, and the stretches inside are its crossings paired in
+  STABLE order (checked by point-in-polygon on the four cases:
+  ``tests/regression/test_foreign_chords.py``). The base branch keeps the
+  author's chain-order pairing. It changes refinement labels only, never walks
+  or words. Every empty stretch lies on one branch, and the base is read at a
+  non-anchor end (an anchor lies on every branch); both are asserted.
 * Cross-branch pieces (a period-k orbit only; a bridge whose two crossings
   lie on different stable branches) are cut like any other: the rule reads
-  the crossing's own branch. No fixture exercises one beyond the ownership
-  invariants.
+  the crossing's own branch.
 * Only pieces with a ``Bridge`` object cut (``minimal.image_bridge_ids``); a
   chain pair the minimal trellis skipped (no bridge object) cuts nothing,
   as ``MinimalTrellis`` already warns, but it still counts as a base or chord.
@@ -775,17 +787,9 @@ class IteratedHomotopyPartition(PartitionFamily):
                 flanks: dict[str, int] = {}
                 for other, kind in abutting:
                     if other not in trellis.branch(key[0]).intersection_ids:
-                        # A far end on another stable branch has no flank here:
-                        # the two cdists are measured along different curves.
-                        logger.warning(
-                            "image bridge %s: the %s stretch abutting crossing %d "
-                            "ends at %d on another stable branch; it is not read "
-                            "as a flank",
-                            bid,
-                            kind,
-                            iid,
-                            other,
-                        )
+                        # Every empty stretch lies on one branch; only an anchor,
+                        # which lies on all of them, abuts one along another branch.
+                        assert trellis.intersection(iid).is_anchor, (bid, iid, other, kind)
                         continue
                     other_c = float(trellis.intersection(other).stable_cdist)
                     flanks.setdefault("anchorward" if other_c < own_c else "outward", other)
@@ -886,9 +890,12 @@ class IteratedHomotopyPartition(PartitionFamily):
             A hole's lobe is its bounding bridge's full image chain (lookup
             only), read for every hole bridge whose stretch is an open
             interval of the homotopy partition; the anchor's one-sided hole
-            has none. A chain with an even number of pieces ends on
-            different rows; its ``(x_0, x_m)`` is still the base, its interior
-            crossings pair as chords and one is left over (WARNING).
+            has none. Its ``(x_0, x_m)`` is the base, on one stable branch.
+            Interior crossings pair as chords per stable branch: in chain order
+            on the base branch (the author's rule), in stable order on any
+            other (C19: a lobe image holds no anchor, so walking a branch from
+            its anchor enters and leaves it in turn). An odd count on a branch
+            leaves its last crossing unpaired (WARNING).
         """
         trellis = minimal.trellis
         stretches: dict[frozenset, str] = {}
@@ -913,45 +920,38 @@ class IteratedHomotopyPartition(PartitionFamily):
                 )
                 continue
             crossings = [chain[0][0]] + [pair[1] for pair in chain]
-            # The lobe sits on the stable branch of its base; an excursion of the
-            # image across ANOTHER stable branch (another orbit branch, another
-            # fixed point) folds nothing on this one, so only the base branch's
-            # crossings are paired into chords.
+            # The base f(sigma) lies on ONE stable branch: its ends are the +1
+            # images of one branch's crossings. An anchor lies on every branch of
+            # its point (D4), so the branch is read at a non-anchor end.
             unstable_key = trellis.unstable_key_of(chain[0])
-            base_branch = trellis.stable_key_at(crossings[0], unstable_key)
-            if trellis.stable_key_at(crossings[-1], unstable_key) != base_branch:
-                logger.warning(
-                    "image chain of hole bridge %s ends on another stable branch "
-                    "than it starts (%d vs %d); its lobe marks no empty stretch",
-                    hole_bridge,
-                    crossings[0],
-                    crossings[-1],
-                )
-                continue
-            interior = [
-                c
-                for c in crossings[1:-1]
-                if trellis.intersection(c).manifold_b_key == base_branch
-            ]
-            if len(interior) < len(crossings) - 2:
-                logger.info(
-                    "image chain of hole bridge %s crosses %d foreign stable "
-                    "crossing(s); they are left out of the chord pairing",
-                    hole_bridge,
-                    len(crossings) - 2 - len(interior),
-                )
-            if len(interior) % 2 == 1:
-                logger.warning(
-                    "image chain of hole bridge %s has an odd number of interior "
-                    "crossings on its base branch (%d), so its lobe ends on "
-                    "different rows; reading its base and chords regardless and "
-                    "leaving the last one unpaired",
-                    hole_bridge,
-                    len(interior),
-                )
+            ends = {
+                trellis.stable_key_at(c, unstable_key)
+                for c in (crossings[0], crossings[-1])
+                if not trellis.intersection(c).is_anchor
+            }
+            assert len(ends) == 1, (hole_bridge, chain)
+            (base_branch,) = ends
             stretches.setdefault(frozenset((crossings[0], crossings[-1])), "base")
-            for i in range(0, len(interior) - 1, 2):
-                stretches.setdefault(frozenset((interior[i], interior[i + 1])), "chord")
+            # Chords: on the base branch the author's pairing in chain order; on any
+            # other stable branch f(H) is entered and left in turn along the branch
+            # from its anchor, which no lobe image holds (C19, Jordan alternation),
+            # so its crossings pair in STABLE order.
+            folds: dict = {}
+            for c in crossings[1:-1]:
+                folds.setdefault(trellis.intersection(c).manifold_b_key, []).append(c)
+            for branch_key, on_branch in folds.items():
+                if branch_key != base_branch:
+                    on_branch.sort(key=lambda c: trellis.intersection(c).stable_cdist)
+                if len(on_branch) % 2:
+                    logger.warning(
+                        "image chain of hole bridge %s crosses stable branch %s an odd "
+                        "number of times (%d); the last crossing there is left unpaired",
+                        hole_bridge,
+                        branch_key[1:],
+                        len(on_branch),
+                    )
+                for x, y in zip(on_branch[::2], on_branch[1::2]):
+                    stretches.setdefault(frozenset((x, y)), "chord")
         empty: dict[int, list[tuple[int, str]]] = {}
         for stretch, kind in stretches.items():
             if len(stretch) != 2:
