@@ -135,7 +135,7 @@ def run(config: dict, rec) -> None:
     with rec.stage("bridges"):
         session.trim_stable_manifolds(fp)
         session.create_bridges(fp)
-        session.infer_iterate_table()
+        session.infer_iterates()
     bridges = session.workbench.bridges
     rec.metric("n_bridges", sum(1 for br in bridges if br.id is not None))
     rec.metric("n_partial_bridges", sum(1 for br in bridges if br.id is None))

@@ -427,21 +427,6 @@ class BridgeClassTable:
                     return entry
         raise KeyError(f"bridge {bridge_id} is in no class")
 
-    def member_of(self, bridge_id: "BridgeId") -> BridgeMember:
-        """
-        The membership record of a bridge.
-
-        Args:
-            bridge_id: The bridge.
-
-        Returns:
-            Its :class:`BridgeMember`.
-
-        Raises:
-            KeyError: If no class holds the bridge.
-        """
-        return self.entry_of(bridge_id).member(bridge_id)
-
     def symbol(self, bridge_id: "BridgeId") -> str:
         """The itinerary symbol of a bridge; see :meth:`BridgeClassEntry.symbol`."""
         return self.entry_of(bridge_id).symbol(bridge_id)

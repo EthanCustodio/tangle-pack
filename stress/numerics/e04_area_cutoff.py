@@ -172,7 +172,7 @@ def run(config: dict, rec) -> None:
     with rec.stage("bridges"):
         session.create_bridges(fp)
     with rec.stage("iterate_table"):
-        session.infer_iterate_table()
+        session.infer_iterates()
     table = session.workbench.intersection_registry.iterate_table
     rec.metric("n_iterate_links", sum(1 for _ in table.items()))
     rec.checkpoint()

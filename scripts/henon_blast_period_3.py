@@ -80,7 +80,6 @@ session.trim_stable_manifolds(fp3)
 session.trim_stable_manifolds(fp1)
 session.create_bridges(fp3)
 session.create_bridges(fp1)
-session.infer_iterate_table()
 
 T1 = session.trellis(fp1)
 T1.classify_strong_pips()

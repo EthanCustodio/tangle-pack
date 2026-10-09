@@ -175,7 +175,6 @@ def build(case: Case) -> tuple[TangleSession, object, np.ndarray]:
     session.compute_intersections([fp])
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
-    session.infer_iterate_table()
     stable_points = _stable_points(session, fp)
 
     session.classify_strong_pips()

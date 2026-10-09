@@ -940,27 +940,6 @@ class ManifoldMachine:
                 p0.insert_point_backward(new_point, only_forward=only_forward)
 
     @staticmethod
-    def _linear_fit(points) -> Tuple[float, float]:
-        """
-        Takes in two points and gives the linear fit between the first and last
-
-        Parameters:
-            points: list of two points
-        """
-
-        if len(points) != 2:
-            raise ValueError("Linear fit takes in two points")
-
-        point_one = points[0]
-        point_two = points[-1]
-
-        # y = mx + b
-        m = (point_two[1] - point_one[1]) / (point_two[0] - point_one[0])
-        b = point_one[1] - m * point_one[0]
-
-        return m, b
-
-    @staticmethod
     def _parabolic_fit(points) -> Tuple[float, float, float]:
         """
         Takes in three points and gives the parabolic fit ``y = a x^2 + b x + c``
@@ -994,159 +973,12 @@ class ManifoldMachine:
         return a, b, c
 
     @staticmethod
-    def _curvature_area(
-        points: Tuple[Point | BranchPoint, Point | BranchPoint], viewer: ManifoldView
-    ):
-        """
-        Takes in two points and computes the curvature between them.
-
-        Fits 2 parabolas, a forward and a backward one
-        Fits 1 line between the two points
-
-        Computes 2 integrals from the difference tbetween the curves
-        Returns the larger area
-
-        Parameters:
-            points: list of two points
-        """
-
-        if len(points) != 2:
-            raise ValueError("Curvature Area takes in two points")
-
-        p0 = points[0]
-        p1 = points[1]
-
-        # Work in a frame where the chord p0->p1 lies on the x-axis. The curvature
-        # area is a geometric (rotation-invariant) quantity, but the line/parabola
-        # fits are expressed as y-of-x, so a near-vertical segment would otherwise
-        # give a singular Vandermonde matrix (and the chord slope would blow up).
-        # Rotating the local points onto the chord keeps every fit well-conditioned
-        # regardless of the segment's orientation.
-        rotate = ManifoldMachine._chord_frame(p0.get_point(), p1.get_point())
-
-        point_vals = np.vstack((rotate(p0.get_point()), rotate(p1.get_point())))
-
-        # chord is the x-axis in this frame: m ~ 0, d ~ 0
-        m, d = ManifoldMachine._linear_fit([point_vals[0], point_vals[1]])
-
-        # compute the left quadratic fit and area
-        left = viewer.manifold.walk_back(p1, p0)
-        if left is not None:
-
-            left_points = np.vstack(
-                (rotate(left.get_point()), point_vals[0], point_vals[1])
-            )
-
-            a_l, b_l, c_l = ManifoldMachine._parabolic_fit(left_points)
-
-            left_area = abs(
-                ManifoldMachine._compute_single_area(
-                    point_vals, (m, d), (a_l, b_l, c_l)
-                )
-            )
-        else:
-            left_area = 0
-
-        # compute the right quadratic fit and area
-        right = viewer.manifold.walk_fwd(p0, p1)
-        if right is not None:
-
-            right_points = np.vstack(
-                (point_vals[0], point_vals[1], rotate(right.get_point()))
-            )
-
-            a_r, b_r, c_r = ManifoldMachine._parabolic_fit(right_points)
-
-            right_area = abs(
-                ManifoldMachine._compute_single_area(
-                    point_vals, (m, d), (a_r, b_r, c_r)
-                )
-            )
-        else:
-            right_area = 0
-
-        # return whichever area is larger
-        area = left_area if left_area > right_area else right_area
-
-        return area
-
-    @staticmethod
     def _curvature_area_batch(
         p0: np.ndarray,
         p1: np.ndarray,
         left: np.ndarray,
         right: np.ndarray,
     ) -> np.ndarray:
-        """Vectorised :meth:`_curvature_area` (:func:`.geometry.curvature_area_batch`)."""
+        """The curvature area of each segment (:func:`.geometry.curvature_area_batch`)."""
         return curvature_area_batch(p0, p1, left, right)
 
-    @staticmethod
-    def _chord_frame(p0_xy: np.ndarray, p1_xy: np.ndarray):
-        """
-        Return a function rotating points into the frame whose x-axis is the
-        chord ``p0 -> p1`` (origin at ``p0``).
-
-        Used so the curvature fits stay well-conditioned for segments of any
-        orientation, including near-vertical ones. Falls back to the identity
-        (translation only) for a degenerate zero-length chord.
-
-        Args:
-            p0_xy: Coordinates of the first endpoint.
-            p1_xy: Coordinates of the second endpoint.
-
-        Returns:
-            Callable mapping an (x, y) point into the chord frame.
-        """
-        p0_xy = np.asarray(p0_xy, dtype=float).ravel()
-        p1_xy = np.asarray(p1_xy, dtype=float).ravel()
-
-        chord = p1_xy - p0_xy
-        length = float(np.hypot(chord[0], chord[1]))
-        if length == 0.0:
-            return lambda pt: np.asarray(pt, dtype=float).ravel() - p0_xy
-
-        ux, uy = chord[0] / length, chord[1] / length
-        # rotation by -theta maps the chord direction onto +x
-        rot = np.array([[ux, uy], [-uy, ux]], dtype=float)
-
-        def to_frame(pt: np.ndarray) -> np.ndarray:
-            return rot @ (np.asarray(pt, dtype=float).ravel() - p0_xy)
-
-        return to_frame
-
-    @staticmethod
-    def _compute_single_area(
-        points: list,
-        linear_coef: tuple[float, float],
-        quad_coef: tuple[float, float, float],
-    ):
-        """
-        Computes the area between a line and parabola
-        given the coefficients of the two curves and
-        the endpoints
-
-        Parameters:
-            points: two endpoints
-            linear_coef: m, d the linear coefficiencts
-            quad_coef: a, b, c the quadratic coefficients
-        """
-
-        # unpack coefficients
-        m, d = linear_coef
-        a, b, c = quad_coef
-
-        x_min = points[0, 0]
-        x_max = points[-1, 0]
-
-        # coefficients for the analytic solution to the integral
-        a = a / 3
-        b = 0.5 * (b - m)
-        c = c - d
-
-        x_3 = x_max**3 - x_min**3
-        x_2 = x_max**2 - x_min**2
-        x_1 = x_max - x_min
-
-        area = a * x_3 + b * x_2 + c * x_1
-
-        return abs(area)

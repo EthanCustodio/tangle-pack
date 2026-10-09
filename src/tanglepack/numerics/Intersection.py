@@ -178,10 +178,7 @@ class Intersection:
         label: Optional[str] = None,
         manifold_a_key: Optional[ManifoldKey] = None,
         manifold_b_key: Optional[ManifoldKey] = None,
-        unstable_manifold: Optional["BaseManifold"] = None,
-        unstable_segment: Optional[tuple["Point", "Point"]] = None,
         crossing_sign: int = 0,
-        stable_segment: Optional[tuple["Point", "Point"]] = None,
     ) -> Intersection:
         """
         Create an Intersection not backed by a detected segment crossing.
@@ -199,16 +196,8 @@ class Intersection:
             label: Optional human-readable name.
             manifold_a_key: Key of the unstable branch this crossing sits on.
             manifold_b_key: Key of the stable branch this crossing sits on.
-            unstable_manifold: The unstable curve this crossing sits on, when it
-                is known. An anchor passes none: it lies on every unstable branch
-                of its point, and ``create_bridges`` cuts each one rooted there
-                at its own root.
-            unstable_segment: The two adjacent points of ``unstable_manifold``
-                bracketing the crossing, in increasing canonical distance.
             crossing_sign: Handedness of the crossing (see the class docstring).
                 An anchor takes it from the oriented eigenvectors.
-            stable_segment: The two adjacent nodes of the stable branch at the
-                crossing.
 
         Returns:
             An Intersection with ``seg_ids`` and ``id`` both None; the id is
@@ -230,10 +219,7 @@ class Intersection:
             label=label,
             manifold_a_key=manifold_a_key,
             manifold_b_key=manifold_b_key,
-            unstable_manifold=unstable_manifold,
-            unstable_segment=unstable_segment,
             crossing_sign=crossing_sign,
-            stable_segment=stable_segment,
         )
 
     # --- helpers ---

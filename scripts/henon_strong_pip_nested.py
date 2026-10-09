@@ -62,7 +62,6 @@ session.trim_stable_manifolds(fp3)
 session.trim_stable_manifolds(fp1)
 session.create_bridges(fp3)
 session.create_bridges(fp1)
-session.infer_iterate_table()
 
 # One call classifies every tangle (inner and outer); returns {fixed_point: ids}.
 candidates = session.classify_strong_pips()

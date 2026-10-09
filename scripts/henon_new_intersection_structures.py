@@ -26,7 +26,7 @@ bridges = wb.create_bridges(fp)
 new_bridges = wb.iterate_bridge(bridges[2])
 
 
-new_links = wb.infer_iterate_table()
+new_links = wb.infer_iterates()
 print(f"Recorded {new_links} iterate relationships")
 
 # ── Topological phase ──────────────────────────────────────────────────────

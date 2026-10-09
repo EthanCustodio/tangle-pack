@@ -53,7 +53,6 @@ from .geometry import curvature_area_batch
 from .Intersection import Stability
 
 if TYPE_CHECKING:
-    from .BaseManifold import BaseManifold
     from .Bridge import Bridge
     from .FixedPoint import FixedPoint
     from .TangleWorkbench import TangleWorkbench

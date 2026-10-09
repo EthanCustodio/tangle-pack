@@ -255,7 +255,7 @@ class IntersectionRegistry:
         """
         return self._find_collision(intersection)
 
-    def reindex_from(self, old: "IntersectionRegistry") -> dict[int, int]:
+    def reindex_from(self, old: "IntersectionRegistry") -> None:
         """
         Re-number this registry so crossings carried over from ``old`` keep their id.
 
@@ -278,28 +278,18 @@ class IntersectionRegistry:
             old: The registry that existed before the rebuild, whose ids should be
                 preserved wherever the same crossing reappears.
 
-        Returns:
-            Mapping ``{final_id: matched_old_id_or_None}`` for every intersection
-            now stored — useful for logging/debugging the remap. Note the
-            direction: it is keyed by the NEW id, and a value of ``None`` marks a
-            crossing with no counterpart in ``old``.
-
         Note:
             Nothing migrates id-keyed derived state across this call. A Trellis
             (and every result hanging off it, partition elements included) is a
             snapshot dropped and rebuilt when the workbench generation moves,
-            which a renumbering does — remapping its partition maps while leaving
-            its branch orderings and bridge list stale would be worse than
-            rebuilding. The remap is therefore diagnostic only.
+            which a renumbering does.
         """
         intersections = list(self._store.values())
 
         used: set[int] = set()
         final_id: dict[int, int] = {}  # id(intersection object) -> assigned id
-        matched: dict[int, Optional[int]] = {}  # id(intersection object) -> old id
         for ix in intersections:
             match = old._find_collision(ix)
-            matched[id(ix)] = match
             if match is not None and match not in used:
                 final_id[id(ix)] = match
                 used.add(match)
@@ -324,7 +314,6 @@ class IntersectionRegistry:
         self._generation += 1
         self._orders_version += 1
 
-        remap: dict[int, int] = {}
         for ix in intersections:
             fid = final_id[id(ix)]
             ix.id = fid
@@ -340,11 +329,8 @@ class IntersectionRegistry:
                 manifold_b_key=ix.manifold_b_key,
                 label=ix.label,
             )
-            remap[fid] = matched[id(ix)]
         self._graph_adjacency_dirty = True
         self._graph_bridges = None
-
-        return remap
 
     def __getitem__(self, id: int) -> Intersection:
         """registry[id] → Intersection. Raises KeyError if id is unknown."""
@@ -763,22 +749,6 @@ class IntersectionRegistry:
     def as_backward_array(self, max_depth: int = 5) -> NDArray[np.int64]:
         """Dense array B[i, d-1] = ID of f^{-d}(ids[i]). Shape (N, max_depth). -1 = unknown."""
         return self.iterate_table.as_backward_array(self.all_ids(), max_depth)
-
-    def unstable_order_array(self) -> NDArray[np.float64]:
-        """(N, 3) array [id, unstable_cdist, stable_cdist] sorted by unstable_cdist."""
-        rows = [
-            [iid, self._store[iid].unstable_cdist, self._store[iid].stable_cdist]
-            for iid in self._unstable_order
-        ]
-        return np.array(rows, dtype=np.float64)
-
-    def stable_order_array(self) -> NDArray[np.float64]:
-        """(N, 3) array [id, unstable_cdist, stable_cdist] sorted by stable_cdist."""
-        rows = [
-            [iid, self._store[iid].unstable_cdist, self._store[iid].stable_cdist]
-            for iid in self._stable_order
-        ]
-        return np.array(rows, dtype=np.float64)
 
     # ── internal helpers ───────────────────────────────────────────────────
 

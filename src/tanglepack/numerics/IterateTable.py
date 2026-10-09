@@ -95,24 +95,6 @@ class IterateTable:
             n += 1
         return chain
 
-    def backward_chain(self, source_id: int) -> list[int]:
-        """Return [id, f^{-1}(id), f^{-2}(id), ...] for all recorded backward iterates."""
-        chain = [source_id]
-        n = 1
-        while (prev := self[source_id, -n]) is not None:
-            chain.append(prev)
-            n += 1
-        return chain
-
-    def all_registered_ids(self) -> set[int]:
-        """All intersection IDs that appear in any entry of this table."""
-        ids = set(self._forward.keys()) | set(self._backward.keys())
-        for sub in self._forward.values():
-            ids.update(sub.values())
-        for sub in self._backward.values():
-            ids.update(sub.values())
-        return ids
-
     def as_forward_array(self, ids: list[int], max_depth: int) -> NDArray[np.int64]:
         """
         Dense 2D array A where A[i, d-1] = ID of f^d(ids[i]), or -1 if unknown.

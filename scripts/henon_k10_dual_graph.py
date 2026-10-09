@@ -167,7 +167,6 @@ def main() -> None:
     session.compute_intersections([fp])
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
-    session.infer_iterate_table()
     logger.info("%s", session.trellis(fp).summary())
 
     # 4. The topological algorithms: strong pip, pseudoneighbors, holes, partition.

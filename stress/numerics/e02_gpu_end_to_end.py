@@ -125,7 +125,7 @@ def downstream(session, case: str, fp, rec) -> None:
         ("compute_intersections", lambda: session.compute_intersections([fp], infer_iterates=False)),
         ("trim", lambda: session.trim_stable_manifolds(fp)),
         ("create_bridges", lambda: session.create_bridges(fp)),
-        ("infer_iterate_table", lambda: session.infer_iterate_table()),
+        ("infer_iterate_table", lambda: session.infer_iterates()),
     ]:
         gc.collect()
         with rec.stage(name):

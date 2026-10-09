@@ -11,7 +11,6 @@ zones and blasting -- that need both halves at once.
 from __future__ import annotations
 
 import logging
-import warnings
 from typing import Callable, Iterable, Optional, TYPE_CHECKING
 
 import numpy as np
@@ -943,28 +942,6 @@ class TangleSession:
         """
         target = minimal if minimal is not None else self.minimal_trellis()
         return plotting.plot_minimal_trellis(target, ax=ax, **kwargs)
-
-    def invalidate_trellises(self) -> None:
-        """
-        No-op alias kept for one release.
-
-        Cached Trellises are invalidated by the workbench generation counter
-        (see :meth:`trellis`), so nothing has to be dropped by hand any more.
-        Calls are harmless; new code should simply take a fresh
-        :meth:`trellis`.
-
-        Warns:
-            DeprecationWarning: Always -- the behaviour changed from "drop every
-                cached Trellis" to "do nothing", which an out-of-repo caller has
-                to be told about while the alias still exists.
-        """
-        warnings.warn(
-            "TangleSession.invalidate_trellises() is a no-op and will be removed: "
-            "the Trellis cache is keyed by TangleWorkbench.generation, so a stale "
-            "snapshot is rebuilt by the next trellis() call.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
 
     def _is_stale(self, trellis: Trellis) -> bool:
         """Whether a cached Trellis snapshot predates the workbench's current state."""

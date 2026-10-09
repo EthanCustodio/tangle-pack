@@ -30,8 +30,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, Optional, TYPE_CHECKING
 
-import numpy as np
-from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from ..numerics.FixedPoint import FixedPoint
@@ -77,11 +75,6 @@ class TrellisBranch:
         Falls back to the bare period if k_value has not been set.
         """
         return int(getattr(self.fixed_point, "k_value", self.fixed_point.period))
-
-    @property
-    def anchor_coords(self) -> NDArray[np.float64]:
-        """Phase-space coordinates of the anchoring periodic point as (2,)."""
-        return np.asarray(self.fixed_point.coordinates[self.orbit_index]).ravel()
 
     # ── ordering along the branch ───────────────────────────────────────────
 

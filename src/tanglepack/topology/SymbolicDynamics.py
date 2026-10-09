@@ -215,11 +215,6 @@ class Symbol:
             body += "^{-1}"
         return f"${body}$"
 
-    @property
-    def is_inverse(self) -> bool:
-        """True for a ``target -> source`` traversal."""
-        return self.direction < 0
-
     def __str__(self) -> str:
         return self.text
 
@@ -796,24 +791,6 @@ class SymbolicDynamics:
                     match.members.append(member.bridge_id)
 
     # ── lookups ─────────────────────────────────────────────────────────
-
-    def dynamics_of(self, letter: str) -> ClassDynamics:
-        """
-        The record of the class a letter names.
-
-        Args:
-            letter: An active or inert letter.
-
-        Returns:
-            Its :class:`ClassDynamics`.
-
-        Raises:
-            KeyError: If no class carries the letter.
-        """
-        for cd in self.classes.values():
-            if cd.letter == letter:
-                return cd
-        raise KeyError(f"no bridge class carries the letter {letter!r}")
 
     def word(self, letter: str, *, refined: bool = True) -> str:
         """

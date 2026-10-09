@@ -64,7 +64,6 @@ session.trim_stable_manifolds(fp3)
 session.trim_stable_manifolds(fp1)
 session.create_bridges(fp3)
 session.create_bridges(fp1)
-session.infer_iterate_table()
 
 # pick a strong pip on each tangle
 T1 = session.trellis(fp1)

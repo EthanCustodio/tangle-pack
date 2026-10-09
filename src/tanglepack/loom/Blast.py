@@ -178,14 +178,6 @@ class BlastResult:
         """True if no interior bridge remained before ``num_iterations`` ran."""
         return self.stop_reason == "frontier_empty"
 
-    def max_depth_reached(self) -> int:
-        """The deepest generation that still held at least one interior bridge."""
-        depth = 0
-        for d, frontier in enumerate(self.interior_bridges_by_iteration):
-            if frontier:
-                depth = d
-        return depth
-
     def all_interior_bridges(self) -> list["Bridge"]:
         """Every distinct bridge that was ever an interior survivor, in order."""
         seen: dict[int, "Bridge"] = {}

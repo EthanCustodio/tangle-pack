@@ -137,7 +137,7 @@ import math
 from itertools import count
 from typing import Iterable, Optional, TYPE_CHECKING
 
-from ..numerics.Intersection import Intersection, ManifoldKey
+from ..numerics.Intersection import ManifoldKey
 from .TopologyResults import PseudoneighborPair
 
 if TYPE_CHECKING:

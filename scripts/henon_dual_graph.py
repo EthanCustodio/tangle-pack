@@ -78,7 +78,6 @@ def build_k10() -> tuple[TangleSession, list[FixedPoint]]:
     session.compute_intersections([fp])
     session.trim_stable_manifolds(fp)
     session.create_bridges(fp)
-    session.infer_iterate_table()
 
     session.classify_strong_pips()
     session.compute_pseudoneighbors()
@@ -130,7 +129,6 @@ def build_p3() -> tuple[TangleSession, list[FixedPoint]]:
     session.trim_stable_manifolds(fp1)
     session.create_bridges(fp3)
     session.create_bridges(fp1)
-    session.infer_iterate_table()
 
     session.classify_strong_pips()
     session.compute_pseudoneighbors()

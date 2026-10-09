@@ -52,7 +52,7 @@ wb.trim_stable_manifolds(fp1)
 bridges = wb.create_bridges(fp3)
 bridges1 = wb.create_bridges(fp1)
 
-new_links = wb.infer_iterate_table()
+new_links = wb.infer_iterates()
 print(f"Recorded {new_links} iterate relationships")
 
 # ── Topological phase ──────────────────────────────────────────────────────

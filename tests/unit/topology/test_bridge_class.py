@@ -215,7 +215,7 @@ def test_loop_folds_into_the_class_whose_image_holds_it(k10_partitioned):
     }
     current = parent[frozenset(loop.bridge_id)]
     while current != ancestor.bridge_id:
-        assert table.member_of(current).is_loop
+        assert table.entry_of(current).member(current).is_loop
         current = parent[frozenset(current)]
 
 

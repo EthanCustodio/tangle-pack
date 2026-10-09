@@ -39,7 +39,6 @@ wb.grow_n_times(fp3, "stable", num_iterations=6)
 wb.compute_intersections(fp3)
 wb.trim_stable_manifolds(fp3)
 bridges = wb.create_bridges(fp3)
-wb.infer_iterate_table()
 
 
 T = Trellis.from_workbench(wb, fp3)

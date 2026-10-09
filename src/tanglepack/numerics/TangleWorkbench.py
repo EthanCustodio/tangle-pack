@@ -50,7 +50,7 @@ from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
 from .BaseManifold import BaseManifold
 from .Bridge import Bridge, BridgeId
-from .Intersection import Intersection, ManifoldKey, Stability
+from .Intersection import Intersection, Stability
 from .IntersectionRegistry import DEDUP_RTOL, IntersectionRegistry
 from .IterateInference import IterateInference
 from .diagnostics import (
@@ -2020,13 +2020,6 @@ class TangleWorkbench:
         return self._bridge_iterator.iterate_all_bridges()
 
     # ── iterate table inference (see IterateInference) ───────────────────────
-
-    def infer_iterate_table(self) -> int:
-        """:meth:`infer_iterates` over every crossing, kept for the scripts.
-
-        The public-API pass (D8) decides its fate.
-        """
-        return self.infer_iterates()
 
     def infer_iterates(self, sources: Optional[Iterable[int]] = None) -> int:
         """

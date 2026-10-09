@@ -373,7 +373,7 @@ def curvature_area_batch(
             c = yt - a * xt**2 - b * xt
 
             # closed-form integral between parabola and chord (see
-            # ManifoldMachine._compute_single_area): coefficients of (quad - line)
+            # the derivation above): coefficients of (quad - line)
             aa = a / 3.0
             bb = 0.5 * (b - m)
             cc = c - d

@@ -50,7 +50,7 @@ def run(config: dict, rec: harness.Recorder) -> None:
     with rec.stage("bridges"):
         session.trim_stable_manifolds(fp)
         session.create_bridges(fp)
-        session.infer_iterate_table()
+        session.infer_iterates()
 
     wb = session.workbench
     for stability in ("unstable", "stable"):

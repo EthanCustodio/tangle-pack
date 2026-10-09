@@ -56,7 +56,7 @@ snapshot's own branch orderings. A registry renumbering (``reindex_from``) moves
 the workbench generation, so the whole Trellis -- results and all -- is dropped
 and rebuilt rather than having its id-keyed tables remapped: remapping only the
 partition maps would leave the branch orderings and bridge list stale, which is
-the more dangerous half. Nothing therefore consumes ``reindex_from``'s remap.
+the more dangerous half.
 
 Open items on the partition-element lookups (Phase 5), both unexercised by any
 available fixture:

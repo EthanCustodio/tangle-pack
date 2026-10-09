@@ -68,7 +68,6 @@ session.trim_stable_manifolds(fp3)
 session.trim_stable_manifolds(fp1)
 session.create_bridges(fp3)
 session.create_bridges(fp1)
-session.infer_iterate_table()
 
 # Strong pips (default choice per tangle), then both resonance zones in one
 # batched recompute so every pip id stays valid.

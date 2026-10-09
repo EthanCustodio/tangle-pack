@@ -25,8 +25,8 @@ bridges = wb.create_bridges(fp)
 
 new_bridges = wb.iterate_bridge(bridges[2])
 wb.iterate_bridge(new_bridges[0])
+wb.infer_iterates()
 
-wb.infer_iterate_table()
 
 
 T = Trellis.from_workbench(wb, fp)

@@ -12,7 +12,7 @@ Two config kinds:
 * ``stages`` -- grow a fixed number of unstable steps (chosen from the growth
   curves so the unstable point count spans ~1e3 .. ~1e6), the stable side to
   turnaround, then time ``compute_intersections``, ``trim + create_bridges``
-  and ``infer_iterate_table`` separately as functions of the point count.
+  and ``infer_iterates`` (stage "infer_iterate_table") separately as functions of the point count.
 
 Note: past ~10 steps the unstable arm of every period-1 Hénon saddle here
 escapes to infinity (max|coord| ~1e3 at 1e4 points, ~1e6 at 4e5 points), and
@@ -159,7 +159,7 @@ def stages(session, fp, config: dict, rec, baseline: float) -> None:
 
     gc.collect()
     with rec.stage("infer_iterate_table", sync=False):
-        rec.metric("iterates_inferred", session.infer_iterate_table())
+        rec.metric("iterates_inferred", session.infer_iterates())
     rec.metric("rss_final_mb", rss_mb())
 
 
