@@ -923,9 +923,8 @@ class IteratedHomotopyPartition(PartitionFamily):
             # The base f(sigma) lies on ONE stable branch: its ends are the +1
             # images of one branch's crossings. An anchor lies on every branch of
             # its point (D4), so the branch is read at a non-anchor end.
-            unstable_key = trellis.unstable_key_of(chain[0])
             ends = {
-                trellis.stable_key_at(c, unstable_key)
+                trellis.intersection(c).manifold_b_key
                 for c in (crossings[0], crossings[-1])
                 if not trellis.intersection(c).is_anchor
             }

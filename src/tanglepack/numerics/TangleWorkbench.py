@@ -1329,13 +1329,19 @@ class TangleWorkbench:
             manifolds_to_index.extend(self._iter_manifolds(fp, "stable"))
         self.Tangle.add_manifolds(manifolds_to_index)
         # A blast image is computed manifold too (D1, NUM-12): re-indexed query-only,
-        # as the blast indexed it. A curve that adds no segment of its own lies on a
-        # grown branch now (growth merged it in) and is dropped.
-        self._image_curves = [
-            curve for curve in self._image_curves
-            if all(curve.fixed_point is not fp for fp in fixed_points)
-            or self.Tangle.add_manifold(curve, index_segments=False)
-        ]
+        # as the blast indexed it. On a FRESH index a curve that adds no segment of
+        # its own lies on a grown branch now (growth merged it in) and is dropped;
+        # an accumulating call cannot tell (the bridges cut out of the curve still
+        # own its edges), so it keeps every curve.
+        kept = []
+        for curve in self._image_curves:
+            if (all(curve.fixed_point is not fp for fp in fixed_points)
+                    or self.Tangle.add_manifold(curve, index_segments=False)
+                    or not reset):
+                kept.append(curve)
+            else:
+                self.Tangle.release_manifold(curve)
+        self._image_curves = kept
 
         # Anchors FIRST: every periodic point is a crossing of its own manifolds,
         # and declaring it beats detecting it (see _register_anchors).
@@ -1793,12 +1799,13 @@ class TangleWorkbench:
         # partial piece, as at blast time (NUM-12).
         crossings_on = Counter(id(ix.unstable_manifold) for ix in crossings)
         indexed = {id(ix.manifold_a_key[0]) for ix in crossings if ix.is_anchor}
+        held = {id(piece) for piece in self._partial_bridges}
         self._partial_bridges += [
             curve for curve in self._image_curves
             if id(curve.fixed_point) in indexed
             and (fixed_point is None or curve.fixed_point is fixed_point)
             and crossings_on[id(curve)] < 2
-            and all(piece is not curve for piece in self._partial_bridges)
+            and id(curve) not in held
         ]
         return cut
 

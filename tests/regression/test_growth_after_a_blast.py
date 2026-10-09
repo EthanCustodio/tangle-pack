@@ -84,3 +84,13 @@ def test_blasting_does_not_depend_on_recomputes() -> None:
     _recompute(mixed)
     cases._blast(mixed.session, mixed.zones[0], mixed.fixed_points)
     assert signature(mixed) == signature(straight)
+
+
+def test_accumulating_recompute_keeps_the_image_curves() -> None:
+    """``reset=False`` after a blast leaves the image curves in the index; the next
+    plain recompute still finds every crossing born on them."""
+    case = cases.build_k28(blasts=2)
+    before = len(case.session.workbench.intersection_registry)
+    case.session.workbench.compute_intersections(case.fixed_points, reset=False, diagnose=False)
+    _recompute(case)
+    assert len(case.session.workbench.intersection_registry) >= before

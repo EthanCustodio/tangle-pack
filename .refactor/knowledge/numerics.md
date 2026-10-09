@@ -177,7 +177,11 @@ the crossing / iterate-table path is described; growth, refinement and budgets a
   flag lives on the curve and survives a rebuild). `compute_intersections` re-indexes every image
   curve of a selected fixed point query-only right after the bulk load and drops a curve that adds
   no segment of its own (`Tangle.add_manifold` now returns the count of new segments: 0 means growth
-  merged the curve into a branch, edges are deduped by point identity). `create_bridges` cuts image
+  merged the curve into a branch, edges are deduped by point identity; the dropped curve's claims
+  are released). That reading holds only on a FRESH index: under `reset=False` the bridges cut out
+  of the curve still own its edges, so the count is 0 for a live curve and every curve is kept
+  (review fix; before it, `reset=False` after a blast lost k28 two blasts 10 -> 8 crossings on
+  the next recompute). `create_bridges` cuts image
   curves like any curve and holds a curve of an indexed fixed point (one with an anchor in the
   registry) crossed fewer than twice as one partial piece. `clear_bridges` releases only id-carrying
   bridges: a partial piece is computed manifold and stays indexed. `_recut_bridges_after_growth`
