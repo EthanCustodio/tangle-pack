@@ -741,7 +741,7 @@ class TangleSession:
                 children.setdefault(parent, []).append(by_id[child])
         centroids = {
             id(fp): np.mean(
-                [np.ravel(np.asarray(c, dtype=float))[:2] for c in fp.coordinates], axis=0
+                [np.asarray(c, dtype=float) for c in fp.coordinates], axis=0
             )
             for group in children.values()
             for fp in group
@@ -856,7 +856,7 @@ class TangleSession:
             if not order or vertices is None or len(vertices) < 3:
                 continue
             fixed_point = zone.fixed_point
-            points = [np.ravel(np.asarray(c, dtype=float))[:2] for c in fixed_point.coordinates]
+            points = [np.asarray(c, dtype=float) for c in fixed_point.coordinates]
             centroid = np.mean(points, axis=0)
             angles = {}
             if len(order) > 1:
@@ -874,7 +874,7 @@ class TangleSession:
         parents: dict = {}
         for zone in zones:
             fixed_point = zone.fixed_point
-            point = np.ravel(np.asarray(fixed_point.coordinates[0], dtype=float))[:2]
+            point = np.asarray(fixed_point.coordinates[0], dtype=float)
             containers = [
                 other
                 for other in zones

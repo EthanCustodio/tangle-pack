@@ -18,8 +18,9 @@ def test_create_fixed_point():
     assert len(p.unstable_eigenvectors) == period
     assert len(p.jacobians) == period
 
-    assert np.shape(p.stable_eigenvectors[0]) == (2, 1)
-    assert np.shape(p.unstable_eigenvectors[0]) == (2, 1)
+    assert np.shape(p.coordinates[0]) == (2,)
+    assert np.shape(p.stable_eigenvectors[0]) == (2,)
+    assert np.shape(p.unstable_eigenvectors[0]) == (2,)
 
     assert np.shape(p.jacobians[0]) == (2, 2)
 
@@ -199,6 +200,17 @@ def test_a_solved_area_preserving_orbit_preserves_orientation(guess):
     fp = _solved(guess)
     assert np.linalg.det(fp.partial_jacobians[0]) > 0
     assert fp.preserves_orientation is True
+
+
+@pytest.mark.parametrize("guess", [[4, -4], [[0, 1], [-1, 0], [-1, 1]]], ids=["period_1", "period_3"])
+def test_a_solved_orbit_stores_plain_shapes(guess):
+    """API-6: orbit points and eigenvectors are (2,), eigenvalues floats -- no reader ravels."""
+    fp = _solved(guess)
+    for i in range(fp.period):
+        assert np.shape(fp.coordinates[i]) == (2,)
+        assert np.shape(fp.unstable_eigenvectors[i]) == np.shape(fp.stable_eigenvectors[i]) == (2,)
+        assert type(fp.unstable_eigenvalues[i]) is float
+        assert type(fp.stable_eigenvalues[i]) is float
 
 
 def test_a_negative_single_step_determinant_reverses_orientation():

@@ -129,17 +129,14 @@ class ManifoldInitializer:
         else:
             direction_from_fixed_point = fixed_point.stable_eigenvectors[orbit_index]
 
-        direction_from_fixed_point = np.asarray(direction_from_fixed_point).flatten()
-        direction_from_fixed_point /= np.linalg.norm(direction_from_fixed_point)
+        direction_from_fixed_point = direction_from_fixed_point / np.linalg.norm(
+            direction_from_fixed_point
+        )
 
         if branch_index == 1 and not fixed_point.check_inversion():
             direction_from_fixed_point = -direction_from_fixed_point
 
-        first_point = (
-            fixed_point.coordinates[orbit_index] + (step) * direction_from_fixed_point
-        )
-
-        return np.array(first_point, dtype=np.float64).reshape(-1)
+        return fixed_point.coordinates[orbit_index] + step * direction_from_fixed_point
 
     def get_first_point_back(
         self,
@@ -312,8 +309,8 @@ class ManifoldInitializer:
         unstable_approx = approx_dirs["unstable"]
         stable_approx = approx_dirs["stable"]
 
-        unstable_dir = fixed_point.unstable_eigenvectors[0].ravel()
-        stable_dir = fixed_point.stable_eigenvectors[0].ravel()
+        unstable_dir = fixed_point.unstable_eigenvectors[0]
+        stable_dir = fixed_point.stable_eigenvectors[0]
 
         # check if the eigenvectors and approximate directions align
         unstable_test = True if np.dot(unstable_approx, unstable_dir) > 0 else False
@@ -332,15 +329,11 @@ class ManifoldInitializer:
 
             partial_jacobian = fixed_point.partial_jacobians[i]
 
-            unstable_approx = (
-                partial_jacobian @ fixed_point.unstable_eigenvectors[i]
-            ).ravel()
-            stable_approx = (
-                partial_jacobian @ fixed_point.stable_eigenvectors[i]
-            ).ravel()
+            unstable_approx = partial_jacobian @ fixed_point.unstable_eigenvectors[i]
+            stable_approx = partial_jacobian @ fixed_point.stable_eigenvectors[i]
 
-            unstable_dir = fixed_point.unstable_eigenvectors[i + 1].ravel()
-            stable_dir = fixed_point.stable_eigenvectors[i + 1].ravel()
+            unstable_dir = fixed_point.unstable_eigenvectors[i + 1]
+            stable_dir = fixed_point.stable_eigenvectors[i + 1]
 
             # check if the eigenvectors and approximate directions align
             unstable_test = True if np.dot(unstable_approx, unstable_dir) > 0 else False

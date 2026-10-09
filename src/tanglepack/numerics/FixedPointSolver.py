@@ -286,10 +286,9 @@ class FixedPointSolver:
 
         Returns:
             tuple: (eigenvalues, eigenvectors), where:
-                eigenvalues: A list of (2, 1) arrays;
-                    [unstable, stable] for each iterate.
-                eigenvectors: A list of two (2, 1) arrays;
-                    [unstable, stable] for each iterate.
+                eigenvalues: Per iterate, the floats ``[unstable, stable]``.
+                eigenvectors: Per iterate, the two ``(2,)`` arrays
+                    ``[unstable, stable]``.
 
         Raises:
             ValueError: If any iterate is not a saddle (see
@@ -309,8 +308,8 @@ class FixedPointSolver:
 
         period, _ = np.shape(np.atleast_2d(fixed_point))
 
-        eigenvector_list = [[np.empty((2, 1)), np.empty((2, 1))] for _ in range(period)]
-        eigenvalue_list = [np.empty((2, 1)) for _ in range(period)]
+        eigenvector_list: list[list[NDArray[np.float64]]] = []
+        eigenvalue_list: list[list[float]] = []
 
         for i in range(period):
 
@@ -324,20 +323,20 @@ class FixedPointSolver:
 
             unstable_index = int(np.argmax(np.abs(eigenvalues)))
 
-            unstable_vector = eigenvectors[:, unstable_index].reshape(2, 1)
-            stable_vector = eigenvectors[:, 1 - unstable_index].reshape(2, 1)
+            unstable_vector = eigenvectors[:, unstable_index].reshape(2)
+            stable_vector = eigenvectors[:, 1 - unstable_index].reshape(2)
 
             if self.orient is not None:
                 unstable_vector, stable_vector = self.orient(
                     i, unstable_vector, stable_vector
                 )
 
-            eigenvector_list[i][0] = unstable_vector
-            eigenvector_list[i][1] = stable_vector
+            eigenvector_list.append([unstable_vector, stable_vector])
 
             logger.debug("eigenvalues at orbit index %d: %s", i, eigenvalues)
-            eigenvalue_list[i][0] = eigenvalues[unstable_index]
-            eigenvalue_list[i][1] = eigenvalues[1 - unstable_index]
+            eigenvalue_list.append(
+                [float(eigenvalues[unstable_index]), float(eigenvalues[1 - unstable_index])]
+            )
 
         return eigenvalue_list, eigenvector_list
 

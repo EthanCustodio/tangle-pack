@@ -9,8 +9,8 @@ is :mod:`~.FixedPointSolver`'s job, not this module's.
 
 Dev Notes:
 
-Ensure that the shape of the coordinates array is consisntent everywhere
-in the package. In this class it is (2, 1). I know in BasePoint it is (2,).
+Shapes (API-6, WP11): an orbit point and an eigenvector are ``(2,)`` arrays, as
+in ``BasePoint``, and an eigenvalue is a float, so no reader ravels.
 
 Eigenvectors under inversion (answered, WP3 2026-10-08): one vector per orbit
 point is enough. It orients branch 0; branch 1 of an inversion point is the
@@ -19,7 +19,9 @@ second half of the same chain, reached by mapping the branch-0 seed around
 the negated vector. ``orient_eigenvectors`` orients branch 0 and propagates it
 along the orbit exactly as without inversion.
 
-Specify why we store the partial_jacobians. What are they used for?
+The single-step Jacobians (``partial_jacobians``) propagate the eigenvector
+orientation along the orbit and give the map's orientation
+(:attr:`FixedPoint.preserves_orientation`).
 """
 
 from __future__ import annotations
@@ -68,24 +70,23 @@ class FixedPoint:
         period (int): Period of the fixed point.
         branch_points (List[BranchPoint]): List of the individual BranchPoints that
             make up the fixed point.
-        coordinates (List[np.ndarray]): Array storing the coordinates of the
-            fixed point. The shape is (2, 1).
+        coordinates (List[np.ndarray]): The orbit points, each ``(2,)`` (the
+            solver stores the ``(period, 2)`` array).
 
         accuracy (float): Computed as the norm of the difference between the
             fixed point and it's iterate. {latex}
         k_value (int): Number of iterations it takes to return to the segment
             of manifold you started from.
 
-        unstable_eigenvectors (List[np.ndarray]): List of arrays storing the
-            eigenvectors corresponding to the direction of the unstable manifold.
-        unstable_eigenvalues (List[float]): List of arrays storing the eigenvalues
-            corresponding to the unstable manifold. If an eigenvalue is < 0 the
+        unstable_eigenvectors (List[np.ndarray]): Per orbit point, the ``(2,)``
+            eigenvector of the unstable manifold.
+        unstable_eigenvalues (List[float]): Per orbit point, the unstable
+            eigenvalue of the full-cycle Jacobian. If an eigenvalue is < 0 the
             fixed point has inversion.
-        stable_eigenvectors (List[np.ndarray]): List of arrays storing the eigenvectors
-            corresponding to the direction fo the stable manifold.
-        stable_eigenvalues (List[float]): List of arrays storing the eigenvalues
-            corresponding to the stable manifold. If an eigenvalue is < 0 the
-            fixed point has inversion.
+        stable_eigenvectors (List[np.ndarray]): Per orbit point, the ``(2,)``
+            eigenvector of the stable manifold.
+        stable_eigenvalues (List[float]): Per orbit point, the stable
+            eigenvalue. If an eigenvalue is < 0 the fixed point has inversion.
 
         jacobians (List[np.ndarray]): List of the full cycle Jacobians at each
             iterate of the fixed point. These Jacobians are used to compute the
@@ -125,12 +126,12 @@ class FixedPoint:
         self.branch_points = [
             BranchPoint(_EIGENDIRECTIONS, (0.0, 0.0)) for _ in range(period)
         ]
-        self.coordinates = [np.empty((2, 1)) for _ in range(period)]
+        self.coordinates = [np.zeros(2) for _ in range(period)]
 
-        self.unstable_eigenvectors = [np.empty((2, 1)) for _ in range(period)]
+        self.unstable_eigenvectors = [np.zeros(2) for _ in range(period)]
         self.unstable_eigenvalues = [0.0] * period
 
-        self.stable_eigenvectors = [np.empty((2, 1)) for _ in range(period)]
+        self.stable_eigenvectors = [np.zeros(2) for _ in range(period)]
         self.stable_eigenvalues = [0.0] * period
 
         self.accuracy = 0.0
@@ -228,8 +229,7 @@ class FixedPoint:
         for orbit_index, (lambda_u, lambda_s) in enumerate(
             zip(self.unstable_eigenvalues, self.stable_eigenvalues)
         ):
-            u = float(np.asarray(lambda_u).ravel()[0])
-            s = float(np.asarray(lambda_s).ravel()[0])
+            u, s = float(lambda_u), float(lambda_s)
             if u == 0.0 or s == 0.0:
                 continue  # eigenvalue not computed yet -- no sign to compare
             if (u < 0) != (s < 0):
@@ -304,12 +304,12 @@ class FixedPoint:
                 "eigenvalues are computed."
             )
 
-        lambda_u = float(np.abs(np.asarray(self.unstable_eigenvalues[0]).ravel()[0]))
+        lambda_u = abs(float(self.unstable_eigenvalues[0]))
         beta_u = lambda_u ** (1.0 / self.period)
         if stability == "unstable":
             return beta_u
 
-        lambda_s = float(np.abs(np.asarray(self.stable_eigenvalues[0]).ravel()[0]))
+        lambda_s = abs(float(self.stable_eigenvalues[0]))
         if lambda_s == 0.0 or abs(lambda_u * lambda_s - 1.0) <= _DET_TOL:
             return 1.0 / beta_u
         return lambda_s ** (1.0 / self.period)

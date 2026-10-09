@@ -38,7 +38,8 @@ class BranchPoint(BasePoint):
         EX: next_iterate, prev_iterate
 
     Attributes:
-        num_branches (int): _description_
+        num_branches (int): The eigendirection slots at this point (two: one
+            per direction along each eigenvector).
         cdists (List[float]): Canonical distance from the fixed point for both the
             stable and unstable manifolds. Index 0 is unstable, index 1 is stable.
         edists (List[float]): Arclength distance from the fixed point for both the
