@@ -323,11 +323,23 @@ class ManifoldMachine:
         with self._top_level_call():
             return self._iterate_manifold(manifold)
 
+    @staticmethod
+    def _manifold_from_points(
+        points: list[Point], stability: Stability, stretch_param: float, fixed_point: FixedPoint
+    ) -> BaseManifold:
+        """A key-less manifold through fresh points in cdist order, linked along the
+        geometric list (forward on an unstable branch, backward on a stable one)."""
+        manifold = BaseManifold(points[0], stability, stretch_param, fixed_point, manifold_key=None)
+        for point, following in zip(points, points[1:]):
+            if stability == "unstable":
+                point.insert_point_forward(following)
+            else:
+                point.insert_point_backward(following)
+        manifold.tail = points[-1]
+        return manifold
+
     def _iterate_manifold(self, manifold: BaseManifold) -> BaseManifold:
         """The body of :meth:`iterate_manifold`, inside the caller's budget scope."""
-        from .ManifoldInitializer import ManifoldInitializer
-
-        initializer = ManifoldInitializer(self.system, self)
         viewer = ManifoldView(manifold, self.system)
 
         non_iterated_coords = manifold.get_non_iterated_point_array()
@@ -361,13 +373,8 @@ class ManifoldMachine:
             # The image of a piece lives on the branch one map step forward, which
             # only the caller can name (see iterate_bridge); the machine leaves the
             # key unset rather than copying the un-advanced one.
-            new_iterated_points = initializer.construct_manifold_from_point_list(
-                new_points,
-                manifold.stability,
-                manifold.stretch_param,
-                manifold.fixed_point,
-                manifold.branch_index,
-                manifold_key=None,
+            new_iterated_points = self._manifold_from_points(
+                new_points, manifold.stability, manifold.stretch_param, manifold.fixed_point
             )
 
         # The images that already exist may lie on several curves (NUM-9): merge

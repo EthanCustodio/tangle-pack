@@ -8,34 +8,19 @@ around the orbit, and orients the eigenvectors consistently.
 
 Dev Notes:
 
-Fully commit to one way of doing the manifold creation. 
-Either Ethan way or Kevin way. The suspicion is that what was
-wront with Ethan way was the mapping of the stable manifolds backwards 
-in the right way like I did for the Kevin way. So if I fix that then 
-I can just fully commit to that way. To do Ethan's way we will take 
-the things I learned from Kevin's way like the output dict structure and such.
-    There are two advantages and one disadvantage to doing Ethan way
-    +1 It will be symmetrical, all manifolds will grow at the same rate
-    +1 This class will have no dependency on ManifoldMachine which is awkward
-    -1 p**2 unnessesary points are added to the manifold.
+One construction (WP11): one fundamental segment is seeded per chain and mapped
+around it (``construct_kevin_way``); the per-orbit-point seeding ("Ethan way")
+was never kept in code.
 
 branch_index (answered, WP3 2026-10-08): a branch index names an
 EIGENDIRECTION, and each one seeds one chain of ``k_value`` pieces walked by
 ``FixedPoint.advance_key``. An inversion chain covers both branches, so asking
 for branch 1 there adds nothing; without inversion branch 1 is its own chain.
 
-orient_manifolds only accepts approximate directions for the 0th iterate of
-the cycle, and it requires both a stable and an unstable direction. Allowing
-an arbitrary iterate, and allowing one of the two directions to be given on
-its own, are both open.
-
-Look at insert_point_geometrically. We have the same function in manifold machine.
-We only need to have that functionality in one place. If the function here 
-does something different then it needs a different name. If they both need this helper
-then it needs to go down to a lower level. Potentially in BaseManifold. 
-
-The get_initial_fundamental segment code is quite long.
-Make it more concise or split it into multiple functions.
+Open requests (features, for the API plan): orient_manifolds only accepts
+approximate directions for the 0th iterate of the cycle, and it requires both a
+stable and an unstable direction. Allowing an arbitrary iterate, and allowing
+one of the two directions to be given on its own, are both open.
 
 Seed step. get_first_point seeds the fundamental segment a distance
 ``max(fixed_point.accuracy, _MIN_SEED_STEP)`` along the eigenvector. The dynamic
@@ -58,11 +43,10 @@ from __future__ import annotations
 from typing import Dict, Tuple, Optional
 from numpy.typing import NDArray
 from .FixedPoint import FixedPoint
-from .BranchPoint import BranchPoint
 from .DynamicalSystem import DynamicalSystem
 from .ManifoldMachine import ManifoldMachine
 from .BaseManifold import BaseManifold
-from .Intersection import ManifoldKey, Stability
+from .Intersection import Stability
 from .Point import Point
 import numpy as np
 
@@ -86,8 +70,7 @@ _MIN_SEED_STEP = 5e-6
 
 class ManifoldInitializer:
     """
-    Toolbox capable of getting the initial manifold segments from a fixed point
-    and initializing manifolds from lists of points.
+    Toolbox getting the initial manifold segments from a fixed point.
 
     Attributes:
         system (DynamicalSystem): All the functions related to the dynamical system.
@@ -272,53 +255,29 @@ class ManifoldInitializer:
             stretch_param=alpha,
         )
 
-        if stability == "unstable":
-            # add in the new point to the iterate list
+        # The seed's (pre)iterate one full return back is first_back: the
+        # unstable branch walks back along prev_iterate (the map's inverse), the
+        # stable one along next_iterate, and the geometric list grows forward on
+        # an unstable branch, backward on a stable one.
+        unstable = stability == "unstable"
+        if unstable:
             first_point.insert_prev_iterate(first_back, fixed_point.k_value)
-
-            # fill the cdist and stretch param info of the
-            # 'fictitious' points added when finding the preiterate
-            previous_point = None
-            current_point = first_point
-            for _ in range(fixed_point.k_value - 1):
-
-                previous_point = current_point
-                current_point = current_point.prev_iterate
-
-                current_point.cdist = previous_point.cdist / alpha
-                current_point.stretch_param = alpha
-
-            # insert the new point in geometrically
-            fixed_point.branch_points[orbit_index].insert_point_forward(
-                first_point, branch_index
-            )
-            fixed_point.branch_points[orbit_index].insert_point_forward(
-                first_back, branch_index
-            )
-
         else:
-            # add in the new point to the iterate list
             first_point.insert_next_iterate(first_back, fixed_point.k_value)
 
-            # fill the cdist and stretch param info of the
-            # 'fictitious' points added when finding the preiterate
-            previous_point = None
-            current_point = first_point
-            for _ in range(fixed_point.k_value - 1):
+        # fill the cdist and stretch param of the 'fictitious' points added
+        # when finding the (pre)iterate
+        current_point = first_point
+        for _ in range(fixed_point.k_value - 1):
+            previous_point = current_point
+            current_point = current_point.prev_iterate if unstable else current_point.next_iterate
+            current_point.cdist = previous_point.cdist / alpha
+            current_point.stretch_param = alpha
 
-                previous_point = current_point
-                current_point = current_point.next_iterate
-
-                current_point.cdist = previous_point.cdist / alpha
-                current_point.stretch_param = alpha
-
-            # insert the new point in geometrically
-            fixed_point.branch_points[orbit_index].insert_point_backward(
-                first_point, branch_index
-            )
-            fixed_point.branch_points[orbit_index].insert_point_backward(
-                first_back, branch_index
-            )
+        branch_point = fixed_point.branch_points[orbit_index]
+        insert = branch_point.insert_point_forward if unstable else branch_point.insert_point_backward
+        insert(first_point, branch_index)
+        insert(first_back, branch_index)
 
         return BaseManifold(
             fixed_point.branch_points[orbit_index],
@@ -329,85 +288,6 @@ class ManifoldInitializer:
             branch_index=branch_index,
             manifold_key=(fixed_point, stability, orbit_index, branch_index),
         )
-
-    def construct_manifold_from_point_list(
-        self,
-        points: list[Point],
-        stability: Stability,
-        stretch_param: float,
-        fixed_point: FixedPoint,
-        branch_index: Optional[int] = None,
-        *,
-        manifold_key: Optional[ManifoldKey],
-    ) -> BaseManifold:
-        """
-        Constructs a manifold from a list of Point objects.
-
-        Note:
-            The given list is assumed to be in cdist ordering.
-
-        Args:
-            points (list[Point]): List of points to turn into a manifold.
-            stability (Stability): Stability of the resulting
-                manifold.
-            stretch_param (float): The stretch parameter for the new manifold.
-            fixed_point (FixedPoint): The fixed point the new manifold emanates from.
-            branch_index (int, optional): The branch index of the fixed point this
-                manifold emanates from.
-            manifold_key (Optional[ManifoldKey]): Keyword-only and required -- the
-                branch the new manifold is (``None`` only for a transient forward
-                image whose branch the caller has yet to advance).
-
-        Returns:
-            BaseManifold: The resulting manifold made from the list.
-        """
-
-        manifold = BaseManifold(
-            points[0],
-            stability,
-            stretch_param,
-            fixed_point,
-            manifold_key=manifold_key,
-        )
-
-        current_point = manifold.root
-
-        for i, point in enumerate(points):
-
-            # start inserting the second point in the list
-            if i == 0:
-                continue
-
-            self._insert_point_geometrically(
-                current_point, point, manifold, branch_index
-            )
-
-            current_point = point
-
-        manifold.tail = points[-1]
-        return manifold
-
-    def _insert_point_geometrically(
-        self,
-        p0: Point,
-        new_point: Point,
-        manifold: BaseManifold,
-        branch_index: Optional[int] = None,
-    ) -> None:
-        """helper function to insert points smartly
-        based on stability and brach_point'ness"""
-
-        if isinstance(p0, BranchPoint):
-            if manifold.stability == "unstable":
-                p0.insert_point_forward(new_point, branch_index=branch_index)
-            else:
-                p0.insert_point_backward(new_point, branch_index=branch_index)
-
-        else:
-            if manifold.stability == "unstable":
-                p0.insert_point_forward(new_point)
-            else:
-                p0.insert_point_backward(new_point)
 
     @staticmethod
     def orient_manifolds(
