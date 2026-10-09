@@ -37,6 +37,14 @@ which carry the canonical distances and branch keys and are stable across
 recomputes, and the primary pip's id is resolved against the live registry on
 demand by ``resolve_boundary_intersection_id``.
 
+A trim is a view, not a state (C22). Growing the stable manifold re-finds every
+branch's physical end, so it un-trims the zone: ``trim_stable_manifolds`` trims at
+the outermost crossing, and a trim that survived growth would hide every crossing
+the growth was meant to discover (D1). The topology never depends on the trim,
+since the trellis is cut at the pip orbit (D10); :meth:`ResonanceZone.restore`
+never shortens a branch that growth has already run past. A zone that re-trims
+itself after growth is API work (the D8 plan).
+
 One zone per fixed point (C8): an inversion chain's two branches bound ONE zone,
 keyed by the fixed point (:attr:`ResonanceZone.key`).
 """
@@ -335,6 +343,11 @@ class ResonanceZone:
                 points and rebuild the bridges so both reflect the restored manifolds.
 
         Note:
+            A restore never shortens a branch (C22). Stable growth after the trim
+            re-finds every branch's physical end (:meth:`TangleWorkbench.grow_n_times`),
+            so the trim is already undone on a grown branch and it is left as is.
+
+        Note:
             ``recompute=False`` deliberately leaves the registry *and* the bridges
             stale: it is the batched path, where several zones are restored in turn
             and the caller runs one ``compute_intersections`` + ``rebuild_bridges``
@@ -346,7 +359,17 @@ class ResonanceZone:
         if not self.previous_tails:
             raise ValueError("Resonance zone has no captured tails to restore.")
         for key, tail in self.previous_tails.items():
-            workbench.manifolds[key].tail = tail
+            manifold = workbench.manifolds[key]
+            # Stable growth since the trim re-found the physical end (C22): the trim
+            # is already undone there, and restoring would cut the grown branch back.
+            if tail.get_cdist("stable") > manifold.tail.get_cdist("stable"):
+                manifold.tail = tail
+            else:
+                logger.info(
+                    "restore: %s already runs past its pre-zone tail (grown since "
+                    "the trim); left as is",
+                    key[1:],
+                )
         if recompute:
             # preserve_ids mirrors define_resonance_zone: ids held across the trim
             # (a strong pip, a BridgeId) must still name the same crossings after the

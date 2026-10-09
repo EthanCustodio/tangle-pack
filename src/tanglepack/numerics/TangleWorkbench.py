@@ -624,7 +624,11 @@ class TangleWorkbench:
 
         Note:
             Growth refines the existing curve as well as extending it, so it
-            bumps the generation and drops every memoised point array.
+            bumps the generation and drops every memoised point array. It also
+            re-finds the physical end of every branch of the grown stability, so
+            stable growth undoes a stable trim (a resonance zone's included, C22):
+            the trim is a view, and the topology is cut at the pip orbit anyway
+            (D10).
 
         Note:
             A fixed count has no notion of escape: an arm leaving the trapped
@@ -2100,7 +2104,8 @@ class TangleWorkbench:
         The one stable trim: :meth:`trim_stable_manifolds` cuts at the outermost
         crossing, a resonance zone at its pip. The node is the one the crossing's
         own stable segment ends at, so the crossing stays on the branch. Only the
-        tail pointer moves; recompute the intersections afterwards.
+        tail pointer moves, so the next growth of that stability undoes the trim
+        (:meth:`grow_n_times`); recompute the intersections afterwards.
 
         Args:
             key: The stable branch.

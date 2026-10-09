@@ -11,12 +11,16 @@ Two behaviours are pinned here, both on the cheap ``k=10`` binary-horseshoe flow
 * :meth:`tanglepack.loom.ResonanceZone.ResonanceZone.restore` must rebuild the
   bridges. Restoring only the tails left ``workbench._bridges`` cut against the
   trimmed (shorter) stable manifold, so the tangle disagreed with itself.
+
+A third, on ``k=2.8`` two blasts: after stable growth (which re-finds every
+physical end, un-trimming the zone) ``restore`` never shortens a branch (C22).
 """
 
 from __future__ import annotations
 
 import pytest
 
+import cases
 from helpers.zones import define_inner_zone
 from tanglepack.numerics.geometry import polyline_midpoint
 
@@ -154,3 +158,27 @@ def test_restore_without_recompute_leaves_bridges_stale(k10_session):
     zone.restore(workbench, recompute=False)
 
     assert [id(b) for b in workbench.bridges] == trimmed
+
+
+# --------------------------------------------------------------------------- #
+# C22 — growth un-trims a zone; restore never shortens a branch
+# --------------------------------------------------------------------------- #
+def test_restore_after_stable_growth_never_shortens():
+    """Stable growth after a zone trim re-finds every branch's physical end (the
+    trim is a view: the topology is cut at the pip orbit, D10), so a later
+    ``restore`` must not cut the grown branch back to its pre-zone tail (C22)."""
+    case = cases.build_k28(blasts=2, through="zones")
+    workbench, fp, zone = case.session.workbench, case.fixed_points[0], case.zones[0]
+    workbench.grow_n_times(fp, "stable", num_iterations=1)
+    grown = {key: workbench.manifolds[key].tail.get_cdist("stable") for key in zone.previous_tails}
+    assert any(
+        grown[key] > tail.get_cdist("stable") for key, tail in zone.previous_tails.items()
+    ), "precondition: the growth must run past a pre-zone tail"
+
+    zone.restore(workbench)
+
+    for key, before in grown.items():
+        manifold = workbench.manifolds[key]
+        end = list(manifold._walk_nodes(stop_at_final=False))[-1]
+        assert manifold.tail.get_cdist("stable") >= before
+        assert manifold.tail is end
