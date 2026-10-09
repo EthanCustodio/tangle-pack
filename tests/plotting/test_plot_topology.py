@@ -411,9 +411,12 @@ def test_nested_inner_circle_sits_inside_the_outer_one(nested: Case, fig_ax) -> 
     outer, inner = nested.fixed_points
     _interior, parents, _arc_order = session.cartoon_zones()
     assert parents == {id(inner): id(outer)}
-    enclosures = session.cartoon_enclosures(session.minimal_trellis().kept_bridge_ids, parents)
+    minimal = session.minimal_trellis()
+    enclosures = session.cartoon_enclosures(minimal.trellis, minimal.kept_bridge_ids, parents)
     assert enclosures, "the outer anchor lobes enclose the period-3 tangle"
     assert all(ids == frozenset({id(inner)}) for ids in enclosures.values())
+    alone = session.dual_graph(outer)  # a sub-selection reads its own trellis's bridges
+    assert session.cartoon_enclosures(alone.trellis, alone.minimal.kept_bridge_ids, parents)
 
     _fig, ax = fig_ax
     layout = session.plot_dual_graph_cartoon(ax=ax, shape="circle")

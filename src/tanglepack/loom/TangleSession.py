@@ -694,11 +694,11 @@ class TangleSession:
             kwargs.setdefault("arc_order", arc_order)
         if kwargs.get("shape") == "circle" and "enclosures" not in kwargs and kwargs.get("parents"):
             kwargs["enclosures"] = self.cartoon_enclosures(
-                graph.minimal.kept_bridge_ids, kwargs["parents"]
+                graph.trellis, graph.minimal.kept_bridge_ids, kwargs["parents"]
             )
         return plotting.plot_dual_graph_cartoon(graph, target, ax=ax, **kwargs)
 
-    def cartoon_enclosures(self, bridge_ids: Iterable, parents: dict) -> dict:
+    def cartoon_enclosures(self, trellis: Trellis, bridge_ids: Iterable, parents: dict) -> dict:
         """
         Which nested tangles each bridge's lobe encloses in the plane.
 
@@ -711,6 +711,9 @@ class TangleSession:
         cartoon keeps the plane's topology.
 
         Args:
+            trellis: The trellis the bridges belong to (the dual graph's: a
+                bridge of a pip-cut trellis may be a joined arc no other
+                snapshot holds).
             bridge_ids: The bridges to test (the minimal trellis's).
             parents: ``{id(fixed_point): id(parent fixed point)}`` from
                 :meth:`cartoon_zones`.
@@ -722,8 +725,7 @@ class TangleSession:
         from ..numerics.geometry import arc_polyline, point_in_polygon
 
         workbench = self.workbench
-        trellis = self.trellis()
-        registry = workbench.intersection_registry
+        registry = trellis.registry
         tol = registry.cdist_tol
         by_id = {id(fp): fp for fp in workbench.fixed_points}
         children: dict = {}
@@ -747,8 +749,7 @@ class TangleSession:
             if not nested or key not in workbench.manifolds:
                 continue
             bridge = trellis.bridge_between(*bridge_id)
-            if bridge is None:
-                continue
+            assert bridge is not None, f"bridge {bridge_id} is not a bridge of the trellis"
             c_first, c_second = float(first.stable_cdist), float(second.stable_cdist)
             stable = np.asarray(
                 arc_polyline(
