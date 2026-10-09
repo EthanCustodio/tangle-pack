@@ -3,11 +3,11 @@
 Two behaviours are pinned here, both on the cheap ``k=10`` binary-horseshoe flow
 (single saddle at ``[4, -4]``, one resonance zone):
 
-* :func:`tanglepack.loom.Blast.blast_zone` must let an ``AssertionError`` escape.
+* :func:`tanglepack.loom.Blast.blast_zone` must let every iterate failure escape.
   Assertions are the correctness guard of this codebase (CLAUDE.md); swallowing
   the cdist-monotonicity assertion of ``ManifoldMachine.iterate_manifold`` turned a
-  broken iterate into a silently skipped bridge. A ``ValueError`` is still a
-  tolerable per-bridge failure under ``strict=False``.
+  broken iterate into a silently skipped bridge, and the ``AttributeError`` it
+  still skipped until WP10 was NUM-9.
 * :meth:`tanglepack.loom.ResonanceZone.ResonanceZone.restore` must rebuild the
   bridges. Restoring only the tails left ``workbench._bridges`` cut against the
   trimmed (shorter) stable manifold, so the tangle disagreed with itself.
@@ -15,11 +15,8 @@ Two behaviours are pinned here, both on the cheap ``k=10`` binary-horseshoe flow
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
-from helpers.logs import assert_logged
 from helpers.zones import define_inner_zone
 from tanglepack.numerics.geometry import polyline_midpoint
 
@@ -60,41 +57,20 @@ def _bridge_endpoint_cdists(workbench):
 # --------------------------------------------------------------------------- #
 # 1.5 — blast_zone must not swallow AssertionError
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize(
-    "error, strict, escapes",
-    [
-        (AssertionError, False, True),
-        (ValueError, False, False),
-        (ValueError, True, True),
-    ],
-    ids=["assertion_escapes_lenient", "value_error_skipped_lenient", "value_error_raised_strict"],
-)
-def test_blast_zone_error_handling(
-    k10_session, monkeypatch, caplog, error: type, strict: bool, escapes: bool
-):
-    """An AssertionError from a bridge's forward map always escapes; a ValueError
-    is a per-bridge skip (with a warning) at ``strict=False`` and raised at
-    ``strict=True``."""
+@pytest.mark.parametrize("error", [AssertionError, ValueError, AttributeError])
+def test_every_iterate_failure_escapes(k10_session, monkeypatch, error: type):
+    """Any error raised by a bridge's forward map escapes ``blast_zone`` (NUM-10):
+    a failure to iterate is a bug, never a skipped bridge."""
     session, fp = k10_session
     zone = define_inner_zone(session, fp)
-    frontier = _interior_frontier(session, zone, fp)
-    assert frontier, "need a non-empty blast frontier"
+    assert _interior_frontier(session, zone, fp), "need a non-empty blast frontier"
 
     def boom(bridge):
         raise error("the forward map failed")
 
     monkeypatch.setattr(session.workbench, "iterate_bridge", boom)
-
-    if escapes:
-        with pytest.raises(error):
-            session.blast_zone(zone, num_iterations=1, fixed_point=fp, strict=strict)
-        return
-
-    with caplog.at_level(logging.WARNING, logger="tanglepack.loom.Blast"):
-        result = session.blast_zone(zone, num_iterations=1, fixed_point=fp, strict=strict)
-    assert result.skipped == len(frontier)
-    assert result.completed_iterations == 1
-    assert_logged(caplog, logging.WARNING, "tanglepack.loom.Blast")
+    with pytest.raises(error):
+        session.blast_zone(zone, num_iterations=1, fixed_point=fp)
 
 
 # --------------------------------------------------------------------------- #

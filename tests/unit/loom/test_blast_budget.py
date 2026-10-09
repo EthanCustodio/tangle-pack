@@ -98,12 +98,12 @@ def test_stop_reason_without_budget():
 
 def test_machine_budget_propagates_with_context(caplog):
     """A ``PointBudgetExceeded`` from one bridge image is never a skipped bridge:
-    it propagates at ``strict=False`` carrying the blast's context."""
+    it propagates carrying the blast's context."""
     case, zone = _k28_zone()
     case.session.max_points_per_step = 1
     with caplog.at_level(logging.WARNING, logger="tanglepack.loom.Blast"):
         with pytest.raises(PointBudgetExceeded) as raised:
-            _blast(case, zone, 1, strict=False)
+            _blast(case, zone, 1)
     exc = raised.value
     assert exc.points_created <= exc.budget == 1
     zone_key, iteration, _bridge_id = exc.blast_context

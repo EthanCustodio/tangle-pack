@@ -1636,7 +1636,6 @@ class TangleSession:
         num_iterations: int,
         *,
         fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
-        strict: bool = False,
         min_separation: Optional[float] = None,
         diagnose: bool = True,
         max_points: Optional[int] = None,
@@ -1661,7 +1660,6 @@ class TangleSession:
             zone: A :class:`ResonanceZone` or its ``(fixed_point, branch_index)`` key.
             num_iterations: Maximum number of blast steps.
             fixed_point: Restrict to bridges from this fixed point (default: all).
-            strict: Re-raise a bridge's forward-map failure instead of skipping it.
             min_separation: Drop a child bridge whose interior comes within this
                 distance of an already-kept sibling, to avoid precision-driven merges
                 of near-coincident unstable curves (default: disabled).
@@ -1685,16 +1683,15 @@ class TangleSession:
             re-establish its strong pip) before continuing topological work.
 
         Note:
-            A :class:`~tanglepack.numerics.budget.PointBudgetExceeded` from one
-            bridge's image propagates (it is never skipped) and leaves the
-            session not resumable; rebuild it.
+            Any failure of one bridge's image propagates (nothing is skipped,
+            NUM-10). A :class:`~tanglepack.numerics.budget.PointBudgetExceeded`
+            leaves the session not resumable; rebuild it.
         """
         return blast_zone(
             self,
             zone,
             num_iterations,
             fixed_point=fixed_point,
-            strict=strict,
             min_separation=min_separation,
             diagnose=diagnose,
             max_points=max_points,

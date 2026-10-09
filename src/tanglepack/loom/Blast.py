@@ -22,12 +22,8 @@ iterate, so iterating an *exterior* bridge many times would blow up exponentiall
 zone interior is the only region where iterating many times stays bounded, and is the
 intended use of this feature.
 
-The orchestration is intentionally tolerant: a bridge whose forward map fails with an
-``AttributeError`` or ``ValueError`` (a rare under-resolved iterate) is skipped and
-counted rather than aborting the whole blast, so a long run always returns a
-:class:`BlastResult`. Pass ``strict=True`` to surface such failures instead. An
-``AssertionError`` is never tolerated: assertions guard the invariants of the numerical
-layer (CLAUDE.md), so a violated invariant aborts the blast at either strictness.
+A bridge whose forward map fails aborts the blast (NUM-10, WP10): every such
+failure is a bug, and the one that was being skipped as "rare" was NUM-9.
 
 Memory is budgeted at two levels. The machine's per-call cap
 (``max_points_per_step``) is always on and RAISES
@@ -128,8 +124,6 @@ class BlastStep:
             input.
         discarded_exterior: The children that fell outside the zone (dropped, never
             re-iterated).
-        skipped: Parents whose forward map raised and were skipped (empty unless an
-            under-resolved bridge was hit; see the module docstring).
     """
 
     iteration: int
@@ -137,7 +131,6 @@ class BlastStep:
     produced_children: list["Bridge"]
     kept_interior: list["Bridge"]
     discarded_exterior: list["Bridge"]
-    skipped: list["Bridge"] = field(default_factory=list)
     discarded_too_close: list["Bridge"] = field(default_factory=list)
     already_known: list["Bridge"] = field(default_factory=list)
 
@@ -164,8 +157,6 @@ class BlastResult:
             ``max_points``).
         points_created: Points held by the bridges this blast added to the
             workbench (images that re-trace existing curve add none).
-        skipped: Total number of bridges skipped across all steps (forward-map
-            failures).
     """
 
     zone: "ResonanceZone"
@@ -178,7 +169,6 @@ class BlastResult:
         "max_iterations"
     )
     points_created: int = 0
-    skipped: int = 0
     too_close: int = 0
     already_known: int = 0
 
@@ -210,7 +200,6 @@ def blast_zone(
     num_iterations: int,
     *,
     fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
-    strict: bool = False,
     min_separation: Optional[float] = None,
     diagnose: bool = True,
     max_points: Optional[int] = None,
@@ -227,9 +216,6 @@ def blast_zone(
         fixed_point: If given, only bridges emanating from this fixed point (or, if a
             list/iterable of fixed points is passed, any of them) participate;
             otherwise (``None``) every fixed point's interior bridges do.
-        strict: If True, re-raise a bridge's tolerated forward-map failure
-            (``AttributeError``/``ValueError``) instead of skipping it. An
-            ``AssertionError`` always propagates, at either setting.
         min_separation: If given, a freshly produced interior bridge is dropped from
             the frontier when its interior runs within ``min_separation`` of an
             already-kept sibling. Unstable curves can never truly cross, so two
@@ -387,7 +373,6 @@ def blast_zone(
         produced: list["Bridge"] = []
         kept: list["Bridge"] = []
         discarded: list["Bridge"] = []
-        skipped: list["Bridge"] = []
         too_close: list["Bridge"] = []
         already_known: list["Bridge"] = []
 
@@ -415,22 +400,6 @@ def blast_zone(
                     f"bridge {parent.id}]",
                 )
                 raise
-            except (AttributeError, ValueError) as exc:
-                # AssertionError is deliberately NOT caught: assertions are the
-                # correctness guard of this codebase (CLAUDE.md), so a violated
-                # cdist-monotonicity invariant in the forward map must abort the
-                # blast rather than be logged as a skipped bridge. Nor is a
-                # PointBudgetExceeded (a RuntimeError): a resource stop is never
-                # a skippable bridge.
-                if strict:
-                    raise
-                logger.warning(
-                    "blast: skipping bridge that failed to iterate (%s: %s)",
-                    type(exc).__name__,
-                    exc,
-                )
-                skipped.append(parent)
-                continue
 
             produced.extend(children)
             for child in children:
@@ -478,12 +447,10 @@ def blast_zone(
                 produced_children=produced,
                 kept_interior=kept,
                 discarded_exterior=discarded,
-                skipped=skipped,
                 discarded_too_close=too_close,
                 already_known=already_known,
             )
         )
-        result.skipped += len(skipped)
         result.too_close += len(too_close)
         result.already_known += len(already_known)
 
@@ -493,23 +460,21 @@ def blast_zone(
                 held.add(_seen_key(child))
                 new_points += len(child.get_point_array())
         result.points_created += new_points
-        mapped_points = frontier_points - sum(len(b.get_point_array()) for b in skipped)
-        if mapped_points > 0:
-            factor = new_points / mapped_points
+        if frontier_points > 0:
+            factor = new_points / frontier_points
             session._blast_stats[zone.key] = factor
 
         result.completed_iterations = iteration
         result.interior_bridges_by_iteration.append(list(kept))
         logger.info(
             "blast: step %d — %d produced, %d kept interior, %d discarded, "
-            "%d already known, %d too close, %d skipped",
+            "%d already known, %d too close",
             iteration,
             len(produced),
             len(kept),
             len(discarded),
             len(already_known),
             len(too_close),
-            len(skipped),
         )
         frontier = kept
 
