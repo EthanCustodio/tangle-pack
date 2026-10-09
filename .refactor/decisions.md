@@ -132,3 +132,8 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   evaluates the dynamical system's Jacobian. The six side flips are one rule,
   `topology.side_after(side, steps, preserving)`, kept although det J < 0 stays out of
   scope (C3).
+
+## 2026-10-09 — DEC-24, a member-less connecting class (raised by WP9b)
+
+- **Said:** "Take whatever path is the most logical with our foundational setup. It is not that tricky. 'One class connects the two tangles and has no computed bridge' is a bit nonsense. If there is no computed bridge that connects the tangles then there is no bridge class which connects the tangles either. Treat every bridge the same. They just connect two intersection points. Those two intersections lie in stable partition elements. Side matters for those partition elements. A bridge connecting two partition elements on the same tangle is no different than a bridge connecting two partition elements on different tangles."
+- **Consequence (D14):** no special case for connecting classes anywhere. A member-less connecting class must be traced to whatever produced it (the walk or landing that named the pair) and fixed there; read together with D11, a walk-named pair is a class like any other, but a pair across tangles that no bridge connects signals a construction error to root out, not a class to model.
