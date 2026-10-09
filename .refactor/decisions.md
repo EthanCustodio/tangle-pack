@@ -137,3 +137,28 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
 
 - **Said:** "Take whatever path is the most logical with our foundational setup. It is not that tricky. 'One class connects the two tangles and has no computed bridge' is a bit nonsense. If there is no computed bridge that connects the tangles then there is no bridge class which connects the tangles either. Treat every bridge the same. They just connect two intersection points. Those two intersections lie in stable partition elements. Side matters for those partition elements. A bridge connecting two partition elements on the same tangle is no different than a bridge connecting two partition elements on different tangles."
 - **Consequence (D14):** no special case for connecting classes anywhere. A member-less connecting class must be traced to whatever produced it (the walk or landing that named the pair) and fixed there; read together with D11, a walk-named pair is a class like any other, but a pair across tangles that no bridge connects signals a construction error to root out, not a class to model.
+
+## 2026-10-09 — WP9c (every bridge is the same, D14), Claude's calls under D13 / D14
+
+Revisable by the author; recorded so later runs know they are calls, not the author's words.
+
+- **Flag for the author: D14's premise does not hold on the fixture.** `bn` = {A:R_1, B:L_(2.0;1)}
+  is no construction error: `named_by` gives `bn <- bl <- bi`, and `bi` has two COMPUTED members,
+  `(91, 92)` and `(93, 94)` (arcs of W^u(p3 2.0) from p3's stable branch to the heteroclinic
+  crossings on p1's window). `bl = f(bi)` and `bn = f^2(bi)` are member-less only because the
+  images of 92 and 93 lie past p3's unstable cut (D12): D11's situation, and at p3 17 unstable steps
+  they are computed. D14's rule ("treat every bridge the same") is what fixes it: the gap was that
+  D13 had a rule only for classes with a member LOBE.
+- **C17 (under D13 / D14) — walls.** D13's own wording, "f(bridge) cannot cross the images of the
+  unstable arcs", for every class: a class's arcs lie on its members' unstable branches, or one map
+  step past its namer's (D11); arcs on different unstable branches are disjoint, and so are their
+  images, so the decided walk (`unique` / `trivial`) of a class walked EARLIER whose branches are
+  disjoint from this class's is a wall, and a tie loses the walks whose chords interleave with a
+  wall's on a face ring (`shortest_walks(walls=)`, `walk_chords`, `DualGraph.chords_cross`). A tie
+  filter only (a unique walk is never second-guessed); when every walk crosses a wall the tie
+  stands. Effect: `heteroclinic`'s `bn` resolved with the word base printed first, the dynamics
+  reliable; at 17u the connecting class `bm` resolved to its registered word; nothing else moves
+  on any law case, deep run or series step.
+- **C18 (under D14) — what is tested.** D14 is tested as "a class connects two tangles only where
+  a computed bridge in the trellis connects them" (the clause in `alphabet_closed_under_words`),
+  not as "every connecting class has a computed member", which contradicts D11 (`bl`, `bn`).

@@ -524,9 +524,10 @@ flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py
   reliable), 9-10 (43 -> 39 closed, ambiguous [ck, br, ct] -> none, still unreliable through INT-11); p3,
   inversion, nested_outer unchanged; k28 9-13 and k32 7-10 describes identical to the prototype's.
   `symbolic_dynamics`: heteroclinic 0.04 -> 0.11 s, deep sliver 0.11 -> 0.15 s.
-- **Residue (DEC-24).** `bn` (member-less, connecting, named by `bl`): its two walks differ by a loop around
-  the B peninsula; none of the heteroclinic crossings (92, 93 in N; 108, 109 past p3's unstable cut) has any
-  iterate link (`bn_missing.py`), so no closed curve with a known image goes through it (NUM-21).
+- **Residue (DEC-24) -- resolved in WP9c by the walls (below).** `bn` (member-less, connecting, named by `bl`):
+  its two walks differ by a loop around the B peninsula; none of the heteroclinic crossings (92, 93 in N; 108,
+  109 past p3's unstable cut) has any iterate link (`bn_missing.py`), so no closed curve with a known image goes
+  through it (NUM-21). The walls need no such curve.
 
 ## Open-issues round WP11 slice 1 (2026-10-09, branch `oi/wp11-simplify`, base `4f7e815`)
 
@@ -558,3 +559,36 @@ flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py
 - Proof harness (`/home/dezhu/.claude/jobs/c5c98371/tmp/wp11/check_all.sh <root> <tag>`): `sig.py`
   (14 + 5 builders), `cartoon_sig.py`, `series_sig.py` (5 series), `tol_count.py`; every hash identical
   to base after every step.
+
+## Open-issues round WP9c (2026-10-09, branch `oi/wp09c-every-bridge-the-same`, base `5c7070e`)
+
+- **Where `bn` comes from (D14).** `named_by`: `bn <- bl <- bi`; `bi = {B:L_(0.0;1), A:R_(0.0;5)}` (A = p1,
+  B = p3) has two COMPUTED members `(91, 92)` +1 / `(93, 94)` -1 on u_B(2.0), arcs from B's stable branch to the
+  heteroclinic crossings 92 / 93 on A's window. `bl = f(bi)`, `bn = f^2(bi)`, member-less only because f(92),
+  f(93) lie past B's unstable cut (D12, NUM-21): D11. Landings table-exact and contained (A:R_(0.0;5) = [5,4] ->
+  A:R_3 = [110,6] -> inside A:R_1 = [0,111]; B:L_(0.0;1) -> B:L_(1.0;1) -> B:L_(2.0;1) -> B:L_(0.0;1)^1). Face 0
+  is one open face, one ring of 59 arcs, holding B's left-side edges on all three B branches and A's right-side
+  edges, with corners 91..94 (the B arms run through it): a cross-tangle pair there is legitimate. A's
+  partition is sound. Probes `wp09c_bn.py`, `wp09c_trace.py`, `wp09c_part.py`, `wp09c_face0.py`.
+- **The gap.** D13 was implemented only as the marker law on a member LOBE (`DualWalk._lobe` is None across two
+  stable branches), so a class joining two stable branches or two tangles had no rule -- members or not: at
+  17u the connecting class `bm` has two registered members and is ambiguous on base.
+- **The rule (C17, walls).** `SymbolicDynamics._arc_branches` (`SymbolicDynamics.py:1090`): a class's arcs lie on
+  its members' unstable branches (`Trellis.unstable_key_of`, loops included), or one `advance_key` step past
+  its namer's. In `symbolic_dynamics` (`:1347-1350`) the decided walks (`unique` / `trivial`) of the classes
+  walked EARLIER whose branches are disjoint from this class's are its walls (`walk_chords`,
+  `DualWalk.py:829`); `shortest_walks(walls=)` (`DualWalk.py:1235`) drops, from a tie only, the walks with a
+  chord crossing a wall in its face (`_crosses_a_wall`, `DualGraph.chords_cross` `DualGraph.py:1372`: four
+  distinct ends on one ring, alternating; `_ring_index` shared with `_cut_ring`), INFO, counted in
+  `WalkSearch.rejected`; when every walk crosses a wall the tie stands (never observed). The walls apply to
+  member-lobe ties too (after the marker filter). The member-less entry's `tangle` takes the namer's fixed
+  points into the table's rule (a no-op everywhere).
+- **Measured.** Id-free and exact `describe()` signatures (`wp11/sig.py`, `PYTHONHASHSEED=0`) of the 11 law
+  cases, `p3_15`, `p3_16`, `p3_6_blasts`, `p3_16_12`, `inversion_period2_10`, `k28_deep_blast_sliver` identical
+  to base except `heteroclinic` (exact 60bc15796d -> 972f82e7c1, the prototype's hash: `bn` ambiguous ->
+  resolved with the same word `a u^-1 bi^-1`, reliable, DualWalk WARNINGs 1 -> 0); `series_sig.py` identical on
+  the five series. The law prototype found no crossing pair of decided walks anywhere. p3 17u (`heteroclinic_17u`,
+  27 s): `bm` resolved to `bh uu^-1 bi^-1`, its registered word, reliable. `symbolic_dynamics` on heteroclinic
+  0.104 -> 0.105 s; k32 / nested_outer series 14.0 / 14.7 s unchanged.
+- **Deferred.** Walls from LATER classes (a second pass; never needed); same-branch disjointness (distinct kept
+  bridges of one branch; measured identical, not needed); NUM-20 / NUM-21 untouched, no longer needed for words.

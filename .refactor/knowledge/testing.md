@@ -646,3 +646,37 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 - New-test base check: copy `src`, `tests`, `pyproject.toml` of the detached base worktree
   (`../tp-oi-wp11-simplify-base`) to `.../tmp/wp11/basecopy`, overwrite the new / extended test files,
   run there (never via PYTHONPATH).
+
+## Open-issues round WP9c (2026-10-09, branch `oi/wp09c-every-bridge-the-same`, base `5c7070e`)
+
+- KNOWN_ISSUES 2 -> 1: `(every_active_class_walks, heteroclinic)` XPASSed (the walls decide `bn`) and was
+  removed; left `(orientation_reversing_case_builds, orientation_reversing)` (C3). NOT_APPLICABLE +5.
+- New symbolic law `walks_avoid_disjoint_images` (D13, D14): two classes with decided walks whose arcs lie on
+  disjoint unstable-branch sets (re-derived in the test, `laws._arc_branches`: members' branches, or one
+  `advance_key` step past the namer's) have no chords interleaving on a face ring (`walk_chords`, checked
+  with `DualGraph.chords_cross` AND an independent ring-position test, `_chords_interleave`). It counts the
+  CLASS pairs judged, not the chord pairs: `test_every_law_holds_on_the_deep_runs` runs every law on
+  `inversion_period2_10`, which has 54 such class pairs and none sharing a face, and NOT_APPLICABLE may only
+  name law cases (`test_law_case_sanity`). NOT_APPLICABLE on k10, k28_one_blast, k28_two_blasts, inversion,
+  inversion_period2 (no such class pair). Non-vacuous on p3 (1 pair), nested, nested_inner_blasts,
+  heteroclinic, inversion_one_blast / _two_blasts (pairs with no shared face).
+- D14 clause in `alphabet_closed_under_words` (C18): every pair of fixed points a class connects is connected
+  by a computed bridge of the selection trellis (`_staged(case).bridges`, ends read by `_stable_branch_at`);
+  exercised on heteroclinic only (3 connecting classes, one fixed-point pair).
+- Regressions (`test_heteroclinic.py`): `test_a_tie_no_lobe_decides_is_broken_by_the_images_of_disjoint_arcs`
+  (every class across two fixed points walks one way, some class without a lobe has `rejected > 0`, no class
+  ambiguous; `is_reliable` is not pinned, conftest policy) and, under `perf`,
+  `test_registered_connecting_images_agree_with_the_wall_rule` on the new builder `heteroclinic_17u`
+  (`build_heteroclinic(p3_unstable_steps=17)`, 27 s; reproduces `wp09c_17u_base.txt`: `bm` ambiguous on base).
+- Unit: `test_dual_walk.py` (a wall breaks the `tie`, a wall crossing every walk keeps it, no walls / walls in
+  an unvisited face change nothing, `walk_chords` end to end; `chords_cross` stubbed on the `FakeDual`
+  instance), `test_enclosure.py` (`chords_cross` interleaved / nested / shared end edge / apart, both orders,
+  and the same verdict as `enclosed(...) == []`), `test_symbolic_dynamics.py` (`_arc_branches`: a member-less
+  class one step past its namer on period 3 and inversion periods 1 / 2; a member class on its members').
+  Scaffolding updated: the synthetic `_Crossings` trellis answers `unstable_key_of`, and the `_resolve_itinerary`
+  stub takes `walls`.
+- Base check: the new and extended test files plus `cases.py` copied over a `git archive` of base
+  (`.../tmp/wp09c_base_tree`): all 14 new tests fail there (12 on the missing API, the two regressions on
+  `bn` / `bm` ambiguous); the existing tests of those files pass.
+- Suite 1101 passed / 26 skipped / 5 deselected / 1 xfailed in 132.5 s (WP11 base: 1088 / 21 / 4 / 2 in 132 s).
+
