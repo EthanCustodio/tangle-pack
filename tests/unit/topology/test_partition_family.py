@@ -5,8 +5,9 @@ Pins: the homotopy family is exactly the trellis's own partition (the
 session's family = a direct build is ``tests/facade/test_session_equivalence``);
 midpoint ownership is unique
 across the full arrangement; the marks round trip reproduces every result
-exactly (which validates the local interval builder against
-``StablePartition._build_intervals`` without importing it).
+exactly (the refinement rebuilds with the homotopy partition's own
+``StablePartition.intervals_from_marks``; the round trip checks that the marks
+of a result carry everything ``_build_intervals`` added).
 """
 
 from __future__ import annotations
@@ -16,9 +17,9 @@ import pytest
 from tanglepack.topology.PartitionFamily import (
     HomotopyPartition,
     PartitionFamily,
-    _intervals_from_marks,
     _marks_of,
 )
+from tanglepack.topology.StablePartition import intervals_from_marks
 
 
 def _boundaries(result):
@@ -107,7 +108,7 @@ def test_marks_round_trip_reproduces_every_result(k10_partitioned):
     """The local interval builder agrees with StablePartition's on real data."""
     session, fp = k10_partitioned
     for result in session.trellis(fp).stable_partitions:
-        rebuilt = _intervals_from_marks(_marks_of(result))
+        rebuilt = intervals_from_marks(_marks_of(result))
         assert [
             (iv.lo_id, iv.hi_id, iv.closed_lo, iv.closed_hi)
             for iv in rebuilt
@@ -124,7 +125,7 @@ def test_marks_round_trip_on_the_nested_fixture(p3_partitioned):
     session, fp3, fp1 = p3_partitioned
     for fp in (fp3, fp1):
         for result in session.trellis(fp).stable_partitions:
-            rebuilt = _intervals_from_marks(_marks_of(result))
+            rebuilt = intervals_from_marks(_marks_of(result))
             assert [
                 (iv.lo_id, iv.hi_id, iv.closed_lo, iv.closed_hi) for iv in rebuilt
             ] == [

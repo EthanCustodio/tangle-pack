@@ -54,14 +54,13 @@ at that crossing; a subdivided image cuts each row once per piece.
 Dev Notes:
 
 * Marks. The homotopy result is turned back into the marks vocabulary of
-  ``StablePartition._build_intervals`` — boundary cdists plus the sets of
-  boundaries whose OUTWARD / ANCHORWARD interval is open — the new bridges
-  add their marks, and the intervals are rebuilt by a local copy of that
-  function's tail (:func:`_intervals_from_marks`). The copy exists because
-  the original is private to a module under concurrent edit and re-derives
-  the anchor and outermost boundaries from the trellis, which a refinement
-  must not do; ``tests/test_partition_family.py`` pins that rebuilding every
-  homotopy result from its own marks reproduces it exactly. A cut is one
+  ``StablePartition`` — boundary cdists plus the sets of boundaries whose
+  OUTWARD / ANCHORWARD interval is open — the new bridges add their marks,
+  and the intervals are rebuilt by the homotopy partition's own
+  ``StablePartition.intervals_from_marks`` (the branch's ends are already
+  among the marks, so nothing is re-derived from the trellis);
+  ``test_partition_family.py`` pins that rebuilding every homotopy result
+  from its own marks reproduces it exactly. A cut is one
   mark per crossing and flank; a crossing that abuts empty stretches on BOTH
   flanks (a hole against a base) is pinched into a closed singleton, as the
   homotopy partition does between two holes (INFO). Two pieces sharing a
@@ -110,8 +109,10 @@ from typing import ClassVar, Iterable, Iterator, Optional, TYPE_CHECKING
 
 from .BridgeClass import _image_chain, _index_partitions
 from .StablePartition import (
+    Marks,
     _element_of_intersection,
     _elements_at_bridge,
+    intervals_from_marks,
     owns_cdist,
     partition_stable_manifold,
     row_of_end,
@@ -134,10 +135,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-#: One boundary set of a partition on one (branch, side): the cdist of every
-#: boundary id (None = the anchor sentinel), and the ids whose outward /
-#: anchorward interval is open there.
-Marks = tuple[dict[Optional[int], float], set[Optional[int]], set[Optional[int]]]
 
 
 class PartitionFamily:
@@ -504,7 +501,7 @@ class HomotopyPartition(PartitionFamily):
         return cls(results, trellis=trellis)
 
 
-# ── marks: the boundary vocabulary of StablePartition._build_intervals ─────
+# ── marks: the boundary vocabulary of StablePartition.intervals_from_marks ──
 
 
 def _marks_of(result: StablePartitionResult) -> Marks:
@@ -528,49 +525,6 @@ def _marks_of(result: StablePartitionResult) -> Marks:
         if not iv.closed_hi:
             open_anchorward.add(iv.hi_id)
     return boundaries, open_outward, open_anchorward
-
-
-def _intervals_from_marks(marks: Marks) -> list[PartitionInterval]:
-    """
-    Assemble ordered intervals from marks (the tail of
-    ``StablePartition._build_intervals``, verbatim in spirit).
-
-    A boundary excluded by both neighbouring intervals owns itself as a closed
-    singleton. Element ids are stamped by the caller.
-    """
-    boundaries, open_outward, open_anchorward = marks
-    unique: dict = {}
-    for bid, cdist in boundaries.items():
-        unique[bid if bid is not None else ("sentinel", cdist)] = (bid, cdist)
-    ordered = sorted(unique.values(), key=lambda item: item[1])
-
-    intervals: list[PartitionInterval] = []
-    for (lo_id, lo_c), (hi_id, hi_c) in zip(ordered, ordered[1:]):
-        intervals.append(
-            PartitionInterval(
-                lo_id,
-                hi_id,
-                lo_c,
-                hi_c,
-                closed_lo=lo_id not in open_outward,
-                closed_hi=hi_id not in open_anchorward,
-            )
-        )
-
-    with_singletons: list[PartitionInterval] = []
-    for position, (bid, cdist) in enumerate(ordered):
-        before = intervals[position - 1] if position > 0 else None
-        after = intervals[position] if position < len(intervals) else None
-        owned = (before is not None and before.closed_hi) or (
-            after is not None and after.closed_lo
-        )
-        if not owned and (before is not None or after is not None):
-            with_singletons.append(
-                PartitionInterval(bid, bid, cdist, cdist, True, True)
-            )
-        if after is not None:
-            with_singletons.append(after)
-    return with_singletons
 
 
 def _parent_interval(
@@ -859,7 +813,7 @@ class IteratedHomotopyPartition(PartitionFamily):
         for (branch_key, side), result_marks in marks.items():
             branch = trellis.branch(branch_key)
             assert branch is not None, f"{branch_key[1:]} is not a branch of the trellis"
-            intervals = _intervals_from_marks(result_marks)
+            intervals = intervals_from_marks(result_marks)
             for element_id, interval in enumerate(intervals):
                 interval.element_id = element_id
                 interval.branch_key = branch_key

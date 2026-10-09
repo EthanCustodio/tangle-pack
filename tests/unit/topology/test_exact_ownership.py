@@ -16,12 +16,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from tanglepack.topology.PartitionFamily import (
-    PartitionFamily,
-    _intervals_from_marks,
-    _parent_interval,
+from tanglepack.topology.PartitionFamily import PartitionFamily, _parent_interval
+from tanglepack.topology.StablePartition import (
+    _build_intervals,
+    _element_of_intersection,
+    intervals_from_marks,
 )
-from tanglepack.topology.StablePartition import _build_intervals, _element_of_intersection
 from tanglepack.topology.TopologyResults import StablePartitionResult
 
 TOL = 1e-6
@@ -63,7 +63,7 @@ class _Branch:
 
 def _result(cdists, boundaries, open_outward=(), open_anchorward=()) -> StablePartitionResult:
     """A stamped result from marks, its ownership table built by the production kernel."""
-    intervals = _intervals_from_marks(
+    intervals = intervals_from_marks(
         ({bid: cdists.get(bid, 0.0) for bid in boundaries}, set(open_outward), set(open_anchorward))
     )
     for element_id, interval in enumerate(intervals):
@@ -120,7 +120,7 @@ def test_crossings_closer_than_the_tolerance_each_have_one_owner():
 
 def test_a_boundary_off_its_registry_cdist_is_refused():
     cdists = {1: 1.0, 2: 2.0}
-    intervals = _intervals_from_marks(({None: 0.0, 1: 1.0 + TOL / 4, 2: 2.0}, {1}, set()))
+    intervals = intervals_from_marks(({None: 0.0, 1: 1.0 + TOL / 4, 2: 2.0}, {1}, set()))
     for element_id, interval in enumerate(intervals):
         interval.element_id = element_id
     with pytest.raises(AssertionError):

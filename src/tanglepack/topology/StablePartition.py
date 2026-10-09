@@ -1713,39 +1713,40 @@ def _hole_marks_on_branch(
     return boundaries, open_outward, open_anchorward
 
 
+#: One boundary set of a partition on one (branch, side): the cdist of every
+#: boundary id (None = the synthetic anchor), and the ids whose outward /
+#: anchorward interval is open there.
+Marks = tuple[dict[Optional[int], float], set[Optional[int]], set[Optional[int]]]
+
+
 def _build_intervals(
     trellis: "Trellis",
     branch: "TrellisBranch",
-    marks: tuple[dict[int, float], set[int], set[int]],
+    marks: Marks,
 ) -> list[PartitionInterval]:
     """Assemble the ordered partition intervals from the hole marks.
 
     ``marks`` is :func:`_hole_marks_on_branch`'s output: the boundary
     intersections and, per boundary, whether a hole opens its outward and/or
-    anchorward interval. A boundary point excluded by both neighbouring
-    intervals owns itself as a closed singleton (see the module Dev Notes).
+    anchorward interval. The branch adds its own two ends -- the outermost
+    crossing and the anchor -- and :func:`intervals_from_marks` does the rest.
     """
     boundary_map, open_outward, open_anchorward = marks
-    boundaries: list[tuple[Optional[int], float]] = list(boundary_map.items())
-    outer_id = branch.ordered_ids(toward_anchor=True)[0] if len(branch) else None
-    if outer_id is not None:
-        boundaries.append((outer_id, trellis.intersection(outer_id).stable_cdist))
+    boundaries = dict(boundary_map)
+    if len(branch):
+        outer_id = branch.ordered_ids(toward_anchor=True)[0]
+        boundaries[outer_id] = trellis.intersection(outer_id).stable_cdist
 
     # The partition starts at the anchor point (cdist 0). When a boundary
     # already sits there (the registered anchor, synthetic at exactly 0.0), it
     # plays that role itself; otherwise a synthetic anchor boundary is added.
-    if not any(cdist == 0.0 for _, cdist in boundaries):
-        boundaries.append((None, 0.0))
+    if 0.0 not in boundaries.values():
+        boundaries[None] = 0.0
 
-    # Sort and deduplicate by id (the anchor and branch end keep their slots).
-    unique: dict = {}
-    for bid, cdist in boundaries:
-        unique[bid if bid is not None else ("anchor", cdist)] = (bid, cdist)
-    ordered = sorted(unique.values(), key=lambda b: b[1])
-    if len(ordered) == 1:
+    if len(boundaries) == 1:
         # C1: no crossing past the anchor yet -- one element to the end of the
         # computed branch.
-        ((bid, cdist),) = ordered
+        ((bid, cdist),) = boundaries.items()
         end = float(trellis.manifolds[branch.key].tail.get_cdist("stable"))
         logger.info(
             "branch %s has no crossing past its anchor; one element to its end "
@@ -1757,27 +1758,49 @@ def _build_intervals(
             "crossing past it"
         )
         return [PartitionInterval(bid, None, cdist, end, True, True)]
+    return intervals_from_marks((boundaries, open_outward, open_anchorward))
 
-    intervals: list[PartitionInterval] = []
-    for (lo_id, lo_c), (hi_id, hi_c) in zip(ordered, ordered[1:]):
-        intervals.append(
-            PartitionInterval(
-                lo_id, hi_id, lo_c, hi_c,
-                closed_lo=lo_id not in open_outward,
-                closed_hi=hi_id not in open_anchorward,
-            )
+
+def intervals_from_marks(marks: Marks) -> list[PartitionInterval]:
+    """
+    The ordered intervals of one branch and side, from its marks.
+
+    Shared by the homotopy partition (:func:`_build_intervals`, after it adds
+    the branch's two ends) and its refinement (``PartitionFamily``, which
+    rebuilds from a result's own marks plus the cuts). Element ids are stamped
+    by the caller.
+
+    Args:
+        marks: The boundary cdists by id and the ids opened outward /
+            anchorward (:data:`Marks`).
+
+    Returns:
+        The intervals in increasing cdist, singletons included.
+
+    Note:
+        A boundary point excluded by both neighbouring intervals owns itself
+        as a closed singleton: an intersection with hole regions on both
+        sides, the outermost intersection when a hole abuts it from the
+        interior, or the anchor-artifact intersection when a hole abuts it
+        from outside. Each point thereby belongs to exactly one piece; an
+        interior boundary always bounds a hole, so at least one of its
+        intervals is open there and "][" cannot occur. Two holes flanking one
+        bridge (one on each side) emit complementary openings at both defining
+        intersections, so this same rule pinches each of them into a singleton
+        with open intervals on both sides -- the "singleton bridge" case needs
+        no extra code.
+    """
+    boundaries, open_outward, open_anchorward = marks
+    ordered = sorted(boundaries.items(), key=lambda b: b[1])
+    intervals = [
+        PartitionInterval(
+            lo_id, hi_id, lo_c, hi_c,
+            closed_lo=lo_id not in open_outward,
+            closed_hi=hi_id not in open_anchorward,
         )
+        for (lo_id, lo_c), (hi_id, hi_c) in zip(ordered, ordered[1:])
+    ]
 
-    # A boundary point excluded by both neighbouring intervals owns itself as
-    # a closed singleton: an intersection with hole regions on both sides, the
-    # outermost intersection when a hole abuts it from the interior, or the
-    # anchor-artifact intersection when a hole abuts it from outside. Each
-    # point thereby belongs to exactly one piece; an interior boundary always
-    # bounds a hole, so at least one of its intervals is open there and "]["
-    # cannot occur. Two holes flanking one bridge (one on each side) emit
-    # complementary openings at both defining intersections, so this same
-    # rule pinches each of them into a singleton with open intervals on both
-    # sides — the "singleton bridge" case needs no extra code.
     with_singletons: list[PartitionInterval] = []
     for position, (bid, cdist) in enumerate(ordered):
         before = intervals[position - 1] if position > 0 else None
@@ -1786,9 +1809,7 @@ def _build_intervals(
             after is not None and after.closed_lo
         )
         if not owned and (before is not None or after is not None):
-            with_singletons.append(
-                PartitionInterval(bid, bid, cdist, cdist, True, True)
-            )
+            with_singletons.append(PartitionInterval(bid, bid, cdist, cdist, True, True))
         if after is not None:
             with_singletons.append(after)
     return with_singletons
