@@ -582,8 +582,6 @@ def oriented_class(
 def bridge_classes(
     trellis: "Trellis",
     partitions: Iterable[StablePartitionResult],
-    *,
-    bridge_ids: Optional[Iterable["BridgeId"]] = None,
 ) -> BridgeClassTable:
     """
     Class a trellis's bridges by the pair of partition elements they connect.
@@ -611,9 +609,6 @@ def bridge_classes(
         partitions: The stable partitions to resolve elements against — every
             per-fixed-point trellis's :attr:`~.Trellis.Trellis.stable_partitions`
             concatenated. Indexed by ``(branch_key, side)``.
-        bridge_ids: The bridges to class. Defaults to every non-partial bridge
-            of ``trellis``. A loop's image-chain parent is looked up among every
-            bridge of the trellis whether or not it is among these.
 
     Returns:
         A :class:`BridgeClassTable` ordered by each class's smallest member
@@ -639,10 +634,9 @@ def bridge_classes(
         is a bijection).
     """
     by_branch_side = _index_partitions(partitions)
-    every = [bridge.id for bridge in trellis.bridges if bridge.id is not None]
-    ids = every if bridge_ids is None else list(bridge_ids)
+    ids = [bridge.id for bridge in trellis.bridges if bridge.id is not None]
     fixed_points = trellis.fixed_points
-    chains = {bid: _image_chain(trellis, bid) for bid in [*every, *ids]}
+    chains = {bid: _image_chain(trellis, bid) for bid in ids}
     image_parent: dict[frozenset, "BridgeId"] = {}
     for bid, chain in chains.items():
         for pair in chain or ():

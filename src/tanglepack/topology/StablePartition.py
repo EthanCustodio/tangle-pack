@@ -189,7 +189,7 @@ fixed in conversation with the author (July 2026):
 * The anchor (WP3, 2026-10-08). A periodic point is ONE crossing on every
   branch attached to it (D4). Both stable branches leave it, so an anchor
   opening faces the outward half of the branch the signs pick
-  (:func:`_anchor_branch`) and every opening record names the branch it
+  (:func:`_hole_openings`) and every opening record names the branch it
   opens; the anchor has no geometric row of its own. A stable branch with
   NO crossing past its anchor (an inversion saddle grown 4-5 steps) is ONE
   element ``[anchor, end]`` to the end of the computed branch (C1), logged
@@ -1353,9 +1353,9 @@ def _hole_openings(
     the inward pair of a direct hole (outward of the near bound, anchorward of
     the far one); a hole facing a trimmed tail opens its removed outward half,
     which still takes part in the singleton pinch. At an ANCHOR both stable
-    branches leave the point: the hole faces the outward half of the one
-    :func:`_anchor_branch` picks, and opens nothing there when that branch is
-    not computed.
+    branches leave the point: the hole faces the outward half of the one on
+    which the bridge's row is its side, and opens nothing there when that
+    branch is not computed.
 
     Returns:
         The ``Hole.openings`` records ``(intersection_id, which, row,
@@ -1365,8 +1365,17 @@ def _hole_openings(
     for endpoint, iid in zip(("first", "second"), bridge.id):
         ix = trellis.intersection(iid)
         if ix.is_anchor:
-            key = _anchor_branch(trellis, bridge.id, bridge_side)
-            if key is not None:
+            # The bridge of u(o, b) meets s(o, b) with the anchor's own sign and
+            # s(o, 1 - b), which runs the other way, with the opposite one; the
+            # hole faces the outward half of the branch on which the bridge's
+            # row (left at the first end iff the sign is positive) is its side,
+            # and opens nothing when that branch was never computed (a point
+            # seeded on one eigendirection).
+            fp, _, orbit_index, branch_index = trellis.unstable_key_of(bridge.id)
+            if (ix.crossing_sign > 0) != (bridge_side == "left"):
+                branch_index = 1 - branch_index
+            key = (fp, "stable", orbit_index, branch_index)
+            if key in trellis.branches:
                 openings.append((iid, "outward", bridge_side, key))
             continue
         outward = (ix.crossing_sign > 0) == (bridge_side == "left")
@@ -1377,25 +1386,6 @@ def _hole_openings(
             ix.manifold_b_key,
         ))
     return openings
-
-
-def _anchor_branch(
-    trellis: "Trellis", bridge_id: "BridgeId", row: Side
-) -> Optional["ManifoldKey"]:
-    """The stable branch at a bridge's anchor end on which the bridge's row is ``row``.
-
-    The bridge of ``u(o, b)`` meets ``s(o, b)`` with the anchor's own sign
-    and ``s(o, 1 - b)``, which runs the other way, with the opposite one;
-    ``row(first)`` is left iff the sign is positive (:func:`row_of_end`).
-    None when that branch is not in the trellis (a point seeded on one
-    eigendirection: the hole faces the uncomputed half).
-    """
-    fp, _, orbit_index, branch_index = trellis.unstable_key_of(bridge_id)
-    home_sign = trellis.intersection(bridge_id[0]).crossing_sign
-    if (home_sign > 0) != (row == "left"):
-        branch_index = 1 - branch_index
-    key = (fp, "stable", orbit_index, branch_index)
-    return key if key in trellis.branches else None
 
 
 def _step_into(

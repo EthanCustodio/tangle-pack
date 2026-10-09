@@ -2679,13 +2679,12 @@ def check_walk_starts_on_the_landing(case: "Case") -> int:
 def check_alphabet_closed_under_words(case: "Case") -> int:
     """D3, D11: every symbol of every word names a class of the table. The seed classes
     are the session alphabet; every other class was added by the closure and is named
-    in the word of the class that named it. A closure class is spanned by a registered
-    bridge (the evidence table) exactly when it is not flagged "no computed bridge yet"
-    (``entry.spanned`` False, D11). A class without an itinerary makes the dynamics
-    unreliable."""
+    in the word of the class that named it. A class without an itinerary makes the
+    dynamics unreliable. (That a closure class is spanned by a registered bridge exactly
+    when it is not flagged "no computed bridge yet" holds by construction: its entry IS
+    the evidence entry when there is one, WP11.)"""
     dyn = case.session.symbolic_dynamics()
     seed = case.session.bridge_classes()
-    evidence = case.session.minimal_trellis().classes
     count = 0
     for letter, word in dyn.rules.items():
         for symbol in word:
@@ -2695,7 +2694,6 @@ def check_alphabet_closed_under_words(case: "Case") -> int:
     for cls, cd in dyn.classes.items():
         assert (cd.named_by is None) == (cls in seed), cd.letter
         if cd.named_by is not None:
-            assert (cls in evidence) == cd.entry.spanned, cd.letter
             namer = dyn.classes[cd.named_by]
             assert cls in {symbol.bridge_class for symbol in namer.symbols}, cd.letter
         if cd.itinerary is None:

@@ -91,10 +91,10 @@ def test_owner_of_intersection_matches_the_result_table(k10_partitioned):
     family = HomotopyPartition.build(session.trellis(fp))
     for result in family:
         for intersection_id, element_id in result.element_of_intersection.items():
-            ref = family.owner_of_intersection(intersection_id, result.side)
+            ref = family.owner_of_intersection(intersection_id, result.side, result.branch_key)
             assert ref == result.ref(element_id)
     with pytest.raises(ValueError):
-        family.owner_of_intersection(10**6, "left")
+        family.owner_of_intersection(10**6, "left", result.branch_key)
 
 
 def test_describe_has_one_line_per_element(k10_partitioned):

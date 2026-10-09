@@ -345,35 +345,33 @@ class PartitionFamily:
         self,
         intersection_id: int,
         side: Side,
-        branch_key: Optional["ManifoldKey"] = None,
+        branch_key: "ManifoldKey",
     ) -> ElementRef:
         """
-        The element owning one registered crossing on one side.
+        The element owning one registered crossing on one side of one branch.
 
         Args:
-            intersection_id: Registry id of a crossing on a covered branch.
+            intersection_id: Registry id of a crossing on ``branch_key``.
             side: Which side's partition to read.
-            branch_key: The stable branch to read it on. Needed for an anchor,
-                which lies on every branch of its point (D4); without it the
-                first covered result knowing the crossing answers.
+            branch_key: The stable branch to read it on (always named: an
+                anchor lies on every branch of its point, D4).
 
         Returns:
             The owning element's reference, read from the result's
             ``element_of_intersection`` table.
 
         Raises:
-            ValueError: If no covered result on that side knows the crossing.
+            ValueError: If that branch and side is not covered, or its result
+                does not know the crossing.
         """
-        for (key, result_side), result in self.results.items():
-            if result_side != side or branch_key not in (None, key):
-                continue
-            element_id = result.element_of_intersection.get(intersection_id)
-            if element_id is not None:
-                return result.ref(element_id)
-        raise ValueError(
-            f"crossing {intersection_id} is on no {side!r}-partitioned branch of "
-            f"this {self.kind} partition family"
-        )
+        result = self.results.get((branch_key, side))
+        element_id = None if result is None else result.element_of_intersection.get(intersection_id)
+        if element_id is None:
+            raise ValueError(
+                f"crossing {intersection_id} is on no {side!r}-partitioned branch "
+                f"{branch_key[1:]} of this {self.kind} partition family"
+            )
+        return result.ref(element_id)
 
     # ── identity and reporting ──────────────────────────────────────────────
 

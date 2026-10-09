@@ -163,3 +163,24 @@ def test_a_periodic_point_is_one_anchor_of_all_its_branches() -> None:
     assert other != anchor
     assert at_point(1, 1, 1) == other
     assert len(registry) == 2
+
+
+@pytest.mark.parametrize("stability", [None, "unstable", "stable"])
+def test_from_branch_holds_the_anchor_on_every_branch(stability) -> None:
+    """D4 (WP11): the anchor is stored under its home pair (branch 0), yet it lies on
+    branch 1 too, so ``from_branch(1)`` finds it; a crossing of branch 0 only stays
+    off branch 1."""
+    fp = bare_fixed_point(1, inversion=True)
+    registry = IntersectionRegistry()
+    anchor = registry.add_synthetic(
+        (0.0, 0.0), 0.0, 0.0,
+        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+    )
+    crossing = registry.add_synthetic(
+        (1.0, 1.0), 1.0, 2.0,
+        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+    )
+    for branch_index in (0, 1):
+        found = registry.from_branch(branch_index, stability=stability)
+        assert registry[anchor] in found
+        assert (registry[crossing] in found) == (branch_index == 0)

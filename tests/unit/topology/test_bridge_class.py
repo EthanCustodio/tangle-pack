@@ -282,16 +282,6 @@ def test_classes_are_keyed_by_element_pairs(k10_partitioned):
                 assert result.element_of_intersection[intersection_id] == ref.element_id
 
 
-def test_bridge_ids_argument_restricts_the_classing(k10_partitioned):
-    session, fp = k10_partitioned
-    trellis = session.trellis()
-    partitions = _all_partitions(session, [fp])
-    chosen = sorted(bridge.id for bridge in _classable_bridges(trellis))[:3]
-
-    table = bridge_classes(trellis, partitions, bridge_ids=chosen)
-    assert table.bridge_ids == chosen
-
-
 def test_table_lookups_symbols_and_report(k10_partitioned):
     session, fp = k10_partitioned
     _trellis, _partitions, table = _k10_table(session, fp)
@@ -338,9 +328,9 @@ def test_a_missing_partition_names_the_branch(k10_partitioned):
     assert len(kept) < len(partitions)
 
     with pytest.raises(ValueError):
-        bridge_classes(trellis, kept, bridge_ids=[bridge_id])
+        bridge_classes(trellis, kept)
     # The same bridge classes once the missing (branch, row) partition is back.
-    assert len(bridge_classes(trellis, partitions, bridge_ids=[bridge_id])) == 1
+    assert bridge_classes(trellis, partitions).entry_of(bridge_id)
 
 
 def test_duplicate_partitions_are_rejected(k10_partitioned):
@@ -489,13 +479,13 @@ def test_classes_group_by_tangle_with_connecting_classes_last():
         3: (1.0, u_b, s_b, +1), 4: (2.0, u_b, s_b, -1),  # tangle 1
         5: (0.5, u_a, s_a, +1), 6: (0.6, u_a, s_b, -1),  # connecting, smallest cdist
     }
-    trellis = _ClassTrellis(crossings, [outer, inner])
+    trellis = _ClassTrellis(crossings, [outer, inner], bridges=[(1, 2), (3, 4), (5, 6)])
     interval = (None, None, 0.0, 1.0, True, True)
     partitions = [
         make_result(s_a, "left", [interval] * 3, {1: 0, 2: 1, 5: 2}),
         make_result(s_b, "left", [interval] * 3, {3: 0, 4: 1, 6: 2}),
     ]
-    table = bridge_classes(trellis, partitions, bridge_ids=[(1, 2), (3, 4), (5, 6)])
+    table = bridge_classes(trellis, partitions)
 
     assert [entry.tangle for entry in table] == [0, 1, None]
     assert [entry.bridge_ids for entry in table] == [[(1, 2)], [(3, 4)], [(5, 6)]]

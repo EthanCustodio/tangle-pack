@@ -745,8 +745,8 @@ class _OwnerFamily:
         self.key = key
         self.missing = set(missing)
 
-    def owner_of_intersection(self, crossing_id, side, branch_key=None):
-        assert branch_key in (None, self.key)
+    def owner_of_intersection(self, crossing_id, side, branch_key):
+        assert branch_key == self.key
         if crossing_id in self.missing:
             raise ValueError(f"crossing {crossing_id} is on no {side!r}-partitioned branch")
         return ref(self.key, side, crossing_id)

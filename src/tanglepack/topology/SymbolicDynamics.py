@@ -115,7 +115,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from itertools import count
+from itertools import count, groupby
 from typing import Callable, Iterable, Literal, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
@@ -1169,18 +1169,15 @@ def _diagnose(
     )
     chain = evidence.chain
     crossings = [chain[0][0], *(pair[1] for pair in chain)] if chain else []
-    run: list[int] = []
-    for crossing in crossings:
-        if run:
-            last, this = trellis.intersection(run[-1]), trellis.intersection(crossing)
-            if (last.manifold_b_key, last.crossing_sign) == (this.manifold_b_key, this.crossing_sign):
-                run.append(crossing)
-                continue
-            if len(run) > 1:
-                break
-        run = [crossing]
-    if len(run) > 1:
-        return EvidenceDiagnosis(position, walked, registered, "stable end", tuple(run))
+    # The first two or more consecutive crossings on one stable branch with one sign.
+    def mark(crossing: int) -> tuple:
+        ix = trellis.intersection(crossing)
+        return ix.manifold_b_key, ix.crossing_sign
+
+    runs = (tuple(run) for _, run in groupby(crossings, key=mark))
+    run = next((run for run in runs if len(run) > 1), None)
+    if run:
+        return EvidenceDiagnosis(position, walked, registered, "stable end", run)
     return EvidenceDiagnosis(position, walked, registered, "walk")
 
 

@@ -215,6 +215,17 @@ def build_period3(
     )
 
 
+def _nested_slug(outer_blasts: int, inner_blasts: int) -> str:
+    """The figure folder of a nested build: the blast counts other than the
+    default (two outer, no inner) are part of it, so runs never overwrite each other."""
+    slug = "nested_p1_p3"
+    if outer_blasts != 2:
+        slug += f"_outer{outer_blasts}"
+    if inner_blasts:
+        slug += f"_inner{inner_blasts}"
+    return slug
+
+
 def build_nested(
     *,
     p3_unstable_steps: int = 13,
@@ -287,7 +298,7 @@ def build_nested(
         pips=pips,
         stable_points=stable_points,
         title=f"Hénon k={HENON_P3[0]:g}, period 1 + period 3{suffix}",
-        slug="nested_p1_p3",
+        slug=_nested_slug(outer_blasts, inner_blasts),
         blast_sizes=sizes,
     )
 
@@ -306,9 +317,10 @@ def build_heteroclinic(**overrides) -> TangleBuild:
 
     Returns:
         The :class:`TangleBuild`, fixed points ``[fp1, fp3]``, its topology
-        computed, slug ``heteroclinic_p1_p3``.
+        computed, slug ``heteroclinic_p1_p3`` (plus the blast counts, as
+        :func:`build_nested`'s).
     """
     build = build_nested(**{"p3_unstable_steps": 16, "p3_stable_steps": 10, **overrides})
     build.title = build.title.replace("period 1 + period 3", "period 1 + period 3, heteroclinic")
-    build.slug = "heteroclinic_p1_p3"
+    build.slug = build.slug.replace("nested", "heteroclinic", 1)
     return build

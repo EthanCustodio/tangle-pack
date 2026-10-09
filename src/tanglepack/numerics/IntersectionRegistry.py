@@ -698,10 +698,14 @@ class IntersectionRegistry:
             stability: If given, only check the corresponding manifold key side.
 
         Returns:
-            List of matching Intersection objects.
+            List of matching Intersection objects. An anchor matches every
+            branch index: the periodic point lies on every branch attached to
+            it (D4), although it is stored under its home pair.
         """
 
         def pred(ix: Intersection) -> bool:
+            if ix.is_anchor:
+                return True
             a_match = (
                 ix.manifold_a_key is not None and ix.manifold_a_key[3] == branch_index
             )
