@@ -1879,11 +1879,9 @@ class CartoonLayout:
         rows: ``{branch_key: y}`` of each partitioned stable branch's line;
             the first branch of the partition family is at 0, the next ones
             below it.
-        ranks: ``{branch_key: [cdist, ...]}``, the representative boundary
-            canonical distances of a branch in ascending order; the ordinal
-            coordinate of a cdist is its index here.
-        tol: The tolerance two boundary cdists are identified within: 0, since
-            boundaries are registry floats and compare exactly (C15, WP11).
+        ranks: ``{branch_key: [cdist, ...]}``, the distinct boundary canonical
+            distances of a branch in ascending order (registry floats, compared
+            exactly: C15); the ordinal coordinate of a cdist is its index here.
         anchor: ``"right"`` (the default: the anchor at the right end of
             every line, elements running outward to the left, as on the
             chalkboard) or ``"left"``.
@@ -1902,7 +1900,6 @@ class CartoonLayout:
 
     rows: dict = field(default_factory=dict)
     ranks: dict = field(default_factory=dict)
-    tol: float = 0.0
     anchor: str = "right"
     segments: dict = field(default_factory=dict)
     nodes: dict = field(default_factory=dict)
@@ -1913,7 +1910,7 @@ class CartoonLayout:
 
     def rank(self, branch_key, cdist: float) -> float:
         """The ordinal coordinate of a boundary cdist on a branch (see :attr:`ranks`)."""
-        return _rank_of(self.ranks[branch_key], float(cdist), self.tol)
+        return _rank_of(self.ranks[branch_key], float(cdist))
 
     def position(self, branch_key, cdist: float) -> float:
         """The x of a boundary cdist: its rank, mirrored (``width - rank``) with the anchor on the right."""
@@ -1933,14 +1930,14 @@ class CartoonLayout:
         return self.width - span, self.width
 
 
-def _rank_of(representatives: Sequence[float], cdist: float, tol: float) -> float:
-    """The index of the representative within ``tol`` of ``cdist`` (else the nearest)."""
+def _rank_of(representatives: Sequence[float], cdist: float) -> float:
+    """The index of ``cdist`` among the representatives (else of the nearest one)."""
     import bisect
 
     index = bisect.bisect_left(representatives, cdist)
     candidates = [i for i in (index - 1, index) if 0 <= i < len(representatives)]
     best = min(candidates, key=lambda i: abs(representatives[i] - cdist))
-    if abs(representatives[best] - cdist) > tol:
+    if representatives[best] != cdist:
         logger.debug(
             "cdist %.6g is no boundary representative (nearest %.6g); using it anyway",
             cdist,
@@ -1948,15 +1945,6 @@ def _rank_of(representatives: Sequence[float], cdist: float, tol: float) -> floa
         )
     return float(best)
 
-
-def _cluster(values: Iterable[float], tol: float) -> list[float]:
-    """Sorted representatives of ``values``, values within ``tol`` merged."""
-    representatives: list[float] = []
-    for value in sorted(float(v) for v in values):
-        if representatives and value - representatives[-1] <= tol:
-            continue
-        representatives.append(value)
-    return representatives
 
 
 def _side_sign(side) -> float:
@@ -1997,13 +1985,12 @@ def dual_graph_cartoon_layout(
     partition = dual_graph.partition
     layout = CartoonLayout(anchor=anchor)
     for branch_key in partition.branch_keys:
-        boundaries = [
-            cdist
+        layout.ranks[branch_key] = sorted({
+            float(cdist)
             for side in partition.sides(branch_key)
             for iv in partition.result(branch_key, side).intervals
             for cdist in (iv.lo_cdist, iv.hi_cdist)
-        ]
-        layout.ranks[branch_key] = _cluster(boundaries, layout.tol)
+        })
     y = 0.0
     for branch_key in partition.branch_keys:
         sides = partition.sides(branch_key)
@@ -2544,7 +2531,6 @@ class ZoneLayout:
             SIGNED ``sweep`` radians toward its pip end (positive
             counter-clockwise).
         ranks: As :attr:`CartoonLayout.ranks`.
-        tol: As :attr:`CartoonLayout.tol`.
         outside: ``{branch_key: side}``, the side drawn OUTSIDE the circle
             (the other side is inside).
         segments: ``{element ref: (theta_lo, theta_hi, r_bar)}``: the angles
@@ -2567,7 +2553,6 @@ class ZoneLayout:
     parents: dict = field(default_factory=dict)
     arcs: dict = field(default_factory=dict)
     ranks: dict = field(default_factory=dict)
-    tol: float = 0.0
     outside: dict = field(default_factory=dict)
     segments: dict = field(default_factory=dict)
     nodes: dict = field(default_factory=dict)
@@ -2585,7 +2570,7 @@ class ZoneLayout:
 
     def rank(self, branch_key, cdist: float) -> float:
         """The ordinal coordinate of a boundary cdist on a branch."""
-        return _rank_of(self.ranks[branch_key], float(cdist), self.tol)
+        return _rank_of(self.ranks[branch_key], float(cdist))
 
     def span(self, branch_key) -> float:
         """The largest ordinal coordinate of a branch (at least 1)."""
@@ -2729,13 +2714,12 @@ def dual_graph_zone_layout(
         if child in known and parent in known and child != parent
     }
     for branch_key in partition.branch_keys:
-        boundaries = [
-            cdist
+        layout.ranks[branch_key] = sorted({
+            float(cdist)
             for side in partition.sides(branch_key)
             for iv in partition.result(branch_key, side).intervals
             for cdist in (iv.lo_cdist, iv.hi_cdist)
-        ]
-        layout.ranks[branch_key] = _cluster(boundaries, layout.tol)
+        })
         inside = interior_side.get(branch_key, "right")
         layout.outside[branch_key] = "left" if inside == "right" else "right"
 

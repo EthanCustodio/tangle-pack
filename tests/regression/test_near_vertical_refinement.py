@@ -5,7 +5,7 @@ whether a segment needs refining. The curvature area of a curved segment is a
 geometric quantity and must not depend on the segment's orientation. The bug was
 that the fit was expressed as ``y`` of ``x``: rotating a well-behaved curved
 segment toward vertical made the x-values coincide, the Vandermonde matrix in
-``_parabolic_fit`` went singular (``LinAlgError``) and the line fit divided by
+the old ``_parabolic_fit`` went singular (``LinAlgError``) and the line fit divided by
 ``~0``. ``refine_two_points`` caught the error and skipped the pair, so
 near-vertical stretches of a manifold silently lost resolution.
 

@@ -1822,7 +1822,8 @@ def span_contains(
         closed_lo: True if the lower end belongs to the span.
         closed_hi: True if the upper end belongs to the span.
         cdist: The canonical distance to test.
-        tol: Comparison tolerance (the registry's ``cdist_tol``).
+        tol: The slack at the ends: 0.0 (exact) for a registry cdist, the
+            relative error of a scaled cdist at a scaled landing end (C15).
 
     Returns:
         True if the span contains the point.
@@ -1842,13 +1843,14 @@ def owns_cdist(interval: PartitionInterval, cdist: float, tol: float) -> bool:
 
     A point strictly inside the span belongs to the element; a point sitting on
     an end belongs to it only when that end is closed. Adjacent elements are
-    never both closed at their shared end (see :func:`_build_intervals`), so
-    exactly one element owns every point of the branch.
+    never both closed at their shared end (see :func:`intervals_from_marks`),
+    so exactly one element owns every point of the branch.
 
     Args:
         interval: The partition element (interval) to test.
         cdist: Stable canonical distance of the point.
-        tol: Comparison tolerance (the registry's ``cdist_tol``).
+        tol: The slack at the ends, as in :func:`span_contains`: 0.0 (exact)
+            for a registry cdist (C15).
 
     Returns:
         True if this element owns the point.

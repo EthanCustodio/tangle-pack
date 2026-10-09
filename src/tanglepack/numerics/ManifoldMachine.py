@@ -87,7 +87,7 @@ Open questions:
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Iterator, Literal, Tuple, Optional
+from typing import Iterator, Literal, Optional
 import logging
 
 import numpy as np
@@ -945,39 +945,6 @@ class ManifoldMachine:
                 if p0.backward is new_point:
                     return
                 p0.insert_point_backward(new_point, only_forward=only_forward)
-
-    @staticmethod
-    def _parabolic_fit(points) -> Tuple[float, float, float]:
-        """
-        Takes in three points and gives the parabolic fit ``y = a x^2 + b x + c``
-        between them.
-
-        Uses the closed-form divided-difference (Newton) solution rather than
-        building and inverting the 3x3 Vandermonde matrix. This is both faster
-        (no ``np.linalg.inv``) and the basis for the vectorized curvature path.
-
-        Parameters:
-            points: list of three points
-
-        Raises:
-            ZeroDivisionError: if two of the three x-values coincide (the
-                divided differences are then singular). Callers in the chord
-                frame avoid this for non-degenerate triplets.
-        """
-
-        x_vals = points[:, 0]
-        y_vals = points[:, 1]
-
-        x0, x1, x2 = x_vals[0], x_vals[1], x_vals[2]
-        y0, y1, y2 = y_vals[0], y_vals[1], y_vals[2]
-
-        s01 = (y1 - y0) / (x1 - x0)
-        s12 = (y2 - y1) / (x2 - x1)
-        a = (s12 - s01) / (x2 - x0)
-        b = s01 - a * (x0 + x1)
-        c = y0 - a * x0**2 - b * x0
-
-        return a, b, c
 
     @staticmethod
     def _curvature_area_batch(

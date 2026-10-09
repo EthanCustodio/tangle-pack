@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
 from cases import build_k10
+from helpers.logs import assert_logged
 
 
 def _first_node_at_or_past(manifold, cdist):
@@ -29,6 +32,31 @@ def test_the_trim_keeps_the_first_node_at_or_past_the_cdist(small_tangle):
     assert workbench.trim_stable_at(key, cdist) is manifold
     assert manifold.tail is expected
     assert expected.get_cdist("stable") >= cdist > lo
+
+
+def test_a_cdist_on_a_node_keeps_that_node(small_tangle):
+    """"At or beyond": a cdist exactly on a node makes that node the tail, not the next."""
+    workbench, fp = small_tangle
+    key = _stable_branches(workbench, fp)[0]
+    manifold = workbench.manifolds[key]
+    nodes = list(manifold._walk_nodes(stop_at_final=False))
+    node = nodes[len(nodes) // 3]
+
+    workbench.trim_stable_at(key, node.get_cdist("stable"))
+    assert manifold.tail is node
+
+
+def test_a_cdist_past_the_end_leaves_the_branch_untrimmed(small_tangle, caplog):
+    workbench, fp = small_tangle
+    key = _stable_branches(workbench, fp)[0]
+    manifold = workbench.manifolds[key]
+    tail = manifold.tail
+    end = max(node.get_cdist("stable") for node in manifold._walk_nodes(stop_at_final=False))
+
+    with caplog.at_level(logging.WARNING, logger="tanglepack.numerics.TangleWorkbench"):
+        workbench.trim_stable_at(key, 2.0 * end)
+    assert manifold.tail is tail
+    assert_logged(caplog, logging.WARNING, "tanglepack.numerics.TangleWorkbench", count=1)
 
 
 def test_trimming_the_manifolds_is_the_trim_at_the_outermost_crossing():

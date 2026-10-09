@@ -289,7 +289,7 @@ def test_cartoon_ordinal_coordinate_is_strictly_increasing(k10_partitioned, fig_
     dual, _dynamics, layout = _cartoon(k10_partitioned, ax)
     for branch_key, reps in layout.ranks.items():
         assert reps == sorted(reps) and len(set(reps)) == len(reps)
-        assert all(b - a > layout.tol for a, b in zip(reps, reps[1:]))
+        assert all(b > a for a, b in zip(reps, reps[1:]))
         assert [layout.rank(branch_key, c) for c in reps] == list(range(len(reps)))
         boundaries = {
             round(c, 9)
