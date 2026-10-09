@@ -464,3 +464,30 @@ def test_crossings_sharing_a_segment_are_bracketed(crossings_on_the_segment):
     nodes = workbench.manifolds[unstable_key].get_point_array(return_nodes=True)
     cdists = [float(node.cdist) for node in nodes]
     assert cdists == sorted(cdists)
+
+
+def test_a_bridge_off_its_branch_is_refused():
+    """``_register_bridge`` asserts a bridge's invariant (NUM-14): a hand-cut bridge
+    whose second crossing lies outside its node span is refused."""
+    from helpers.fakes import bare_fixed_point
+    from helpers.polylines import polyline_workbench
+    from tanglepack import Bridge
+
+    fp = bare_fixed_point(label="A")
+    unstable_key = (fp, "unstable", 0, 0)
+    workbench = polyline_workbench(fp, {
+        unstable_key: [(0, 0), (3, 0), (5, 0), (10, 0)],
+        (fp, "stable", 0, 0): _ZIGZAG[:4],  # crosses at x = 2 and x = 4, on two segments
+    })
+    workbench.compute_intersections([fp], infer_iterates=False)
+    first, second = sorted(
+        (ix.unstable_cdist, iid) for iid, ix in workbench.intersection_registry if not ix.is_anchor
+    )
+    nodes = workbench.manifolds[unstable_key].get_point_array(return_nodes=True)
+    short = Bridge(
+        root=nodes[0], stability="unstable", stretch_param=1.0, fixed_point=fp, tail=nodes[1],
+        branch_index=0, manifold_key=unstable_key,
+        first_intersection=first[1], second_intersection=second[1],
+    )
+    with pytest.raises(AssertionError):
+        workbench._register_bridge(short)

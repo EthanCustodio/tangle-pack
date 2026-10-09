@@ -48,7 +48,7 @@ from .FixedPoint import FixedPoint, position_letter
 from .BaseManifold import BaseManifold
 from .Bridge import Bridge, BridgeId
 from .Intersection import Intersection, ManifoldKey, Stability
-from .IntersectionRegistry import IntersectionRegistry
+from .IntersectionRegistry import DEDUP_RTOL, IntersectionRegistry
 from .IterateInference import IterateInference
 from .diagnostics import ResolutionReport, SameStabilityCrossing, same_stability_crossings
 
@@ -1694,6 +1694,12 @@ class TangleWorkbench:
         registered IS that bridge -- the stored object is returned in its place and
         the duplicate gives up the segments the cut claimed for it. Partial pieces
         have no id and are simply appended.
+
+        Every bridge enters here, so this is where its invariants are asserted
+        (NUM-14): a bridge is an arc of ITS unstable branch between its two
+        crossings. A non-anchor end sits on the bridge's own branch, inside its node
+        span up to the registry's dedup tolerance; an anchor end comes first and is
+        the bridge's own periodic point (one anchor on every branch there, D4).
         """
         bid = bridge.id
         if bid is None:
@@ -1705,6 +1711,18 @@ class TangleWorkbench:
             if existing is not bridge:
                 self.Tangle.release_manifold(bridge)
             return existing
+
+        lo, hi = sorted(float(point.get_cdist("unstable")) for point in (bridge.root, bridge.tail))
+        slack = DEDUP_RTOL * max(abs(hi), 1.0)
+        fixed_point, _, orbit_index, _ = bridge.manifold_key
+        for end in bid:
+            crossing = self._intersection_registry[end]
+            if crossing.is_anchor:
+                assert end == bid[0], bid
+                assert crossing.manifold_a_key[0] is fixed_point and crossing.manifold_a_key[2] == orbit_index, bid
+            else:
+                assert crossing.manifold_a_key == bridge.manifold_key, (bid, end, crossing.manifold_a_key[1:])
+                assert lo - slack <= crossing.unstable_cdist <= hi + slack, (bid, end, lo, crossing.unstable_cdist, hi)
 
         self._bridges[bid] = bridge
         for endpoint in bid:
