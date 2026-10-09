@@ -64,3 +64,9 @@ What the author has decided. Binding on every later run. Newest last.
 
 - **Said:** "Accept the asymmetry" (offered: trim the trellis to complete orbits; warn and grow more; accept).
 - **Consequence (D9):** a stable branch whose reference pair's +j images lie beyond the computed manifold has no fundamental-segment hole; that is correct for the finite trellis, not a bug. WP5's WARNING naming the branch stays. Laws that assume every branch has a window hole (e.g. the inversion anchor class leading its tangle) must be scoped to branches that have one, not left as known issues.
+
+## 2026-10-08 — DEC-20, DEC-21, DEC-22 (raised by WP7 and WP8)
+
+- **DEC-20, said:** "Cut S at the pip orbit." **Consequence (D10):** the partition and the dual graph use the stable manifold cut at the strong pip's orbit (chalkboard stage 3, as pseudoneighbors already do); this replaces the 2026-09-14 "the pip moves the unified set without trimming" rule.
+- **DEC-21, said:** "I'm not sure this is an issue? We do not need computed bridges to find words, we strictly use the dual graph unless it is a singleton. That allows us to potentially find words even though we haven't computed the actual iterates. A word can include the class itself and any other classes." Confirmed on follow-up: "Yes, but mark them." **Consequence (D11):** a walk pair no computed bridge spans is a legitimate class: lettered, walked from its elements' landings, NOT a reliability failure, and marked "no computed bridge yet" (informational). Supersedes C9's "a pair no bridge spans is never a class".
+- **DEC-22, said:** "Balanced trellis." **Consequence (D12):** cut the crossing set at an unstable depth matched to the stable cut at the pip, so blasting cannot reshape the fundamental segment at depth; the class count then never drops under blasting.
