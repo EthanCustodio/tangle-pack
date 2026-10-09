@@ -23,6 +23,7 @@ import numpy as np
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.topology.DualGraph import FaceNode, StableNode
 from tanglepack.topology.Trellis import Trellis
+from tanglepack.topology.TrellisBranch import TrellisBranch
 from tanglepack.topology.TopologyResults import (
     ElementRef,
     PartitionInterval,
@@ -70,6 +71,45 @@ def bare_fixed_point(
     if coordinates is not None:
         fixed_point.coordinates = [np.asarray(point, dtype=np.float64) for point in coordinates]
     return fixed_point
+
+
+def synthetic_trellis(registry, *fixed_points: FixedPoint) -> Trellis:
+    """
+    A real :class:`Trellis` over a hand-built registry, with no bridges.
+
+    Its branches are bucketed and ordered from the registry, as
+    ``Trellis.from_workbench`` derives them from a workbench.
+
+    Args:
+        registry: An ``IntersectionRegistry`` of synthetic crossings.
+        *fixed_points: The fixed points whose branches the trellis holds.
+
+    Returns:
+        The trellis.
+    """
+    branches: dict = {}
+    for ix_id, ix in registry:
+        for key in (ix.manifold_a_key, ix.manifold_b_key):
+            if key is None or key[0] not in fixed_points:
+                continue
+            branch = branches.setdefault(
+                key,
+                TrellisBranch(
+                    key=key,
+                    fixed_point=key[0],
+                    stability=key[1],
+                    orbit_index=key[2],
+                    branch_index=key[3],
+                    intersection_ids=[],
+                ),
+            )
+            branch.intersection_ids.append(ix_id)
+    for key, branch in branches.items():
+        attr = "unstable_cdist" if key[1] == "unstable" else "stable_cdist"
+        branch.intersection_ids.sort(key=lambda i: getattr(registry[i], attr))
+    return Trellis(
+        fixed_points=list(fixed_points), registry=registry, branches=branches, bridges=[]
+    )
 
 
 def stable_key(fixed_point: FixedPoint, orbit: int = 0, branch: int = 0) -> tuple:
@@ -206,6 +246,10 @@ class FakeTrellis:
             manifold_b_key=self.key_of(crossing_id),
             is_anchor=False,
         )
+
+    def __contains__(self, crossing_id: Optional[int]) -> bool:
+        """Every crossing of the fake is a crossing of its trellis (no pip cut)."""
+        return crossing_id in self.cdists
 
     def iterate(self, crossing_id: int, n: int) -> Optional[int]:
         """``M^n`` of one crossing, composed link by link; None at a missing link."""

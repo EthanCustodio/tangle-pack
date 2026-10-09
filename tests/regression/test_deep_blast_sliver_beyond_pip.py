@@ -6,8 +6,10 @@ Nine blasts of the k=2.8 zone (analytic seed, ``area_cutoff = 1e-7``,
 so the sliver's midpoint lies within the registry's absolute ``cdist_tol`` of
 the pip. The iterated partition used to find each element's homotopy parent by
 TOLERANT midpoint ownership, so the sliver ``(pip, outer]`` was handed to the
-closed pip singleton and the child-inside-parent assertion fired. Ownership of registry cdists is exact now.
-No count of the build is pinned.
+closed pip singleton and the child-inside-parent assertion fired. Ownership of
+registry cdists is exact now, and since D10 (WP8b) the trellis is cut at the
+pip, so the sliver crossing is no crossing of the trellis at all. No count of
+the build is pinned.
 """
 
 from __future__ import annotations
@@ -22,16 +24,18 @@ def test_deep_blast_sliver_beyond_pip():
     trellis = session.trellis(case.fixed_points[0])
     tol = float(trellis.registry.cdist_tol)
     pip = trellis.intersection(case.pips[0])
-    branch = trellis.branch(pip.manifold_b_key)
     pip_cdist = float(pip.stable_cdist)
-    beyond = [
-        float(trellis.intersection(iid).stable_cdist) - pip_cdist
-        for iid in branch.intersection_ids
-        if float(trellis.intersection(iid).stable_cdist) > pip_cdist
-    ]
-    # The build must still exercise the defect: a sliver past the pip whose
-    # midpoint lies within the tolerance of it.
-    assert any(gap < 2 * tol for gap in beyond), "the builder no longer makes the sliver"
+    beyond = {
+        crossing_id: float(ix.stable_cdist) - pip_cdist
+        for crossing_id, ix in trellis.registry
+        if ix.manifold_b_key == pip.manifold_b_key and float(ix.stable_cdist) > pip_cdist
+    }
+    # The build must still exercise the defect: a computed crossing a sliver past
+    # the pip whose midpoint lies within the tolerance of it ...
+    slivers = [crossing_id for crossing_id, gap in beyond.items() if gap < 2 * tol]
+    assert slivers, "the builder no longer makes the sliver"
+    # ... which the cut at the pip orbit leaves out of the trellis (D10).
+    assert not [crossing_id for crossing_id in slivers if crossing_id in trellis]
 
     session.symbolic_dynamics()
     assert laws.check_iterated_child_inside_parent(case) > 0

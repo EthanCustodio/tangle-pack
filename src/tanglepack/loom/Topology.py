@@ -18,6 +18,11 @@ Dev Notes:
   old "branch missing a partition" WARNING is gone: a heteroclinic bridge's
   class needs both its fixed points selected, and ``bridge_classes`` raises
   naming the end it cannot resolve otherwise (WP9 builds the first such case).
+* The selection's trellis is cut at every selected pip's orbit (D10, D12):
+  each per-fixed-point trellis is cut when its pip is set, and for a single
+  fixed point it IS the selection's, so the cut is a no-op there. A class
+  member may be a joined arc of the cut, which the workbench does not hold,
+  so bridges are resolved through the trellis (``bridge_between``).
 * Letters follow :meth:`Topology.identity`, the pair of the bounding crossings
   of a class's two elements, so a class keeps its letter across recomputes
   while its elements keep their bounds (C2, BCG-7). Element NAMES
@@ -59,7 +64,8 @@ class Topology:
     Attributes:
         generation: The workbench generation it was computed at.
         fixed_points: The selected fixed points, in workbench order.
-        trellis: The selection's trellis (its bridges are the ones classed).
+        trellis: The selection's trellis, cut at the pip orbits (its bridges
+            are the ones classed).
         strong_pips: The strong pip of each selected fixed point (None where
             a fixed point has no candidate), in the same order.
         holes: Every hole of the selected fixed points.
@@ -82,9 +88,10 @@ class Topology:
         self._session = session
         self.generation = session.workbench.generation
         self.fixed_points = tuple(fixed_points)
-        self.trellis: "Trellis" = session.trellis(self.fixed_points)
         recomputed = [self._stages_3_to_6(fp) for fp in self.fixed_points]
         self.strong_pips = tuple(t.strong_pip for t in recomputed)
+        self.trellis: "Trellis" = session.trellis(self.fixed_points)
+        self.trellis.cut_at_pip_orbit(pip for pip in self.strong_pips if pip is not None)
         # New lists: a later manual stage call clears the trellis slots in place.
         self.holes = [hole for t in recomputed for hole in t.holes]
         self.partitions: list["StablePartitionResult"] = [
@@ -140,7 +147,7 @@ class Topology:
         session = self._session
         keys = set()
         for member in entry.members:
-            zone = session.classify_bridge(session.workbench.bridge(member.bridge_id))
+            zone = session.classify_bridge(self.trellis.bridge_between(*member.bridge_id))
             keys.add(None if zone is None else zone.key)
         if len(keys) > 1:
             logger.warning(

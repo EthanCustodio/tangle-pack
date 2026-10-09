@@ -242,6 +242,12 @@ class BridgeClassEntry:
         return not self.inert
 
     @property
+    def spanned(self) -> bool:
+        """False for a class a word names that no computed bridge spans yet (D11):
+        lettered and walked like any other, informational only."""
+        return bool(self.members)
+
+    @property
     def has_image_evidence(self) -> bool:
         """True when at least one member's forward image was resolved."""
         return bool(self.image_classes or self.image_loops)
@@ -758,11 +764,13 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
         The image's consecutive pairs in increasing unstable canonical
         distance (each ordered like a
         :data:`~tanglepack.numerics.Bridge.BridgeId`), or ``None`` when an
-        endpoint has no registered ``+1`` iterate, an image end lies off the
-        advanced branch (WARNING), or that branch is not in the trellis.
+        endpoint's ``+1`` iterate is no crossing of the trellis (unregistered,
+        or past its pip-orbit cut: the image leaves T(q0), no evidence either
+        way), an image end lies off the advanced branch (WARNING), or that
+        branch is not in the trellis.
     """
     images = [trellis.iterate(endpoint, 1) for endpoint in bridge_id]
-    if any(image is None for image in images):
+    if any(image not in trellis for image in images):
         return None
     ia, ib = (trellis.intersection(image) for image in images)
     own_key = trellis.unstable_key_of(bridge_id)

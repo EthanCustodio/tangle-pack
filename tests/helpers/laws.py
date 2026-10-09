@@ -1397,6 +1397,80 @@ def check_window_holes_on_every_branch(case: "Case") -> int:
     return count
 
 
+def pip_orbit_cuts(trellis, pip: int) -> dict:
+    """
+    The cuts of the trellis of the pip ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])`` (D10, D12),
+    read off the iterate table's ``+1`` links and the registry alone.
+
+    Stable branch ``j`` ends at ``f^j(q0)``, ``j < k``; the unstable branch of
+    ``f^i(q0)`` ends there for the ``k`` deepest ``i``, ``m`` the last ``+1`` link of
+    the pip's chain. A point the table does not hold is scaled from the pip by
+    ``per_step_beta`` and flagged as placed.
+
+    Args:
+        trellis: A trellis holding the pip's registry.
+        pip: The strong pip's id.
+
+    Returns:
+        ``{branch key: (cdist, placed)}``.
+    """
+    orbit = [pip]
+    while (image := trellis.iterate(orbit[-1], 1)) is not None:
+        orbit.append(image)
+    q0 = trellis.intersection(pip)
+    fp = q0.manifold_b_key[0]
+    k, m = fp.k_value, len(orbit) - 1
+
+    def point(i: int, stability: str) -> tuple:
+        key = q0.manifold_b_key if stability == "stable" else q0.manifold_a_key
+        if 0 <= i <= m:
+            ix = trellis.intersection(orbit[i])
+            own = ix.manifold_b_key if stability == "stable" else ix.manifold_a_key
+            cdist = ix.stable_cdist if stability == "stable" else ix.unstable_cdist
+            return own, (float(cdist), False)
+        cdist = q0.stable_cdist if stability == "stable" else q0.unstable_cdist
+        return fp.advance_key(key, i), (float(cdist) * fp.per_step_beta(stability) ** i, True)
+
+    return dict(
+        [point(j, "stable") for j in range(k)]
+        + [point(i, "unstable") for i in range(m - k + 1, m + 1)]
+    )
+
+
+def check_trellis_is_cut_at_the_pip_orbit(case: "Case") -> int:
+    """D10, D12: once a pip is chosen, the trellis holds exactly the computed crossings of
+    ``T(q0)``: none past a pip-orbit cut on its stable or its unstable branch, and every
+    computed crossing of its branches inside both cuts. The selection trellis is cut at
+    every pip."""
+    count = 0
+    trellises = _per_fp_trellises(case)
+    pips = [trellis.strong_pip for trellis in trellises]
+    for trellis, chosen in [*((t, [t.strong_pip]) for t in trellises), (_full(case), pips)]:
+        cuts = {
+            key: cut
+            for pip in chosen
+            if pip is not None
+            for key, cut in pip_orbit_cuts(trellis, pip).items()
+        }
+        tol = float(trellis.registry.cdist_tol)
+        held = set(trellis.own_intersection_ids)
+        for iid, ix in trellis.registry:
+            if ix.is_anchor or not {ix.manifold_a_key, ix.manifold_b_key} & set(trellis.branches):
+                continue
+            inside = all(
+                float(cdist) <= cuts[key][0] + (tol if cuts[key][1] else 0.0)
+                for key, cdist in (
+                    (ix.manifold_b_key, ix.stable_cdist),
+                    (ix.manifold_a_key, ix.unstable_cdist),
+                )
+                if key in cuts
+            )
+            assert (iid in held) == inside, (
+                iid, iid in held, float(ix.unstable_cdist), float(ix.stable_cdist))
+            count += 1
+    return count
+
+
 def check_reference_pairs_valid(case: "Case") -> int:
     """A reference pair is consecutive on its stable AND its unstable branch, on the
     strong pip's own branch, inside the reference window ``[f^k(q0), q0]``."""
@@ -2224,8 +2298,9 @@ def misplaced_unified_crossings(dual) -> list:
     """``[(stable branch key, crossing id)]`` for every crossing of a pip's fixed point
     whose place disagrees with the unified span. ``S \\ f(S)`` is read off the iterate
     table, independently of the dual graph's cdist arithmetic: a crossing lies in it
-    exactly when it has no registered preimage (its preimage would sit beyond the end of
-    the computed stable branch), so it must be unified exactly then."""
+    exactly when it has no preimage IN THE TRELLIS (its preimage would sit beyond the
+    end of the trellis's stable branch, which is cut at the pip orbit, D10), so it must
+    be unified exactly then."""
     trellis = dual.trellis
     tol = float(trellis.registry.cdist_tol)
     owners = {key[0] for key in dual.fundamental_segments}
@@ -2239,16 +2314,16 @@ def misplaced_unified_crossings(dual) -> list:
             if cdist == 0.0:  # the anchor is its own preimage
                 continue
             unified = span is not None and span[0] + tol < cdist <= span[1] + tol
-            if unified != (trellis.iterate(crossing_id, -1) is None):
+            if unified != (trellis.iterate(crossing_id, -1) not in trellis):
                 misplaced.append((branch.key, crossing_id))
     return misplaced
 
 
 def check_dual_unified_is_where_f_of_s_stops(case: "Case") -> int:
-    """The precondition of the walk (PK-5 / DEC-20): on every stable branch of a pip's
+    """The precondition of the walk (PK-5, D10): on every stable branch of a pip's
     fixed point the unified span is exactly ``S \\ f(S)``, where the image of a bridge
     may cross the stable manifold away from the images of its ends: a crossing is
-    unified iff it has no registered preimage."""
+    unified iff it has no preimage in the trellis."""
     dual = case.session.dual_graph()
     assert misplaced_unified_crossings(dual) == []
     return sum(len(branch) for branch in dual.trellis.stable_branches)
@@ -2340,11 +2415,12 @@ def check_every_active_class_walks(case: "Case") -> int:
 
 
 def check_alphabet_closed_under_words(case: "Case") -> int:
-    """D3: every symbol of every word names a class of the table. The seed classes are
-    the session alphabet; every other class was added by the closure, is spanned by a
-    registered bridge (the evidence table) and is named in the word of the class that
-    named it. A pair no bridge spans is never a class: its class has no itinerary,
-    and then the dynamics is not reliable."""
+    """D3, D11: every symbol of every word names a class of the table. The seed classes
+    are the session alphabet; every other class was added by the closure and is named
+    in the word of the class that named it. A closure class is spanned by a registered
+    bridge (the evidence table) exactly when it is not flagged "no computed bridge yet"
+    (``entry.spanned`` False, D11). A class without an itinerary makes the dynamics
+    unreliable."""
     dyn = case.session.symbolic_dynamics()
     seed = case.session.bridge_classes()
     evidence = case.session.minimal_trellis().classes
@@ -2357,7 +2433,7 @@ def check_alphabet_closed_under_words(case: "Case") -> int:
     for cls, cd in dyn.classes.items():
         assert (cd.named_by is None) == (cls in seed), cd.letter
         if cd.named_by is not None:
-            assert cls in evidence, cd.letter
+            assert (cls in evidence) == cd.entry.spanned, cd.letter
             namer = dyn.classes[cd.named_by]
             assert cls in {symbol.bridge_class for symbol in namer.symbols}, cd.letter
         if cd.itinerary is None:
@@ -2523,6 +2599,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_propagation_terminates,
         check_no_direct_hole_beyond_fundamental,
         check_window_holes_on_every_branch,
+        check_trellis_is_cut_at_the_pip_orbit,
         check_reference_pairs_valid,
     ],
     "arrangement": [

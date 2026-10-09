@@ -183,39 +183,40 @@ def test_point_between_two_holes_is_closed_singleton(stable_line):
     ]
 
 
-def test_partition_ignores_strong_pip_cut(stable_line):
-    """The strong-pip cut no longer splits the partition — the intervals run
-    contiguously past it, and every hole opens its interval (the earlier
-    interior/exterior reporting split was removed with the zone association,
-    2026-07-16)."""
-    trellis, ids = stable_line
-    fp = trellis.fixed_points[0]
-    branch_key = (fp, "stable", 0, 0)
-    # A strong pip between the hole regions, at stable cdist 2.5.
-    cut = trellis.registry.add_synthetic(
-        (2.5, 0.0), unstable_cdist=4.5, stable_cdist=2.5,
-        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=branch_key,
+def test_partition_of_a_cut_trellis_ends_at_the_pip():
+    """The partition reads the trellis cut at the chosen pip's orbit (D10): it ends
+    at the pip, and the crossings past it are no boundaries. (Until 2026-10-08 the
+    pip only moved the unified set and the partition ran past it.)"""
+    fp = _fixed_point(1, 4.0)
+    reg = IntersectionRegistry()
+    stable, unstable = (fp, "stable", 0, 0), (fp, "unstable", 0, 0)
+
+    def crossing(s: float, u: float) -> int:
+        return reg.add_synthetic(
+            (s, u), unstable_cdist=u, stable_cdist=s, manifold_a_key=unstable, manifold_b_key=stable
+        )
+
+    ids = [crossing(float(s), float(7 - s)) for s in range(1, 7)]
+    pip = crossing(4.5, 1.5)
+    reg.register_iterate(pip, 1, ids[0])  # f(q0): the unstable cut lies past every crossing
+    branch = TrellisBranch(
+        key=stable, fixed_point=fp, stability="stable", orbit_index=0, branch_index=0,
+        intersection_ids=sorted([*ids, pip], key=lambda i: reg[i].stable_cdist),
     )
-    trellis.branch(branch_key).intersection_ids.insert(2, cut)
-    trellis.strong_pip = cut
+    trellis = Trellis(fixed_points=[fp], registry=reg, branches={stable: branch}, bridges=[])
+    trellis.strong_pip = pip
 
     trellis.holes.append(_hole(trellis, ids[0], ids[1], "right"))
     trellis.holes.append(_hole(trellis, ids[2], ids[3], "right"))
-    trellis.holes.append(_hole(trellis, ids[4], ids[5], "right"))  # outermost
 
-    result = partition_stable_manifold(trellis, branch_key, "right")
+    result = partition_stable_manifold(trellis, stable, "right")
 
-    # No boundary at the cut; the region (5, 6) ends at the branch end, so
-    # the outermost point owns itself as a singleton.
-    assert 2.5 not in {iv.lo_cdist for iv in result.intervals}
     assert _spans(result.intervals) == [
         (0.0, 1.0, True, True),
         (1.0, 2.0, False, False),
         (2.0, 3.0, True, True),
         (3.0, 4.0, False, False),
-        (4.0, 5.0, True, True),
-        (5.0, 6.0, False, False),
-        (6.0, 6.0, True, True),
+        (4.0, 4.5, True, True),
     ]
 
 

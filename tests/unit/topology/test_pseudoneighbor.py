@@ -15,7 +15,7 @@ import logging
 import pytest
 
 from helpers.logs import assert_logged
-from helpers.fakes import bare_fixed_point
+from helpers.fakes import bare_fixed_point, synthetic_trellis as _trellis
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.Pseudoneighbor import (
@@ -23,8 +23,6 @@ from tanglepack.topology.Pseudoneighbor import (
     extend_pseudoneighbor_trajectories,
 )
 from tanglepack.topology.TopologyResults import PseudoneighborPair
-from tanglepack.topology.Trellis import Trellis
-from tanglepack.topology.TrellisBranch import TrellisBranch
 
 #: The default slack of the 2D endpoint-collision fallback; the table-linked
 #: tests drift a landing by TWICE this, so the unlinked fallback must reject it.
@@ -34,37 +32,6 @@ COLLISION_RTOL = inspect.signature(compute_pseudoneighbors).parameters["collisio
 def _fixed_point(period: int, lambda_u: float) -> FixedPoint:
     """A bare no-inversion fixed point whose full-cycle unstable eigenvalue is ``lambda_u``."""
     return bare_fixed_point(period, beta=lambda_u ** (-1.0 / period))
-
-
-def _trellis(registry: IntersectionRegistry, *fixed_points: FixedPoint) -> Trellis:
-    """A Trellis whose branches are bucketed and ordered from the registry,
-    mirroring what Trellis.from_workbench derives from a workbench."""
-    branches: dict = {}
-    for ix_id, ix in registry:
-        for key in (ix.manifold_a_key, ix.manifold_b_key):
-            if key is None or key[0] not in fixed_points:
-                continue
-            branch = branches.setdefault(
-                key,
-                TrellisBranch(
-                    key=key,
-                    fixed_point=key[0],
-                    stability=key[1],
-                    orbit_index=key[2],
-                    branch_index=key[3],
-                    intersection_ids=[],
-                ),
-            )
-            branch.intersection_ids.append(ix_id)
-    for key, branch in branches.items():
-        attr = "unstable_cdist" if key[1] == "unstable" else "stable_cdist"
-        branch.intersection_ids.sort(key=lambda i: getattr(registry[i], attr))
-    return Trellis(
-        fixed_points=list(fixed_points),
-        registry=registry,
-        branches=branches,
-        bridges=[],
-    )
 
 
 def _reference_window(fp: FixedPoint, registry: IntersectionRegistry):
@@ -341,7 +308,8 @@ def test_heteroclinic_candidate_ignored():
 
 def test_reference_window_starts_at_chosen_strong_pip():
     """With a strong pip chosen, r_n is its cut point — not the outermost
-    intersection — and crossings beyond the cut leave the check set N."""
+    intersection — and the trellis cuts N there (D10): crossings beyond the cut
+    are no crossings of the trellis, so they leave the check set."""
     fp = _fixed_point(1, 4.0)
     reg = IntersectionRegistry()
     r_n, x1, r_end = _reference_window(fp, reg)
@@ -415,12 +383,19 @@ def test_backward_iterate_punctures_interval():
     """The definition's X runs over ALL n in Z: a candidate's BACKWARD iterate
     landing inside the pair's open unstable interval rejects the pair, even
     though that iterate's stable position lies beyond the pip cut (on the
-    removed tail) — e.g. the preimages of blasted crossings."""
+    removed tail) — e.g. the preimages of blasted crossings. The candidate itself
+    is a crossing of T(q0): the pip's orbit is registered to M^2(q0), so the
+    unstable branch is cut past it (D12)."""
     fp = _fixed_point(1, 4.0)
     reg = IntersectionRegistry()
     r_n, x1, r_end = _reference_window(fp, reg)
     stable = (fp, "stable", 0, 0)
     unstable = (fp, "unstable", 0, 0)
+    deepest = reg.add_synthetic(
+        (0.25, 16.0), unstable_cdist=16.0, stable_cdist=0.25,
+        manifold_a_key=unstable, manifold_b_key=stable,
+    )
+    reg.register_iterate(r_end, 1, deepest)
     # Backward iterate lands at u = 6 / 4 = 1.5 inside (1, 2); its stable
     # position 2 * 4 = 8 exceeds the cut, and it still punctures.
     reg.add_synthetic(
@@ -526,8 +501,9 @@ def test_missing_pip_iterates_are_cut_at_their_predicted_cdist(caplog, period, p
     """A period-3 anchor is cut on every stable branch (PK-6, D5): with no
     ``+1``/``+2`` links for the pip, its cuts on the other two branches are
     placed by ``image_cdist`` (stable cdist ``4 * beta^j``) and flagged in one
-    WARNING. A crossing beyond such a predicted cut leaves the check set N, so
-    it cannot puncture a window pair. A period-1 anchor has one stable branch,
+    WARNING of the trellis, which cuts N when the pip is chosen (D10). A
+    crossing beyond such a predicted cut is no crossing of the trellis, so it
+    cannot puncture a window pair. A period-1 anchor has one stable branch,
     which the pip alone cuts: nothing to place, nothing to report.
 
     The window ``(4, 1) -> (3, 2) -> M^k = (4 / lambda, lambda)`` sits on orbit
@@ -555,18 +531,17 @@ def test_missing_pip_iterates_are_cut_at_their_predicted_cdist(caplog, period, p
     if period == 3:
         _point(3.0, 1.5, stable_orbit=1)
     trellis = _trellis(reg, fp)
-    trellis.strong_pip = pip
     assert fp.k_value == period
 
-    with caplog.at_level(logging.WARNING, logger="tanglepack.topology.Pseudoneighbor"):
+    with caplog.at_level(logging.WARNING):
+        trellis.strong_pip = pip
         pairs = compute_pseudoneighbors(trellis)
 
     assert [p.as_tuple() for p in pairs] == [
         tuple(sorted((pip, x1))), tuple(sorted((x1, r_end)))
     ]
-    assert_logged(
-        caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=placed_warnings
-    )
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Trellis", count=placed_warnings)
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=0)
 
 
 @pytest.mark.parametrize(

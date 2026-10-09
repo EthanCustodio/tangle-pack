@@ -52,15 +52,10 @@ Dev Notes:
   :meth:`~tanglepack.topology.Trellis.Trellis.image_cdist`; nothing on any
   other branch. A straddling arc is unified and logged at INFO; no pip unifies
   nothing and warns.
-* The walk's precondition (PK-5, DEC-20 for the author): the image of a bridge
-  crosses the trellis's stable manifold only at the images of its ends and in
-  ``S \\ f(S)``, per branch ``(c_s(f(end of the previous branch)), end]``. That
-  equals the pip window exactly when the stable manifold is trimmed at the pip
-  orbit (every builder does); a stable manifold running past it (inversion x
-  period 2 at 10 steps) leaves a walk unreachable. Unifying ``S \\ f(S)``, or
-  cutting S at the pip orbit here, would reverse the 2026-09-14 "the pip moves
-  the unified set without trimming" design, so the dual graph only WARNS per
-  branch where the two differ.
+* The trellis is cut at the pip orbit (``Trellis.cut_at_pip_orbit``, D10), so
+  ``S \\ f(S)``, where the image of a bridge may cross the stable manifold
+  away from the images of its ends, is exactly the pip window, and the other
+  ``k - 1`` branches are walls as a consequence.
 * Element images are read from the trellis (iterate table first, scaled cdist
   otherwise); the map is never called during the build. Face images go
   through :meth:`~tanglepack.topology.Arrangement.Arrangement.image_of`,
@@ -90,7 +85,6 @@ from numpy.typing import NDArray
 
 from ..numerics.geometry import point_in_polygon, signed_polygon_area
 from .ElementNaming import ElementName, ElementNaming
-from .Trellis import SCALING_RTOL
 from .TopologyResults import (
     Arc,
     ElementRef,
@@ -548,7 +542,6 @@ class DualGraph:
         self._nodes_of_edge: dict[tuple, dict[Side, StableNode]] = {}
 
         self._fundamental_segments_from(strong_pips)
-        self._check_where_f_of_s_stops()
         self._build_stable_nodes()
         self._name_stable_nodes()
         classes = self._merge_faces()
@@ -593,37 +586,6 @@ class DualGraph:
                 c_hi,
                 pip_id,
                 "iterate table" if from_table else "scaled cdist",
-            )
-
-    def _check_where_f_of_s_stops(self) -> None:
-        """WARN on each stable branch of a pip's fixed point whose unified span is not
-        ``S \\ f(S)`` (see the module Dev Notes; PK-5, DEC-20)."""
-        trellis = self.trellis
-        cdist_tol = float(trellis.registry.cdist_tol)
-        owners = {key[0] for key in self.fundamental_segments}
-        for branch in trellis.stable_branches:
-            fixed_point = branch.key[0]
-            previous = fixed_point.advance_key(branch.key, -1)
-            previous_branch = trellis.branch(previous)
-            if fixed_point not in owners or not len(branch) or not previous_branch:
-                continue
-            end = float(trellis.intersection(branch.intersection_ids[-1]).stable_cdist)
-            last = previous_branch.intersection_ids[-1]
-            _key, image, from_table = trellis.image_cdist(last, 1, "stable", branch=previous)
-            tol = cdist_tol if from_table else max(cdist_tol, SCALING_RTOL * end)
-            stops = (float(image), end) if image < end - tol else None
-            unified = self.fundamental_segments.get(branch.key)
-            if stops is None and unified is None:
-                continue
-            if stops and unified and all(abs(a - b) <= tol for a, b in zip(stops, unified)):
-                continue
-            logger.warning(
-                "stable branch %s runs past the strong pip's orbit: images may cross it "
-                "on %s, the dual graph unifies %s; a walk can be unreachable -- trim the "
-                "stable manifold at the pip orbit (resonance_zone) (DEC-20)",
-                branch.key[1:],
-                "(%.6g, %.6g]" % stops if stops else "nothing",
-                "(%.6g, %.6g]" % unified if unified else "nothing",
             )
 
     def _pip_segment(self, pip_id: int) -> tuple["ManifoldKey", float, float, bool]:

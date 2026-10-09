@@ -26,6 +26,7 @@ def test_a_pair_with_no_bridge_object_is_skipped_with_a_warning(
     session, _fp = k10_partitioned
     full = session.trellis()
     victim = session.minimal_trellis().image_bridge_ids[0]
+    table = session.bridge_classes()
     original = full.bridge_between
 
     def hide(a, b):
@@ -35,7 +36,7 @@ def test_a_pair_with_no_bridge_object_is_skipped_with_a_warning(
 
     monkeypatch.setattr(full, "bridge_between", hide)
     with caplog.at_level(logging.WARNING, logger="tanglepack.topology.MinimalTrellis"):
-        minimal = minimal_trellis(full, _holes(session), session.bridge_classes())
+        minimal = minimal_trellis(full, _holes(session), table)
     assert any(frozenset(p) == frozenset(victim) for _parent, p in minimal.skipped_pairs)
     assert not minimal.is_kept(victim)
     assert_logged(caplog, logging.WARNING, "tanglepack.topology.MinimalTrellis")

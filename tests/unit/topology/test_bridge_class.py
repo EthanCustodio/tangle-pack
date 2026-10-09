@@ -463,6 +463,10 @@ class _ClassTrellis:
             is_anchor=False,
         )
 
+    def __contains__(self, iid) -> bool:
+        """Every crossing of the fake is a crossing of its trellis (no pip cut)."""
+        return iid in self._crossings
+
     def iterate(self, iid: int, n: int):
         """The registered iterate, or None."""
         return self._iterates.get((iid, n))

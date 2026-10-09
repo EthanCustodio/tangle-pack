@@ -221,7 +221,10 @@ class TangleSession:
         single-fixed-point trellis gets its fixed point's chosen strong pip back
         (API-1): it is classified and the remembered pip is found again by its
         cdists and keys; a pip that is no longer a candidate is left unset with
-        a WARNING.
+        a WARNING. Once a pip is chosen the trellis is cut at its orbit
+        (``Trellis.cut_at_pip_orbit``, D10, D12): a single fixed point's when
+        the pip is set or restored, a selection of several by
+        :meth:`topology`.
 
         Args:
             fixed_points: A single FixedPoint, an iterable of them, or None for all
@@ -713,6 +716,7 @@ class TangleSession:
         from ..numerics.geometry import arc_polyline, point_in_polygon
 
         workbench = self.workbench
+        trellis = self.trellis()
         registry = workbench.intersection_registry
         tol = registry.cdist_tol
         by_id = {id(fp): fp for fp in workbench.fixed_points}
@@ -736,9 +740,8 @@ class TangleSession:
             nested = children.get(id(key[0]))
             if not nested or key not in workbench.manifolds:
                 continue
-            try:
-                bridge = workbench.bridge(bridge_id)
-            except KeyError:
+            bridge = trellis.bridge_between(*bridge_id)
+            if bridge is None:
                 continue
             c_first, c_second = float(first.stable_cdist), float(second.stable_cdist)
             stable = np.asarray(

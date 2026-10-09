@@ -8,7 +8,7 @@ on and the registry ids of the two crossings that bound it (its
 """
 
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, Sequence
 
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
@@ -120,6 +120,42 @@ class Bridge(BaseManifold):
         self.iterated: bool = False
         self.first_intersection: Optional[int] = first_intersection
         self.second_intersection: Optional[int] = second_intersection
+
+    @classmethod
+    def joined(cls, pieces: Sequence["Bridge"]) -> "Bridge":
+        """
+        Consecutive bridges of one curve as ONE arc, from the first piece's root to
+        the last piece's tail.
+
+        The trellis cut at a strong pip's orbit drops the crossings past it, and
+        the unstable arc across a dropped crossing is one arc of the cut trellis
+        (D10). No map call and no registry write: the workbench never holds the
+        joined arc.
+
+        Args:
+            pieces: Bridges in unstable order, each starting where the previous
+                one ends, all on one branch.
+
+        Returns:
+            The joined bridge, keyed and bounded by the outer ends of the run.
+        """
+        first, last = pieces[0], pieces[-1]
+        assert all(
+            a.second_intersection == b.first_intersection is not None
+            and a.manifold_key == b.manifold_key
+            for a, b in zip(pieces, pieces[1:])
+        ), "joined bridges must be consecutive pieces of one curve"
+        return cls(
+            first.root,
+            first.stability,
+            first.stretch_param,
+            first.fixed_point,
+            last.tail,
+            branch_index=first.branch_index,
+            manifold_key=first.manifold_key,
+            first_intersection=first.first_intersection,
+            second_intersection=last.second_intersection,
+        )
 
     @property
     def id(self) -> Optional[BridgeId]:

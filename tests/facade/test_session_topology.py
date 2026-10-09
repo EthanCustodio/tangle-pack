@@ -39,8 +39,13 @@ def test_a_blast_or_a_pip_change_recomputes():
     case = build_k10()
     session, fp = case.session, case.fixed_point
     first = session.topology()
-    alternate = next(c for c in session.strong_pip_candidates(fp) if c != session.strong_pip(fp))
-
+    # The anchor-nearest other candidate (test_session_caches' rule): an inner
+    # one's orbit cut can leave a bridge around the end of the cut stable branch,
+    # which the row invariant rejects exactly as on a numerical trim at that pip.
+    alternate = min(
+        (c for c in session.strong_pip_candidates(fp) if c != session.strong_pip(fp)),
+        key=lambda c: float(case.registry[c].stable_cdist),
+    )
     session.set_strong_pip(fp, alternate)
     second = session.topology()
     assert second is not first and second.strong_pips == (alternate,)

@@ -220,10 +220,10 @@ def _land_singleton(
     key, cdist, from_table = trellis.image_cdist(crossing_id, 1, "stable", branch=ref.branch_key)
     span = (float(cdist), float(cdist))
     flags = (bool(from_table), bool(from_table))
-    if image_id is None:
+    if image_id not in trellis:
         reason = (
             f"image crossing of singleton element {ref.label} (crossing "
-            f"{crossing_id}) is not registered; grow or blast"
+            f"{crossing_id}) is no crossing of the trellis; grow or blast"
         )
         logger.warning("%s", reason)
         return _unresolved(ref, image_key, image_side, span, flags, reason, singleton=True)
@@ -420,7 +420,7 @@ def _debug_endpoint_owners(
         if end_id is None:
             continue
         image_id = trellis.iterate(end_id, 1)
-        if image_id is None:
+        if image_id not in trellis:
             continue
         try:
             owner = iterated.owner_of_intersection(image_id, image_side, target.branch_key)

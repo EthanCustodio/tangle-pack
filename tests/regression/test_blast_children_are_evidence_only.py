@@ -23,8 +23,7 @@ _BLASTS = 6
 @pytest.fixture(scope="module")
 def k28_blasted():
     """The k=2.8 zone blasted one iteration at a time, six times (~3 s)."""
-    build, _ = SERIES["k28_series"]
-    case = build()
+    case = SERIES["k28_series"].build()
     (zone,) = case.zones
     for _ in range(_BLASTS):
         _blast(case.session, zone, case.fixed_points, diagnose=False)

@@ -235,7 +235,8 @@ _NEEDS_ZONE = frozenset({"add_resonance_zones", "restore"})
 @pytest.mark.parametrize("mutation", list(_MUTATIONS))
 def test_trellis_is_fresh_after_every_mutation_path(mutation: str) -> None:
     """Growth, a re-cut, an iterated bridge, a zone and its restore all leave the
-    session's trellis equal to a direct build of the workbench.
+    session's trellis equal to a direct build of the workbench, cut at the
+    session's pip when one is chosen (D10, D12).
 
     ``restore`` is the regression guard: it is the gap the manual
     ``invalidate_trellises`` calls used to leave open (stale trellises after a
@@ -253,7 +254,11 @@ def test_trellis_is_fresh_after_every_mutation_path(mutation: str) -> None:
     _MUTATIONS[mutation](case)
 
     direct = Trellis.from_workbench(session.workbench, fp)
-    assert trellis_view(session.trellis(fp)) == trellis_view(direct)
+    trellis = session.trellis(fp)
+    if trellis.strong_pip is not None:  # a zone chose its pip: both cut at its orbit (D10)
+        direct.classify_strong_pips(choose_default=False)
+        direct.set_strong_pip(trellis.strong_pip)
+    assert trellis_view(trellis) == trellis_view(direct)
 
 
 def test_trellis_is_fresh_after_a_recompute_on_the_nested_session() -> None:

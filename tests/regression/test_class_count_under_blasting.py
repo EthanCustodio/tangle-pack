@@ -13,7 +13,10 @@ pinned count:
 * the TOTAL class count (active + inert) never decreases -- D1 says "the
   class count"; per kind it legitimately moves: a first blast registers image
   loops that turn active classes inert, and a reference-pair switch can merge
-  inert ones (``docs/open_issues.md``, TEST-2);
+  inert ones (``docs/open_issues.md``, TEST-2). A decrease is a failure even
+  when the lost references are witnessed: the trellis is cut at the pip orbit
+  on both sides (D10, D12), so a lambda-lemma copy deeper than the pip's own
+  orbit is no crossing of it;
 * while the hole set stays the same between two recomputes, so does the class
   count (at least one such pair must exist, or the law checked nothing);
 * every class has a member the minimal trellis keeps;
@@ -44,10 +47,10 @@ def _series(name: str) -> tuple[SeriesStep, ...]:
 
 
 def _table(steps: tuple[SeriesStep, ...]) -> str:
-    """``blasts: holes, classes (active/inert), outside minimal`` per step."""
+    """``blasts: holes, classes (active/inert), closed, outside minimal`` per step."""
     return "; ".join(
         f"{s.blasts}: {len(s.holes)} holes, {s.classes} ({s.active}/{s.inert}), "
-        f"{s.outside_minimal} outside"
+        f"{s.closed} closed, {s.outside_minimal} outside"
         for s in steps
     )
 

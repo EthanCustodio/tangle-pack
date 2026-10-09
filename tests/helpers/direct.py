@@ -49,7 +49,8 @@ class DirectBuild:
     Attributes:
         case: The built case.
         selected: The fixed points of the selection.
-        trellis: A fresh trellis of the workbench over the selection.
+        trellis: A fresh trellis of the workbench over the selection, cut at
+            the orbits of the selected pips (D10, D12).
         partitions: The stable partitions of the selected fixed points, one per
             ``(branch_key, side)``.
         holes: Every hole of the selected fixed points.
@@ -89,6 +90,7 @@ class DirectBuild:
             self.partitions += trellis.stable_partitions
             self.holes += trellis.holes
             self.strong_pips.append(trellis.strong_pip)
+        self.trellis.cut_at_pip_orbit(pip for pip in self.strong_pips if pip is not None)
 
     def homotopy(self) -> HomotopyPartition:
         """The homotopy partition family."""

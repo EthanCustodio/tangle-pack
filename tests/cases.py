@@ -68,7 +68,10 @@ Cases:
 
 The blast series (:data:`SERIES`, :func:`blast_series`) run the D1 loop --
 blast once, recompute the topology from scratch, compare -- from the zone
-stage of ``k28`` (8 blasts), ``p3`` (9) and ``inversion`` (2).
+stage of ``k28`` (8 blasts), ``p3`` (9), ``inversion`` (4), E11's ``k32`` (10;
+``build_k32_zone``, the ``k28`` recipe at ``k = 3.2`` from its analytic seed)
+and E11's ``nested_outer`` (11 blasts of the outer zone at ``min_separation =
+1e-4``).
 
 Dev Notes:
 
@@ -89,7 +92,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Callable, Literal, Mapping, Optional
+from typing import TYPE_CHECKING, Callable, Literal, Mapping, NamedTuple, Optional
 
 import numpy as np
 import pytest
@@ -148,6 +151,8 @@ _STAGES: tuple[str, ...] = (
 # Frozen parameters
 # --------------------------------------------------------------------------- #
 HENON_K28: tuple[float, float] = (2.8, 1)
+#: The second single saddle of the stress campaign's E11 (``k32_series``).
+HENON_K32: tuple[float, float] = (3.2, 1)
 #: The map of the inversion law cases (its OTHER saddle, ``K4_INVERSION_SEED``).
 HENON_K4: tuple[float, float] = (4.0, 1)
 #: The map of the inversion x period-k case (``K41_INVERSION_PERIOD2_SEED``).
@@ -174,6 +179,8 @@ K28_SADDLE_SEED: tuple[float, float] = (4.0, -4.0)
 #: 1.1e-6 past the pip, a sliver whose midpoint lies within ``cdist_tol`` of the
 #: pip (the E11 sliver).
 K28_ANALYTIC_SADDLE_SEED: tuple[float, float] = (2.9493588689617924, -2.9493588689617924)
+#: The analytic ``k=3.2`` saddle ``x = (2 + sqrt(4 + 4k)) / 2`` (E11's seed).
+K32_SADDLE_SEED: tuple[float, float] = (3.04939015319192, -3.04939015319192)
 ORIENTATION_REVERSING_SEED: tuple[float, float] = (2.0, 2.0)
 #: The ``min_separation`` of every single-iteration zone blast (k28, inversion, series).
 ZONE_MIN_SEPARATION: float = 1e-5
@@ -274,13 +281,14 @@ def _blast(
     fixed_points: list,
     *,
     diagnose: bool = True,
+    min_separation: float = ZONE_MIN_SEPARATION,
 ) -> None:
-    """One single-iteration blast of ``zone`` at ``ZONE_MIN_SEPARATION``."""
+    """One single-iteration blast of ``zone`` (at ``ZONE_MIN_SEPARATION`` by default)."""
     session.blast_zone(
         zone,
         num_iterations=1,
         fixed_point=fixed_points,
-        min_separation=ZONE_MIN_SEPARATION,
+        min_separation=min_separation,
         diagnose=diagnose,
     )
 
@@ -369,6 +377,27 @@ def build_k10(
 # --------------------------------------------------------------------------- #
 # k = 2.8
 # --------------------------------------------------------------------------- #
+def _saddle_zone(
+    henon: tuple[float, float], seed: tuple[float, float], blasts: int
+) -> tuple[TangleSession, "FixedPoint", int, "ResonanceZone"]:
+    """The period-1 zone recipe of ``k28`` and ``k32``: 10 unstable steps at
+    ``area_cutoff = 1e-7``, the stable manifold to turnaround, the zone at
+    ``f(q0)`` blasted ``blasts`` times (:func:`_zone_at_image_pip`)."""
+    session = TangleSession(
+        henon_map(*henon), henon_map_inverse(*henon), henon_jacobian(*henon), area_cutoff=1e-7
+    )
+    fp = session.construct_fixed_point(list(seed))
+    session.orient_eigenvectors(fp, _orientation(PERIOD1_ORIENTATION))
+    session.initialize_both_manifolds(fp)
+    session.grow_n_times(fp, "unstable", num_iterations=10)
+    session.grow_until_turnaround(fp, "stable")
+    session.compute_intersections([fp])
+    session.trim_stable_manifolds(fp)
+    session.create_bridges(fp)
+    pip, zone = _zone_at_image_pip(session, fp, blasts)
+    return session, fp, pip, zone
+
+
 def build_k28(
     *,
     blasts: int = 1,
@@ -392,22 +421,7 @@ def build_k28(
     """
     if through not in ("zones", "partitioned"):
         raise ValueError("build_k28 stops at 'zones' or 'partitioned'")
-    area_cutoff = 1e-7
-    session = TangleSession(
-        henon_map(*HENON_K28),
-        henon_map_inverse(*HENON_K28),
-        henon_jacobian(*HENON_K28),
-        area_cutoff=area_cutoff,
-    )
-    fp = session.construct_fixed_point(list(seed))
-    session.orient_eigenvectors(fp, _orientation(PERIOD1_ORIENTATION))
-    session.initialize_both_manifolds(fp)
-    session.grow_n_times(fp, "unstable", num_iterations=10)
-    session.grow_until_turnaround(fp, "stable")
-    session.compute_intersections([fp])
-    session.trim_stable_manifolds(fp)
-    session.create_bridges(fp)
-    pip, zone = _zone_at_image_pip(session, fp, blasts)
+    session, fp, pip, zone = _saddle_zone(HENON_K28, seed, blasts)
     if through == "partitioned":
         session.topology()
     return Case(
@@ -417,9 +431,29 @@ def build_k28(
         session=session,
         fixed_points=[fp],
         pips=[pip],
-        expect=CaseExpect(periods=(1,), area_cutoff=area_cutoff, blasts=blasts),
+        expect=CaseExpect(periods=(1,), area_cutoff=1e-7, blasts=blasts),
         zones=[zone],
         stage=through,
+    )
+
+
+def build_k32_zone() -> Case:
+    """
+    The ``k=3.2`` saddle by the ``k28`` recipe, from its analytic seed (E11's
+    ``k32``), stopped at its zone ``f(q0)``: the start of ``k32_series``.
+
+    Returns:
+        The case at the ``zones`` stage, unblasted.
+    """
+    session, fp, pip, zone = _saddle_zone(HENON_K32, K32_SADDLE_SEED, 0)
+    return Case(
+        name="k32_unblasted",
+        session=session,
+        fixed_points=[fp],
+        pips=[pip],
+        expect=CaseExpect(periods=(1,), area_cutoff=1e-7),
+        zones=[zone],
+        stage="zones",
     )
 
 
@@ -985,6 +1019,8 @@ class SeriesStep:
             persist across the blasts of one session, so two steps compare.
         classes: ``len(session.bridge_classes())``, the ALPHABET's size (the classes
             with a member the minimal trellis keeps, D2), active and inert together.
+        closed: ``len(session.symbolic_dynamics().classes)``, the alphabet closed
+            under the word map (C9, D11).
         active: The active classes (a diagnostic, never compared).
         inert: The inert classes (a diagnostic, never compared).
         outside_minimal: Classes with no member in ``minimal_trellis().kept_bridge_ids``.
@@ -1000,6 +1036,7 @@ class SeriesStep:
     blasts: int
     holes: frozenset
     classes: int
+    closed: int
     active: int
     inert: int
     outside_minimal: int
@@ -1008,13 +1045,29 @@ class SeriesStep:
     letters: frozenset
 
 
-#: ``name -> (zone-stage builder, blasts)``. k28 switches its reference pair at
-#: blasts 2 and 8, p3 at blast 6; inversion stops at 2.
-SERIES: Mapping[str, tuple[Callable[[], Case], int]] = MappingProxyType(
+class Series(NamedTuple):
+    """One blast series: the zone-stage build, how many blasts, at which separation."""
+
+    build: Callable[[], Case]
+    blasts: int
+    min_separation: float = ZONE_MIN_SEPARATION
+
+
+#: ``name -> Series``. Each blasts the build's LARGEST zone (the only one but on
+#: ``nested_outer_series``, whose outer zone it is). k28 switches its reference
+#: pair at blasts 2 and 8, p3 at blast 6. ``k32_series`` and
+#: ``nested_outer_series`` are E11's ``k32`` / ``nested_outer`` (2026-10-07), run
+#: to the depth where the base decreased (BCG-5: k32 blast 10, nested_outer blast
+#: 11, inversion blast 4) until the trellis was balanced (D12).
+SERIES: Mapping[str, Series] = MappingProxyType(
     {
-        "k28_series": (lambda: build_k28(blasts=0, through="zones"), 8),
-        "p3_series": (lambda: build_period3(through="zones"), 9),
-        "inversion_series": (lambda: build_inversion(through="zones"), 2),
+        "k28_series": Series(lambda: build_k28(blasts=0, through="zones"), 8),
+        "p3_series": Series(lambda: build_period3(through="zones"), 9),
+        "inversion_series": Series(lambda: build_inversion(through="zones"), 4),
+        "k32_series": Series(build_k32_zone, 10),
+        "nested_outer_series": Series(
+            lambda: build_nested(outer_blasts=0, through="zones"), 11, min_separation=1e-4
+        ),
     }
 )
 
@@ -1023,8 +1076,8 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
     """
     The D1 loop on one session: recompute the topology, blast once, repeat.
 
-    Each blast is one iteration at ``ZONE_MIN_SEPARATION`` with
-    ``diagnose=False``; the session carries the pip.
+    Each blast is one iteration of the build's largest zone, of its own fixed
+    point only, with ``diagnose=False``; the session carries the pips.
 
     Args:
         name: A key of :data:`SERIES`.
@@ -1032,15 +1085,15 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
     Returns:
         One step per recompute, the unblasted one first.
     """
-    build, blasts = SERIES[name]
-    case = build()
+    series = SERIES[name]
+    case = series.build()
     session = case.session
-    (zone,) = case.zones
-    (fp,) = case.fixed_points
+    zone = max(case.zones, key=lambda zone: zone.area)
+    fp = zone.fixed_point
     steps: list[SeriesStep] = []
-    for blast in range(blasts + 1):
+    for blast in range(series.blasts + 1):
         if blast:
-            _blast(session, zone, case.fixed_points, diagnose=False)
+            _blast(session, zone, [fp], diagnose=False, min_separation=series.min_separation)
         table = session.bridge_classes()
         kept = set(session.minimal_trellis().kept_bridge_ids)
         family = session.homotopy_partition()
@@ -1054,6 +1107,7 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
                     (hole.bounding_ids, hole.iterate, hole.bridge_side) for hole in trellis.holes
                 ),
                 classes=len(table),
+                closed=len(session.symbolic_dynamics().classes),
                 active=len(table.active),
                 inert=len(table.inert),
                 outside_minimal=sum(
@@ -1183,18 +1237,13 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
             "which image_of rejects; no region has a closed image"
         ),
         ("arrangement_preimage_inverts_image", "k10"): "no region has a closed image",
-        ("anchor_bridge_class_leads_its_tangle", "inversion"): (
-            "s(0.1) carries no hole (D9): its reference images are not computed, so "
-            "the anchor bridges map onto a loop and no tangle has a hole on every "
-            "stable branch"
-        ),
         **{
             ("partition_singletons", name): _NO_PINCH
-            for name in ("k10", "k28_two_blasts", "inversion")
+            for name in ("k10", "k28_two_blasts")
         },
         **{
             ("anchor_opening_faces_its_hole", name): _NO_ANCHOR_OPENING
-            for name in ("k10", "k28_two_blasts", "inversion")
+            for name in ("k10", "k28_two_blasts")
         },
         **{
             ("iterated_cut_provenance", name): _NO_IMAGE_BRIDGES
@@ -1210,25 +1259,7 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
                 "every active class lands on a singleton; its word is the trellis "
                 "itinerary (D3)"
             )
-            for name in ("k28_one_blast", "p3")
-        },
-        **{
-            (law, "inversion"): (
-                "the alphabet is the inert hole-bridge class alone (D2): s(0.1) has no "
-                "window hole (PK-3 / DEC-19), so no class is active"
-            )
-            for law in ("every_active_class_walks", "matrix_is_token_counts")
-        },
-        **{
-            (law, "inversion"): (
-                "one reference hole, whose backward image lies past the last crossing of "
-                "the other unstable branch"
-            )
-            for law in (
-                "backward_holes_keep_bridge_side",
-                "propagated_holes_land_on_predicted_branch",
-                "propagation_terminates",
-            )
+            for name in ("k28_one_blast", "p3", "inversion")
         },
     }
 )

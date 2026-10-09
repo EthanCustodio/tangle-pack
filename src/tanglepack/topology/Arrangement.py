@@ -753,7 +753,7 @@ class Arrangement:
         images: list[int] = []
         for corner in region.corners:
             image = self.trellis.iterate(corner, n)
-            if image is None:
+            if image not in self.trellis:
                 return None
             images.append(image)
 

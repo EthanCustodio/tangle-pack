@@ -25,6 +25,22 @@ decide that, so nothing has to be invalidated by hand. Everything a Trellis
 memoises on top of the snapshot (the endpoint-to-bridge index, the oriented
 bridge polylines) is a function of the snapshot alone and dies with it.
 
+The trellis of the pip (stage 3, D10 and D12, 2026-10-08). Choosing a strong
+pip q0 CUTS the snapshot to ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])``, both
+ends on the pip's orbit (:meth:`cut_at_pip_orbit`): stable branch ``j`` ends at
+``f^j(q0)``, ``j < k``, and the unstable branch of ``f^i(q0)`` at that point for
+the ``k`` deepest registered ``i`` (``m`` the last). ``f^-1`` maps the unstable
+half into itself and ``f`` the stable half, so it is a genuine trellis, and a
+lambda-lemma copy deeper than the pip's own orbit is no crossing of it, so it
+cannot reshape the fundamental segment (BCG-5). The cut is the ONE place the
+crossing set N is decided: every later stage reads the branches and bridges
+cut here. A crossing past a cut is a point of X (every iterate of N), not of N:
+it leaves the branches, and the unstable arc across it joins its two bridges
+into one (``Bridge.joined``; the workbench never holds it). Un-choosing the pip
+restores the computed trellis. :meth:`iterate` and :meth:`image_cdist` stay RAW
+registry lookups -- X holds points outside T -- so a consumer that needs an
+iterate AS A CROSSING of the trellis asks ``image in trellis``.
+
 The algorithm results are id-keyed (partition elements included) and so are the
 snapshot's own branch orderings. A registry renumbering (``reindex_from``) moves
 the workbench generation, so the whole Trellis -- results and all -- is dropped
@@ -107,11 +123,13 @@ from .TopologyResults import (
     endpoint_index,
 )
 
+from ..numerics.Bridge import Bridge
+
 if TYPE_CHECKING:
     from .Arrangement import Arrangement
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.DynamicalSystem import DynamicalSystem
-    from ..numerics.Bridge import Bridge, BridgeId
+    from ..numerics.Bridge import BridgeId
     from ..numerics.TangleWorkbench import TangleWorkbench
 
 logger = logging.getLogger(__name__)
@@ -192,7 +210,8 @@ class Trellis:
         strong_pip_candidates: Output slot — IDs of every intersection that
             qualifies as a strong pip.
         strong_pip: The single chosen strong pip (an intersection ID), or None.
-            Chosen from strong_pip_candidates via set_strong_pip().
+            Chosen from strong_pip_candidates via set_strong_pip(); choosing it
+            cuts the trellis at its orbit (:meth:`cut_at_pip_orbit`).
     """
 
     def __init__(
@@ -251,15 +270,138 @@ class Trellis:
         self.holes: list[Hole] = []
         self.stable_partitions: list[StablePartitionResult] = []
 
+        # The computed trellis, which a pip cut (cut_at_pip_orbit) reduces to
+        # T(q0) and un-choosing the pip restores; the joined arcs are memoised
+        # by id so a re-cut hands back the same objects.
+        self._computed = (
+            {key: list(branch.intersection_ids) for key, branch in branches.items()},
+            list(bridges),
+        )
+        self._crossings = {i for branch in branches.values() for i in branch.intersection_ids}
+        self._cuts: dict[ManifoldKey, tuple[float, bool]] = {}
+        self._joined: dict["BridgeId", Bridge] = {}
+
         # Every intersection that *qualifies* as a strong pip is a candidate.
         # A trellis has exactly one actual strong pip — a unique choice made from
         # the candidates (default: smallest unstable cdist; user-overridable via
         # set_strong_pip()).
         self.strong_pip_candidates: list[int] = []
-        self.strong_pip: Optional[int] = None
+        self.strong_pip = None
 
         # Cache for the orientation_preserving property (see below).
         self._orientation_preserving: Optional[bool] = None
+
+    # ── the trellis of the pip (stage 3) ────────────────────────────────────
+
+    @property
+    def strong_pip(self) -> Optional[int]:
+        """The chosen strong pip (an intersection id), or None.
+
+        Assigning it cuts the trellis at the pip's orbit, and None restores the
+        computed trellis (:meth:`cut_at_pip_orbit`).
+        """
+        return self._strong_pip
+
+    @strong_pip.setter
+    def strong_pip(self, pip: Optional[int]) -> None:
+        self._strong_pip = pip
+        self.cut_at_pip_orbit(() if pip is None else (pip,))
+
+    def cut_at_pip_orbit(self, pips: Iterable[int]) -> None:
+        """
+        Cut N to the crossings of ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])`` (D10, D12).
+
+        For each pip: stable branch ``j`` is cut at ``c_s(f^j q0)``, ``j < k``
+        (``k = k_value``), and the unstable branch of ``f^i(q0)`` at
+        ``c_u(f^i q0)`` for the ``k`` deepest registered ``i``, ``m`` the last
+        forward iterate of ``q0`` the table holds. A crossing past a cut leaves
+        every branch and the bridges across it are joined (see the module Dev
+        Notes). No pip restores the computed trellis.
+
+        Args:
+            pips: The strong pips, at most one per fixed point (the selection
+                trellis of several fixed points is cut at all of theirs).
+
+        Note:
+            A cut whose orbit point the table does not hold is PLACED by
+            :meth:`image_cdist` (scaling) and flagged in one WARNING (PK-6); a
+            crossing is past a placed cut only by more than ``cdist_tol``, past a
+            registered one by any amount. The same cut twice is a no-op, and
+            stage outputs (pseudoneighbors, holes, partitions) are never cleared
+            here.
+        """
+        pips = list(pips)
+        cuts = {key: cut for pip in pips for key, cut in self._pip_orbit_cuts(pip).items()}
+        if cuts == self._cuts:
+            return
+        placed = [f"{key[1:]} at {cdist:.6g}" for key, (cdist, scaled) in cuts.items() if scaled]
+        if placed:
+            logger.warning(
+                "Strong pip(s) %s: the cuts on %s are placed by image_cdist, their orbit "
+                "points are not registered (grow the manifolds or blast to register them)",
+                pips, ", ".join(placed),
+            )
+        tol = self.registry.cdist_tol
+
+        def inside(crossing_id: int) -> bool:
+            ix = self.registry[crossing_id]
+            return ix.is_anchor or all(
+                cdist <= cuts[key][0] + (tol if cuts[key][1] else 0.0)
+                for key, cdist in (
+                    (ix.manifold_b_key, ix.stable_cdist),
+                    (ix.manifold_a_key, ix.unstable_cdist),
+                )
+                if key in cuts
+            )
+
+        branches, bridges = self._computed
+        kept = {i for ids in branches.values() for i in ids if inside(i)}
+        for key, branch in self.branches.items():
+            branch.intersection_ids = [i for i in branches[key] if i in kept]
+        self.bridges = self._bridges_inside(bridges, kept)
+        self._crossings, self._cuts = kept, cuts
+        self._bridge_by_endpoints, self._arrangement = None, None
+
+    def _pip_orbit_cuts(self, pip: int) -> dict[ManifoldKey, tuple[float, bool]]:
+        """``{branch: (cdist, placed)}``: the k stable and the k unstable cuts of T(q0)."""
+        k = self.registry[pip].manifold_b_key[0].k_value
+        m = self.registry.iterate_table.forward_depth(pip)
+        while self.iterate(pip, m + 1) is not None:
+            m += 1
+        steps = [(j, "stable") for j in range(k)]
+        steps += [(i, "unstable") for i in range(m - k + 1, m + 1)]
+        cuts = {}
+        for n, stability in steps:
+            key, cdist, from_table = self.image_cdist(pip, n, stability)
+            cuts[key] = (float(cdist), not from_table)
+        return cuts
+
+    def _bridges_inside(self, bridges: list[Bridge], kept: set[int]) -> list[Bridge]:
+        """The computed bridges between kept crossings, each run through dropped ones joined."""
+        starting = {
+            b.first_intersection: b
+            for b in bridges
+            if not b.partial and b.first_intersection not in kept
+        }
+        inside = []
+        for bridge in bridges:
+            first, second = bridge.first_intersection, bridge.second_intersection
+            if all(i in kept for i in (first, second) if i is not None):
+                inside.append(bridge)
+            elif not bridge.partial and first in kept:
+                run = [bridge]
+                while run[-1].second_intersection in starting:
+                    run.append(starting[run[-1].second_intersection])
+                ids = (first, run[-1].second_intersection)
+                if ids[1] in kept:
+                    if ids not in self._joined:
+                        self._joined[ids] = Bridge.joined(run)
+                    inside.append(self._joined[ids])
+        return inside
+
+    def __contains__(self, intersection_id: Optional[int]) -> bool:
+        """Whether a crossing is a crossing of this trellis (of N, once cut at the pip)."""
+        return intersection_id in self._crossings
 
     # ── map properties ──────────────────────────────────────────────────────
 
@@ -957,6 +1099,9 @@ class Trellis:
         """
         from .StrongPip import classify_strong_pips as _classify_strong_pips
 
+        # Un-choose first: candidates are classified over the whole computed
+        # trellis, never over one cut at an earlier pip.
+        self.strong_pip = None
         # Default to *this* trellis's intersections, not the whole shared registry,
         # so a nested trellis is classified only against its own tangle's crossings.
         if intersection_ids is None:
@@ -968,7 +1113,6 @@ class Trellis:
         self.strong_pip_candidates = sorted(
             iid for iid, r in results.items() if r.is_strong_pip
         )
-        self.strong_pip = None
         if choose_default and self.strong_pip_candidates:
             self.select_default_strong_pip()
         return list(self.strong_pip_candidates)
