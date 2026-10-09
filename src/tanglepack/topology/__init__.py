@@ -25,6 +25,7 @@ from .TopologyResults import (
     StablePartitionResult,
     StrongPipResult,
     canonical_corners,
+    side_after,
 )
 from .StrongPip import (
     is_strong_pip,
@@ -143,6 +144,7 @@ __all__ = [
     "TrellisBranch",
     "Arrangement",
     "Arc",
+    "side_after",
     "StableNode",
     "MinimalTrellis",
     "image_chain",

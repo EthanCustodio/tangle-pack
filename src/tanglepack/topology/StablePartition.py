@@ -131,7 +131,7 @@ fixed in conversation with the author (July 2026):
   orientation-PRESERVING map (det J > 0, both Hénon fixtures have b = 1)
   carries the bridge's dynamical orientation to the image bridge's
   unchanged — under an orientation-REVERSING map the side alternates with
-  the parity of ``Hole.iterate``
+  the parity of ``Hole.iterate`` (``side_after``, the one rule, C3)
   (``check_holes_share_bridge_side(..., orientation_preserving=False)``);
   propagated holes carry their side, so I1 guards the direct holes of one
   orbit (the reference and its ``+1 .. +(k-1)`` appearances) and the
@@ -229,12 +229,12 @@ from .TopologyResults import (
     Endpoint,
     endpoint_index,
     Hole,
-    OPPOSITE_SIDE,
     PartitionInterval,
     PseudoneighborPair,
     Side,
     SideSource,
     StablePartitionResult,
+    side_after,
 )
 
 if TYPE_CHECKING:
@@ -510,7 +510,7 @@ def propagate_reference_holes(
         carried = np.asarray(start.hole.coords, dtype=np.float64)
         start_iterate = start.iterate or 0
         start_side = start.hole.bridge_side
-        flips = not trellis.orientation_preserving
+        preserving = trellis.orientation_preserving
         # A bridge lives on one branch, so meeting it again is meeting it at the
         # same branch-cycle residue: the backward orbit has become periodic.
         visited = {bridge.id}
@@ -539,11 +539,8 @@ def propagate_reference_holes(
                 # map carries the bridge's dynamical orientation to the image
                 # bridge's, flipping it every step only when it reverses
                 # orientation. The carried point is measured against it.
-                side = start_side
-                if flips and step % 2:
-                    side = OPPOSITE_SIDE[side]
                 hole = _punch_in_bridge(
-                    trellis, containing, bridge_side=side,
+                    trellis, containing, bridge_side=side_after(start_side, -step, preserving),
                     iterate=iterate, origin=origin, carried=carried, span=span,
                 )
                 if hole is not None:
@@ -1101,19 +1098,11 @@ def check_bridge_rows_consistent(trellis: "Trellis", bridge: "Bridge") -> None:
 
 
 def _orbit_side(hole: Hole, orientation_preserving: bool) -> Optional[Side]:
-    """A hole's bridge side normalized to iterate 0 of its orbit.
-
-    Under an orientation-preserving map the side is already invariant along
-    the orbit; under an orientation-reversing one it flips every step, so an
-    odd iterate is normalized by flipping it back.
-    """
-    if hole.bridge_side is None:
+    """A hole's bridge side carried back to iterate 0 of its orbit (None without
+    a side, or without an iterate to carry it by under a reversing map)."""
+    if hole.bridge_side is None or (hole.iterate is None and not orientation_preserving):
         return None
-    if orientation_preserving:
-        return hole.bridge_side
-    if hole.iterate is None:
-        return None
-    return hole.bridge_side if hole.iterate % 2 == 0 else OPPOSITE_SIDE[hole.bridge_side]
+    return side_after(hole.bridge_side, -(hole.iterate or 0), orientation_preserving)
 
 
 @dataclass(frozen=True)
@@ -1225,8 +1214,7 @@ def side_diagnoses(
         expected = reference_iterate = None
         if hole.origin in orbit_side and _orbit_side(hole, orientation_preserving):
             expected, reference_iterate = orbit_side[hole.origin]
-            if not orientation_preserving and hole.iterate % 2:
-                expected = OPPOSITE_SIDE[expected]
+            expected = side_after(expected, hole.iterate or 0, orientation_preserving)
         diagnosis = SideDiagnosis(
             bounding_ids=hole.bounding_ids,
             origin=hole.origin,

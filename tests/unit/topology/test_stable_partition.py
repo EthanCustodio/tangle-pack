@@ -555,19 +555,10 @@ def test_near_far_falls_back_to_unstable_order_across_branches(
 # --------------------------------------------------------------------------- #
 # Map orientation (plan row 0.3 review finding)
 # --------------------------------------------------------------------------- #
-class _StubSystem:
-    """A dynamical system stand-in carrying only a constant jacobian."""
-
-    def __init__(self, jacobian) -> None:
-        self._jacobian = np.asarray(jacobian, dtype=np.float64)
-        self.jacobian = lambda point: self._jacobian
-
-
 def test_orientation_preserved_for_a_positive_determinant(stable_line):
     """det J > 0 preserves orientation (the Hénon fixtures' b = 1 case)."""
     trellis, _ids = stable_line
-    trellis.fixed_points[0].coordinates[0] = np.zeros((2, 1))
-    trellis.dynamical_system = _StubSystem([[2.0, 1.0], [-1.0, 0.0]])  # det +1
+    trellis.fixed_points[0].partial_jacobians[0] = np.array([[2.0, 1.0], [-1.0, 0.0]])  # det +1
 
     assert trellis.orientation_preserving is True
 
@@ -575,26 +566,25 @@ def test_orientation_preserved_for_a_positive_determinant(stable_line):
 def test_orientation_reversed_for_a_negative_determinant(stable_line):
     """det J < 0 reverses orientation, so a hole's side flips every step."""
     trellis, _ids = stable_line
-    trellis.fixed_points[0].coordinates[0] = np.zeros((2, 1))
-    trellis.dynamical_system = _StubSystem([[0.0, 1.0], [1.0, 0.0]])  # det -1
+    trellis.fixed_points[0].partial_jacobians[0] = np.array([[0.0, 1.0], [1.0, 0.0]])  # det -1
 
     assert trellis.orientation_preserving is False
 
 
-def test_orientation_from_eigenvalues_without_a_jacobian(stable_line):
-    """Without a jacobian an odd-period saddle still decides it: the product of
-    its eigenvalues is the determinant of the p-fold Jacobian, whose sign is
-    the single-step sign when p is odd."""
+def test_orientation_is_read_off_the_fixed_point_not_the_map(stable_line):
+    """The trellis never evaluates the map's Jacobian: a dynamical system whose
+    jacobian contradicts the fixed point's single-step Jacobian is ignored."""
     trellis, _ids = stable_line
-    fp = trellis.fixed_points[0]
-    assert fp.period == 1
-    fp.stable_eigenvalues = [-0.25]
+    trellis.fixed_points[0].partial_jacobians[0] = np.array([[0.0, 1.0], [1.0, 0.0]])  # det -1
+    trellis.dynamical_system = type("System", (), {"jacobian": staticmethod(lambda p: np.eye(2))})()
+
     assert trellis.orientation_preserving is False
 
 
 def test_orientation_defaults_to_preserving_without_evidence(stable_line):
-    """No jacobian and no usable eigenvalue pair defaults to preserving."""
+    """An unsolved fixed point (no single-step Jacobian) defaults to preserving."""
     trellis, _ids = stable_line
+    assert trellis.fixed_points[0].preserves_orientation is None
     assert trellis.orientation_preserving is True
 
 

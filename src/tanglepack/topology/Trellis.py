@@ -69,7 +69,6 @@ from __future__ import annotations
 import logging
 from typing import Iterable, Optional, Union, TYPE_CHECKING
 
-import numpy as np
 
 from ..numerics.Intersection import Intersection, ManifoldKey, Stability
 from ..numerics.IntersectionRegistry import IntersectionRegistry
@@ -219,8 +218,6 @@ class Trellis:
         self._candidates: Optional[list[int]] = None
         self.strong_pip = None
 
-        # Cache for the orientation_preserving property (see below).
-        self._orientation_preserving: Optional[bool] = None
 
     # ── the trellis of the pip (stage 3) ────────────────────────────────────
 
@@ -343,13 +340,10 @@ class Trellis:
         """
         True when the underlying map preserves orientation (det J > 0).
 
-        Area-preserving maps have a constant Jacobian determinant sign, so one
-        evaluation settles it: the determinant is read at the first fixed
-        point's first orbit coordinate when the dynamical system carries a
-        jacobian. Without one, an odd-period fixed point still decides it —
-        the product of its two eigenvalues is the determinant of the p-fold
-        Jacobian, whose sign equals the single-step sign for odd p. Failing
-        both, the answer defaults to True with a debug log.
+        Read off the first fixed point that knows it
+        (:attr:`FixedPoint.preserves_orientation`, the sign of the solver's
+        single-step Jacobian); the topology never evaluates the map. With no
+        solved fixed point the answer defaults to True with a debug log.
 
         Orientation decides how the hole-side invariant reads a backward chain:
         an orientation-preserving map carries a bridge's dynamical orientation
@@ -360,30 +354,11 @@ class Trellis:
         Returns:
             True if the map preserves orientation, False if it reverses it.
         """
-        if self._orientation_preserving is None:
-            self._orientation_preserving = self._compute_orientation_preserving()
-        return self._orientation_preserving
-
-    def _compute_orientation_preserving(self) -> bool:
-        """Sign of det J from the map, else from an odd-period eigenvalue pair."""
-        jacobian = getattr(self.dynamical_system, "jacobian", None)
-        coords = self.fixed_points[0].coordinates[0] if self.fixed_points else None
-        if jacobian is not None and coords is not None:
-            point = np.asarray(coords, dtype=np.float64).ravel()[:2]
-            if np.isfinite(point).all():
-                determinant = float(np.linalg.det(np.asarray(jacobian(point))))
-                if np.isfinite(determinant) and determinant != 0.0:
-                    return determinant > 0.0
-
         for fixed_point in self.fixed_points:
             preserving = fixed_point.preserves_orientation
             if preserving is not None:
                 return preserving
-
-        logger.debug(
-            "No jacobian and no odd-period eigenvalue pair on this trellis; "
-            "assuming the map preserves orientation"
-        )
+        logger.debug("No solved fixed point on this trellis; assuming the map preserves orientation")
         return True
 
     # ── construction ────────────────────────────────────────────────────────

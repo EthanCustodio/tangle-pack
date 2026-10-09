@@ -104,6 +104,7 @@ from .TopologyResults import (
     PartitionInterval,
     Side,
     endpoint_index,
+    side_after,
 )
 from .Trellis import SCALING_RTOL
 
@@ -347,7 +348,7 @@ def land_element(
     interval = homotopy.element(ref)
     fixed_point: "FixedPoint" = ref.branch_key[0]
     image_key = fixed_point.advance_key(ref.branch_key, 1)
-    image_side: Side = ref.side if trellis.orientation_preserving else OPPOSITE_SIDE[ref.side]
+    image_side = side_after(ref.side, 1, trellis.orientation_preserving)
     cdist_tol = float(trellis.registry.cdist_tol)
 
     if _is_singleton(interval):

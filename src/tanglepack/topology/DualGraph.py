@@ -116,6 +116,7 @@ from .TopologyResults import (
     PartitionInterval,
     Region,
     Side,
+    side_after,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -1124,7 +1125,7 @@ class DualGraph:
                 places[orbit] = ("vertex", crossing_id)
         holes = {(hole.origin, hole.iterate): hole for hole in self.minimal.holes}
         assert len(holes) == len(self.minimal.holes), "two holes share one orbit step"
-        flip = not trellis.orientation_preserving
+        preserving = trellis.orientation_preserving
         for (origin, iterate), hole in holes.items():
             bridge = trellis.bridge_between(*hole.bounding_ids)
             edge = self.unstable_edges.get(bridge.id) if bridge is not None else None
@@ -1136,7 +1137,7 @@ class DualGraph:
             image = trellis.iterate(hole.near_intersection_id, 1)
             for pair in image_chain(trellis, bridge.id) or ():
                 if image in pair and pair in self.unstable_edges:
-                    side = OPPOSITE_SIDE[hole.bridge_side] if flip else hole.bridge_side
+                    side = side_after(hole.bridge_side, 1, preserving)
                     places[("hole", origin, iterate + 1)] = ("beside", self.unstable_edges[pair], side)
         return places
 

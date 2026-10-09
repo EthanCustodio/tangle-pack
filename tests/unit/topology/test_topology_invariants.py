@@ -127,25 +127,29 @@ def test_orientation_reversing_requires_alternating_sides():
 
 
 @pytest.mark.parametrize(
-    "periods, defaulted",
-    [((1,), False), ((2,), True), ((), True)],
-    ids=["odd_period_eigenvalues_decide", "even_period_only", "no_fixed_point"],
+    "periods, solved",
+    [((1,), True), ((2,), True), ((1,), False), ((), False)],
+    ids=["period_1_jacobian_decides", "period_2_jacobian_decides", "unsolved", "no_fixed_point"],
 )
-def test_orientation_without_a_jacobian(caplog, periods, defaulted):
-    """With no jacobian an odd-period eigenvalue pair decides the orientation
-    (det > 0 for a bare saddle); with only even periods, or no fixed point, the
-    trellis assumes the map preserves orientation and says so at DEBUG."""
+def test_orientation_from_the_single_step_jacobian(caplog, periods, solved):
+    """A solved fixed point's single-step Jacobian decides the orientation, for any
+    period (det > 0 here); with no solved fixed point the trellis assumes the map
+    preserves orientation and says so at DEBUG."""
     from tanglepack.topology.Trellis import Trellis
 
+    fixed_points = [bare_fixed_point(period) for period in periods]
+    if solved:
+        for fp in fixed_points:
+            fp.partial_jacobians = [np.array([[0.0, -1.0], [1.0, 0.5]])] * fp.period  # det +1
     trellis = Trellis(
-        fixed_points=[bare_fixed_point(period) for period in periods],
+        fixed_points=fixed_points,
         registry=IntersectionRegistry(),
         branches={},
         bridges=[],
     )
     with caplog.at_level(logging.DEBUG, logger="tanglepack.topology.Trellis"):
         assert trellis.orientation_preserving is True
-    assert_logged(caplog, logging.DEBUG, "tanglepack.topology.Trellis", count=int(defaulted))
+    assert_logged(caplog, logging.DEBUG, "tanglepack.topology.Trellis", count=int(not solved))
 
 
 def test_measured_side_disagreement_is_a_flag_not_an_error():

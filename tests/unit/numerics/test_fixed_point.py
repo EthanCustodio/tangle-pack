@@ -180,3 +180,32 @@ def test_set_k_value_tolerates_unset_stable_eigenvalues():
     fp.unstable_eigenvalues = [-2.0, -2.0]
     fp.set_k_value()
     assert fp.k_value == 4
+
+
+# --------------------------------------------------------------------------- #
+# WP11 (C16) -- orientation is the sign of the solver's single-step Jacobian
+# --------------------------------------------------------------------------- #
+def _solved(guess) -> FixedPoint:
+    """A Hénon k=2, b=1 orbit solved by the workbench (period from the guess)."""
+    from tanglepack import TangleWorkbench
+    from tanglepack.examples.henon import henon_jacobian, henon_map, henon_map_inverse
+
+    workbench = TangleWorkbench(henon_map(2), henon_map_inverse(2), henon_jacobian(2))
+    return workbench.construct_fixed_point(guess)
+
+
+@pytest.mark.parametrize("guess", [[4, -4], [[0, 1], [-1, 0], [-1, 1]]], ids=["period_1", "period_3"])
+def test_a_solved_area_preserving_orbit_preserves_orientation(guess):
+    fp = _solved(guess)
+    assert np.linalg.det(fp.partial_jacobians[0]) > 0
+    assert fp.preserves_orientation is True
+
+
+def test_a_negative_single_step_determinant_reverses_orientation():
+    fp = FixedPoint(2)
+    fp.partial_jacobians = [np.array([[0.0, 1.0], [1.0, 0.0]])] * 2  # det -1
+    assert fp.preserves_orientation is False
+
+
+def test_an_unsolved_fixed_point_does_not_know_its_orientation():
+    assert FixedPoint(1).preserves_orientation is None

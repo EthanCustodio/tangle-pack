@@ -90,8 +90,11 @@ class FixedPoint:
         jacobians (List[np.ndarray]): List of the full cycle Jacobians at each
             iterate of the fixed point. These Jacobians are used to compute the
             eigenstuffs.
-        partial_jacobians (List[np.ndarray]): List of the single step Jacobians
-            at each iterate of the fixed point. These Jacobians are used to
+        partial_jacobians (List[Optional[np.ndarray]]): The single-step
+            Jacobian ``DM`` at each orbit point (None until solved). It
+            propagates the eigenvector orientation along the orbit
+            (``ManifoldInitializer``), and its determinant's sign is the map's
+            orientation (:attr:`preserves_orientation`).
         label (Optional[str]): Display letter (``"A"``, ``"B"``, ...) that
             tells fixed points apart in element names and labels; stamped by
             :meth:`TangleWorkbench.construct_fixed_point` in construction
@@ -133,7 +136,7 @@ class FixedPoint:
         self.accuracy = 0.0
 
         self.jacobians = [np.empty((2, 2)) for _ in range(period)]
-        self.partial_jacobians = [np.empty((2, 2)) for _ in range(period)]
+        self.partial_jacobians: list[Optional[np.ndarray]] = [None] * period
 
         # Filled in by set_k_value() once the eigenvalues are known.
         self.k_value: Optional[int] = None
@@ -169,21 +172,22 @@ class FixedPoint:
     @property
     def preserves_orientation(self) -> Optional[bool]:
         """
-        The sign of the single-step ``det J``, when the eigenvalues can tell it.
+        Whether the map preserves orientation: the sign of the single-step ``det DM``.
 
-        The product of the two eigenvalues is ``det DM^period``, whose sign is the
-        single-step sign only for an ODD period (an even one squares it away).
+        An area-preserving map has a Jacobian determinant of constant sign, so
+        the solver's single-step Jacobian at the first orbit point settles it,
+        for any period (C16, WP11: orientation is a fact of the orbit, read by
+        the topology, never computed there).
 
         Returns:
-            True / False for an odd period with both eigenvalues computed, None
-            otherwise (an even period, or eigenvalues still unset).
+            True for ``det > 0``, False for ``det < 0``, None before the orbit
+            is solved (or for a degenerate Jacobian).
         """
-        if self.period % 2 == 0 or not self.unstable_eigenvalues or not self.stable_eigenvalues:
+        jacobian = self.partial_jacobians[0] if self.partial_jacobians else None
+        if jacobian is None:
             return None
-        product = float(np.asarray(self.unstable_eigenvalues[0]).ravel()[0]) * float(
-            np.asarray(self.stable_eigenvalues[0]).ravel()[0]
-        )
-        return None if product == 0.0 else product > 0.0
+        determinant = float(np.linalg.det(jacobian))
+        return determinant > 0.0 if np.isfinite(determinant) and determinant != 0.0 else None
 
     def check_inversion(self) -> bool:
         """

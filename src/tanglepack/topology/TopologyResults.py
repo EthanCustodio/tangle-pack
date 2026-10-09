@@ -62,6 +62,26 @@ SideSource = Literal["signs", "carried"]
 OPPOSITE_SIDE: dict[Side, Side] = {"left": "right", "right": "left"}
 
 
+def side_after(side: Side, steps: int, preserving: bool) -> Side:
+    """
+    The side ``steps`` map steps carry ``side`` to (negative steps walk backward).
+
+    An orientation-preserving map keeps a side of a bridge in its dynamical
+    orientation; a reversing one flips it at every step. This is the ONE place
+    the rule lives (C3: det J < 0 is out of scope, the rule is kept).
+
+    Args:
+        side: The side at the start.
+        steps: Number of map steps.
+        preserving: Whether the map preserves orientation
+            (:attr:`~.Trellis.Trellis.orientation_preserving`).
+
+    Returns:
+        The side after ``steps`` steps.
+    """
+    return side if preserving or steps % 2 == 0 else OPPOSITE_SIDE[side]
+
+
 def endpoint_index(endpoint: Endpoint) -> int:
     """
     Position of a named bridge endpoint within its BridgeId.
