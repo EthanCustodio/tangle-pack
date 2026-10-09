@@ -495,3 +495,38 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 - Probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp08b_impl/` (`replay.py` rubric 10,
   `lawsig.py` id-free signatures, `deep.py` deep runs).
 
+
+## Open-issues round WP9 (2026-10-08, branch `oi/wp09-heteroclinic`, base `b460363`)
+
+- Suite: 1017 passed, 21 skipped, 3 deselected, 3 xfailed, 177.6 s (base on the same machine:
+  1000 / 21 / 3 / 2 xfailed, 162.1 s). KNOWN_ISSUES 2 -> 3: removed
+  `three_tangles_take_three_families` x `hand_built`; added on the new law case `heteroclinic`
+  `every_active_class_walks` (WP9 slice 2, DEC-23) and `partition_covers_branch` (WP10).
+- New law case `heteroclinic` (`cases.build_heteroclinic` = frozen `build_nested(16u / 10s,
+  every keyword)` renamed, `CaseExpect.heteroclinic=True`); ~0.8 s per law module.
+- New laws: `trellis_crossings_belong_to_its_selection` (partition: every crossing of every
+  per-fixed-point trellis and of the selection has both branches in that trellis, every bridge
+  ends at its crossings), `tangles_in_case_order` (classes: `session.trellis().fixed_points` IS
+  `case.fixed_points`; a class of tangle t has elements and members on `case.fixed_points[t]`),
+  `case_heteroclinic` (case sanity). `trellis_is_cut_at_the_pip_orbit` skips a crossing unless
+  BOTH keys are branches (`<=`, was `&`).
+- Stages 4-6 run on the selection trellis, so every hole / partition / pair read moved to
+  `case.session.topology().trellis` (`helpers.laws._staged`; `_holes`, `_partitions`,
+  `check_case_builds` "every fixed point is partitioned" = the partitions' fixed points,
+  `backward_holes_keep_bridge_side`, `propagated_holes_land_on_predicted_branch` (the cycle of
+  the reference BRIDGE's fixed point), `propagation_terminates`, `no_direct_hole_beyond_
+  fundamental` (`k` of the origin's / pair's stable fixed point), `window_holes_on_every_branch`
+  (`fp = ref.branch_key[0]`), `reference_pairs_valid` (`trellis.pips[fp]`)); `law_tier.
+  fingerprint` hashes the topology's holes; `cases.blast_series` reads holes and references off
+  `session.topology().trellis`; `helpers.direct.DirectBuild` picks pips per fixed point, then runs
+  stages 4-6 on a fresh selection trellis; `conftest.p3_partitioned` calls `session.topology(fp)`
+  per fixed point; `test_image_of_element_accepts_partitions_from_another_trellis` takes a fresh
+  `Trellis.from_workbench` for its "no partitions" half. `_nested_through` constructs p1 first.
+- New tests (all fail on a detached `b460363` worktree with the new tests copied in):
+  regression `test_heteroclinic` (D7), `test_nested_blast_containment` (C4: one unfiltered outer
+  blast's parents all classify to the outer zone and no inner-zone bridge is iterated; 4 outer +
+  2 inner unfiltered blasts give the same holes per period / class count / spelled words in both
+  orders, base p3 holes 4 vs 42, ~2.5 s), unit `test_rebuilding_one_fixed_points_bridges_keeps_
+  the_others` (NEST-5, base KeyError). The three-family plotting test is a plain test now.
+- Probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp09_impl/` (`het_sig.py` base vs branch,
+  `sig_base.txt` / `sig_branch.txt` from the planner's `wp09/sig.py`).

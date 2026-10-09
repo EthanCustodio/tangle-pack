@@ -157,3 +157,27 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
   (candidate 2: the anchor bridge wraps the end of the cut stable branch), exactly as a
   numerical trim at that pip does. Tests choose the anchor-nearest alternate.
 
+
+## Open-issues round WP9 (2026-10-08, branch `oi/wp09-heteroclinic`, base `b460363`)
+
+- `Topology.__init__`: stage 3 per fixed point (`_choose_pip(fp)`, on its own trellis; same
+  ValueError text when a chosen pip is lost), then `session.trellis(selection)` (cut at every pip)
+  and stages 4-6 ON IT; `holes` / `partitions` are copies of that trellis's slots. For one fixed
+  point the selection trellis IS its trellis (`trellis(fp) is trellis([fp])`), so nothing
+  changes there. After `topology()` of several fixed points the per-fixed-point trellises carry
+  no stage output; `topology(fp)` fills one (tests: `conftest.p3_partitioned`). `topology()` and
+  `topology(fp)` differ exactly where heteroclinic pairs exist.
+- C4 (`Blast.py`): `in_zone(b) = session.classify_bridge(b) is zone` (innermost containing zone)
+  for the frontier and the kept children. Unfiltered nested blasting is order independent and
+  equals the own-fixed-point recipe; an unfiltered outer blast still iterates the inner tangle's
+  annulus bridges (its own by C4), one of which can hit NUM-9 (WP10).
+- `henon_cases`: `_orbit(session, guess, orientation)` + `_grow(session, fp, u, s, cutoff)`
+  (`s=None` = turnaround) replace `_grow_period3/_grow_period1`; `build_nested` constructs p1
+  THEN p3 (NEST-6: p1 = `A` = tangle 0, the order of `TangleBuild.fixed_points`), grows p3 then
+  p1 (unchanged cutoffs, session ends at p1's), `compute_intersections([fp1, fp3])`.
+  `build_heteroclinic(**overrides)` = `build_nested(p3_unstable_steps=16, p3_stable_steps=10)`,
+  slug `heteroclinic_p1_p3` (scan in its Dev Notes).
+- `scripts/symbolic_figures.py::draw_trellis` draws the topology trellis's holes
+  (`trellis.plot_holes`), not the per-fixed-point fan-out (which is empty for nested now).
+- Later (D8 API plan): defaulting `blast_zone`'s filter to the zone's own fixed point;
+  `partition_element_for` could read the selection trellis directly (WP11).

@@ -402,3 +402,38 @@ depth; the rest of the layer is described in `CLAUDE.md`.
 - Open / for later: k32 dynamics is unreliable from blast 6 of its series (not examined; WP10's
   evidence/ambiguity work); PK-4 untouched; re-classification is O(N^2) per rebuild (PERF).
 
+
+## Open-issues round WP9 (2026-10-08, branch `oi/wp09-heteroclinic`, base `b460363`)
+
+- Selection rule (`Trellis.from_workbench`): a non-anchor crossing is bucketed only when BOTH its
+  keys are branches of the selection. A tangle's own trellis therefore holds no heteroclinic
+  crossing; `Trellis.__init__` passes the given bridges through `_bridges_inside(bridges,
+  crossings)` so an arc ending at a foreign crossing is JOINED across it (same rule and memo as a
+  crossing past a pip cut; `_computed` stores the joined list). No-op on every trellis without
+  heteroclinic crossings, the minimal trellis's synthetic one included. A run through foreign
+  crossings that ends in a partial tip is dropped, like a run past a cut (only an uncut trellis
+  could notice; none of the cases do).
+- `Trellis.pips: {fixed point: pip}` is set by `cut_at_pip_orbit` (the `strong_pip` setter too).
+  Cut at both pips the selection is `T(q0_A) ∪ T(q0_B)`: `cut_at_pip_orbit` already merged the
+  cuts per branch key, so D10/D12 needed no change for two fixed points.
+- D7 pair test (`Pseudoneighbor._unstable_interval_is_clear`): the cycle, `k` and β are the ARC's
+  fixed point's (`u_key[0]`), so a heteroclinic pair on B's stable branch is tested against the
+  crossings whose unstable side is A's with A's cycle; the "missing from the branch cycle"
+  WARNING is gone (it cannot happen). The scaled-fallback 2D endpoint collision applies only when
+  the candidate's stable fixed point is the pair's (stable cdists of two manifolds never compare);
+  the own-frame branch is unchanged. `_reference_branch` reads `trellis.pips.get(fp)`.
+  `extend_pseudoneighbor_trajectories`, `punch_holes` and `propagate_reference_holes` needed no
+  change: the window's `k` is the pair's STABLE fixed point's (D5), the backward chain follows the
+  bridge's own `advance_key` (A's cycle), `_containing_bridge` reads A's branch of the selection.
+- `heteroclinic` (p3 16u/10s): refs 3 -> 4 (one heteroclinic reference on p1's window), holes
+  50 -> 77 (its backward chain, ~23 steps along A's cycle, holes p3's anchor bridges), alphabet
+  31 -> 57, closed 53 -> 81, connecting classes 0 -> 2, one sparse-arrangement component.
+  DEC-23: with the lobe's hole, two equal-length shortest walks pass either side of it on p1's
+  window (the faces on each side are one face: the lobe and the bubble across it are bays of the
+  stable manifold); three classes are ambiguous and the dynamics unreliable (strict xfail
+  `every_active_class_walks` x `heteroclinic`, WP9 slice 2). The member images disagree between
+  classes, so no evidence rule breaks the tie for all of them.
+- Open for later: `partition_covers_branch` on every p3 16u build (WP10, inherited);
+  `dual_face_side_is_geometry` on p3 16u/9s and 16u/12s (half-plane test against a non-convex
+  face's representative point; 16/10 avoids it, not fixed); escape-lobe images (the four
+  heteroclinic crossings carry no iterate links, WP10).

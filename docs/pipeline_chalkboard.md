@@ -34,15 +34,17 @@ Inversion, period-k and several saddles are **no special case** below, except at
 
 3. **Strong pip q₀** (`Strong_Pip_Algorithm.pdf`). q₀ is a strong pip iff no crossing, mapped onto q₀'s stable branch, lands in the open box (0, c_s(q₀)) × (0, c_u(q₀)).
    - Output: the pip orbit (one cut point per stable branch), the resonance zone, the fundamental segment F = (c_s(M^k q₀), c_s(q₀)] on the pip's branch, and **the trellis of the pip T(q₀) = (W^u[P, M^m q₀], W^s[P, q₀])** (D10, D12; `T(q0)`, `Trellis.cut_at_pip_orbit`): stable branch j is cut at c_s(M^j q₀), j < k, and the unstable branch of M^i q₀ at c_u(M^i q₀) for the k deepest registered i (m = the last forward iterate of q₀ the table holds). M⁻¹ maps its unstable half into itself and M its stable half, so it is a genuine trellis. Every later stage reads its crossing set N and its arcs; a crossing past a cut is a point of X, not of N, and the arc across it is one arc of T(q₀). A missing orbit point is placed by `image_cdist` and flagged.
+   - ★ Several saddles: a trellis holds a crossing only when both its branches are selected, so a tangle alone holds no heteroclinic crossing (its arcs run through them). The selection's trellis, cut at every pip, is T(q₀_A) ∪ T(q₀_B): each branch at its own pip orbit, a heteroclinic crossing in N iff it is inside A's unstable cut and B's stable cut. M⁻¹ maps the union of the unstable halves into itself and M the union of the stable halves, so it is a genuine trellis (WP9).
 
 4. **Pseudoneighbors** (`Pseudoneighbor_Algorithm.pdf`). N is T(q₀)'s (stage 3). Consecutive crossings x, x′ on a stable branch are a pair iff the unstable arc between them contains no point of X = ∪_n Mⁿ(N). A trajectory is extended only while its images are crossings of T(q₀).
    - Reference pairs are the pairs in F, plus their +1..+(k−1) iterates on the other branches of a period-k orbit.
    - A landing is compared on ONE polyline: the registered landing's own, else r's own against the pair's registered images there (WP8); β-scaling onto the pair is the fallback only when neither image is registered.
    - D5: a missing `+j` is predicted by `image_cdist`, never invented: its branch is named in a WARNING (the stagger of a period-k chain); a missing pip cut is placed by `image_cdist`.
-   - ★ Heteroclinic (D7): a pair of heteroclinic crossings on B's stable branch can be a pair of B's tangle.
+   - ★ Heteroclinic (D7): a pair of heteroclinic crossings on B's stable branch can be a pair of B's tangle. Its unstable arc is A's, so X is read with A's branch cycle, k and β, over the crossings whose unstable side is A's. It needs both tangles selected: stages 4-6 run on the selection's trellis (WP9).
 
 5. **Holes** (`Stable_Manifold_Partition_Algorithm`). Each reference pair puts one hole in its lobe. A reference bridge is mapped BACKWARD until it maps into a bridge already visited; each backward image lies inside one existing bridge, and that bridge gets the hole. Forward iterates (≥ k) get no hole.
    - A hole's side is its side of its OWN bridge, in the dynamical orientation, and M preserves it (det J > 0).
+   - ★ A heteroclinic reference's backward chain runs along A's unstable cycle into A's bridges, so it holes A's partition too.
    - Invariants:
      - I1: one origin ⇒ one side.
      - I2: a bridge whose two ends are on one stable branch has the same row at both ends (its signs differ).
@@ -71,7 +73,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
 
 10. **Recompute (D1).** Topology is a pure function of the numerical state. Any growth or blast recomputes stages 1-9 from scratch. Successive recomputes are compared by element identity (the bounding crossings of each element: hole-bridge endpoints, whose ids persist in a session; C10), and the class count may only go up: N is T(q₀)'s (D12), so a lap the pip orbit has not completed, a lambda-lemma copy deeper than M^m q₀, is not in N and cannot reshape the fundamental segment. While the hole set stays the same, so does the alphabet closed under the word map (D11).
 
-★ **Several saddles.** A heteroclinic crossing is a node of both tangles. Nesting of tangles needs ONE containment test per fixed point. Nothing else changes.
+★ **Several saddles.** A heteroclinic crossing is a node of both tangles, and of neither alone: the topology of several saddles is computed on ONE trellis, the selection's (stage 3). Nesting of tangles needs ONE containment test per fixed point, and a zone's blast iterates the bridges whose innermost zone it is (C4). Nothing else changes.
 
 ## Where the code diverged on 2026-10-07
 
@@ -88,4 +90,6 @@ From the audit; the details and evidence are in `open_issues.md`.
 | 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | no longer states (WP7); a walk pair no computed bridge spans is a flagged class (D11, WP8b) |
 | 3, 8 | The partition and dual graph do not cut S at the pip orbit (unified window ≠ S \ f(S) when S runs past it) | PK-5 | fixed (WP8b, D10): the trellis is cut at the pip orbit |
 | 10 | Element identity is a positional index | BCG-7 | fixed (WP8): letters by bounding crossings |
+| 4 | Heteroclinic pairs rejected (A's arc tested against B's branch cycle); stages 4-6 per tangle | NEST-2 | fixed (WP9): the arc's own cycle, stages on the selection's trellis |
+| — | An outer blast iterated the bridges inside an inner zone | NEST-4 | fixed (WP9, C4): innermost zone |
 | 4 | Class-count decreases at depth: references lost to witnesses inside the cdist placement error bar (noise not ruled out; one clear lambda-lemma copy) | BCG-5 | fixed (WP8b, D12): every witness lay deeper than the pip's own orbit; N is cut there |

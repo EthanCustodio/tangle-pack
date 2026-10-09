@@ -103,3 +103,13 @@ the crossing / iterate-table path is described; growth, refinement and budgets a
   a set of frozensets of segment ids, and `Tangle._ids` is a process-wide counter: reproducible for
   the first build of a process, not for a second build in the same process. Anchors are still
   registered first; blast registration was already ordered (`_collapse_noise_crossings`).
+
+## Open-issues round WP9 (2026-10-08, branch `oi/wp09-heteroclinic`)
+
+- NEST-5: `clear_bridges(fixed_point=None)` releases and drops only that fixed point's bridges
+  and partial pieces (in place), rebuilds `_bridges_at` from the survivors, bumps the generation.
+  `rebuild_bridges(fp)`: ids current (`_bridge_id_epoch == _registry_id_epoch`) -> clear and
+  recut `fp` only, carrying `iterated` by id; ids stale and bridges held -> DEBUG line and every
+  fixed point is rebuilt (the survivors' ids would name other crossings). `create_bridges`
+  stamps the epoch only from an empty set, which the stale path guarantees. Recutting a
+  fixed point twice reproduces its ids and adds no partial piece.
