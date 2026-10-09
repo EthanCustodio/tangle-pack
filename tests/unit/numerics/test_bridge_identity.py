@@ -129,6 +129,31 @@ def test_bridge_ids_survive_rebuild_with_metadata(henon_tangle_with_bridges):
     )
 
 
+def test_rebuilding_one_fixed_points_bridges_keeps_the_others():
+    """NEST-5: ``rebuild_bridges(fp)`` recuts ``fp``'s bridges only; the other fixed
+    point's bridges stay the same objects under the same ids, and a repeated rebuild
+    adds no partial piece."""
+    from cases import build_nested
+
+    case = build_nested(outer_blasts=0, through="bridges")
+    workbench = case.workbench
+    fp1, fp3 = case.fixed_points
+
+    def ids_of(fp):
+        return {b.id: b for b in _full_bridges(workbench) if b.fixed_point is fp}
+
+    outer, inner = ids_of(fp1), ids_of(fp3)
+    assert outer and inner
+    workbench.rebuild_bridges(fp3)
+    partials = len(workbench.bridges) - len(_full_bridges(workbench))
+    workbench.rebuild_bridges(fp3)
+
+    assert all(workbench.bridge(bid) is bridge for bid, bridge in outer.items())
+    assert ids_of(fp1).keys() == outer.keys()
+    assert ids_of(fp3).keys() == inner.keys()
+    assert len(workbench.bridges) - len(_full_bridges(workbench)) == partials
+
+
 # --------------------------------------------------------------------------- #
 # derived genealogy
 # --------------------------------------------------------------------------- #

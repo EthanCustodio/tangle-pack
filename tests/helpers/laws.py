@@ -389,6 +389,19 @@ def check_every_branch_crosses(case: "Case") -> int:
     return count
 
 
+def check_case_heteroclinic(case: "Case") -> int:
+    """The selection trellis holds a crossing of one fixed point's unstable branch and
+    another's stable branch exactly when the case says it is heteroclinic."""
+    trellis = _full(case)
+    heteroclinic = any(
+        ix.manifold_a_key[0] is not ix.manifold_b_key[0]
+        for iid, ix in trellis.registry
+        if iid in trellis and not ix.is_anchor
+    )
+    assert heteroclinic == case.expect.heteroclinic
+    return 1
+
+
 # --------------------------------------------------------------------------- #
 # Manifolds
 # --------------------------------------------------------------------------- #
@@ -1437,6 +1450,25 @@ def pip_orbit_cuts(trellis, pip: int) -> dict:
     )
 
 
+def check_trellis_crossings_belong_to_its_selection(case: "Case") -> int:
+    """A trellis holds a crossing only when BOTH its branches are selected (an anchor
+    lies on its own branches), and each of its bridges ends at crossings it holds: a
+    tangle alone holds no heteroclinic crossing, its arcs run through them (WP9)."""
+    count = 0
+    for trellis in [*_per_fp_trellises(case), _full(case)]:
+        for iid in trellis.own_intersection_ids:
+            ix = trellis.intersection(iid)
+            if not ix.is_anchor:
+                assert {ix.manifold_a_key, ix.manifold_b_key} <= set(trellis.branches), iid
+            count += 1
+        for bridge in trellis.bridges:
+            ends = [i for i in (bridge.first_intersection, bridge.second_intersection)
+                    if i is not None]
+            assert all(i in trellis for i in ends), (bridge.id, ends)
+            count += 1
+    return count
+
+
 def check_trellis_is_cut_at_the_pip_orbit(case: "Case") -> int:
     """D10, D12: once a pip is chosen, the trellis holds exactly the computed crossings of
     ``T(q0)``: none past a pip-orbit cut on its stable or its unstable branch, and every
@@ -1455,7 +1487,7 @@ def check_trellis_is_cut_at_the_pip_orbit(case: "Case") -> int:
         tol = float(trellis.registry.cdist_tol)
         held = set(trellis.own_intersection_ids)
         for iid, ix in trellis.registry:
-            if ix.is_anchor or not {ix.manifold_a_key, ix.manifold_b_key} & set(trellis.branches):
+            if ix.is_anchor or not {ix.manifold_a_key, ix.manifold_b_key} <= set(trellis.branches):
                 continue
             inside = all(
                 float(cdist) <= cuts[key][0] + (tol if cuts[key][1] else 0.0)
@@ -1852,6 +1884,25 @@ def check_classes_do_not_mix_tangles(case: "Case") -> int:
             assert entry.tangle is None
     assert seen == {id(fp) for fp in case.fixed_points}, "every tangle contributes classes"
     return len(table)
+
+
+def check_tangles_in_case_order(case: "Case") -> int:
+    """NEST-6: the session's tangles are the case's fixed points in order (outermost
+    first), so ``entry.tangle = t`` names ``case.fixed_points[t]``: the class's elements
+    and its members' unstable branches all belong to that fixed point."""
+    trellis = _full(case)
+    assert [id(fp) for fp in trellis.fixed_points] == [id(fp) for fp in case.fixed_points]
+    count = 0
+    for entry in _evidence(case):
+        if entry.tangle is None:
+            continue
+        owner = case.fixed_points[entry.tangle]
+        cls = entry.bridge_class
+        assert cls.source.fixed_point is owner and cls.target.fixed_point is owner, cls.label
+        for bridge_id in entry.bridge_ids:
+            assert trellis.intersection(bridge_id[0]).manifold_a_key[0] is owner, bridge_id
+        count += 1
+    return count
 
 
 def check_classes_use_every_orbit_branch(case: "Case") -> int:
@@ -2551,6 +2602,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_map_is_area_preserving,
         check_every_branch_is_built,
         check_every_branch_crosses,
+        check_case_heteroclinic,
     ],
     "manifolds": [
         check_manifold_cdist_monotone,
@@ -2599,6 +2651,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_propagation_terminates,
         check_no_direct_hole_beyond_fundamental,
         check_window_holes_on_every_branch,
+        check_trellis_crossings_belong_to_its_selection,
         check_trellis_is_cut_at_the_pip_orbit,
         check_reference_pairs_valid,
     ],
@@ -2618,6 +2671,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_anchor_bridge_class_leads_its_tangle,
         check_class_table_order,
         check_classes_do_not_mix_tangles,
+        check_tangles_in_case_order,
         check_classes_use_every_orbit_branch,
         check_only_active_classes_lettered,
         check_alphabet_inside_minimal_trellis,

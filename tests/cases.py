@@ -28,6 +28,12 @@ Cases:
   blasts, and no or two inner blasts, delegated to
   :func:`tanglepack.examples.henon_cases.build_nested` with every keyword
   explicit (``p1_area_cutoff = 1e-7``).
+* ``heteroclinic`` -- the nested recipe with period 3 grown 16 unstable / 10
+  stable steps (two outer blasts, ``1e-7`` on both): the inner orbit's unstable
+  manifold reaches across the outer saddle's stable manifold, four ``A(u) x
+  B(s)`` crossings, two inside both pip-orbit cuts (NEST-1, WP9). 16 / 9 and
+  16 / 12 also fail ``dual_face_side_is_geometry``, as p3 at 16 / 9 does alone
+  (WP10), so 16 / 10 keeps that unrelated failure out of the case.
 * ``nested_unblasted`` -- the nested map with no blast and the outer saddle
   grown at ``p1_area_cutoff = 1e-4`` (the old ``henon_p3_session`` recipe, kept
   as a parameter: Phase 0 probe P6 showed the cutoff changes the outer tangle).
@@ -91,7 +97,7 @@ Dev Notes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Callable, Literal, Mapping, NamedTuple, Optional
 
@@ -211,6 +217,8 @@ class CaseExpect:
         inversion: Whether any fixed point has inversion (``k_value == 2 * period``).
         n_tangles: The number of fixed points.
         blasts: Single-iteration blasts applied (outer blasts for nested).
+        heteroclinic: Whether the selection trellis holds a crossing of one
+            fixed point's unstable and another's stable branch.
     """
 
     periods: tuple[int, ...]
@@ -218,6 +226,7 @@ class CaseExpect:
     inversion: bool = False
     n_tangles: int = 1
     blasts: int = 0
+    heteroclinic: bool = False
 
 
 @dataclass
@@ -721,6 +730,28 @@ def build_nested(
     )
 
 
+def build_heteroclinic() -> Case:
+    """
+    Period 1 + period 3 with heteroclinic crossings: period 3 at 16 / 10 steps.
+
+    Returns:
+        The case ``"heteroclinic"``, fixed points ``[fp1, fp3]``.
+    """
+    case = build_nested(
+        outer_blasts=2,
+        inner_blasts=0,
+        p3_unstable_steps=16,
+        p3_stable_steps=10,
+        p3_area_cutoff=1e-7,
+        p1_unstable_steps=11,
+        p1_area_cutoff=1e-7,
+        min_separation=1e-4,
+    )
+    case.name = "heteroclinic"
+    case.expect = replace(case.expect, heteroclinic=True)
+    return case
+
+
 # --------------------------------------------------------------------------- #
 # Inversion: the k = 4 law cases and the k = 10 numerics fixture
 # --------------------------------------------------------------------------- #
@@ -1156,6 +1187,7 @@ LAW_CASES: tuple[str, ...] = (
     "inversion_one_blast",
     "inversion_two_blasts",
     "inversion_period2",
+    "heteroclinic",
 )
 
 #: Every named case and its frozen builder.
@@ -1167,6 +1199,7 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         "p3": build_period3,
         "nested": build_nested,
         "nested_inner_blasts": lambda: build_nested(inner_blasts=2),
+        "heteroclinic": build_heteroclinic,
         "nested_unblasted": lambda: build_nested(
             outer_blasts=0, p1_area_cutoff=1e-4, through="zones"
         ),
@@ -1225,6 +1258,16 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
         ("three_tangles_take_three_families", "hand_built"): KnownIssue(
             "TEST-5(c): TANGLE_COLOR_FAMILIES holds two families, so a third tangle "
             "draws from none",
+            "WP9",
+        ),
+        ("partition_covers_branch", "heteroclinic"): KnownIssue(
+            "deep-run residual law: p3 at 16 unstable steps has open elements that are "
+            "no single hole's stretch (fails on p3 16u alone; WP8 note)",
+            "WP10",
+        ),
+        ("every_active_class_walks", "heteroclinic"): KnownIssue(
+            "NEST-1 / DEC-23: two shortest walks of equal length pass either side of the "
+            "heteroclinic lobe on B's fundamental segment (ambiguous, unreliable)",
             "WP9",
         ),
     }
