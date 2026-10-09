@@ -1683,9 +1683,9 @@ class TangleSession:
             re-establish its strong pip) before continuing topological work.
 
         Note:
-            Any failure of one bridge's image propagates (nothing is skipped,
-            NUM-10). A :class:`~tanglepack.numerics.budget.PointBudgetExceeded`
-            leaves the session not resumable; rebuild it.
+            Any failure of one bridge's image propagates (NUM-10). A
+            :class:`~tanglepack.numerics.budget.PointBudgetExceeded` leaves the
+            session not resumable; rebuild it.
         """
         return blast_zone(
             self,

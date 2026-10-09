@@ -23,7 +23,8 @@ zone interior is the only region where iterating many times stays bounded, and i
 intended use of this feature.
 
 A bridge whose forward map fails aborts the blast (NUM-10, WP10): every such
-failure is a bug, and the one that was being skipped as "rare" was NUM-9.
+failure is a bug, and the "rare under-resolved iterate" once tolerated here was
+NUM-9.
 
 Memory is budgeted at two levels. The machine's per-call cap
 (``max_points_per_step``) is always on and RAISES
