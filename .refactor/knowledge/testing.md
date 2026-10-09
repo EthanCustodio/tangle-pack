@@ -566,3 +566,9 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   on base (it pins C6). The ninth-blast k28 count check is `perf` (~9 s).
 - Reworded to new rules: `test_same_stability_discard.py` (never formed), the evidence tests
   (C11), `test_blast_restore` / `test_blast_monotonicity` / `test_blast_budget` (no `strict`).
+- Suite (back to back, same machine, load ~1.7): branch 1042 passed / 21 skipped / 4 deselected /
+  2 xfailed in 137.3 s; base `3f27456` 1022 / 21 / 3 / 3 in 184.3 s (0.75x). Savings: law tier
+  setups (C12, ~25 s), one rtree per stability (~7 s on the series), lazy pip candidates.
+  Slowest left: the `k32_series` and `nested_outer_series` builds (~15 s each, shared by the
+  series tests), the deep-reference regression (~9 s, a duplicate of the series at 9-10 blasts,
+  kept per rubric 16) and `test_deep_blast_sliver_beyond_pip` (~10 s).
