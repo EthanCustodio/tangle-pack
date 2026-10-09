@@ -231,8 +231,8 @@ class Arrangement:
             trellis: The trellis to build over. Pass the ALL-fixed-points trellis
                 (``session.trellis(None)``) unless you deliberately want one
                 tangle in isolation: a heteroclinic crossing belongs to two fixed
-                points, and a single-fixed-point snapshot cuts the other side's
-                arcs off, turning real faces into open ones.
+                points, and a single-fixed-point snapshot holds neither it nor
+                the other tangle's arcs, turning real faces into open ones.
             sparse: When True the unstable arcs are exactly the trellis's
                 (non-partial) bridges, not the consecutive crossing pairs of
                 its unstable branches, and a crossing missing an unstable ray

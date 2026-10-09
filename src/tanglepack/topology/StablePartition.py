@@ -29,11 +29,11 @@ fixed in conversation with the author (July 2026):
   ``element_of_intersection`` (crossing -> owning element, by id at a
   boundary and by EXACT cdist elsewhere, see "Exact ownership" below) and
   ``elements_at_bridge``. The latter is only a
-  convenience index over the bridges the building trellis HELD: a trellis keeps a
-  bridge under its unstable fixed point, so a heteroclinic bridge never appears
-  in the trellis that owns its endpoints' stable branch. The authoritative
-  lookup is therefore :meth:`Trellis.element_for`, which falls back to the
-  endpoint ids carried by the BridgeId itself.
+  convenience index over the bridges the building trellis HELD: a heteroclinic
+  bridge exists only in a trellis holding both its tangles (a tangle alone
+  holds no heteroclinic crossing, WP9). The authoritative lookup is
+  :meth:`Trellis.element_for`, which reads the endpoint ids carried by the
+  BridgeId itself.
 * Side (author, 2026-07-16): a hole's side is left/right of its own BRIDGE,
   i.e. of the unstable manifold, in the bridge's dynamical orientation —
   forward flow points AWAY from the fixed point, so the bridge is oriented by

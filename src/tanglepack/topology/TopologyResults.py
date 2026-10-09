@@ -412,11 +412,10 @@ class StablePartitionResult:
             one endpoint on this branch, mapped to ``(element at first, element
             at second)`` in :data:`~tanglepack.numerics.Bridge.BridgeId` order,
             with ``None`` for an end that lies on a different stable branch.
-            It is NOT the authority on bridge-to-element: a trellis holds a
-            bridge under its UNSTABLE fixed point, so a heteroclinic bridge of
-            W^u(fp1) whose endpoints sit on W^s(fp3) is absent from fp3's
-            snapshot entirely and has no entry here even though fp3's partition
-            owns both its endpoints. Because a BridgeId IS the endpoint id pair,
+            It is NOT the authority on bridge-to-element: a heteroclinic
+            bridge of W^u(fp1) whose endpoints sit on W^s(fp3) exists only in
+            a trellis holding both tangles (a tangle alone holds no
+            heteroclinic crossing). Because a BridgeId IS the endpoint id pair,
             :meth:`Trellis.element_for` falls back to
             ``element_of_intersection`` and answers anyway — go through it, or
             through

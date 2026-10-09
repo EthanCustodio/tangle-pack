@@ -37,7 +37,17 @@ crossing set N is decided: every later stage reads the branches and bridges
 cut here. A crossing past a cut is a point of X (every iterate of N), not of N:
 it leaves the branches, and the unstable arc across it joins its two bridges
 into one (``Bridge.joined``; the workbench never holds it). Un-choosing the pip
-restores the computed trellis. :meth:`iterate` and :meth:`image_cdist` stay RAW
+restores the computed trellis.
+
+Several fixed points (WP9). A trellis holds a crossing only when BOTH its
+branches are selected, so a tangle's own trellis holds no heteroclinic crossing
+(its unstable arcs are joined across them, as across a crossing past a cut) and
+the selection's trellis holds them. Cut at every selected pip, the selection is
+``T(q0_A) ∪ T(q0_B)``: each branch at its own pip orbit, a heteroclinic crossing
+of ``W^u(A)`` and ``W^s(B)`` in N iff it lies inside A's unstable cut AND B's
+stable cut. ``f^-1`` maps the union of the unstable halves into itself and ``f``
+the union of the stable halves, so it is a genuine trellis. :attr:`pips` records
+the pip each fixed point is cut at. :meth:`iterate` and :meth:`image_cdist` stay RAW
 registry lookups -- X holds points outside T -- so a consumer that needs an
 iterate AS A CROSSING of the trellis asks ``image in trellis``.
 
@@ -212,6 +222,9 @@ class Trellis:
         strong_pip: The single chosen strong pip (an intersection ID), or None.
             Chosen from strong_pip_candidates via set_strong_pip(); choosing it
             cuts the trellis at its orbit (:meth:`cut_at_pip_orbit`).
+        pips: The pips the trellis is cut at, by the fixed point owning each
+            pip's stable branch (the strong pip of a single fixed point, every
+            selected pip of a selection of several).
     """
 
     def __init__(
@@ -245,7 +258,6 @@ class Trellis:
         self.fixed_points = fixed_points
         self.registry = registry
         self.branches = branches
-        self.bridges = bridges
         self.dynamical_system = dynamical_system
         # Live reference to the workbench's manifolds (keyed like branches).
         # Purely geometric consumers (hole placement inside narrow lobes) walk
@@ -272,14 +284,18 @@ class Trellis:
 
         # The computed trellis, which a pip cut (cut_at_pip_orbit) reduces to
         # T(q0) and un-choosing the pip restores; the joined arcs are memoised
-        # by id so a re-cut hands back the same objects.
-        self._computed = (
-            {key: list(branch.intersection_ids) for key, branch in branches.items()},
-            list(bridges),
-        )
+        # by id so a re-cut hands back the same objects. A bridge ending at a
+        # crossing outside the selection (a heteroclinic crossing of a tangle
+        # alone) is joined across it, like one past a pip cut.
         self._crossings = {i for branch in branches.values() for i in branch.intersection_ids}
         self._cuts: dict[ManifoldKey, tuple[float, bool]] = {}
         self._joined: dict["BridgeId", Bridge] = {}
+        self.pips: dict["FixedPoint", int] = {}
+        self.bridges = self._bridges_inside(bridges, self._crossings)
+        self._computed = (
+            {key: list(branch.intersection_ids) for key, branch in branches.items()},
+            list(self.bridges),
+        )
 
         # Every intersection that *qualifies* as a strong pip is a candidate.
         # A trellis has exactly one actual strong pip — a unique choice made from
@@ -320,7 +336,8 @@ class Trellis:
 
         Args:
             pips: The strong pips, at most one per fixed point (the selection
-                trellis of several fixed points is cut at all of theirs).
+                trellis of several fixed points is cut at all of theirs,
+                ``T(q0_A) ∪ T(q0_B)``); recorded in :attr:`pips` by fixed point.
 
         Note:
             A cut whose orbit point the table does not hold is PLACED by
@@ -331,6 +348,7 @@ class Trellis:
             here.
         """
         pips = list(pips)
+        self.pips = {self.registry[pip].manifold_b_key[0]: pip for pip in pips}
         cuts = {key: cut for pip in pips for key, cut in self._pip_orbit_cuts(pip).items()}
         if cuts == self._cuts:
             return
@@ -503,15 +521,20 @@ class Trellis:
                 intersection_ids=[],
             )
 
-        # Bucket each intersection onto the branch(es) it lies on: its unstable
+        # Bucket each intersection onto the branches it lies on: its unstable
         # side is manifold_a_key, its stable side manifold_b_key, and an anchor
-        # is one point on every branch attached to it (D4).
+        # is one point on every branch attached to it (D4). A crossing is a
+        # crossing of the selection only when BOTH its branches are selected: a
+        # heteroclinic crossing belongs to the trellis of its two tangles, never
+        # to either alone.
         for ix_id, ix in registry:
             if ix.is_anchor:
                 fp, _, orbit_index, _ = ix.manifold_a_key
                 on = [key for key in branches if key[0] is fp and key[2] == orbit_index]
             else:
-                on = [key for key in (ix.manifold_a_key, ix.manifold_b_key) if key in branches]
+                on = [ix.manifold_a_key, ix.manifold_b_key]
+                if not all(key in branches for key in on):
+                    continue
             for key in on:
                 branches[key].intersection_ids.append(ix_id)
 
@@ -618,7 +641,7 @@ class Trellis:
 
         Prefer the ALL-fixed-points trellis (``session.arrangement()``): a
         heteroclinic crossing belongs to two tangles, and a single-fixed-point
-        snapshot cuts the other side's arcs off, turning real faces into open ones.
+        snapshot holds neither the crossing nor the other tangle's arcs.
 
         Returns:
             The :class:`~tanglepack.topology.Arrangement.Arrangement`.
@@ -683,9 +706,10 @@ class Trellis:
 
         The registry is shared across every fixed point on the workbench, so in a
         nested / multi-tangle session it holds intersections this trellis does not
-        own. An intersection belongs here iff it lies on one of this trellis's
-        branches (its unstable or stable side resolves to a branch we hold), which
-        is precisely the set ``from_workbench`` bucketed onto the branches. The
+        own. An intersection belongs here iff BOTH its branches are branches of
+        this trellis (an anchor lies on its own), which is precisely the set
+        ``from_workbench`` bucketed onto the branches, less any crossing past a
+        pip-orbit cut. The
         topological algorithms default to this set so that, e.g., the inner
         period-3 trellis is not classified against the outer fixed point's
         crossings.
@@ -1440,11 +1464,9 @@ class Trellis:
         A :data:`~tanglepack.numerics.Bridge.BridgeId` IS the ordered pair of its
         endpoints' registry ids, so the answer never depends on this trellis
         holding the bridge object: the endpoint id is looked up in
-        :attr:`StablePartitionResult.element_of_intersection`. That is what makes
-        a heteroclinic bridge resolvable: a bridge of W^u(fp1) crossing W^s(fp3)
-        is filtered out of fp3's snapshot (``from_workbench`` keeps bridges by
-        their UNSTABLE fixed point) while the element that owns its endpoint
-        lives precisely in fp3's partition.
+        :attr:`StablePartitionResult.element_of_intersection`. A heteroclinic
+        bridge's ends are crossings of the trellis of BOTH its tangles (a tangle
+        alone holds no heteroclinic crossing), whose partitions own them.
 
         Args:
             bridge_id: The bridge's :data:`~tanglepack.numerics.Bridge.BridgeId`.
