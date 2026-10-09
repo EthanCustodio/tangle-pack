@@ -28,7 +28,10 @@ pinned count:
   crossings, and no two such identities share a letter (C2, BCG-7);
 * ``session.trellis()`` read before the recompute already shows the
   recomputed topology's trellis: the selection trellis is cut at the pips of
-  its fixed points when it is read, never by whichever product runs first (D1).
+  its fixed points when it is read, never by whichever product runs first (D1);
+* no class is ambiguous: the walk leaves from the edges its landing span meets
+  and the non-crossing rule picks the side of every class with a member lobe
+  (D13; the ties of k=2.8 and k=3.2 at 8+ blasts were the span's).
 
 The per-kind counts are printed in every failure message as diagnostics.
 
@@ -52,10 +55,10 @@ def _series(name: str) -> tuple[SeriesStep, ...]:
 
 
 def _table(steps: tuple[SeriesStep, ...]) -> str:
-    """``blasts: holes, classes (active/inert), closed, outside minimal`` per step."""
+    """``blasts: holes, classes (active/inert), closed, ambiguous, outside minimal`` per step."""
     return "; ".join(
         f"{s.blasts}: {len(s.holes)} holes, {s.classes} ({s.active}/{s.inert}), "
-        f"{s.closed} closed, {s.outside_minimal} outside"
+        f"{s.closed} closed, {s.ambiguous} ambiguous, {s.outside_minimal} outside"
         for s in steps
     )
 
@@ -127,3 +130,10 @@ def test_session_trellis_is_history_free(name: str) -> None:
     whether a product was computed first."""
     steps = _series(name)
     assert all(s.history_free for s in steps), [s.blasts for s in steps if not s.history_free]
+
+
+@pytest.mark.parametrize("name", _params("series_no_walk_is_ambiguous"))
+def test_no_walk_is_ambiguous(name: str) -> None:
+    """D3 + D13: after every blast each class has one word (no class is ambiguous)."""
+    steps = _series(name)
+    assert all(s.ambiguous == 0 for s in steps), _table(steps)

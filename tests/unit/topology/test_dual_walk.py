@@ -4,7 +4,8 @@ Dual-graph walks, element landings and the trellis itinerary.
 Synthetic graphs (real ``StableNode`` / ``FaceNode`` objects, ``arc=None``)
 pin the walk: trivial cases, entry-then-exit recording, walls never crossed,
 merged-face self-adjacency, ties, dedupe of parallel nodes, unreachability,
-missing nodes, several start faces and the ``max_walks`` cap. Hand-made
+missing nodes, several start faces, the ``max_walks`` cap, the landing span
+and the non-crossing rule's search (its marker verdict stubbed). Hand-made
 partition families and a duck-typed trellis pin the landing and the trellis
 itinerary. Real walks are checked by the law tier (even itineraries, same-side
 pairs, contained landings), never pinned.
@@ -18,7 +19,9 @@ from typing import Callable, Optional
 import pytest
 
 from helpers.logs import assert_logged
+from tanglepack.topology import DualWalk
 from tanglepack.topology.DualWalk import (
+    MAX_DETOUR,
     ElementLanding,
     Walk,
     WalkStep,
@@ -272,6 +275,132 @@ def test_walks_are_sorted_deterministically(key):
         walk.itinerary for walk in search.walks
     ]
 
+
+# --------------------------------------------------------------------------- #
+# shortest_walks: the landing span and the non-crossing rule (D13)
+# --------------------------------------------------------------------------- #
+def _landing(target, span, from_table=(True, True)):
+    """A contained landing on ``target`` with the given image span."""
+    return ElementLanding(
+        source=target,
+        image_key=target.branch_key,
+        image_side=target.side,
+        span=span,
+        from_table=from_table,
+        target=target,
+        contained=True,
+        singleton=False,
+        covering=(target,),
+        reason=None,
+    )
+
+
+@pytest.fixture
+def two_starts(key):
+    """The start element owns the edges [0, 1] (face f0) and [1, 2] (face f3); each face
+    reaches the goal's face through its own unified node, so two shortest walks tie."""
+    dual = FakeDual()
+    f0, f3, f1, fx, fy = (dual.face() for _ in range(5))
+    dual.wall(f0, fx, L(key, 0), R(key, 0), lo_cdist=0.0, hi_cdist=1.0)
+    dual.wall(f3, fx, L(key, 0), R(key, 5), lo_cdist=1.0, hi_cdist=2.0)
+    dual.unified(f0, f1, L(key, 1), R(key, 1))
+    dual.unified(f3, f1, L(key, 2), R(key, 2))
+    dual.wall(f1, fy, L(key, 3), R(key, 3))
+    return dual, f0, f3
+
+
+@pytest.mark.parametrize(
+    "span, from_table",
+    [((0.25, 0.75), (True, True)), ((0.25, 1.0), (True, True)), ((0.25, 1.005), (True, False))],
+    ids=["inside", "touching_the_neighbour", "scaled_end_past_the_neighbour"],
+)
+def test_the_walk_leaves_from_the_edges_the_landing_span_meets(key, two_starts, span, from_table):
+    """The image of an element is its landing span, so the walk leaves from an edge the span
+    overlaps: a neighbour merely touched, or overlapped by less than a scaled end's error,
+    is no start."""
+    dual, f0, _f3 = two_starts
+    assert shortest_walks(dual, L(key, 0), L(key, 3)).status == "ambiguous"
+    landings = (_landing(L(key, 0), span, from_table), _landing(L(key, 3), (0.0, 1.0)))
+    search = shortest_walks(dual, L(key, 0), L(key, 3), landings=landings)
+    assert search.status == "unique" and search.start_faces == [f0]
+    assert search.walk.faces[0] is f0
+    assert search.walk.start_node.face_on("left") is f0
+    assert search.walk.goal_node in dual.stable_nodes_of(L(key, 3))
+
+
+def test_a_span_meeting_no_edge_falls_back_to_every_edge(key, caplog):
+    dual = FakeDual()
+    f0, f3, f1, fx, fy = (dual.face() for _ in range(5))
+    dual.wall(f0, fx, L(key, 0), R(key, 0))
+    dual.wall(f3, fx, L(key, 0), R(key, 5), lo_cdist=1.0, hi_cdist=2.0)
+    dual.unified(f3, f1, L(key, 1), R(key, 1))  # only f3 leads to the goal
+    dual.wall(f1, fy, L(key, 2), R(key, 2))
+    landings = (_landing(L(key, 0), (5.0, 6.0)), _landing(L(key, 2), (0.0, 1.0)))
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        search = shortest_walks(dual, L(key, 0), L(key, 2), landings=landings)
+    assert search.status == "unique" and [face.index for face in search.start_faces] == [f0.index, f3.index]
+    assert_logged(caplog, logging.WARNING, LOGGER, count=1)
+
+
+@pytest.fixture
+def tie(key):
+    """Two unified nodes from f0 to f1: two shortest walks with different itineraries."""
+    dual = FakeDual()
+    f0, f1, fx, fy = dual.face(), dual.face(), dual.face(), dual.face()
+    dual.wall(f0, fx, L(key, 0), R(key, 0))
+    dual.unified(f0, f1, L(key, 1), R(key, 1))
+    dual.unified(f0, f1, L(key, 2), R(key, 2))
+    dual.wall(f1, fy, L(key, 3), R(key, 3))
+    return dual
+
+
+def test_the_markers_break_a_tie(key, tie, monkeypatch):
+    monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: walk.itinerary[1] == L(key, 2))
+    search = shortest_walks(tie, L(key, 0), L(key, 3), wanted={})
+    assert search.status == "unique" and search.constrained and search.rejected == 1
+    assert search.walk.itinerary == (L(key, 0), L(key, 2), R(key, 2), L(key, 3))
+    assert not shortest_walks(tie, L(key, 0), L(key, 3)).constrained
+
+
+def test_a_walk_that_cannot_be_judged_is_never_picked_by_order(key, tie, monkeypatch, caplog):
+    """An admissible walk and one whose curve the model cannot judge (None) stay a tie."""
+    monkeypatch.setattr(
+        DualWalk, "holds_markers", lambda dual, walk, wanted: True if walk.itinerary[1] == L(key, 2) else None
+    )
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        search = shortest_walks(tie, L(key, 0), L(key, 3), wanted={})
+    assert search.status == "ambiguous" and search.rejected == 0
+    assert len(search.walks) == 2
+    assert_logged(caplog, logging.WARNING, LOGGER)
+
+
+def test_the_markers_may_ask_for_a_detour_through_a_face_twice(key, monkeypatch):
+    """The direct walk breaks the markers; the admissible one loops out of f0 through f2
+    and back (faces may repeat, a node is crossed once), two crossings longer."""
+    dual = FakeDual()
+    f0, f1, f2, fx, fy = (dual.face() for _ in range(5))
+    dual.wall(f0, fx, L(key, 0), R(key, 0))
+    dual.unified(f0, f1, L(key, 1), R(key, 1))
+    out = dual.unified(f0, f2, L(key, 4), R(key, 4))
+    dual.unified(f2, f0, L(key, 5), R(key, 5))
+    dual.wall(f1, fy, L(key, 3), R(key, 3))
+    monkeypatch.setattr(
+        DualWalk, "holds_markers", lambda dual, walk, wanted: bool(walk.steps) and walk.steps[0].node is out
+    )
+    search = shortest_walks(dual, L(key, 0), L(key, 3), wanted={})
+    assert search.status == "unique" and search.rejected >= 1
+    assert search.walk.length == 3
+    assert search.walk.faces == [f0, f2, f0, f1]
+
+
+def test_no_admissible_walk_within_the_detour_cap(key, tie, monkeypatch, caplog):
+    monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: False)
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        search = shortest_walks(tie, L(key, 0), L(key, 3), wanted={})
+    assert search.status == "no_admissible_walk" and search.constrained
+    assert search.walks == [] and search.walk is None and search.rejected == 2
+    assert MAX_DETOUR >= 1
+    assert_logged(caplog, logging.WARNING, LOGGER)
 
 # --------------------------------------------------------------------------- #
 # land_element: synthetic

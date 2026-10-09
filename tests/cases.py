@@ -1061,6 +1061,8 @@ class SeriesStep:
             with a member the minimal trellis keeps, D2), active and inert together.
         closed: ``len(session.symbolic_dynamics().classes)``, the alphabet closed
             under the word map (C9, D11).
+        ambiguous: How many of those classes have several shortest walks with
+            different words (D13 picks the side wherever a member lobe exists).
         active: The active classes (a diagnostic, never compared).
         inert: The inert classes (a diagnostic, never compared).
         outside_minimal: Classes with no member in ``minimal_trellis().kept_bridge_ids``.
@@ -1080,6 +1082,7 @@ class SeriesStep:
     holes: frozenset
     classes: int
     closed: int
+    ambiguous: int
     active: int
     inert: int
     outside_minimal: int
@@ -1143,6 +1146,7 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
         kept = set(session.minimal_trellis().kept_bridge_ids)
         family = session.homotopy_partition()
         trellis = session.topology().trellis
+        dynamics = session.symbolic_dynamics()
         references = frozenset(p.as_tuple() for p in trellis.reference_pseudoneighbors)
         lost = steps[-1].references - references if steps else frozenset()
         steps.append(
@@ -1152,7 +1156,8 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
                     (hole.bounding_ids, hole.iterate, hole.bridge_side) for hole in trellis.holes
                 ),
                 classes=len(table),
-                closed=len(session.symbolic_dynamics().classes),
+                closed=len(dynamics.classes),
+                ambiguous=sum(cd.ambiguous for cd in dynamics.classes.values()),
                 active=len(table.active),
                 inert=len(table.inert),
                 outside_minimal=sum(
@@ -1243,8 +1248,9 @@ class KnownIssue:
     Attributes:
         reason: Why the pair fails today, led by the catalog issue id
             (``docs/open_issues.md``).
-        wp: The work package that fixes it (``"WP3"``), or the decision that
-            keeps it (``"C3"``).
+        wp: The work package that fixes it (``"WP3"``), the decision that
+            keeps it (``"C3"``), or the open author decision it waits on
+            (``"DEC-24"``).
         raises: The exception type the failure raises, when it is one.
     """
 
@@ -1273,9 +1279,11 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             raises=ValueError,
         ),
         ("every_active_class_walks", "heteroclinic"): KnownIssue(
-            "NEST-1 / DEC-23: two shortest walks of equal length pass either side of the "
-            "heteroclinic lobe on B's fundamental segment (ambiguous, unreliable)",
-            "WP9",
+            "NEST-1 / DEC-24 (the DEC-23 residue after WP9b): the member-less connecting "
+            "class bn has no closed curve with a known image -- no heteroclinic crossing "
+            "of N has an iterate link in N (NUM-21) -- so the non-crossing rule cannot "
+            "pick its side of the B peninsula (ambiguous, unreliable)",
+            "DEC-24",
         ),
     }
 )

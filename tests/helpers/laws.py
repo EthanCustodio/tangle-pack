@@ -55,7 +55,7 @@ from helpers.invariants import (
     assert_no_geometric_spikes,
     assert_one_to_one,
 )
-from tanglepack.numerics.geometry import oriented_bridge_polyline
+from tanglepack.numerics.geometry import oriented_bridge_polyline, point_in_polygon
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.BridgeClass import (
     anchor_outward_key,
@@ -2433,6 +2433,105 @@ def check_stable_nodes_never_own_a_singleton(case: "Case") -> int:
     return count
 
 
+# --------------------------------------------------------------------------- #
+# Markers and enclosure: the non-crossing rule (D13)
+# --------------------------------------------------------------------------- #
+def _unstable_edge_keys(dual) -> dict:
+    """``{frozenset(bridge id): edge key}`` of every unstable arc of the dual graph's arrangement."""
+    return {
+        frozenset(arc.bridge_id): arc.edge_key
+        for face in dual.arrangement.faces
+        for arc in face.arcs
+        if arc.kind == "unstable"
+    }
+
+
+def _closed_curve(case: "Case", dual, pairs: list, edges: dict) -> Optional[set]:
+    """The edges of the closed curve made of the consecutive unstable arcs ``pairs`` and
+    the stable segment between their two outer ends, or None when those ends lie on two
+    stable branches. An anchor lies on every branch of its point (D4), so an anchor end
+    closes along the other end's branch: any stable path between the ends makes a
+    Jordan curve, whatever row the arc's end sits against there (C7)."""
+    ends = (pairs[0][0], pairs[-1][1])
+    branches = {case.registry[end].manifold_b_key for end in ends if not _is_anchor(case.registry[end])}
+    if len(branches) != 1:
+        return None
+    lo, hi = sorted(float(case.registry[end].stable_cdist) for end in ends)
+    stable = {
+        node.edge_key
+        for node in dual.stable_nodes_on(branches.pop())
+        if lo <= node.lo_cdist and node.hi_cdist <= hi
+    }
+    return stable | {edges[frozenset(pair)] for pair in pairs}
+
+
+def check_lobe_enclosure_is_geometry(case: "Case") -> int:
+    """D13 decides enclosure combinatorially, so it must agree with the curves: the lobe
+    of every kept bridge whose ends lie on one stable branch (the bridge and the stable
+    segment between its ends) holds a periodic point by the dual graph's flood exactly
+    when point-in-polygon on the lobe's polylines says so. A point within 1e-6 of the
+    lobe is skipped."""
+    dual = case.session.dual_graph()
+    trellis = dual.trellis
+    edges = _unstable_edge_keys(dual)
+    arcs = {
+        arc.edge_key: arc.reversed() if arc.reverse else arc
+        for face in dual.arrangement.faces
+        for arc in face.arcs
+    }
+    count = 0
+    for bridge_id in dual.minimal.kept_bridge_ids:
+        curve = _closed_curve(case, dual, [bridge_id], edges)
+        if curve is None:
+            continue
+        (held,) = dual.enclosed(curve)
+        bridge = arcs[edges[frozenset(bridge_id)]].polyline(trellis)
+        stable = sorted(
+            (arcs[key] for key in curve if key[0] == "stable"),
+            key=lambda arc: float(case.registry[arc.lo_id].stable_cdist),
+        )
+        segment = np.vstack([arc.polyline(trellis) for arc in stable])
+        if np.linalg.norm(segment[0] - bridge[-1]) > np.linalg.norm(segment[-1] - bridge[-1]):
+            segment = segment[::-1]
+        lobe = np.vstack([bridge, segment])
+        for position, fixed_point in enumerate(trellis.fixed_points):
+            for orbit_index in range(fixed_point.period):
+                point = np.ravel(fixed_point.coordinates[orbit_index])
+                if np.min(np.linalg.norm(lobe - point, axis=1)) < 1e-6:
+                    continue
+                inside = held[("orbit", position, orbit_index)]
+                assert inside == point_in_polygon(point, lobe), (bridge_id, position, orbit_index)
+                count += 1
+    return count
+
+
+def check_registered_images_keep_markers(case: "Case") -> int:
+    """The physics of D13: the map is a homeomorphism, so where a kept bridge's whole
+    registered image chain is kept, the closed curve of the chain and the stable segment
+    between its ends holds the image of every marker the bridge's lobe holds, and of no
+    marker the lobe leaves out (wherever both curves decide)."""
+    dual = case.session.dual_graph()
+    edges = _unstable_edge_keys(dual)
+    count = 0
+    for bridge_id in dual.minimal.kept_bridge_ids:
+        chain = image_chain(dual.trellis, bridge_id)
+        if not chain or any(frozenset(pair) not in edges for pair in chain):
+            continue
+        lobe = _closed_curve(case, dual, [bridge_id], edges)
+        image = _closed_curve(case, dual, chain, edges)
+        if lobe is None or image is None:
+            continue
+        (held,) = dual.enclosed(lobe)
+        (image_held,) = dual.enclosed(image)
+        for marker, inside in held.items():
+            image_marker = dual.image_marker(marker)
+            if inside is None or image_held.get(image_marker) is None:
+                continue
+            assert image_held[image_marker] == inside, (bridge_id, marker, inside)
+            count += 1
+    return count
+
+
 def check_dual_bipartite_degree(case: "Case") -> int:
     """The graph view is bipartite face/stable; a wall has degree 1, a unified node 2."""
     import networkx as nx
@@ -2500,6 +2599,77 @@ def check_every_active_class_walks(case: "Case") -> int:
         assert cd.search is not None and cd.search.status in ("unique", "trivial"), (
             cd.letter, cd.status, cd.unresolved_reason)
         count += 1
+    return count
+
+
+def check_walks_agree_with_registered_images(case: "Case") -> int:
+    """D3 + D13: the walk is the word and a member's registered image its cross-check, so
+    every registered image that gives a verdict agrees with the walk at word level and no
+    class is contradicted by its evidence (C11: incomplete ``"stable end"`` evidence gives
+    no verdict)."""
+    dyn = case.session.symbolic_dynamics()
+    count = 0
+    for cd in dyn.classes.values():
+        for evidence in cd.evidence:
+            if evidence.word_agrees is None:
+                continue
+            assert evidence.word_agrees, (cd.letter, evidence.bridge_id, evidence.word, cd.word)
+            count += 1
+        assert cd.verified is not False, cd.letter
+    return count
+
+
+def check_ambiguous_only_without_a_member_lobe(case: "Case") -> int:
+    """D13: a walked class with a member lobe -- a non-loop member the minimal trellis
+    keeps whose two ends lie on one stable branch -- has its side picked by the
+    non-crossing rule, so only a class without one may stay ambiguous."""
+    dyn = case.session.symbolic_dynamics()
+    kept = set(case.session.minimal_trellis().kept_bridge_ids)
+    count = 0
+    for cd in dyn.classes.values():
+        lobes = [
+            member
+            for member in cd.entry.members
+            if not member.is_loop
+            and member.bridge_id in kept
+            and len({_stable_branch_at(case, member.bridge_id, end) for end in member.bridge_id}) == 1
+        ]
+        if cd.source != "walk" or not lobes:
+            continue
+        assert not cd.ambiguous, (cd.letter, [walk.itinerary for walk in cd.search.walks])
+        count += 1
+    return count
+
+
+def _span_meets(node, landing) -> bool:
+    """A stable node's edge overlaps a landing span by more than the span's error (nothing
+    at a table end, ``SCALING_RTOL`` relative at a scaled one)."""
+    lo, hi = landing.span
+    error = max(
+        [SCALING_RTOL * abs(c) for c, exact in zip(landing.span, landing.from_table) if not exact]
+        + [0.0]
+    )
+    return min(hi, node.hi_cdist) - max(lo, node.lo_cdist) > error
+
+
+def check_walk_starts_on_the_landing(case: "Case") -> int:
+    """D3, D13: the walk runs from the image of one element to the image of the other, so
+    it leaves from a face beside a stable edge the source's landing span meets and
+    arrives at one beside an edge the target's span meets (when some edge of the element
+    meets it)."""
+    dyn = case.session.symbolic_dynamics()
+    dual = case.session.dual_graph()
+    count = 0
+    for cd in dyn.classes.values():
+        if cd.source != "walk":
+            continue
+        walk = cd.search.walk
+        for landing, face in ((cd.landings[0], walk.faces[0]), (cd.landings[1], walk.faces[-1])):
+            target = landing.target
+            meeting = [node for node in dual.stable_nodes_of(target) if _span_meets(node, landing)]
+            if meeting:
+                assert face in [node.face_on(target.side) for node in meeting], (cd.letter, target.label)
+            count += 1
     return count
 
 
@@ -2731,11 +2901,16 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_dual_unified_is_where_f_of_s_stops,
         check_stable_nodes_never_own_a_singleton,
         check_dual_bipartite_degree,
+        check_lobe_enclosure_is_geometry,
+        check_registered_images_keep_markers,
     ],
     "symbolic": [
         check_itineraries_even,
         check_cross_side_only_within_a_branch,
         check_every_active_class_walks,
+        check_walks_agree_with_registered_images,
+        check_ambiguous_only_without_a_member_lobe,
+        check_walk_starts_on_the_landing,
         check_alphabet_closed_under_words,
         check_itinerary_pairs_are_classes,
         check_landings_contained,

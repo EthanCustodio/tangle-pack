@@ -63,7 +63,8 @@ def test_orientation_reversing_case_builds(name: str) -> None:
 
 def test_every_law_runs_in_the_tier() -> None:
     """Every check is in a layer, every layer is wired into a module, and the issue
-    registries name real laws and cases, apart, each known issue with its WP.
+    registries name real laws and cases, apart, each known issue with its WP (or the
+    decision that keeps it).
 
     A law written but never run over the cases would check nothing.
     """
@@ -93,6 +94,8 @@ def test_every_law_runs_in_the_tier() -> None:
     assert not unknown, unknown
     assert not set(KNOWN_ISSUES) & set(NOT_APPLICABLE)
     untagged = [
-        pair for pair, issue in KNOWN_ISSUES.items() if not re.fullmatch(r"WP\d+|C\d", issue.wp)
+        pair
+        for pair, issue in KNOWN_ISSUES.items()
+        if not re.fullmatch(r"WP\d+|C\d|DEC-\d+", issue.wp)
     ]
     assert not untagged, untagged

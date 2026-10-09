@@ -10,6 +10,10 @@ closed pip singleton and the child-inside-parent assertion fired. Ownership of
 registry cdists is exact now, and since D10 (WP8b) the trellis is cut at the
 pip, so the sliver crossing is no crossing of the trellis at all. No count of
 the build is pinned.
+
+The same build had two ambiguous classes and a walk contradicted by its
+registered image until the walk left from the edges its landing SPAN meets
+rather than from every edge of the iterated element (D13, WP9b).
 """
 
 from __future__ import annotations
@@ -37,7 +41,11 @@ def test_deep_blast_sliver_beyond_pip():
     # ... which the cut at the pip orbit leaves out of the trellis (D10).
     assert not [crossing_id for crossing_id in slivers if crossing_id in trellis]
 
-    session.symbolic_dynamics()
+    dynamics = session.symbolic_dynamics()
     assert laws.check_iterated_child_inside_parent(case) > 0
     assert laws.check_iterated_unique_owner(case) > 0
     assert laws.check_partition_unique_owner(case) > 0
+
+    assert laws.check_walk_starts_on_the_landing(case) > 0
+    assert not [cd.letter for cd in dynamics.classes.values() if cd.ambiguous]
+    assert laws.check_walks_agree_with_registered_images(case) > 0
