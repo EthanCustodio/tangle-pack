@@ -2,11 +2,18 @@
 Blasting — driving the dynamics inside a resonance zone.
 
 "Blasting" a resonance zone repeatedly iterates the bridges that live *inside* it. One
-blast step takes every un-iterated bridge whose midpoint lies in the zone, maps it
+blast step takes every un-iterated bridge whose INNERMOST zone is this one, maps it
 forward one step under the dynamical map (which automatically cuts the image into child
 bridges at its new crossings with the stable manifold), then keeps only the children
-whose midpoint is *still* inside the zone. Those survivors are the next step's input, so
+whose innermost zone is *still* this one. Those survivors are the next step's input, so
 the process recurses up to ``num_iterations`` times.
+
+Zones nest (C4, WP9): a bridge belongs to the smallest zone containing its midpoint
+(:meth:`TangleSession.classify_bridge`), so an outer zone's blast never iterates a
+bridge inside an inner zone, and nested blasting does not depend on the order of the
+zones. With ``fixed_point=None`` an outer blast still iterates an inner tangle's bridges
+lying in the annulus between the two zones: they are the outer zone's bridges. The
+recipes pass the zone's own fixed point, which leaves them alone.
 
 Bridges that leave the zone are deliberately dropped from the frontier and never
 iterated again: an unstable manifold grows by the per-step eigenvalue factor each
@@ -277,8 +284,7 @@ def blast_zone(
         )
 
     def in_zone(bridge: "Bridge") -> bool:
-        point = session._bridge_test_point(bridge)
-        return point is not None and zone.contains_point(point)
+        return session.classify_bridge(bridge) is zone  # innermost containing zone (C4)
 
     # Normalize the fixed-point filter to a set of allowed fixed points (or None for
     # "all"). Accepts a single FixedPoint or any iterable of them, so a caller can
