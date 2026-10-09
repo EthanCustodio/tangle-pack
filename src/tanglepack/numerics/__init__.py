@@ -30,7 +30,7 @@ from .ManifoldInitializer import ManifoldInitializer
 from .Bridge import Bridge
 from .Tangle import Tangle
 from .BridgeIterator import BridgeIterator
-from .IterateInference import IterateInference
+from .IterateInference import infer_iterates
 from .TangleWorkbench import TangleWorkbench
 from . import graphviz
 from . import diagnostics
@@ -60,7 +60,7 @@ __all__ = [
     "Bridge",
     "Tangle",
     "BridgeIterator",
-    "IterateInference",
+    "infer_iterates",
     "TangleWorkbench",
     "graphviz",
     "diagnostics",

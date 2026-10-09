@@ -83,23 +83,22 @@ def test_bridge_lookup_by_id(henon_tangle_with_bridges):
 
 
 def test_standalone_collaborators_agree_with_the_workbench(henon_tangle_with_bridges):
-    """A ``BridgeIterator`` / ``IterateInference`` built over a workbench reads
+    """A ``BridgeIterator`` / ``infer_iterates`` over a workbench reads
     that workbench: its genealogy matches the workbench's delegates, and a
     second inference pass over an already-inferred table adds nothing."""
     from tanglepack.numerics.BridgeIterator import BridgeIterator
-    from tanglepack.numerics.IterateInference import IterateInference
+    from tanglepack.numerics.IterateInference import infer_iterates
 
     workbench, _fp = henon_tangle_with_bridges
     iterator = BridgeIterator(workbench)
-    inference = IterateInference(workbench)
-    assert iterator.workbench is workbench and inference.workbench is workbench
+    assert iterator.workbench is workbench
 
     bridges = _full_bridges(workbench)
     assert bridges
     for bridge in bridges:
         assert iterator.image_bridges(bridge.id) == workbench.image_bridges(bridge.id)
         assert iterator.preimage_bridges(bridge.id) == workbench.preimage_bridges(bridge.id)
-    assert inference.infer_iterates() == 0
+    assert infer_iterates(workbench) == 0
 
 
 # --------------------------------------------------------------------------- #

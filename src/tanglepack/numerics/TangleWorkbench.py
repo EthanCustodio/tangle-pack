@@ -52,7 +52,7 @@ from .BaseManifold import BaseManifold
 from .Bridge import Bridge, BridgeId
 from .Intersection import Intersection, Stability
 from .IntersectionRegistry import DEDUP_RTOL, IntersectionRegistry
-from .IterateInference import IterateInference
+from .IterateInference import infer_iterates
 from .diagnostics import (
     ResolutionReport,
     SameStabilityCount,
@@ -169,7 +169,7 @@ class TangleWorkbench:
     Note:
         Bridge iteration, iterate-table inference and graph plotting are
         delegated to :class:`~.BridgeIterator.BridgeIterator`,
-        :class:`~.IterateInference.IterateInference` and :mod:`~.graphviz`. The
+        :func:`~.IterateInference.infer_iterates` and :mod:`~.graphviz`. The
         methods here forward to them and their signatures are the contract; the
         bodies (and their Dev Notes) live in those modules.
     """
@@ -289,11 +289,10 @@ class TangleWorkbench:
         self._generation_state: Optional[tuple] = None
         self._generation: int = 0
 
-        # The two collaborators that read and extend this state (see the module
-        # docstring). They are constructed here, hold no state of their own, and
-        # the workbench forwards its same-named methods to them.
+        # The collaborator that reads and extends this state (see the module
+        # docstring). It holds no state of its own; the workbench forwards its
+        # same-named methods to it.
         self._bridge_iterator = BridgeIterator(self)
-        self._iterate_inference = IterateInference(self)
 
     # ── refinement and the point budget ──────────────────────────────────────
 
@@ -2025,7 +2024,7 @@ class TangleWorkbench:
         """
         Record the ``+1`` image of every source crossing, by the exact bracket rule.
 
-        Delegates to :meth:`~.IterateInference.IterateInference.infer_iterates`;
+        Delegates to :func:`~.IterateInference.infer_iterates`;
         :meth:`compute_intersections`, every :meth:`iterate_bridge` and the end
         of every blast call it, so the table is complete without a manual call.
 
@@ -2035,7 +2034,7 @@ class TangleWorkbench:
         Returns:
             Number of new iterate relationships recorded.
         """
-        return self._iterate_inference.infer_iterates(sources)
+        return infer_iterates(self, sources)
 
     # ── graph view (see graphviz) ────────────────────────────────────────────
 
