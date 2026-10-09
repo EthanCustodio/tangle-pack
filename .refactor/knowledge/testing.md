@@ -440,3 +440,51 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   signatures (`wp08/lawsig.py`) identical before and after the review fixes.
 - Probe trap: `stress/numerics/harness.py` puts MAIN's `src` first on `sys.path`; import
   `tanglepack` before the harness or a probe silently runs main.
+
+## Open-issues round WP8b (2026-10-08, branch `oi/wp08b-d10-d12`, base `014ea4b`)
+
+- Suite: 994 passed, 21 skipped, 3 deselected, 2 xfailed, ~165 s (base 974 passed / 28 skipped /
+  2 xfailed). KNOWN_ISSUES 2 -> 2. NOT_APPLICABLE 28 -> 21: removed on `inversion`
+  `anchor_bridge_class_leads_its_tangle`, `matrix_is_token_counts`, `partition_singletons`,
+  `anchor_opening_faces_its_hole`, `backward_holes_keep_bridge_side`,
+  `propagated_holes_land_on_predicted_branch`, `propagation_terminates` (all pass now);
+  `every_active_class_walks` x `inversion` reworded (its active classes land on singletons).
+- Series: `cases.SERIES` values are `Series(build, blasts, min_separation)` (NamedTuple);
+  `blast_series` blasts the build's LARGEST zone, of its own fixed point only. New
+  `k32_series` (`build_k32_zone`: the k28 recipe at k = 3.2 from the analytic seed, 10 blasts,
+  ~18 s) and `nested_outer_series` (`build_nested(outer_blasts=0, through="zones")`, 11 blasts at
+  `min_separation = 1e-4`, ~20 s); `inversion_series` to 4 blasts. `SeriesStep.closed` =
+  `len(session.symbolic_dynamics().classes)`. `build_k28` shares `_saddle_zone` with k32;
+  `_blast(..., min_separation=)`.
+- Laws: `trellis_is_cut_at_the_pip_orbit` (partition layer; helper `helpers.laws.pip_orbit_cuts`
+  reads the cuts off `+1` links and the registry independently; checks the per-fixed-point AND the
+  selection trellis; fails on base on the three inversion cases); series
+  `series_closed_alphabet_constant_while_holes_constant` (fails on base on `p3_series` and
+  `k32_series`); `series_class_count_never_decreases` now fails on base on `inversion_series`,
+  `k32_series`, `nested_outer_series`. Changed: `alphabet_closed_under_words` (a closure class is
+  in the evidence table iff `entry.spanned`), `misplaced_unified_crossings` (no preimage IN the
+  trellis).
+- New: regression `test_pip_orbit_cut` (k10 every candidate: cut vs `resonance_zone` trim on a
+  fresh build, same holes by cdists / class count / words in names / reliability or same raised
+  type; p2inv10 the same and every class walks; a joined arc), unit `test_trellis_cut`
+  (`helpers.fakes.synthetic_trellis`, now also `test_pseudoneighbor`'s `_trellis`).
+- Rewritten to the new rules: `test_partition_ignores_strong_pip_cut` ->
+  `test_partition_of_a_cut_trellis_ends_at_the_pip`; `test_backward_iterate_punctures_interval`
+  registers `M^2(q0)` so its candidate is a crossing of T (D12); the placed-cut WARNING test reads
+  the Trellis logger; `test_a_pair_no_bridge_spans_is_a_flagged_class` (was `..._is_warned_and_
+  unreliable`); `test_deep_p3_alphabet_is_closed` (flagged class exists, reliable, no "no bridge
+  spans" WARNING); `test_period_k_window_gaps` (`inversion` moved to the complete list);
+  `test_deep_blast_sliver_beyond_pip` (the sliver crossing is not in the trellis);
+  `test_trellis_is_fresh_after_every_mutation_path` (the direct build is cut at the session's
+  pip); `test_a_blast_or_a_pip_change_recomputes` (the anchor-nearest alternate pip, the caches
+  test's rule); `test_a_pair_with_no_bridge_object_is_skipped_with_a_warning` (classes built
+  before the monkeypatch). Fakes `FakeTrellis` and `_ClassTrellis` gained `__contains__`.
+  `helpers.direct.DirectBuild` cuts its selection trellis at the pips. Deleted:
+  `test_unified_segment_precondition`.
+- Base check: the new / changed tests copied onto `../tp-oi-wp08b-d10-d12-base` (detached
+  `014ea4b`) fail there: 3 series monotone, 2 closed-alphabet, 6 deep-run, the D11 unit test, the
+  placed-cut unit test, the cut law on the 3 inversion cases, `test_pip_orbit_cut` x4 (k10
+  candidates 2 and 3 differ, p2inv10 differs and `n` unreachable, no joined arc).
+- Probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp08b_impl/` (`replay.py` rubric 10,
+  `lawsig.py` id-free signatures, `deep.py` deep runs).
+

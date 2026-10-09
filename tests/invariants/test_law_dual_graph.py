@@ -6,7 +6,7 @@ side node of the edge it geometrically lies on; the unified edges are
 exactly the strong pip's fundamental segment ``(f^k(q0), q0]`` on the pip's
 OWN branch (author, 2026-09-30), and that is where ``f(S)`` stops: on every
 stable branch of a pip's fixed point the unified span is ``S \\ f(S)`` (the
-walk's precondition, PK-5 / DEC-20); the graph is bipartite with walls of
+walk's precondition, PK-5; the trellis is cut at the pip orbit, D10); the graph is bipartite with walls of
 degree 1 and unified nodes of degree 2.
 """
 

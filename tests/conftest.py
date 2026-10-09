@@ -55,8 +55,9 @@ Layout (tiers; every test basename is unique, no ``__init__.py``):
   delegates and reports.
 * ``regression/`` -- fixed bugs that need their own build, the open deep
   period-3 runs, and the D1 blast-series laws (``cases.SERIES``: the class
-  count never decreases, is constant while the hole set is, and every class
-  has a member in the minimal trellis).
+  count never decreases, it and the alphabet closed under the word map are
+  constant while the hole set is, every class has a member in the minimal
+  trellis, lost references are witnessed and letters follow identity).
 * ``plotting/`` -- smoke plus topological properties of the drawings.
 * ``helpers/`` (checks, fakes, letter-free name spellers for comparing two
   builds, the cache-free direct build of every session product, log

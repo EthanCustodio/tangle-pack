@@ -295,7 +295,7 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   the first WP7 version, which lettered such bare pairs: 82 of 90 closure classes on the deep
   runs had no bridge): `_unspanned` unresolves the class whose itinerary names it (itinerary and
   source None, `search` kept, reason "grow or blast"), ONE WARNING naming the pairs and the
-  non-loop members; nothing is added from that itinerary; `is_reliable` False. DEC-21 asks
+  non-loop members; nothing is added from that itinerary; `is_reliable` False (SUPERSEDED by D11, WP8b: such a pair is a flagged class). DEC-21 asked
   whether such a pair must get its bridge. Translation runs once the table is closed
   (`SymbolicDynamics.table` = seed then closure in discovery order); `session.bridge_classes()`
   stays the seed. Measured (`wp07fix/probe.py`): p3_15 / p3_6_blasts / nested 6 inner blasts:
@@ -319,7 +319,7 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   usual stubs. Gaps per law case: k28_one 1, k28_two 2, nested_inner_blasts 4, inversion_one 2,
   inversion_two 5. Sparse mode unchanged. The two "no spanning bridge" WARNINGs
   (`punch_holes`, minimal trellis) name the cause (D9: the image of a bridge no blast iterated).
-- PK-5 / DEC-20: `DualGraph._check_where_f_of_s_stops` WARNs per stable branch of a pip's fixed
+- PK-5 / DEC-20 (the WARNING below was DELETED in WP8b: the trellis is cut at the pip orbit, D10): `DualGraph._check_where_f_of_s_stops` WARNs per stable branch of a pip's fixed
   point whose unified span is not `S \ f(S) = (c_s(f(end of previous branch)), end]`
   (`image_cdist(last, 1, "stable", branch=previous)`, tol `cdist_tol` from the table, else
   `SCALING_RTOL * end`). Equal on every law case and deep run (all from the table, exact);
@@ -332,7 +332,7 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   `dual_face_side_is_geometry` (INT-10, WP10). Inversion x period 2 at 10 steps also fails
   `partition_covers_branch`, `bridge_endpoints_on_own_branch`, `backward_holes_keep_bridge_side`
   (WP8 / WP10).
-- Deferred: escape-lobe images (WP9 / WP10); DEC-21 (a walk pair no bridge spans).
+- Deferred: escape-lobe images (WP9 / WP10); DEC-21 (a walk pair no bridge spans; answered D11, WP8b).
 
 ## Open-issues round WP8 (2026-10-08, branch `oi/wp08-recompute-identity`)
 
@@ -343,7 +343,7 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   2D collision only when neither image is registered. Root cause of nested 10 outer blasts
   (`(37,38)` lost to 592, 6178 below `M^8(37)` yet 1.3e-5 inside after scaling, noise 0.0103) and
   k32 12 blasts. Law cases / deep runs / series: hole sets identical.
-- The decreases left are DEC-22, open, and NOT shown definitional: the witnesses (nested 11 outer
+- The decreases left were DEC-22 (answered D12; root cause and fix in WP8b below), NOT shown definitional: the witnesses (nested 11 outer
   blasts, k32 11 and 13) sit within 1e-6..1.6e-5 of a window crossing, unlinked both ways, INSIDE
   the placement error bar `min(l_u, l_s) / ratio` (the ratio is the crossing angle's resolution,
   not cdist placement). Only k32 blast 10 is a clear lambda-lemma copy (1.25e-2 inside).
@@ -353,3 +353,52 @@ depth; the rest of the layer is described in `CLAUDE.md`.
 - Open: `partition_covers_branch` fails on `p3_6_blasts` / `p3_15` / `p3_16` (open elements that are
   no hole's stretch: 6 / 6 / 5 spans, e.g. `(0,35)` on p3_6_blasts) -- hole bridges of one deep chain
   nest on a branch and the law assumes disjoint hole stretches; unexamined (not a law case).
+
+## Open-issues round WP8b (2026-10-08, branch `oi/wp08b-d10-d12`, base `014ea4b`)
+
+- The trellis of the pip (D10 + D12): `Trellis.cut_at_pip_orbit(pips)` cuts N to `T(q0) = (W^u[P,
+  f^m(q0)], W^s[P, q0])`: stable branch `j` at `c_s(f^j q0)` (`image_cdist(pip, j, "stable")`, `j <
+  k`), the unstable branch of `f^i q0` at `c_u(f^i q0)` for `i = m-k+1..m` (`m` = the largest `n`
+  with `iterate(pip, n)` registered: `forward_depth` then `+1` composition). Exact comparison
+  against a registered cut, `+ cdist_tol` against a PLACED one (one WARNING on the Trellis logger,
+  PK-6 moved there). `Trellis.__init__` keeps `_computed` (branch orderings, bridges); the
+  `strong_pip` PROPERTY setter cuts, None restores; `classify_strong_pips` sets None FIRST, so
+  candidates are always classified on the computed trellis; `clear_results` restores. Same cut
+  twice is a no-op; stage outputs are never cleared by the cut.
+- Joined arcs: `_bridges_inside` keeps a bridge whose present ends are kept and, for a run of
+  consecutive bridges of one curve through dropped crossings between two kept ones, ONE
+  `Bridge.joined(run)` (root of the first, tail of the last; the parent curve's points, no map
+  call), memoised in `_joined` by id. A run never crosses a gap (bridges exist only within one
+  curve). Joined arcs are NOT workbench bridges: `Topology._zone_key` and
+  `TangleSession.cartoon_enclosures` resolve through `trellis.bridge_between`. Without them
+  `arrangement_regions_*` failed on inversion x period 2 at 10 steps (planner's prototype).
+- Membership vs raw lookups: `Trellis.__contains__` = a crossing of the cut N. `iterate` and
+  `image_cdist` stay raw (X). Consumers that need an iterate AS A CROSSING: pseudoneighbor
+  trajectory extension and its gap note, `BridgeClass._image_chain` (None = no evidence),
+  `DualWalk._land_singleton` / `_debug_endpoint_owners`, `Arrangement.image_of`. The
+  pseudoneighbor all-iterates test keeps raw landings (`_unstable_interval_is_clear`).
+- `Pseudoneighbor._strong_pip_cuts` / `_within_cut` deleted (check set = `own_intersection_ids`).
+  `DualGraph._check_where_f_of_s_stops` deleted (vacuous: the unified window is `S \ f(S)`).
+  `Topology.__init__`: stages first, then the selection trellis cut at every pip (a no-op for one
+  fixed point, the same object).
+- Why D12 is the BCG-5 fix: every decrease happened when N held crossings deeper than the
+  deepest registered pip-orbit point (the pip lap stalls when its bridge falls under the blast's
+  `min_separation`: k32 at blast 9 / `f^10(q0)`, nested_outer at blast 10). Measured
+  (`wp08b_impl/replay.py`): k32 34 classes at blasts 8..13, nested_outer 13 at 2..11, inversion
+  series 6, 7, 8, 9, 9, 9. Only the three inversion law cases change (1 -> 6, 9 -> 7, 9 -> 8
+  classes); everything else bit-identical (id-free describe). N freezes once the pip orbit stops
+  (k32 N = 521 from blast 9 while the registry grows to 4366 at 13).
+- D11: `symbolic_dynamics.add` builds a member-less `BridgeClassEntry(named, tangle=...)` for a
+  pair outside the evidence table; `BridgeClassEntry.spanned = bool(members)`; describe's class
+  line ends "; no computed bridge yet", the closure line counts them; `_unspanned` deleted. A
+  member-less class landing on a singleton has no member chain and stays unresolved (not seen on
+  any run). Deep runs: p3_15 / p3_6_blasts 23 -> 43 (20 flagged), p3_16 27 -> 49, nested 6 / 7
+  inner 27 -> 47 / 28 -> 49, all reliable; k28 at 8 blasts 15 -> 23, unreliable (ambiguous `q`,
+  `aa`, evidence `r`: WP10); inversion x period 2 at 10 steps 14 seed / 17 closed, reliable.
+- k10 candidates under the cut: [1, 2, 3, 4, 7] -> 1 fine; 2 raises the I2 row assertion (the
+  joined anchor bridge `(0, 2)` wraps the end of the cut branch; a numerical trim at 2 raises the
+  same); 3 has 4 holes / 3 classes, not reliable; 4 and 7 have no hole. The cut equals a trim at
+  every candidate (`test_pip_orbit_cut`).
+- Open / for later: k32 dynamics is unreliable from blast 6 of its series (not examined; WP10's
+  evidence/ambiguity work); PK-4 untouched; re-classification is O(N^2) per rebuild (PERF).
+

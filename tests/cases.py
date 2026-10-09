@@ -40,10 +40,11 @@ Cases:
 * ``inversion_period2`` -- inversion on a period-k orbit: the ``k=4.1``
   period-2 orbit ``(-2.0488, -0.0488) <-> (0.0488, 2.0488)``, both ``DM^2``
   eigenvalues negative (-1.863 / -0.537), ``k_value = 4``; 9 unstable / 9
-  stable steps at ``area_cutoff = 1e-5``, no zone (at 10 steps seven laws fail,
-  none of them a period-k hole gap: an element opened by two holes of one
-  origin a lap apart, one on a cross-branch container, and landings past the
-  next branch's partition -- WP7 / WP8; it escapes past ~8 steps at k=4.25).
+  stable steps at ``area_cutoff = 1e-5``, no zone (at 10 steps its stable
+  manifold runs past the pip orbit; with the trellis cut there (D10, WP8b) the
+  only law failing is ``bridge_endpoints_on_own_branch`` on a WORKBENCH bridge,
+  WP7-D1, so it is a regression of its own, ``test_pip_orbit_cut``; it escapes
+  past ~8 steps at k=4.25).
 * ``k10_inversion`` -- the ``k=10`` map's inversion saddle at ``(-2.3166,
   2.3166)``, 6 unstable / 5 stable steps at ``area_cutoff = 1e-4``: the
   numerics fixture behind ``henon_inversion*`` only (it escapes at 7 steps and
@@ -790,7 +791,7 @@ def build_inversion_period2(
 
     Args:
         unstable_steps: Unstable growth steps (the law case: 9; 10 runs the
-            stable manifold past the pip orbit, DEC-20).
+            stable manifold past the pip orbit, which the trellis cuts, D10).
         stable_steps: Stable growth steps (the law case: 9).
         through: ``"bridges"`` or ``"partitioned"``.
 

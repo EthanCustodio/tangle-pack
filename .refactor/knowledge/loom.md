@@ -136,3 +136,18 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
   deleted `hc._repin` / `hc._partition` (historical proof scripts, not maintained).
 - A `rebuild=True` on any product recomputes the holes too, whose geometric cross-check calls the
   map (escaping builds need `np.errstate(over="ignore")` around it).
+
+## Open-issues round WP8b (2026-10-08, branch `oi/wp08b-d10-d12`, base `014ea4b`)
+
+- `Topology.__init__` runs stages 3-6 per fixed point FIRST (each per-fixed-point trellis is cut
+  at its pip by `set_strong_pip`), then takes the selection trellis and
+  `cut_at_pip_orbit(pips)` (a no-op for one fixed point: the same object). So
+  `session.trellis()` of several fixed points is cut only once `topology()` ran; a per-fixed-point
+  trellis is cut as soon as its pip is set or restored (rebuild path of `session.trellis`).
+- A class member can be a JOINED arc of the cut (not a workbench bridge): `Topology._zone_key`
+  and `TangleSession.cartoon_enclosures` resolve bridges through `trellis.bridge_between`
+  (`workbench.bridge` would raise KeyError).
+- Choosing an inner pip candidate on k10 can now raise the I2 row assertion in `topology()`
+  (candidate 2: the anchor bridge wraps the end of the cut stable branch), exactly as a
+  numerical trim at that pip does. Tests choose the anchor-nearest alternate.
+
