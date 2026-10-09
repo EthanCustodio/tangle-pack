@@ -51,7 +51,7 @@
 \title{\textbf{Stress-testing the \texttt{tanglepack} numerics layer}\\[0.6em]
 \large What the manifold-growth engine can and cannot do, with evidence}
 \author{tanglepack numerics stress campaign}
-\date{2026-10-07}
+\date{2026-10-07; third edition 2026-10-09}
 
 \begin{document}
 
@@ -84,6 +84,17 @@ rerun in full on the fixed library (harness commit \NumRerunCommit); E1, E2,
 E4, E5, E6 and E10 are the first campaign's records. The text below
 describes the rerun wherever an experiment was rerun, and corrects three
 mechanisms the first edition got wrong (\cref{sec:blastdepth-errors,sec:tangency,sec:intersections}).
+
+\medskip
+\noindent\textbf{Third edition (2026-10-09).} The second edition's findings
+were catalogued and resolved in the open-issues round (WP1--WP12, decisions
+D1--D14, calls C1--C22). A new experiment, E12
+(\cref{sec:thirdedition}), re-verifies the topology on seven cases to the
+depths the round measured, at two blasting cutoffs: every case runs end to
+end, and at the default cutoff the class count is non-decreasing and
+plateaus on every case but inversion, which loses classes once by a genuine
+reference switch (DEC-25, open). The sections of the second edition stay as
+its record.
 \end{minipage}
 \end{center}
 \vfill
@@ -1285,12 +1296,12 @@ The last two columns cover every configuration of the case.}
 \reading This is blasting doing its job. Each burst is a blast after which
 the class table is rebuilt over a stable manifold with new holes and cuts,
 so the class count is recomputed, not appended to; this is also why
-nested\_outer and k32 can \emph{lose} classes. Why the bursts fall at those
-particular blasts (presumably the first blast whose images reach a new part
-of the stable manifold) I have not checked. The period-3 zones show a
-regular pattern after their burst, a fixed number of new classes per blast.
-The period-1 zones have no such pattern, and their crossings grow
-geometrically rather than slowly.
+nested\_outer and k32 can \emph{lose} classes. The third edition explains
+both (\cref{sec:thirdedition}): each burst is a reference switch at a new
+lap of the pip orbit (BCG-4), the losses were witnesses deeper than that lap
+(cut since D12), and the period-3 ``fixed number of new classes per blast''
+seen here was bookkeeping (every blast child was classed, BCG-1), gone since
+WP6. The period-1 crossings grow geometrically, the period-3 ones slowly.
 
 \caveat Class counts at a given blast depend on the blasting cutoff
 (\cref{sec:blastdepth-params}), so these are counts at cutoff $10^{-7}$. In
@@ -1943,6 +1954,235 @@ they are dual-graph walks that cannot complete. Both call for more
 growth or a further rule. The arrangement's \code{image\_of} misses
 (\NumArrImageMissing{} of the regions tried, \cref{sec:invariants}) are an
 open question of the same kind, not a failure.
+
+%======================================================================
+\section{Third edition: re-verification after the open-issues round (E12)}
+\label{sec:thirdedition}
+
+\claim After the open-issues round (WP1--WP12, 2026-10-07 to 2026-10-09)
+every case runs end to end, and at the default blasting cutoff $10^{-7}$
+the class count is non-decreasing and plateaus on every case but one:
+inversion, which loses classes once, at blast 6, through a genuine
+reference switch that waits on an author decision (DEC-25). At the coarse
+cutoff $10^{-5}$ three period-1 and two period-3 series still decrease
+(NUM-5). The deep blasts past the freeze of $N$ (the crossings of the
+trellis of the pip, $T(q_0)$) cost most of the time and change nothing.
+
+\subsection{What changed since the second edition}
+
+The second edition's findings were catalogued (\code{docs/open\_issues.md},
+102 issues) and resolved in work packages, each merged to \code{main} with
+the full suite green. The author's decisions D1--D14 and Claude's calls
+C1--C22 are recorded there and in \code{.refactor/decisions.md};
+\cref{tab:wps} gives one line per package. The library no longer has
+``virtual'' classes or unreachable walks; the trellis is cut at the strong
+pip's orbit; a class no computed bridge spans is a flagged class (D11), not
+an error.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{The open-issues round, one line per work package.}
+\label{tab:wps}
+\begin{tabularx}{\textwidth}{lY}
+\toprule
+WP & What changed \\
+\midrule
+WP1 & laws encoding D1--D8 (walk existence, class monotonicity over blast series, alphabet inside the minimal trellis), the k=4 inversion law cases \\
+WP2 & exact iterate bookkeeping: map-gated table links after every blast, $\beta^k$ lap factor, one scaling path \\
+WP3 & inversion end to end: one anchor with four branches (D4), zone ring by full key (C7, C8) \\
+WP4 & signs decide hole openings and rows (D6); geometry is a flag \\
+WP5 & period-$k$ hole gap closed and warned (D5); the stagger accepted (D9) \\
+WP6 & the alphabet is the minimal trellis's classes; loops fold forward (D2) \\
+WP7 & the walk always exists: the alphabet closed under the word map (C9), virtual classes deleted \\
+WP8 & recompute semantics (D1): reproducible ids, letters by element identity (C10), one \code{Topology} per state \\
+WP8b & the trellis of the pip: $S$ cut at the pip orbit, $N$ at its deepest registered lap (D10, D12); unspanned pairs are flagged classes (D11) \\
+WP9 & nested and heteroclinic tangles: heteroclinic holes (D7), innermost-zone blasting (C4) \\
+WP9b & the non-crossing rule: walks between landing spans and the marker law (D13, C13, C14) \\
+WP9c & every bridge is the same: walls of disjoint unstable arcs (D14, C17, C18) \\
+WP10 & numerics leftovers: one rtree per stability, outer faces from the rotation system, stable-end evidence gives no verdict (C11) \\
+WP10b & blast image curves are computed manifold (C20), foreign chords (C19) \\
+WP11 & simplification: no absolute cdist slack in the topology (C15), one orientation rule (C16), dead API removed \\
+WP12 & this re-verification; an order flip at a member end is noise (C21); a restore never shortens a grown branch (C22) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Design of E12}
+
+\code{stress/numerics/e12\_reverify.py} runs \NumWpTwelveConfigs{} cells
+(\NumWpTwelveConfigsOk{} ok; \NumWpTwelveTopologyErrors{} topology snapshots
+raised). Every case is a frozen \code{tests/cases.py} recipe: k28 and k32 to
+13 blasts (the depths WP8b measured), p3 to 20, nested\_outer and
+nested\_inner to 12, inversion (k=4) to 10, heteroclinic (its inner zone) to
+8, each at the blasting cutoffs $10^{-7}$ and $10^{-5}$ with one iteration
+per \code{blast\_zone} call; the NUM-6/NUM-7 cells at $10^{-7}$ with two
+iterations per call (k28, k32, nested\_outer to 6 calls, p3 to 10); and a
+growth-depth study (p3 at 11--18 unstable steps, inversion at 8--12). Each
+call carries a per-call point budget (\code{max\_points}, C6) and every
+blast is followed by one \code{session.topology()}. \emph{Not rerun}: E1--E6,
+E8--E10, the E7 escape and tangency studies and the full E11 grid
+(separations other than each recipe's, cutoffs $10^{-6}$ and $10^{-8}$,
+repeats): the numerics they measure did not change in a way those studies
+probe since the second edition.
+
+\subsection{The class-count series}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{\fig{e12_classes}}
+  \caption{E12: the seed table (coloured) and the alphabet closed under the
+  word map (grey) after each blast, at the blasting cutoffs $10^{-7}$
+  (solid) and $10^{-5}$ (dashed). The vertical line marks the blast from
+  which $N$, the crossings of $T(q_0)$, stops changing at $10^{-7}$; a red
+  triangle marks a decrease of the seed.}
+  \label{fig:e12classes}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E12 series. ``plateau'': the blast from which the seed table is
+constant; ``drops'': the blasts where it decreases; ``reliable at'': the
+blasts whose words are reliable; ``N frozen'': the blast from which $N$ is
+constant (``no'': still growing at the last blast); ``growth'': the
+per-blast factor of the blast time over the last blasts.}
+\label{tab:e12summary}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{llrrrrlrrrr}
+\tablebody tables/e12_summary.tex
+\end{tabular}
+\end{table}
+
+\evidence \Cref{fig:e12classes,tab:e12summary}. At $10^{-7}$
+\NumWpTwelveFineMonotone{} of the \NumWpTwelveFineSeries{} series never
+decrease. k28 reads \NumWpTwelveKTwoEightFineSeed; k32
+\NumWpTwelveKThreeTwoFineSeed; p3 \NumWpTwelvePThreeFineSeed; nested\_inner
+\NumWpTwelveNestedInnerFineSeed; nested\_outer
+\NumWpTwelveNestedOuterFineSeed; heteroclinic stays at
+\NumWpTwelveHeteroclinicFineClosed{} closed classes throughout.
+
+\reading The counts move in bursts and then stay flat: each burst is a
+reference switch (BCG-4: a deeper lap of the pip orbit brings a pair of the
+fundamental window whose backward hole chain is long), and the plateau
+follows because $N$ is cut at the deepest registered lap of the pip orbit
+(D12). This answers the second edition's open question of why the bursts
+fall where they do (\cref{sec:blastdepth-evolution}); the period-3 ``fixed
+number of new classes per blast'' of the second edition was bookkeeping
+(every blast child was classed, BCG-1) and is gone since WP6: p3 plateaus at
+25 seed classes from blast 8 to 20. There is no linear staircase anywhere.
+The closed alphabet of k32 drops once (45 to 39 at blast 9) while the seed
+and the hole count grow: the refined words name fewer unspanned pairs. No
+law binds the closed alphabet across a switch; it is a question for the
+author (with DEC-25).
+
+\caveat \emph{Inversion} reads \NumWpTwelveInversionFineSeed{} at both
+cutoffs (and with two iterations per blast): at blast 6 the references
+$(23,24), (26,27)$ are replaced by $(56,57)$ alone, witnessed by a crossing
+0.16 and 0.26 in stable cdist from the old pair's ends, no noise (probes of
+WP12). The new reference's $+1$ pair is never spanned, because its bridge
+lies outside the zone and no blast iterates it (NUM-21), so the second
+stable branch has no window hole (D9's stagger) and the hole count falls
+from 9 to 5. D12 does not prevent it: the blasts keep registering deeper
+laps of the pip orbit, so $N$ is still growing at blast 10. This contradicts
+D1's ``a decrease is a bug'' while following the pseudoneighbor definition
+exactly; it is BCG-8 and waits on DEC-25 (accept; compute the reference
+arcs' images outside the zone; or refine old pairs instead of replacing
+them). The words are unreliable from that blast on (two ambiguous classes
+contradicted by their registered images).
+
+\subsection{The blasting cutoff (NUM-5)}
+
+At $10^{-5}$ the seed decreases on k28 (blast 9), k32 (blasts 9 and 10), p3
+and nested\_inner (blast 7) (\cref{tab:e12summary}), and the period-1 words
+are unreliable from blast 7. The k28 drop is root-caused (WP12 probes): the
+reference $(9,10)$ is lost to a witness at $c_u \approx 1.6\times10^{9}$, a
+lambda-lemma copy hugging the arc through crossing 9 and $5.6\times10^{-6}$
+from it in stable cdist, which the coarse polyline orders on the wrong side;
+at $10^{-7}$ the copy does not cross the window. Its per-crossing resolution
+ratio (183) does not see this: it is a \emph{pair}-ordering resolution
+limit, of the NUM-3/NUM-4 family. \emph{Recommendation (DEC-14, the
+author's):} the default cutoff $10^{-7}$ defines the symbolic result;
+coarser blasting cutoffs are for exploration only.
+
+\subsection{Two iterations per blast, and the lobe areas (NUM-6, NUM-7)}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E12: call $n$ with two iterations against single blast $2n$ (seed,
+closed alphabet, holes and reliability; and $N$), and the lobe-area probe
+over both cells.}
+\label{tab:e12iterations}
+\begin{tabular}{lrrrrr}
+\tablebody tables/e12_iterations.tex
+\end{tabular}
+\end{table}
+
+\Cref{tab:e12iterations}: at the topology level two iterations per call
+equal two single blasts on every case. nested\_outer's $N$ lags by one
+iteration twice (the \code{min\_separation} guard stops a pip-orbit image
+one iteration earlier inside a two-iteration call; the classes are the
+same). The second edition's difference came from the pip repin and the
+recompute moments, which the session's carried pip (WP8) and the kept blast
+curves (WP10b, C20) removed. The second edition's lobe-area excess of 2.29
+with four sign flips is gone: no sign flip, and the period-1 ratios stay
+below $10^{-3}$; the period-3 residual is the polygon probe of a folded
+lobe, not a law.
+
+\subsection{Cost after the freeze (PERF-2)}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{\fig{e12_cost}}
+  \caption{E12 at $10^{-7}$: (a) the time of each blast, (b) the registry
+  size. Shaded: the blasts of k28 and k32 after $N$ froze.}
+  \label{fig:e12cost}
+\end{figure}
+
+\Cref{fig:e12cost}: the blast cost still grows geometrically (the map's
+stretching, $\lambda$ per lap, cannot be removed), but $N$ freezes at blast
+\NumWpTwelveKTwoEightFrozenFrom{} for k28, and the blasts after it take
+\NumWpTwelveKTwoEightFrozenShare\,\% of the blasting time while changing
+nothing in the topology. What is wasted is blasting past the freeze. A
+driver that stops when $T(q_0)$ stops growing, or blasts only $T(q_0)$'s
+bridges, would remove it; it is an API change and is deferred to the D8 API
+plan. Peak memory at 13 blasts is 3.6\,GB for k28 and 4.9\,GB for k32,
+against 9\,GB for fifteen blasts in the second edition.
+
+\subsection{Evidence at depth (INT-11)}
+
+Registered member images disagreed with the walk at depth in two ways.
+\emph{Kind 1} (k28 at 9--13 blasts, k32 at 9): a member end lies
+$8.5\times10^{-6}$ outward of its element's bound, and their registered
+images lie in the \emph{opposite} order ($1.2\times10^{-6}$), which the
+map, preserving the order along a branch, cannot do; both crossings are well
+resolved, so this is cdist placement noise between a deep copy and the
+hole-bridge end it hugs. C21 diagnoses it (\code{"order flip"}) and gives it
+no verdict: k28 is reliable at every blast from 1 to 13. \emph{Kind 2}
+(k32 from blast 9): the image chain crosses the window $7\times10^{-8}$ to
+$2\times10^{-6}$ from a hole-bridge end at a crossing with no registered
+preimage, so no flip can be proven; one end's resolution ratio sits at the
+threshold. It is the same resolution floor (NUM-3/NUM-4, deferred), and k32
+stays unreliable from blast 9.
+
+\subsection{Growth depth}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{E12 growth depth: the topology of the final state. ``no zone'':
+the strong pip has no registered image, so the zone at $f(q_0)$ cannot be
+cut; ``point budget'': a growth step ran into the library's per-step budget
+(an escaping arm).}
+\label{tab:e12depth}
+\begin{tabular}{lrlrrrlr}
+\tablebody tables/e12_depth.tex
+\end{tabular}
+\end{table}
+
+\Cref{tab:e12depth}: p3 has 9 classes through 14 unstable steps, switches
+references at 15 (the same burst as blast 6 of the series) and is reliable
+at every depth it reaches; 18 steps escape into the point budget. The
+inversion recipe needs 9 steps for a zone and escapes at 12; at 10 steps one
+class is unreliable (an incomplete tangle), at 11 (the law-case recipe) all
+are reliable.
 
 %======================================================================
 \section{Recommendations}
