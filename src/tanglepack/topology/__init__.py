@@ -101,6 +101,7 @@ from .DualWalk import (
     lobe_image_markers,
     shortest_walks,
     trellis_itinerary,
+    walk_chords,
 )
 from .SymbolicDynamics import (
     ClassDynamics,
@@ -171,6 +172,7 @@ __all__ = [
     "lobe_image_markers",
     "shortest_walks",
     "trellis_itinerary",
+    "walk_chords",
     "ClassDynamics",
     "EvidenceDiagnosis",
     "ImageEvidence",

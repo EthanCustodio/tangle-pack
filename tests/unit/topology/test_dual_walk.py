@@ -459,6 +459,59 @@ def test_no_admissible_walk_within_the_detour_cap(key, tie, monkeypatch, caplog)
     assert MAX_DETOUR >= 1
     assert_logged(caplog, logging.WARNING, LOGGER)
 
+
+def _crossing_into(node) -> Callable:
+    """A ``chords_cross`` stub: a chord crosses any wall iff it runs into ``node``'s edge
+    (a wall's own chord is never read)."""
+    return lambda face, chord, wall: chord[2] == node.edge_key
+
+
+def test_a_wall_breaks_a_tie(key, tie, caplog):
+    """D13 / D14: images of disjoint arcs are disjoint, so a walk crossing the image walk
+    of an arc on another unstable branch is rejected; the clear walk is the word."""
+    (through_1,) = tie.stable_nodes_of(L(key, 1))
+    tie.chords_cross = _crossing_into(through_1)
+    walls = [(tie.faces[0], ("wall chord",))]
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        search = shortest_walks(tie, L(key, 0), L(key, 3), walls=walls)
+    assert search.status == "unique" and search.rejected == 1 and not search.constrained
+    assert search.walk.itinerary == (L(key, 0), L(key, 2), R(key, 2), L(key, 3))
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
+
+
+def test_a_wall_crossing_every_walk_keeps_the_tie(key, tie, caplog):
+    """No clear walk: nothing is rejected and the tie stays flagged."""
+    tie.chords_cross = lambda face, chord, wall: True
+    walls = [(tie.faces[0], ("wall chord",))]
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        search = shortest_walks(tie, L(key, 0), L(key, 3), walls=walls)
+    assert search.status == "ambiguous" and search.rejected == 0 and len(search.walks) == 2
+    assert_logged(caplog, logging.WARNING, LOGGER)
+
+
+def test_no_walls_and_walls_elsewhere_change_nothing(key, tie):
+    """Without walls, or with walls only in a face no walk visits, the tie is the old one."""
+    (through_1,) = tie.stable_nodes_of(L(key, 1))
+    tie.chords_cross = _crossing_into(through_1)
+    plain = shortest_walks(tie, L(key, 0), L(key, 3))
+    elsewhere = shortest_walks(tie, L(key, 0), L(key, 3), walls=[(tie.faces[2], ("wall chord",))])
+    for search in (plain, elsewhere):
+        assert search.status == "ambiguous" and search.rejected == 0
+        assert [walk.itinerary for walk in search.walks] == [walk.itinerary for walk in plain.walks]
+
+
+def test_walk_chords_run_from_edge_to_edge_in_each_face(key, tie):
+    """One chord per face visited: in by the start edge (or the edge crossed), out by the
+    edge crossed next (or the goal edge), each end on the side the face lies on."""
+    (walk, _other) = shortest_walks(tie, L(key, 0), L(key, 3)).walks
+    (start,) = tie.stable_nodes_of(L(key, 0))
+    (goal,) = tie.stable_nodes_of(L(key, 3))
+    (step,) = walk.steps
+    assert DualWalk.walk_chords(walk) == [
+        (walk.faces[0], (start.edge_key, "left", step.node.edge_key, step.entry_side)),
+        (walk.faces[1], (step.node.edge_key, step.exit_side, goal.edge_key, "left")),
+    ]
+
 # --------------------------------------------------------------------------- #
 # land_element: synthetic
 # --------------------------------------------------------------------------- #

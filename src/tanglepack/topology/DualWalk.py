@@ -15,7 +15,8 @@ each of which is one bridge class (or its inverse) -- the caller
 (``SymbolicDynamics``) turns those pairs into symbols. Between the landing
 spans, the walk obeys the non-crossing rule (D13): :func:`lobe_image_markers`
 reads which markers a member's lobe holds and :func:`holds_markers` whether a
-walk's closed curve holds their images.
+walk's closed curve holds their images, and the decided walks of classes on
+other unstable branches are walls a tie may not cross (:func:`walk_chords`).
 
 A singleton element ``[x, x]`` owns no stable edge and has no dual-graph
 node, so a class with a singleton landing cannot be walked. For it
@@ -76,8 +77,15 @@ Dev Notes:
   (``f(b)`` is simple and meets ``f(sigma_b)`` only at its ends; pulling it
   tight keeps it so); one the midpoint model cannot draw (an edge crossed
   twice) is kept but never preferred by order, so it can only make a tie.
-  A class with no member lobe (member-less, D11, or with its ends on two
-  branches) keeps the plain shortest walk.
+* Walls (D13, D14; WP9c). Images of disjoint unstable arcs are disjoint, so
+  ``f(b)`` cannot cross the image walk of an arc on another unstable branch:
+  given the decided walks of such classes (``walls``, :func:`walk_chords`), a
+  tie loses every walk with a chord crossing a wall in its face
+  (:meth:`~tanglepack.topology.DualGraph.DualGraph.chords_cross`); it counts
+  in :attr:`WalkSearch.rejected`. This is the rule for a class with no member
+  lobe (member-less, D11, or with its ends on two branches or two tangles),
+  and it applies to member-lobe ties too. When every walk crosses a wall the
+  tie stands (never observed).
 * When the ``max_walks`` cap cuts the enumeration short the status still
   says ``"unique"`` or ``"ambiguous"`` for the itineraries that survived and
   :attr:`WalkSearch.truncated` is set (with a WARNING), because a truncated
@@ -113,7 +121,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Intersection import ManifoldKey
     from .BridgeClass import BridgeClassEntry
-    from .DualGraph import FaceNode, Marker, StableNode
+    from .DualGraph import Chord, FaceNode, Marker, StableNode
     from .PartitionFamily import PartitionFamily
     from .Trellis import Trellis
 
@@ -583,7 +591,7 @@ class WalkSearch:
         constrained: True when the markers of a member lobe were imposed
             (the non-crossing rule, D13).
         rejected: How many itineraries, no longer than the one chosen, broke
-            the markers.
+            the markers or crossed the image of a disjoint arc (a wall).
     """
 
     start: ElementRef
@@ -782,7 +790,7 @@ def lobe_image_markers(dual, entry: "BridgeClassEntry") -> Optional[dict["Marker
     Returns:
         ``{image marker: held}`` for every marker the lobe decides and whose
         image is placed, read off the class's first such member; None when
-        the class has none (member-less, connecting, or no member kept). Two
+        the class has no member lobe (its walk is held only by the walls). Two
         members disagreeing on a marker is a WARNING: the class is not one
         homotopy class.
     """
@@ -816,6 +824,23 @@ def lobe_image_markers(dual, entry: "BridgeClassEntry") -> Optional[dict["Marker
                 first_id,
             )
     return first
+
+
+def walk_chords(walk: Walk) -> list[tuple["FaceNode", "Chord"]]:
+    """
+    The walk's chord in each face it visits.
+
+    Each chord runs from the edge the walk entered the face by (its start edge
+    first) to the edge it leaves by (its goal edge last), each end named
+    ``(edge key, side)`` on the side the face lies on.
+    """
+    ends_in = [(walk.start_node.edge_key, walk.itinerary[0].side)] + [
+        (step.node.edge_key, step.exit_side) for step in walk.steps
+    ]
+    ends_out = [(step.node.edge_key, step.entry_side) for step in walk.steps] + [
+        (walk.goal_node.edge_key, walk.itinerary[-1].side)
+    ]
+    return [(face, end_in + end_out) for face, end_in, end_out in zip(walk.faces, ends_in, ends_out)]
 
 
 def _half_toward(node: "StableNode", other: "StableNode") -> tuple:
@@ -862,14 +887,8 @@ def holds_markers(dual, walk: Walk, wanted: dict["Marker", bool]) -> Optional[bo
         return False
     if len(set(crossed)) < len(crossed) or {start.edge_key, goal.edge_key} & set(crossed):
         return None
-    ends_in = [(start.edge_key, walk.itinerary[0].side)] + [
-        (step.node.edge_key, step.exit_side) for step in walk.steps
-    ]
-    ends_out = [(step.node.edge_key, step.entry_side) for step in walk.steps] + [
-        (goal.edge_key, walk.itinerary[-1].side)
-    ]
-    chords = [(face, end_in + end_out) for face, end_in, end_out in zip(walk.faces, ends_in, ends_out)]
-    routings = dual.enclosed(between, chords, {_half_toward(start, goal), _half_toward(goal, start)})
+    halves = {_half_toward(start, goal), _half_toward(goal, start)}
+    routings = dual.enclosed(between, walk_chords(walk), halves)
     if routings is None:
         return None
     return any(
@@ -989,6 +1008,15 @@ def _admissible_walks(
     return [], rejected, None
 
 
+def _crosses_a_wall(dual, walk: Walk, walls: Sequence[tuple["FaceNode", "Chord"]]) -> bool:
+    """Whether a chord of the walk crosses a wall in the same face."""
+    return any(
+        wall_face is face and dual.chords_cross(face, chord, wall)
+        for face, chord in walk_chords(walk)
+        for wall_face, wall in walls
+    )
+
+
 def shortest_walks(
     dual,
     start: ElementRef,
@@ -998,6 +1026,7 @@ def shortest_walks(
     fixed_points: Optional[Sequence["FixedPoint"]] = None,
     landings: Optional[tuple[ElementLanding, ElementLanding]] = None,
     wanted: Optional[dict["Marker", bool]] = None,
+    walls: Sequence[tuple["FaceNode", "Chord"]] = (),
 ) -> WalkSearch:
     """
     Every shortest walk of the dual graph from one iterated element to another.
@@ -1018,7 +1047,11 @@ def shortest_walks(
     ``wanted``, the non-crossing rule: the word is the shortest walk whose
     closed curve holds exactly the wanted markers (:func:`holds_markers`),
     looked for up to :data:`MAX_DETOUR` crossings past the shortest walk
-    (faces may then repeat).
+    (faces may then repeat). With ``walls``, a tie loses the walks whose
+    chords cross a wall in its face (:meth:`~.DualGraph.DualGraph.chords_cross`):
+    the walls stand for the images of arcs disjoint from this class's, and
+    images of disjoint arcs are disjoint (D13, D14). When every walk crosses
+    one, the tie stands.
 
     Args:
         dual: Anything with ``stable_nodes_of(ref) -> list[StableNode]``
@@ -1041,6 +1074,9 @@ def shortest_walks(
         landings: The landings ``start`` and ``goal`` are the targets of.
         wanted: ``{marker: held}`` from a member lobe
             (:func:`lobe_image_markers`), or None for no constraint.
+        walls: ``(face, chord)`` per face of the decided walks of classes
+            whose arcs lie on other unstable branches (:func:`walk_chords`);
+            with them, ``dual`` needs ``chords_cross`` too.
 
     Returns:
         The :class:`WalkSearch`. ``"no_start_node"`` / ``"no_goal_node"``
@@ -1196,6 +1232,18 @@ def shortest_walks(
         found_walks,
         key=lambda walk: tuple(element_sort_key(ref, context) for ref in walk.itinerary),
     )
+    if len(walks) > 1 and walls:
+        clear = [walk for walk in walks if not _crosses_a_wall(dual, walk, walls)]
+        if clear and len(clear) < len(walks):
+            logger.info(
+                "walk %s -> %s: %d itinerar%s cross the image of a disjoint arc",
+                start.label,
+                goal.label,
+                len(walks) - len(clear),
+                "y" if len(walks) - len(clear) == 1 else "ies",
+            )
+            rejected += len(walks) - len(clear)
+            walks = clear
     if truncated:
         logger.warning(
             "walk %s -> %s: more than %d %s; enumeration truncated after %d "

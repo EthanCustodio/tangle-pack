@@ -79,6 +79,24 @@ def test_interleaved_chords_of_one_ring_cross(lobe):
     assert dual.enclosed([], [_chord(face, edges[1], edges[3]), _chord(face, edges[2], edges[4])]) == []
 
 
+@pytest.mark.parametrize(
+    "ends, crossing",
+    [((1, 3, 2, 4), True), ((1, 4, 2, 3), False), ((1, 3, 3, 4), False), ((1, 2, 3, 4), False)],
+    ids=["interleaved", "nested", "shared_end_edge", "apart"],
+)
+def test_chords_cross_iff_their_ends_alternate_on_one_ring(lobe, ends, crossing):
+    """Two disjoint simple arcs in a disk face never interleave; chords sharing an end
+    edge can always be drawn apart (the order along that edge is free). The verdict is
+    the enclosure's: crossing chords leave no routing that keeps the curve simple."""
+    dual, face, edges, _bridge = lobe
+    a, b, c, d = (edges[i] for i in ends)
+    (_f, chord), (_g, other) = _chord(face, a, b), _chord(face, c, d)
+    assert dual.chords_cross(face, chord, other) is crossing
+    assert dual.chords_cross(face, other, chord) is crossing
+    if len({a, b, c, d}) == 4:
+        assert (dual.enclosed([], [(face, chord), (face, other)]) == []) is crossing
+
+
 @pytest.mark.parametrize("period, inversion", [(1, False), (1, True), (3, False), (2, True)])
 def test_a_periodic_point_marker_maps_along_its_orbit(period, inversion):
     """The marker of orbit point ``i`` maps to the point ``FixedPoint.advance_key`` names."""

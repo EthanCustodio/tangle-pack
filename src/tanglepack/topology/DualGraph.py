@@ -93,6 +93,12 @@ Dev Notes:
   component on either side, so every placement is returned and the caller
   asks whether SOME routing holds the right markers: the routing is free
   because nothing but the markers and the walls is known inside a face.
+* Crossing chords (D13 / D14, WP9c). Two disjoint simple arcs through a disk
+  face never interleave their ends on its ring, so :meth:`DualGraph.chords_cross`
+  is the walls' test: the four ends on ONE ring at four distinct positions,
+  alternating. Ends on one edge side, or on two rings, can always be drawn
+  apart. It is the verdict ``enclosed`` reaches by flooding (no routing keeps
+  the curve simple), read off the ring order alone.
 """
 
 from __future__ import annotations
@@ -159,6 +165,14 @@ def face_side(arc: Arc) -> Side:
     ``lo -> hi`` on an unstable one (away from it).
     """
     return "right" if arc.reverse == (arc.kind == "stable") else "left"
+
+
+def _ring_index(arcs: Sequence[Arc], end: tuple) -> Optional[int]:
+    """The position on a ring of a chord end ``(edge key, side)``, or None."""
+    edge, side = end
+    return next(
+        (i for i, arc in enumerate(arcs) if arc.edge_key == edge and face_side(arc) == side), None
+    )
 
 
 def _position_of(
@@ -1328,9 +1342,7 @@ class DualGraph:
         """
         arcs = face.faces[ring].arcs
         chord_at = {
-            next(i for i, arc in enumerate(arcs) if arc.edge_key == edge and face_side(arc) == side): k
-            for k, chord in enumerate(chords)
-            for edge, side in (chord[:2], chord[2:])
+            _ring_index(arcs, end): k for k, chord in enumerate(chords) for end in (chord[:2], chord[2:])
         }
         cuts = sorted(chord_at)
         before: dict[int, tuple] = {}
@@ -1355,6 +1367,34 @@ class DualGraph:
         if len(regions) != len(chords) + 1:
             return None
         return list(regions.values())
+
+    @staticmethod
+    def chords_cross(face: FaceNode, chord: Chord, other: Chord) -> bool:
+        """
+        Whether two chords of one face must cross.
+
+        Args:
+            face: The face node both chords run through.
+            chord: One chord.
+            other: The other.
+
+        Returns:
+            True when their four ends lie on ONE ring of the face at four
+            distinct positions and alternate around it. Ends on one edge
+            side (the order along the edge is free) or on two rings can be
+            drawn apart: False.
+        """
+        for region in face.faces:
+            a, b, c, d = (
+                _ring_index(region.arcs, end) for end in (chord[:2], chord[2:], other[:2], other[2:])
+            )
+            if None in (a, b, c, d):
+                continue
+            if len({a, b, c, d}) < 4:
+                return False
+            lo, hi = sorted((a, b))
+            return (lo < c < hi) != (lo < d < hi)
+        return False
 
     # ── views ───────────────────────────────────────────────────────────────
 
