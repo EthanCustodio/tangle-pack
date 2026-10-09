@@ -1033,13 +1033,42 @@ def check_bridge_image_round_trip(case: "Case") -> int:
 # --------------------------------------------------------------------------- #
 # Partition and holes
 # --------------------------------------------------------------------------- #
+def _sign_openings(case: "Case", trellis, hole) -> set:
+    """The ``(intersection_id, half, row, branch_key)`` halves a hole opens, derived from
+    its bounds, its ``bridge_side`` and the registry signs alone (D6, never from
+    ``hole.openings``): at a crossing the outward half iff ``(sign > 0) == (side ==
+    "left")``, on the crossing's branch and the bridge's row there; at an anchor the
+    outward half of the branch on which the bridge's row is its side, if computed."""
+    bridge = trellis.bridge_between(*hole.bounding_ids)
+    assert bridge is not None and bridge.id is not None, hole.bounding_ids
+    fp, _, orbit_index, _ = bridge.manifold_key
+    opened = set()
+    for endpoint, intersection_id in zip(("first", "second"), bridge.id):
+        ix = case.registry[intersection_id]
+        if _is_anchor(ix):
+            for branch_index in (0, 1):
+                key = (fp, "stable", orbit_index, branch_index)
+                if key in trellis.branches and _anchor_row(case, bridge, key) == hole.bridge_side:
+                    opened.add((intersection_id, "outward", hole.bridge_side, key))
+            continue
+        positive = ix.crossing_sign > 0
+        half = "outward" if positive == (hole.bridge_side == "left") else "anchorward"
+        row = "left" if positive == (endpoint == "first") else "right"
+        opened.add((intersection_id, half, row, ix.manifold_b_key))
+    return opened
+
+
 def check_partition_covers_branch(case: "Case") -> int:
     """Each side's partition runs anchor to branch end in contiguous, positional elements,
-    and a non-singleton element is open at an end iff a hole of that side opens that
-    crossing on that half (stage 6, D6; WP10: an element open at both ends need not be
-    ONE hole's span -- between consecutive U-arcs it is a stretch of the face holding a
-    hole of the other bridge, as on p3 at 16 unstable steps)."""
+    and a non-singleton element is open at an end iff a hole opens that half there
+    (stage 6). The opened halves are derived from each hole's bounds, bridge side and
+    crossing signs (:func:`_sign_openings`), never read from ``hole.openings``, which the
+    partition is built from. WP10: an element open at both ends need not be ONE hole's
+    span -- between consecutive U-arcs it is a stretch of the face holding a hole of the
+    other bridge, as on p3 at 16 unstable steps."""
     count = 0
+    staged = _staged(case)
+    opened = {half for hole in staged.holes for half in _sign_openings(case, staged, hole)}
     for trellis, result in _partitions(case):
         tol = float(trellis.registry.cdist_tol)
         intervals = result.intervals
@@ -1053,18 +1082,13 @@ def check_partition_covers_branch(case: "Case") -> int:
             assert result.element(interval.element_id) is interval
         for prev, nxt in zip(intervals, intervals[1:]):
             assert prev.hi_cdist == pytest.approx(nxt.lo_cdist, abs=tol)
-        opened = {
-            (iid, half)
-            for hole in trellis.holes
-            for iid, half, row, key in hole.openings or ()
-            if (row, key) == (result.side, result.branch_key)
-        }
         for iv in intervals:
             if iv.lo_id == iv.hi_id:
                 continue  # a pinched singleton is closed at its one crossing
             for iid, closed, half in ((iv.lo_id, iv.closed_lo, "outward"), (iv.hi_id, iv.closed_hi, "anchorward")):
                 if iid is not None:
-                    assert (not closed) == ((iid, half) in opened), (result.branch_key[1:], result.side, iid, half)
+                    is_open = (iid, half, result.side, result.branch_key) in opened
+                    assert (not closed) == is_open, (result.branch_key[1:], result.side, iid, half)
         count += 1
     return count
 

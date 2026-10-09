@@ -541,8 +541,14 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 
 ## Open-issues round WP10 slice 1 (2026-10-08, branch `oi/wp10-numerics-leftovers`, base `3f27456`)
 
-- KNOWN_ISSUES 3 -> 2: `(partition_covers_branch, heteroclinic)` removed (XPASS after the law
-  restatement). Left: C3 `orientation_reversing`, WP9 slice 2 `every_active_class_walks` x
+- KNOWN_ISSUES 3 -> 2: `(partition_covers_branch, heteroclinic)` removed (XPASS after the law's
+  last clause was rewritten). Review round: the first rewrite read `hole.openings` with the
+  partition builder's own filter and restated `StablePartition` (a break-it flipping every
+  non-anchor opening in `_hole_openings` passed it on k10, p3, k28_two_blasts); the clause now
+  derives each hole's opened halves from its bounds, `bridge_side` and crossing signs
+  (`_sign_openings`, `_anchor_row` at an anchor) and fails that break-it on all three. The
+  derived halves equal `hole.openings` on every law case (anchor openings exercised on 9 of 11).
+  Left: C3 `orientation_reversing`, WP9 slice 2 `every_active_class_walks` x
   `heteroclinic` (DEC-23).
 - `law_case` is session scoped (C12): law tier 35.7 -> 11.2 s. Fingerprint guard unchanged.
 - `tests/regression/test_deep_reference_survives_noise.py` was vacuous (per-fixed-point trellises

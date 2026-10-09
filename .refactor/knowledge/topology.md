@@ -451,8 +451,10 @@ depth; the rest of the layer is described in `CLAUDE.md`.
   `_traversal_area` survives only for `_innermost_container`'s magnitude.
 - `SymbolicDynamics._compare_evidence`: `"stable end"` evidence -> `word_agrees` None + INFO;
   `"walk"` -> False + WARNING; `verified` over the evidence with a verdict (C11).
-- Laws (tests/helpers/laws.py): `check_partition_covers_branch` last clause = stage 6 (an end is
-  open iff a hole of that side opens that crossing on that half; pinched singletons skipped);
+- Laws (tests/helpers/laws.py): `check_partition_covers_branch` last clause: an end is open iff a
+  hole opens that half there, the halves derived by `_sign_openings` from the hole's bounds,
+  `bridge_side` and crossing signs (never `hole.openings`, which the partition is built from;
+  pinched singletons skipped);
   `check_dual_face_side_is_geometry` = a local probe off the stable edge's middle segment pushed by
   a quarter of its distance to every OTHER boundary segment of the region (its own arc included:
   `inversion_period2_10` has a stable hairpin region `(3, 4)` where the other leg is the nearest
