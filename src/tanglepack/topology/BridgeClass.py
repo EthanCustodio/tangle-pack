@@ -745,8 +745,11 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
         :data:`~tanglepack.numerics.Bridge.BridgeId`), or ``None`` when an
         endpoint's ``+1`` iterate is no crossing of the trellis (unregistered,
         or past its pip-orbit cut: the image leaves T(q0), no evidence either
-        way), an image end lies off the advanced branch (WARNING), or that
-        branch is not in the trellis.
+        way), or the advanced branch is not in the trellis.
+
+    Raises:
+        AssertionError: If an image end lies off the advanced branch (a table
+            link always passes the map gate onto ``advance_key``).
     """
     images = [trellis.iterate(endpoint, 1) for endpoint in bridge_id]
     if any(image not in trellis for image in images):
@@ -754,16 +757,12 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
     ia, ib = (trellis.intersection(image) for image in images)
     own_key = trellis.unstable_key_of(bridge_id)
     key = own_key[0].advance_key(own_key, 1)
+    # A table link passes the map gate onto advance_key (WP2), so an image end
+    # lies on the advanced branch (an anchor lies on every branch of its point).
     for image in (ia, ib):
-        if not image.is_anchor and image.manifold_a_key != key:
-            logger.warning(
-                "image of bridge %s has endpoints %s off its image branch %s; "
-                "cannot place its image arc",
-                bridge_id,
-                tuple(images),
-                key[1:],
-            )
-            return None
+        assert image.is_anchor or image.manifold_a_key == key, (
+            f"image of bridge {bridge_id} ends off its image branch {key[1:]}: {images}"
+        )
     branch = trellis.branch(key)
     if branch is None:
         return None
@@ -794,8 +793,9 @@ def _collect_image_evidence(
     is classed pair by pair with the same row/element rule as the members themselves; a pair
     with two different elements adds its class, a pair with one element adds a
     loop. Loop members add themselves as loop evidence and no images of their
-    own (a loop's image is a loop). An image pair whose end lies on a branch no
-    partition covers is logged and skipped.
+    own (a loop's image is a loop). An image pair is a pair of trellis crossings
+    on selected branches, all partitioned, so ``ends`` classes it exactly as it
+    does a member (and raises the same ``ValueError`` if it cannot).
     """
     seen_classes: set[BridgeClass] = set()
     seen_loops: set["BridgeId"] = set()
@@ -814,16 +814,7 @@ def _collect_image_evidence(
             entry.unresolved.append(member.bridge_id)
             continue
         for pair in chain:
-            try:
-                x, y = ends(pair)
-            except ValueError as error:
-                logger.warning(
-                    "image pair %s of bridge %s cannot be classed (%s); ignoring it",
-                    pair,
-                    member.bridge_id,
-                    error,
-                )
-                continue
+            x, y = ends(pair)
             image_class, direction = oriented_class(x, y, fixed_points)
             if direction == 0:
                 add_loop(pair, x)

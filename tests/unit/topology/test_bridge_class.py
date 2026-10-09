@@ -545,3 +545,27 @@ def test_an_image_pair_has_one_parent():
     trellis._iterates[(3, 1)] = 4  # f(2, 3) = (5, 4): the pair (4, 5) again
     with pytest.raises(AssertionError):
         bridge_classes(trellis, partitions)
+
+
+def test_an_image_end_off_its_branch_asserts(k10_partitioned, monkeypatch):
+    """A table link passes the map gate onto ``advance_key`` (WP2), so a bridge's
+    image ends lie on the advanced unstable branch; one that does not is a broken
+    invariant (an AssertionError), never a skipped chain. Here the bridge's own
+    branch is misreported as branch index 1, so its registered images lie off the
+    branch one step past it."""
+    session, fp = k10_partitioned
+    trellis = session.topology().trellis
+    bridge_id = next(
+        b.id
+        for b in trellis.bridges
+        if b.id is not None
+        and all(
+            (image := trellis.iterate(end, 1)) in trellis
+            and not trellis.intersection(image).is_anchor
+            for end in b.id
+        )
+    )
+    own = trellis.unstable_key_of(bridge_id)
+    monkeypatch.setattr(trellis, "unstable_key_of", lambda _bid: (*own[:3], 1))
+    with pytest.raises(AssertionError, match="off its image branch"):
+        image_chain(trellis, bridge_id)
