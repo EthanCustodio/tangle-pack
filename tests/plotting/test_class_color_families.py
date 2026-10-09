@@ -7,7 +7,8 @@ CLAUDE.md (``class_colors``): no colour is used twice; one tangle draws from
 (``BridgeClassEntry.tangle is None``) draw from
 :data:`~tanglepack.topology.plotting.HETEROCLINIC_COLORS`. The author asked
 for this as a rule (2026-10-05), not a style pin: the tests check FAMILY
-MEMBERSHIP only, never a colour value or which slot of a family a symbol gets.
+MEMBERSHIP only, never a colour value or which slot of a family a symbol gets,
+plus the rule that two families' colours never look alike (a CIE76 floor).
 
 A family that runs out is extended from its colormap rather than repeating,
 so a group larger than its family is only required to exhaust that family
@@ -16,10 +17,12 @@ first (and the extension colours to belong to no other family).
 
 from __future__ import annotations
 
+import itertools
 from types import SimpleNamespace
 from typing import Optional
 
-from matplotlib.colors import to_hex
+import numpy as np
+from matplotlib.colors import to_hex, to_rgb
 import pytest
 
 from cases import build_k10, build_nested
@@ -133,6 +136,29 @@ def test_hand_built_three_tangles_take_three_families() -> None:
     spec = [("a", 0, 0), ("b", 0, 0), ("c", 1, 0), ("d", 1, 0), ("e", 2, 0), ("f", 2, 0),
             ("g", None, 0)]
     _assert_family_rule(_dynamics(spec), refined=True)
+
+
+#: The smallest CIE76 colour difference allowed between two families' colours.
+MIN_FAMILY_DELTA_E = 13.0
+
+
+def _lab(color: str) -> np.ndarray:
+    """CIE L*a*b* (D65) of a colour."""
+    rgb = np.array(to_rgb(color))
+    rgb = np.where(rgb > 0.04045, ((rgb + 0.055) / 1.055) ** 2.4, rgb / 12.92)
+    xyz = np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722],
+                    [0.0193, 0.1192, 0.9505]]) @ rgb / np.array([0.95047, 1.0, 1.08883])
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.array([116 * f[1] - 16, 500 * (f[0] - f[1]), 200 * (f[1] - f[2])])
+
+
+def test_families_do_not_look_alike() -> None:
+    """No colour of one family (or the connecting colours) is perceptually close
+    to another's: "families never share a colour" means by eye, not by hex."""
+    groups = [*plotting.TANGLE_COLOR_FAMILIES, plotting.HETEROCLINIC_COLORS]
+    for one, other in itertools.combinations(groups, 2):
+        for a, b in itertools.product(one, other):
+            assert np.linalg.norm(_lab(a) - _lab(b)) >= MIN_FAMILY_DELTA_E, (a, b)
 
 
 def test_hand_built_single_tangle_draws_from_class_colors() -> None:

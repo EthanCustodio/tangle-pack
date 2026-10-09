@@ -167,8 +167,10 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
   changes there. After `topology()` of several fixed points the per-fixed-point trellises carry
   no stage output; `topology(fp)` fills one (tests: `conftest.p3_partitioned`). `topology()` and
   `topology(fp)` differ exactly where heteroclinic pairs exist.
-- C4 (`Blast.py`): `in_zone(b) = session.classify_bridge(b) is zone` (innermost containing zone)
-  for the frontier and the kept children. Unfiltered nested blasting is order independent and
+- C4 (`Blast.py`): `in_zone(b)` = the blasted zone contains b's midpoint and no SMALLER stored
+  zone of ANOTHER fixed point does (innermost containing zone), for the frontier and the kept
+  children. The first cut, `classify_bridge(b) is zone`, blasted nothing for a zone the session
+  does not store (`define_resonance_zone`, a replaced or copied handle; review). Unfiltered nested blasting is order independent and
   equals the own-fixed-point recipe; an unfiltered outer blast still iterates the inner tangle's
   annulus bridges (its own by C4), one of which can hit NUM-9 (WP10).
 - `henon_cases`: `_orbit(session, guess, orientation)` + `_grow(session, fp, u, s, cutoff)`

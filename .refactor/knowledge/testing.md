@@ -528,5 +528,13 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   2 inner unfiltered blasts give the same holes per period / class count / spelled words in both
   orders, base p3 holes 4 vs 42, ~2.5 s), unit `test_rebuilding_one_fixed_points_bridges_keeps_
   the_others` (NEST-5, base KeyError). The three-family plotting test is a plain test now.
+- Review round: `test_nested_blast_containment` also blasts an UNSTORED zone (k10,
+  `define_resonance_zone`: parents = every un-iterated bridge whose midpoint it holds) and a
+  copy of the stored outer nested zone (parents = the bridges classifying to the stored one);
+  both fail on the first cut. Unit `test_collision_on_another_stable_manifold_still_punctures`
+  (scaled / own frame): a hand-built A x A candidate whose numbers collide with an endpoint on
+  W^s(B) still punctures; each parameter fails with its gate removed. Plotting
+  `test_families_do_not_look_alike`: every pair of families (and `HETEROCLINIC_COLORS`) at CIE76
+  >= 13 (the old closest pair is 13.4; the first third family had 7.1 and 8.1).
 - Probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp09_impl/` (`het_sig.py` base vs branch,
   `sig_base.txt` / `sig_branch.txt` from the planner's `wp09/sig.py`).
