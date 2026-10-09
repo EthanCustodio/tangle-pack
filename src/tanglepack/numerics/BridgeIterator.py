@@ -20,12 +20,18 @@ uses it is the one made on that curve. Widening the cut set to every crossing wh
 cdist falls in the image's span would reintroduce the cross-curve bridges plan row
 1.1 removed, so it must not be done without a per-curve span test.
 
-Partial bridges (an image piece bounded by fewer than two crossings) have no
-endpoint pair, hence no ``BridgeId``, hence no identity to dedupe on. They are
-kept out of ``_bridges`` in a separate ``_partial_bridges`` list: they are real
-stretches of unstable manifold the blast frontier must carry forward, but they are
-not bridges in the topological sense and never appear in a genealogy answer. Two
-consequences to keep in mind:
+Every image curve is computed manifold (NUM-12, D1, C20): the workbench keeps it
+in ``_image_curves``, every ``compute_intersections`` re-indexes it query-only (as
+the blast did) until growth has merged it into a branch, and ``create_bridges``
+cuts it like any curve. A recompute, a growth round or a zone (re)definition after
+a blast therefore keeps every crossing, bridge, partial piece and ``iterated`` flag.
+
+A partial bridge is an image curve crossed fewer than twice: it has no endpoint
+pair, hence no ``BridgeId``, hence no identity to dedupe on. It is kept out of
+``_bridges`` in a separate ``_partial_bridges`` list: it is a real stretch of
+unstable manifold the blast frontier must carry forward, but not a bridge in the
+topological sense, and never appears in a genealogy answer. Two consequences to
+keep in mind:
 
 * repeated blasting of the same region can accumulate several Bridge objects over
   the same partial arc (nothing identifies them as the same arc), which is why the
@@ -331,8 +337,21 @@ class BridgeIterator:
         # orbit step forward of the parent's branch. Recording that key -- before the
         # image is indexed -- is what lets every crossing detected on it carry its
         # unstable branch identity (and lets its children advance the key again).
+        # The image is computed manifold the branches do not hold: the workbench
+        # keeps it, and every recompute re-indexes it (NUM-12).
         image_key = bridge.fixed_point.advance_key(bridge.manifold_key, 1)
+        if not isinstance(iterated, Bridge):
+            iterated = Bridge(
+                root=iterated.root,
+                stability=iterated.stability,
+                stretch_param=iterated.stretch_param,
+                fixed_point=iterated.fixed_point,
+                tail=iterated.tail,
+                branch_index=iterated.branch_index,
+                manifold_key=image_key,
+            )
         iterated.manifold_key = image_key
+        workbench._image_curves.append(iterated)
 
         # 2. register with the tangle. The bridge is unstable manifold, so every
         #    curve it can legitimately cross is stable and already in the rtree
@@ -363,31 +382,12 @@ class BridgeIterator:
         )
 
         # A bridge is bounded by two crossings, so create_bridges yields nothing when
-        # the image crosses the stable manifold fewer than twice -- either zero times
-        # (no crossing) or exactly once (a single new homoclinic point cannot bound a
-        # bridge on its own). Either way the forward image is still a real piece of
-        # unstable manifold whose dynamics must be carried forward, so keep it as one
-        # PARTIAL bridge (both endpoint ids stay None) rather than dropping it. (Any
-        # new crossing was already registered above; it is picked up as a bridge
-        # boundary on later iterates, once a second crossing appears alongside it.)
-        # ManifoldMachine.iterate_bridge may return a BaseManifold, so wrap it as a
-        # Bridge -- downstream consumers (uniiterated_bridges, genealogy) need the
-        # Bridge attributes.
+        # the image crosses the stable manifold fewer than twice. The image is still a
+        # real piece of unstable manifold whose dynamics must be carried forward, so
+        # the curve itself is kept as one PARTIAL bridge (both endpoint ids None); a
+        # crossing on it becomes a bridge boundary once a second one appears.
         if not new_bridges:
-            if isinstance(iterated, Bridge):
-                new_bridges = [iterated]
-            else:
-                new_bridges = [
-                    Bridge(
-                        root=iterated.root,
-                        stability=iterated.stability,
-                        stretch_param=iterated.stretch_param,
-                        fixed_point=iterated.fixed_point,
-                        tail=iterated.tail,
-                        branch_index=iterated.branch_index,
-                        manifold_key=image_key,
-                    )
-                ]
+            new_bridges = [iterated]
 
         # 5. the images of the parent's two endpoints, and of the crossings just
         #    born, by the exact rule against the whole registry

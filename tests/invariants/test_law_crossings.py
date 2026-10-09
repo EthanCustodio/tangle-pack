@@ -7,9 +7,9 @@ one branch, across branches or across fixed points. A crossing's cdists are
 defined and bracketed by the segment it was found on, its sign is the cross
 product of the two increasing-cdist directions, and every registered ``+1``
 link preserves the canonical area and scales the cdists by
-``per_step_beta``. Recomputing the crossings keeps ids and is idempotent
-(the ``recompute`` layer: one fresh build per case, since these two laws
-mutate the session).
+``per_step_beta``. Recomputing the crossings keeps the topology (D1, NUM-12),
+keeps every id and is idempotent (the ``recompute`` layer: one fresh build per
+case, since these laws mutate the session).
 """
 
 from __future__ import annotations

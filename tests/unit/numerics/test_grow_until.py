@@ -470,24 +470,26 @@ def test_iterates_closed_all_is_scoped_to_the_grown_fixed_point(
 
 
 # --------------------------------------------------------------------------- #
-# the per-round recut does not corrupt blast state
+# a growth round keeps the blast (NUM-12)
 # --------------------------------------------------------------------------- #
-def test_grow_until_clears_the_iterated_flag_it_invalidates(small_tangle, caplog):
-    """A recut that drops the images must not leave the sources marked iterated.
+def test_a_growth_round_keeps_the_blast(small_tangle, caplog):
+    """The images a blast computed are manifold: a growth round recomputes and recuts
+    them like the branches, so no crossing is lost, every partial piece stays a
+    registered bridge and nothing is reported as lost.
 
-    ``rebuild_bridges`` carries ``iterated`` across by id, but the recut throws
-    away the image bridges and partial pieces that flag was recording. A bridge
-    left marked ``iterated`` with no derivable image is invisible to
-    ``uniiterated_bridges``, so a later blast silently skips it forever.
+    Before WP10b the recut dropped every crossing on an image curve and every
+    partial piece, then cleared the ``iterated`` flags at WARNING.
     """
     workbench, fp = small_tangle
     workbench.grow_n_times(fp, "unstable", num_iterations=2)
     workbench.compute_intersections([fp])
     workbench.create_bridges(fp)
     workbench.iterate_all_bridges()
-    assert any(bridge.iterated for bridge in workbench.bridges), (
-        "the fixture must have iterated something for the repair to be tested"
-    )
+    before = [
+        np.ravel(ix.coords) for _, ix in workbench.intersection_registry if not ix.is_synthetic
+    ]
+    partials = [bridge for bridge in workbench.bridges if bridge.partial]
+    assert partials, "the fixture must leave a partial piece on the blast frontier"
 
     with caplog.at_level(logging.WARNING, logger="tanglepack.numerics.TangleWorkbench"):
         with pytest.raises(ValueError):
@@ -495,19 +497,14 @@ def test_grow_until_clears_the_iterated_flag_it_invalidates(small_tangle, caplog
                 fp, lambda wb: False, grow=("stable",), max_iterations=1
             )
 
-    stranded = [
-        bridge.id
-        for bridge in workbench.bridges
-        if bridge.id is not None
-        and bridge.iterated
-        and workbench.image_bridges(bridge.id) is None
-    ]
-    assert not stranded, (
-        f"bridges {stranded} are marked iterated but their image cannot be "
-        "derived: a later blast will never re-iterate them"
-    )
-    # losing a blast frontier must be logged, not silent (level and logger only)
-    assert_logged(caplog, logging.WARNING, "tanglepack.numerics.TangleWorkbench")
+    after = np.array([
+        np.ravel(ix.coords) for _, ix in workbench.intersection_registry if not ix.is_synthetic
+    ])
+    lost = [coords for coords in before if np.min(np.linalg.norm(after - coords, axis=1)) > 1e-9]
+    assert not lost, f"{len(lost)} crossing(s) of the blast vanished in a growth round"
+    held = workbench.bridges
+    assert all(any(piece is bridge for bridge in held) for piece in partials)
+    assert_logged(caplog, logging.WARNING, "tanglepack.numerics.TangleWorkbench", count=0)
 
 
 def test_arclength_stops_on_arc_length(initialized, monkeypatch):

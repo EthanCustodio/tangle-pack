@@ -9,7 +9,7 @@ reads it. An autouse FINGERPRINT GUARD snapshots the shared build before each te
 and compares after it, so a test that mutates the build fails loudly instead
 of leaking state into the next law.
 
-The two laws that must mutate a session (a recompute of the crossings) take
+The laws that must mutate a session (a recompute of the crossings) take
 ``fresh_law_case`` instead: a function-scoped build of their own.
 """
 

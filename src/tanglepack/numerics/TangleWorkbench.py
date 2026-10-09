@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections import Counter
 from typing import Callable, Literal, Iterable, Optional, Sequence, Union
 
 import numpy as np
@@ -270,6 +271,9 @@ class TangleWorkbench:
         self._bridges: dict[BridgeId, Bridge] = {}
         self._partial_bridges: list[Bridge] = []
         self._bridges_at: dict[int, list[BridgeId]] = {}
+        # Every blast image curve: computed unstable manifold the branches do not
+        # hold, re-indexed by every recompute until growth covers it (NUM-12).
+        self._image_curves: list[Bridge] = []
         # A BridgeId is a pair of REGISTRY ids, so it only means anything while the
         # registry still numbers its crossings the same way. This counter is bumped
         # every time a recompute renumbers them (see compute_intersections);
@@ -1002,11 +1006,9 @@ class TangleWorkbench:
             If the workbench already carries bridges they are recut each round
             (:meth:`rebuild_bridges`): growth inserts new crossings between the
             endpoints of existing bridges, so the old cut stops describing the
-            curve. That recut DROPS the image bridges and partial pieces produced
-            by :meth:`iterate_bridge`, so a blast frontier does not survive a
-            growth round -- see :meth:`_recut_bridges_after_growth`, which warns
-            about what it cost and clears the ``iterated`` flag of every bridge
-            whose image can no longer be derived.
+            curve. A blast's image curves are recomputed and recut with the
+            branches (NUM-12), so the blast frontier, its partial pieces and the
+            ``iterated`` flags survive the round.
         """
         stabilities = tuple(grow)
         if not stabilities:
@@ -1037,7 +1039,7 @@ class TangleWorkbench:
                 diagnose=False,
             )
             if self._bridges or self._partial_bridges:
-                self._recut_bridges_after_growth()
+                self.rebuild_bridges()
 
             if predicate(self):
                 self.report_resolution(self._fixed_points_with_manifolds())
@@ -1048,58 +1050,6 @@ class TangleWorkbench:
             "predicate becoming true; choose a higher cap or a different "
             "stopping condition."
         )
-
-    def _recut_bridges_after_growth(self) -> None:
-        """
-        Recut the bridge set against the grown curves, and repair the blast state.
-
-        Two things go wrong if a growth round leaves the bridges alone or recuts
-        them naively:
-
-        * an uncut bridge is no longer a pair of CONSECUTIVE crossings on its
-          branch (growing the stable manifold drops new crossings inside it), and
-          the arrangement asserts exactly that;
-        * :meth:`rebuild_bridges` carries the ``iterated`` flag across by id, but
-          the recut DROPS the image bridges and partial pieces that flag was
-          recording. A bridge left marked ``iterated`` whose
-          :meth:`image_bridges` is ``None`` is invisible to
-          :meth:`uniiterated_bridges` and can never be re-derived, so a later
-          blast silently skips it.
-
-        The flag is therefore cleared wherever the image is gone, and the whole
-        repair is logged at WARNING: losing a frontier is a real cost to whoever
-        was mid-blast, not an implementation detail.
-
-        Note:
-            Only a ``None`` image clears the flag. An EMPTY image list is a
-            different statement -- the image span is known and simply carries no
-            cut bridges yet -- and re-iterating that bridge would duplicate work
-            rather than recover anything.
-        """
-        before_ids = set(self._bridges)
-        partials_before = len(self._partial_bridges)
-
-        self.rebuild_bridges()
-
-        dropped = sorted(before_ids - set(self._bridges))
-        cleared: list[BridgeId] = []
-        for bid, bridge in self._bridges.items():
-            if bridge.iterated and self.image_bridges(bid) is None:
-                bridge.iterated = False
-                cleared.append(bid)
-
-        if dropped or partials_before or cleared:
-            logger.warning(
-                "growth round recut the bridge set: dropped %d identified bridge(s) "
-                "%s and %d partial piece(s); cleared the 'iterated' flag on %d "
-                "bridge(s) %s whose forward image can no longer be derived. A blast "
-                "frontier does not survive a growth round.",
-                len(dropped),
-                dropped,
-                partials_before,
-                len(cleared),
-                sorted(cleared),
-            )
 
     def _fixed_points_with_manifolds(self) -> list[FixedPoint]:
         """The fixed points that own at least one registered manifold, in insertion order."""
@@ -1378,6 +1328,14 @@ class TangleWorkbench:
             manifolds_to_index.extend(self._iter_manifolds(fp, "unstable"))
             manifolds_to_index.extend(self._iter_manifolds(fp, "stable"))
         self.Tangle.add_manifolds(manifolds_to_index)
+        # A blast image is computed manifold too (D1, NUM-12): re-indexed query-only,
+        # as the blast indexed it. A curve that adds no segment of its own lies on a
+        # grown branch now (growth merged it in) and is dropped.
+        self._image_curves = [
+            curve for curve in self._image_curves
+            if all(curve.fixed_point is not fp for fp in fixed_points)
+            or self.Tangle.add_manifold(curve, index_segments=False)
+        ]
 
         # Anchors FIRST: every periodic point is a crossing of its own manifolds,
         # and declaring it beats detecting it (see _register_anchors).
@@ -1798,6 +1756,10 @@ class TangleWorkbench:
         """
         Cut indexed unstable manifolds into bridges.
 
+        A blast's image curves are indexed unstable manifold too (NUM-12): one
+        crossed twice or more is cut like a branch, one crossed fewer than twice is
+        held whole as a partial piece.
+
         Args:
             fixed_point: If given, only build bridges for that fixed point's
                 unstable manifolds. If None, build bridges for every indexed
@@ -1823,7 +1785,19 @@ class TangleWorkbench:
         # Cutting inserts a separator point at every crossing, which can land
         # inside an arc an earlier cut already claimed: drop the memoised walks.
         self._bump_generation(invalidate_walks=True)
-        return [self._register_bridge(bridge) for bridge in bridges]
+        cut = [self._register_bridge(bridge) for bridge in bridges]
+        # An image curve of an indexed fixed point crossed fewer than twice is one
+        # partial piece, as at blast time (NUM-12).
+        crossings_on = Counter(id(ix.unstable_manifold) for ix in crossings)
+        indexed = {id(ix.manifold_a_key[0]) for ix in crossings if ix.is_anchor}
+        self._partial_bridges += [
+            curve for curve in self._image_curves
+            if id(curve.fixed_point) in indexed
+            and (fixed_point is None or curve.fixed_point is fixed_point)
+            and crossings_on[id(curve)] < 2
+            and all(piece is not curve for piece in self._partial_bridges)
+        ]
+        return cut
 
     def clear_bridges(self, fixed_point: Optional[FixedPoint] = None) -> None:
         """
@@ -1849,7 +1823,8 @@ class TangleWorkbench:
         def dropped(bridge: Bridge) -> bool:
             return fixed_point is None or bridge.fixed_point is fixed_point
 
-        for bridge in self.bridges:
+        # A partial piece is an image curve: computed manifold, which stays indexed.
+        for bridge in self._bridges.values():
             if dropped(bridge):
                 self.Tangle.release_manifold(bridge)
         for bid in [bid for bid, bridge in self._bridges.items() if dropped(bridge)]:
@@ -1884,9 +1859,10 @@ class TangleWorkbench:
         :meth:`IntersectionRegistry.reindex_from`, every re-detected crossing gets its
         old id back, and the carry stands.
 
-        Only bridges cut out of an INDEXED unstable manifold are recut; the image
-        bridges produced by :meth:`iterate_bridge` are not, so they are dropped by the
-        rebuild as they always have been.
+        A blast's image curves are recut too: they are computed manifold, indexed by
+        every recompute (NUM-12), so a rebuild keeps every image bridge, every partial
+        piece (an image curve crossed fewer than twice, whose ``iterated`` flag lives
+        on the curve itself) and every flag carried by id.
 
         Args:
             fixed_point: If given, only rebuild bridges for that fixed point's unstable

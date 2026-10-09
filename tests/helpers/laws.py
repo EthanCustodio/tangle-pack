@@ -8,7 +8,8 @@ checks only read the case; they never mutate the session (the law tier shares
 one build per case per run and fingerprints it around every test). The two laws
 that must mutate a session (a recompute) share ONE fresh build per case, the
 ``recompute`` layer of :data:`MUTATING_LAYERS`:
-:func:`check_recompute_preserves_ids` then :func:`check_recompute_is_idempotent`.
+:func:`check_recompute_keeps_the_topology`, :func:`check_recompute_preserves_ids`
+then :func:`check_recompute_is_idempotent`.
 
 A check reads the session's cached products (``session.trellis()``,
 ``arrangement()``, ``bridge_classes()``, ``minimal_trellis()``,
@@ -813,27 +814,53 @@ def _same_crossing(a: tuple, b: tuple, tol: float) -> bool:
     return a[:2] == b[:2] and abs(a[2] - b[2]) <= tol and abs(a[3] - b[3]) <= tol
 
 
+def _topology_snapshot(case: "Case") -> tuple:
+    """What a recompute must not move: the bridges and their ``iterated`` flags, the
+    number of partial pieces, the holes, the class table and the dynamics."""
+    session, workbench = case.session, case.workbench
+    bridges = sorted((bridge.id, bridge.iterated) for bridge in workbench.bridges if not bridge.partial)
+    partials = sum(bridge.partial for bridge in workbench.bridges)
+    holes = sorted((hole.bounding_ids, hole.iterate, hole.bridge_side) for hole in session.topology().holes)
+    return (
+        bridges,
+        partials,
+        holes,
+        session.bridge_classes().describe(),
+        session.symbolic_dynamics().describe(),
+    )
+
+
+def check_recompute_keeps_the_topology(case: "Case") -> int:
+    """MUTATES (fresh build only), D1: a recompute of the crossings and a rebuild of
+    the bridges, with nothing grown or blasted in between, change nothing.
+
+    The blast's image curves are computed manifold (NUM-12): their crossings,
+    bridges, partial pieces and ``iterated`` flags survive, so the bridges, holes,
+    class table and words are exactly what they were.
+    """
+    before = _topology_snapshot(case)
+    case.workbench.compute_intersections(case.fixed_points, preserve_ids=True)
+    case.workbench.rebuild_bridges()
+    after = _topology_snapshot(case)
+    for name, old, new in zip(("bridges", "partial pieces", "holes", "classes", "dynamics"), before, after):
+        assert new == old, f"a recompute moved the {name}"
+    return len(before[0])
+
+
 def check_recompute_preserves_ids(case: "Case") -> int:
     """MUTATES (fresh build only): ``compute_intersections(preserve_ids=True)``
-    keeps the id of every crossing that reappears.
-
-    Crossings registered on blast children (image bridges, not manifolds) are
-    not recomputed and may drop out; every crossing that IS recomputed keeps
-    its id, keys and cdists.
-    """
+    gives every crossing back under its own id, keys and cdists, the crossings
+    on a blast's image curves included (NUM-12)."""
     tol = _tol(case)
     before = _crossing_fingerprint(case)
     case.workbench.compute_intersections(case.fixed_points, preserve_ids=True)
     after = _crossing_fingerprint(case)
-    count = 0
+    assert set(after) == set(before), (
+        f"lost {sorted(set(before) - set(after))}, new {sorted(set(after) - set(before))}"
+    )
     for intersection_id, value in after.items():
-        old = before.get(intersection_id)
-        if old is not None and _same_crossing(old, value, tol):
-            count += 1
-            continue
-        moved = [iid for iid, prior in before.items() if _same_crossing(prior, value, tol)]
-        assert not moved, f"crossing {moved} reappeared under the new id {intersection_id}"
-    return count
+        assert _same_crossing(before[intersection_id], value, tol), intersection_id
+    return len(after)
 
 
 def check_recompute_is_idempotent(case: "Case") -> int:
@@ -2999,10 +3026,14 @@ LAYERS: dict[str, list[LawCheck]] = {
 #: The layers whose laws mutate their session: run on ONE fresh build per case,
 #: never the shared one (the checks run in order on that build).
 MUTATING_LAYERS: dict[str, list[LawCheck]] = {
-    "recompute": [check_recompute_preserves_ids, check_recompute_is_idempotent],
+    "recompute": [
+        check_recompute_keeps_the_topology,
+        check_recompute_preserves_ids,
+        check_recompute_is_idempotent,
+    ],
 }
 
-#: The two laws that mutate their session.
+#: The laws that mutate their session.
 MUTATING: tuple[LawCheck, ...] = tuple(MUTATING_LAYERS["recompute"])
 
 

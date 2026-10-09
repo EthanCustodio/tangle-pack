@@ -440,7 +440,7 @@ class Tangle:
         manifold: BaseManifold,
         index_segments: bool = True,
         detect_crossings: bool = True,
-    ) -> None:
+    ) -> int:
         """
         Registers every segment of a manifold and detects its crossings.
 
@@ -459,6 +459,10 @@ class Tangle:
                 crossing on that stretch of curve was already found on the
                 parent's segments, so querying again would only duplicate it.
 
+        Returns:
+            The number of segments the manifold added: 0 when every edge of it was
+            already registered by another owner.
+
         Note:
             An edge that is already registered (a bridge reuses its parent
             manifold's points) is mapped to the existing segment id and that id
@@ -472,12 +476,14 @@ class Tangle:
                 self._remove_segment(sid, manifold)
 
         # _insert_segment records each id in _manifold_segs itself.
+        before = len(self._seg_lookup)
         for segment in self._segments_of(manifold):
             self._insert_segment(
                 segment,
                 index_in_rtree=index_segments,
                 detect_crossings=detect_crossings,
             )
+        return len(self._seg_lookup) - before
 
     def add_manifolds(self, manifolds: list[BaseManifold]) -> None:
         """
