@@ -1,24 +1,26 @@
-"""Coverage guard for the 2026-10-05 test-suite refactor.
+"""Coverage guard: no source line the baseline executed may go missed.
 
 Compares two coverage.py JSON reports (``--cov-report=json``) of
-``src/tanglepack`` and fails when a source line that the baseline executed is
-missed in the candidate report, unless that line lies inside a whitelisted
-dead-API qualname (whose tests the refactor drops while the code stays).
+``src/tanglepack`` and fails when a statement that the baseline executed is
+missed in the candidate report.
 
 Usage::
 
-    env/bin/python tests/_tools/coverage_guard.py BASE.json CANDIDATE.json
+    env/bin/python tests/_tools/coverage_guard.py BASE.json CANDIDATE.json [--base-ref REF]
 
-Prints the per-module coverage change and every newly missed line, and exits
-with status 1 on any non-whitelisted new miss (0 otherwise).
+The baseline source is read from git (``git show REF:path``, ``REF`` defaults
+to ``HEAD``), the candidate source from the working tree. Prints the
+per-module coverage change and every newly missed line (at its candidate line
+number), and exits with status 1 on any new miss (0 otherwise).
 
-This file lives under ``tests/_tools`` and is not collected by pytest (its name
-does not match ``test_*.py``).
-
-Dev Notes:
-    The whitelist is resolved by qualname through ``ast`` on the CURRENT source
-    tree, so it survives line shifts. A whitelisted qualname that no longer
-    exists is reported (it is a stale entry), but does not fail the guard.
+Note:
+    A line is matched across the two versions by its KEY, never by its number
+    (TEST-6, WP11): ``(enclosing qualname, stripped source text, occurrence of
+    that text inside the qualname)``, with ``<module>`` for module-level lines.
+    An edit above a covered statement shifts its number but not its key, so it
+    is neither a false miss nor a mask for a real one. A deleted statement has
+    no candidate key and is never reported; dead API is deleted, not
+    whitelisted.
 """
 
 from __future__ import annotations
@@ -26,69 +28,57 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
-from typing import Iterable
-
-# Dead API (plan decision 4): the code stays, its tests are dropped.
-WHITELIST: dict[str, tuple[str, ...]] = {
-    # the scalar curvature area and the three helpers only it calls (Phase 3a
-    # moved the last tests onto the vectorized kernel ``_curvature_area_batch``)
-    "src/tanglepack/numerics/ManifoldMachine.py": (
-        "ManifoldMachine._curvature_area",
-        "ManifoldMachine._chord_frame",
-        "ManifoldMachine._linear_fit",
-        "ManifoldMachine._compute_single_area",
-    ),
-    "src/tanglepack/loom/TangleSession.py": ("TangleSession.invalidate_trellises",),
-    "src/tanglepack/topology/Pseudoneighbor.py": ("forward_unstable_branch_cycle",),
-    "src/tanglepack/topology/StrongPip.py": ("forward_stable_branch_cycle",),
-}
+from typing import Callable, Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+LineKey = tuple[str, str, int]
 
-def _qualname_spans(source: str) -> dict[str, tuple[int, int]]:
-    """Map every function/class qualname in ``source`` to its (first, last) line span."""
-    spans: dict[str, tuple[int, int]] = {}
+
+def _qualname_spans(source: str) -> list[tuple[str, int, int]]:
+    """Every function/class qualname of ``source`` with its (first, last) line, outermost first."""
+    spans: list[tuple[str, int, int]] = []
 
     def visit(node: ast.AST, prefix: str) -> None:
         for child in ast.iter_child_nodes(node):
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 name = f"{prefix}{child.name}"
-                first = min(
-                    [child.lineno] + [d.lineno for d in getattr(child, "decorator_list", [])]
-                )
-                spans[name] = (first, child.end_lineno or child.lineno)
+                first = min([child.lineno] + [d.lineno for d in child.decorator_list])
+                spans.append((name, first, child.end_lineno or child.lineno))
                 visit(child, f"{name}.")
 
     visit(ast.parse(source), "")
     return spans
 
 
-def whitelisted_lines(path: str, qualnames: Iterable[str]) -> tuple[set[int], list[str]]:
-    """Return the line numbers covered by ``qualnames`` in ``path`` and the stale names.
+def line_keys(source: str, lines: Iterable[int]) -> dict[int, LineKey]:
+    """Key each of ``lines`` by (enclosing qualname, stripped text, occurrence index).
 
     Args:
-        path: Repo-relative source path.
-        qualnames: Dotted qualnames to whitelist.
+        source: The module's source text.
+        lines: 1-based line numbers to key.
 
     Returns:
-        The set of whitelisted line numbers and the list of qualnames not found.
+        ``{line: key}``; the occurrence index counts the same stripped text
+        earlier in the same qualname, so repeated statements stay distinct.
     """
-    file = REPO_ROOT / path
-    if not file.exists():
-        return set(), list(qualnames)
-    spans = _qualname_spans(file.read_text())
-    lines: set[int] = set()
-    stale: list[str] = []
-    for name in qualnames:
-        if name not in spans:
-            stale.append(name)
-            continue
-        lo, hi = spans[name]
-        lines.update(range(lo, hi + 1))
-    return lines, stale
+    text = source.splitlines()
+    owner = ["<module>"] * (len(text) + 1)
+    for name, first, last in _qualname_spans(source):  # outermost first: inner spans overwrite
+        owner[first:last + 1] = [name] * (last + 1 - first)
+    seen: Counter[tuple[str, str]] = Counter()
+    keys: dict[int, LineKey] = {}
+    wanted = set(lines)
+    for number, line in enumerate(text, start=1):
+        pair = (owner[number], line.strip())
+        if number in wanted:
+            keys[number] = (*pair, seen[pair])
+        seen[pair] += 1
+    return keys
 
 
 def _load(path: str) -> dict[str, dict]:
@@ -107,47 +97,52 @@ def _load(path: str) -> dict[str, dict]:
     return files
 
 
-def compare(base_path: str, cand_path: str) -> int:
-    """Compare two coverage reports and print the result.
+def git_source(ref: str) -> Callable[[str], str]:
+    """A reader of repo-relative paths at the git revision ``ref``."""
+    def read(path: str) -> str:
+        return subprocess.run(["git", "show", f"{ref}:{path}"], cwd=REPO_ROOT,
+                              capture_output=True, text=True, check=True).stdout
+    return read
+
+
+def _working_tree(path: str) -> str:
+    return (REPO_ROOT / path).read_text()
+
+
+def compare(base: dict[str, dict], cand: dict[str, dict], base_source: Callable[[str], str],
+            cand_source: Callable[[str], str] = _working_tree) -> int:
+    """Compare two coverage ``files`` tables and print the result.
 
     Args:
-        base_path: Baseline coverage JSON.
-        cand_path: Candidate coverage JSON.
+        base: Baseline report's ``files`` table, keyed by repo-relative path.
+        cand: Candidate report's ``files`` table, keyed the same way.
+        base_source: Reads a path's baseline source.
+        cand_source: Reads a path's candidate source (default: the working tree).
 
     Returns:
-        The process exit status: 1 when a non-whitelisted line is newly missed.
+        The process exit status: 1 when a baseline-executed statement is missed.
     """
-    base = _load(base_path)
-    cand = _load(cand_path)
     failures = 0
     for path in sorted(set(base) | set(cand)):
         if not path.startswith("src/tanglepack/"):
             continue
-        b = base.get(path)
-        c = cand.get(path)
+        b, c = base.get(path), cand.get(path)
         if b is None or c is None:
             print(f"{path}: present only in {'candidate' if b is None else 'baseline'}")
             continue
-        b_pct = b["summary"]["percent_covered"]
-        c_pct = c["summary"]["percent_covered"]
-        base_executed = set(b["executed_lines"])
-        new_missed = sorted(base_executed & set(c["missing_lines"]))
-        allowed, stale = whitelisted_lines(path, WHITELIST.get(path, ()))
-        bad = [line for line in new_missed if line not in allowed]
-        ok = [line for line in new_missed if line in allowed]
-        if abs(c_pct - b_pct) > 1e-9 or new_missed or stale:
+        executed = set(line_keys(base_source(path), b["executed_lines"]).values())
+        missing = line_keys(cand_source(path), c["missing_lines"])
+        new_missed = sorted(line for line, key in missing.items() if key in executed)
+        b_pct, c_pct = b["summary"]["percent_covered"], c["summary"]["percent_covered"]
+        if abs(c_pct - b_pct) > 1e-9 or new_missed:
             print(f"{path}: {b_pct:6.2f}% -> {c_pct:6.2f}% ({c_pct - b_pct:+.2f})")
-        if ok:
-            print(f"    newly missed, whitelisted dead API: {ok}")
-        if bad:
-            print(f"    NEWLY MISSED: {bad}")
-            failures += len(bad)
-        for name in stale:
-            print(f"    stale whitelist entry (not found): {name}")
+        if new_missed:
+            print(f"    NEWLY MISSED: {new_missed}")
+            failures += len(new_missed)
     if failures:
-        print(f"coverage guard FAILED: {failures} newly missed line(s) outside the whitelist")
+        print(f"coverage guard FAILED: {failures} newly missed line(s)")
         return 1
-    print("coverage guard OK: no newly missed line outside the whitelist")
+    print("coverage guard OK: no newly missed line")
     return 0
 
 
@@ -163,8 +158,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("base")
     parser.add_argument("candidate")
+    parser.add_argument("--base-ref", default="HEAD", help="git revision of the baseline source")
     args = parser.parse_args(argv)
-    return compare(args.base, args.candidate)
+    return compare(_load(args.base), _load(args.candidate), git_source(args.base_ref))
 
 
 if __name__ == "__main__":

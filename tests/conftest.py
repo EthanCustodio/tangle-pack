@@ -64,6 +64,8 @@ Layout (tiers; every test basename is unique, no ``__init__.py``):
   assertion),
   ``cases.py`` (frozen builders, ``KNOWN_ISSUES``, ``NOT_APPLICABLE``) and
   ``_tools/coverage_guard.py`` are not collected.
+* ``_tools/test_coverage_guard.py`` -- the guard matches lines by content,
+  never by number (TEST-6).
 
 Marker: ``perf`` (opt-in, ``pytest -m perf``; ``addopts`` deselects it).
 
@@ -88,15 +90,6 @@ Dev Notes:
       stubs, never closes). Untested; noted in
       ``unit/numerics/test_grow_until.py``. The four-anchor cause is gone
       (WP3, API-5); the check-with-a-cap semantics are WP11.
-
-    Dead API: the code stays, its tests were dropped (author decision 4), and
-    ``_tools/coverage_guard.py`` whitelists it:
-    ``TangleSession.invalidate_trellises`` (deprecated no-op), the scalar
-    ``ManifoldMachine._curvature_area`` (superseded by
-    ``_curvature_area_batch``), the ``Pseudoneighbor.forward_unstable_branch_cycle``
-    / ``StrongPip.forward_stable_branch_cycle`` wrappers (use
-    ``FixedPoint.branch_cycle``), and ``BoundaryArc`` (already gone from
-    ``src/``).
 
     Known issues: see :data:`cases.KNOWN_ISSUES`. Every entry is
     ``xfail(strict=True)``, cites its catalog issue id
