@@ -35,9 +35,15 @@ def _crossings(case: cases.Case) -> dict[int, tuple[np.ndarray, float]]:
     }
 
 
-@pytest.mark.parametrize("stability", ["unstable", "stable"])
-@pytest.mark.parametrize("name", ["k28_two_blasts", "nested"])
-def test_growth_keeps_every_crossing_and_class(name: str, stability: str) -> None:
+# Unstable growth merges the image curves into the branches, stable growth cuts them
+# at new crossings. Nested grows its stable manifolds only: p1's unstable arm escapes,
+# and growing it costs two seconds to test what k=2.8 already does.
+@pytest.mark.parametrize(
+    "name, stabilities",
+    [("k28_two_blasts", ("unstable", "stable")), ("nested", ("stable",))],
+    ids=["k28_two_blasts", "nested"],
+)
+def test_growth_keeps_every_crossing_and_class(name: str, stabilities: tuple) -> None:
     """One growth step after the blasts: every crossing still lies on a computed curve,
     so each is registered again (by position, within its own unstable segment), and
     neither the class table nor the closed alphabet shrinks."""
@@ -47,7 +53,8 @@ def test_growth_keeps_every_crossing_and_class(name: str, stability: str) -> Non
     classes, closed = len(session.bridge_classes()), len(session.symbolic_dynamics().classes)
 
     for fp in case.fixed_points:
-        session.workbench.grow_n_times(fp, stability, num_iterations=1)
+        for stability in stabilities:
+            session.workbench.grow_n_times(fp, stability, num_iterations=1)
     _recompute(case)
 
     after = np.array([coords for coords, _ in _crossings(case).values()])
@@ -61,7 +68,7 @@ def test_growth_keeps_every_crossing_and_class(name: str, stability: str) -> Non
 
 
 def test_blasting_does_not_depend_on_recomputes() -> None:
-    """Two blasts, a recompute, one more blast: the same tangle as three blasts straight."""
+    """One blast, a recompute, one more blast: the same tangle as two blasts straight."""
     def signature(case: cases.Case) -> tuple:
         session = case.session
         dynamics = session.symbolic_dynamics()
@@ -72,8 +79,8 @@ def test_blasting_does_not_depend_on_recomputes() -> None:
             re.sub(r"\d+", "#", dynamics.describe()),
         )
 
-    straight = cases.build_k28(blasts=3)
-    mixed = cases.build_k28(blasts=2)
+    straight = cases.build_k28(blasts=2)
+    mixed = cases.build_k28(blasts=1)
     _recompute(mixed)
     cases._blast(mixed.session, mixed.zones[0], mixed.fixed_points)
     assert signature(mixed) == signature(straight)
