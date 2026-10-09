@@ -1,11 +1,13 @@
 """Higher-period and nested Hénon tangles, built up to their topology.
 
-Two recipes on the nested Hénon map ``HENON_P3 = (2, 1)``, shared by the
+Three recipes on the nested Hénon map ``HENON_P3 = (2, 1)``, shared by the
 figure scripts and the test fixtures so the two can never drift apart:
 
 * :func:`build_period3` -- the inner period-3 saddle orbit alone;
 * :func:`build_nested` -- the outer period-1 saddle and the inner period-3
-  orbit together, one resonance zone each.
+  orbit together, one resonance zone each;
+* :func:`build_heteroclinic` -- :func:`build_nested` with period 3 grown far
+  enough to cross the outer saddle's stable manifold.
 
 Both end at ``session.topology()`` (holes, partition, classes, minimal
 trellis, dual graph and words of every fixed point, from the pips the zones
@@ -39,6 +41,21 @@ Dev Notes:
   blast the outer class ``e`` is unresolved (a singleton landing with no
   registered chain); after two blasts every class resolves and the outer
   classes reproduce the k=2.8 two-blast words, with real (``unique``) walks.
+* Construction order is OUTERMOST first (NEST-6, WP9): the period-1 saddle is
+  constructed first, so it is ``A`` and tangle 0 of the session, matching
+  ``TangleBuild.fixed_points``; the orbits are still grown period 3 first, each
+  at its own ``area_cutoff``, so the session ends at period 1's.
+* The heteroclinic recipe (:func:`build_heteroclinic`, WP9; scan of
+  ``build_nested`` on 2026-10-08): period 3 at 13-15 unstable steps (any stable
+  growth 9-12) has NO heteroclinic crossing; at 16 unstable steps it has four
+  ``W^u(p3) x W^s(p1)`` crossings (0.6-0.8 s), two inside both pip-orbit cuts
+  (the other two past p3's unstable cut: points of X). 16 / 10 is used because
+  16 / 9 and 16 / 12 also fail the law ``dual_face_side_is_geometry``, as p3 at
+  16 / 9 does alone (a WP10 residual law). 17 / 9 has 22 heteroclinic crossings
+  but builds in 34 s; 13 / 15 has seven ``W^u(p1) x W^s(p3)`` crossings but a
+  near-duplicate pair (NUM-4) makes the arrangement assert. None of the four
+  crossings has an iterate link (the preimage lies past p1's stable trim, the
+  image past p3's unstable cut: escape-lobe images, WP10).
 * The pips are the default strong pips, never pinned by id. The session
   carries them across every blast (API-1, WP8): a zone remembers the pip it
   was cut at, and each recompute finds it again by its cdists and keys.
@@ -48,7 +65,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -107,26 +124,24 @@ def _session() -> "TangleSession":
     )
 
 
-def _grow_period3(session, unstable_steps: int, stable_steps: int, area_cutoff: float):
-    """Construct, orient, initialise and grow the period-3 orbit."""
-    session.area_cutoff = area_cutoff
-    fp3 = session.construct_fixed_point(saddle_guesses(*HENON_P3)["period_3"])
-    session.orient_eigenvectors(fp3, PERIOD3_ORIENTATION)
-    session.initialize_both_manifolds(fp3)
-    session.grow_n_times(fp3, "unstable", num_iterations=unstable_steps)
-    session.grow_n_times(fp3, "stable", num_iterations=stable_steps)
-    return fp3
+def _orbit(session, guess: str, orientation: dict[str, NDArray[np.float64]]):
+    """Construct and orient one orbit of the nested map (``guess`` names a saddle guess)."""
+    fp = session.construct_fixed_point(saddle_guesses(*HENON_P3)[guess])
+    session.orient_eigenvectors(fp, orientation)
+    return fp
 
 
-def _grow_period1(session, unstable_steps: int, area_cutoff: float):
-    """Construct, orient, initialise and grow the outer period-1 saddle."""
+def _grow(
+    session, fp, unstable_steps: int, stable_steps: Optional[int], area_cutoff: float
+) -> None:
+    """Initialise and grow one orbit; ``stable_steps=None`` grows its stable side to turnaround."""
     session.area_cutoff = area_cutoff
-    fp1 = session.construct_fixed_point(saddle_guesses(*HENON_P3)["saddle"])
-    session.orient_eigenvectors(fp1, PERIOD1_ORIENTATION)
-    session.initialize_both_manifolds(fp1)
-    session.grow_n_times(fp1, "unstable", num_iterations=unstable_steps)
-    session.grow_until_turnaround(fp1, "stable")
-    return fp1
+    session.initialize_both_manifolds(fp)
+    session.grow_n_times(fp, "unstable", num_iterations=unstable_steps)
+    if stable_steps is None:
+        session.grow_until_turnaround(fp, "stable")
+    else:
+        session.grow_n_times(fp, "stable", num_iterations=stable_steps)
 
 
 def _stable_points(session, fixed_points) -> NDArray[np.float64]:
@@ -171,7 +186,8 @@ def build_period3(
         The :class:`TangleBuild` (one fixed point), its topology computed.
     """
     session = _session()
-    fp3 = _grow_period3(session, unstable_steps, stable_steps, area_cutoff)
+    fp3 = _orbit(session, "period_3", PERIOD3_ORIENTATION)
+    _grow(session, fp3, unstable_steps, stable_steps, area_cutoff)
     _intersect_and_bridge(session, [fp3])
     stable_points = _stable_points(session, [fp3])
 
@@ -227,13 +243,18 @@ def build_nested(
 
     Returns:
         The :class:`TangleBuild`, fixed points ``[fp1, fp3]`` (outermost
-        first), its topology computed.
+        first, the session's order too: ``fp1`` is ``A`` and tangle 0), its
+        topology computed.
     """
     session = _session()
-    fp3 = _grow_period3(session, p3_unstable_steps, p3_stable_steps, p3_area_cutoff)
-    fp1 = _grow_period1(session, p1_unstable_steps, p1_area_cutoff)
-    fixed_points = [fp1, fp3]
-    _intersect_and_bridge(session, [fp3, fp1])
+    fixed_points = [
+        _orbit(session, "saddle", PERIOD1_ORIENTATION),
+        _orbit(session, "period_3", PERIOD3_ORIENTATION),
+    ]
+    fp1, fp3 = fixed_points
+    _grow(session, fp3, p3_unstable_steps, p3_stable_steps, p3_area_cutoff)
+    _grow(session, fp1, p1_unstable_steps, None, p1_area_cutoff)
+    _intersect_and_bridge(session, fixed_points)
     stable_points = _stable_points(session, fixed_points)
 
     session.classify_strong_pips()
@@ -267,3 +288,25 @@ def build_nested(
         slug="nested_p1_p3",
         blast_sizes=sizes,
     )
+
+
+def build_heteroclinic(**overrides) -> TangleBuild:
+    """
+    The nested tangles with heteroclinic crossings: period 3 grown to 16 / 10 steps.
+
+    At 16 unstable steps the inner orbit's unstable manifold reaches across the
+    outer saddle's stable manifold: four ``W^u(p3) x W^s(p1)`` crossings, two of
+    them inside both pip-orbit cuts, a thin lobe across p1's fundamental
+    segment (see the Dev Notes for why this recipe).
+
+    Args:
+        **overrides: Keywords of :func:`build_nested` replacing this recipe's.
+
+    Returns:
+        The :class:`TangleBuild`, fixed points ``[fp1, fp3]``, its topology
+        computed, slug ``heteroclinic_p1_p3``.
+    """
+    build = build_nested(**{"p3_unstable_steps": 16, "p3_stable_steps": 10, **overrides})
+    build.title = build.title.replace("period 1 + period 3", "period 1 + period 3, heteroclinic")
+    build.slug = "heteroclinic_p1_p3"
+    return build

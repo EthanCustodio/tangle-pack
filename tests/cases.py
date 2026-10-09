@@ -614,30 +614,33 @@ def _nested_through(
         expect=CaseExpect(periods=(1, 3), area_cutoff=p1_area_cutoff, n_tangles=2),
         stage=through,
     )
-    session.area_cutoff = p3_area_cutoff
+    # Constructed outermost first (NEST-6: the session's tangle order is the
+    # case's), grown period 3 first, each at its own cutoff.
+    fp1 = session.construct_fixed_point(list(P3_OUTER_SADDLE_SEED))
+    session.orient_eigenvectors(fp1, _orientation(PERIOD1_ORIENTATION))
     fp3 = session.construct_fixed_point([list(p) for p in P3_ORBIT_SEED])
     session.orient_eigenvectors(fp3, _orientation(PERIOD3_ORIENTATION))
+    case.fixed_points = [fp1, fp3]
+
+    session.area_cutoff = p3_area_cutoff
     session.initialize_both_manifolds(fp3)
     session.grow_n_times(fp3, "unstable", num_iterations=p3_unstable_steps)
     session.grow_n_times(fp3, "stable", num_iterations=p3_stable_steps)
 
     session.area_cutoff = p1_area_cutoff
-    fp1 = session.construct_fixed_point(list(P3_OUTER_SADDLE_SEED))
-    session.orient_eigenvectors(fp1, _orientation(PERIOD1_ORIENTATION))
     session.initialize_both_manifolds(fp1)
     session.grow_n_times(fp1, "unstable", num_iterations=p1_unstable_steps)
     session.grow_until_turnaround(fp1, "stable")
-    case.fixed_points = [fp1, fp3]
     if not _reached(through, "intersected"):
         return case
 
-    session.compute_intersections([fp3, fp1])
+    session.compute_intersections(case.fixed_points)
     if not _reached(through, "bridges"):
         return case
-    session.trim_stable_manifolds(fp3)
-    session.trim_stable_manifolds(fp1)
-    session.create_bridges(fp3)
-    session.create_bridges(fp1)
+    for fp in case.fixed_points:
+        session.trim_stable_manifolds(fp)
+    for fp in case.fixed_points:
+        session.create_bridges(fp)
     if not _reached(through, "pips"):
         return case
 
@@ -1135,7 +1138,7 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
         table = session.bridge_classes()
         kept = set(session.minimal_trellis().kept_bridge_ids)
         family = session.homotopy_partition()
-        trellis = session.trellis(fp)
+        trellis = session.topology().trellis
         references = frozenset(p.as_tuple() for p in trellis.reference_pseudoneighbors)
         lost = steps[-1].references - references if steps else frozenset()
         steps.append(
@@ -1254,11 +1257,6 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "saddle with exactly one negative eigenvalue",
             "C3",
             raises=ValueError,
-        ),
-        ("three_tangles_take_three_families", "hand_built"): KnownIssue(
-            "TEST-5(c): TANGLE_COLOR_FAMILIES holds two families, so a third tangle "
-            "draws from none",
-            "WP9",
         ),
         ("partition_covers_branch", "heteroclinic"): KnownIssue(
             "deep-run residual law: p3 at 16 unstable steps has open elements that are "
