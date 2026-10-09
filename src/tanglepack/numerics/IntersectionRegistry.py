@@ -75,9 +75,11 @@ class IntersectionRegistry:
     Attributes:
         _store: dict[int, Intersection]
         _next_id: int
-        cdist_tol: float  — the topology's ABSOLUTE canonical-distance slack
-            (anchor detection, window ends); NOT the dedup rule, which is
-            :data:`DEDUP_RTOL` (its consumers are SIMP-13, WP11)
+        cdist_tol: float  — an ABSOLUTE canonical-distance slack for geometry
+            only: a degenerate bridge cut (``Tangle.create_bridges``,
+            ``BridgeIterator``) and clipping a polyline to an arc. Never
+            identity, ownership or containment (the topology reads none, C15,
+            WP11), and NOT the dedup rule, which is :data:`DEDUP_RTOL`
         iterate_table: IterateTable  — a partial bijection: the map is injective
         _generation: int  — bumped by every mutation; read via :attr:`generation`
         _orders_version: int  — bumped by the mutations that change the stored
@@ -103,8 +105,9 @@ class IntersectionRegistry:
         Build an empty registry.
 
         Args:
-            cdist_tol (float): The absolute canonical-distance slack the
-                topology reads (never the dedup rule; see :data:`DEDUP_RTOL`).
+            cdist_tol (float): The absolute canonical-distance slack of
+                degenerate bridge cuts and polyline clipping (never identity,
+                and never the dedup rule; see :data:`DEDUP_RTOL`).
         """
         self._store: dict[int, Intersection] = {}
         self._next_id: int = 0

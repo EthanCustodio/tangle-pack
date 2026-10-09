@@ -288,7 +288,6 @@ def minimal_trellis(
         bridge the class table does not know, and an image pair no bridge
         spans are each logged as a WARNING and skipped, never invented.
     """
-    tol = trellis.registry.cdist_tol
     holes = list(holes)
 
     # 1. Hole bridges.
@@ -386,9 +385,8 @@ def minimal_trellis(
             for iid in endpoints
             if getattr(trellis.intersection(iid), key_attr) == key
         }
-        for iid in branch.intersection_ids:
-            if float(getattr(trellis.intersection(iid), attr)) <= tol:
-                ids.add(iid)  # the anchor: a periodic point is its own crossing
+        # the anchor: a periodic point is its own crossing
+        ids.update(iid for iid in branch.intersection_ids if trellis.intersection(iid).is_anchor)
         if branch.stability == "stable" and len(branch):
             ids.add(branch.intersection_ids[-1])  # the partition ends here
         assert ids <= set(branch.intersection_ids), (

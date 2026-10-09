@@ -1065,8 +1065,8 @@ class TangleSession:
             fixed_point: A single FixedPoint (→ returns that fixed point's candidate
                 list), an iterable of them, or None for every fixed point on the
                 workbench (→ returns a ``{fixed_point: candidates}`` dict).
-            **kwargs: Forwarded to :meth:`Trellis.classify_strong_pips` (``tol``,
-                ``collision_rtol``, ``choose_default``; the last only for a
+            **kwargs: Forwarded to :meth:`Trellis.classify_strong_pips`
+                (``collision_rtol``, ``choose_default``; the last only for a
                 fixed point with no chosen pip).
 
         Returns:
@@ -1224,7 +1224,7 @@ class TangleSession:
                 reference-pair list), an iterable of them, or None for every
                 fixed point (→ returns a ``{fixed_point: references}`` dict).
             **kwargs: Forwarded to :meth:`Trellis.compute_pseudoneighbors`
-                (``extend``, ``collision_rtol``, ``tol``).
+                (``extend``, ``collision_rtol``).
 
         Returns:
             A reference-pair list for a single fixed point, or a dict mapping

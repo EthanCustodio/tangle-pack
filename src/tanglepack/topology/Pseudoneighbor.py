@@ -170,7 +170,6 @@ def compute_pseudoneighbors(
     trellis: "Trellis",
     *,
     collision_rtol: float = 1e-2,
-    tol: Optional[float] = None,
 ) -> list[PseudoneighborPair]:
     """
     Find the reference pseudoneighbor pairs (pure query).
@@ -198,22 +197,17 @@ def compute_pseudoneighbors(
         collision_rtol: Relative slack of the 2D endpoint-collision test that
             recognises the pair's own (noisy) endpoint iterates so they never
             disqualify it (both cdists must match an endpoint).
-        tol: Absolute canonical-distance slack used to recognise the anchor
-            artifact. Defaults to the registry's ``cdist_tol``.
 
     Returns:
         The reference pairs (``is_reference=True``), from the outermost pair
         toward the anchor (per fixed point of the trellis). A fixed point whose
         r_{n+p} = M^p(r_n) is not in the iterate table gets none (WARNING).
     """
-    if tol is None:
-        tol = trellis.registry.cdist_tol
-
     candidates = trellis.own_intersection_ids
     pairs: list[PseudoneighborPair] = []
 
     for fixed_point in trellis.fixed_points:
-        branch, r_n = _reference_branch(trellis, fixed_point, tol)
+        branch, r_n = _reference_branch(trellis, fixed_point)
         if branch is None or len(branch) < 2:
             logger.warning(
                 "No usable reference window for %r; skipping", fixed_point
@@ -240,9 +234,7 @@ def compute_pseudoneighbors(
                     branch.key,
                 )
                 break
-            if _unstable_interval_is_clear(
-                trellis, x0, x1, candidates, collision_rtol, tol
-            ):
+            if _unstable_interval_is_clear(trellis, x0, x1, candidates, collision_rtol):
                 pair = PseudoneighborPair(
                     x0, x1, branch_key=branch.key, is_reference=True, iterate=0
                 )
@@ -375,7 +367,7 @@ def _branch_text(key: ManifoldKey) -> str:
 
 
 def _reference_branch(
-    trellis: "Trellis", fixed_point: "FixedPoint", tol: float
+    trellis: "Trellis", fixed_point: "FixedPoint"
 ) -> tuple[Optional["TrellisBranch"], Optional[int]]:
     """The fixed point's single reference branch and its r_n.
 
@@ -395,7 +387,7 @@ def _reference_branch(
             continue
         outer = branch.ordered_ids(toward_anchor=True)[0]
         s = trellis.intersection(outer).stable_cdist
-        if s > tol and s > best_s:
+        if s > 0.0 and s > best_s:
             best_branch, best_id, best_s = branch, outer, s
     if best_branch is not None:
         logger.info(
@@ -413,7 +405,6 @@ def _unstable_interval_is_clear(
     x1: int,
     candidates: Iterable[int],
     collision_rtol: float,
-    tol: float,
 ) -> bool:
     """True if no trellis intersection (or iterate of one) lies on W^U(x0, x1).
 
@@ -453,7 +444,7 @@ def _unstable_interval_is_clear(
     pos_target = pos_map[u_key]
 
     lo, hi = sorted((ix0.unstable_cdist, ix1.unstable_cdist))
-    if hi - lo <= tol or lo <= 0.0:
+    if hi == lo or lo <= 0.0:
         return False  # degenerate interval (near-tangency or anchor endpoint)
     endpoints = (
         (ix0.unstable_cdist, ix0.stable_cdist),
@@ -466,10 +457,8 @@ def _unstable_interval_is_clear(
         if r_id == x0 or r_id == x1:
             continue
         r = trellis.intersection(r_id)
-        if abs(r.stable_cdist) <= tol and abs(r.unstable_cdist) <= tol:
-            continue  # the anchoring fixed point, not a transverse crossing
-        if r.unstable_cdist <= tol:
-            continue  # no meaningful position along any unstable branch
+        if r.unstable_cdist <= 0.0:
+            continue  # the anchor: no position along any unstable branch
 
         pos_r = pos_map.get(r.manifold_a_key)
         if pos_r is None:
@@ -527,8 +516,8 @@ def _unstable_interval_is_clear(
                     _, s_e, _ = trellis.image_cdist(x, -steps, "stable")
                     if (
                         same_stable
-                        and abs(r.unstable_cdist - u_e) <= collision_rtol * u_e + tol
-                        and abs(r.stable_cdist - s_e) <= collision_rtol * s_e + tol
+                        and abs(r.unstable_cdist - u_e) <= collision_rtol * u_e
+                        and abs(r.stable_cdist - s_e) <= collision_rtol * s_e
                     ):
                         continue  # r is x's own unlinked orbit (2D collision)
                     ends.append(u_e)
@@ -546,8 +535,8 @@ def _unstable_interval_is_clear(
 
             _, s_value, _ = trellis.image_cdist(r_id, steps, "stable")
             if same_stable and any(
-                abs(value - u_e) <= collision_rtol * u_e + tol
-                and abs(s_value - s_e) <= collision_rtol * s_e + tol
+                abs(value - u_e) <= collision_rtol * u_e
+                and abs(s_value - s_e) <= collision_rtol * s_e
                 for u_e, s_e in endpoints
             ):
                 continue  # the endpoint's own orbit (2D collision on one stable manifold)

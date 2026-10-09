@@ -1882,7 +1882,8 @@ class CartoonLayout:
         ranks: ``{branch_key: [cdist, ...]}``, the representative boundary
             canonical distances of a branch in ascending order; the ordinal
             coordinate of a cdist is its index here.
-        tol: The tolerance two boundary cdists are identified within.
+        tol: The tolerance two boundary cdists are identified within: 0, since
+            boundaries are registry floats and compare exactly (C15, WP11).
         anchor: ``"right"`` (the default: the anchor at the right end of
             every line, elements running outward to the left, as on the
             chalkboard) or ``"left"``.
@@ -1970,8 +1971,8 @@ def dual_graph_cartoon_layout(
     Lay out the cartoon of a dual graph: rows, ordinal coordinates, bars, nodes.
 
     Every boundary canonical distance of BOTH sides of a branch (the ends of
-    every element of ``dual_graph.partition``, identified within the family's
-    tolerance) gets consecutive ordinal coordinates, so a boundary shared by
+    every element of ``dual_graph.partition``, registry floats identified
+    exactly) gets consecutive ordinal coordinates, so a boundary shared by
     the two sides aligns and every non-singleton element is at least one unit
     wide whatever its real length. A singleton element ``[x, x]`` sits at its
     boundary's coordinate with zero width. With the anchor on the RIGHT (the
@@ -1994,7 +1995,7 @@ def dual_graph_cartoon_layout(
     if anchor not in ("left", "right"):
         raise ValueError(f"anchor must be 'left' or 'right', got {anchor!r}")
     partition = dual_graph.partition
-    layout = CartoonLayout(tol=max(float(partition.tol), 1e-12), anchor=anchor)
+    layout = CartoonLayout(anchor=anchor)
     for branch_key in partition.branch_keys:
         boundaries = [
             cdist
@@ -2689,7 +2690,7 @@ def dual_graph_zone_layout(
         The :class:`ZoneLayout`.
     """
     partition = dual_graph.partition
-    layout = ZoneLayout(tol=max(float(partition.tol), 1e-12))
+    layout = ZoneLayout()
     interior_side = interior_side or {}
     order = _branch_order(partition)
     known = set(order)

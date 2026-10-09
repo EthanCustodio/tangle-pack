@@ -618,10 +618,9 @@ class DualGraph:
         if segment is None:
             return None
         c_lo, c_hi = segment
-        tol = self.trellis.registry.cdist_tol
-        if hi <= c_lo + tol or lo >= c_hi - tol:
+        if hi <= c_lo or lo >= c_hi:
             return None
-        if lo < c_lo - tol or hi > c_hi + tol:
+        if lo < c_lo or hi > c_hi:
             logger.info(
                 "stable edge %.6g..%.6g of branch %s straddles the fundamental "
                 "segment (%.6g, %.6g]; unifying it",

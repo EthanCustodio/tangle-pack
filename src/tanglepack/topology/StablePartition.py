@@ -177,13 +177,15 @@ fixed in conversation with the author (July 2026):
   crossings closer than it (68% of consecutive k=2.8 gaps by blast 14), and
   a sliver ``(pip, outer]`` of width 1.1e-6 beyond the zone's pip had its
   midpoint swallowed by the closed pip singleton, which tripped the
-  child-inside-parent assertion of the iterated partition at 9 blasts. The
-  tolerance survives only where a cdist is ESTIMATED (``land_element``'s
-  image spans): ``PartitionFamily.interval_at``
-  tries exact first and falls back to it. The anchor is detected by its exact
-  cdist 0.0 (a registered anchor is synthetic at exactly 0.0); a boundary
-  within the tolerance of 0 but not on it is still taken as the anchor, at
-  INFO.
+  child-inside-parent assertion of the iterated partition at 9 blasts.
+  Since WP11 (C15) the topology reads no absolute cdist slack at all: an
+  anchor is told by identity (``Intersection.is_anchor``, synthetic at
+  exactly 0.0), ownership and containment are exact, and the one slack left
+  is the RELATIVE error of a scaled cdist (``SCALING_RTOL`` at a scaled
+  landing end, ``collision_rtol`` in the same-point test). Forcing the slack
+  to 0 moved no output on any fixture. ``cdist_tol`` survives only as
+  geometry -- clipping a polyline to its arc (``Arc._interior_polyline``,
+  ``_oriented_bridge_polyline``) -- never as identity or ownership.
 * The anchor (WP3, 2026-10-08). A periodic point is ONE crossing on every
   branch attached to it (D4). Both stable branches leave it, so an anchor
   opening faces the outward half of the branch the signs pick
@@ -660,10 +662,9 @@ def _anchorward_look(
         return None
     nodes = manifold.get_point_array(return_nodes=True)
     cdists = [node.cdist for node in nodes]
-    tol = trellis.registry.cdist_tol
     here = np.asarray(ix.get_point(), dtype=np.float64)
-    below = bisect_left(cdists, ix.stable_cdist - tol) - 1
-    above = bisect_right(cdists, ix.stable_cdist + tol)
+    below = bisect_left(cdists, ix.stable_cdist) - 1
+    above = bisect_right(cdists, ix.stable_cdist)
     if below >= 0:
         look = np.asarray(nodes[below].get_point(), dtype=np.float64) - here
     elif above < len(nodes):
@@ -1734,18 +1735,7 @@ def _build_intervals(
     # already sits there (the registered anchor, synthetic at exactly 0.0), it
     # plays that role itself; otherwise a synthetic anchor boundary is added.
     if not any(cdist == 0.0 for _, cdist in boundaries):
-        tol = trellis.registry.cdist_tol
-        near_anchor = [bid for bid, cdist in boundaries if cdist <= tol]
-        if near_anchor:
-            logger.info(
-                "branch %s: no boundary at the anchor's exact cdist 0, but %s lie(s) "
-                "within cdist_tol=%g of it; taken as the anchor",
-                branch.key[1:],
-                near_anchor,
-                tol,
-            )
-        else:
-            boundaries.append((None, 0.0))
+        boundaries.append((None, 0.0))
 
     # Sort and deduplicate by id (the anchor and branch end keep their slots).
     unique: dict = {}

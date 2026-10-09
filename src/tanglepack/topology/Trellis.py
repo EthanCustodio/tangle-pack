@@ -254,8 +254,8 @@ class Trellis:
         Note:
             A cut whose orbit point the table does not hold is PLACED by
             :meth:`image_cdist` (scaling) and flagged in one WARNING (PK-6); a
-            crossing is past a placed cut only by more than ``cdist_tol``, past a
-            registered one by any amount. The same cut twice is a no-op, and
+            crossing is past a cut, placed or registered, by any amount (no
+            absolute slack, C15). The same cut twice is a no-op, and
             stage outputs (pseudoneighbors, holes, partitions) are never cleared
             here.
         """
@@ -271,12 +271,10 @@ class Trellis:
                 "points are not registered (grow the manifolds or blast to register them)",
                 pips, ", ".join(placed),
             )
-        tol = self.registry.cdist_tol
-
         def inside(crossing_id: int) -> bool:
             ix = self.registry[crossing_id]
             return ix.is_anchor or all(
-                cdist <= cuts[key][0] + (tol if cuts[key][1] else 0.0)
+                cdist <= cuts[key][0]
                 for key, cdist in (
                     (ix.manifold_b_key, ix.stable_cdist),
                     (ix.manifold_a_key, ix.unstable_cdist),
@@ -983,7 +981,6 @@ class Trellis:
         self,
         intersection_id: int,
         *,
-        tol: Optional[float] = None,
         collision_rtol: float = 1e-2,
     ) -> StrongPipResult:
         """
@@ -995,8 +992,6 @@ class Trellis:
 
         Args:
             intersection_id: Registry ID of the candidate.
-            tol: Optional canonical-distance slack (defaults to the registry's
-                cdist_tol).
             collision_rtol: Relative slack on the cdist collision test (default
                 1e-2) so that q0's own orbit does not disqualify it.
 
@@ -1005,15 +1000,12 @@ class Trellis:
         """
         from .StrongPip import is_strong_pip as _is_strong_pip
 
-        return _is_strong_pip(
-            self, intersection_id, tol=tol, collision_rtol=collision_rtol
-        )
+        return _is_strong_pip(self, intersection_id, collision_rtol=collision_rtol)
 
     def classify_strong_pips(
         self,
         intersection_ids: Optional[Iterable[int]] = None,
         *,
-        tol: Optional[float] = None,
         collision_rtol: float = 1e-2,
         choose_default: bool = True,
     ) -> list[int]:
@@ -1031,7 +1023,6 @@ class Trellis:
             intersection_ids: Intersections to test; defaults to this trellis's own
                 intersections (see :attr:`own_intersection_ids`), not the whole
                 shared registry.
-            tol: Optional canonical-distance slack.
             collision_rtol: Relative slack on the cdist collision test (default
                 1e-2) so that a point's own orbit does not disqualify it.
             choose_default: If True (default), also select the default strong pip
@@ -1050,9 +1041,7 @@ class Trellis:
         if intersection_ids is None:
             intersection_ids = self.own_intersection_ids
 
-        results = _classify_strong_pips(
-            self, intersection_ids, tol=tol, collision_rtol=collision_rtol
-        )
+        results = _classify_strong_pips(self, intersection_ids, collision_rtol=collision_rtol)
         self._candidates = sorted(iid for iid, r in results.items() if r.is_strong_pip)
         if choose_default and self._candidates:
             self.select_default_strong_pip()
@@ -1107,7 +1096,6 @@ class Trellis:
         *,
         extend: bool = True,
         collision_rtol: float = 1e-2,
-        tol: Optional[float] = None,
         verbose: bool = False,
     ) -> list[PseudoneighborPair]:
         """
@@ -1126,8 +1114,6 @@ class Trellis:
             extend: Also record the iterated (non-reference) pairs.
             collision_rtol: Relative slack of the endpoint-collision test (a
                 landing skipped only when BOTH its cdists match an endpoint).
-            tol: Absolute canonical-distance slack (defaults to the registry's
-                ``cdist_tol``).
             verbose: Report :meth:`describe_pseudoneighbors` when done —
                 logged at INFO (this module's logger is raised to INFO for the
                 call, so a higher application-level setting cannot swallow it),
@@ -1144,7 +1130,7 @@ class Trellis:
 
         self.pseudoneighbors.clear()
         self.holes.clear()
-        references = _compute(self, collision_rtol=collision_rtol, tol=tol)
+        references = _compute(self, collision_rtol=collision_rtol)
         for pair in references:
             self.add_pseudoneighbor(pair)
         if extend:

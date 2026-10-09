@@ -2064,7 +2064,7 @@ def check_iterated_unique_owner(case: "Case") -> int:
                 + float(full.intersection(arc.hi_id).stable_cdist)
             )
             for side in ("left", "right"):
-                iterated.interval_at(arc.branch_key, side, mid, tol=0.0)
+                iterated.interval_at(arc.branch_key, side, mid)
     return count
 
 

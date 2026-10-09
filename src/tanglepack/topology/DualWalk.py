@@ -189,11 +189,10 @@ def _is_singleton(interval: PartitionInterval) -> bool:
     return interval.lo_id is not None and interval.lo_id == interval.hi_id
 
 
-def _end_tolerance(cdist: float, from_table: bool, cdist_tol: float) -> float:
-    """The containment tolerance at one end of an image span."""
-    if from_table:
-        return cdist_tol
-    return max(cdist_tol, SCALING_RTOL * abs(cdist))
+def _end_tolerance(cdist: float, from_table: bool) -> float:
+    """The containment tolerance at one end of an image span: none at a registered
+    end, the scaling law's relative error at a scaled one."""
+    return 0.0 if from_table else SCALING_RTOL * abs(cdist)
 
 
 def _meets_span(
@@ -254,13 +253,9 @@ def _land_singleton(
         )
         logger.warning("%s", reason)
         return _unresolved(ref, image_key, image_side, span, flags, reason, singleton=True)
-    if key != image_key:
-        reason = (
-            f"image of singleton element {ref.label} landed on branch {key[1:]} "
-            f"instead of {image_key[1:]}"
-        )
-        logger.warning("%s", reason)
-        return _unresolved(ref, image_key, image_side, span, flags, reason, singleton=True)
+    # infer_iterates links a crossing only to one on the advanced branches, and
+    # the scaled fallback IS advance_key, so the image is always on image_key.
+    assert key == image_key, f"singleton {ref.label} imaged onto {key[1:]}, not {image_key[1:]}"
     try:
         target = iterated.owner_of_intersection(image_id, image_side, image_key)
     except ValueError as error:
@@ -321,12 +316,12 @@ def land_element(
     a registered end through :meth:`~.Trellis.Trellis.image_cdist` (table
     first, scaled fallback), an unbounded high end by the scaling law -- and
     lands in the iterated element owning the midpoint of the image span.
-    Containment of the whole span is checked with the registry's
-    ``cdist_tol`` at a table end and ``SCALING_RTOL * |c|`` at a scaled end.
+    Containment of the whole span is exact at a table end and checked to
+    ``SCALING_RTOL * |c|`` at a scaled end.
 
     Args:
-        trellis: The trellis resolving iterates, image distances, the
-            orientation of the map and the canonical-distance tolerance.
+        trellis: The trellis resolving iterates, image distances and the
+            orientation of the map.
         homotopy: The family ``ref`` belongs to.
         iterated: The family the image is located in (normally the iterated
             homotopy partition; any family covering the image branch and side
@@ -336,9 +331,8 @@ def land_element(
     Returns:
         The :class:`ElementLanding`. It is unresolved (``target is None``,
         ``reason`` set, WARNING logged) when a singleton's image crossing is
-        not registered, when an image end lands on a branch other than the
-        expected one, or when the iterated partition has no single owner for
-        the probe point. A span that straddles a cut is resolved to its
+        not a crossing of the trellis, or when the iterated partition has no
+        single owner for the probe point. A span that straddles a cut is resolved to its
         midpoint owner with ``contained=False`` and ``covering`` filled
         (WARNING).
 
@@ -349,7 +343,6 @@ def land_element(
     fixed_point: "FixedPoint" = ref.branch_key[0]
     image_key = fixed_point.advance_key(ref.branch_key, 1)
     image_side = side_after(ref.side, 1, trellis.orientation_preserving)
-    cdist_tol = float(trellis.registry.cdist_tol)
 
     if _is_singleton(interval):
         return _land_singleton(trellis, iterated, ref, interval, image_key, image_side)
@@ -366,14 +359,9 @@ def land_element(
                 ends.append((float(end_cdist) * fixed_point.per_step_beta("stable"), False))
             continue
         key, cdist, from_table = trellis.image_cdist(end_id, 1, "stable", branch=ref.branch_key)
-        if key != image_key:
-            partial = (float(cdist), float(cdist))
-            reason = (
-                f"image of crossing {end_id} bounding element {ref.label} landed "
-                f"on branch {key[1:]} instead of {image_key[1:]}"
-            )
-            logger.warning("%s", reason)
-            return _unresolved(ref, image_key, image_side, partial, (from_table, from_table), reason)
+        # Always the advanced branch: the table links only there, and the
+        # scaled fallback is advance_key itself.
+        assert key == image_key, f"end {end_id} of {ref.label} imaged onto {key[1:]}, not {image_key[1:]}"
         ends.append((float(cdist), bool(from_table)))
 
     (lo, lo_table), (hi, hi_table) = ends
@@ -395,8 +383,8 @@ def land_element(
         return _unresolved(ref, image_key, image_side, span, flags, reason)
     target = iterated.ref(image_key, image_side, owner.element_id)
 
-    tol_lo = _end_tolerance(lo, lo_table, cdist_tol)
-    tol_hi = _end_tolerance(hi, hi_table, cdist_tol)
+    tol_lo = _end_tolerance(lo, lo_table)
+    tol_hi = _end_tolerance(hi, hi_table)
     contained = owner.lo_cdist - tol_lo <= lo and hi <= owner.hi_cdist + tol_hi
     if contained:
         covering: tuple[ElementRef, ...] = (target,)

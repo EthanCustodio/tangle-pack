@@ -612,7 +612,7 @@ class Arc:
         # whole -- and arc_polyline normalizes the storage direction, which is what
         # oriented_bridge_polyline does for the partition's own callers.
         curve = trellis.bridge_between(self.lo_id, self.hi_id)
-        if curve is None and abs(lo.unstable_cdist) <= tol:
+        if curve is None and lo.is_anchor:
             # No bridge was cut here, but the arc starts AT the periodic point, so
             # it runs along the parent branch from its root -- which is exactly a
             # resonance-zone boundary arc (periodic point out to its pip, possibly
@@ -662,7 +662,6 @@ class Arc:
         """
         if self.kind != "stable":
             return []
-        tol = trellis.registry.cdist_tol
         lo = trellis.intersection(self.lo_id).stable_cdist
         hi = trellis.intersection(self.hi_id).stable_cdist
         found: list["PartitionInterval"] = []
@@ -670,7 +669,7 @@ class Arc:
             if result.branch_key != self.branch_key:
                 continue
             for interval in result.intervals:
-                if interval.lo_cdist > hi + tol or interval.hi_cdist < lo - tol:
+                if interval.lo_cdist > hi or interval.hi_cdist < lo:
                     continue
                 found.append(interval)
         return found

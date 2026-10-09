@@ -699,7 +699,10 @@ def test_span_straddling_two_elements_fills_covering(caplog):
     assert repr(landing)
 
 
-def test_image_on_an_unexpected_branch_is_unresolved(caplog):
+def test_image_on_an_unexpected_branch_asserts():
+    """The iterate table links only onto the advanced branches and the scaled
+    fallback is advance_key itself, so an image elsewhere is a broken table:
+    asserted, never a resolvable state (WP11)."""
     other = stable_key(bare_fixed_point(2))
 
     def keys(key: tuple) -> dict[int, tuple]:
@@ -708,11 +711,8 @@ def test_image_on_an_unexpected_branch_is_unresolved(caplog):
 
     trellis, key = _trellis(keys=keys)
     homotopy, iterated = _families(trellis, key)
-    with caplog.at_level(logging.WARNING, logger=LOGGER):
-        landing = land_element(trellis, homotopy, iterated, L(key, 1))
-    assert not landing.resolved
-    assert landing.reason
-    assert_logged(caplog, logging.WARNING, LOGGER)
+    with pytest.raises(AssertionError, match="imaged onto"):
+        land_element(trellis, homotopy, iterated, L(key, 1))
 
 
 def test_probe_outside_the_iterated_partition_is_unresolved(caplog):

@@ -129,7 +129,6 @@ def is_strong_pip(
     trellis: "Trellis",
     intersection_id: int,
     *,
-    tol: Optional[float] = None,
     collision_rtol: float = 1e-2,
 ) -> StrongPipResult:
     """
@@ -151,8 +150,6 @@ def is_strong_pip(
     Args:
         trellis: The Trellis to read intersections and eigen/orbit data from.
         intersection_id: Registry ID of the candidate q0.
-        tol: Absolute canonical-distance slack. Defaults to the registry's
-            ``cdist_tol``.
         collision_rtol: Relative slack for the cdist collision test that identifies
             q0's own orbit among crossings the iterate table does NOT link (a
             linked crossing is mapped back by lookup and recognised by id). An
@@ -195,9 +192,6 @@ def is_strong_pip(
             "in the forward branch cycle; the trellis may be inconsistent."
         )
 
-    if tol is None:
-        tol = trellis.registry.cdist_tol
-
     # Map every intersection back onto q0's stable branch by the minimal i_r
     # backward steps in the branch cycle, scaling stable cdist by beta^(i_r) and
     # unstable cdist by beta^(-i_r) (both map-free). A disqualifier is one
@@ -209,7 +203,7 @@ def is_strong_pip(
     for r_id, r in trellis.registry:
         if r_id == intersection_id:
             continue
-        if abs(r.stable_cdist) <= tol and abs(r.unstable_cdist) <= tol:
+        if r.is_anchor:
             continue  # the anchoring fixed point, not a transverse intersection
         # A strong pip is a property of one periodic point's own tangle, so only
         # crossings between two manifolds of THIS fixed point may disqualify q0:
@@ -245,8 +239,8 @@ def is_strong_pip(
             # q0's genuine iterates are skipped; a distinct chain that merely
             # shares q0's stable OR unstable cdist — or an equal "action"
             # product — is not mistaken for q0.
-            collides_s = abs(stable_rep - s0) <= collision_rtol * s0 + tol
-            collides_u = abs(unstable_rep - u0) <= collision_rtol * u0 + tol
+            collides_s = abs(stable_rep - s0) <= collision_rtol * s0
+            collides_u = abs(unstable_rep - u0) <= collision_rtol * u0
             if collides_s and collides_u:
                 continue
 
@@ -271,7 +265,6 @@ def classify_strong_pips(
     trellis: "Trellis",
     intersection_ids: Optional[Iterable[int]] = None,
     *,
-    tol: Optional[float] = None,
     collision_rtol: float = 1e-2,
 ) -> dict[int, StrongPipResult]:
     """
@@ -286,7 +279,6 @@ def classify_strong_pips(
         trellis: The Trellis to classify within.
         intersection_ids: Candidates to classify. Defaults to every intersection
             in the trellis.
-        tol: Canonical-distance slack passed through to is_strong_pip.
         collision_rtol: Relative collision slack passed through to is_strong_pip.
 
     Returns:
@@ -295,22 +287,15 @@ def classify_strong_pips(
     if intersection_ids is None:
         intersection_ids = trellis.registry.all_ids()
 
-    anchor_tol = tol if tol is not None else trellis.registry.cdist_tol
-
     results: dict[int, StrongPipResult] = {}
     for iid in intersection_ids:
         ix = trellis.intersection(iid)
-        # The fixed point is reported by the detector as an intersection at
-        # canonical distance 0 on both manifolds. It is the anchor z'_0, not a
-        # transverse crossing, so its open interval W^S(z'_0, q0) is empty and
-        # classifying it as a pip is meaningless — skip it. A genuine near-anchor
-        # crossing has a large canonical distance on one manifold and is kept.
-        if abs(ix.stable_cdist) <= anchor_tol and abs(ix.unstable_cdist) <= anchor_tol:
+        # The anchor z'_0 is not a transverse crossing: its open interval
+        # W^S(z'_0, q0) is empty, so classifying it as a pip is meaningless.
+        if ix.is_anchor:
             logger.debug("Skipping anchor/fixed-point intersection %s", iid)
             continue
-        results[iid] = is_strong_pip(
-            trellis, iid, tol=tol, collision_rtol=collision_rtol
-        )
+        results[iid] = is_strong_pip(trellis, iid, collision_rtol=collision_rtol)
 
     logger.debug(
         "Classified %d intersection(s): %d candidate(s)",

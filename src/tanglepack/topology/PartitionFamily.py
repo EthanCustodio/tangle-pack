@@ -74,7 +74,7 @@ Dev Notes:
   sliver ``(pip, outer]`` of width 1.1e-6 beyond the zone's pip (k=2.8, 9
   blasts) had its midpoint within the tolerance of the closed pip singleton,
   so the containment assertion fired. The ``cut_by`` covering test is exact
-  for the same reason; :meth:`PartitionFamily.interval_at` is exact first.
+  for the same reason; :meth:`PartitionFamily.interval_at` is exact.
 * History. Commit ``2a2e35a`` closed the element under every image bridge at
   both crossings; the footprint rule of 2026-09-21 opened the base and the
   chords of every lobe, the anchor lobe's included, so the anchor lobe's fold
@@ -147,8 +147,8 @@ class PartitionFamily:
     Attributes:
         results: The results indexed by ``(branch_key, side)``, in insertion
             order.
-        trellis: The trellis the results were computed over (supplies the
-            canonical-distance tolerance and crossing lookups). Optional for
+        trellis: The trellis the results were computed over (supplies
+            crossing lookups). Optional for
             a family assembled by hand.
     """
 
@@ -175,11 +175,6 @@ class PartitionFamily:
         self.trellis = trellis
 
     # ── access ──────────────────────────────────────────────────────────────
-
-    @property
-    def tol(self) -> float:
-        """The canonical-distance tolerance (0 without a trellis)."""
-        return 0.0 if self.trellis is None else float(self.trellis.registry.cdist_tol)
 
     def result(self, branch_key: "ManifoldKey", side: Side) -> StablePartitionResult:
         """
@@ -260,22 +255,14 @@ class PartitionFamily:
         branch_key: "ManifoldKey",
         side: Side,
         cdist: float,
-        *,
-        tol: Optional[float] = None,
     ) -> PartitionInterval:
         """
-        The element owning one stable canonical distance on one side of a branch.
-
-        Exact first: the one element owning ``cdist`` with no tolerance is the
-        answer. Only when no element owns it exactly (an estimated cdist just
-        past the partitioned stretch) is the tolerant reading tried.
+        The element owning one stable canonical distance on one side of a branch, exactly.
 
         Args:
             branch_key: Manifold key of the stable branch.
             side: Which side's partition to read.
             cdist: The stable canonical distance to locate.
-            tol: The fallback tolerance; the registry's ``cdist_tol`` by
-                default, ``0.0`` to force the exact reading.
 
         Returns:
             The owning :class:`~tanglepack.topology.TopologyResults.PartitionInterval`.
@@ -287,22 +274,15 @@ class PartitionFamily:
 
         Note:
             Partition boundaries ARE registry floats, so a registry cdist
-            resolves exactly, however close its neighbours sit; the tolerance
-            only absorbs ESTIMATED cdists (``land_element``'s image spans). A
-            tolerant reading near a boundary would hand a sliver narrower than
-            ``2 * tol`` to the closed element beside it.
+            resolves exactly, however close its neighbours sit. An ESTIMATED
+            cdist (a midpoint of ``land_element``'s image span) is located
+            exactly too: an absolute fallback slack was never needed on any
+            fixture and is gone (C15, WP11).
         """
         result = self.result(branch_key, side)
         owners = [
             interval for interval in result.intervals if owns_cdist(interval, cdist, 0.0)
         ]
-        tol = self.tol if tol is None else tol
-        if len(owners) != 1 and tol > 0.0:
-            owners = [
-                interval
-                for interval in result.intervals
-                if owns_cdist(interval, cdist, tol)
-            ]
         if len(owners) != 1:
             span = (
                 f"{result.intervals[0].lo_cdist:.6g}.."

@@ -2,8 +2,8 @@
 Exact ownership of registry cdists (stress campaign E11, 2026-10-07).
 
 Every partition boundary is a registry float, so a registered crossing is owned
-with no tolerance, however close its neighbours sit; ``cdist_tol`` only absorbs
-ESTIMATED cdists. Pure kernels over a hand-built registry: crossings closer than
+with no tolerance, however close its neighbours sit, and since WP11 (C15) an
+ESTIMATED cdist is located exactly too. Pure kernels over a hand-built registry: crossings closer than
 the tolerance, a sliver of width ``1.5 * tol`` beside a closed singleton (the
 shape that tripped the iterated child-inside-parent assertion at 9 blasts), and
 the anchor detected by its exact cdist.
@@ -16,7 +16,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from helpers.logs import assert_logged
 from tanglepack.topology.PartitionFamily import (
     PartitionFamily,
     _intervals_from_marks,
@@ -87,21 +86,20 @@ def test_interval_at_gives_a_sliver_beside_a_singleton_its_own_midpoint():
     assert (sliver.lo_id, sliver.hi_id) == (1, 2) and not sliver.closed_lo
     mid = 0.5 * (sliver.lo_cdist + sliver.hi_cdist)
     assert family.interval_at(BRANCH, "right", mid) is sliver
-    assert family.interval_at(BRANCH, "right", mid, tol=0.0) is sliver
     assert family.interval_at(BRANCH, "right", 1.0).lo_id == family.interval_at(
         BRANCH, "right", 1.0
     ).hi_id == 1
 
 
-def test_interval_at_falls_back_to_the_tolerance_for_an_estimated_cdist():
+def test_interval_at_is_exact_for_an_estimated_cdist():
+    """No absolute slack (C15, WP11): a cdist just past the closed outer end has no
+    owner, however close it sits; the outer end itself is owned."""
     cdists, result = _sliver_beside_a_singleton()
     family = PartitionFamily([result], trellis=_trellis(cdists))
-    estimated = cdists[2] + 0.5 * TOL  # just past the closed outer end
-    assert family.interval_at(BRANCH, "right", estimated) is result.intervals[-1]
-    with pytest.raises(ValueError):
-        family.interval_at(BRANCH, "right", estimated, tol=0.0)
-    with pytest.raises(ValueError):
-        family.interval_at(BRANCH, "right", cdists[2] + 10 * TOL)
+    assert family.interval_at(BRANCH, "right", cdists[2]) is result.intervals[-1]
+    for estimated in (cdists[2] + 0.5 * TOL, cdists[2] + 10 * TOL):
+        with pytest.raises(ValueError):
+            family.interval_at(BRANCH, "right", estimated)
 
 
 def test_crossings_closer_than_the_tolerance_each_have_one_owner():
@@ -146,7 +144,9 @@ def test_iterated_parent_is_found_by_exact_containment_and_singletons_by_id():
     assert parents == [(None, 1), (1, 1), (1, 2), (1, 2), (1, 2)]
 
 
-def test_the_anchor_is_its_exact_cdist_and_a_near_miss_is_logged(caplog):
+def test_the_anchor_is_its_exact_cdist(caplog):
+    """A boundary at exactly 0.0 is the anchor; any other gets a synthetic anchor
+    below it, however close it sits (no absolute slack, C15, WP11)."""
     caplog.set_level(logging.INFO, logger="tanglepack.topology.StablePartition")
     anchored = {0: 0.0, 1: 1.0}
     intervals = _build_intervals(_trellis(anchored), _Branch(anchored), ({0: 0.0}, set(), set()))
@@ -159,5 +159,5 @@ def test_the_anchor_is_its_exact_cdist_and_a_near_miss_is_logged(caplog):
 
     near = {5: TOL / 2, 1: 1.0}
     intervals = _build_intervals(_trellis(near), _Branch(near), ({5: TOL / 2}, set(), set()))
-    assert [iv.lo_id for iv in intervals] == [5]
-    assert_logged(caplog, logging.INFO, "tanglepack.topology.StablePartition", count=1)
+    assert [(iv.lo_id, iv.lo_cdist) for iv in intervals] == [(None, 0.0), (5, TOL / 2)]
+    assert not caplog.records
