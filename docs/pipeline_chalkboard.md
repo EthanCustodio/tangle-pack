@@ -31,6 +31,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
    - Topology only looks crossings up in the table. Where a link is absent, it predicts with `advance_key` and β-scaling; it never calls the map.
    - Numerics may call the map to make the table exact.
    - Invariant: table links form a partial bijection. Compare c_u and c_s individually, never their product.
+   - Topology compares crossings by identity and by registry floats; the only slack is the relative error of a scaled cdist (WP11, C15).
 
 3. **Strong pip q₀** (`Strong_Pip_Algorithm.pdf`). q₀ is a strong pip iff no crossing, mapped onto q₀'s stable branch, lands in the open box (0, c_s(q₀)) × (0, c_u(q₀)).
    - Output: the pip orbit (one cut point per stable branch), the resonance zone, the fundamental segment F = (c_s(M^k q₀), c_s(q₀)] on the pip's branch, and **the trellis of the pip T(q₀) = (W^u[P, M^m q₀], W^s[P, q₀])** (D10, D12; `T(q0)`, `Trellis.cut_at_pip_orbit`): stable branch j is cut at c_s(M^j q₀), j < k, and the unstable branch of M^i q₀ at c_u(M^i q₀) for the k deepest registered i (m = the last forward iterate of q₀ the table holds). M⁻¹ maps its unstable half into itself and M its stable half, so it is a genuine trellis. Every later stage reads its crossing set N and its arcs; a crossing past a cut is a point of X, not of N, and the arc across it is one arc of T(q₀). A missing orbit point is placed by `image_cdist` and flagged.

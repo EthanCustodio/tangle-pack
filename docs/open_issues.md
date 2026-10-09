@@ -160,11 +160,13 @@ This is log noise; the probe saw it three times. Fix by defaulting to `branch_in
 **Evidence:** `docs/regions_bridge_identity_and_cleanup_plan.md:196, 332-334`
 
 ### INV-11: Orientation-reversing maps (det J < 0) are rejected, so every side-flip path is unexercised
-**Status:** decided 2026-10-07 | **Severity:** medium | **Related:** SIMP-1, DEC-10, TEST-1 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** medium | **Related:** SIMP-1, DEC-10, TEST-1 | **WP:** WP11
 
 `set_k_value` rejects disagreeing eigenvalue signs, so all 8 b=-1 configs are rejected and there is a strict xfail with `raises=ValueError`. The parity flip on carried hole sides (WP7-D2), `check_holes_share_bridge_side(orientation_preserving=False)`, `land_element` and `image_of_element` flips have never run on real data.
 
 Note that inversion has det J = +1. Earlier notes conflate "inversion" with "orientation-reversing", so the plan must say which one is meant. Supporting det<0 would need a per-stability k_value.
+
+**WP11:** closed by C3: det J < 0 stays out of scope and `orientation_reversing_case_builds` stays a strict xfail. The flip rule is ONE function, `topology.side_after(side, steps, preserving)`, called by `land_element`, the dual-graph markers, backward hole propagation, `_orbit_side` and `side_diagnoses`, and pinned by `test_side_after.py`. The orientation is read off the FixedPoint (C16): `preserves_orientation` is the sign of the solver's single-step Jacobian (any period), and `Trellis.orientation_preserving` no longer calls the map's Jacobian. A period-2 orbit of b = -1 passes `set_k_value` (det DM^2 > 0) and could exercise the rule end to end if the author ever admits det J < 0.
 
 **Evidence:** `src/tanglepack/numerics/FixedPoint.py:185-225`; `src/tanglepack/numerics/FixedPointSolver.py:16-22`; `tests/cases.py:36-39, 826-830`; `tests/conftest.py:108-110`; `src/tanglepack/topology/Trellis.py:32-40`; `stress/numerics/report/report.tex:833-834, 1906`; `docs/dual_graph_symbolic_dynamics_plan.md:338`
 
@@ -577,19 +579,23 @@ Evidence disagreements left on non-law deep builds once the walk runs between th
 ## Unnecessary complexity / simplification
 
 ### SIMP-1: The orientation side-flip rule is coded at six sites and cannot be reached while det<0 is rejected
-**Status:** open | **Severity:** low | **Related:** INV-11, DEC-10 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** INV-11, DEC-10 | **WP:** WP11
 
 One helper (`image_side(side, n)`) would do, or delete the flips until det<0 is admitted.
+
+**WP11:** one helper, `side_after` (see INV-11); `image_of_element`'s flip went with SIMP-2, and no `OPPOSITE_SIDE[...]` stands next to an orientation test any more.
 
 **Evidence:** `src/tanglepack/topology/StablePartition.py:563, 596-598, 1287-1300, 1409-1412`; `src/tanglepack/topology/Trellis.py:292, 1423-1424`; `src/tanglepack/topology/DualGraph.py:934-940`; `src/tanglepack/topology/DualWalk.py:317`
 
 ### SIMP-2: Two element-image implementations with different tolerance rules
-**Status:** open | **Severity:** medium | **Related:** INT-8, SIMP-3 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** medium | **Related:** INT-8, SIMP-3 | **WP:** WP11
 
 - `Trellis.image_of_element`: cover plus `_snap_to_partition_boundary` with `SNAP_RTOL`/`SCALING_RTOL`. It feeds `StableNode.images`, which only plots read.
 - `land_element`: midpoint owner.
 
 Same rule, possibly two answers.
+
+**WP11:** `Trellis.image_of_element` (with `_snap_to_partition_boundary` and `SNAP_RTOL`) fed only `StableNode.images`, which nothing read (not the plots, not the walk); both are deleted, with `DualGraph._link_element_images`. `land_element` is the one element image.
 
 **Evidence:** `src/tanglepack/topology/Trellis.py:42-105, 128, 143, 1315-1440`; `src/tanglepack/topology/DualWalk.py:270-380`; `src/tanglepack/topology/DualGraph.py:932-956`
 
@@ -609,14 +615,18 @@ Same rule, possibly two answers.
 **Evidence:** `src/tanglepack/topology/Trellis.py:679-763` (:690, :725); `src/tanglepack/topology/StablePartition.py:1744-1768`; `src/tanglepack/topology/Pseudoneighbor.py:491, 551-576`; `src/tanglepack/topology/TrellisBranch.py:72-84`; `src/tanglepack/topology/DualWalk.py:330-334`
 
 ### SIMP-4: The 2-D same-point collision test is duplicated in StrongPip and Pseudoneighbor; three branch-cycle wrappers sit over one memo
-**Status:** open | **Severity:** low | **Related:** INT-6, SIMP-12 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** INT-6, SIMP-12 | **WP:** WP11
 
 The collision test exists only for unlinked crossings and would vanish with an exact table. The wrappers are `forward_stable_branch_cycle`, `forward_unstable_branch_cycle` and `_branch_position_map`.
+
+**WP11:** one 2-D collision test, `Trellis.same_point(u, s, u0, s0, rtol)` (relative only, C15), used by StrongPip and twice by Pseudoneighbor; the three branch-cycle wrappers and their exports are gone (callers read `FixedPoint.branch_position_map`).
 
 **Evidence:** `src/tanglepack/topology/StrongPip.py:92, 260-280`; `src/tanglepack/topology/Pseudoneighbor.py:114-128, 609-610`
 
 ### SIMP-5: PartitionFamily keeps a local copy of `_build_intervals` ("concurrent edit" reason is stale)
-**Status:** open | **Severity:** low | **Related:** DOC-3 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** DOC-3 | **WP:** WP11
+
+**WP11:** `StablePartition.intervals_from_marks` is the shared tail; `_build_intervals` adds the branch's ends (outermost crossing, anchor, the C1 branch) and calls it, and `PartitionFamily` imports it instead of its copy. The marks round trip test stays the guard.
 
 **Evidence:** `src/tanglepack/topology/PartitionFamily.py:54-67, 518`; `src/tanglepack/topology/StablePartition.py:1968`
 
@@ -630,11 +640,13 @@ Active letters can reach `u` after 20 classes, and E11 reaches `bw`/`cz`.
 **Evidence:** `src/tanglepack/loom/BridgeAlphabet.py:10-25, 74`; `src/tanglepack/topology/SymbolicDynamics.py:330-345`
 
 ### SIMP-7: `Blast.py` tidy-up
-**Status:** open | **Severity:** low | **Related:** NEST-4 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** NEST-4 | **WP:** WP11
 
 - It hand-rolls the fixed-point normalisation that `TangleSession._resolve_fixed_points` already does.
 - `cKDTree` is imported inside the loop, with a dead scipy-missing fallback.
 - `BlastResult.fixed_point` is typed `Optional[FixedPoint]` but stores lists.
+
+**WP11:** `blast_zone` normalises its filter with `session._resolve_fixed_points` (`BlastResult.fixed_points`, a list; the mistyped `fixed_point` had no reader), `cKDTree` and `ResonanceZone` are imported at module top (the scipy-missing fallback and `_resolve_zone` are gone), `max_depth_reached` is deleted (SIMP-12).
 
 **Evidence:** `src/tanglepack/loom/Blast.py:95-99, 160, 226-236, 281-289, 373`; `src/tanglepack/loom/TangleSession.py:538`
 
@@ -648,29 +660,35 @@ Active letters can reach `u` after 20 classes, and E11 reaches `bw`/`cz`.
 **Evidence:** `src/tanglepack/loom/TangleSession.py:291-400, 379-388, 442-560, 603-611, 643-651, 677-860, 729-740, 828-839, 1313`
 
 ### SIMP-9: ManifoldInitializer open notes
-**Status:** open | **Severity:** low | **Related:** INV-7 | **WP:** WP11
+**Status:** partly closed (WP11) | **Severity:** low | **Related:** INV-7 | **WP:** WP11
 
 - Ethan vs Kevin construction.
 - A duplicate `_insert_point_geometrically` (it also calls the machine's).
 - `get_initial_fundamental_segment` is too long.
 - Requests: orient at any iterate, or one direction alone.
 
+**WP11:** one construction is kept and the Dev Note says so (the per-orbit-point seeding never existed in code); `get_initial_fundamental_segment` is one path; `construct_manifold_from_point_list` and its duplicate `_insert_point_geometrically` moved to `ManifoldMachine._manifold_from_points` (the machine no longer builds a throw-away initializer through a lazy import). Open: the two feature requests (orient at any iterate, one direction alone) -> the API plan.
+
 **Evidence:** `src/tanglepack/numerics/ManifoldInitializer.py:9-45, 391, 557, 588`; `src/tanglepack/numerics/ManifoldMachine.py:902`
 
 ### SIMP-10: Two stable trims
-**Status:** open | **Severity:** low | **Related:** INT-7 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** INT-7 | **WP:** WP11
 
 `TangleWorkbench.trim_stable_manifolds` and `ResonanceZone._trim_stable_at`.
+
+**WP11:** one numerics primitive, `TangleWorkbench.trim_stable_at(key, cdist)` (the first node past the root at or beyond `cdist`); `trim_stable_manifolds` and the zone trims call it, and `ResonanceZone._trim_stable_at` (which read the rtree's private segment tables with a `cdist_tol` slack) is gone. The two rules were measured identical on every zone trim of 15 builders before the change.
 
 **Evidence:** `src/tanglepack/numerics/TangleWorkbench.py:2045`; `src/tanglepack/loom/ResonanceZone.py:429`
 
 ### SIMP-11: The cartoon bridge-drawing block is duplicated between the line and circle layouts; `plotting.py` is 3275 lines
-**Status:** open | **Severity:** low | **Related:** — | **WP:** WP11
+**Status:** partly closed (WP11) | **Severity:** low | **Related:** — | **WP:** WP11
+
+**WP11:** the node scatter, unified S-curves, bridge arcs and walks of both layouts are one `_draw_cartoon_graph`, parametrised by the shape's `arc` / `cross` / `track`; every drawn artist is byte-identical on four fixtures in both shapes and colourings. Open: splitting `plotting.py` (import churn for TangleSession, scripts and tests) -> a later slice.
 
 **Evidence:** `src/tanglepack/topology/plotting.py:2140, 2360-2375, 2922, 3060-3075`
 
 ### SIMP-12: Dead or redundant public API, kept and whitelisted by the coverage guard
-**Status:** open | **Severity:** low | **Related:** SIMP-3, SIMP-4, PK-7, API-4 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** SIMP-3, SIMP-4, PK-7, API-4 | **WP:** WP11
 
 - `Trellis.scale_cdist`, `_get_lambda_u`, `IntersectionRegistry.on_interval`
 - `TangleSession.invalidate_trellises`
@@ -688,14 +706,18 @@ Active letters can reach `u` after 20 classes, and E11 reaches `bw`/`cz`.
 
 WP2 removed `Trellis.scale_cdist`, `_get_lambda_u`, `IntersectionRegistry.on_interval`, `TrellisBranch.eigenvalue` and the `manifold_a_key is None` branches.
 
+**WP11:** deleted `invalidate_trellises`, `BlastResult.max_depth_reached`, `IntersectionRegistry.unstable_order_array` / `stable_order_array`, `IterateTable.backward_chain` / `all_registered_ids`, `Symbol.is_inverse`, `SymbolicDynamics.dynamics_of`, `TrellisBranch.anchor_coords`, the scalar `ManifoldMachine._curvature_area` and its three helpers, `BridgeClassTable.member_of`, the branch-cycle wrappers, three unused `Intersection.synthetic` keywords, `bridge_classes(bridge_ids=)`, the `infer_iterate_table` forwarder (scripts and the stress harness call `infer_iterates`) and the stateless `IterateInference` class (a module function `infer_iterates`); `reindex_from` returns None. The coverage guard's whitelist went with them (TEST-6).
+
 **Evidence:** `tests/conftest.py:85-93`; `src/tanglepack/numerics/IterateTable.py:81, 98, 107`; `src/tanglepack/numerics/IntersectionRegistry.py:792, 800`; `src/tanglepack/topology/SymbolicDynamics.py:167, 787`; `src/tanglepack/topology/TrellisBranch.py:72, 96`; `src/tanglepack/topology/BridgeClass.py:410`; `src/tanglepack/loom/Blast.py:178`; `src/tanglepack/topology/Trellis.py:24-30, 690`; `docs/dual_graph_symbolic_dynamics_plan.md:326`
 
 ### SIMP-13: Tolerance and warning density
-**Status:** open | **Severity:** low | **Related:** INT-6, INT-7 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** INT-6, INT-7 | **WP:** WP11
 
 - 86 tolerance sites in `topology/`.
 - 73 WARNINGs against 38 asserts across the library.
 - About 130 lines of `tangle_of`/`min_cdist`/`anchor_outward_key` ordering just to make letters deterministic.
+
+**WP11:** counted by an AST counter over `topology/` (identifier sites matching `tol` / `*_tol` / `rtol`, `cdist_tol` sites, `logger.warning` calls; the catalog's 86 was an unrecorded grep): before 115 / 19 / 56, after 59 / 2 / 51. The decisive measurement: forcing the `cdist_tol` topology and loom read to 0 (or 1e-12) moved no output on any law case, deep run or series, and the suite passed. So (C15) anchors are told by identity, ownership / containment / the pip cut / the fundamental-segment overlap / `interval_at` are exact, and only RELATIVE slack is left (`SCALING_RTOL`, `collision_rtol`); `cdist_tol` remains for the degenerate bridge cut and polyline clipping. Two WARNINGs of `land_element` (an image on a branch other than `advance_key`'s, which the iterate table rules out) are asserts; the cartoon's duplicated warnings went with SIMP-11. The walk's WARNINGs and the class-ordering code (the author's rules) stay.
 
 **Evidence:** chalkboard §8(b); `src/tanglepack/topology/BridgeClass.py:465-560, 659-693`
 
@@ -764,7 +786,7 @@ Reference cells peak at 0.0514 (median 1.2e-5). The excess falls on the first bl
 
 68% of consecutive k28 gaps fall below it by blast 14, and it caused E11 error 1. The fix is a relative tolerance. The near-ULP vs exact merge dedup question is also undecided.
 
-**WP2:** dedup is relative, `DEDUP_RTOL = 1e-9` (every registry collision on every builder, k28 at 11 blasts included, is a bit-identical re-detection; the closest distinct same-key pair is 4e-3 apart; an anchor matches only an exact 0.0). `cdist_tol` stays as the topology's absolute slack (its ~86 consumers are SIMP-13, WP11).
+**WP2:** dedup is relative, `DEDUP_RTOL = 1e-9` (every registry collision on every builder, k28 at 11 blasts included, is a bit-identical re-detection; the closest distinct same-key pair is 4e-3 apart; an anchor matches only an exact 0.0). `cdist_tol` stays as the topology's absolute slack (its ~86 consumers are SIMP-13, WP11). **WP11:** removed from topology: it reads no absolute cdist slack (C15, SIMP-13).
 
 **Evidence:** `src/tanglepack/numerics/IntersectionRegistry.py:85-95`; `src/tanglepack/topology/StablePartition.py:200-206`; `stress/numerics/report/report.tex:1645-1649, 2003-2005`
 
@@ -973,7 +995,9 @@ The 15+ laws switched off on inversion, and the k10/p3/k28 exclusions, never app
 **Evidence:** memory `test-suite-policy-2026-10-05:52`
 
 ### TEST-6: `coverage_guard.py` trips when lines shift
-**Status:** open | **Severity:** low | **Related:** — | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** — | **WP:** WP11
+
+**WP11:** `coverage_guard.py` keys every line by (enclosing qualname, stripped text, occurrence inside the qualname) and reads the base source from git (`--base-ref`, default HEAD), so a shifted line is neither a false miss nor a mask for a real one (`tests/_tools/test_coverage_guard.py`). The dead-API whitelist is gone: dead API is deleted instead.
 
 **Evidence:** `tests/_tools/coverage_guard.py`; memory `stress-recs-plan-2026-10-07`
 
@@ -1007,12 +1031,16 @@ A rebuilt trellis starts with empty strong-pip slots. The session should carry t
 **Evidence:** `src/tanglepack/loom/TangleSession.py:479-505, 528-545, 755-779`
 
 ### API-3: `PointBudgetExceeded.blast_context` is set dynamically and not declared; `MaxIterationsReached` and `TURNAROUND_LOG_STRETCH` are not exported
-**Status:** open (verified 2026-10-07) | **Severity:** low | **Related:** — | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** — | **WP:** WP11
+
+**WP11:** `PointBudgetExceeded.blast_context` is declared (None outside a blast); `MaxIterationsReached` and `TURNAROUND_LOG_STRETCH` are exported from `tanglepack.numerics` and `tanglepack`.
 
 **Evidence:** `src/tanglepack/loom/Blast.py:262, 388`; `src/tanglepack/numerics/budget.py` (no `blast_context`); `src/tanglepack/__init__.py:30, 78`; `src/tanglepack/numerics/__init__.py:27, 56`
 
 ### API-4: The deprecated no-op `invalidate_trellises` is still present
-**Status:** open | **Severity:** low | **Related:** SIMP-12 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** SIMP-12 | **WP:** WP11
+
+**WP11:** deleted (no caller anywhere).
 
 **Evidence:** `src/tanglepack/loom/TangleSession.py:1290-1306`
 
@@ -1024,14 +1052,18 @@ A rebuilt trellis starts with empty strong-pip slots. The session should carry t
 **Evidence:** `src/tanglepack/numerics/TangleWorkbench.py:1204-1265`
 
 ### API-6: Coordinate shape is (2,1) in FixedPoint and (2,) in BasePoint, so callers ravel everywhere
-**Status:** open | **Severity:** low | **Related:** — | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** — | **WP:** WP11
 
 Also: `partial_jacobians` is unexplained, and BranchPoint has a `_description_` placeholder.
+
+**WP11:** the solver stores `(2,)` orbit points and eigenvectors and float eigenvalues, the FixedPoint placeholders match, and FixedPoint, ManifoldInitializer and TangleSession stop ravelling. `partial_jacobians` is documented (it propagates the eigenvector orientation and gives the map's orientation, C16); `BranchPoint`'s placeholder is filled in.
 
 **Evidence:** `src/tanglepack/numerics/FixedPoint.py:10-21`; `src/tanglepack/numerics/BasePoint.py:9-11`; `src/tanglepack/numerics/BranchPoint.py:8-12, 41`; `src/tanglepack/numerics/Point.py:8-10`
 
 ### API-7: `build_nested` always returns the slug `nested_p1_p3`, so figures overwrite each other whatever the blast counts
-**Status:** open | **Severity:** low | **Related:** DOC-4 | **WP:** WP11
+**Status:** closed (WP11) | **Severity:** low | **Related:** DOC-4 | **WP:** WP11
+
+**WP11:** `build_nested`'s slug adds `_outer<n>` / `_inner<m>` for non-default blast counts (the defaults keep `nested_p1_p3` / `heteroclinic_p1_p3`, so committed folders keep their names); `build_heteroclinic` derives its slug from it.
 
 **Evidence:** `src/tanglepack/examples/henon_cases.py:282`
 
@@ -1235,3 +1267,5 @@ Verification of the "possibly stale" items (WP0): DOC-3 is confirmed open (the M
 **WP10 slice 1** (KNOWN_ISSUES 3 -> 2; NOT_APPLICABLE unchanged): numerics and performance leftovers. (1) F6: the Tangle keeps one rtree per stability and queries a segment only against the other, so no same-stability pair is ever formed (`_discard_same_stability` and its INFO line are gone). (2) F3 / NUM-19: crossings sharing one segment are bracketed before cutting, so a bridge contains both its crossings and cdist stays monotone (inversion x period 2 at 10 / 10, p3 13u / 16s, and the p1(u) x p3(s) recipe, which builds now). (3) NUM-9: a curve's existing images are merged chain by chain. (4) NUM-10: iterate failures propagate; `strict` and `skipped` are gone. (5) NUM-14: `_register_bridge` asserts the bridge invariants. (6) PERF-1 / C5: a blast's resolution report counts its new image bridges' same-stability hits only. (7) F7: the strong-pip candidates are classified on first read and a rebuild tests only the remembered pip (k28 1e-5 at 12 blasts: recompute 4.6 -> 0.8 s). (8) INT-10: outer faces from the rotation system; `OuterFaceError` is gone. (9) Laws: `partition_covers_branch`'s last clause is now an element end is open iff a hole opens that half there, the halves derived in the test from each hole's bounds, `bridge_side` and the registry crossing signs (D6), never read from `hole.openings` (the old clause over-claimed on p3 16u, where two adjacent reference pairs hole both sides of the same bridges; a first restatement read `hole.openings` with the partition's own filter and could not fail: the review's break-it, every non-anchor opening flipped in `_hole_openings`, passed it on k10, p3 and k28_two_blasts, and fails it now), `dual_face_side_is_geometry` a local probe (the half-plane test failed on slivers, non-convex faces and a stable hairpin); `(partition_covers_branch, heteroclinic)` XPASSed and was removed. (10) C11 (proposed, under D3): stable-end evidence is incomplete and gives no verdict (k28 at 6-7 blasts reliable; at 8+ the DEC-23 ties remain). (11) NUM-13 / NUM-15: `grow_until_arclength` stops on arc length; the drivers' caps scale with the stretch. (12) TEST-7: C6 pinned. (13) Suite: the law tier builds each case once per run (C12, proposed); `test_deep_reference_survives_noise` read the per-fixed-point trellises, which carry no stage output since WP9 (an empty witness loop), and is rewritten on the selection's trellis (the WP8 frame-fix break-it fails only `test_unlinked_landing_is_read_against_the_pairs_images`, no series test, so it is kept). New tests: `test_blast_through_a_shared_straddle`, `test_crossings_sharing_a_segment_are_bracketed`, `test_every_law_holds_on_the_deep_runs` (`p3_15`, `p3_16`, `p3_6_blasts` and the new builders `p3_16_12`, `inversion_period2_10`), `test_the_count_is_the_listing_of_the_new_curves`, `test_a_blast_counts_and_remembers_nothing` (plus the ninth-blast k28 check under `perf`), the rewritten `test_a_same_stability_pair_is_never_formed`, `test_a_bridge_off_its_branch_is_refused`, `test_every_iterate_failure_escapes`, `test_a_rebuild_tests_only_the_remembered_pip`, `test_outer_faces_do_not_read_areas`, `test_arclength_stops_on_arc_length`, `test_default_cap_scales_with_the_stretch`, `test_the_budget_is_per_call`. Behaviour: law cases, deep runs and the five series are identical to base (id-free signatures, `PYTHONHASHSEED=0`) except `k28_deep_blast_sliver`, where one class's `verified` reads True instead of False (its only disagreement was stable-end evidence; still unreliable). Suite 1042 passed / 21 skipped / 4 deselected / 2 xfailed in 137.3 s (base 1022 / 21 / 3 / 3 in 184.3 s, back to back on the same machine: 0.75x). Deferred: NUM-12 (slice 2), NUM-20, NUM-21 (accepted), `row_of_end_is_geometry` at 16 stable steps (resolution), the E11 2-iteration cells (WP12), vectorised rtree queries (PERF-2 / PERF-3), DEC-23.
 
 **WP9b** (KNOWN_ISSUES 2 -> 2, nothing flips or is added; NOT_APPLICABLE unchanged): the non-crossing rule (D13, DEC-23), on `DualWalk` / `DualGraph`, lookup only. (1) C14: the walk leaves from and arrives at the stable edges the landing SPAN meets (the hole bridges bounding X map onto the kept image bridges at the ends of f(X), which f(b) cannot cross); every tie of k28 at 8-13 blasts and k32 at 8-10 was two walks starting on edges the span does not meet. (2) The marker law: a kept non-loop member `b` with both ends on one stable branch and the stable segment between them bound a disk whose image holds exactly the images of its markers (periodic points at their anchors, holes beside their own bridges on their bridge sides); the word is the shortest walk whose curve, closed along S, holds them (`DualGraph.markers` / `image_marker` / `enclosed`, `DualWalk.lobe_image_markers` / `holds_markers`; detours up to `MAX_DETOUR = 4` crossings; status `no_admissible_walk` when none, `truncated` when the `max_walks` budget, which counts `holds_markers` judgements only, runs out first). C13: it applies to every class with a member lobe, not only ties. `MinimalTrellis.holes`, `Walk.start_node` / `goal_node`, `WalkSearch.constrained` / `rejected`. Behaviour: law cases and the deep runs (`p3_15`, `p3_16`, `p3_6_blasts`, `p3_16_12`, `inversion_period2_10`) have id-free `describe()` signatures identical to base (`PYTHONHASHSEED=0`) except `heteroclinic` (`a` unambiguous with the same word; `c` `a u^-1 a^-1` -> `a d^-1 a^-1` and `bh` empty -> `bi bj bi^-1`, both their registered words; no class `verified` False; ambiguous `[a, c, bn]` -> `[bn]`; still unreliable, DEC-24) and `k28_deep_blast_sliver` (ambiguous `[o, s]` and `s` contradicted -> reliable). Series: k28 at 8 blasts reliable (was ambiguous `[ab, af]`); k32 at 6-7 reliable (`m`'s unique walk started on the wrong edge and its image contradicted it), 8 reliable (closed 44 -> 45), 9-10 no ambiguous class (closed 43 -> 39), still unreliable through INT-11; p3, inversion and nested_outer series unchanged. The two non-tie changes (`bh`, k32's `m`) break the request's "no word changes except where it was ambiguous"; both new words are the registered ones (C13, C14). New laws (pass on all 11, non-vacuous): `walks_agree_with_registered_images`, `member_lobe_classes_have_one_walk`, `walk_starts_on_the_landing` (symbolic), `lobe_enclosure_is_geometry`, `registered_images_keep_markers` (dual graph); series test `test_no_walk_is_ambiguous` (`SeriesStep.ambiguous`); the deep-sliver regression checks its landings, ties and evidence; unit tests of the span, the constrained search and its budget, the `sigma'` rule, and the enclosure (`test_enclosure.py`: interleaved chords cross, the orbit-marker image follows `advance_key`). Fails on base: `heteroclinic`'s symbolic layer, `test_no_walk_is_ambiguous[k28_series, k32_series]`, the deep sliver (the dual-graph laws need the new API). `(every_active_class_walks, heteroclinic)` stays strict, re-tagged DEC-24: the member-less connecting class `bn` has no closed curve with a known image (no heteroclinic crossing has an iterate link, NUM-21). New catalog entry INT-11 (deep evidence disagreements, WP12). `symbolic_dynamics`: heteroclinic 0.04 -> 0.11 s. Suite 1067 passed / 21 skipped / 4 deselected / 2 xfailed in 139.3 s after the review fix (1055 in 139.4 s before it; base 1042 / 21 / 4 / 2 in 138.6 s, back to back on the same machine). Left: DEC-24 (slice 2: close a connecting arc through a linked heteroclinic crossing); classes whose ends lie on two branches (an inversion anchor bridge: sigma would run through the anchor); a walk crossing one edge twice (beyond the midpoint model, kept as a candidate, not observed); INT-11.
+
+**WP11 slice 1** (KNOWN_ISSUES 2 -> 2, nothing flips or is added; NOT_APPLICABLE unchanged): the simplification sweep, a refactor whose proof is that no output moved. Before every commit a harness re-ran the id-free and exact `describe()` signatures of the dynamics, partitions, class table and holes, `is_reliable` and per-logger WARNING counts on the 11 law cases, `p3_15`, `p3_16`, `p3_6_blasts` and five deep builders, every `SeriesStep` of the five series, and every artist of the dual-graph cartoon (both shapes, both colourings, four fixtures): all identical to base. (1) The decisive measurement (SIMP-13, C15): forcing the `cdist_tol` that topology and loom read to 0 or 1e-12 moved nothing anywhere, so the topology now reads no absolute cdist slack (anchors by identity, exact ownership / containment / cuts, relative error only for scaled cdists); tolerance sites in `topology/` 115 -> 59, `cdist_tol` sites 19 -> 2, `logger.warning` calls 56 -> 51. (2) One rule each: `side_after` (INV-11, SIMP-1; orientation read off the FixedPoint, C16), `land_element` as the element image (SIMP-2), `Trellis.same_point` (SIMP-4), `StablePartition.intervals_from_marks` (SIMP-5), `TangleWorkbench.trim_stable_at` (SIMP-10), `_draw_cartoon_graph` (SIMP-11, first half). (3) Dead API deleted (SIMP-12, API-4), `IterateInference` a function, Blast tidy-up (SIMP-7), API traps (API-3, API-6, API-7), the coverage guard keyed by content (TEST-6), and the handed-over nits (`owner_of_intersection` needs its branch, `from_branch` holds the anchor on every branch, `_anchor_branch` inlined, `bridge_classes` without `bridge_ids`, `groupby` in `_diagnose`, a tautological law assertion removed). API changes (D8): removed `invalidate_trellises`, `Trellis.image_of_element`, `SNAP_RTOL`, `StableNode.images`, `infer_iterate_table`, the `IterateInference` class, the branch-cycle wrappers, the dead accessors of SIMP-12, the `tol=` keywords of the strong-pip / pseudoneighbor entry points and `interval_at`, `PartitionFamily.tol`, `bridge_classes(bridge_ids=)`, three `Intersection.synthetic` keywords; changed `reindex_from` (returns None), `owner_of_intersection` (branch required), `from_branch` (anchor on every branch), `BlastResult.fixed_point` -> `fixed_points`, `PointBudgetExceeded.blast_context` (always set), nested slugs (non-default blast counts), FixedPoint shapes, `preserves_orientation` (any period), `land_element` (a non-advanced image branch asserts), `interval_at` (raises instead of a tolerant fallback); added `trim_stable_at`, `ring_order`, `side_after`, `same_point`, `intervals_from_marks`, exports `MaxIterationsReached` / `TURNAROUND_LOG_STRETCH` / `infer_iterates`. Tests rewritten to the new rules: the four orientation tests set the single-step Jacobian, `interval_at` is exact for an estimated cdist, a boundary near 0 gets a synthetic anchor below it, an image on a foreign branch asserts; deleted with their code: the `image_of_element` / `SNAP_RTOL` tests and the `bridge_ids=` test. New tests (each fails on a copy of the base tree): `test_coverage_guard.py`, `test_side_after.py`, the orientation and shape tests of `test_fixed_point.py` (a period-2 orbit included), `test_from_branch_holds_the_anchor_on_every_branch`, the two API-3 tests, `test_stable_trim.py`, `test_henon_slugs.py`. SUITE_LINE Deferred: the `plotting.py` split (SIMP-11), the SIMP-9 feature requests, `partition_element_for` reading the topology and `grow_until_faces_closed`'s cap semantics (D8 API plan), the geometric polyline-clipping tolerances, WARNING -> assert in the walk (frozen until DEC-24), the class-ordering code (the author's rules).

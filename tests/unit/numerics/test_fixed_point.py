@@ -186,26 +186,36 @@ def test_set_k_value_tolerates_unset_stable_eigenvalues():
 # --------------------------------------------------------------------------- #
 # WP11 (C16) -- orientation is the sign of the solver's single-step Jacobian
 # --------------------------------------------------------------------------- #
-def _solved(guess) -> FixedPoint:
-    """A Hénon k=2, b=1 orbit solved by the workbench (period from the guess)."""
+#: (k, guess): the Hénon b=1 saddle at k=2 (period 1), the k=2 period-3 orbit, and
+#: the k=4.1 period-2 orbit (even period: its eigenvalues cannot tell the orientation).
+ORBITS = {
+    "period_1": (2, [4, -4]),
+    "period_3": (2, [[0, 1], [-1, 0], [-1, 1]]),
+    "period_2": (4.1, [[-2.0488, -0.0488], [0.0488, 2.0488]]),
+}
+
+
+def _solved(name: str) -> FixedPoint:
+    """A Hénon b=1 orbit solved by the workbench."""
     from tanglepack import TangleWorkbench
     from tanglepack.examples.henon import henon_jacobian, henon_map, henon_map_inverse
 
-    workbench = TangleWorkbench(henon_map(2), henon_map_inverse(2), henon_jacobian(2))
+    k, guess = ORBITS[name]
+    workbench = TangleWorkbench(henon_map(k), henon_map_inverse(k), henon_jacobian(k))
     return workbench.construct_fixed_point(guess)
 
 
-@pytest.mark.parametrize("guess", [[4, -4], [[0, 1], [-1, 0], [-1, 1]]], ids=["period_1", "period_3"])
-def test_a_solved_area_preserving_orbit_preserves_orientation(guess):
-    fp = _solved(guess)
+@pytest.mark.parametrize("name", ORBITS)
+def test_a_solved_area_preserving_orbit_preserves_orientation(name):
+    fp = _solved(name)
     assert np.linalg.det(fp.partial_jacobians[0]) > 0
     assert fp.preserves_orientation is True
 
 
-@pytest.mark.parametrize("guess", [[4, -4], [[0, 1], [-1, 0], [-1, 1]]], ids=["period_1", "period_3"])
-def test_a_solved_orbit_stores_plain_shapes(guess):
+@pytest.mark.parametrize("name", ORBITS)
+def test_a_solved_orbit_stores_plain_shapes(name):
     """API-6: orbit points and eigenvectors are (2,), eigenvalues floats -- no reader ravels."""
-    fp = _solved(guess)
+    fp = _solved(name)
     for i in range(fp.period):
         assert np.shape(fp.coordinates[i]) == (2,)
         assert np.shape(fp.unstable_eigenvectors[i]) == np.shape(fp.stable_eigenvectors[i]) == (2,)

@@ -621,3 +621,28 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
   now carry real `Arc`s (no geometry) and the dual has `stable_nodes_on`. Mutants killed: `sigma'` -> True,
   `enclosed` crossing -> `[{}]`, `_cut_ring` crossing check removed, orbit `+0` / `+2`. (`return []` ->
   `continue` in `enclosed` is equivalent: `_cut_ring` does not depend on the routing.)
+
+## Open-issues round WP11 slice 1 (2026-10-09, branch `oi/wp11-simplify`, base `4f7e815`)
+
+- KNOWN_ISSUES 2 -> 2 (C3 det J < 0; DEC-24). NOT_APPLICABLE unchanged.
+- Proof that nothing moved: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp11/check_all.sh <root> <tag>` runs
+  `sig.py` (14 cases + 5 deep builders, exact and id-free `describe()` hashes, holes, partitions,
+  classes, reliability, WARNING counts per logger; `PYTHONHASHSEED=0`), `cartoon_sig.py` (every
+  PathPatch / scatter / line / text of both cartoon shapes and colourings on four fixtures),
+  `series_sig.py` (every `SeriesStep` of the five series) and `tol_count.py`; all identical to base
+  after every step. ~55 s.
+- The tolerance experiment behind C15: `sig_tol.py`, `series_sig_tol.py` and the pytest plugin
+  `plug/tolzero.py` force the `cdist_tol` read from topology / loom frames to 0 (numerics keeps 1e-6):
+  every fingerprint and the full suite were unchanged on base.
+- `coverage_guard.py` keys lines by (qualname, stripped text, occurrence) and reads the base source
+  with `git show <base-ref>:path`; its own tests are `tests/_tools/test_coverage_guard.py` (collected).
+  The dead-API whitelist and the conftest "Dead API" paragraph are gone.
+- Tests rewritten to new rules (say so in any later review): `test_stable_partition.py` orientation
+  tests set `fp.partial_jacobians[0]` (and one checks a contradicting dynamical-system jacobian is
+  ignored); `test_topology_invariants.py::test_orientation_from_the_single_step_jacobian` (the DEBUG
+  default fires for every unsolved fixed point); `test_exact_ownership.py`: `interval_at` exact for an
+  estimated cdist, a boundary at TOL/2 gets a synthetic anchor below it, no INFO;
+  `test_dual_walk.py::test_image_on_an_unexpected_branch_asserts`.
+- New-test base check: copy `src`, `tests`, `pyproject.toml` of the detached base worktree
+  (`../tp-oi-wp11-simplify-base`) to `.../tmp/wp11/basecopy`, overwrite the new / extended test files,
+  run there (never via PYTHONPATH).

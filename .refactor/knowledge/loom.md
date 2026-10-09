@@ -196,3 +196,16 @@ Last updated 2026-10-02 (auditor, outcome of `hole-side-and-own-blast`, branch a
   `session.set_strong_pip` -> `Trellis.set_strong_pip` skips validation when the id is already the
   chosen pip. One `is_strong_pip` call per remembered pip per recompute
   (`test_a_rebuild_tests_only_the_remembered_pip`).
+
+## Open-issues round WP11 slice 1 (2026-10-09, branch `oi/wp11-simplify`, base `4f7e815`)
+
+- `Blast.py`: `fixed_points = session._resolve_fixed_points(fixed_point)` feeds `fp_ok` and
+  `report_resolution`; `BlastResult.fixed_points` (list) replaces the unread `fixed_point`;
+  `cKDTree` / `ResonanceZone` imported at module top; `_resolve_zone` and `max_depth_reached` gone.
+- `ResonanceZone`: `_trim_stable_at` (rtree internals + `cdist_tol`) replaced by
+  `workbench.trim_stable_at`; `_live_id` inlined as `registry.find`; `ring_order(cuts)` (was the
+  session's `_zone_ring_order`) sits beside `ring_cycles`.
+- `TangleSession`: `invalidate_trellises` deleted; coordinate readers stop ravelling (API-6).
+- `henon_cases._nested_slug(outer, inner)`: non-default blast counts in the slug (API-7).
+- Deferred: `partition_element_for` reading the topology instead of scanning snapshots (changes a
+  public answer, D8 API plan).

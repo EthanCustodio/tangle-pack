@@ -142,3 +142,29 @@ the crossing / iterate-table path is described; growth, refinement and budgets a
   `grow_until_arclength` on polyline arc length; module Dev Note rewritten.
 - Probes: `/home/dezhu/.claude/jobs/c5c98371/tmp/wp10/` (planner) and `.../tmp/wp10c/` (coder:
   `sig.py`, `series_time.py`, `alllaws.py`, `prof_topo.py` with worktree-relative paths).
+
+## Open-issues round WP11 slice 1 (2026-10-09, branch `oi/wp11-simplify`, base `4f7e815`)
+
+- `IterateInference.py` is a module function `infer_iterates(workbench, sources=None)` plus private
+  helpers (`_register_anchor_iterate(registry, ...)`, `_widest_stable_brackets`, `_bracketed_image`,
+  `_map_gated`); the stateless class, the workbench's `_iterate_inference` attribute and the
+  `infer_iterate_table` forwarder are gone (scripts / stress call `infer_iterates`; the stress stage
+  label `"infer_iterate_table"` is kept so recorded results stay comparable). Logger name unchanged.
+  `_widest_stable_brackets` scanning the registry per pass was measured negligible (0.10 s of 13 s of
+  blasting on `k28_deep_blast_sliver`).
+- `TangleWorkbench.trim_stable_at(key, cdist)` is the one stable trim (first node past the root at
+  or beyond `cdist`; no node -> WARNING, untrimmed); `trim_stable_manifolds` and the loom zone trims
+  call it.
+- `FixedPoint`: `(2,)` orbit points and eigenvectors, float eigenvalues (solver and placeholders);
+  `partial_jacobians` placeholders None; `preserves_orientation` = sign of `det(partial_jacobians[0])`
+  (any period, None unsolved, C16).
+- `ManifoldMachine._manifold_from_points(points, stability, stretch, fp)` replaces the initializer's
+  `construct_manifold_from_point_list` (no lazy initializer in `iterate_manifold`);
+  `get_initial_fundamental_segment` is one code path.
+- Dead code deleted: `IterateTable.backward_chain` / `all_registered_ids`, the registry's
+  `unstable_order_array` / `stable_order_array`, the scalar `_curvature_area` and its three helpers
+  (`_parabolic_fit` stays: unit-tested kernel), three `Intersection.synthetic` keywords;
+  `reindex_from` returns None. `from_branch(b)` holds the anchor for every b (D4).
+- `PointBudgetExceeded.blast_context` declared; `MaxIterationsReached`, `TURNAROUND_LOG_STRETCH`
+  exported.
+- `cdist_tol` (registry) is documented as geometry-only: degenerate bridge cuts and polyline clipping.

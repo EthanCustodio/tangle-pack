@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from cases import build_k10
+
 
 def _first_node_at_or_past(manifold, cdist):
     return next(
@@ -29,18 +31,21 @@ def test_the_trim_keeps_the_first_node_at_or_past_the_cdist(small_tangle):
     assert expected.get_cdist("stable") >= cdist > lo
 
 
-def test_trimming_the_manifolds_is_the_trim_at_the_outermost_crossing(small_tangle):
-    workbench, fp = small_tangle
+def test_trimming_the_manifolds_is_the_trim_at_the_outermost_crossing():
+    """Two identical builds: one trimmed by ``trim_stable_manifolds``, the other by
+    ``trim_stable_at`` at each branch's outermost registered crossing."""
+    trimmed, by_hand = (build_k10(unstable_steps=7, through="intersected") for _ in range(2))
+    workbench, fp = by_hand.workbench, by_hand.fixed_point
     outermost = {}
     for _, ix in workbench.intersection_registry:
         outermost[ix.manifold_b_key] = max(outermost.get(ix.manifold_b_key, 0.0), ix.stable_cdist)
-    expected = {
-        key: _first_node_at_or_past(workbench.manifolds[key], outermost[key])
-        for key in _stable_branches(workbench, fp)
-        if outermost.get(key, 0.0) > 0.0
-    }
-    assert expected
+    keys = [key for key in _stable_branches(workbench, fp) if outermost.get(key, 0.0) > 0.0]
+    assert keys
+    for key in keys:
+        workbench.trim_stable_at(key, outermost[key])
 
-    workbench.trim_stable_manifolds(fp)
-    for key, node in expected.items():
-        assert workbench.manifolds[key].tail is node
+    trimmed.workbench.trim_stable_manifolds(trimmed.fixed_point)
+    for key in keys:
+        other = (trimmed.fixed_point, *key[1:])
+        expected = workbench.manifolds[key].tail.get_cdist("stable")
+        assert trimmed.workbench.manifolds[other].tail.get_cdist("stable") == expected

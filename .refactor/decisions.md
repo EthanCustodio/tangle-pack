@@ -111,3 +111,24 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
 - **DEC-24 raised** (open): a member-less connecting class whose equal walks differ by a loop
   around another tangle, with no heteroclinic iterate link in N (`heteroclinic`'s `bn`). See
   `docs/open_issues.md`.
+
+## 2026-10-09 — WP11 (simplification sweep, slice 1), Claude's calls under D8 / C3
+
+Revisable by the author; recorded so later runs know they are calls, not the author's words.
+
+- **C15 (under D8) — the topology reads no absolute cdist slack.** Anchors are told by
+  identity (`Intersection.is_anchor`: synthetic at exactly (0, 0)), partition ownership,
+  containment, the pip-orbit cut, the fundamental-segment overlap and `interval_at` are
+  exact, and the only slack left is the RELATIVE error a scaled cdist carries
+  (`SCALING_RTOL` at a scaled landing end, `collision_rtol` in `Trellis.same_point`).
+  Measured before the change: forcing the `cdist_tol` that topology and loom read to 0
+  (and to 1e-12) moved no output on any law case, deep run or blast series, and the full
+  suite passed. `cdist_tol` stays for geometry only: degenerate bridge cuts in numerics
+  and clipping a polyline to its arc. The cartoon identifies partition boundaries exactly
+  too (they are registry floats).
+- **C16 (under C3) — orientation is a FixedPoint fact.** `FixedPoint.preserves_orientation`
+  is the sign of the solver's single-step Jacobian (`partial_jacobians[0]`, any period;
+  None before a solve), and `Trellis.orientation_preserving` reads it; the topology never
+  evaluates the dynamical system's Jacobian. The six side flips are one rule,
+  `topology.side_after(side, steps, preserving)`, kept although det J < 0 stays out of
+  scope (C3).

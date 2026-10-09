@@ -527,3 +527,34 @@ flood vs prototype, `sig.py`, `series.py`, `series_describe_all.py`, `breakit.py
 - **Residue (DEC-24).** `bn` (member-less, connecting, named by `bl`): its two walks differ by a loop around
   the B peninsula; none of the heteroclinic crossings (92, 93 in N; 108, 109 past p3's unstable cut) has any
   iterate link (`bn_missing.py`), so no closed curve with a known image goes through it (NUM-21).
+
+## Open-issues round WP11 slice 1 (2026-10-09, branch `oi/wp11-simplify`, base `4f7e815`)
+
+- **No absolute cdist slack (C15).** Anchors by `is_anchor` (StrongPip x2, Pseudoneighbor,
+  MinimalTrellis, `Arc._interior_polyline`); exact: `cut_at_pip_orbit` (placed cuts too),
+  `_anchorward_look`, `DualGraph._meets_fundamental_segment`, `Arc.elements`, `interval_at` (no
+  fallback, no `tol=`, `PartitionFamily.tol` gone); `_build_intervals`' near-anchor INFO branch gone;
+  `land_element._end_tolerance` = 0 at a table end, `SCALING_RTOL * |c|` at a scaled one. Public
+  `tol=` of `is_strong_pip` / `classify_strong_pips` / `compute_pseudoneighbors` (+ Trellis wrappers)
+  removed. Kept (geometry): `Arc._interior_polyline` and `_oriented_bridge_polyline` clipping. The
+  cartoon layouts identify boundaries exactly (`tol` 0; boundaries are registry floats). Counter
+  (`tol_count.py`): 115 / 19 / 56 -> 59 / 2 / 51 (tolerance sites / `cdist_tol` sites / warnings).
+- **One orientation rule (C3, C16).** `TopologyResults.side_after(side, steps, preserving)`, exported;
+  `Trellis.orientation_preserving` reads `FixedPoint.preserves_orientation` (no jacobian call, no
+  cache; DEBUG default True when no fixed point is solved).
+- **One collision test.** `Trellis.same_point(u, s, u0, s0, rtol)`; the branch-cycle wrappers are
+  gone (use `FixedPoint.branch_position_map`).
+- **One interval builder.** `StablePartition.intervals_from_marks` (+ `Marks`), shared with
+  `PartitionFamily`; `_build_intervals` only adds the branch's ends.
+- **One element image.** `land_element`; `Trellis.image_of_element`, `SNAP_RTOL`,
+  `StableNode.images`, `_link_element_images` deleted. In `land_element` (and its singleton path) an
+  image end on a branch other than `advance_key`'s is an assert (was WARNING + unresolved).
+- **One cartoon drawer.** `plotting._draw_cartoon_graph(target, layout, dual, dynamics, arc=, cross=,
+  track=, ...)`; module split deferred.
+- Smaller: `owner_of_intersection(id, side, branch_key)` (required, a direct lookup);
+  `_anchor_branch` inlined in `_hole_openings`; `bridge_classes(trellis, partitions)` (no
+  `bridge_ids`); `_diagnose` uses `groupby`; dead `Symbol.is_inverse`, `dynamics_of`,
+  `TrellisBranch.anchor_coords`, `BridgeClassTable.member_of` deleted.
+- Proof harness (`/home/dezhu/.claude/jobs/c5c98371/tmp/wp11/check_all.sh <root> <tag>`): `sig.py`
+  (14 + 5 builders), `cartoon_sig.py`, `series_sig.py` (5 series), `tol_count.py`; every hash identical
+  to base after every step.
