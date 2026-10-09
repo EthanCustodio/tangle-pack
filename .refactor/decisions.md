@@ -225,6 +225,6 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   the holes grow 56 -> 58.)
 - **DEC-14 recommendation (the author's call): the default blasting cutoff 1e-7 defines the
   symbolic result.** At 1e-5 the seed decreases on k28, k32, p3 and nested_inner (E12); the k28
-  drop is a lambda-lemma copy 5.6e-6 from a pair end that the coarse polyline orders on the
+  drop is a lambda-lemma copy 5.6e-5 from a pair end that the coarse polyline orders on the
   wrong side, a pair-ordering resolution limit the per-crossing ratio (183) does not see. Coarse
   blasting cutoffs are for exploration only.

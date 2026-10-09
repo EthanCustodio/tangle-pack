@@ -2,7 +2,7 @@
 
 This page states the whole tanglepack pipeline the way it is drawn at a chalkboard: one rule per stage, its input and output, and the invariants it must keep. The code is judged against it. When the code does something this page cannot explain, either the page is missing a rule or the code is carrying complexity it should not have. Issues found that way go in [`open_issues.md`](open_issues.md).
 
-The first draft was written on 2026-10-07 by the audit workflow's chalkboard review. It has been adjusted to the author's decisions of the same day (D1-D8 in `open_issues.md`) and of 2026-10-08 (D9-D12).
+The first draft was written on 2026-10-07 by the audit workflow's chalkboard review. It has been adjusted to the author's decisions of the same day (D1-D8 in `open_issues.md`), of 2026-10-08 (D9-D12) and of 2026-10-09 (D13, D14); the divergence table below is final for the open-issues round (WP12).
 
 ## Notation
 
@@ -74,7 +74,7 @@ Inversion, period-k and several saddles are **no special case** below, except at
 
 9. **Refinement and transition matrix.** A class whose symbol occurs with two or more distinct image pairs splits into a₁, a₂, …. The nodes are the active refined symbols, and the edge weights are token multiplicities. Inert classes are not nodes.
 
-10. **Recompute (D1).** Topology is a pure function of the numerical state. Any growth or blast recomputes stages 1-9 from scratch. A blast's image curves are computed manifold: every recompute re-indexes them, so grow, blast and recompute commute (NUM-12, C20). Successive recomputes are compared by element identity (the bounding crossings of each element: hole-bridge endpoints, whose ids persist in a session; C10), and the class count may only go up: N is T(q₀)'s (D12), so a lap the pip orbit has not completed, a lambda-lemma copy deeper than M^m q₀, is not in N and cannot reshape the fundamental segment. While the hole set stays the same, so does the alphabet closed under the word map (D11).
+10. **Recompute (D1).** Topology is a pure function of the numerical state. Any growth or blast recomputes stages 1-9 from scratch. A blast's image curves are computed manifold: every recompute re-indexes them, so grow, blast and recompute commute (NUM-12, C20). Successive recomputes are compared by element identity (the bounding crossings of each element: hole-bridge endpoints, whose ids persist in a session; C10), and the class count may only go up: N is T(q₀)'s (D12), so a lap the pip orbit has not completed, a lambda-lemma copy deeper than M^m q₀, is not in N and cannot reshape the fundamental segment. Measured (E12, WP12, cutoff 1e-7): the seed count is non-decreasing and plateaus on k28, k32, p3, nested_outer, nested_inner and heteroclinic; inversion drops once, at blast 6, by a genuine switch (BCG-8, DEC-25); at the coarse cutoff 1e-5 several series drop (NUM-5: near-parallel copies ordered wrongly across the window), so 1e-7 is the recommended cutoff (DEC-14). While the hole set stays the same, so does the alphabet closed under the word map (D11).
 
 ★ **Several saddles.** A heteroclinic crossing is a node of both tangles, and of neither alone: the topology of several saddles is computed on ONE trellis, the selection's (stage 3). Nesting of tangles is the rotation system's outer face of each component (the face holding due east at its easternmost vertex, never an area, WP10) plus ONE containment test per component, and a zone's blast iterates the bridges whose innermost zone it is (C4). A heteroclinic bridge is a bridge like any other (D14): it is classed, walked and a wall by the same rules; a connecting class exists only where a computed bridge connects the tangles (C18), and its images are D11 classes until growth computes them (at p3 17u they are). Nothing else changes.
 
@@ -87,7 +87,7 @@ From the audit; the details and evidence are in `open_issues.md`.
 | 1 | Four coincident anchors at an inversion point | INV-1 | fixed (WP3) |
 | 2 | Iterate table filled by a 5% cdist heuristic, never after a blast | INT-6, BCG-3 | fixed (WP2) |
 | 4 | Lap factor λ_u instead of β^k | INV-2 | fixed (WP2) |
-| 4 | Missing table links leave branches without holes | PK-3 | warned (WP5); filling is DEC-19 |
+| 4 | Missing table links leave branches without holes | PK-3 | accepted (D9): warned (WP5), nothing invented |
 | 5-6 | Holes and rows read from polyline geometry, not signs | INT-3 | fixed (WP4) |
 | 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | fixed (WP6) |
 | 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | no longer states (WP7); a walk pair no computed bridge spans is a flagged class (D11, WP8b) |
@@ -99,3 +99,5 @@ From the audit; the details and evidence are in `open_issues.md`.
 | 8 | Equal shortest walks picked by order; the walk started on any edge of the iterated element | DEC-23 | WP9b: span ends + the marker law (D13); WP9c: walls (D13, D14) |
 | 8 | Chords of a lobe image on a foreign stable branch left unpaired ("abuts no hole") | PK-4 | fixed (WP10b, C19) |
 | 10 | A recompute after a blast dropped every crossing on its image curves | NUM-12 | fixed (WP10b) |
+| 8 | Registered evidence contradicts the walk at depth through cdist noise (an image order the map cannot produce) | INT-11 | fixed (WP12, C21: an order flip gives no verdict); kind 2 (no registered preimage to prove it) is the resolution floor, NUM-3/4, deferred |
+| 4, 10 | The inversion series loses classes at blast 6: a genuine reference switch whose `+1` pair is never spanned (the reference arc lies outside the zone) | BCG-8 | open: DEC-25 |
