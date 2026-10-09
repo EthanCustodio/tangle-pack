@@ -1722,7 +1722,8 @@ class TangleWorkbench:
         (NUM-14): a bridge is an arc of ITS unstable branch between its two
         crossings. A non-anchor end sits on the bridge's own branch, inside its node
         span up to the registry's dedup tolerance; an anchor end comes first and is
-        the bridge's own periodic point (one anchor on every branch there, D4).
+        the bridge's own periodic point (one anchor on every branch there, D4); and
+        the id runs in unstable-cdist order (NUM-19).
         """
         bid = bridge.id
         if bid is None:
@@ -1738,6 +1739,8 @@ class TangleWorkbench:
         lo, hi = sorted(float(point.get_cdist("unstable")) for point in (bridge.root, bridge.tail))
         slack = DEDUP_RTOL * max(abs(hi), 1.0)
         fixed_point, _, orbit_index, _ = bridge.manifold_key
+        first, second = (self._intersection_registry[end] for end in bid)
+        assert first.is_anchor or first.unstable_cdist <= second.unstable_cdist, bid
         for end in bid:
             crossing = self._intersection_registry[end]
             if crossing.is_anchor:

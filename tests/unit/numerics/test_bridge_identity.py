@@ -490,3 +490,30 @@ def test_a_bridge_off_its_branch_is_refused():
     )
     with pytest.raises(AssertionError):
         workbench._register_bridge(short)
+
+
+def test_a_reversed_bridge_id_is_refused():
+    """NUM-19: a ``BridgeId`` runs in unstable-cdist order, asserted where every bridge
+    enters (``_register_bridge``); a hand-cut bridge naming its ends backwards is refused."""
+    from helpers.fakes import bare_fixed_point
+    from helpers.polylines import polyline_workbench
+    from tanglepack import Bridge
+
+    fp = bare_fixed_point(label="A")
+    unstable_key = (fp, "unstable", 0, 0)
+    workbench = polyline_workbench(fp, {
+        unstable_key: [(0, 0), (3, 0), (5, 0), (10, 0)],
+        (fp, "stable", 0, 0): _ZIGZAG[:4],  # crosses at x = 2 and x = 4, on two segments
+    })
+    workbench.compute_intersections([fp], infer_iterates=False)
+    (_, lower), (_, upper) = sorted(
+        (ix.unstable_cdist, iid) for iid, ix in workbench.intersection_registry if not ix.is_anchor
+    )
+    nodes = workbench.manifolds[unstable_key].get_point_array(return_nodes=True)
+    reversed_ends = Bridge(
+        root=nodes[0], stability="unstable", stretch_param=1.0, fixed_point=fp, tail=nodes[-1],
+        branch_index=0, manifold_key=unstable_key,
+        first_intersection=upper, second_intersection=lower,
+    )
+    with pytest.raises(AssertionError):
+        workbench._register_bridge(reversed_ends)
