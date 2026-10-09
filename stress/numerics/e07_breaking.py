@@ -140,15 +140,14 @@ def run_topology(session, rec: harness.Recorder) -> None:
     """The topology stack on the final state: secondary, recorded, never raised."""
     t0 = time.perf_counter()
     try:
-        session.compute_pseudoneighbors()
-        session.punch_holes()
-        session.partition_stable_manifold()
-        dynamics = session.symbolic_dynamics()
+        dynamics = session.topology().dynamics
         rec.metric("topology_outcome", "ok")
         rec.metric("is_reliable", bool(dynamics.is_reliable))
         rec.metric("n_classes", len(dynamics.classes))
         rec.metric("n_unresolved", len(dynamics.unresolved))
-        rec.metric("n_virtual", len(dynamics.virtual_classes))
+        # D11: classes no computed bridge spans yet (informational; the virtual
+        # classes these replaced were deleted in WP7).
+        rec.metric("n_flagged", sum(not cd.entry.spanned for cd in dynamics.classes.values()))
     except Exception as exc:  # noqa: BLE001 - the failure is the datum
         kind = "invariant_assert" if isinstance(exc, AssertionError) else "exception"
         rec.metric("topology_outcome", kind)
@@ -237,31 +236,18 @@ def run_escape(config: dict, rec: harness.Recorder) -> None:
 # blasts
 # --------------------------------------------------------------------------- #
 def blast_setup(case: str):
-    """Session, the fixed points to repin, their pips, and the zone to blast."""
-    from cases import build_k28
-    from tanglepack.examples import henon_cases as hc
+    """Session, its fixed points, their pips, and the zone to blast (the frozen
+    ``tests/cases.py`` recipes; the session carries the pips across blasts)."""
+    import cases
 
     if case == "k28":
-        built = build_k28(blasts=0, through="zones")
-        return built.session, built.fixed_points, built.pips, built.zones[0]
-
-    session = hc._session()
-    fp3 = hc._grow_period3(session, 13, 9, 1e-7)
-    if case == "p3":
-        hc._intersect_and_bridge(session, [fp3])
-        session.classify_strong_pips()
-        pip = session.trellis(fp3).strong_pip
-        zone = session.resonance_zone(pip)
-        return session, [fp3], [pip], zone
-
-    fp1 = hc._grow_period1(session, 11, 1e-7)
-    fixed_points = [fp1, fp3]
-    hc._intersect_and_bridge(session, [fp3, fp1])
-    session.classify_strong_pips()
-    pips = [session.trellis(fp).strong_pip for fp in fixed_points]
-    session.add_resonance_zones(pips)
-    outer = max(session.resonance_zones.values(), key=lambda zone: zone.area)
-    return session, fixed_points, pips, outer
+        built = cases.build_k28(blasts=0, through="zones")
+    elif case == "p3":
+        built = cases.build_period3(through="zones")
+    else:
+        built = cases.build_nested(outer_blasts=0, through="zones")
+    outer = max(built.session.resonance_zones.values(), key=lambda zone: zone.area)
+    return built.session, built.fixed_points, built.pips, outer
 
 
 def run_blasts(config: dict, rec: harness.Recorder) -> None:
@@ -272,7 +258,6 @@ def run_blasts(config: dict, rec: harness.Recorder) -> None:
     min_separation = 1e-4 if case == "nested" else 1e-5
     append_size(rec, session)
     rec.append("blast_s", 0.0)
-    rec.append("repin_s", 0.0)
     rec.append("interior_bridges", 0)
     rec.checkpoint()
 
@@ -282,12 +267,7 @@ def run_blasts(config: dict, rec: harness.Recorder) -> None:
         result = session.blast_zone(
             zone, num_iterations=1, fixed_point=[zone.fixed_point], min_separation=min_separation
         )
-        t1 = time.perf_counter()
-        session.classify_strong_pips()
-        for fp, pip in zip(fixed_points, pips):
-            session.set_strong_pip(fp, pip)
-        rec.append("blast_s", t1 - t0)
-        rec.append("repin_s", time.perf_counter() - t1)
+        rec.append("blast_s", time.perf_counter() - t0)
         rec.append("interior_bridges", len(result.all_interior_bridges()))
         append_size(rec, session)
         rec.metric("blasts_done", blast)
@@ -335,7 +315,6 @@ def run_depth(config: dict, rec: harness.Recorder) -> None:
     with rec.stage("bridges"):
         session.trim_stable_manifolds(fp)
         session.create_bridges(fp)
-        session.infer_iterates()
     for name, value in numerics_size(session).items():
         rec.metric(name, value)
     rec.metric("numerics_done", True)
@@ -343,11 +322,8 @@ def run_depth(config: dict, rec: harness.Recorder) -> None:
     with rec.stage("topology"):
         session.classify_strong_pips()
         if config["case"] == "p3":
-            # build_period3: trim at the default pip's zone, then restore the pip.
-            pip = session.strong_pip(fp)
-            session.resonance_zone(pip)
-            session.classify_strong_pips()
-            session.set_strong_pip(fp, pip)
+            # build_period3: the zone at the default pip (the session carries it).
+            session.resonance_zone(session.strong_pip(fp))
         run_topology(session, rec)
 
 
@@ -406,10 +382,10 @@ def run_tangency(config: dict, rec: harness.Recorder) -> None:
     rec.metric("max_abs", max_abs_coord(session))
     rec.checkpoint()
 
-    # The library's own resolution pass runs inside (diagnose=True, the default)
-    # and logs its WARNINGs, which the harness counts; the report is re-read here.
+    # The resolution pass runs once (PERF-5): not inside compute_intersections
+    # (diagnose=False), then check_resolution, whose report is kept.
     with rec.stage("intersections"):
-        registry = session.compute_intersections([fp])
+        registry = session.compute_intersections([fp], diagnose=False)
     with rec.stage("check_resolution"):
         report = wb.check_resolution([fp])
     for name, value in resolution_metrics(report, registry).items():

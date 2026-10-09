@@ -31,6 +31,10 @@ Cases (``case``)
   ``min_separation = 1e-4`` (the ``build_nested`` default, so every outer
   class resolves), then the inner (period-3) zone blasted.
 
+Since WP12 every case is a frozen ``tests/cases.py`` builder (``build``), which
+also builds ``inversion`` (k=4, zone at ``f(q0)``) and ``heteroclinic`` (its
+inner zone) for ``e12_reverify``; this grid is unchanged.
+
 Every case is BUILT at ``area_cutoff = 1e-7`` (the canonical recipes), so all
 cells of one case start from the same tangle; ``area_cutoff`` is the
 refinement threshold while BLASTING (the bridge images are refined by the
@@ -124,12 +128,15 @@ numerics ``blast``, ``blast_s``, ``crossings``,
 ``same_stability_stable_in``, ``same_stability_out``,
 ``min_suggested_area_cutoff``; laws ``same_stability``, ``cdist_decreasing``,
 ``cdist_worst_drop``, ``lobe_n``, ``lobe_ratio_max``, ``lobe_ratio_p50``,
-``lobe_sign_flips``; topology scalars ``repin_s`` (``classify_strong_pips`` +
-the pip restore, inside the topology guard; None when it raised),
-``topology_s``, ``topology_outcome``
+``lobe_sign_flips``; topology scalars (one ``session.topology()``; the session
+carries the pips, so nothing is repinned since WP12) ``topology_s``,
+``topology_outcome``
 (ok | exception | invariant_assert), ``n_classes``, ``n_active``,
 ``n_inert``, ``n_letters``, ``is_reliable``, ``n_unresolved``,
-``n_virtual``, ``n_ambiguous``, ``n_holes``, ``n_homotopy_elements``,
+``n_ambiguous``, ``n_flagged`` (D11 classes no computed bridge spans yet),
+``n_disagree`` (``verified is False``), ``n_straddle``, ``n_closed`` (the
+alphabet closed under the word map; ``n_classes`` is the seed table),
+``n_trellis_crossings`` (N, the crossings of T(q0)), ``n_holes``, ``n_homotopy_elements``,
 ``n_iterated_elements``, ``minimal_kept``, ``minimal_image``,
 ``topology_hash``, ``canonical_hash``; change flags vs the last successful
 snapshot (None at blast 0 and when this snapshot failed) ``classes_added``,
@@ -138,12 +145,11 @@ word differs, compared per class since inert letters are re-dealt every
 snapshot), ``new_letters`` (counts),
 ``matrix_changed``, ``reliability_changed``, ``structure_changed``
 (booleans); ``topology`` (one dict per blast: ``error`` (the traceback only at
-a message's first occurrence), ``pips``, ``default_pips`` (what
-``classify_strong_pips`` chose before the restore), ``classes``
+a message's first occurrence), ``pips`` (the session's), ``classes``
 ``[label, letter, inert]``, ``rules``, ``refined_rules``, ``canonical_rules``,
 ``matrix`` / ``refined_matrix`` ``{names, n, nnz, rows, hash}`` (rows
-omitted past 40 symbols), ``unresolved`` ``[letter, reason]``, ``virtual``,
-``ambiguous``, and the change lists ``classes_added``, ``classes_removed``,
+omitted past 40 symbols), ``unresolved`` ``[letter, reason]``, ``ambiguous``,
+``flagged``, ``disagree``, ``straddle``, and the change lists ``classes_added``, ``classes_removed``,
 ``words_changed``, ``new_letters``; lists capped at 60, words at 300 chars).
 """
 
@@ -156,9 +162,13 @@ import traceback
 
 import numpy as np
 
+import sys
+
 import harness
 from maps import (curve_arrays, lobe_polygon, max_abs_coord, resolution_metrics, saddle_session,
                   total_points)
+
+sys.path.insert(0, str(harness.REPO / "tests"))
 
 EXPERIMENT = "e11_blast_depth"
 TIMEOUT = 900
@@ -212,52 +222,33 @@ def configs(quick: bool) -> list[dict]:
 # Building the cases
 # --------------------------------------------------------------------------- #
 def build(case: str):
-    """Session, fixed points to repin, their pips, and the zone to blast."""
-    from tanglepack.examples import henon_cases as hc
+    """Session, its fixed points, their pips, and the zone to blast.
 
-    if case in ("k28", "k32"):
-        session, fp = saddle_session(2.8 if case == "k28" else 3.2, 1, area_cutoff=BUILD_CUTOFF)
-        session.grow_n_times(fp, "unstable", num_iterations=10)
-        session.grow_until_turnaround(fp, "stable")
-        hc._intersect_and_bridge(session, [fp])
-        session.classify_strong_pips()
-        trellis = session.trellis(fp)
-        pip = trellis.iterate(trellis.strong_pip, 1)
-        zone = session.resonance_zone(pip)
-        return session, [fp], [pip], zone
+    The frozen recipes of ``tests/cases.py`` (WP12: the harness used private
+    ``henon_cases`` growers that the open-issues round deleted). The session
+    carries each pip across every blast (API-1, WP8), so nothing is repinned.
+    """
+    import cases
 
-    session = hc._session()
-    fp3 = hc._grow_period3(session, 13, 9, BUILD_CUTOFF)
-    if case == "p3":
-        hc._intersect_and_bridge(session, [fp3])
-        session.classify_strong_pips()
-        pip = session.trellis(fp3).strong_pip
-        zone = session.resonance_zone(pip)
-        return session, [fp3], [pip], zone
-
-    fp1 = hc._grow_period1(session, 11, BUILD_CUTOFF)
-    fixed_points = [fp1, fp3]
-    hc._intersect_and_bridge(session, [fp3, fp1])
-    session.classify_strong_pips()
-    pips = [session.trellis(fp).strong_pip for fp in fixed_points]
-    session.add_resonance_zones(pips)
-    zones = sorted(session.resonance_zones.values(), key=lambda zone: zone.area)
-    inner, outer = zones[0], zones[-1]
-    if case == "nested_outer":
-        return session, fixed_points, pips, outer
-    for _ in range(2):
-        session.blast_zone(outer, num_iterations=1, fixed_point=[outer.fixed_point],
-                           min_separation=1e-4)
-    return session, fixed_points, pips, inner
-
-
-def repin(session, fixed_points, pips) -> list:
-    """Classify, restore the chosen pips; return the default pips the classification chose."""
-    session.classify_strong_pips()
-    defaults = [session.strong_pip(fp) for fp in fixed_points]
-    for fp, pip in zip(fixed_points, pips):
-        session.set_strong_pip(fp, pip)
-    return defaults
+    if case == "k28":
+        built = cases.build_k28(blasts=0, through="zones")
+    elif case == "k32":
+        built = cases.build_k32_zone()
+    elif case == "p3":
+        built = cases.build_period3(through="zones")
+    elif case == "inversion":
+        built = cases.build_inversion(through="zones")
+    elif case == "nested_outer":
+        built = cases.build_nested(outer_blasts=0, through="zones")
+    elif case == "nested_inner":
+        built = cases.build_nested(outer_blasts=2)
+    elif case == "heteroclinic":
+        built = cases.build_heteroclinic()
+    else:
+        raise ValueError(f"unknown case {case!r}")
+    zones = sorted(built.session.resonance_zones.values(), key=lambda zone: zone.area)
+    zone = zones[0] if case in ("nested_inner", "heteroclinic") else zones[-1]
+    return built.session, list(built.fixed_points), list(built.pips), zone
 
 
 # --------------------------------------------------------------------------- #
@@ -359,15 +350,11 @@ def _matrix(dynamics, refined: bool) -> dict:
 
 
 def topology_snapshot(session, fixed_points) -> dict:
-    """The topology stack on the current state, as small JSON."""
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-    table = session.bridge_classes()
-    dynamics = session.symbolic_dynamics()
-    minimal = session.minimal_trellis()
-    iterated = session.iterated_partition()
-    trellises = [session.trellis(fp) for fp in fixed_points]
+    """The topology stack on the current state (one ``session.topology()``), as small JSON."""
+    topology = session.topology()
+    table = topology.classes
+    dynamics = topology.dynamics
+    minimal, iterated, trellis = topology.minimal, topology.iterated, topology.trellis
     letters = {cls: cd.letter for cls, cd in dynamics.classes.items()}
     classes = [[e.bridge_class.label, letters.get(e.bridge_class), e.inert] for e in table]
     rules, refined_rules = _words(dynamics.rules), _words(dynamics.refined_rules)
@@ -377,6 +364,7 @@ def topology_snapshot(session, fixed_points) -> dict:
              for cls, cd in dynamics.classes.items()}
     canonical = _canonical_rules(dynamics, classes)
     matrix, refined_matrix = _matrix(dynamics, False), _matrix(dynamics, True)
+    records = list(dynamics.classes.values())
     return {
         "classes": classes[:CAP],
         "class_labels": [label for label, _l, _i in classes],
@@ -392,13 +380,19 @@ def topology_snapshot(session, fixed_points) -> dict:
         "is_reliable": bool(dynamics.is_reliable),
         "unresolved": [[cd.letter, (cd.unresolved_reason or "")[:120]]
                        for cd in dynamics.unresolved][:CAP],
-        "virtual": list(dynamics.virtual_classes.values())[:CAP],
-        "ambiguous": [cd.letter for cd in dynamics.classes.values() if cd.ambiguous][:CAP],
+        "ambiguous": [cd.letter for cd in records if cd.ambiguous][:CAP],
+        # D11: a class no computed bridge spans yet (informational, never unreliable).
+        "flagged": [cd.letter for cd in records if not cd.entry.spanned][:CAP],
+        "disagree": [cd.letter for cd in records if cd.verified is False][:CAP],
+        "straddle": [cd.letter for cd in records
+                     if any(landing is not None and not landing.contained
+                            for landing in cd.landings)][:CAP],
+        "n_closed": len(records),
+        "n_trellis_crossings": len(trellis.own_intersection_ids),
         "n_active": len(table.active),
         "n_inert": len(table.inert),
-        "n_holes": sum(len(t.holes) for t in trellises),
-        "n_homotopy_elements": sum(len(r.intervals) for t in trellises
-                                   for r in t.stable_partitions),
+        "n_holes": len(topology.holes),
+        "n_homotopy_elements": sum(len(r.intervals) for r in topology.partitions),
         "n_iterated_elements": sum(len(r.intervals) for r in iterated.as_list()),
         "minimal_kept": len(minimal.kept_bridge_ids),
         "minimal_image": len(minimal.image_bridge_ids),
@@ -432,17 +426,10 @@ def changes(previous: dict | None, current: dict | None) -> dict:
 
 
 def record_topology(rec, session, fixed_points, pips, previous):
-    """Repin and snapshot the topology into the series; a failure is recorded, never raised.
-
-    The repin (``classify_strong_pips``) is topology too, so it sits inside the
-    guard: a strong-pip failure is a topology error of this blast, not of the run.
-    """
+    """Snapshot the topology into the series; a failure is recorded, never raised."""
     t0 = time.perf_counter()
-    snapshot, outcome, error, defaults = None, "ok", None, None
+    snapshot, outcome, error = None, "ok", None
     try:
-        defaults = repin(session, fixed_points, pips)
-        rec.append("repin_s", time.perf_counter() - t0)
-        t0 = time.perf_counter()
         snapshot = topology_snapshot(session, fixed_points)
     except Exception as exc:  # noqa: BLE001 - the failure is the datum
         outcome = "invariant_assert" if isinstance(exc, AssertionError) else "exception"
@@ -450,18 +437,17 @@ def record_topology(rec, session, fixed_points, pips, previous):
         if error not in _SEEN_ERRORS:  # the traceback once per distinct message
             _SEEN_ERRORS.add(error)
             error += "\n" + traceback.format_exc()[-1500:]
-    if defaults is None:
-        rec.append("repin_s", None)
     rec.append("topology_s", time.perf_counter() - t0)
     rec.append("topology_outcome", outcome)
     delta = changes(previous, snapshot)
     snap = snapshot or {}
     for name in ("n_active", "n_inert", "is_reliable", "n_holes", "n_homotopy_elements",
-                 "n_iterated_elements", "minimal_kept", "minimal_image"):
+                 "n_iterated_elements", "minimal_kept", "minimal_image", "n_closed",
+                 "n_trellis_crossings"):
         rec.append(name, snap.get(name))
     rec.append("n_classes", len(snap["class_labels"]) if snapshot else None)
     rec.append("n_letters", len(snap["letters"]) if snapshot else None)
-    for name in ("unresolved", "virtual", "ambiguous"):
+    for name in ("unresolved", "ambiguous", "flagged", "disagree", "straddle"):
         rec.append(f"n_{name}", len(snap[name]) if snapshot else None)
     rec.append("topology_hash", snap.get("hash"))
     for name in ("classes_added", "classes_removed", "words_changed", "new_letters"):
@@ -471,7 +457,8 @@ def record_topology(rec, session, fixed_points, pips, previous):
     rec.append("canonical_hash", snap.get("canonical_hash"))
     detail = {k: v for k, v in snap.items()
               if k not in ("class_labels", "words", "hash", "canonical_hash")}
-    rec.append("topology", {"error": error, "pips": pips, "default_pips": defaults,
+    pips = [session.strong_pip(fp) for fp in fixed_points]
+    rec.append("topology", {"error": error, "pips": pips,
                             **detail, **{k: v for k, v in delta.items()
                                          if isinstance(v, list)}})
     return snapshot, delta
@@ -491,10 +478,13 @@ def resolution_step(wb, fixed_points, full: bool) -> dict:
     if full:
         flags = resolution_metrics(wb.report_resolution(fixed_points), registry)
     else:
+        # The crossings of the blasted fixed points only, as the full pass reads them.
         threshold = wb.resolution_ratio_threshold
         ratios = [ix.resolution_ratio for _id, ix in registry if ix.resolution_ratio is not None]
         flags = {"resolution_threshold": threshold,
-                 "unresolved": len(registry.unresolved_crossings(threshold)),
+                 "unresolved": sum(
+                     any(fp is chosen for fp in registry[i].fixed_points for chosen in fixed_points)
+                     for i in registry.unresolved_crossings(threshold)),
                  "min_resolution_ratio": min(ratios) if ratios else None,
                  "same_stability_unstable_in": None, "same_stability_stable_in": None,
                  "same_stability_out": None, "min_suggested_area_cutoff": None}
@@ -522,7 +512,7 @@ def run(config: dict, rec: harness.Recorder) -> None:
     previous, _ = record_topology(rec, session, fixed_points, pips, None)
     full_pass = bool(config.get("resolution_pass"))
     blast_step = dict(blast=0, blast_s=0.0, new_crossings=0, interior_bridges=0,
-                      **resolution_step(wb, fixed_points, full_pass))
+                      **resolution_step(wb, [zone.fixed_point], full_pass))
     totals = dict(topology_errors=0, law_violations=0, topology_changes=0, structure_changes=0)
     first_change, stop_reason, last_cost = None, "max_blasts", 0.0
 
@@ -556,7 +546,7 @@ def run(config: dict, rec: harness.Recorder) -> None:
         t1 = time.perf_counter()
         # What blast_zone's own end-of-call pass would log, kept per blast (only in
         # the resolution_pass cells: the pass outgrows the blast at depth).
-        flags = resolution_step(wb, fixed_points, full_pass)
+        flags = resolution_step(wb, [zone.fixed_point], full_pass)
         new_bridges = [b for b in wb.bridges if id(b) not in known]
         known |= {id(b) for b in new_bridges}
         if total_points(session) != curve_size:
