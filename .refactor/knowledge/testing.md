@@ -681,5 +681,5 @@ Last updated 2026-10-02 (auditor second pass, branch `refactor/hole-side-and-own
 - Base check: the new and extended test files plus `cases.py` copied over a `git archive` of base
   (`.../tmp/wp09c_base_tree`): all 14 new tests fail there (12 on the missing API, the two regressions on
   `bn` / `bm` ambiguous); the existing tests of those files pass.
-- Suite 1101 passed / 26 skipped / 5 deselected / 1 xfailed in 132.5 s (WP11 base: 1088 / 21 / 4 / 2 in 132 s).
+- Suite 1102 passed / 26 skipped / 5 deselected / 1 xfailed in 132.0 s after the review fix round (WP11 base: 1088 / 21 / 4 / 2 in 132 s).
 
