@@ -25,6 +25,7 @@ from tanglepack.topology.DualGraph import FaceNode, StableNode
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch
 from tanglepack.topology.TopologyResults import (
+    Arc,
     ElementRef,
     PartitionInterval,
     Side,
@@ -267,7 +268,8 @@ class FakeTrellis:
 # --------------------------------------------------------------------------- #
 class FakeDual:
     """
-    The one method :func:`~tanglepack.topology.DualWalk.shortest_walks` needs.
+    The methods :func:`~tanglepack.topology.DualWalk.shortest_walks` needs (and
+    :func:`~tanglepack.topology.DualWalk.holds_markers`, up to the enclosure).
 
     Attributes:
         faces: The face nodes, ``faces[i].index == i``.
@@ -285,10 +287,10 @@ class FakeDual:
         self.faces.append(node)
         return node
 
-    def _edge_key(self, branch_key: tuple) -> tuple:
+    def _arc(self, branch_key: tuple) -> Arc:
         lo = 2 * self._next_edge
         self._next_edge += 1
-        return ("stable", lo, lo + 1, branch_key)
+        return Arc("stable", lo, lo + 1, branch_key)
 
     def unified(
         self,
@@ -306,9 +308,10 @@ class FakeDual:
         The same face may be passed on both sides (merged-face self-adjacency).
         """
         branch_key = left_element.branch_key
-        edge_key = self._edge_key(branch_key)
+        arc = self._arc(branch_key)
+        edge_key = arc.edge_key
         node = StableNode(
-            arc=None,
+            arc=arc,
             edge_key=edge_key,
             key=(edge_key, "both"),
             branch_key=branch_key,
@@ -337,14 +340,15 @@ class FakeDual:
     ) -> tuple[StableNode, StableNode]:
         """Add the two open side nodes of one wall edge."""
         branch_key = left_element.branch_key
-        edge_key = self._edge_key(branch_key)
+        arc = self._arc(branch_key)
+        edge_key = arc.edge_key
         made: list[StableNode] = []
         for side, face, element in (
             ("left", left_face, left_element),
             ("right", right_face, right_element),
         ):
             node = StableNode(
-                arc=None,
+                arc=arc,
                 edge_key=edge_key,
                 key=(edge_key, side),
                 branch_key=branch_key,
@@ -360,6 +364,10 @@ class FakeDual:
             self.nodes.append(node)
             made.append(node)
         return made[0], made[1]
+
+    def stable_nodes_on(self, branch_key: tuple) -> list[StableNode]:
+        """Every node on one stable branch."""
+        return [node for node in self.nodes if node.branch_key == branch_key]
 
     def stable_nodes_of(self, element: ElementRef) -> list[StableNode]:
         """Every node whose element on ``element.side`` is ``element``."""

@@ -80,12 +80,15 @@ Dev Notes:
   twice) is kept but never preferred by order, so it can only make a tie.
   A class with no member lobe (member-less, D11, or with its ends on two
   branches) keeps the plain shortest walk.
-* ``"truncated"`` is a member of :data:`WalkStatus` for callers, but
-  :func:`shortest_walks` never reports it as the status: when the
-  ``max_walks`` cap cuts the enumeration short the status still says
-  ``"unique"`` or ``"ambiguous"`` for the itineraries that survived and
+* When the ``max_walks`` cap cuts the enumeration short the status still
+  says ``"unique"`` or ``"ambiguous"`` for the itineraries that survived and
   :attr:`WalkSearch.truncated` is set (with a WARNING), because a truncated
-  search still has a best candidate to hand on.
+  search still has a best candidate to hand on. Only a constrained search
+  (D13) that runs out before any judged walk holds the markers reports
+  ``"truncated"`` as its status, with no walk: it has no candidate, and
+  ``"no_admissible_walk"`` would claim every walk up to the detour cap broke
+  the rule. The cap counts judgements there, and the other walks of an
+  itinerary already holding the markers are counted, not judged.
 """
 
 from __future__ import annotations
@@ -511,7 +514,8 @@ class Walk:
         faces: The faces visited, ``len(steps) + 1`` of them.
         multiplicity: How many distinct face paths produced this itinerary
             (parallel unified nodes carrying the same elements collapse into
-            one walk).
+            one walk); under the non-crossing rule, the walks of the
+            itinerary not rejected.
         start_node: The stable node of the start element the walk leaves from
             (on its first face).
         goal_node: The stable node of the goal element it arrives at (on its
@@ -543,9 +547,9 @@ class Walk:
         return f"Walk({self.length} step(s), x{self.multiplicity}: {route})"
 
 
-#: The outcome of a shortest-walk search. ``"truncated"`` is reserved for
-#: callers; :func:`shortest_walks` reports the cap through
-#: :attr:`WalkSearch.truncated` instead (see the module Dev Notes).
+#: The outcome of a shortest-walk search. :func:`shortest_walks` reports the
+#: cap through :attr:`WalkSearch.truncated`; ``"truncated"`` is the status only
+#: when a constrained search ran out with no walk (see the module Dev Notes).
 WalkStatus = Literal[
     "unique",
     "trivial",
@@ -573,9 +577,11 @@ class WalkSearch:
         status: ``"trivial"`` (start and goal share a face, or are equal),
             ``"unique"`` (one distinct shortest itinerary), ``"ambiguous"``
             (several distinct shortest itineraries, all kept),
-            ``"unreachable"``, ``"no_start_node"``, ``"no_goal_node"`` or
+            ``"unreachable"``, ``"no_start_node"``, ``"no_goal_node"``,
             ``"no_admissible_walk"`` (the non-crossing rule rejected every
-            walk up to :data:`MAX_DETOUR` crossings past the shortest).
+            walk up to :data:`MAX_DETOUR` crossings past the shortest) or
+            ``"truncated"`` (the ``max_walks`` cap ran out before any walk
+            judged under that rule held the markers).
         walks: The distinct shortest walks in deterministic order (by the
             :func:`~tanglepack.topology.BridgeClass.element_sort_key` of
             their itineraries); empty unless the status is ``"trivial"``,
@@ -583,8 +589,8 @@ class WalkSearch:
         start_faces: The distinct faces on ``start``'s side of the nodes the
             walk may leave from.
         truncated: True when the ``max_walks`` cap stopped the enumeration of
-            shortest face paths, so ``walks`` (and their multiplicities) may
-            be incomplete.
+            shortest face paths (of judged walks, when constrained), so
+            ``walks`` (and their multiplicities) may be incomplete.
         constrained: True when the markers of a member lobe were imposed
             (the non-crossing rule, D13).
         rejected: How many itineraries, no longer than the one chosen, broke
@@ -835,7 +841,8 @@ def holds_markers(dual, walk: Walk, wanted: dict["Marker", bool]) -> Optional[bo
     The walk runs from the middle of its start edge through its faces to the
     middle of its goal edge; ``sigma'``, the stable edges between the two plus
     the half of each end edge facing the other, closes it. The curve stands
-    for ``f(b) + f(sigma_b)``, so it must hold exactly the wanted markers.
+    for ``f(b) + f(sigma_b)``, so each marker in ``wanted`` must be held or
+    left out as ``wanted`` says; markers outside ``wanted`` are free.
 
     Args:
         dual: The dual graph.
@@ -844,8 +851,9 @@ def holds_markers(dual, walk: Walk, wanted: dict["Marker", bool]) -> Optional[bo
 
     Returns:
         True when SOME routing through the faces keeps the curve simple and
-        holds every wanted marker the curve decides and leaves out every other
-        one. False when none does, which includes a walk crossing ``sigma'``
+        agrees with ``wanted`` on every marker of ``wanted`` the curve decides
+        (held where ``wanted`` says held, left out where it says left out).
+        False when none does, which includes a walk crossing ``sigma'``
         (``f(b)`` meets ``f(sigma_b)`` only at its ends) and one whose chords
         cross in a face (``f(b)`` is simple, and pulling it tight keeps it
         so). None when the curve is beyond the model: the ends on two
@@ -903,10 +911,9 @@ def _walks(
     start_nodes: list["StableNode"],
     goal_nodes: list["StableNode"],
     length: int,
-    budget: _Budget,
 ) -> Iterator[Walk]:
     """
-    Every walk with exactly ``length`` crossings, while the budget lasts.
+    Every walk with exactly ``length`` crossings.
 
     Faces may repeat; a node is crossed at most once and a step never stays
     in its face. A branch is cut once the goal is out of reach in the steps
@@ -937,8 +944,6 @@ def _walks(
     for start_node in start_nodes:
         first = start_node.face_on(start.side)
         for steps, goal_node in extend(first, []):
-            if not budget.take():
-                return
             itinerary = [start]
             for step in steps:
                 itinerary += [step.entry_element, step.exit_element]
@@ -962,23 +967,32 @@ def _admissible_walks(
 
     An itinerary is admissible when one of its walks holds the wanted markers,
     or cannot be judged (kept, so it is never passed over by order alone).
+    Each judgement spends one unit of the budget; once an itinerary has a
+    walk holding the markers its other walks are counted, not judged.
 
     Returns:
         ``(walks, rejected itineraries, their length)``; no walks and length
-        None when every itinerary up to the detour cap broke the markers.
+        None when every itinerary up to the detour cap broke the markers, no
+        walks and the length reached when the budget ran out first.
     """
     rejected = 0
     for length in range(shortest, shortest + MAX_DETOUR + 1):
         judged: dict[tuple[ElementRef, ...], list[tuple[Optional[bool], Walk]]] = {}
-        for walk in _walks(start, goal, start_nodes, goal_nodes, length, budget):
-            judged.setdefault(walk.itinerary, []).append((holds_markers(dual, walk, wanted), walk))
+        for walk in _walks(start, goal, start_nodes, goal_nodes, length):
+            verdicts = judged.get(walk.itinerary)
+            if verdicts and verdicts[0][0]:  # held: one walk is enough
+                verdicts[0][1].multiplicity += 1
+                continue
+            if not budget.take():
+                break
+            verdict = holds_markers(dual, walk, wanted)
+            verdicts = judged.setdefault(walk.itinerary, [])
+            verdicts.insert(0 if verdict else len(verdicts), (verdict, walk))
         kept = []
         for verdicts in judged.values():
-            admissible = [walk for verdict, walk in verdicts if verdict] + [
-                walk for verdict, walk in verdicts if verdict is None
-            ]
+            admissible = [walk for verdict, walk in verdicts if verdict is not False]
             if admissible:
-                admissible[0].multiplicity = len(admissible)
+                admissible[0].multiplicity += len(admissible) - 1
                 kept.append(admissible[0])
         rejected += len(judged) - len(kept)
         if kept or budget.truncated:
@@ -1025,9 +1039,11 @@ def shortest_walks(
         start: The iterated element to start from.
         goal: The iterated element to reach.
         max_walks: Cap on the number of shortest face paths enumerated (on
-            the walks enumerated, with ``wanted``). When it is hit
-            ``truncated`` is set and a WARNING logged; the status still
-            reports the itineraries that survived.
+            the walks judged against the markers, with ``wanted``: the other
+            walks of an itinerary already holding them are counted, not
+            judged). When it is hit ``truncated`` is set and a WARNING
+            logged; the status still reports the itineraries that survived,
+            or is ``"truncated"`` when none did.
         fixed_points: The ordering context for
             :func:`~tanglepack.topology.BridgeClass.element_sort_key`. By
             default it is derived from the refs themselves (start, goal, then
@@ -1045,7 +1061,8 @@ def shortest_walks(
         distinct shortest itinerary; ``"ambiguous"`` for several (all kept,
         WARNING); ``"unreachable"`` when the search exhausts the faces;
         ``"no_admissible_walk"`` when the non-crossing rule rejects every
-        walk it looked at.
+        walk up to the detour cap; ``"truncated"`` when the cap ran out
+        before any judged walk held the markers.
     """
     start_nodes = list(dual.stable_nodes_of(start))
     if not start_nodes:
@@ -1157,6 +1174,18 @@ def shortest_walks(
                 rejected,
                 "y" if rejected == 1 else "ies",
             )
+        if not found_walks and budget.truncated:
+            logger.warning(
+                "walk %s -> %s: the %d walks judged under the non-crossing rule ran "
+                "out at %d crossings with no walk holding the markers of the class's "
+                "member lobe (%d itineraries rejected); the search is truncated",
+                start.label,
+                goal.label,
+                max_walks,
+                length,
+                rejected,
+            )
+            return WalkSearch(start, goal, "truncated", [], start_faces, True, True, rejected)
         if not found_walks:
             logger.warning(
                 "walk %s -> %s: no walk up to %d crossings holds the markers of the "
@@ -1166,9 +1195,7 @@ def shortest_walks(
                 shortest + MAX_DETOUR,
                 rejected,
             )
-            return WalkSearch(
-                start, goal, "no_admissible_walk", [], start_faces, budget.truncated, True, rejected
-            )
+            return WalkSearch(start, goal, "no_admissible_walk", [], start_faces, False, True, rejected)
     truncated = budget.truncated
 
     context = (
@@ -1182,11 +1209,12 @@ def shortest_walks(
     )
     if truncated:
         logger.warning(
-            "walk %s -> %s: more than %d shortest face paths; enumeration "
-            "truncated after %d distinct itinerar%s",
+            "walk %s -> %s: more than %d %s; enumeration truncated after %d "
+            "distinct itinerar%s",
             start.label,
             goal.label,
             max_walks,
+            "shortest face paths" if wanted is None else "walks judged",
             len(walks),
             "y" if len(walks) == 1 else "ies",
         )

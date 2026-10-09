@@ -94,7 +94,8 @@ Dev Notes:
   deterministic order into the refinement and the graph, and
   :attr:`SymbolicDynamics.is_reliable` is False (DEC-24). No walk up to the
   detour cap holding the markers leaves the class unresolved
-  (``"no_admissible_walk"``).
+  (``"no_admissible_walk"``), and so does the walk budget running out
+  before any judged walk held them (``"truncated"``).
 * Inert classes are NOT nodes of the transition graph or the matrix (author,
   2026-09-23): they contribute nothing to the dynamics, and their symbols
   are still visible in the words. A token naming an inert class is dropped

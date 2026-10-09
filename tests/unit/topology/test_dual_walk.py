@@ -1,11 +1,13 @@
 """
 Dual-graph walks, element landings and the trellis itinerary.
 
-Synthetic graphs (real ``StableNode`` / ``FaceNode`` objects, ``arc=None``)
-pin the walk: trivial cases, entry-then-exit recording, walls never crossed,
-merged-face self-adjacency, ties, dedupe of parallel nodes, unreachability,
-missing nodes, several start faces, the ``max_walks`` cap, the landing span
-and the non-crossing rule's search (its marker verdict stubbed). Hand-made
+Synthetic graphs (real ``StableNode`` / ``FaceNode`` objects, arcs with no
+geometry) pin the walk: trivial cases, entry-then-exit recording, walls never
+crossed, merged-face self-adjacency, ties, dedupe of parallel nodes,
+unreachability, missing nodes, several start faces, the ``max_walks`` cap, the
+landing span and the non-crossing rule's search (its marker verdict stubbed,
+or only its enclosure, for the ``sigma'`` rule; the enclosure itself is in
+``test_enclosure.py``). Hand-made
 partition families and a duck-typed trellis pin the landing and the trellis
 itinerary. Real walks are checked by the law tier (even itineraries, same-side
 pairs, contained landings), never pinned.
@@ -391,6 +393,61 @@ def test_the_markers_may_ask_for_a_detour_through_a_face_twice(key, monkeypatch)
     assert search.status == "unique" and search.rejected >= 1
     assert search.walk.length == 3
     assert search.walk.faces == [f0, f2, f0, f1]
+
+
+class _HoldsNothing(FakeDual):
+    """A dual graph whose every closed curve holds no marker: only ``sigma'`` can reject."""
+
+    def enclosed(self, along, chords=(), along_halves=()):
+        return [{}]
+
+
+def test_a_walk_crossing_sigma_prime_is_rejected(key):
+    """Two walks from the edge ``[0, 1]`` to the edge ``[2, 3]``: the one crossing the
+    edge ``[1, 2]`` between them crosses ``f(sigma_b)``, which ``f(b)`` meets only at its
+    ends (D13); the one going round beyond the goal does not."""
+    dual = _HoldsNothing()
+    fa, fb, fb2, fc, fx, fy = (dual.face() for _ in range(6))
+    dual.wall(fa, fx, L(key, 0), R(key, 0), lo_cdist=0.0, hi_cdist=1.0)
+    inside = dual.unified(fa, fb, L(key, 1), R(key, 1), lo_cdist=1.0, hi_cdist=2.0)
+    dual.wall(fc, fy, L(key, 3), R(key, 3), lo_cdist=2.0, hi_cdist=3.0)
+    beyond = dual.unified(fa, fb2, L(key, 4), R(key, 4), lo_cdist=3.0, hi_cdist=4.0)
+    dual.unified(fb, fc, L(key, 5), R(key, 5), lo_cdist=5.0, hi_cdist=6.0)
+    dual.unified(fb2, fc, L(key, 6), R(key, 6), lo_cdist=6.0, hi_cdist=7.0)
+    assert shortest_walks(dual, L(key, 0), L(key, 3)).status == "ambiguous"
+    search = shortest_walks(dual, L(key, 0), L(key, 3), wanted={})
+    across, around = sorted(
+        shortest_walks(dual, L(key, 0), L(key, 3)).walks, key=lambda walk: walk.steps[0].node is beyond
+    )
+    assert across.steps[0].node is inside and DualWalk.holds_markers(dual, across, {}) is False
+    assert DualWalk.holds_markers(dual, around, {}) is True
+    assert search.status == "unique" and search.rejected == 1
+    assert search.walk.steps[0].node is beyond
+
+
+def test_a_budget_spent_before_any_walk_holds_the_markers_is_truncated(key, tie, monkeypatch, caplog):
+    """Out of budget with nothing admitted is no verdict on the walks never judged."""
+    monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: False)
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        search = shortest_walks(tie, L(key, 0), L(key, 3), wanted={}, max_walks=1)
+    assert search.status == "truncated" and search.truncated and search.walk is None
+    assert_logged(caplog, logging.WARNING, LOGGER)
+
+
+def test_walks_of_an_admitted_itinerary_are_counted_not_judged(key, monkeypatch):
+    """Parallel nodes carrying the same elements: one judgement admits the itinerary,
+    the other walk adds to its multiplicity and spends no budget."""
+    dual = FakeDual()
+    f0, f1, fx, fy = dual.face(), dual.face(), dual.face(), dual.face()
+    dual.wall(f0, fx, L(key, 0), R(key, 0))
+    dual.unified(f0, f1, L(key, 1), R(key, 1))
+    dual.unified(f0, f1, L(key, 1), R(key, 1))
+    dual.wall(f1, fy, L(key, 3), R(key, 3))
+    judged = []
+    monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: judged.append(walk) or True)
+    search = shortest_walks(dual, L(key, 0), L(key, 3), wanted={}, max_walks=1)
+    assert search.status == "unique" and not search.truncated
+    assert len(judged) == 1 and search.walk.multiplicity == 2
 
 
 def test_no_admissible_walk_within_the_detour_cap(key, tie, monkeypatch, caplog):
