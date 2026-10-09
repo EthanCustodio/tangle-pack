@@ -125,7 +125,7 @@ Implementation notes:
   position lookup drops it). The 2D endpoint collision of a scaled landing
   compares stable cdists, so it applies only to a candidate on the pair's own
   stable manifold (an A x A crossing's orbit stays on W^s(A), never x0's on
-  W^s(B)). Every detected crossing carries both branch keys (Tangle asserts
+  W^s(B)), in r's own frame as in the scaled fallback. Every detected crossing carries both branch keys (Tangle asserts
   it). Landings stay RAW table lookups: X holds the iterates of N outside
   T(q0) too.
 """
@@ -436,7 +436,8 @@ def _unstable_interval_is_clear(
 
     The arc is the unstable arc of the pair, so the cycle, ``k`` and ``beta`` are
     those of ITS fixed point: A's for a heteroclinic pair of ``W^u(A)`` crossings
-    on B's stable branch (D7).
+    on B's stable branch (D7). Both 2D collisions compare stable cdists, so they
+    skip only an r on the pair's own stable manifold.
     """
     ix0 = trellis.intersection(x0)
     ix1 = trellis.intersection(x1)
@@ -473,6 +474,9 @@ def _unstable_interval_is_clear(
         pos_r = pos_map.get(r.manifold_a_key)
         if pos_r is None:
             continue  # foreign unstable manifold: never lands on this branch
+        # A 2D endpoint collision compares stable cdists, so only an r on the
+        # pair's own stable manifold can be an endpoint's orbit (D7).
+        same_stable = r.manifold_b_key[0] is ix0.manifold_b_key[0]
         d = (pos_target - pos_r) % k
         c = r.unstable_cdist * beta**d
         # After d + m*k total steps the cdist is c * lap^m; only finitely many
@@ -522,7 +526,8 @@ def _unstable_interval_is_clear(
                     _, u_e, _ = trellis.image_cdist(x, -steps, "unstable")
                     _, s_e, _ = trellis.image_cdist(x, -steps, "stable")
                     if (
-                        abs(r.unstable_cdist - u_e) <= collision_rtol * u_e + tol
+                        same_stable
+                        and abs(r.unstable_cdist - u_e) <= collision_rtol * u_e + tol
                         and abs(r.stable_cdist - s_e) <= collision_rtol * s_e + tol
                     ):
                         continue  # r is x's own unlinked orbit (2D collision)
@@ -540,7 +545,7 @@ def _unstable_interval_is_clear(
                 continue
 
             _, s_value, _ = trellis.image_cdist(r_id, steps, "stable")
-            if r.manifold_b_key[0] is ix0.manifold_b_key[0] and any(
+            if same_stable and any(
                 abs(value - u_e) <= collision_rtol * u_e + tol
                 and abs(s_value - s_e) <= collision_rtol * s_e + tol
                 for u_e, s_e in endpoints

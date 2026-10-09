@@ -738,3 +738,37 @@ def test_endpoint_own_unlinked_orbit_is_not_a_puncture(noise):
 
     assert (r_n, x1) in pairs
     assert (x1, r_end) in pairs
+
+
+@pytest.mark.parametrize("frame", ["scaled", "own"])
+def test_collision_on_another_stable_manifold_still_punctures(frame):
+    """The 2D endpoint collision compares stable cdists, so it only names an
+    endpoint's own orbit on the pair's OWN stable manifold (D7, WP9).
+
+    A heteroclinic window of ``W^u(A)`` crossings on B's stable branch
+    (A: lambda 4, B: lambda 6). An A x A crossing r lands one step back at
+    unstable cdist 2.01, inside the pair (x1, r_end)'s (2, 4), and its stable
+    cdist matches x1's on W^s(B) by numbers alone: read by scaling (no image
+    of x1 or r_end registered) or in r's own frame (r_end's image registered,
+    x1's placed), it still punctures, since r's orbit stays on W^s(A).
+    """
+    a, b = _fixed_point(1, 4.0), _fixed_point(1, 6.0)
+    a_u, a_s, b_s = (a, "unstable", 0, 0), (a, "stable", 0, 0), (b, "stable", 0, 0)
+    reg = IntersectionRegistry()
+
+    def point(u, s, stable=b_s):
+        return reg.add_synthetic((s, u), unstable_cdist=u, stable_cdist=s,
+                                 manifold_a_key=a_u, manifold_b_key=stable)
+
+    r_n, x1, r_end = point(1.0, 6.0), point(2.0, 3.0), point(4.0, 1.0)
+    reg.register_iterate(r_n, 1, r_end)
+    if frame == "own":
+        reg.register_iterate(r_end, 1, point(16.0, 1.0 / 6.0))
+    # x1's stable cdist one step forward on W^s(B) is 0.5, one step back from r 4 * s.
+    point(8.04, 0.5 if frame == "own" else 0.75, stable=a_s)
+
+    pairs = [(p.intersection_a, p.intersection_b)
+             for p in compute_pseudoneighbors(_trellis(reg, a, b))]
+
+    assert (r_n, x1) in pairs
+    assert (x1, r_end) not in pairs
