@@ -1306,10 +1306,10 @@ def symbolic_dynamics(
         if named in evidence_table:
             entry = replace(evidence_table[named], letter=None)
         else:
-            # The table's tangle rule, the arcs' branches standing in for the members'.
-            arcs = _arc_branches(trellis, BridgeClassEntry(named), branches[named_by])
+            # The table's tangle rule, its arcs (one step past its namer's, on the
+            # same fixed points) standing in for the members.
             owners = {id(named.source.fixed_point), id(named.target.fixed_point)}
-            owners |= {id(key[0]) for key in arcs}
+            owners |= {id(key[0]) for key in branches[named_by]}
             tangle = next(
                 (i for i, fp in enumerate(fixed_points) if {id(fp)} == owners), None
             )
@@ -1335,7 +1335,8 @@ def symbolic_dynamics(
     decided: list[tuple[frozenset, list]] = []
     for entry in entries:  # the list grows while the words name new classes
         cls = entry.bridge_class
-        branches[cls] = mine = _arc_branches(trellis, entry, branches.get(closure.get(cls), frozenset()))
+        namer = branches.get(closure.get(cls), frozenset())
+        branches[cls] = mine = _arc_branches(trellis, entry, namer)
         kind: Literal["active", "inert"] = "active" if entry.active else "inert"
         landings = tuple(
             land_element(trellis, homotopy, iterated, ref) for ref in (cls.source, cls.target)
