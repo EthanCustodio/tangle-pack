@@ -71,7 +71,6 @@ from .BridgeClass import (
 )
 from .DualGraph import (
     DualGraph,
-    OuterFaceError,
     FaceNode,
     StableNode,
 )
@@ -154,7 +153,6 @@ __all__ = [
     "BridgeClassTable",
     "BridgeMember",
     "DualGraph",
-    "OuterFaceError",
     "FaceNode",
     "SIDE_LETTER",
     "ElementName",

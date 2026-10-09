@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 import pytest
 
-from cases import Case, build_period3
+from cases import Case, build_nested, build_period3
 from helpers.logs import assert_logged
 
 stable_partition = importlib.import_module("tanglepack.topology.StablePartition")
@@ -169,35 +169,24 @@ def test_punch_holes_raises_on_equal_signs(
         trellis.punch_holes()
 
 
-def test_outer_face_error_without_a_positive_face_lists_the_members() -> None:
-    """A component with a closed face and no positive face still raises a
-    ``ValueError`` that builds its own message (no ratio to a missing largest)."""
-    members = [(4, (1, 2, 3), -0.5), (5, (2, 3), 0.0)]
-    error = dual_graph_module.OuterFaceError(3, [], members)
-    assert isinstance(error, ValueError)
-    assert error.positive_faces == [] and error.members == members
-    assert dual_graph_module.OuterFaceError(3, []).positive_faces == []
+@pytest.mark.parametrize("build", [build_period3, build_nested], ids=["p3", "nested"])
+@pytest.mark.parametrize("sign", [abs, lambda area: -area], ids=["all_positive", "all_flipped"])
+def test_outer_faces_do_not_read_areas(build, sign, monkeypatch: pytest.MonkeyPatch) -> None:
+    """INT-10: a component's outer face comes from the rotation system, so faking
+    every traversal area (all positive, or every sign flipped) leaves the merged
+    face nodes unchanged."""
 
+    def face_nodes(case: Case) -> list[list[tuple[int, ...]]]:
+        dual = case.session.dual_graph(rebuild=True)
+        return sorted(sorted(face.corners for face in node.faces) for node in dual.face_nodes)
 
-def test_two_outer_faces_raise_with_every_positive_face(
-    p3: Case, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A component with more than one positively winding face keeps raising a
-    ``ValueError``, now carrying every positive face (largest first)."""
+    case = build()
+    expected = face_nodes(case)
     real = dual_graph_module.DualGraph._traversal_area
     monkeypatch.setattr(
-        dual_graph_module.DualGraph,
-        "_traversal_area",
-        lambda self, face: abs(real(self, face)),
+        dual_graph_module.DualGraph, "_traversal_area", lambda self, face: sign(real(self, face))
     )
-    with pytest.raises(dual_graph_module.OuterFaceError) as caught:
-        p3.session.dual_graph()
-    assert isinstance(caught.value, ValueError)
-    faces = caught.value.positive_faces
-    assert len(faces) > 1
-    areas = [area for _index, _corners, area in faces]
-    assert areas == sorted(areas, reverse=True) and areas[-1] > 0.0
-    assert all(corners for _index, corners, _area in faces)
+    assert face_nodes(case) == expected
 
 
 def test_dual_graph_construction_runs_its_self_check(

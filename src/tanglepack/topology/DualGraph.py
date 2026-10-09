@@ -64,14 +64,13 @@ Dev Notes:
 * A sparse component may have no closed face at all (a stable branch with no
   kept bridge). Its single open face is merged into the unbounded node with a
   WARNING rather than raising.
-* A component with a closed face but not exactly one positive face raises
-  :class:`OuterFaceError` (2026-10-07: kept raising, its message lists every
-  positive face's corners, area and ratio to the largest, or every member
-  face when none is positive). Deep blasts reach it on self-intersecting
-  slivers, where no area is trustworthy: :attr:`Region.area` and the
-  area check in :meth:`Arrangement.image_of` are unreliable on a polygon that
-  crosses itself, so a small positive face is NOT evidence that it is
-  spurious, and no demotion threshold is offered.
+* A component's outer face is read off the rotation system, never an area
+  (INT-10, WP10): it is the face whose sector at the component's EASTERNMOST
+  polyline vertex holds due east, since everything else lies west of that
+  vertex. The positive-traversal-area rule it replaces raised on the
+  self-intersecting slivers of deep blasts, where no area is trustworthy. Nesting is then one point-in-polygon test per component
+  (:meth:`DualGraph._innermost_container`), the chalkboard's one containment
+  test per tangle.
 """
 
 from __future__ import annotations
@@ -113,55 +112,6 @@ FaceKind = Literal["region", "open", "outer"]
 
 #: Which side(s) of its stable edge a stable node faces.
 NodeSide = Literal["left", "right", "both"]
-
-
-class OuterFaceError(ValueError):
-    """
-    A component of the sparse arrangement does not have exactly one outer face.
-
-    Exactly one face per component with a closed face winds positively; two or
-    more means the arrangement is not a planar subdivision at this resolution
-    (typically a self-intersecting sliver), and none means every face winds the
-    wrong way. It stays an error (the 2026-10-07 rule files invariant failures
-    as genuine errors).
-
-    Attributes:
-        component: The arrangement component.
-        positive_faces: ``(face index, corners, traversal area)`` of every
-            positive face, largest area first (empty when there is none).
-        members: The same triples for every face of the component, given
-            when there is no positive face to list.
-    """
-
-    def __init__(
-        self,
-        component: int,
-        positive_faces: list[tuple[int, tuple[int, ...], float]],
-        members: Sequence[tuple[int, tuple[int, ...], float]] = (),
-    ) -> None:
-        self.component = component
-        self.positive_faces = sorted(positive_faces, key=lambda face: -face[2])
-        self.members = list(members)
-        if not self.positive_faces:
-            listing = "; ".join(
-                f"face {index} corners {corners} area {area:.3g}"
-                for index, corners, area in self.members
-            )
-            super().__init__(
-                f"component {component} has a closed face but no face of positive "
-                f"traversal area (expected exactly one outer face): {listing}"
-            )
-            return
-        largest = self.positive_faces[0][2]
-        listing = "; ".join(
-            f"face {index} corners {corners} area {area:.3g} "
-            f"({area / largest:.3g} of the largest)"
-            for index, corners, area in self.positive_faces
-        )
-        super().__init__(
-            f"component {component} has {len(self.positive_faces)} faces of "
-            f"positive traversal area (expected exactly one outer face): {listing}"
-        )
 
 
 def _position_of(
@@ -525,9 +475,9 @@ class DualGraph:
 
         Raises:
             ValueError: If a stable edge's branch has no partition on a side,
-                if no element (or more than one) owns an edge's midpoint, if a
-                component has more than one positive-area face, or if a strong
-                pip carries no stable branch key or two pips lie on one branch.
+                if no element (or more than one) owns an edge's midpoint, or if a
+                strong pip carries no stable branch key or two pips lie on one
+                branch.
         """
         self.minimal = minimal
         self.trellis: "Trellis" = minimal.trellis
@@ -732,23 +682,63 @@ class DualGraph:
 
     # ── face nodes and the merge rule ───────────────────────────────────────
 
-    def _traversal_area(self, face: Region) -> float:
+    def _traversal_ring(self, face: Region) -> NDArray[np.float64]:
         """
-        The signed area of a face's traversal polygon, open faces included.
+        A face's traversal polygon, open faces included, without repeated vertices.
 
         :attr:`~.TopologyResults.Region.area` refuses an open face — its
         boundary is not a closed curve — but the traversal itself always closes,
-        reflecting off each dangling end and retracing that stub, which
-        contributes exactly nothing to the shoelace sum. So the polygon is
-        stitched here rather than through ``boundary_points``.
+        reflecting off each dangling end and retracing that stub. So the polygon
+        is stitched here rather than through ``boundary_points``: consecutive
+        arcs share their end vertex, kept once, and the closing vertex is dropped.
         """
-        pieces = [arc.polyline(self.arrangement.trellis) for arc in face.arcs]
+        pieces = [np.asarray(arc.polyline(self.arrangement.trellis), dtype=float) for arc in face.arcs]
         if not pieces:
-            return 0.0
+            return np.empty((0, 2))
         ring = np.vstack(pieces)
-        if len(ring) < 3:
-            return 0.0
-        return float(signed_polygon_area(ring))
+        ring = ring[np.r_[True, np.any(ring[1:] != ring[:-1], axis=1)]]
+        if len(ring) > 1 and np.array_equal(ring[0], ring[-1]):
+            ring = ring[:-1]
+        return ring
+
+    def _traversal_area(self, face: Region) -> float:
+        """The signed area of a face's traversal polygon (a retraced stub adds nothing)."""
+        ring = self._traversal_ring(face)
+        return float(signed_polygon_area(ring)) if len(ring) >= 3 else 0.0
+
+    def _outer_face(self, members: list[int]) -> int:
+        """
+        The outer face of one component, from the rotation system (INT-10).
+
+        Every face is traversed with itself on the RIGHT, so at a vertex ``v``
+        reached from ``prev`` and left towards ``next`` its sector runs clockwise
+        from ``next - v`` to ``prev - v`` (the whole circle at a stub tip, where
+        ``prev == next``). At the component's easternmost vertex everything lies
+        west, so the one sector there holding due east is the outer face's.
+
+        Args:
+            members: The component's face indices.
+
+        Returns:
+            The outer face's index.
+        """
+        faces = self.arrangement.faces
+        rings = {index: self._traversal_ring(faces[index]) for index in members}
+        east = max((ring[np.argmax(ring[:, 0])] for ring in rings.values() if len(ring)), key=lambda v: v[0])
+
+        def clockwise(start: float, end: float) -> float:
+            return (start - end) % (2 * np.pi)
+
+        holders = set()
+        for index, ring in rings.items():
+            for k in np.flatnonzero(np.all(ring == east, axis=1)):
+                after, before = ring[(k + 1) % len(ring)] - east, ring[k - 1] - east
+                out, back = np.arctan2(after[1], after[0]), np.arctan2(before[1], before[0])
+                sector = clockwise(out, back)
+                if sector == 0.0 or 0.0 < clockwise(out, 0.0) < sector:
+                    holders.add(index)
+        assert len(holders) == 1, (members, sorted(holders), tuple(east))
+        return holders.pop()
 
     def _nodes_by_component(self) -> dict[int, list[int]]:
         """The real crossing ids of each connected component of the arrangement."""
@@ -776,18 +766,11 @@ class DualGraph:
         """
         Union-find over face indices; returns the classes as face-index lists.
 
-        Each component's outer face — the single face of that component whose
-        traversal polygon winds positively — is merged with the innermost face
-        of ANOTHER component that geometrically contains it, or with a synthetic
-        global root when nothing contains it. A component with no positive-area
-        face (only open faces: a stable branch with no kept bridge) has all of
-        its faces merged into the root, with a WARNING.
-
-        Raises:
-            OuterFaceError: If a component has a closed face but not exactly
-                one positive face (a ``ValueError`` listing each positive
-                face's corners and area, or every member face when none is
-                positive).
+        Each component's outer face (:meth:`_outer_face`, read off the rotation
+        system) is merged with the innermost face of ANOTHER component that
+        geometrically contains it, or with a synthetic global root when nothing
+        contains it. A component with only open faces (a stable branch with no
+        kept bridge) has all of its faces merged into the root, with a WARNING.
         """
         faces = self.arrangement.faces
         root = len(faces)
@@ -796,7 +779,6 @@ class DualGraph:
         for index in range(len(faces)):
             union.find(index)
 
-        areas = [self._traversal_area(face) for face in faces]
         components = [self._component_of_face(face) for face in faces]
         nodes_by_component = self._nodes_by_component()
         containing = [
@@ -807,8 +789,7 @@ class DualGraph:
 
         for component, node_ids in nodes_by_component.items():
             members = [index for index in range(len(faces)) if components[index] == component]
-            outer = [index for index in members if areas[index] > 0.0]
-            if not outer and all(not faces[index].is_closed for index in members):
+            if all(not faces[index].is_closed for index in members):
                 logger.warning(
                     "component %s has no closed face (a stable branch with no kept "
                     "bridge?); its %d open face(s) join the unbounded node",
@@ -818,19 +799,9 @@ class DualGraph:
                 for index in members:
                     union.union(index, root)
                 continue
-            if len(outer) != 1:
-                described = {
-                    index: (index, faces[index].corners, areas[index]) for index in members
-                }
-                raise OuterFaceError(
-                    component,
-                    [described[index] for index in outer],
-                    described.values(),
-                )
-            host = self._innermost_container(
-                outer[0], component, node_ids, containing, components, areas
-            )
-            union.union(outer[0], root if host is None else host)
+            outer = self._outer_face(members)
+            host = self._innermost_container(outer, component, node_ids, containing, components)
+            union.union(outer, root if host is None else host)
 
         classes: dict[int, list[int]] = {}
         for index in range(len(faces)):
@@ -850,7 +821,6 @@ class DualGraph:
         node_ids: list[int],
         containing: list[tuple[int, Region]],
         components: list[Optional[int]],
-        areas: list[float],
     ) -> Optional[int]:
         """The smallest containing face of another component holding this one."""
         best: Optional[int] = None
@@ -866,7 +836,7 @@ class DualGraph:
                 for node_id in node_ids
             ):
                 continue
-            magnitude = abs(areas[index])
+            magnitude = abs(self._traversal_area(face))
             if magnitude < best_area:
                 best, best_area = index, magnitude
         if best is not None:
