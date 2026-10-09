@@ -508,3 +508,26 @@ def test_grow_until_clears_the_iterated_flag_it_invalidates(small_tangle, caplog
     )
     # losing a blast frontier must be logged, not silent (level and logger only)
     assert_logged(caplog, logging.WARNING, "tanglepack.numerics.TangleWorkbench")
+
+
+def test_arclength_stops_on_arc_length(initialized, monkeypatch):
+    """NUM-13: ``grow_until_arclength`` stops on the polyline's arc length: after the
+    call the branch is at least ``length`` long, and it was shorter before the last
+    growth step. The length is past the linear regime of the k=10 fixture, where the
+    tail's canonical distance passes it one step before the polyline does."""
+    workbench, fp = initialized
+    key = (fp, "unstable", 0, 0)
+
+    def arc_length() -> float:
+        points = workbench.manifolds[key].get_point_array()
+        return float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum())
+
+    before = []
+    grow = workbench.grow_n_times
+    monkeypatch.setattr(
+        workbench, "grow_n_times", lambda *args, **kwargs: before.append(arc_length()) or grow(*args, **kwargs)
+    )
+    length = 14.0
+    workbench.grow_until_arclength(fp, "unstable", length=length)
+    assert arc_length() >= length
+    assert before and before[-1] < length

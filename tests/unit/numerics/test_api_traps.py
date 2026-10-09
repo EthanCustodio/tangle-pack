@@ -89,6 +89,15 @@ def test_the_suggested_cap_rescues_a_weakly_hyperbolic_saddle():
     workbench.grow_until_turnaround(fp, "stable", max_iterations=suggested)
 
 
+def test_default_cap_scales_with_the_stretch():
+    """NUM-15: with no cap given, the drivers take the rounds the stretch needs
+    (never fewer than 10): the k = 0.3 saddle that fails at a cap of 10 turns around."""
+    workbench, fp = _henon_saddle(0.3)
+    stretch = 1.0 / fp.per_step_beta("stable")
+    assert math.ceil(TURNAROUND_LOG_STRETCH / math.log(stretch)) > 10
+    workbench.grow_until_turnaround(fp, "stable")
+
+
 # --------------------------------------------------------------------------- #
 # area preservation
 # --------------------------------------------------------------------------- #

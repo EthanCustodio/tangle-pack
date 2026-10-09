@@ -20,10 +20,13 @@ module that owns it.
 
 Dev Notes:
 
-``grow_until_arclength`` stops on the tail's CANONICAL distance, not on the true
-arc length along the curve. The two agree up to the per-branch scaling only while
-the curve is close to the linear regime, so the stop length is approximate; using
-the accumulated ``edist`` would make it exact.
+The ``grow_until_*`` drivers cap their rounds at ``max_iterations``; the default
+(None) scales the cap with the stretch the stop condition needs,
+``max(10, ceil(log_stretch / ln(stretch per round)) + 1)`` (NUM-15, WP10), so a
+small ``lambda_u`` gets the depth it needs and no recipe that ran under the old
+fixed cap of 10 changes. ``grow_until_arclength`` stops on the polyline ARC
+LENGTH of the grown branch (NUM-13, WP10; it stopped on the tail's canonical
+distance before, which agrees only in the linear regime).
 """
 
 from __future__ import annotations
@@ -727,7 +730,7 @@ class TangleWorkbench:
         self,
         fixed_point: FixedPoint,
         stability: Stability,
-        max_iterations: int = 10,
+        max_iterations: Optional[int] = None,
         branch_index: int = 0,
     ) -> None:
         """
@@ -736,8 +739,10 @@ class TangleWorkbench:
         Args:
             fixed_point (FixedPoint): The fixed point whose manifold is to be grown.
             stability (Stability): The stability type of the manifold ('stable' or 'unstable').
-            max_iterations (int, optional): Maximum number of growth iterations
-                to attempt before giving up. Defaults to 10.
+            max_iterations (Optional[int]): Maximum number of growth iterations
+                to attempt before giving up. None (default) scales it with the
+                stretch a turnaround needs (see the module Dev Notes), never
+                below 10.
             branch_index (int, optional): Which eigenvector branch to grow.
                 Defaults to 0.
 
@@ -757,6 +762,8 @@ class TangleWorkbench:
 
         initial_direction = np.asarray(first_point_coords) - np.asarray(root_coord)
 
+        if max_iterations is None:
+            max_iterations = self._default_cap(fixed_point, stability, TURNAROUND_LOG_STRETCH)
         for _ in range(max_iterations):
 
             self.grow_n_times(
@@ -787,7 +794,7 @@ class TangleWorkbench:
         fixed_point: FixedPoint,
         stability: Stability,
         radius: float,
-        max_iterations: int = 10,
+        max_iterations: Optional[int] = None,
         branch_index: int = 0,
     ) -> int:
         """
@@ -803,8 +810,9 @@ class TangleWorkbench:
             fixed_point (FixedPoint): The fixed point whose manifold is grown.
             stability (Stability): Which manifold to grow.
             radius (float): The ``max|coordinate|`` that ends the growth.
-            max_iterations (int): Growth steps to attempt before giving up.
-                Defaults to 10, matching :meth:`grow_until_turnaround`.
+            max_iterations (Optional[int]): Growth steps to attempt before giving
+                up. None (default) scales it as :meth:`grow_until_turnaround`
+                does.
             branch_index (int): Which eigenvector branch to grow. Defaults to 0;
                 ignored on an inversion point, whose one chain covers both.
 
@@ -819,6 +827,8 @@ class TangleWorkbench:
         """
         self._require_manifold(fixed_point, stability, branch_index)
 
+        if max_iterations is None:
+            max_iterations = self._default_cap(fixed_point, stability, TURNAROUND_LOG_STRETCH)
         for step in range(1, max_iterations + 1):
             self.grow_n_times(fixed_point, stability, 1, branch_index)
             stats = self.growth_stats(fixed_point, stability, branch_index)
@@ -835,54 +845,58 @@ class TangleWorkbench:
         fixed_point: FixedPoint,
         stability: Stability,
         length: float,
-        max_iterations: int = 10,
+        max_iterations: Optional[int] = None,
         branch_index: int = 0,
     ) -> None:
         """
-        Grow the manifold until its tail passes the requested canonical distance.
+        Grow the manifold until its polyline is at least ``length`` long.
 
         Args:
             fixed_point (FixedPoint): The fixed point whose manifold is grown.
             stability (Stability): Which manifold to grow.
-            length (float): Target canonical distance of the tail.
-            max_iterations (int): Growth iterations to attempt before giving up.
-                Defaults to 10, matching :meth:`grow_until_turnaround`.
+            length (float): Target arc length of the branch's polyline, from the
+                periodic point to the tail.
+            max_iterations (Optional[int]): Growth iterations to attempt before
+                giving up. None (default) scales it with ``length`` over the
+                starting arc length (see the module Dev Notes), never below 10.
             branch_index (int): Which eigenvector branch to grow. Defaults to 0.
 
         Raises:
             ValueError: If the manifold has not been initialized.
             MaxIterationsReached: A ``ValueError`` raised when the cap is reached
-                before the tail passes ``length``; it carries ``suggested_max_iterations``.
+                before the polyline reaches ``length``; it carries
+                ``suggested_max_iterations``.
         """
 
         self._require_manifold(fixed_point, stability, branch_index)
 
-        def tail_distance() -> float:
-            return self.manifolds[(fixed_point, stability, 0, branch_index)].tail.cdist
+        def arc_length() -> float:
+            points = self.manifolds[(fixed_point, stability, 0, branch_index)].get_point_array()
+            return float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum())
 
-        start_distance = tail_distance()
+        log_stretch = math.log(max(length / arc_length(), 1.0))
+        if max_iterations is None:
+            max_iterations = self._default_cap(fixed_point, stability, log_stretch)
         for _ in range(max_iterations):
-
-            if tail_distance() >= length:
+            if arc_length() >= length:
                 return None
-
             self.grow_n_times(
                 fixed_point, stability, num_iterations=1, branch_index=branch_index
             )
 
-        if tail_distance() >= length:
+        if arc_length() >= length:
             return None
 
         raise self._cap_reached(
-            fixed_point, stability, max_iterations,
-            math.log(length / start_distance), f"the tail reaching cdist {length:g}",
+            fixed_point, stability, max_iterations, log_stretch,
+            f"the polyline reaching arc length {length:g}",
         )
 
     def grow_until_intersection(
         self,
         fixed_point: FixedPoint,
         stability: Stability,
-        max_iterations: int = 10,
+        max_iterations: Optional[int] = None,
         branch_index: int = 0,
     ) -> None:
         """
@@ -891,8 +905,9 @@ class TangleWorkbench:
         Args:
             fixed_point (FixedPoint): The fixed point whose manifold is grown.
             stability (Stability): Which manifold to grow.
-            max_iterations (int): Growth iterations to attempt before giving up.
-                Defaults to 10.
+            max_iterations (Optional[int]): Growth iterations to attempt before
+                giving up. None (default) scales it as
+                :meth:`grow_until_turnaround` does.
             branch_index (int): Which eigenvector branch to grow. Defaults to 0.
 
         Raises:
@@ -908,6 +923,8 @@ class TangleWorkbench:
         num_initial_intersections = len(self._intersection_registry)
         logger.info("current intersections %d", num_initial_intersections)
 
+        if max_iterations is None:
+            max_iterations = self._default_cap(fixed_point, stability, TURNAROUND_LOG_STRETCH)
         for _ in range(max_iterations):
 
             self.grow_n_times(
@@ -2168,7 +2185,19 @@ class TangleWorkbench:
             manifold.tail = new_tail
 
     @staticmethod
+    def _stretch_per_round(fixed_point: FixedPoint, stability: Stability) -> float:
+        """The canonical-distance factor of one growth round on a branch."""
+        beta = fixed_point.per_step_beta(stability)
+        # stable growth runs the inverse map, which stretches by 1 / beta_s
+        return beta if stability == "unstable" else 1.0 / beta
+
+    def _default_cap(self, fixed_point: FixedPoint, stability: Stability, log_stretch: float) -> int:
+        """A driver's default round cap: the rounds the needed stretch takes, never below 10 (NUM-15)."""
+        rounds = math.ceil(log_stretch / math.log(self._stretch_per_round(fixed_point, stability)))
+        return max(10, rounds + 1)
+
     def _cap_reached(
+        self,
         fixed_point: FixedPoint,
         stability: Stability,
         max_iterations: int,
@@ -2176,10 +2205,9 @@ class TangleWorkbench:
         what: str,
     ) -> MaxIterationsReached:
         """The cap error of a ``grow_until_*`` driver, with its suggested cap."""
-        beta = fixed_point.per_step_beta(stability)
-        # stable growth runs the inverse map, which stretches by 1 / beta_s
-        stretch = beta if stability == "unstable" else 1.0 / beta
-        return MaxIterationsReached(max_iterations, stretch, log_stretch, what)
+        return MaxIterationsReached(
+            max_iterations, self._stretch_per_round(fixed_point, stability), log_stretch, what
+        )
 
     def _require_manifold(
         self,
