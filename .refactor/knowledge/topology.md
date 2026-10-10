@@ -70,7 +70,7 @@ are each WP's notes, kept as the record. The whole layer is described in `CLAUDE
   `beta ** k_value` (lambda_u squared under inversion, not lambda_u). r_{n+p} and every
   trajectory image are `Trellis.iterate` lookups; `_resolve_reference_end` /
   `_iterate_intersection` and every `match_rtol` are gone. A missing link means a missing image
-  crossing; predicting it so no branch loses its holes is PK-3 / D5, WP5. An unlinked landing's
+  crossing; since D15 (2026-10-09) a missing `+j` appearance costs no hole. An unlinked landing's
   stable cdist comes from `image_cdist`.
 - StrongPip: the unlinked backward representative is two `image_cdist` calls (same numbers).
 - PK-7 closed: every detected crossing carries both keys (`Tangle._key_of` asserts), so the
@@ -188,8 +188,8 @@ are each WP's notes, kept as the record. The whole layer is described in `CLAUDE
   `j < k_value`: one cut per branch always; a cut not from the table is flagged in one WARNING
   (PK-6). Never fires on a builder (cuts complete everywhere). `_cut_ids` and both
   `_pair_fixed_point` copies are deleted.
-- `_is_forward_beyond_fundamental(pair)`: `iterate is not None and iterate >= k_value` (D5, kept;
-  every forward pair carries `branch_key`). `punch_holes` partitions `forward` / `pairs` by two
+- `_is_forward_iterate(pair)`: `iterate is not None and iterate > 0` (D15, 2026-10-09, reversing
+  D5's `+1 .. +(k_value-1)` exemption: no forward hole on any orbit). `punch_holes` partitions `forward` / `pairs` by two
   comprehensions; the no-spanning-bridge WARNING names each skipped pair, iterate, origin and
   branch (INT-9 stays WP7's).
 - PK-9: `propagate_reference_holes` has no `max_steps`; it loops `count(1)` and ends because

@@ -1330,7 +1330,9 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
         },
         **{
             ("walks_avoid_disjoint_images", name): _NO_DISJOINT_WALLS
-            for name in ("k10", "k28_one_blast", "k28_two_blasts", "inversion", "inversion_period2")
+            for name in (
+                "k10", "k28_one_blast", "k28_two_blasts", "p3", "inversion", "inversion_period2"
+            )
         },
     }
 )

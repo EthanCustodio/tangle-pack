@@ -545,18 +545,15 @@ def test_missing_pip_iterates_are_cut_at_their_predicted_cdist(caplog, period, p
 
 
 @pytest.mark.parametrize(
-    "period, linked_steps, gap_warnings, emitted",
-    [(3, 1, 1, [1]), (3, 0, 2, []), (1, 0, 0, [])],
+    "period, linked_steps, emitted",
+    [(3, 1, [1]), (3, 0, []), (1, 0, [])],
     ids=["period_3_plus_2_missing", "period_3_unlinked", "period_1_needs_no_image"],
 )
-def test_missing_forward_appearance_warns_once_per_branch(
-    caplog, period, linked_steps, gap_warnings, emitted
-):
-    """A reference trajectory appears on each of the k stable branches of its
-    orbit at ``+1 .. +(k-1)`` (D5). Where the table has no ``+j`` link for a
-    member, the image crossing is not registered and nothing is invented, but
-    every branch left without that appearance is named: one WARNING per stable
-    branch (PK-3). A period-1 orbit needs no forward appearance at all."""
+def test_missing_forward_appearance_is_silent(caplog, period, linked_steps, emitted):
+    """A reference trajectory is extended forward only while the table links
+    its members, and a missing ``+j`` appearance on another branch of a
+    period-k orbit costs nothing: forward pairs are never holed (author,
+    2026-10-09, reversing D5), so nothing is invented and nothing warns."""
     fp = _fixed_point(period, 8.0)
     reg = IntersectionRegistry()
 
@@ -578,9 +575,7 @@ def test_missing_forward_appearance_warns_once_per_branch(
         out = extend_pseudoneighbor_trajectories(trellis, [ref])
 
     assert [p.iterate for p in out] == emitted
-    assert_logged(
-        caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=gap_warnings
-    )
+    assert_logged(caplog, logging.WARNING, "tanglepack.topology.Pseudoneighbor", count=0)
 
 
 def test_table_linked_deep_iterate_does_not_disqualify():

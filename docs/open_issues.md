@@ -236,6 +236,8 @@ A side effect on the baseline is the inert chain `u(1.0)→v(2.0)→x(0.0)→loo
 
 **WP5:** decided by D5 and kept: `_is_forward_beyond_fundamental(pair)` is `iterate >= k_value` alone, and the positive half is now tested by the law `window_holes_on_every_branch` (a direct hole at every `+j`, `j < k_value`, whose image pair is registered and spanned, on `advance_key(branch, j)`; counts k10 1, k28_one 2, k28_two 1, p3 6, nested 7, nested_inner 7, inversion 1, inversion_one 3, inversion_two 3, inversion_period2 2). The window-walking alternative is rejected: see PK-3.
 
+**2026-10-09 (D15, author, reverses D5):** the `+1..+(k_value−1)` appearances are no longer punched: holes propagate backward only on every orbit, the other branches get theirs from the backward chain. `_is_forward_iterate` (`iterate > 0`), law `no_forward_hole`; `window_holes_on_every_branch`, the PK-3 WARNING and `test_period_k_window_gaps` are gone. p3 0-5 blasts: 9 -> 5 classes. See `.refactor/decisions.md`.
+
 **Evidence:** `src/tanglepack/topology/StablePartition.py:173-190, 1712-1723`; `tests/conftest.py:72-77`; `CLAUDE.md` "Holes propagate BACKWARD only"; memory `holes-backward-only-2026-09`
 
 ### PK-3: When `extend_pseudoneighbor_trajectories` finds no table links, the other k−1 rays silently get no window holes

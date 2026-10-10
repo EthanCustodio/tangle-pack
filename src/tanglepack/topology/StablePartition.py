@@ -134,8 +134,7 @@ fixed in conversation with the author (July 2026):
   the parity of ``Hole.iterate`` (``side_after``, the one rule, C3)
   (``check_holes_share_bridge_side(..., orientation_preserving=False)``);
   propagated holes carry their side, so I1 guards the direct holes of one
-  orbit (the reference and its ``+1 .. +(k-1)`` appearances) and the
-  carrying itself; and (I2) a bridge whose two crossings lie on the same
+  orbit (its references) and the carrying itself; and (I2) a bridge whose two crossings lie on the same
   stable branch has the same row at both ends, because its endpoints are
   consecutive crossings so the arc between them never crosses the stable
   manifold again — with rows read off the signs, I2 says the two signs
@@ -153,14 +152,13 @@ fixed in conversation with the author (July 2026):
   the blast-child bridge (the +1 image of a reference pair) that split the
   partition and produced a fourth bridge class; k=10 escaped only because its
   reference pair's forward images were never registered (the manifold was not
-  grown that far). PERIOD-k (D5, 2026-10-07, kept): forward iterates
-  ``1 .. k_value - 1`` are punched — they are how the other branches of the
-  orbit get their fundamental-segment holes, since the reference window lives
-  on the strong pip's branch alone (Pseudoneighbor Dev Notes) — and only
-  ``iterate >= k_value`` is dropped (``_is_forward_beyond_fundamental``). An
-  appearance whose image crossings are not computed (the stagger of a
-  period-k chain) has no pair to punch; ``extend_pseudoneighbor_trajectories``
-  names its branch in a WARNING (WP5, PK-3), and nothing is invented.
+  grown that far). PERIOD-k (author, 2026-10-09, reversing D5): the rule has
+  no exemption. EVERY forward iterate is dropped (``_is_forward_iterate``),
+  the ``+1 .. +(k_value - 1)`` appearances on the other branches of the orbit
+  included; those branches get their holes from the backward chain, which
+  walks the whole unstable branch cycle. Punching the ``+j`` appearances (D5,
+  2026-10-07) added holes the period-3 figures showed as forward iterates
+  and four inert classes at 0-5 blasts.
 * Propagation start: a reference whose pair has no spanning Bridge object
   (after a blast there is no bridge between a parent-manifold crossing and
   a blast-child crossing) punches no direct hole, but its orbit still
@@ -197,10 +195,7 @@ fixed in conversation with the author (July 2026):
 
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
 StrongPip/Pseudoneighbor and is exercised by the inversion law cases (the k=4
-saddle at 0/1/2 blasts and the k=4.1 period-2 orbit). On a period-k orbit a
-branch can lack a reference's window hole when that reference's ``+j`` image
-crossings are not computed; the pseudoneighbor layer names each such branch in
-a WARNING (PK-3; filling the gap is DEC-19). Unstable cdists are only
+saddle at 0/1/2 blasts and the k=4.1 period-2 orbit). Unstable cdists are only
 comparable on one unstable branch, so every bridge carries its branch
 (``Bridge.manifold_key``, required at construction since plan row 2.3: an
 endpoint-derived branch once handed one branch's anchor to another's first
@@ -292,12 +287,10 @@ def punch_holes(
     identity (``origin``/``iterate``) and is attached to its pair
     (``pair.hole``).
 
-    Holes propagate BACKWARD only: a pair recorded at a forward iterate
-    ``>= k_value`` of its fixed point is the image of a region still attached
-    to the stable manifold and gets no direct hole (it is logged at DEBUG and
-    left with ``pair.hole = None``). Forward iterates ``1 .. k_value - 1`` are
-    the reference trajectory's appearances on the other branches' fundamental
-    segments and are punched like references. See the module Dev Notes.
+    Holes propagate BACKWARD only: a pair recorded at any forward iterate is
+    the image of a region still attached to the stable manifold and gets no
+    direct hole (it is logged at DEBUG and left with ``pair.hole = None``),
+    on a period-k orbit too. See the module Dev Notes.
 
     Args:
         trellis: The Trellis carrying the pairs and bridges.
@@ -308,8 +301,7 @@ def punch_holes(
 
     Returns:
         The punched holes. Pairs with no spanning bridge are skipped with a
-        warning; forward-iterate pairs beyond the fundamental segment are
-        skipped silently (DEBUG).
+        warning; forward-iterate pairs are skipped silently (DEBUG).
     """
     if pairs is None:
         pairs = trellis.pseudoneighbors
@@ -323,15 +315,13 @@ def punch_holes(
 
     # Holes propagate BACKWARD only (author's rule, 2026-09-16): a forward
     # iterate of a punched hole is the image of a region still attached to the
-    # stable manifold and gets no hole of its own. The forward iterates
-    # +1 .. +(k_value - 1) are exempt: they are the reference trajectory's
-    # appearances on the OTHER branches' fundamental segments (the reference
-    # window lives on the strong pip's branch only). See the module Dev Notes.
-    forward = [pair for pair in pairs if _is_forward_beyond_fundamental(pair)]
-    pairs = [pair for pair in pairs if not _is_forward_beyond_fundamental(pair)]
+    # stable manifold and gets no hole of its own, on every branch of a
+    # period-k orbit (author, 2026-10-09). See the module Dev Notes.
+    forward = [pair for pair in pairs if _is_forward_iterate(pair)]
+    pairs = [pair for pair in pairs if not _is_forward_iterate(pair)]
     if forward:
         logger.debug(
-            "Not punching %d forward-iterate pair(s) (iterate >= k_value): "
+            "Not punching %d forward-iterate pair(s): "
             "holes propagate backward only; %s",
             len(forward),
             [(pair.as_tuple(), pair.iterate) for pair in forward],
@@ -452,8 +442,8 @@ def propagate_reference_holes(
         if pair.hole is not None
     }
     # Regions already punched, per origin: a propagated hole must not land a
-    # second time on a region its orbit already punched directly (a reference
-    # and its +1 .. +(k-1) appearances are punched before the chains run).
+    # second time on a region its orbit already punched directly (the
+    # references are punched before the chains run).
     punched_regions: set[tuple] = {
         _region_key(pair.origin, pair.hole)
         for pair in trellis.pseudoneighbors
@@ -1173,8 +1163,8 @@ def side_diagnoses(
     side alternates with the parity of :attr:`Hole.iterate`, which
     ``orientation_preserving=False`` encodes. Since propagated holes CARRY
     their side (author, 2026-10-07) this guards the direct holes of one
-    orbit (the reference and its ``+1 .. +(k-1)`` appearances, each read off
-    its own crossing signs) and the carrying itself.
+    orbit (its references, each read off its own crossing signs) and the
+    carrying itself.
 
     The MEASURED reading is the geometric cross-check: a hole whose
     ``measured_side`` (the reference hole carried back by the real inverse
@@ -1510,17 +1500,15 @@ def _nearest_arc_point(
     return points[int(np.argmin(distances))]
 
 
-def _is_forward_beyond_fundamental(pair: PseudoneighborPair) -> bool:
-    """True for a forward-iterated pair that has wrapped past the fundamental segment.
+def _is_forward_iterate(pair: PseudoneighborPair) -> bool:
+    """True for a forward-iterated pair: it gets no direct hole.
 
-    A pair at ``iterate >= k_value`` is the image of one already on a fundamental
-    segment (its own branch's, after a full branch return) and gets no direct
-    hole; ``1 .. k_value - 1`` are the trajectory's first appearances on the
-    other branches and do (D5, 2026-10-07, kept). References and backward
-    iterates return False.
+    Any ``iterate > 0`` is the image of a region still attached to the stable
+    manifold, on whichever branch of the orbit it lands (author, 2026-10-09,
+    reversing D5's ``+1 .. +(k_value - 1)`` exemption). References and
+    backward iterates return False.
     """
-    forward = pair.iterate is not None and pair.iterate > 0
-    return forward and pair.iterate >= pair.branch_key[0].k_value
+    return pair.iterate is not None and pair.iterate > 0
 
 
 def _containing_bridge(

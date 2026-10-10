@@ -38,9 +38,9 @@ Inversion, period-k and several saddles are **no special case** below, except at
    - ★ Several saddles: a trellis holds a crossing only when both its branches are selected, so a tangle alone holds no heteroclinic crossing (its arcs run through them). The selection's trellis, cut at every pip, is T(q₀_A) ∪ T(q₀_B): each branch at its own pip orbit, a heteroclinic crossing in N iff it is inside A's unstable cut and B's stable cut. M⁻¹ maps the union of the unstable halves into itself and M the union of the stable halves, so it is a genuine trellis (WP9).
 
 4. **Pseudoneighbors** (`Pseudoneighbor_Algorithm.pdf`). N is T(q₀)'s (stage 3). Consecutive crossings x, x′ on a stable branch are a pair iff the unstable arc between them contains no point of X = ∪_n Mⁿ(N). A trajectory is extended only while its images are crossings of T(q₀).
-   - Reference pairs are the pairs in F, plus their +1..+(k−1) iterates on the other branches of a period-k orbit.
+   - Reference pairs are the pairs in F. Their +1..+(k−1) iterates on the other branches of a period-k orbit are recorded but get no hole (D15, 2026-10-09: holes propagate backward only, on every orbit).
    - A landing is compared on ONE polyline: the registered landing's own, else r's own against the pair's registered images there (WP8); β-scaling onto the pair is the fallback only when neither image is registered.
-   - D5: a missing `+j` is predicted by `image_cdist`, never invented: its branch is named in a WARNING (the stagger of a period-k chain); a missing pip cut is placed by `image_cdist`.
+   - A missing pip cut is placed by `image_cdist` (a missing `+j` appearance costs nothing since D15).
    - ★ Heteroclinic (D7): a pair of heteroclinic crossings on B's stable branch can be a pair of B's tangle. Its unstable arc is A's, so X is read with A's branch cycle, k and β, over the crossings whose unstable side is A's. It needs both tangles selected: stages 4-6 run on the selection's trellis (WP9).
 
 5. **Holes** (`Stable_Manifold_Partition_Algorithm`). Each reference pair puts one hole in its lobe. A reference bridge is mapped BACKWARD until it maps into a bridge already visited; each backward image lies inside one existing bridge, and that bridge gets the hole. Forward iterates (≥ k) get no hole.

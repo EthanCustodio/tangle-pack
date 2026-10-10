@@ -228,3 +228,25 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   drop is a lambda-lemma copy 5.6e-5 from a pair end that the coarse polyline orders on the
   wrong side, a pair-ordering resolution limit the per-crossing ratio (183) does not see. Coarse
   blasting cutoffs are for exploration only.
+
+## 2026-10-09 — D15, holes propagate backward only on every orbit (reverses D5)
+
+- **Author:** looking at the period-3 itinerary figures, "it seems like we are iterating the
+  holes forward for some reason. Whereas in all other cases we only iterate the original holes
+  backwards. That is the same for higher period cases."
+- **Decision:** no hole at any forward iterate, the `+1 .. +(k_value-1)` appearances on the
+  other branches of a period-k (or inversion) orbit included. The other branches get their
+  holes from the backward chain, which walks the whole unstable branch cycle.
+  `_is_forward_beyond_fundamental` -> `_is_forward_iterate` (`iterate > 0`); the PK-3 gap
+  WARNING and `_missing_appearance` are deleted (a missing `+j` costs nothing now); law
+  `no_direct_hole_beyond_fundamental` + `window_holes_on_every_branch` -> `no_forward_hole`;
+  regression `test_period_k_window_gaps.py` deleted; `("walks_avoid_disjoint_images", "p3")`
+  NOT_APPLICABLE (one decided walk left).
+- **Measured:** p3 0-5 blasts 12 -> 8 holes, 9 -> 5 classes (the 4 lost were inert; words
+  `a -> b -> c -> a u^-1 v^-1`); p3 8 blasts and p3_16 25/27 -> 23 seed, 47/49 -> 43 closed;
+  p3_15, p3_6_blasts, nested_inner6 unchanged (their `+j` were never registered); inversion 0
+  blasts 8 -> 6 holes, 6 -> 4 classes, every stable branch still holed. Suite 1117 pass.
+- **Open (probed, not changed):** past 5 blasts the p3 class count is driven by the reference
+  switch (BCG-4): the references become blast-born crossings at unstable cdist ~2600-3100 whose
+  backward chain runs ~20 iterates (42 holes). DEC-25's "no window hole on the second branch"
+  is no longer a gap under D15.

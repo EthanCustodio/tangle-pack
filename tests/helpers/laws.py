@@ -1425,45 +1425,21 @@ def check_propagation_terminates(case: "Case") -> int:
     return count
 
 
-def check_no_direct_hole_beyond_fundamental(case: "Case") -> int:
-    """Holes propagate backward only: nothing at iterate ``>= k_value`` is punched.
+def check_no_forward_hole(case: "Case") -> int:
+    """Holes propagate backward only: no hole sits at a forward iterate.
 
-    The ``+1 .. +(k_value - 1)`` appearances ARE punched (D5): see
-    :func:`check_window_holes_on_every_branch`. ``k`` is the window's: the stable
-    fixed point of the pair (or of the hole's origin).
+    On a period-k orbit too (author, 2026-10-09, reversing D5): the
+    ``+1 .. +(k_value - 1)`` appearances on the other branches are recorded
+    pairs, never holes.
     """
     trellis = _staged(case)
     count = 0
     for hole in trellis.holes:
-        k = trellis.intersection(hole.origin[0]).manifold_b_key[0].k_value
-        assert hole.iterate < k, (hole.bounding_ids, hole.iterate)
+        assert hole.iterate <= 0, (hole.bounding_ids, hole.iterate)
         count += 1
     for pair in trellis.pseudoneighbors:
-        if pair.iterate is not None and pair.iterate >= pair.branch_key[0].k_value:
+        if pair.iterate is not None and pair.iterate > 0:
             assert pair.hole is None, pair.as_tuple()
-            count += 1
-    return count
-
-
-def check_window_holes_on_every_branch(case: "Case") -> int:
-    """D5: a reference trajectory punches a direct hole on each of the k stable
-    branches of its orbit wherever its ``+j`` image pair (``j < k_value``) is
-    registered and spanned by a bridge; the hole lies on ``advance_key(branch, j)``."""
-    trellis = _staged(case)
-    direct = {
-        (hole.origin, hole.iterate, frozenset(hole.bounding_ids))
-        for hole in trellis.holes
-        if hole.side_source == "signs"
-    }
-    count = 0
-    for ref in trellis.reference_pseudoneighbors:
-        fp = ref.branch_key[0]
-        for j in range(fp.k_value):
-            a, b = (trellis.iterate(end, j) for end in ref.as_tuple())
-            if a is None or b is None or trellis.bridge_between(a, b) is None:
-                continue
-            assert trellis.intersection(a).manifold_b_key == fp.advance_key(ref.branch_key, j)
-            assert (ref.as_tuple(), j, frozenset((a, b))) in direct, (ref.as_tuple(), j)
             count += 1
     return count
 
@@ -2962,8 +2938,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_openings_follow_signs,
         check_propagated_holes_land_on_predicted_branch,
         check_propagation_terminates,
-        check_no_direct_hole_beyond_fundamental,
-        check_window_holes_on_every_branch,
+        check_no_forward_hole,
         check_trellis_crossings_belong_to_its_selection,
         check_trellis_is_cut_at_the_pip_orbit,
         check_reference_pairs_valid,

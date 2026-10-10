@@ -17,10 +17,9 @@ branch, and the opened branch's first node lies on the hole's side of its
 bridge (D6, checked by geometry); every other bound opens exactly the stable
 half on the hole's side of its bridge, ``outward`` iff ``(crossing_sign > 0) ==
 (bridge_side == "left")`` (D6). Propagated holes land on the
-branch the cycle predicts and stop at periodicity; nothing at iterate
-``>= k_value`` is punched (holes propagate backward only), while every
-``+1 .. +(k-1)`` appearance whose image pair is registered and spanned IS
-punched on the branch ``advance_key`` names (D5, ``window_holes_on_every_branch``);
+branch the cycle predicts and stop at periodicity; nothing at a forward
+iterate is punched, on a period-k orbit either (holes propagate backward only,
+author 2026-10-09, ``no_forward_hole``);
 reference pairs are consecutive on both branches inside the reference window.
 """
 

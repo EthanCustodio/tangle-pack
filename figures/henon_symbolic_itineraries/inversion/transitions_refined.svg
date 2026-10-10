@@ -6,11 +6,11 @@
   <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
-    <dc:date>2026-10-09T15:29:07.276838</dc:date>
+    <dc:date>2026-10-09T16:38:24.867198</dc:date>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
-      <dc:title>Matplotlib v3.10.0, https://matplotlib.org/</dc:title>
+      <dc:title>Matplotlib v3.10.9, https://matplotlib.org/</dc:title>
      </cc:Agent>
     </dc:creator>
    </cc:Work>
@@ -32,26 +32,26 @@ z
    <g id="patch_2">
     <path d="M 525.013638 323.338174 
 Q 320.398991 265.991754 117.506863 322.856098 
-" clip-path="url(#pa7bbeebd29)" style="fill: none; stroke: #52514e; stroke-width: 1.6; stroke-linecap: round"/>
+" clip-path="url(#pb90769d7e6)" style="fill: none; stroke: #52514e; stroke-width: 1.6; stroke-linecap: round"/>
     <path d="M 123.654721 324.040937 
 L 117.506863 322.856098 
 L 122.143449 318.648715 
 z
-" clip-path="url(#pa7bbeebd29)" style="fill: #52514e; stroke: #52514e; stroke-width: 1.6; stroke-linecap: round"/>
+" clip-path="url(#pb90769d7e6)" style="fill: #52514e; stroke: #52514e; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="patch_3">
     <path d="M 115.786362 331.698388 
 Q 320.401009 389.044809 523.293137 332.180465 
-" clip-path="url(#pa7bbeebd29)" style="fill: none; stroke: #52514e; stroke-width: 1.6; stroke-linecap: round"/>
+" clip-path="url(#pb90769d7e6)" style="fill: none; stroke: #52514e; stroke-width: 1.6; stroke-linecap: round"/>
     <path d="M 517.145279 330.995626 
 L 523.293137 332.180465 
 L 518.656551 336.387847 
 z
-" clip-path="url(#pa7bbeebd29)" style="fill: #52514e; stroke: #52514e; stroke-width: 1.6; stroke-linecap: round"/>
+" clip-path="url(#pb90769d7e6)" style="fill: #52514e; stroke: #52514e; stroke-width: 1.6; stroke-linecap: round"/>
    </g>
    <g id="PathCollection_1">
     <defs>
-     <path id="C0_0_c9bb20896f" d="M 0 15 
+     <path id="C0_0_49669f51bd" d="M 0 15 
 C 3.978047 15 7.793698 13.419505 10.606602 10.606602 
 C 13.419505 7.793698 15 3.978047 15 -0 
 C 15 -3.978047 13.419505 -7.793698 10.606602 -10.606602 
@@ -63,15 +63,15 @@ C -7.793698 13.419505 -3.978047 15 0 15
 z
 "/>
     </defs>
-    <g clip-path="url(#pa7bbeebd29)">
-     <use xlink:href="#C0_0_c9bb20896f" x="539.420979" y="327.518213" style="fill: #ffffff; stroke: #2a78d6; stroke-width: 2"/>
+    <g clip-path="url(#pb90769d7e6)">
+     <use xlink:href="#C0_0_49669f51bd" x="539.420979" y="327.518213" style="fill: #ffffff; stroke: #2a78d6; stroke-width: 2"/>
     </g>
-    <g clip-path="url(#pa7bbeebd29)">
-     <use xlink:href="#C0_0_c9bb20896f" x="101.379021" y="327.518349" style="fill: #ffffff; stroke: #eb6834; stroke-width: 2"/>
+    <g clip-path="url(#pb90769d7e6)">
+     <use xlink:href="#C0_0_49669f51bd" x="101.379021" y="327.518349" style="fill: #ffffff; stroke: #eb6834; stroke-width: 2"/>
     </g>
    </g>
    <g id="text_1">
-    <g clip-path="url(#pa7bbeebd29)">
+    <g clip-path="url(#pb90769d7e6)">
      <!-- $a$ -->
      <g transform="translate(536.010979 330.553526) scale(0.11 -0.11)">
       <defs>
@@ -118,7 +118,7 @@ z
     </g>
    </g>
    <g id="text_2">
-    <g clip-path="url(#pa7bbeebd29)">
+    <g clip-path="url(#pb90769d7e6)">
      <!-- $b$ -->
      <g transform="translate(97.859021 330.553662) scale(0.11 -0.11)">
       <defs>
@@ -758,7 +758,7 @@ z
   </g>
  </g>
  <defs>
-  <clipPath id="pa7bbeebd29">
+  <clipPath id="pb90769d7e6">
    <rect x="7.2" y="21.998281" width="626.4" height="611.04"/>
   </clipPath>
  </defs>
