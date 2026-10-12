@@ -823,21 +823,22 @@ def build_inversion(*, blasts: int = 0, through: Stage = "partitioned") -> Case:
 
 
 def build_inversion_period2(
-    *, unstable_steps: int = 9, stable_steps: int = 9, through: Stage = "partitioned"
+    *, unstable_steps: int = 9, stable_steps: int = 10, through: Stage = "partitioned"
 ) -> Case:
     """
     Inversion on a period-k orbit: the ``k=4.1`` period-2 orbit, no zone.
 
     Both eigenvalues of ``DM^2`` are negative (-1.863 and -0.537), so
     ``k_value = 2 * period = 4`` and each manifold's four pieces are one chain
-    over the two orbit points and both branches; det J = +1. 9 unstable and 9
+    over the two orbit points and both branches; det J = +1. 9 unstable and 10
     stable steps at ``area_cutoff = 1e-5``, then the stable manifold trimmed at
-    its outermost crossings and partitioned at the default strong pip.
+    its outermost crossings and partitioned at the default strong pip. The
+    tenth stable step resolves the class a 9-step build leaves unresolved (a
+    singleton landing with no registered member image; author Q12).
 
     Args:
-        unstable_steps: Unstable growth steps (the law case: 9; 10 runs the
-            stable manifold past the pip orbit, which the trellis cuts, D10).
-        stable_steps: Stable growth steps (the law case: 9).
+        unstable_steps: Unstable growth steps (the law case: 9).
+        stable_steps: Stable growth steps (the law case: 10).
         through: ``"bridges"`` or ``"partitioned"``.
 
     Returns:
@@ -1326,7 +1327,7 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
                 "every active class lands on a singleton; its word is the trellis "
                 "itinerary (D3)"
             )
-            for name in ("k28_one_blast", "p3", "inversion")
+            for name in ("k28_one_blast", "p3", "inversion", "inversion_period2")
         },
         **{
             ("walks_avoid_disjoint_images", name): _NO_DISJOINT_WALLS
