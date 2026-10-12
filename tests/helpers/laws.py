@@ -1563,6 +1563,146 @@ def check_reference_pairs_valid(case: "Case") -> int:
     return count
 
 
+def check_chosen_pip_is_strong(case: "Case") -> int:
+    """The chosen pip passes the box test (A.4), re-derived from the registry and the
+    fixed point alone: no crossing of the pip's fixed point, carried onto the pip's
+    stable branch by the fewest backward steps, lies in the open box
+    ``(0, c_s(q0)) x (0, c_u(q0))``. The whole registry is read, since classification
+    un-chooses the pip first; q0's own orbit is recognised by a 2-D collision within
+    ``SCALING_RTOL``, the one identity assumption."""
+    trellis, count = _staged(case), 0
+    for fp in case.fixed_points:
+        q0 = case.registry[trellis.pips[fp]]
+        cycle = fp.branch_cycle("stable")
+        s0, u0 = float(q0.stable_cdist), float(q0.unstable_cdist)
+        for rid, r in case.registry:
+            if r.is_anchor or r.manifold_a_key[0] is not fp or r.manifold_b_key not in cycle:
+                continue  # homoclinic crossings of fp only: a heteroclinic u-cdist is another saddle's
+            steps = (cycle.index(r.manifold_b_key) - cycle.index(q0.manifold_b_key)) % len(cycle)
+            s = float(r.stable_cdist) / fp.per_step_beta("stable") ** steps  # backward: stable grows
+            u = float(r.unstable_cdist) / fp.per_step_beta("unstable") ** steps  # unstable shrinks
+            count += 1
+            if abs(s - s0) <= SCALING_RTOL * s0 and abs(u - u0) <= SCALING_RTOL * u0:
+                continue
+            assert not (0 < s < s0 and 0 < u < u0), (rid, steps, s, s0, u, u0)
+    return count
+
+
+def _key(ix, stability: str):
+    """A crossing's manifold key of one stability."""
+    return ix.manifold_a_key if stability == "unstable" else ix.manifold_b_key
+
+
+def _cdist(ix, stability: str) -> float:
+    """A crossing's canonical distance along its manifold of one stability."""
+    return float(ix.unstable_cdist if stability == "unstable" else ix.stable_cdist)
+
+
+def _scaled(ix, n: int) -> dict:
+    """``M^n`` of a crossing placed by scaling alone: per stability, the advanced key and
+    the cdist times ``per_step_beta ** n`` of THAT side's fixed point (D7)."""
+    image = {}
+    for stability in ("unstable", "stable"):
+        key = _key(ix, stability)
+        fp = key[0]
+        image[stability] = (fp.advance_key(key, n), _cdist(ix, stability) * fp.per_step_beta(stability) ** n)
+    return image
+
+
+def _laps(cdist: float, lo: float, hi: float, beta: float, n0: int, k: int) -> list[int]:
+    """Every ``n = n0 (mod k)`` with ``lo < cdist * beta**n < hi``: finitely many, ``beta != 1``."""
+    a, b = sorted(np.log([lo / cdist, hi / cdist]) / np.log(beta))
+    first = n0 + k * int(np.floor((a - n0) / k))
+    return [n for n in range(first, int(np.ceil(b)) + 1, k) if lo < cdist * beta**n < hi]
+
+
+def _table_image(registry, intersection_id: int, n: int) -> Optional[int]:
+    """``M^n`` of a crossing read off the registry's iterate table: the direct entry,
+    else the composition of its ``+-1`` links; None where the table stops."""
+    if (direct := registry.iterate_table[intersection_id, n]) is not None:
+        return direct
+    step = 1 if n > 0 else -1
+    for _ in range(abs(n)):
+        intersection_id = registry.iterate_table[intersection_id, step]
+        if intersection_id is None:
+            return None
+    return intersection_id
+
+
+def check_reference_pairs_clear_of_X(case: "Case") -> int:
+    """Both open intervals of every reference pair hold no point of X (the pseudoneighbor
+    definition), by scaling alone: every crossing ``r`` of the cut N on the interval's
+    branch cycle, carried ``n`` steps by ``per_step_beta`` (the cycle and beta of the
+    interval's own fixed point, D7), for every ``n`` landing on the interval's branch
+    strictly inside it. A landing the iterate table links to an end of the pair, or one
+    colliding with an end on both cdists within ``SCALING_RTOL``, is that end. Law cases
+    only: scaling alone is wrong at depth (A.5)."""
+    trellis, registry, count = _staged(case), case.registry, 0
+    crossings = [(rid, registry[rid]) for rid in trellis.own_intersection_ids
+                 if not registry[rid].is_anchor]
+    for pair in trellis.reference_pseudoneighbors:
+        ends = pair.as_tuple()
+        x0, x1 = (registry[i] for i in ends)
+        for stability in ("unstable", "stable"):
+            key = _key(x0, stability)
+            cycle = key[0].branch_cycle(stability)
+            lo, hi = sorted((_cdist(x0, stability), _cdist(x1, stability)))
+            for rid, r in crossings:
+                if _key(r, stability) not in cycle:
+                    continue
+                n0 = (cycle.index(key) - cycle.index(_key(r, stability))) % len(cycle)
+                beta = key[0].per_step_beta(stability)
+                for n in _laps(_cdist(r, stability), lo, hi, beta, n0, len(cycle)):
+                    if _table_image(registry, rid, n) in ends or any(
+                        all(
+                            image_key == _key(x, s)
+                            and abs(c - _cdist(x, s)) <= SCALING_RTOL * _cdist(x, s)
+                            for s, (image_key, c) in _scaled(r, n).items()
+                        )
+                        for x in (x0, x1)
+                    ):
+                        continue  # the pair's own end
+                    raise AssertionError(
+                        f"pair {ends}: M^{n}({rid}) lies inside its open {stability} interval"
+                    )
+            count += 1
+    return count
+
+
+def check_propagated_hole_inside_container(case: "Case") -> int:
+    """Every propagated hole's container holds the reference bridge's ends carried back
+    by the REAL inverse map (the test may call the map; the topology never does):
+    each carried end, projected onto the container's polyline, lies strictly between
+    the container's two crossings -- or, when the iterate table links that end to a
+    crossing of the container, on that shared end (the real map's overshoot of an
+    exact crossing is noise)."""
+    trellis, registry, count = _staged(case), case.registry, 0
+    map_inv = case.workbench.dynamical_system.map_inv_batch
+    for hole in trellis.holes:
+        if hole.iterate is None or hole.iterate >= 0:
+            continue
+        container = trellis.bridge_between(*hole.bounding_ids)
+        nodes = container.get_point_array(return_nodes=True)
+        points = np.array([np.asarray(p.get_point(), dtype=float).ravel() for p in nodes])
+        cdists = np.array([float(p.get_cdist("unstable")) for p in nodes])
+        lo, hi = sorted(float(registry[i].unstable_cdist) for i in hole.bounding_ids)
+        for end in hole.origin:
+            if _table_image(registry, end, hole.iterate) in hole.bounding_ids:
+                count += 1
+                continue
+            point = np.asarray(registry[end].coords, dtype=float).reshape(1, 2)
+            for _ in range(-hole.iterate):
+                point = map_inv(point)
+            a, ab = points[:-1], points[1:] - points[:-1]
+            t = np.clip(np.einsum("ij,ij->i", point - a, ab)
+                        / np.maximum(np.einsum("ij,ij->i", ab, ab), 1e-300), 0.0, 1.0)
+            nearest = int(np.argmin(np.linalg.norm(a + t[:, None] * ab - point, axis=1)))
+            cdist = cdists[nearest] + t[nearest] * (cdists[nearest + 1] - cdists[nearest])
+            assert lo < cdist < hi, (hole.origin, end, hole.iterate, hole.bounding_ids, cdist, lo, hi)
+            count += 1
+    return count
+
+
 def reference_witness(trellis, pair: tuple[int, int]) -> Optional[str]:
     """
     Why a reference pair of an earlier recompute is no pair of ``trellis`` (BCG-4).
@@ -2942,6 +3082,9 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_trellis_crossings_belong_to_its_selection,
         check_trellis_is_cut_at_the_pip_orbit,
         check_reference_pairs_valid,
+        check_chosen_pip_is_strong,
+        check_reference_pairs_clear_of_X,
+        check_propagated_hole_inside_container,
     ],
     "arrangement": [
         check_arrangement_euler,
