@@ -3020,6 +3020,26 @@ def check_matrix_is_token_counts(case: "Case") -> int:
     return int(matrix.sum()) + len(names)
 
 
+
+def check_k10_is_the_full_shift(case: "Case") -> int:
+    """On k=10, and only there, the dynamics is the full 2-shift (author Q11, the one
+    textbook pin): one active class whose word is two occurrences of itself in opposite
+    directions, class matrix ``[[2]]``, refined matrix its in-splitting
+    ``[[1, 1], [1, 1]]`` (A.8d: two occurrences, two children). Letter-free; every
+    other case checks nothing (``cases.NOT_APPLICABLE``)."""
+    if case.name != "k10":
+        return 0
+    dyn = case.session.symbolic_dynamics()
+    active = [cls for cls, cd in dyn.classes.items() if cd.kind == "active"]
+    assert len(active) == 1, active
+    tokens = [symbol for symbol in dyn.classes[active[0]].symbols if symbol.kind == "active"]
+    assert [symbol.bridge_class for symbol in tokens] == active * 2
+    assert sorted(symbol.direction for symbol in tokens) == [-1, 1]
+    assert len({symbol.occurrence for symbol in tokens}) == 2
+    assert dyn.transition_matrix(refined=False)[1].tolist() == [[2]]
+    assert dyn.transition_matrix()[1].tolist() == [[1, 1], [1, 1]]
+    return len(tokens)
+
 #: The read-only law checks by layer: ONE law-tier test per (layer, case) runs
 #: every check of its layer (``helpers.law_tier.run_layer``).
 LAYERS: dict[str, list[LawCheck]] = {
@@ -3142,6 +3162,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_member_matching_consistent,
         check_inert_classes_outside_transitions,
         check_matrix_is_token_counts,
+        check_k10_is_the_full_shift,
     ],
 }
 

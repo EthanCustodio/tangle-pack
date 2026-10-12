@@ -1334,6 +1334,11 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
                 "k10", "k28_one_blast", "k28_two_blasts", "p3", "inversion", "inversion_period2"
             )
         },
+        **{
+            ("k10_is_the_full_shift", name): "the textbook answer is known for k=10 only"
+            for name in LAW_CASES
+            if name != "k10"
+        },
     }
 )
 
