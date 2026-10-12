@@ -47,8 +47,8 @@ Cases:
   blasts (INV-4).
 * ``inversion_period2`` -- inversion on a period-k orbit: the ``k=4.1``
   period-2 orbit ``(-2.0488, -0.0488) <-> (0.0488, 2.0488)``, both ``DM^2``
-  eigenvalues negative (-1.863 / -0.537), ``k_value = 4``; 9 unstable / 9
-  stable steps at ``area_cutoff = 1e-5``, no zone (at 10 steps its stable
+  eigenvalues negative (-1.863 / -0.537), ``k_value = 4``; 9 unstable / 10
+  stable steps at ``area_cutoff = 1e-5`` (Q12), no zone (at 10 / 10 its stable
   manifold runs past the pip orbit; with the trellis cut there (D10, WP8b) the
   only law failing is ``bridge_endpoints_on_own_branch`` on a WORKBENCH bridge,
   WP7-D1, so it is a regression of its own, ``test_pip_orbit_cut``; it escapes
