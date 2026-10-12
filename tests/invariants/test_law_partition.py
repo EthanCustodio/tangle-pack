@@ -21,6 +21,9 @@ branch the cycle predicts and stop at periodicity; nothing at a forward
 iterate is punched, on a period-k orbit either (holes propagate backward only,
 author 2026-10-09, ``no_forward_hole``);
 reference pairs are consecutive on both branches inside the reference window.
+The chosen pip passes the box test, every reference pair's two open intervals
+hold no scaled point of X, and every propagated hole's container holds the
+reference bridge's ends carried back by the real inverse map.
 """
 
 from __future__ import annotations

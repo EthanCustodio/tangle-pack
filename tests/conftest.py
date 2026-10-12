@@ -74,6 +74,9 @@ letter or count of a particular build (author, 2026-10-05: the golden tier was
 removed as "arbitrary and irrelevant"; the CLAUDE.md fixture facts are
 documentation). A real build is checked against RULES; a specific word or name
 appears only in a synthetic test whose input was built by hand to produce it.
+The one exception is a textbook answer, an oracle rather than a fixture fact
+(author Q11, 2026-10-09): ``k10_is_the_full_shift`` checks that k=10 is the
+full 2-shift, letter-free, and is not applicable on every other case.
 ``is_reliable``, ``verified`` and ``source`` of a real build are never pinned;
 they appear only in rules (WP7: an unresolved, ambiguous, contradicted or
 straddling class makes ``is_reliable`` False).

@@ -11,7 +11,8 @@ inverse -- exactly the word's tokens; each class
 element lands in one iterated element; a split class's children keep its
 ``BridgeClass`` and inherit its word; member matching is consistent; inert
 classes are outside the transition graph and matrix; and the matrix counts
-the word tokens.
+the word tokens. On k=10, and only there, the dynamics is the full 2-shift
+(author Q11, the one textbook pin).
 """
 
 from __future__ import annotations
