@@ -3166,6 +3166,11 @@ LAYERS: dict[str, list[LawCheck]] = {
     ],
 }
 
+#: The laws that run on ``cases.LAW_CASES`` only, never on a deep build: the
+#: scaling-only pair oracle (scaling alone is wrong at depth, A.5) and the k=10
+#: textbook pin (plan B0, section 6).
+LAW_CASES_ONLY: tuple[str, ...] = ("reference_pairs_clear_of_X", "k10_is_the_full_shift")
+
 #: The layers whose laws mutate their session: run on ONE fresh build per case,
 #: never the shared one (the checks run in order on that build).
 MUTATING_LAYERS: dict[str, list[LawCheck]] = {
