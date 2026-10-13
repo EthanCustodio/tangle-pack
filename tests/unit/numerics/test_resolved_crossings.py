@@ -55,10 +55,6 @@ def test_a_zig_zag_across_the_stable_curve_is_registered_and_out_of_n(caplog):
     clean = [iid for iid in _detections(registry) if iid not in zig_zag]
 
     assert len(zig_zag) == 3 and len(clean) == 2
-    resolved = registry.resolved_ids(THRESHOLD)
-    assert not set(zig_zag) & resolved
-    assert set(clean) <= resolved
-    assert sorted(registry.unresolved_crossings(THRESHOLD)) == sorted(zig_zag)
 
     workbench.create_bridges()
     assert [bridge.id for bridge in workbench.bridges] == [tuple(clean)]
@@ -67,6 +63,11 @@ def test_a_zig_zag_across_the_stable_curve_is_registered_and_out_of_n(caplog):
     assert all(table[iid, n] is None for iid in zig_zag for n in (1, -1))
     assert all(table[iid, 1] == iid for iid in clean), "the identity map links the clean ones"
     assert not {table[iid, n] for iid in clean for n in (1, -1)} & set(zig_zag)
+
+    resolved = registry.resolved_ids(THRESHOLD)
+    assert not set(zig_zag) & resolved
+    assert set(clean) <= resolved
+    assert sorted(registry.unresolved_crossings(THRESHOLD)) == sorted(zig_zag)
 
     assert_logged(caplog, logging.WARNING, WORKBENCH, count=1)
     caplog.clear()
