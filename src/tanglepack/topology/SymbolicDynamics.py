@@ -1183,19 +1183,22 @@ def _resolve_itinerary(
         goal,
         max_walks=max_walks,
         landings=(source_landing, target_landing),
-        wanted=lobe_image_markers(dual_graph, cd.entry),
+        wanted=wanted,
         walls=walls,
     )
     cd.search = search
     walk = search.walk
     if walk is None or search.status not in ("unique", "trivial", "ambiguous"):
         cd.unresolved_reason = f"dual-graph walk {search.status}"
+    elif search.truncated:  # a budget cut short decides nothing, whatever the status
+        cd.unresolved_reason = "search budget reached before uniqueness was established"
+    if cd.unresolved_reason is not None:
         logger.warning(
-            "class %s unresolved: walk from %s to %s is %s",
+            "class %s unresolved: walk from %s to %s: %s",
             cd.letter,
             start.label,
             goal.label,
-            search.status,
+            cd.unresolved_reason,
         )
         return
     cd.itinerary = tuple(walk.itinerary)
@@ -1416,9 +1419,15 @@ def symbolic_dynamics(
         )
         walls = [wall for theirs, chords in decided if not theirs & mine for wall in chords]
         _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls)
-        # A walk standing for several face paths names none of them: no wall.
+        # A walk standing for several face paths names none of them, and an unresolved
+        # class (a truncated search, B6a) established none: no wall.
         search = cd.search
-        if search and search.status in ("unique", "trivial") and search.walk.multiplicity == 1:
+        if (
+            search
+            and cd.itinerary is not None
+            and search.status in ("unique", "trivial")
+            and search.walk.multiplicity == 1
+        ):
             decided.append((mine, walk_chords(search.walk)))
         itinerary = cd.itinerary or ()
         named = [

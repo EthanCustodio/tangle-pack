@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import importlib
 import logging
+from collections import defaultdict
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from helpers.logs import assert_logged
-from helpers.fakes import bare_fixed_point
+from helpers.fakes import FakeDual, bare_fixed_point
 from tanglepack.topology.BridgeClass import (
     BridgeClass,
     BridgeClassEntry,
@@ -490,9 +491,10 @@ class _Crossings:
 
 
 def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
-           chains=None, registered=None, letter_for=None):
+           chains=None, registered=None, letter_for=None, dual_graph=None, max_walks=64):
     """``symbolic_dynamics`` over the layout: every landing is contained, each class
-    walks ``walks[class]``, ``chains`` / ``registered`` stand in for the iterate table."""
+    walks ``walks[class]``, ``chains`` / ``registered`` stand in for the iterate table.
+    With ``walks`` None the classes really walk ``dual_graph`` (a ``FakeDual``)."""
     def land(_trellis, _homotopy, _iterated, ref):
         return SD.ElementLanding(
             ref, ref.branch_key, ref.side, (0.0, 1.0), (True, True), ref, True, False,
@@ -507,19 +509,19 @@ def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
 
     monkeypatch.setattr(SD, "ElementNaming", lambda _homotopy, _iterated: layout.naming)
     monkeypatch.setattr(SD, "land_element", land)
-    monkeypatch.setattr(SD, "_resolve_itinerary", resolve)
+    if walks is not None:
+        monkeypatch.setattr(SD, "_resolve_itinerary", resolve)
     monkeypatch.setattr(SD, "_member_pair", owner_pair)
     monkeypatch.setattr(SD, "_image_chain", lambda _t, bid: (chains or {}).get(bid))
     monkeypatch.setattr(SD, "trellis_itinerary", lambda _t, _i, chain, _d: registered[tuple(chain)])
-    dual = SimpleNamespace(
-        trellis=_Crossings(layout.fixed_points, crossings or {}),
-        # Elements with no bounding crossings: no order flip to read (C21).
-        partition=SimpleNamespace(
-            homotopy=SimpleNamespace(element=lambda _ref: SimpleNamespace(lo_id=None, hi_id=None))
-        ),
-        minimal=SimpleNamespace(classes=evidence),
+    dual = dual_graph if dual_graph is not None else SimpleNamespace()
+    dual.trellis = _Crossings(layout.fixed_points, crossings or {})
+    # Elements with no bounding crossings: no order flip to read (C21).
+    dual.partition = SimpleNamespace(
+        homotopy=SimpleNamespace(element=lambda _ref: SimpleNamespace(lo_id=None, hi_id=None))
     )
-    return symbolic_dynamics(dual, alphabet, letter_for=letter_for)
+    dual.minimal = SimpleNamespace(classes=evidence)
+    return symbolic_dynamics(dual, alphabet, max_walks=max_walks, letter_for=letter_for)
 
 
 def test_a_word_naming_a_spanned_class_closes_the_alphabet(layout, monkeypatch, caplog):
@@ -614,6 +616,90 @@ def test_evidence_disagreement_names_a_stable_end(layout, monkeypatch, caplog, s
     assert_logged(caplog, logging.WARNING, SD.__name__, count=0 if incomplete else 1)
     assert any("registered image" in r.getMessage() for r in caplog.records if r.levelno == logging.INFO) == incomplete
     assert dyn.is_reliable == incomplete
+
+
+# --------------------------------------------------------------------------- #
+# A walk the search did not establish is no word (B6a)
+# --------------------------------------------------------------------------- #
+def _contained(ref: ElementRef) -> SD.ElementLanding:
+    return SD.ElementLanding(
+        ref, ref.branch_key, ref.side, (0.0, 1.0), (True, True), ref, True, False, (ref,), None
+    )
+
+
+def test_members_holding_different_markers_leave_the_class_unwalked(layout, monkeypatch, caplog):
+    """B6a: two member lobes whose closed curves hold different markers cannot both be
+    one homotopy class; the class is unresolved before any walk, never walked under
+    fewer constraints."""
+    fp = layout.fp
+    trellis = SimpleNamespace(
+        unstable_key_of=lambda _pair: (fp, "unstable", 0, 0),
+        stable_key_at=lambda _end, _unstable: layout.key,
+        intersection=lambda crossing: SimpleNamespace(stable_cdist=float(crossing)),
+    )
+    verdicts = iter([({"marker": True},), ({"marker": False},)])
+    dual = SimpleNamespace(
+        trellis=trellis,
+        unstable_edges={(1, 2): "edge 1-2", (3, 4): "edge 3-4"},
+        stable_nodes_on=lambda _key: [],
+        enclosed=lambda _curve: next(verdicts),
+        image_marker=lambda marker: marker,
+    )
+    entry = BridgeClassEntry(
+        layout.a, [BridgeMember((1, 2), +1), BridgeMember((3, 4), +1)], inert=False, letter="a"
+    )
+    cd = ClassDynamics(entry, "a", "active", (_contained(layout.R[0]), _contained(layout.R[2])))
+    walked = []
+    monkeypatch.setattr(SD, "shortest_walks", lambda *args, **kwargs: walked.append(args))
+    with caplog.at_level(logging.WARNING, logger=SD.__name__):
+        SD._resolve_itinerary(dual, None, cd, 64)
+    assert walked == []
+    assert cd.itinerary is None and cd.search is None
+    assert "different markers" in cd.unresolved_reason
+    assert_logged(caplog, logging.WARNING, SD.__name__, count=1)
+
+
+def test_a_truncated_search_decides_nothing_and_is_no_wall(layout, monkeypatch):
+    """B6a: a search the ``max_walks`` budget cut short reports a candidate, but the
+    class stays unresolved and lends no wall: a later class on another unstable branch
+    is walked with no wall, so it still sees both walks of its tie."""
+    fp = layout.fp
+    a = BridgeClass(layout.L[0], layout.L[2])
+    b = BridgeClass(layout.L[1], layout.L[2])
+    tie = FakeDual()
+    f0, f1, fx, fy = (tie.face() for _ in range(4))
+    tie.wall(f0, fx, layout.L[0], ElementRef(layout.key, "right", 0))
+    tie.wall(f0, fx, layout.L[1], ElementRef(layout.key, "right", 1))
+    through_1 = tie.unified(f0, f1, ElementRef(layout.key, "left", 5), ElementRef(layout.key, "right", 5))
+    tie.unified(f0, f1, ElementRef(layout.key, "left", 6), ElementRef(layout.key, "right", 6))
+    tie.wall(f1, fy, layout.L[2], ElementRef(layout.key, "right", 2))
+    tie.unstable_edges = {}  # no kept member: no lobe, the walls alone hold the walk
+    tie.chords_cross = lambda _face, chord, _wall: chord[2] == through_1.edge_key
+    alphabet = BridgeClassTable(
+        [
+            BridgeClassEntry(a, [BridgeMember((1, 2), +1)], inert=False, letter="a"),
+            BridgeClassEntry(b, [BridgeMember((3, 4), +1)], inert=False, letter="b"),
+        ]
+    )
+    # Every pair a loop of one element: the words name no class outside the alphabet.
+    layout.naming = _FakeNaming(defaultdict(lambda: layout.L[0]), defaultdict(lambda: "X"))
+    monkeypatch.setattr(_Crossings, "unstable_key_of", lambda _self, pair: (fp, "unstable", pair[0], 0))
+    calls = []
+    real = SD.shortest_walks
+
+    def spy(dual, start, goal, **kwargs):
+        calls.append((start, goal, list(kwargs["walls"])))
+        return real(dual, start, goal, **kwargs)
+
+    monkeypatch.setattr(SD, "shortest_walks", spy)
+    dyn = _drive(layout, monkeypatch, alphabet, alphabet, None, dual_graph=tie, max_walks=1)
+    first = dyn.classes[a]
+    assert first.search.truncated and first.search.walk is not None
+    assert first.itinerary is None and "budget" in first.unresolved_reason
+    assert not dyn.is_reliable
+    (_, _, walls_a), (start, goal, walls_b) = calls
+    assert walls_a == [] and walls_b == []
+    assert len(real(tie, start, goal, walls=walls_b).walks) == 2
 
 
 # --------------------------------------------------------------------------- #
