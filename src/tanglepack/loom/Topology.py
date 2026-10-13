@@ -96,7 +96,8 @@ class Topology:
 
         Raises:
             ValueError: A fixed point's chosen strong pip is no longer a
-                candidate (see ``TangleSession.set_strong_pip``).
+                candidate (see ``TangleSession.set_strong_pip`` and
+                ``TangleSession.forget_strong_pip``).
         """
         self._session = session
         self.generation = session.workbench.generation
@@ -122,7 +123,8 @@ class Topology:
         elif session.chosen_strong_pip(fixed_point) is not None:
             raise ValueError(
                 f"the chosen strong pip of {fixed_point!r} is no longer a "
-                "strong-pip candidate; choose another with set_strong_pip()"
+                "strong-pip candidate; choose another with set_strong_pip() or drop it "
+                "with forget_strong_pip()"
             )
         return trellis.strong_pip
 

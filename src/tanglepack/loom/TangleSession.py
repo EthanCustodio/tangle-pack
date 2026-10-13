@@ -322,7 +322,8 @@ class TangleSession:
 
         Raises:
             ValueError: A selected fixed point's chosen strong pip is no
-                longer a candidate (choose another with :meth:`set_strong_pip`).
+                longer a candidate (choose another with :meth:`set_strong_pip` or drop
+                it with :meth:`forget_strong_pip`).
         """
         key, selected = self._selection(fixed_points)
         topology = self._topologies.get(key)
@@ -1102,7 +1103,8 @@ class TangleSession:
         if warn:
             logger.warning(
                 "the chosen strong pip of %r (stable cdist %.6g on %s) is no longer a "
-                "strong-pip candidate; choose another with set_strong_pip()",
+                "strong-pip candidate; choose another with set_strong_pip() or drop it "
+                "with forget_strong_pip()",
                 fixed_point, chosen.stable_cdist, chosen.manifold_b_key[1:],
             )
 
@@ -1113,6 +1115,13 @@ class TangleSession:
         trellis.set_strong_pip(intersection_id)
         self._strong_pips[fixed_point] = trellis.strong_pip_intersection
         return intersection_id
+
+    def forget_strong_pip(self, fixed_point: "FixedPoint") -> None:
+        """Drop the pip chosen for ``fixed_point``: its trellis is uncut and the
+        next :meth:`topology` chooses the default again. The remedy for a pip
+        that is no longer a candidate (B8)."""
+        self._strong_pips.pop(fixed_point, None)
+        self.trellis(fixed_point).strong_pip = None
 
     def strong_pip(self, fixed_point: "FixedPoint") -> Optional[int]:
         """The chosen strong-pip id for ``fixed_point``'s trellis (or None)."""
@@ -1484,7 +1493,9 @@ class TangleSession:
         The zone is stored in :attr:`resonance_zones` keyed by its fixed point
         (one zone per fixed point, inversion included), so a later call for a
         different fixed point does not overwrite it. The zone's pip becomes
-        that fixed point's chosen strong pip (the zone is cut at it).
+        that fixed point's chosen strong pip (the zone is cut at it) when it is
+        a strong-pip candidate on the trimmed trellis; otherwise the zone is
+        still stored, the previous choice stays and a WARNING says so (B8).
         Trims are cumulative (each sets a manifold's tail), so building zones for
         several fixed points nests correctly — the inner zone ends up a subset of the
         outer one. A recompute advances the workbench generation, so any cached
@@ -1506,7 +1517,17 @@ class TangleSession:
             self.workbench, intersection_id, fixed_points, recompute=recompute
         )
         self.resonance_zones[rz.key] = rz
-        self._strong_pips[rz.key] = pip
+        trellis = self.trellis(rz.key)
+        found = trellis.registry.find(pip)
+        if found is not None and trellis._is_candidate(found):
+            trellis.strong_pip = found  # tested just now, as _restore_strong_pip does
+            self._strong_pips[rz.key] = pip
+        else:
+            logger.warning(
+                "the zone pip %d of %r is not a strong-pip candidate; the zone is "
+                "stored, the chosen strong pip is unchanged",
+                intersection_id, rz.key,
+            )
         return rz
 
     def add_resonance_zones(
