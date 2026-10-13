@@ -96,7 +96,13 @@ Dev Notes:
   it (the heteroclinic ``bh``). No walk up to the detour cap holding the
   markers leaves the class unresolved (``"no_admissible_walk"``), and so does
   the walk budget running out before any judged walk held them
-  (``"truncated"``).
+  (``"truncated"``). A walk is a claim only when it is established (B6a):
+  a search the budget cut short (:attr:`WalkSearch.truncated`, whatever its
+  status), a landing span overlapping no stable node
+  (``"span_meets_no_node"``) and two member lobes holding different markers
+  (:class:`~tanglepack.topology.DualWalk.MembersDisagree`, caught before
+  walking) all leave the class unresolved, and an unresolved class is no
+  wall.
 * Walls (D13's own words, "f(bridge) cannot cross the images of the unstable
   arcs"; WP9c, C17). Every class's arcs lie on known unstable branches: its
   members' (``Trellis.unstable_key_of``), or, for a class no computed bridge
@@ -330,8 +336,10 @@ class ClassDynamics:
             non-crossing rule, so only for a class with no member lobe); the
             first candidate is the primary itinerary.
         unresolved_reason: Why the class has no itinerary (a failed landing,
-            no walk, or a singleton landing with no registered member image),
-            else ``None``. A pair no computed bridge spans unresolves nothing
+            no walk, a walk not established -- a truncated search, a span
+            meeting no node, member lobes holding different markers (B6a) --
+            or a singleton landing with no registered member image), else
+            ``None``. A pair no computed bridge spans unresolves nothing
             (D11): it is a class of its own, ``entry.spanned`` False.
         evidence: The registered member images, one record each.
         verified: Word-level agreement of every piece of evidence that gives a
@@ -839,7 +847,12 @@ class SymbolicDynamics:
     @property
     def is_reliable(self) -> bool:
         """True when no class is ambiguous, unresolved, contradicted by evidence or
-        landed across a cut (a straddling landing, INT-8)."""
+        landed across a cut (a straddling landing, INT-8).
+
+        Unresolved (``itinerary is None``) covers every walk not established
+        (B6a): a search the ``max_walks`` budget cut short, a landing span
+        meeting no stable node, and member lobes holding different markers.
+        """
         return all(
             cd.itinerary is not None
             and not cd.ambiguous

@@ -64,10 +64,14 @@ Dev Notes:
   around it. Two consequences make it combinatorial. (1) The walk runs
   between the landing SPANS (C14): the hole bridges bounding a homotopy
   element ``X`` map onto the kept image bridges at the ends of ``f(X)``, so
-  ``f(b)`` leaves the stable manifold from an edge ``f(X)`` meets. (2) The
+  ``f(b)`` leaves the stable manifold from an edge ``f(X)`` meets; a span
+  that overlaps no edge at all is ``"span_meets_no_node"``, never a walk from
+  every edge (B6a). (2) The
   marker law: ``b`` and the stable segment ``sigma_b`` between its ends bound
   a disk, and ``f(b) + f(sigma_b)`` bounds its image, so it holds the image of
-  every marker (periodic point, hole) the lobe holds and of no other. The
+  every marker (periodic point, hole) the lobe holds and of no other; two
+  member lobes disagreeing on a marker raise :class:`MembersDisagree` (the
+  class is not one homotopy class, B6a). The
   word is the shortest walk whose curve, closed by ``sigma'`` along the
   stable manifold, does so. The rule applies to every class with a member
   lobe, not only to ties (C13): a unique shortest walk can break it. A walk
@@ -90,8 +94,9 @@ Dev Notes:
   a wall the tie stands (never observed).
 * When the ``max_walks`` cap cuts the enumeration short the status still
   says ``"unique"`` or ``"ambiguous"`` for the itineraries that survived and
-  :attr:`WalkSearch.truncated` is set (with a WARNING), because a truncated
-  search still has a best candidate to hand on. Only a constrained search
+  :attr:`WalkSearch.truncated` is set (with a WARNING): the search reports its
+  best candidate, but a truncated search decides nothing, so the symbolic
+  dynamics leaves the class unresolved (B6a). Only a constrained search
   (D13) that runs out before any judged walk holds the markers reports
   ``"truncated"`` as its status, with no walk: it has no candidate, and
   ``"no_admissible_walk"`` would claim every walk up to the detour cap broke
@@ -592,7 +597,9 @@ class WalkSearch:
             walk may leave from.
         truncated: True when the ``max_walks`` cap stopped the enumeration of
             shortest face paths (of judged walks, when constrained), so
-            ``walks`` (and their multiplicities) may be incomplete.
+            ``walks`` (and their multiplicities) may be incomplete: the status
+            is the best candidate so far, and the symbolic dynamics leaves
+            such a class unresolved.
         constrained: True when the markers of a member lobe were imposed
             (the non-crossing rule, D13).
         rejected: How many itineraries, no longer than the one chosen, broke
