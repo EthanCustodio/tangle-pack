@@ -558,6 +558,7 @@ WalkStatus = Literal[
     "no_goal_node",
     "no_admissible_walk",
     "truncated",
+    "span_meets_no_node",
 ]
 
 #: How many crossings longer than the shortest walk the non-crossing rule may
@@ -578,9 +579,11 @@ class WalkSearch:
             (several distinct shortest itineraries, all kept),
             ``"unreachable"``, ``"no_start_node"``, ``"no_goal_node"``,
             ``"no_admissible_walk"`` (the non-crossing rule rejected every
-            walk up to :data:`MAX_DETOUR` crossings past the shortest) or
+            walk up to :data:`MAX_DETOUR` crossings past the shortest),
             ``"truncated"`` (the ``max_walks`` cap ran out before any walk
-            judged under that rule held the markers).
+            judged under that rule held the markers) or
+            ``"span_meets_no_node"`` (a landing span overlaps none of its
+            element's stable nodes).
         walks: The distinct shortest walks in deterministic order (by the
             :func:`~tanglepack.topology.BridgeClass.element_sort_key` of
             their itineraries); empty unless the status is ``"trivial"``,
@@ -730,29 +733,31 @@ def _nodes_meeting(
     nodes: list["StableNode"], landing: ElementLanding, ref: ElementRef
 ) -> list["StableNode"]:
     """
-    The nodes whose edge the landing span meets, or all of them (WARNING).
+    The nodes whose edge the landing span overlaps; empty (WARNING) when none.
 
-    The span overlaps an edge by more than its end tolerance: nothing at a
-    table end, ``SCALING_RTOL * |c|`` at a scaled one, so a neighbour touched
-    by a scaled end's error is no start.
+    The span should overlap an edge by more than its end tolerance (nothing at
+    a table end, ``SCALING_RTOL * |c|`` at a scaled one), so a neighbour
+    touched by a scaled end's error is no start. A span narrower than its own
+    error overlaps no edge by that much, so then the edges it overlaps at all
+    are kept: the tolerance drops neighbours, never the one edge a span lies in.
     """
     lo, hi = landing.span
     tol = max(
         (SCALING_RTOL * abs(c) for c, exact in zip(landing.span, landing.from_table) if not exact),
         default=0.0,
     )
-    meeting = [node for node in nodes if min(hi, node.hi_cdist) - max(lo, node.lo_cdist) > tol]
-    if meeting:
-        return meeting
-    logger.warning(
-        "the landing span [%.6g, %.6g] of %s meets none of its %d stable node(s); the "
-        "walk may leave from any of them",
-        lo,
-        hi,
-        ref.label,
-        len(nodes),
-    )
-    return nodes
+    overlaps = [(node, min(hi, node.hi_cdist) - max(lo, node.lo_cdist)) for node in nodes]
+    meeting = [n for n, o in overlaps if o > tol] or [n for n, o in overlaps if o > 0]
+    if not meeting:
+        logger.warning(
+            "the landing span [%.6g, %.6g] of %s meets none of its %d stable node(s) "
+            "(resolution flag): the class is unresolved",
+            lo,
+            hi,
+            ref.label,
+            len(nodes),
+        )
+    return meeting
 
 
 def _stable_edges_between(dual, branch_key: "ManifoldKey", lo: float, hi: float) -> set[tuple]:
@@ -1081,7 +1086,8 @@ def shortest_walks(
         WARNING); ``"unreachable"`` when the search exhausts the faces;
         ``"no_admissible_walk"`` when the non-crossing rule rejects every
         walk up to the detour cap; ``"truncated"`` when the cap ran out
-        before any judged walk held the markers.
+        before any judged walk held the markers; ``"span_meets_no_node"``
+        when a landing span overlaps none of its element's stable nodes.
     """
     start_nodes = list(dual.stable_nodes_of(start))
     if not start_nodes:
@@ -1104,6 +1110,8 @@ def shortest_walks(
     if landings is not None:
         start_nodes = _nodes_meeting(start_nodes, landings[0], start)
         goal_nodes = _nodes_meeting(goal_nodes, landings[1], goal)
+        if not start_nodes or not goal_nodes:
+            return WalkSearch(start, goal, "span_meets_no_node")
 
     start_faces = _distinct_faces(node.face_on(start.side) for node in start_nodes)
     goal_faces = _distinct_faces(node.face_on(goal.side) for node in goal_nodes)

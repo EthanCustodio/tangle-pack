@@ -330,7 +330,23 @@ def test_the_walk_leaves_from_the_edges_the_landing_span_meets(key, two_starts, 
     assert search.walk.goal_node in dual.stable_nodes_of(L(key, 3))
 
 
-def test_a_span_meeting_no_edge_falls_back_to_every_edge(key, caplog):
+def test_a_span_narrower_than_its_error_starts_from_the_edge_it_lies_in(key, two_starts):
+    """B6a: a scaled span inside the edge [1, 2] overlaps it by less than its own error
+    (``SCALING_RTOL * |c|``), and its neighbour not at all: the walk leaves from that
+    edge only, never from every edge."""
+    dual, _f0, f3 = two_starts
+    landings = (
+        _landing(L(key, 0), (1.2, 1.205), (False, False)),
+        _landing(L(key, 3), (0.0, 1.0)),
+    )
+    search = shortest_walks(dual, L(key, 0), L(key, 3), landings=landings)
+    assert search.start_faces == [f3]
+    assert search.status == "unique" and search.walk.faces[0] is f3
+
+
+def test_a_span_meeting_no_edge_leaves_the_walk_undecided(key, caplog):
+    """B6a: a landing span overlapping none of its element's edges names no start, so
+    there is no walk to claim (a resolution flag, one WARNING)."""
     dual = FakeDual()
     f0, f3, f1, fx, fy = (dual.face() for _ in range(5))
     dual.wall(f0, fx, L(key, 0), R(key, 0))
@@ -340,7 +356,8 @@ def test_a_span_meeting_no_edge_falls_back_to_every_edge(key, caplog):
     landings = (_landing(L(key, 0), (5.0, 6.0)), _landing(L(key, 2), (0.0, 1.0)))
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         search = shortest_walks(dual, L(key, 0), L(key, 2), landings=landings)
-    assert search.status == "unique" and [face.index for face in search.start_faces] == [f0.index, f3.index]
+    assert search.status == "span_meets_no_node"
+    assert search.walks == [] and search.walk is None
     assert_logged(caplog, logging.WARNING, LOGGER, count=1)
 
 
