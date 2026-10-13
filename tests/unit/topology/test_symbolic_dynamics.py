@@ -744,6 +744,25 @@ def test_unresolved_class_carries_a_reason_and_warns(caplog):
             assert len(cd.itinerary) % 2 == 0
 
 
+@pytest.mark.parametrize("max_walks", [1, 2])
+def test_a_budget_too_small_to_decide_a_walk_leaves_its_class_unresolved(max_walks):
+    """B6a on real data: the heteroclinic tangle has a tie no two walks decide, so at a
+    budget of one or two walks some search is cut short. Whatever status it reports,
+    its class is unresolved with the budget as the reason, and the table is unreliable."""
+    from cases import build_heteroclinic
+
+    topo = build_heteroclinic().session.topology()
+    dyn = symbolic_dynamics(topo.dual_graph, topo.classes, max_walks=max_walks, letter_for=topo.letter_for)
+
+    truncated = [cd for cd in dyn.classes.values() if cd.search is not None and cd.search.truncated]
+    assert truncated, "the heteroclinic tie needs more than two walks"
+    for cd in truncated:
+        assert cd.itinerary is None and not cd.symbols
+        if cd.search.walk is not None:
+            assert "budget" in cd.unresolved_reason
+    assert not dyn.is_reliable
+
+
 # --------------------------------------------------------------------------- #
 # The unstable branches a class's arcs lie on (the walls, D13 / D14)
 # --------------------------------------------------------------------------- #
