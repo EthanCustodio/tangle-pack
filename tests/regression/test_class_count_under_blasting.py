@@ -31,7 +31,10 @@ pinned count:
   its fixed points when it is read, never by whichever product runs first (D1);
 * no class is ambiguous: the walk leaves from the edges its landing span meets
   and the non-crossing rule picks the side of every class with a member lobe
-  (D13; the ties of k=2.8 and k=3.2 at 8+ blasts were the span's).
+  (D13; the ties of k=2.8 and k=3.2 at 8+ blasts were the span's);
+* a plain recompute keeps the crossing set N and the bridges a blast left: N
+  is one definition on every path (B1, Q13 (a); the blast path's vote on
+  near-coincident detections made k=2.8 drift from blast 6).
 
 The per-kind counts are printed in every failure message as diagnostics.
 
@@ -137,3 +140,16 @@ def test_no_walk_is_ambiguous(name: str) -> None:
     """D3 + D13: after every blast each class has one word (no class is ambiguous)."""
     steps = _series(name)
     assert all(s.ambiguous == 0 for s in steps), _table(steps)
+
+
+@pytest.mark.parametrize("name", _params("series_recompute_keeps_the_crossing_set"))
+def test_recompute_keeps_the_crossing_set(name: str) -> None:
+    """B1: ``compute_intersections(preserve_ids=True)`` and ``rebuild_bridges()``
+    after a blast find the same N and cut the same bridges."""
+    steps = _series(name)
+    drift = [
+        (s.blasts, *(f"{len(blast)} -> {len(again)}" for blast, again in zip(s.crossings, s.recomputed)))
+        for s in steps
+        if s.crossings != s.recomputed
+    ]
+    assert not drift, f"(blasts, |N|, bridges) changed by a recompute: {drift}"

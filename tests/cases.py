@@ -1083,6 +1083,12 @@ class SeriesStep:
         history_free: Whether ``session.trellis()`` read BEFORE the recompute
             shows the crossings and bridges of the recomputed topology's
             trellis (D1: the snapshot never depends on what ran first).
+        crossings: ``(N, bridge ids)`` as the blast left them: every registered
+            crossing ``unresolved_crossings`` does not list, and the ids of the
+            cut bridges.
+        recomputed: The same pair after a plain
+            ``compute_intersections(preserve_ids=True)`` and
+            ``rebuild_bridges()`` (B1: N is one definition on every path).
     """
 
     blasts: int
@@ -1097,6 +1103,8 @@ class SeriesStep:
     unwitnessed: frozenset
     letters: frozenset
     history_free: bool
+    crossings: tuple[frozenset, frozenset]
+    recomputed: tuple[frozenset, frozenset]
 
 
 class Series(NamedTuple):
@@ -1131,7 +1139,9 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
     The D1 loop on one session: recompute the topology, blast once, repeat.
 
     Each blast is one iteration of the build's largest zone, of its own fixed
-    point only, with ``diagnose=False``; the session carries the pips.
+    point only, with ``diagnose=False``; the session carries the pips. Each
+    step ends with a plain recompute of the crossings and bridges, recorded
+    beside what the blast left.
 
     Args:
         name: A key of :data:`SERIES`.
@@ -1180,9 +1190,28 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
                     if entry.letter is not None
                 ),
                 history_free=shown == trellis_view(session.topology().trellis),
+                crossings=_crossings_and_bridges(session.workbench),
+                recomputed=_recomputed(session.workbench),
             )
         )
     return tuple(steps)
+
+
+def _crossings_and_bridges(workbench) -> tuple[frozenset, frozenset]:
+    """``(N, bridge ids)``: the registry less what it lists as unresolved, and the cut."""
+    registry = workbench.intersection_registry
+    unresolved = set(registry.unresolved_crossings(workbench.resolution_ratio_threshold))
+    return (
+        frozenset(iid for iid in registry.all_ids() if iid not in unresolved),
+        frozenset(bridge.id for bridge in workbench.bridges if bridge.id is not None),
+    )
+
+
+def _recomputed(workbench) -> tuple[frozenset, frozenset]:
+    """:func:`_crossings_and_bridges` after a plain recompute of the crossings and bridges."""
+    workbench.compute_intersections(workbench.fixed_points, preserve_ids=True, diagnose=False)
+    workbench.rebuild_bridges()
+    return _crossings_and_bridges(workbench)
 
 
 def _class_identity(family, bridge_class) -> frozenset:
