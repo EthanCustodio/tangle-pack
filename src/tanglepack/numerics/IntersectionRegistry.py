@@ -106,6 +106,10 @@ class IntersectionRegistry:
             identity, ownership or containment (the topology reads none, C15,
             WP11), and NOT the dedup rule, which is :data:`DEDUP_RTOL`
         iterate_table: IterateTable  — a partial bijection: the map is injective
+        unresolved_links: dict[int, tuple[int, ...]]  — source id -> the candidate
+            images the exact rule cannot decide between (several bracketed
+            images, or one image claimed by several sources); none of them is
+            linked, so the set is disjoint from the table's ``+1`` sources (B8)
         _generation: int  — bumped by every mutation; read via :attr:`generation`
         _orders_version: int  — bumped by the mutations that change the stored
             crossings (insert, renumber); the ordering-derived views key on it
@@ -138,6 +142,7 @@ class IntersectionRegistry:
         self._next_id: int = 0
         self.cdist_tol = cdist_tol
         self.iterate_table = IterateTable()
+        self.unresolved_links: dict[int, tuple[int, ...]] = {}
 
         # Monotone mutation counter. Anything derived from this registry (a
         # Trellis snapshot, the workbench's generation) is valid only for the
@@ -344,6 +349,7 @@ class IntersectionRegistry:
         self._stable_keys = []
         self._graph = nx.MultiDiGraph()
         self.iterate_table = IterateTable()
+        self.unresolved_links = {}
         self._next_id = (max(used) + 1) if used else 0
         self._generation += 1
         self._orders_version += 1
@@ -674,6 +680,20 @@ class IntersectionRegistry:
                 stability="unstable",
                 n=n,
             )
+
+    def remove_iterate(self, source_id: int, n: int) -> None:
+        """
+        Forget f^n(source) and its backward twin, and the graph's iterate edge.
+
+        Raises:
+            KeyError: If the table holds no such link.
+        """
+        target_id = self.iterate_table[source_id, n]
+        self.iterate_table.remove(source_id, n)
+        self._generation += 1
+        edge = (source_id, target_id, f"iter_{source_id}_{n}")
+        if self._graph.has_edge(*edge):
+            self._graph.remove_edge(*edge)
 
     def iterate_orbit(
         self, start_id: int, max_len: Optional[int] = None

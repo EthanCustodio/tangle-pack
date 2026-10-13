@@ -127,3 +127,12 @@ class IterateTable:
     def register_iterate(self, source_id: int, n: int, target_id: int) -> None:
         """Explicit named method — delegates to __setitem__."""
         self[source_id, n] = target_id
+
+    def remove(self, source_id: int, n: int) -> None:
+        """Forget ``f^n(source)`` and its backward twin (``n > 0``).
+
+        Raises:
+            KeyError: If the table holds no such link.
+        """
+        target_id = self._forward[source_id].pop(n)
+        del self._backward[target_id][n]
