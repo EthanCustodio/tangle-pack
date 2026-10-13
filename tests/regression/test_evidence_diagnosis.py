@@ -15,6 +15,14 @@ along a branch, so the cdists there are noise, C21, WP12); else ``"walk"``. A
 k=2.8 zone blasted six times has a stable-end member (~3 s), blasted nine times
 an order flip (~8 s, INT-11). Rule-based: the cause is checked against an
 independent scan of the chain and the table, nothing of the build is pinned.
+
+The order flip needs the trellis of the pip at its full depth. At nine blasts
+the deepest point of the pip's orbit has resolution ratio 2.99, below the
+threshold, so under N it shortens ``T(q0)`` by one iterate and the flipped copy
+lies past the cut (Q13 a, B1); refining the blasts resolves it but also moves
+the copy off the hole-bridge end. The order-flip build therefore blasts with
+clause 1 of N off; the crossings of the flip itself are resolved (ratios above
+5000).
 """
 
 from __future__ import annotations
@@ -23,7 +31,7 @@ import logging
 
 import pytest
 
-from cases import build_k28
+from cases import ZONE_MIN_SEPARATION, build_k28
 from tanglepack.topology.BridgeClass import _image_chain
 
 
@@ -99,7 +107,13 @@ def test_an_order_flip_gives_no_verdict(caplog):
     hole-bridge end so closely that the registered images of a member end and its
     element's bound come out in the reverse stable order. That evidence is noise:
     no verdict, and the dynamics stays reliable."""
-    session = build_k28(blasts=9).session
+    case = build_k28(blasts=0, through="zones")
+    session, (fp,), (zone,) = case.session, case.fixed_points, case.zones
+    session.workbench.resolution_ratio_threshold = None
+    for _ in range(9):
+        session.blast_zone(
+            zone, num_iterations=1, fixed_point=[fp], min_separation=ZONE_MIN_SEPARATION
+        )
     trellis = session.minimal_trellis().trellis
     homotopy = session.homotopy_partition()
     with caplog.at_level(logging.INFO, logger="tanglepack.topology.SymbolicDynamics"):
