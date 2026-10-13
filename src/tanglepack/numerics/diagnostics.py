@@ -7,9 +7,11 @@ things go silently wrong where the polylines are too coarse for the geometry:
 * **Unresolved crossings.** Near a tangency an unstable and a stable polyline
   can straddle each other without the curves crossing there (or cross without
   the polylines showing it). ``Tangle`` scores every detected crossing with
-  its :attr:`~.Intersection.Intersection.resolution_ratio`;
+  its :attr:`~.Intersection.Intersection.resolution_ratio` and chord deviation;
   :meth:`~.IntersectionRegistry.IntersectionRegistry.unresolved_crossings`
-  lists the ones below a threshold.
+  lists the detections that are not crossings of N: below the threshold
+  (clause 1), or in a run of detections closer along the unstable polyline
+  than their chord deviation (clause 2).
 * **Same-stability crossings.** By the fundamental invariant two unstable
   curves never cross, nor do two stable ones, and no curve crosses itself. A
   polyline that does -- a Z-kink of one manifold, two branches, a blast's image
@@ -20,9 +22,9 @@ things go silently wrong where the polylines are too coarse for the geometry:
   bridges take part in (C5: a blast adds no stable curve, and every hit it can
   add involves one of its images).
 
-Both are FLAGS. Nothing here discards a crossing or changes the tangle: a real
-near-tangent crossing exists, only the count of crossings near a tangency is
-untrustworthy. :meth:`~.TangleWorkbench.TangleWorkbench.check_resolution`
+Nothing here changes the tangle. An unresolved detection is out of N by the
+registry's definition (B1, Q13 (a)), not by this report, which only names it;
+a same-stability crossing is a FLAG. :meth:`~.TangleWorkbench.TangleWorkbench.check_resolution`
 bundles the two into a :class:`ResolutionReport`.
 
 Dev Notes:
@@ -127,9 +129,10 @@ class ResolutionReport:
     Everything the polylines fail to resolve, on demand.
 
     Attributes:
-        threshold: The resolution-ratio threshold used (None: not checked).
-        unresolved_crossings: Registry ids whose resolution ratio is below
-            ``threshold``, in unstable cdist order.
+        threshold: The resolution-ratio threshold used (None: clause 1 off).
+        unresolved_crossings: Registry ids of the detections that are not
+            crossings of N -- ratio below ``threshold`` (clause 1) or in a run
+            (clause 2) -- in unstable cdist order.
         same_stability_crossings: Every same-stability polyline crossing (empty
             when only a count was taken).
         same_stability_count: The count of the hits a blast's new image bridges

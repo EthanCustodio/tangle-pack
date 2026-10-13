@@ -163,9 +163,9 @@ class TangleWorkbench:
             (see :attr:`max_points_per_step`).
         escape_radius: Optional ``max|coordinate|`` above which a growth step
             logs a WARNING; off by default.
-        resolution_ratio_threshold: The resolution ratio below which a detected
-            crossing is reported as unresolved (see :meth:`check_resolution`);
-            None disables the report.
+        resolution_ratio_threshold: Part of the definition of N: a detection
+            whose resolution ratio is below it is no crossing (see the
+            constructor).
 
     Note:
         Bridge iteration, iterate-table inference and graph plotting are
@@ -225,12 +225,21 @@ class TangleWorkbench:
                 ``None`` disables it.
             escape_radius (Optional[float]): ``max|coordinate|`` above which a
                 growth step warns; ``None`` (default) never warns.
-            resolution_ratio_threshold (Optional[float]): A detected crossing
-                whose :attr:`~.Intersection.Intersection.resolution_ratio` is
-                below this is reported as unresolved. 3 is silent on every
-                well-resolved test tangle (smallest ratio ~9 on period 3, hundreds
-                on the period-1 cases) and flags the near-tangent polylines of a
-                tangle close to a tangency. None disables the report.
+            resolution_ratio_threshold (Optional[float]): Part of the
+                definition of N (A.2, Q13 (a)): a detection whose
+                :attr:`~.Intersection.Intersection.resolution_ratio` is below it
+                is registered but no crossing of N -- nothing is cut at it,
+                linked to it or trimmed at it, and :meth:`report_resolution`
+                names it with the remedy "refine". Derived bound 1: at a ratio
+                of 1 the segments separate by no more than the polygon error,
+                and the crossing cannot be told apart from noise. The default
+                keeps a margin 3 above it; the corpus minimum, over the law
+                cases, is 3.038 (heteroclinic, 2026-10-12). None turns this
+                clause off; a run of detections closer than their chord
+                deviation is out of N whatever the threshold. It is read by
+                every detection pass and every trellis built afterwards: after
+                changing it on a workbench that holds crossings, run
+                :meth:`compute_intersections` to re-cut.
         """
 
         self.dynamical_system = DynamicalSystem(
@@ -1397,11 +1406,12 @@ class TangleWorkbench:
                 fixed point.
 
         Returns:
-            The registered crossings whose resolution ratio is below
-            :attr:`resolution_ratio_threshold` (none when it is None) and every
+            The registered detections that are not crossings of N (below
+            :attr:`resolution_ratio_threshold`, or in a run) and every
             same-stability polyline crossing
-            (:func:`~.diagnostics.same_stability_crossings`). Both are flags:
-            nothing is discarded, and neither feeds any reliability verdict.
+            (:func:`~.diagnostics.same_stability_crossings`). Neither feeds any
+            reliability verdict; the unresolved detections are already out of N
+            by definition, and the report only names them.
         """
         selected = self._selection(fixed_points)
         return ResolutionReport(
@@ -1419,9 +1429,11 @@ class TangleWorkbench:
         """
         :meth:`check_resolution`, logging what no earlier report has said.
 
-        One WARNING when unresolved crossings appear that were not reported
-        before (with the totals, the smallest ratio and the current
-        ``area_cutoff``); one WARNING when same-stability polyline crossings
+        One WARNING when unresolved detections appear that were not reported
+        before, naming every unresolved one (id, coordinates, ratio, clause,
+        and for a run its partner and separation) and ending with the remedy
+        "refine: lower `area_cutoff` or grow the stretch; NUM-3/4"; one WARNING
+        when same-stability polyline crossings
         appear in the tangle region, one INFO when they appear only outside it
         (an escaping arm). Each finding is reported once, so the zone
         recomputes and the next blast stay quiet about what is already known.
@@ -1466,21 +1478,16 @@ class TangleWorkbench:
         return list(fixed_points)
 
     def _unresolved_crossings(self, selected: list[FixedPoint]) -> tuple[int, ...]:
-        """The selection's crossings below the resolution-ratio threshold."""
-        threshold = self.resolution_ratio_threshold
-        if threshold is None:
-            return ()
+        """The selection's detections that are not crossings of N."""
         registry = self._intersection_registry
         return tuple(
             iid
-            for iid in registry.unresolved_crossings(threshold)
+            for iid in registry.unresolved_crossings(self.resolution_ratio_threshold)
             if any(fp is chosen for fp in registry[iid].fixed_points for chosen in selected)
         )
 
     def pending_resolution_flags(self) -> list[int]:
-        """The unresolved crossings no report has logged yet, in unstable cdist order."""
-        if self.resolution_ratio_threshold is None:
-            return []
+        """The unresolved detections no report has logged yet, in unstable cdist order."""
         reported = self._reported_flag_ids()
         return [
             iid
@@ -1498,33 +1505,37 @@ class TangleWorkbench:
     def _report_unresolved(
         self, unresolved: tuple[int, ...], threshold: Optional[float]
     ) -> None:
-        """One WARNING for the unresolved crossings, if any of them is new."""
+        """One WARNING naming every unresolved detection, if any of them is new."""
         reported = self._reported_flag_ids()
         self._reported_flags = (self._registry_id_epoch, reported | frozenset(unresolved))
-        registry = self._intersection_registry
-        new = [iid for iid in unresolved if iid not in reported]
-        for iid in new:
-            logger.debug(
-                "Crossing %d: resolution ratio %.3g below %.3g",
-                iid,
-                registry[iid].resolution_ratio,
-                threshold,
-            )
-        if not new:
+        if all(iid in reported for iid in unresolved):
             return
-        cdists = [registry[iid].unstable_cdist for iid in unresolved]
+        registry = self._intersection_registry
+        lines = []
+        for iid in unresolved:
+            ix = registry[iid]
+            clauses = []
+            if threshold is not None and ix.resolution_ratio is not None and ix.resolution_ratio < threshold:
+                clauses.append(f"ratio below {threshold:.3g} (clause 1)")
+            partner = registry.run_partner(iid)
+            if partner is not None:
+                clauses.append(
+                    f"in a run with {partner}, the nearest detection "
+                    f"{registry.run_separation(iid):.3g} away along the polyline (clause 2)"
+                )
+            lines.append(
+                f"  {iid} at ({ix.coords[0]:.12g}, {ix.coords[1]:.12g}): ratio "
+                f"{ix.resolution_ratio:.4g}, " + "; ".join(clauses)
+            )
         logger.warning(
-            "%d of %d detected crossings have a resolution ratio below %.3g "
-            "(smallest %.3g, unstable cdist %.6g .. %.6g, area_cutoff %.3g): they "
-            "cannot be distinguished from polygon noise at this area_cutoff; refine "
-            "and compare counts -- near a tangency they may be undecidable",
+            "%d of %d detections are not crossings of N: the polylines do not resolve "
+            "them at area_cutoff %.3g, so they are registered and read by no path "
+            "(an unresolved one lies inside a bridge and is never linked):\n%s\n"
+            "refine: lower `area_cutoff` or grow the stretch; NUM-3/4",
             len(unresolved),
-            sum(ix.resolution_ratio is not None for _iid, ix in registry),
-            threshold,
-            min(registry[iid].resolution_ratio for iid in unresolved),
-            min(cdists),
-            max(cdists),
+            sum(not ix.is_synthetic for _iid, ix in registry),
             self._man_machine.area_cutoff,
+            "\n".join(lines),
         )
 
     def _report_artifacts(self, hits: tuple[SameStabilityCrossing, ...]) -> None:

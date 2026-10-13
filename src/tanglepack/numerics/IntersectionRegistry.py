@@ -163,8 +163,9 @@ class IntersectionRegistry:
             dict[Optional[ManifoldKey], tuple[list[float], list[int]]]
         ] = None
         self._stable_branch_version: int = -1
-        # The detections' run separations and run members, and N per threshold.
-        self._runs_cache: tuple[dict[int, float], frozenset[int]] = ({}, frozenset())
+        # Each detection's nearest neighbour and each run member's partner, and N
+        # per threshold.
+        self._runs_cache: tuple[dict[int, tuple[float, int]], dict[int, int]] = ({}, {})
         self._runs_version: int = -1
         self._resolved_cache: dict[Optional[float], frozenset[int]] = {}
         self._resolved_version: int = -1
@@ -430,7 +431,12 @@ class IntersectionRegistry:
             unstable cdist order and sits on the same or a node-sharing unstable
             segment; None when there is none (always for a synthetic crossing).
         """
-        return self._runs()[0].get(id)
+        nearest = self._runs()[0].get(id)
+        return None if nearest is None else nearest[0]
+
+    def run_partner(self, id: int) -> Optional[int]:
+        """The nearest neighbour a detection forms a run with (clause 2), or None when in no run."""
+        return self._runs()[1].get(id)
 
     def resolved_ids(self, threshold: Optional[float]) -> frozenset[int]:
         """
@@ -480,26 +486,33 @@ class IntersectionRegistry:
         resolved = self.resolved_ids(threshold)
         return [iid for iid in self._unstable_order if iid not in resolved]
 
-    def _runs(self) -> tuple[dict[int, float], frozenset[int]]:
-        """Per detection its :meth:`run_separation`, and every run member; rebuilt when the crossings change."""
+    def _runs(self) -> tuple[dict[int, tuple[float, int]], dict[int, int]]:
+        """Per detection its nearest neighbour ``(separation, id)``, and per run member its partner.
+
+        Rebuilt when the stored crossings change (an insert or a renumbering),
+        never by an iterate link.
+        """
         if self._runs_version != self._orders_version:
             groups: dict[tuple, list[Intersection]] = defaultdict(list)
             for iid in self._unstable_order:
                 ix = self._store[iid]
                 if ix.unstable_segment is not None:
                     groups[ix.manifold_a_key, ix.manifold_b_key].append(ix)
-            separation: dict[int, float] = {}
-            members: set[int] = set()
+            nearest: dict[int, tuple[float, int]] = {}
+            in_run: dict[int, tuple[float, int]] = {}
             for group in groups.values():
                 for a, b in zip(group, group[1:]):
                     gap = _polyline_gap(a, b)
                     if gap is None:
                         continue
-                    for ix in (a, b):
-                        separation[ix.id] = min(gap, separation.get(ix.id, np.inf))
-                    if gap <= max(a.chord_deviation, b.chord_deviation):
-                        members.update((a.id, b.id))
-            self._runs_cache, self._runs_version = (separation, frozenset(members)), self._orders_version
+                    # A pair is judged as a pair: by the larger of its two deviations.
+                    run = gap <= max(a.chord_deviation, b.chord_deviation)
+                    for ix, other in ((a, b), (b, a)):
+                        nearest[ix.id] = min(nearest.get(ix.id, (np.inf, -1)), (gap, other.id))
+                        if run:
+                            in_run[ix.id] = min(in_run.get(ix.id, (np.inf, -1)), (gap, other.id))
+            partners = {iid: partner for iid, (_gap, partner) in in_run.items()}
+            self._runs_cache, self._runs_version = (nearest, partners), self._orders_version
         return self._runs_cache
 
     def all_ids(self) -> list[int]:
