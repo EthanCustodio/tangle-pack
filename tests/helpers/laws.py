@@ -773,10 +773,22 @@ def check_iterate_table_complete(case: "Case") -> int:
     A crossing y is the image of x when it sits on the advanced branches, both
     of its brackets meet x's carried one step, and the real map puts it within
     the gate. The table must already hold every such link (inference runs
-    after every detection and every blast, BCG-3).
+    after every detection and every blast, BCG-3), except for the sources the
+    rule cannot decide (``registry.unresolved_links``, B8): those hold at least
+    one candidate, none is linked, and an image contested alone by them has
+    no preimage either -- no claimant is chosen by the order of the passes.
     """
     registry = case.registry
     table = registry.iterate_table
+    unresolved = registry.unresolved_links
+    for source, candidates in unresolved.items():
+        assert candidates, f"crossing {source} is unresolved with no candidate image"
+        assert table[source, 1] is None, f"crossing {source} is unresolved but linked"
+        if len(candidates) == 1:
+            assert table[candidates[0], -1] is None, (
+                f"image {candidates[0]} is contested by {source} but linked to "
+                f"{table[candidates[0], -1]}"
+            )
     on_branches: dict[tuple, list[int]] = defaultdict(list)
     for intersection_id, ix in registry:
         if not ix.is_synthetic:
@@ -786,7 +798,7 @@ def check_iterate_table_complete(case: "Case") -> int:
         if ix.is_synthetic:
             continue
         count += 1
-        if table[intersection_id, 1] is not None:
+        if table[intersection_id, 1] is not None or intersection_id in unresolved:
             continue
         a_key, b_key, unstable, stable = _image_brackets(case, ix)
         images = [
