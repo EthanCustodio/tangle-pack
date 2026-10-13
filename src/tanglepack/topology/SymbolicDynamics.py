@@ -146,6 +146,7 @@ from .BridgeClass import (
 )
 from .DualWalk import (
     ElementLanding,
+    MembersDisagree,
     WalkSearch,
     land_element,
     lobe_image_markers,
@@ -1166,6 +1167,16 @@ def _resolve_itinerary(
         logger.warning("class %s unresolved: %s", cd.letter, cd.unresolved_reason)
         return
 
+    try:
+        wanted = lobe_image_markers(dual_graph, cd.entry)
+    except MembersDisagree as error:
+        # Never walk unconstrained instead: that word would rest on fewer markers.
+        cd.unresolved_reason = (
+            f"members hold different markers: the class is not one homotopy class "
+            f"(resolution; {error})"
+        )
+        logger.warning("class %s unresolved: %s", cd.letter, cd.unresolved_reason)
+        return
     search = shortest_walks(
         dual_graph,
         start,

@@ -780,6 +780,11 @@ def _lobe(dual, bridge_id: "BridgeId") -> Optional[set[tuple]]:
     return _stable_edges_between(dual, branches.pop(), lo, hi) | {dual.unstable_edges[bridge_id]}
 
 
+class MembersDisagree(ValueError):
+    """Two member lobes of one class hold different marker images: the class is
+    not one homotopy class (a resolution flag)."""
+
+
 def lobe_image_markers(dual, entry: "BridgeClassEntry") -> Optional[dict["Marker", bool]]:
     """
     The images of the markers a member's lobe holds and leaves out (D13).
@@ -796,10 +801,12 @@ def lobe_image_markers(dual, entry: "BridgeClassEntry") -> Optional[dict["Marker
 
     Returns:
         ``{image marker: held}`` for every marker the lobe decides and whose
-        image is placed, read off the class's first such member; None when
-        the class has no member lobe (its walk is held only by the walls). Two
-        members disagreeing on a marker is a WARNING: the class is not one
-        homotopy class.
+        image is placed, read off the class's first such member (every other
+        lobe agrees); None when the class has no member lobe (its walk is held
+        only by the walls).
+
+    Raises:
+        MembersDisagree: If two member lobes disagree on a marker.
     """
     lobes: list[tuple["BridgeId", dict["Marker", bool]]] = []
     for member in entry.members:
@@ -821,14 +828,9 @@ def lobe_image_markers(dual, entry: "BridgeClassEntry") -> Optional[dict["Marker
     for bridge_id, images in others:
         clash = [marker for marker, inside in images.items() if first.get(marker, inside) != inside]
         if clash:
-            logger.warning(
-                "members %s and %s of class %s hold different markers (%s); the "
-                "non-crossing rule reads %s",
-                first_id,
-                bridge_id,
-                entry.bridge_class.label,
-                ", ".join(map(str, clash)),
-                first_id,
+            raise MembersDisagree(
+                f"members {first_id} and {bridge_id} of class {entry.bridge_class.label} "
+                f"hold different markers ({', '.join(map(str, clash))})"
             )
     return first
 
