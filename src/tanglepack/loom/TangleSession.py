@@ -1517,17 +1517,23 @@ class TangleSession:
             self.workbench, intersection_id, fixed_points, recompute=recompute
         )
         self.resonance_zones[rz.key] = rz
+        # The trimmed trellis is built without the previous choice, which the
+        # trim may have cut away: only the zone's pip is tested here.
+        previous = self._strong_pips.pop(rz.key, None)
         trellis = self.trellis(rz.key)
         found = trellis.registry.find(pip)
         if found is not None and trellis._is_candidate(found):
             trellis.strong_pip = found  # tested just now, as _restore_strong_pip does
             self._strong_pips[rz.key] = pip
-        else:
-            logger.warning(
-                "the zone pip %d of %r is not a strong-pip candidate; the zone is "
-                "stored, the chosen strong pip is unchanged",
-                intersection_id, rz.key,
-            )
+            return rz
+        logger.warning(
+            "the zone pip %d of %r is not a strong-pip candidate; the zone is "
+            "stored, the chosen strong pip is unchanged",
+            intersection_id, rz.key,
+        )
+        if previous is not None:
+            self._strong_pips[rz.key] = previous
+            self._restore_strong_pip(trellis)
         return rz
 
     def add_resonance_zones(
