@@ -1504,10 +1504,10 @@ def check_trellis_crossings_belong_to_its_selection(case: "Case") -> int:
 
 
 def check_trellis_is_cut_at_the_pip_orbit(case: "Case") -> int:
-    """D10, D12: once a pip is chosen, the trellis holds exactly the computed crossings of
-    ``T(q0)``: none past a pip-orbit cut on its stable or its unstable branch, and every
-    computed crossing of its branches inside both cuts. The selection trellis is cut at
-    every pip."""
+    """D10, D12: once a pip is chosen, the trellis holds exactly the crossings of ``T(q0)``
+    in ``N``: none past a pip-orbit cut on its stable or its unstable branch, and every
+    resolved crossing of its branches inside both cuts. The selection trellis is cut at
+    every pip. A detection the polylines cannot resolve is in no trellis (Q13 a, B1)."""
     count = 0
     trellises = _per_fp_trellises(case)
     pips = [trellis.strong_pip for trellis in trellises]
@@ -1521,7 +1521,11 @@ def check_trellis_is_cut_at_the_pip_orbit(case: "Case") -> int:
         tol = float(trellis.registry.cdist_tol)
         held = set(trellis.own_intersection_ids)
         for iid, ix in trellis.registry:
-            if ix.is_anchor or not {ix.manifold_a_key, ix.manifold_b_key} <= set(trellis.branches):
+            if (
+                ix.is_anchor
+                or iid not in trellis.resolved_ids
+                or not {ix.manifold_a_key, ix.manifold_b_key} <= set(trellis.branches)
+            ):
                 continue
             inside = all(
                 float(cdist) <= cuts[key][0] + (tol if cuts[key][1] else 0.0)
