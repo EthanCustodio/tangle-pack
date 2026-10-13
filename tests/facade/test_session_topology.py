@@ -10,10 +10,14 @@ reads partitions, holes and pips from the selected fixed points only
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
-from cases import _blast, build_k10, build_k28, build_nested
+from cases import _blast, build_inversion, build_k10, build_k28, build_nested
 from helpers.direct import direct_view, trellis_view, view_of
+from helpers.logs import assert_logged
+from tanglepack.loom import define_resonance_zone
 
 #: session accessor -> its stage on the Topology.
 STAGES: dict[str, str] = {
@@ -143,3 +147,58 @@ def test_a_rebuild_tests_only_the_remembered_pip(builder, monkeypatch):
     for fp in case.fixed_points:
         fresh = Trellis.from_workbench(session.workbench, [fp])
         assert session.strong_pip_candidates(fp) == fresh.classify_strong_pips(choose_default=False)
+
+
+def test_a_zone_at_a_non_candidate_keeps_the_chosen_pip(caplog):
+    """B8: a zone whose pip is no strong-pip candidate is stored, warns once and
+    leaves the chosen pip alone, so the topology still runs. The non-candidate
+    lies on the other stable branch, so the zone does not trim the chosen pip away."""
+    case = build_inversion(blasts=2)
+    session, fp = case.session, case.fixed_point
+    chosen = session.chosen_strong_pip(fp)
+    candidates = set(session.strong_pip_candidates(fp))
+    registry = case.registry
+    outermost = max(
+        (
+            iid
+            for iid in session.trellis(fp).own_intersection_ids
+            if not registry[iid].is_synthetic
+            and iid not in candidates
+            and registry[iid].manifold_b_key != chosen.manifold_b_key
+        ),
+        key=lambda iid: float(registry[iid].stable_cdist),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="tanglepack.loom.TangleSession"):
+        zone = session.resonance_zone(outermost)
+
+    assert_logged(caplog, logging.WARNING, "tanglepack.loom.TangleSession", count=1)
+    assert session.resonance_zones[zone.key] is zone
+    assert session.chosen_strong_pip(fp) is chosen
+    session.topology()
+
+
+def test_a_forgotten_pip_gives_the_default_back():
+    """B8: forgetting a chosen pip uncuts its trellis; the next topology takes the default."""
+    case = build_k10()
+    session, fp = case.session, case.fixed_point
+    default = session.strong_pip(fp)
+    session.set_strong_pip(fp, min(c for c in session.strong_pip_candidates(fp) if c != default))
+
+    session.forget_strong_pip(fp)
+    session.topology()
+
+    assert session.trellis(fp).strong_pip == default
+    assert session.chosen_strong_pip(fp) is case.registry[default]
+
+
+def test_a_stale_pip_error_names_the_remedy(k10_session):
+    """B8: the topology's refusal of a pip trimmed away names ``forget_strong_pip``."""
+    session, fp = k10_session
+    session.classify_strong_pips()
+    q0 = session.strong_pip(fp)
+    define_resonance_zone(session.workbench, session.trellis(fp).iterate(q0, 1))
+
+    with pytest.raises(ValueError, match="no longer a strong-pip candidate") as raised:
+        session.topology()
+    assert "forget_strong_pip" in str(raised.value)
