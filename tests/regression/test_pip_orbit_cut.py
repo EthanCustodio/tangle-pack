@@ -94,6 +94,24 @@ def test_p2inv10_cut_equals_a_trim() -> None:
     assert view == trim
 
 
+def test_p2inv10_coarse_cut_holds_what_is_resolved() -> None:
+    """D10 under Q13 (a): at the law case's 1e-5 the 10 / 10 build has detections out of
+    N; the trellis holds none of them and is still exactly the crossings of T(q0) in N."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        case = build_inversion_period2(unstable_steps=10, stable_steps=10)
+    workbench = case.session.workbench
+    unresolved = set(
+        workbench.intersection_registry.unresolved_crossings(workbench.resolution_ratio_threshold)
+    )
+    (fp,) = case.fixed_points
+    trellis = case.session.trellis(fp)
+
+    assert unresolved, "precondition: the build has a detection out of N"
+    assert trellis.strong_pip is not None, "precondition: a pip is chosen, so the trellis is cut"
+    assert not unresolved & set(trellis.own_intersection_ids)
+    assert laws.check_trellis_is_cut_at_the_pip_orbit(case) > 0
+
+
 def test_p2inv10_every_class_walks() -> None:
     """D3: with S cut at the pip orbit every active class walks and the words are reliable."""
     case = _p2inv10("partitioned")

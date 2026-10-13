@@ -211,3 +211,26 @@ def test_an_unresolved_detection_never_disqualifies_a_strong_pip():
 
     assert strong(None).blocking_intersection_id == inside
     assert strong(frozenset({q0})).is_strong_pip
+
+
+def test_without_a_threshold_a_run_is_still_out_of_n():
+    # None turns clause 1 off only: the zig-zag is a run (clause 2), still no crossing.
+    workbench, fp = _workbench(ZIG_ZAG)
+    workbench.resolution_ratio_threshold = None
+    registry = workbench.compute_intersections([fp], diagnose=False)
+    zig_zag = _detections(registry, near=1.0)
+    clean = [iid for iid in _detections(registry) if iid not in zig_zag]
+    workbench.create_bridges()
+
+    assert sorted(registry.unresolved_crossings(None)) == sorted(zig_zag)
+    assert [bridge.id for bridge in workbench.bridges] == [tuple(clean)]
+    assert Trellis.from_workbench(workbench, [fp]).resolved_ids == registry.resolved_ids(None)
+
+
+def test_without_a_threshold_a_detection_below_it_is_in_n():
+    workbench, fp = _grazing_workbench()
+    registry = workbench.compute_intersections([fp], diagnose=False)
+    (grazing,) = registry.unresolved_crossings(THRESHOLD)
+
+    assert registry.unresolved_crossings(None) == []
+    assert grazing in registry.resolved_ids(None)
