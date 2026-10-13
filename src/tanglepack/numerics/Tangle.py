@@ -558,8 +558,10 @@ class Tangle:
             manifold: The newly added manifold to resolve intersections for.
 
         Returns:
-            Every new detection, the unresolved ones included: which of them are
-            crossings of N is the registry's decision, over all its detections.
+            Every new detection, the unresolved ones included (which of them are
+            crossings of N is the registry's decision, over all its detections),
+            in unstable cdist order: the caller registers them in this order,
+            never in that of a set of segment ids, so ids are reproducible (INT-7).
         """
         manifold_seg_ids = self._manifold_segs.get(manifold, set())
         resolved = (
@@ -567,7 +569,10 @@ class Tangle:
             for pair in list(self._intersecting_segments)
             if pair & manifold_seg_ids
         )
-        return [intersection for intersection in resolved if intersection is not None]
+        return sorted(
+            (intersection for intersection in resolved if intersection is not None),
+            key=lambda ix: (ix.unstable_cdist, ix.stable_cdist),
+        )
 
     # ------------- internal helpers -----------------
     def _claim_segment(self, sid: int, manifold: BaseManifold) -> None:
