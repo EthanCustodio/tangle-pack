@@ -30,12 +30,15 @@ distinct polylines, so key-grouping would let one cut span two curves. Phase 3's
 BridgeId may make a key-plus-generation grouping viable; until then the object is
 the only unambiguous grouping.
 
-Crossing resolution (2026-10-07). Below a ``resolution_ratio`` of a few, a
-crossing of two near-tangent polylines is undecidable at the current
-``area_cutoff``: the polylines may straddle where the curves do not cross, or
-miss a pair of crossings the curves do have. The ratio FLAGS such crossings
-(``TangleWorkbench.report_resolution``) and nothing is discarded -- real
-near-tangent crossings exist; only their count is untrustworthy. Deciding them
+Crossing resolution (2026-10-07; B1, Q13 (a), 2026-10-12). Below a
+``resolution_ratio`` of a few, a crossing of two near-tangent polylines is
+undecidable at the current ``area_cutoff``: the polylines may straddle where the
+curves do not cross, or miss a pair of crossings the curves do have. Every
+detection is registered with its ratio and chord deviation, and the registry
+decides which are crossings of N (A.2: ratio at least the threshold, and in no
+run of detections closer than their chord deviation); an unresolved one is reported with the remedy "refine" and read by no path. There
+is no vote: the blast path once kept the median of a run of near-coincident
+detections and nothing else did, so a recompute changed N. Deciding them
 would need a validated method, and interval arithmetic alone is not enough: the
 splitting angle near ``k = -1`` reaches ~1e-31, below double precision, so it
 would need multiprecision (and a parameterisation of the curves) as well. That is
@@ -276,6 +279,7 @@ class Tangle:
             (seg_1, seg_2) if seg_1.manifold.stability == "unstable" else (seg_2, seg_1)
         )
 
+        ratio, deviation = self._resolution_ratio(u_seg, s_seg, sin_theta)
         # cdist interpolated at the true crossing (not the segment midpoint)
         intersection = Intersection.from_segments(
             coords=tuple(point),
@@ -292,7 +296,8 @@ class Tangle:
             unstable_segment=(u_seg.p0, u_seg.p0_seg1),
             stable_segment=(s_seg.p0, s_seg.p0_seg1),
             crossing_sign=self._crossing_sign(u_seg, s_seg),
-            resolution_ratio=self._resolution_ratio(u_seg, s_seg, sin_theta),
+            resolution_ratio=ratio,
+            chord_deviation=deviation,
         )
 
         self._processed_pairs.add(seg_id_pair)
@@ -335,7 +340,9 @@ class Tangle:
         return int(np.sign(cross))
 
     @staticmethod
-    def _resolution_ratio(u_seg: _Segment, s_seg: _Segment, sin_theta: float) -> float:
+    def _resolution_ratio(
+        u_seg: _Segment, s_seg: _Segment, sin_theta: float
+    ) -> tuple[float, float]:
         """
         How far a crossing stands above the polygon noise of its two polylines.
 
@@ -355,16 +362,17 @@ class Tangle:
             sin_theta: ``|sin|`` of the crossing angle.
 
         Returns:
-            The resolution ratio.
+            The resolution ratio, and ``max(h_u, h_s)`` unfloored: the chord
+            deviation a neighbouring detection is measured against.
         """
         segments = (u_seg, s_seg)
         p0 = np.array([seg.p0.get_point() for seg in segments], dtype=float)
         p1 = np.array([seg.p0_seg1.get_point() for seg in segments], dtype=float)
         left, right = zip(*(Tangle._outer_neighbours(seg) for seg in segments))
-        deviation = chord_deviation_batch(p0, p1, np.array(left), np.array(right))
+        deviation = float(chord_deviation_batch(p0, p1, np.array(left), np.array(right)).max())
         shorter = float(np.hypot(*(p1 - p0).T).min())
         floor = _DEVIATION_FLOOR_REL * shorter
-        return shorter * sin_theta / max(float(deviation.max()), floor)
+        return shorter * sin_theta / max(deviation, floor), deviation
 
     @staticmethod
     def _outer_neighbours(
@@ -550,92 +558,16 @@ class Tangle:
             manifold: The newly added manifold to resolve intersections for.
 
         Returns:
-            List of newly created Intersection objects.
+            Every new detection, the unresolved ones included: which of them are
+            crossings of N is the registry's decision, over all its detections.
         """
         manifold_seg_ids = self._manifold_segs.get(manifold, set())
-        new_intersections: list[Intersection] = []
-
-        for seg_id_pair in list(self._intersecting_segments):
-            # only process pairs where at least one segment belongs to manifold
-            if not (seg_id_pair & manifold_seg_ids):
-                continue
-
-            intersection = self._resolve_crossing_pair(seg_id_pair)
-            if intersection is not None:
-                new_intersections.append(intersection)
-
-        return self._collapse_noise_crossings(new_intersections)
-
-    def _collapse_noise_crossings(
-        self, intersections: list[Intersection], rtol: float = 1e-9
-    ) -> list[Intersection]:
-        """
-        Collapse multiple detections of one transversal crossing into one.
-
-        A forward-mapped (iterated-bridge) polyline carries coordinate noise
-        amplified by the map; near a crossing it can zig-zag across the stable
-        curve, so one physical crossing is detected several times within noise
-        of a single point of the bridge — unstable cdists agreeing to ~1e-12
-        RELATIVE, versus >= 1e-3 between genuine neighbouring crossings. Noise
-        flips add detections in PAIRS while a genuine transversal crossing
-        adds one, so within each noise-run (consecutive unstable cdists closer
-        than ``rtol`` relative): an odd-length run keeps its median detection,
-        an even-length run is a grazing artifact with no net crossing and is
-        dropped entirely. Dropped crossings are purged from every tangle
-        structure so bridge cutting never sees them.
-
-        Args:
-            intersections: Freshly resolved crossings of one query manifold.
-            rtol: Relative unstable-cdist gap under which two detections are
-                the same point of the manifold.
-
-        Returns:
-            The surviving crossings.
-        """
-        if len(intersections) < 2:
-            return intersections
-
-        ordered = sorted(intersections, key=lambda ix: ix.unstable_cdist)
-        runs: list[list[Intersection]] = [[ordered[0]]]
-        for previous, current in zip(ordered, ordered[1:]):
-            gap = current.unstable_cdist - previous.unstable_cdist
-            if gap <= rtol * max(abs(current.unstable_cdist), 1.0):
-                runs[-1].append(current)
-            else:
-                runs.append([current])
-
-        kept: list[Intersection] = []
-        for run in runs:
-            if len(run) == 1:
-                kept.append(run[0])
-                continue
-            if len(run) % 2 == 1:
-                keep = run[len(run) // 2]
-                kept.append(keep)
-            else:
-                keep = None
-            logger.info(
-                "Collapsed %d noise detections of one crossing at unstable "
-                "cdist %.9g (%s)",
-                len(run),
-                run[0].unstable_cdist,
-                "kept median" if keep is not None else "grazing pair dropped",
-            )
-            for ix in run:
-                if ix is not keep:
-                    self._purge_crossing(ix)
-        return kept
-
-    def _purge_crossing(self, intersection: Intersection) -> None:
-        """
-        Forget the segment pair a discarded crossing came from.
-
-        The crossing itself is simply dropped from the list the caller is about to
-        register, so nothing else has to be unwound; only the index must stop
-        reporting the pair, or the next resolve pass would recreate it.
-        """
-        if intersection.seg_ids:
-            self._intersecting_segments.discard(intersection.seg_ids)
+        resolved = (
+            self._resolve_crossing_pair(pair)
+            for pair in list(self._intersecting_segments)
+            if pair & manifold_seg_ids
+        )
+        return [intersection for intersection in resolved if intersection is not None]
 
     # ------------- internal helpers -----------------
     def _claim_segment(self, sid: int, manifold: BaseManifold) -> None:
@@ -877,8 +809,8 @@ class Tangle:
 
         The crossings to cut at are an INPUT: the Tangle holds no resolved
         crossings of its own (see the class docstring), so the caller passes the
-        registry -- or, when only one image is being cut, just the crossings born
-        on it. Each crossing carries the unstable manifold it was found on and the
+        crossings of N -- or, when only one image is being cut, just those born
+        on it. An unresolved detection is never passed: it lies inside a bridge. Each crossing carries the unstable manifold it was found on and the
         two points bracketing it, which is everything a cut needs.
 
         Crossings are grouped by their parent unstable manifold OBJECT and sorted by

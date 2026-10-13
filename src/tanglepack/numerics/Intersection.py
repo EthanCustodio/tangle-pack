@@ -78,6 +78,12 @@ class Intersection:
             told apart from polygon noise. None for an anchor or a synthetic
             crossing. When a later detection collides with a registered
             crossing, the stored (first) detection's ratio is the one kept.
+        chord_deviation: ``max(h_u, h_s)``, the larger chord deviation of the
+            two segments, i.e. how far the curves may stray from the polylines
+            here. Two detections of one branch pair closer along the unstable
+            polyline than the larger of their two deviations are one unresolved
+            run, out of N (:mod:`~.IntersectionRegistry`).
+            None exactly when the crossing is synthetic.
     """
 
     def __init__(
@@ -95,6 +101,7 @@ class Intersection:
         crossing_sign: int = 0,
         resolution_ratio: Optional[float] = None,
         stable_segment: Optional[tuple["Point", "Point"]] = None,
+        chord_deviation: Optional[float] = None,
     ) -> None:
         """
         Build one crossing. Every field is optional so that a synthetic
@@ -114,6 +121,7 @@ class Intersection:
         self.stable_segment = stable_segment
         self.crossing_sign = int(crossing_sign)
         self.resolution_ratio = resolution_ratio
+        self.chord_deviation = chord_deviation
 
     @classmethod
     def from_segments(
@@ -131,6 +139,7 @@ class Intersection:
         crossing_sign: int = 0,
         resolution_ratio: Optional[float] = None,
         stable_segment: Optional[tuple["Point", "Point"]] = None,
+        chord_deviation: Optional[float] = None,
     ) -> Intersection:
         """Create an Intersection backed by two R-tree segment IDs."""
         return cls(
@@ -146,6 +155,7 @@ class Intersection:
             crossing_sign=crossing_sign,
             resolution_ratio=resolution_ratio,
             stable_segment=stable_segment,
+            chord_deviation=chord_deviation,
         )
 
     @property

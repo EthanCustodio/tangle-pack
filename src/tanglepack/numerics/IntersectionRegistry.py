@@ -5,12 +5,19 @@ The master store of crossings and their iterate table.
 dedupes on (unstable cdist, stable cdist, unstable branch, stable branch), and
 keeps the ordered per-branch views plus the
 :class:`~.IterateTable.IterateTable` that maps an id to its iterates.
+
+It also decides which detections are crossings of N (A.2, Q13 (a), B1): every
+detection is registered, and :meth:`IntersectionRegistry.resolved_ids` keeps the
+ones the polylines resolve. A run of detections closer along the unstable
+polyline than their chord deviation is judged over the WHOLE registry, because
+on the blast path one run can straddle two ``iterate_bridge`` calls.
 """
 
 from __future__ import annotations
 
 import bisect
 import logging
+from collections import defaultdict
 from typing import Callable, Iterable, Iterator, Optional, TYPE_CHECKING
 
 import networkx as nx
@@ -40,6 +47,23 @@ def _close(a: float, b: float) -> bool:
     return abs(a - b) <= DEDUP_RTOL * max(abs(a), abs(b))
 
 
+def _polyline_gap(a: Intersection, b: Intersection) -> Optional[float]:
+    """Distance from ``a`` to ``b`` along the unstable polyline, None unless adjacent.
+
+    On one stored segment it is the straight distance; on two segments sharing a
+    node (node identity) it runs through that node. The segments are the ones
+    captured at detection, before any separator was spliced in.
+    """
+    shared = [node for node in a.unstable_segment if any(node is other for other in b.unstable_segment)]
+    a_xy, b_xy = np.asarray(a.coords, dtype=float), np.asarray(b.coords, dtype=float)
+    if len(shared) == 2:
+        return float(np.hypot(*(a_xy - b_xy)))
+    if len(shared) == 1:
+        node = np.asarray(shared[0].get_point(), dtype=float)
+        return float(np.hypot(*(a_xy - node)) + np.hypot(*(node - b_xy)))
+    return None
+
+
 class IntersectionRegistry:
     """
     Master store of all intersection points in the tangle.
@@ -65,6 +89,7 @@ class IntersectionRegistry:
         registry.by_unstable_cdist               → list[int]  (sorted by u-cdist)
         registry.by_stable_cdist                 → list[int]  (sorted by s-cdist)
         registry.graph(bridges=None)             → nx.MultiDiGraph (live)
+        registry.resolved_ids(threshold)         → frozenset[int]  (N)
 
     Query interface (all return list[Intersection]):
         registry.on_cdist_range(lo, hi)          → intersections with cdist in [lo, hi]
@@ -138,6 +163,11 @@ class IntersectionRegistry:
             dict[Optional[ManifoldKey], tuple[list[float], list[int]]]
         ] = None
         self._stable_branch_version: int = -1
+        # The detections' run separations and run members, and N per threshold.
+        self._runs_cache: tuple[dict[int, float], frozenset[int]] = ({}, frozenset())
+        self._runs_version: int = -1
+        self._resolved_cache: dict[Optional[float], frozenset[int]] = {}
+        self._resolved_version: int = -1
 
         self._graph: nx.MultiDiGraph = nx.MultiDiGraph()
         self._graph_adjacency_dirty: bool = False
@@ -387,25 +417,90 @@ class IntersectionRegistry:
             self._rank_version = self._orders_version
         return self._rank_maps
 
-    def unresolved_crossings(self, threshold: float) -> list[int]:
+    def run_separation(self, id: int) -> Optional[float]:
         """
-        The detected crossings the polylines resolve too poorly to trust.
+        How far a detection's nearest same-curve neighbour lies along the polyline.
 
         Args:
-            threshold: The smallest :attr:`Intersection.resolution_ratio` a
-                crossing may have and still count as resolved.
+            id: A registered crossing.
 
         Returns:
-            The ids whose ratio lies below ``threshold``, in unstable cdist
-            order. Anchors and synthetic crossings carry no ratio and are never
+            The distance along the unstable polyline to the nearest other
+            detection of the same ``(u_key, s_key)`` that is its neighbour in
+            unstable cdist order and sits on the same or a node-sharing unstable
+            segment; None when there is none (always for a synthetic crossing).
+        """
+        return self._runs()[0].get(id)
+
+    def resolved_ids(self, threshold: Optional[float]) -> frozenset[int]:
+        """
+        N: the registered crossings the polylines resolve (A.2, Q13 (a)).
+
+        A crossing is in N when it is synthetic, or when (clause 1) its
+        resolution ratio is at least ``threshold`` and (clause 2) it is in no
+        run. Two neighbouring detections (:meth:`run_separation`) are a run
+        when they sit no farther apart than the LARGER of their two chord
+        deviations: the pair is judged as a pair, so both are out, and a run is
+        out whole, median included. Every path that reads the registry as the
+        crossing set reads this set.
+
+        Args:
+            threshold: The smallest resolution ratio a crossing may have
+                (``TangleWorkbench.resolution_ratio_threshold``); None turns
+                clause 1 off, and clause 2 still applies.
+
+        Returns:
+            The ids of N, cached until the stored crossings change.
+        """
+        if self._resolved_version != self._orders_version:
+            self._resolved_cache, self._resolved_version = {}, self._orders_version
+        if threshold not in self._resolved_cache:
+            runs = self._runs()[1]
+            self._resolved_cache[threshold] = frozenset(
+                iid
+                for iid, ix in self._store.items()
+                if iid not in runs
+                and (threshold is None or ix.resolution_ratio is None or ix.resolution_ratio >= threshold)
+            )
+        return self._resolved_cache[threshold]
+
+    def unresolved_crossings(self, threshold: Optional[float]) -> list[int]:
+        """
+        The registered detections that are not crossings of N.
+
+        Args:
+            threshold: As in :meth:`resolved_ids`.
+
+        Returns:
+            The complement of :meth:`resolved_ids`, in unstable cdist order:
+            the detections below ``threshold`` (clause 1) and every member of
+            every run (clause 2). Anchors and synthetic crossings are never
             listed.
         """
-        return [
-            iid
-            for iid in self._unstable_order
-            if (ratio := self._store[iid].resolution_ratio) is not None
-            and ratio < threshold
-        ]
+        resolved = self.resolved_ids(threshold)
+        return [iid for iid in self._unstable_order if iid not in resolved]
+
+    def _runs(self) -> tuple[dict[int, float], frozenset[int]]:
+        """Per detection its :meth:`run_separation`, and every run member; rebuilt when the crossings change."""
+        if self._runs_version != self._orders_version:
+            groups: dict[tuple, list[Intersection]] = defaultdict(list)
+            for iid in self._unstable_order:
+                ix = self._store[iid]
+                if ix.unstable_segment is not None:
+                    groups[ix.manifold_a_key, ix.manifold_b_key].append(ix)
+            separation: dict[int, float] = {}
+            members: set[int] = set()
+            for group in groups.values():
+                for a, b in zip(group, group[1:]):
+                    gap = _polyline_gap(a, b)
+                    if gap is None:
+                        continue
+                    for ix in (a, b):
+                        separation[ix.id] = min(gap, separation.get(ix.id, np.inf))
+                    if gap <= max(a.chord_deviation, b.chord_deviation):
+                        members.update((a.id, b.id))
+            self._runs_cache, self._runs_version = (separation, frozenset(members)), self._orders_version
+        return self._runs_cache
 
     def all_ids(self) -> list[int]:
         """All registered IDs in insertion order."""
