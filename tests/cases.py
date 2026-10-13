@@ -574,7 +574,10 @@ def build_period3_coarse_blasts(*, blasts: int = 6, area_cutoff: float = 1e-5) -
     ``min_separation = 1e-5`` (no same-stability pass), and the topology is
     computed. At 1e-5 and 6 blasts some hole
     bridges hold 2-4 nodes, where a polyline reading of their rows disagrees with
-    the crossing signs (NUM-1).
+    the crossing signs (NUM-1). Their ends have resolution ratios near 1, so the
+    blasts run with clause 1 of N off (``resolution_ratio_threshold = None``):
+    under the default threshold those detections are outside N (Q13 a, B1) and
+    no hole bridge is that coarse.
 
     Args:
         blasts: Single-iteration blasts of the zone.
@@ -586,6 +589,7 @@ def build_period3_coarse_blasts(*, blasts: int = 6, area_cutoff: float = 1e-5) -
     case = build_period3(through="zones")
     session = case.session
     session.area_cutoff = area_cutoff
+    session.workbench.resolution_ratio_threshold = None
     (zone,) = case.zones
     for _ in range(blasts):
         session.blast_zone(

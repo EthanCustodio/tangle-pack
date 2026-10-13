@@ -8,7 +8,10 @@ its crossing sign even though the two signs alternate (the combinatorial rows
 agree). The partition used to decide openings and the row assertion on that
 geometry and raised "approaches its two defining crossings from opposite
 sides". Under D6 the signs decide and the geometry only flags the bridge
-(one WARNING per ``punch_holes``). No count of the build is pinned.
+(one WARNING per ``punch_holes``). Those bridge ends are below the resolution
+threshold, so the build turns clause 1 of N off (``build_period3_coarse_blasts``):
+under the default threshold they are no crossings (Q13 a, B1). No count of the
+build is pinned.
 """
 
 from __future__ import annotations
