@@ -1076,9 +1076,11 @@ class TangleWorkbench:
 
         The list is deliberately materialised here rather than re-read inside a
         predicate: the crossings born during a growth loop must not move the
-        goalposts. ``"all"`` means every non-anchor crossing OF ``fixed_point`` --
-        scoping it to the whole registry would put another tangle's crossings in a
-        set that only this fixed point's growth can ever close.
+        goalposts. ``"all"`` means every non-anchor crossing of N OF
+        ``fixed_point`` -- scoping it to the whole registry would put another
+        tangle's crossings in a set that only this fixed point's growth can ever
+        close, and an unresolved detection is never linked, so the driver would
+        run to its cap on it.
         """
         registry = self._intersection_registry
         if isinstance(ids, str):
@@ -1088,11 +1090,13 @@ class TangleWorkbench:
                     + (' or "all".' if allow_all else ".")
                 )
             assert fixed_point is not None, '"all" needs a fixed point to scope to'
-            id_of = {id(ix): iid for iid, ix in registry}
+            resolved = registry.resolved_ids(self.resolution_ratio_threshold)
             selected = sorted(
-                id_of[id(ix)]
-                for ix in registry.from_fixed_point(fixed_point)
-                if not ix.is_synthetic
+                iid
+                for iid, ix in registry
+                if iid in resolved
+                and not ix.is_synthetic
+                and any(fp is fixed_point for fp in ix.fixed_points)
             )
         else:
             selected = [int(iid) for iid in ids]
@@ -1769,9 +1773,10 @@ class TangleWorkbench:
         """
         Cut indexed unstable manifolds into bridges.
 
-        A blast's image curves are indexed unstable manifold too (NUM-12): one
-        crossed twice or more is cut like a branch, one crossed fewer than twice is
-        held whole as a partial piece.
+        The cut is at the crossings of N (B1): an unresolved detection lies inside
+        a bridge. A blast's image curves are indexed unstable manifold too
+        (NUM-12): one crossed twice or more is cut like a branch, one crossed fewer
+        than twice is held whole as a partial piece.
 
         Args:
             fixed_point: If given, only build bridges for that fixed point's
@@ -1783,7 +1788,9 @@ class TangleWorkbench:
             The bridges cut, each the single registered copy for its
             :data:`~.Bridge.BridgeId`.
         """
-        crossings = [ix for _iid, ix in self._intersection_registry]
+        registry = self._intersection_registry
+        resolved = registry.resolved_ids(self.resolution_ratio_threshold)
+        crossings = [ix for iid, ix in registry if iid in resolved]
         bridges = self.Tangle.create_bridges(
             crossings,
             fixed_point=fixed_point,
@@ -2150,12 +2157,15 @@ class TangleWorkbench:
             trimmed. There is no outermost crossing to trim to.
 
         Note:
-            The outermost crossing is read off the registry (grouped by the stable
-            branch key each crossing records), the single source of truth for
-            resolved crossings; the cut is :meth:`trim_stable_at`.
+            The outermost crossing of N is read off the registry (grouped by the
+            stable branch key each crossing records), the single source of truth
+            for crossings; an unresolved detection never sets the trim. The cut
+            is :meth:`trim_stable_at`.
         """
+        registry = self._intersection_registry
         outermost: dict[ManifoldKey, float] = {}
-        for _iid, intersection in self._intersection_registry:
+        for iid in registry.resolved_ids(self.resolution_ratio_threshold):
+            intersection = registry[iid]
             key = intersection.manifold_b_key
             outermost[key] = max(outermost.get(key, -np.inf), float(intersection.stable_cdist))
 

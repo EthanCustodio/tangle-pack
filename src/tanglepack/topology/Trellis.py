@@ -156,6 +156,9 @@ class Trellis:
         pips: The pips the trellis is cut at, by the fixed point owning each
             pip's stable branch (the strong pip of a single fixed point, every
             selected pip of a selection of several).
+        resolved_ids: N, the registered crossings the polylines resolve, as the
+            registry decided when the snapshot was taken (B1). The branches hold
+            only these; an unresolved detection is registered but on no branch.
     """
 
     def __init__(
@@ -167,6 +170,7 @@ class Trellis:
         dynamical_system: Optional["DynamicalSystem"] = None,
         manifolds: Optional[dict] = None,
         generation: int = 0,
+        resolved_ids: Optional[frozenset[int]] = None,
     ) -> None:
         """
         Build a trellis from an already-computed tangle.
@@ -185,6 +189,9 @@ class Trellis:
                 algorithms that walk a real curve.
             generation (int): The workbench generation this snapshot was taken
                 at; a cache compares it to decide staleness.
+            resolved_ids (Optional[frozenset[int]]): N, the registered crossings
+                the polylines resolve (B1); None counts every registered one (a
+                hand-built trellis).
         """
         self.fixed_points = fixed_points
         self.registry = registry
@@ -194,6 +201,7 @@ class Trellis:
         # Purely geometric consumers (hole placement inside narrow lobes) walk
         # the actual curve nodes through this; None degrades to chord fallbacks.
         self.manifolds = manifolds or {}
+        self.resolved_ids = frozenset(registry.all_ids()) if resolved_ids is None else resolved_ids
         # The workbench generation this snapshot was built at. A Trellis is a
         # snapshot -- the per-branch orderings and the bridge list are frozen at
         # build time -- so it is valid exactly while the workbench still reports
@@ -411,6 +419,7 @@ class Trellis:
 
         selected_set = set(selected)
         registry = workbench.intersection_registry
+        resolved = registry.resolved_ids(workbench.resolution_ratio_threshold)
 
         # One branch per workbench manifold belonging to a selected fixed point.
         branches: dict[ManifoldKey, TrellisBranch] = {}
@@ -432,8 +441,11 @@ class Trellis:
         # is one point on every branch attached to it (D4). A crossing is a
         # crossing of the selection only when BOTH its branches are selected: a
         # heteroclinic crossing belongs to the trellis of its two tangles, never
-        # to either alone.
+        # to either alone. Only crossings of N are on a branch: an unresolved
+        # detection is a point of no trellis (B1).
         for ix_id, ix in registry:
+            if ix_id not in resolved:
+                continue
             if ix.is_anchor:
                 fp, _, orbit_index, _ = ix.manifold_a_key
                 on = [key for key in branches if key[0] is fp and key[2] == orbit_index]
@@ -473,6 +485,7 @@ class Trellis:
             dynamical_system=workbench.dynamical_system,
             manifolds=workbench.manifolds,
             generation=workbench.generation,
+            resolved_ids=resolved,
         )
 
     # ── snapshot memos ──────────────────────────────────────────────────────

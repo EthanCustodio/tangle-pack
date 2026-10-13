@@ -364,20 +364,24 @@ class BridgeIterator:
             iterated
         )
 
+        registry = workbench._intersection_registry
         for ix in new_intersections:
             # A crossing that collides with one already registered IS that crossing;
             # take the registry's id for it so the cut below records the canonical id.
-            ix.id = workbench._intersection_registry.add(ix)
+            ix.id = registry.add(ix)
 
-        # 4. cut at crossings. Only the crossings just born on this image are cut at:
-        #    they alone carry bracketing points that lie on the image's own polyline.
+        # 4. cut at crossings. Only the crossings of N just born on this image are
+        #    cut at: they alone carry bracketing points that lie on the image's own
+        #    polyline. N is the registry's verdict over every detection, because a
+        #    run of unresolved detections can straddle two images (B1); an
+        #    unresolved one lies inside a bridge.
+        resolved = registry.resolved_ids(workbench.resolution_ratio_threshold)
+        cut_at = [ix for ix in new_intersections if ix.id in resolved]
         new_bridges = (
             workbench.Tangle.create_bridges(
-                new_intersections,
-                for_manifold=iterated,
-                cdist_tol=workbench._intersection_registry.cdist_tol,
+                cut_at, for_manifold=iterated, cdist_tol=registry.cdist_tol
             )
-            if new_intersections
+            if cut_at
             else []
         )
 
@@ -395,7 +399,7 @@ class BridgeIterator:
             sources=[
                 bridge.first_intersection,
                 bridge.second_intersection,
-                *(ix.id for ix in new_intersections),
+                *(ix.id for ix in cut_at),
             ]
         )
 

@@ -88,10 +88,13 @@ def infer_iterates(workbench: "TangleWorkbench", sources: Optional[Iterable[int]
     carried one map step (module docstring), confirmed by the real map in one
     batched call. Idempotent: a source already linked is skipped.
 
+    Only crossings of N are linked (B1): an unresolved detection is neither a
+    source nor a candidate image, so no link starts or ends at one.
+
     Args:
         workbench: The workbench whose registry and iterate table this fills.
         sources: The crossings to find images for, searched against the
-            whole registry; None means every registered crossing.
+            crossings of N; None means every one of them.
 
     Returns:
         Number of new iterate relationships recorded.
@@ -103,8 +106,9 @@ def infer_iterates(workbench: "TangleWorkbench", sources: Optional[Iterable[int]
     """
     registry = workbench.intersection_registry
     table = registry.iterate_table
+    resolved = registry.resolved_ids(workbench.resolution_ratio_threshold)
     ids = registry.all_ids() if sources is None else dict.fromkeys(sources)
-    pending = [i for i in ids if i in registry and (i, 1) not in table]
+    pending = [i for i in ids if i in resolved and (i, 1) not in table]
 
     recorded = sum(
         _register_anchor_iterate(registry, i, registry[i])
@@ -119,7 +123,7 @@ def infer_iterates(workbench: "TangleWorkbench", sources: Optional[Iterable[int]
     matches = {
         i: j
         for i in detected
-        if (j := _bracketed_image(workbench, registry, i, widest)) is not None
+        if (j := _bracketed_image(workbench, registry, i, widest, resolved)) is not None
     }
     for i, j in _map_gated(workbench, registry, matches).items():
         if (j, -1) in table:
@@ -201,8 +205,9 @@ def _bracketed_image(
     registry: IntersectionRegistry,
     src_id: int,
     widest: dict[ManifoldKey, float],
+    resolved: frozenset[int],
 ) -> Optional[int]:
-    """The unique crossing whose brackets meet the source's carried one step, or None."""
+    """The unique crossing of N whose brackets meet the source's carried one step, or None."""
     source = registry[src_id]
     a_key, b_key = (
         key[0].advance_key(key, 1) for key in (source.manifold_a_key, source.manifold_b_key)
@@ -218,7 +223,8 @@ def _bracketed_image(
     images = [
         j
         for j, y in candidates
-        if not y.is_synthetic
+        if j in resolved
+        and not y.is_synthetic
         and y.manifold_a_key == a_key
         and _meets(unstable, _brackets(y)[0])
         and _meets(stable, _brackets(y)[1])
