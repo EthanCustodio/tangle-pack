@@ -9,7 +9,10 @@ same exception both ways. Where the cut removes a crossing between two kept
 crossings of one unstable curve, the trellis joins the two bridges across it
 (an arc of ``T(q0)``, not a workbench bridge). The inversion x period-2 orbit at
 10 steps, whose stable manifold runs past its pip orbit, walks every class.
-No count, id or word of a build is pinned.
+It is refined to ``area_cutoff = 1e-6``: at the law case's 1e-5 two crossings of
+its reference window are detections below the resolution threshold, outside
+``N`` (Q13 a, B1), and the remedy is to refine. No count, id or word of a build
+is pinned.
 """
 
 from __future__ import annotations
@@ -75,9 +78,12 @@ def test_k10_cut_at_every_candidate_equals_a_trim() -> None:
 
 
 def _p2inv10(through: str = "bridges"):
-    """Inversion x period 2 at 10 / 10 steps: its stable manifold runs past the pip orbit."""
+    """Inversion x period 2 at 10 / 10 steps and 1e-6: its stable manifold runs past the
+    pip orbit, and every crossing of its reference window is in N."""
     with np.errstate(over="ignore", invalid="ignore"):
-        return build_inversion_period2(unstable_steps=10, stable_steps=10, through=through)
+        return build_inversion_period2(
+            unstable_steps=10, stable_steps=10, area_cutoff=1e-6, through=through
+        )
 
 
 def test_p2inv10_cut_equals_a_trim() -> None:
@@ -91,6 +97,9 @@ def test_p2inv10_cut_equals_a_trim() -> None:
 def test_p2inv10_every_class_walks() -> None:
     """D3: with S cut at the pip orbit every active class walks and the words are reliable."""
     case = _p2inv10("partitioned")
+    registry = case.session.workbench.intersection_registry
+    assert not registry.unresolved_crossings(case.session.workbench.resolution_ratio_threshold), (
+        "precondition: the build resolves every detection")
     with np.errstate(over="ignore", invalid="ignore"):
         assert laws.check_every_active_class_walks(case) > 0
         assert case.session.symbolic_dynamics().is_reliable

@@ -823,7 +823,11 @@ def build_inversion(*, blasts: int = 0, through: Stage = "partitioned") -> Case:
 
 
 def build_inversion_period2(
-    *, unstable_steps: int = 9, stable_steps: int = 10, through: Stage = "partitioned"
+    *,
+    unstable_steps: int = 9,
+    stable_steps: int = 10,
+    area_cutoff: float = 1e-5,
+    through: Stage = "partitioned",
 ) -> Case:
     """
     Inversion on a period-k orbit: the ``k=4.1`` period-2 orbit, no zone.
@@ -839,6 +843,7 @@ def build_inversion_period2(
     Args:
         unstable_steps: Unstable growth steps (the law case: 9).
         stable_steps: Stable growth steps (the law case: 10).
+        area_cutoff: The refinement cutoff (the law case: 1e-5).
         through: ``"bridges"`` or ``"partitioned"``.
 
     Returns:
@@ -849,7 +854,6 @@ def build_inversion_period2(
     """
     if through not in ("bridges", "partitioned"):
         raise ValueError("build_inversion_period2 stops at 'bridges' or 'partitioned'")
-    area_cutoff = 1e-5
     session = TangleSession(
         henon_map(*HENON_K41),
         henon_map_inverse(*HENON_K41),
