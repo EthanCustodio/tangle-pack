@@ -6,7 +6,8 @@ same two branches sits closer along the unstable polyline than the larger of
 their two chord deviations (clause 2: a run is out whole, median included).
 An unresolved detection lies inside a bridge, is never linked and is named in
 one WARNING. Hand-placed polylines on a real workbench (identity map, never
-called by the topology): rules only, no case's numbers.
+called by the topology): rules only, no case's numbers. The law cases are
+resolved, so the rule moves nothing on them: N is their whole registry.
 """
 
 from __future__ import annotations
@@ -14,16 +15,29 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+import pytest
 
+from cases import BUILDERS, LAW_CASES
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
 from helpers.polylines import polyline_workbench
+from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
+from tanglepack.topology.StrongPip import is_strong_pip
+from tanglepack.topology.Trellis import Trellis
 
 WORKBENCH = "tanglepack.numerics.TangleWorkbench"
 THRESHOLD = 3.0
 
 #: The x-axis, in segments longer than anything that crosses it.
 STABLE = [(-9.0, 0.0), (-3.0, 0.0), (3.0, 0.0), (9.0, 0.0)]
+
+#: Two clean crossings at x = -4.5 and 4.5, and between them a zig-zag of two
+#: short segments crossing the axis three times within their chord deviation.
+ZIG_ZAG = [
+    (-8, 2), (-6, 1), (-5, 0.5), (-4, -0.5), (-3, -1),
+    (-1, -1), (0, 1e-3), (1e-3, -1e-3), (1, 1),
+    (3, 1), (4, 0.5), (5, -0.5), (6, -1), (8, -2),
+]
 
 
 def _workbench(unstable):
@@ -41,14 +55,7 @@ def _detections(registry, near: float = np.inf) -> list[int]:
 
 
 def test_a_zig_zag_across_the_stable_curve_is_registered_and_out_of_n(caplog):
-    # Two clean crossings at x = -4.5 and 4.5, and between them a zig-zag of two
-    # short segments crossing the axis three times within their chord deviation.
-    unstable = [
-        (-8, 2), (-6, 1), (-5, 0.5), (-4, -0.5), (-3, -1),
-        (-1, -1), (0, 1e-3), (1e-3, -1e-3), (1, 1),
-        (3, 1), (4, 0.5), (5, -0.5), (6, -1), (8, -2),
-    ]
-    workbench, fp = _workbench(unstable)
+    workbench, fp = _workbench(ZIG_ZAG)
     caplog.set_level(logging.WARNING, logger=WORKBENCH)
     registry = workbench.compute_intersections([fp])
     zig_zag = _detections(registry, near=1.0)
@@ -105,3 +112,102 @@ def test_a_clean_transversal_crossing_is_in_n():
     assert registry.run_separation(crossing) is None
     assert crossing in registry.resolved_ids(THRESHOLD)
     assert registry.unresolved_crossings(THRESHOLD) == []
+
+
+def test_an_unresolved_detection_is_on_no_trellis_branch():
+    workbench, fp = _workbench(ZIG_ZAG)
+    registry = workbench.compute_intersections([fp], diagnose=False)
+    workbench.create_bridges()
+    trellis = Trellis.from_workbench(workbench, [fp])
+    zig_zag = set(_detections(registry, near=1.0))
+
+    assert trellis.resolved_ids == registry.resolved_ids(THRESHOLD)
+    assert all(not zig_zag & set(branch.intersection_ids) for branch in trellis.branches.values())
+    assert all(set(branch.intersection_ids) <= trellis.resolved_ids for branch in trellis.branches.values())
+
+
+@pytest.mark.parametrize("name", LAW_CASES)
+def test_every_law_case_crossing_is_in_n(name: str) -> None:
+    """The law cases are resolved, so N is the whole registry and the rule moves nothing there."""
+    case = BUILDERS[name]()
+    assert case.registry.unresolved_crossings(case.workbench.resolution_ratio_threshold) == []
+
+
+@pytest.mark.parametrize("name", LAW_CASES)
+def test_chord_deviation_is_none_exactly_on_synthetic_crossings(name: str) -> None:
+    registry = BUILDERS[name]().registry
+    assert all((ix.chord_deviation is None) == ix.is_synthetic for _, ix in registry)
+
+
+def test_an_unresolved_detection_never_sets_the_stable_trim():
+    # One clean crossing at x = -4.5, then a zig-zag at x = 6, past it along the
+    # stable curve: the trim stops at the outermost crossing of N.
+    fp = bare_fixed_point(label="A")
+    unstable = [(-8, 2), (-6, 1), (-5, 0.5), (-4, -0.5), (-3, -1), (3, -1), (5, -1),
+                (6, 1e-3), (6.001, -1e-3), (7, 1), (8, 2)]
+    stable = [(float(x), 0.0) for x in range(-9, 10)]
+    workbench = polyline_workbench(
+        fp, {(fp, "unstable", 0, 0): unstable, (fp, "stable", 0, 0): stable}
+    )
+    registry = workbench.compute_intersections([fp], diagnose=False)
+    zig_zag = registry.unresolved_crossings(THRESHOLD)
+    (clean,) = [iid for iid in _detections(registry) if iid not in zig_zag]
+
+    workbench.trim_stable_manifolds(fp)
+    end = workbench.manifolds[fp, "stable", 0, 0].tail.cdist
+
+    assert len(zig_zag) == 3
+    assert registry[clean].stable_cdist <= end < min(registry[iid].stable_cdist for iid in zig_zag)
+
+
+def _grazing_workbench():
+    """A coarse parabola grazing the x-axis: its near-parallel chord gives a detection
+    below the threshold, the next chord a clean crossing."""
+    fp = bare_fixed_point(label="A")
+    xs = np.arange(-3, 4) + 0.45
+    grazing = np.column_stack([xs, 0.05 * xs**2 - 0.0125])
+    line = np.column_stack([np.arange(8) - 3.5, np.zeros(8)])
+    workbench = polyline_workbench(
+        fp, {(fp, "unstable", 0, 0): line, (fp, "stable", 0, 0): grazing}
+    )
+    return workbench, fp
+
+
+def test_a_detection_below_the_threshold_is_neither_source_nor_image():
+    # Under the identity map the clean crossing is its own image, uniquely once the
+    # grazing detection is no candidate.
+    workbench, fp = _grazing_workbench()
+    registry = workbench.compute_intersections([fp], diagnose=False)
+    (unresolved,) = registry.unresolved_crossings(THRESHOLD)
+    (clean,) = [iid for iid in _detections(registry) if iid != unresolved]
+    table = registry.iterate_table
+
+    assert registry[unresolved].resolution_ratio < THRESHOLD
+    assert table[unresolved, 1] is None and table[unresolved, -1] is None
+    assert table[clean, 1] == clean
+
+
+def test_closing_all_iterates_never_waits_on_an_unresolved_detection():
+    # Every crossing of N is linked already, so "all" is closed without a growth
+    # round; the unresolved detection, never linked, would hold it to the cap.
+    workbench, fp = _grazing_workbench()
+    workbench.compute_intersections([fp], diagnose=False)
+    assert workbench.grow_until_iterates_closed(fp, "all") == 0
+
+
+def test_an_unresolved_detection_never_disqualifies_a_strong_pip():
+    # q0 and one crossing of its own tangle inside its open box (0, 1) x (0, 1):
+    # in N it blocks q0; out of N it is no crossing and blocks nothing.
+    fp = bare_fixed_point(label="A")
+    registry = IntersectionRegistry()
+    keys = {"manifold_a_key": (fp, "unstable", 0, 0), "manifold_b_key": (fp, "stable", 0, 0)}
+    q0 = registry.add_synthetic((0.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0, **keys)
+    inside = registry.add_synthetic((0.1, 0.1), unstable_cdist=0.5, stable_cdist=0.5, **keys)
+
+    def strong(resolved):
+        trellis = Trellis(fixed_points=[fp], registry=registry, branches={}, bridges=[],
+                          resolved_ids=resolved)
+        return is_strong_pip(trellis, q0)
+
+    assert strong(None).blocking_intersection_id == inside
+    assert strong(frozenset({q0})).is_strong_pip

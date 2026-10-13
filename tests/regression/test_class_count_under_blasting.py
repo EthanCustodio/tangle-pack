@@ -34,7 +34,9 @@ pinned count:
   (D13; the ties of k=2.8 and k=3.2 at 8+ blasts were the span's);
 * a plain recompute keeps the crossing set N and the bridges a blast left: N
   is one definition on every path (B1, Q13 (a); the blast path's vote on
-  near-coincident detections made k=2.8 drift from blast 6).
+  near-coincident detections made k=2.8 drift from blast 6);
+* no bridge ends at a detection outside N, as the blast left it or after the
+  recompute: an unresolved detection lies inside a bridge (B1).
 
 The per-kind counts are printed in every failure message as diagnostics.
 
@@ -153,3 +155,17 @@ def test_recompute_keeps_the_crossing_set(name: str) -> None:
         if s.crossings != s.recomputed
     ]
     assert not drift, f"(blasts, |N|, bridges) changed by a recompute: {drift}"
+
+
+@pytest.mark.parametrize("name", _params("series_bridges_end_at_crossings_of_n"))
+def test_every_bridge_ends_at_crossings_of_n(name: str) -> None:
+    """B1: the blast's cut and the recompute's cut are both at crossings of N only."""
+    steps = _series(name)
+    stray = [
+        (s.blasts, which, bridge_id)
+        for s in steps
+        for which, (crossings, bridges) in (("blast", s.crossings), ("recompute", s.recomputed))
+        for bridge_id in bridges
+        if not set(bridge_id) <= crossings
+    ]
+    assert not stray, f"(blasts, cut by, bridge) ending outside N: {stray}"
