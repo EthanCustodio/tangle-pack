@@ -66,9 +66,11 @@ Cases:
   trellis's alphabet, which the symbolic dynamics closes under the word map
   (PK-1, WP7).
 * ``p3_16_12`` / ``inversion_period2_10`` -- period 3 at 16 unstable / 12
-  stable steps, and the inversion x period-2 orbit at 10 / 10 steps: the deep
-  runs every non-mutating law holds on since WP10 (two crossings on one segment
-  used to cut a bridge past its own end there; two laws over-claimed on p3).
+  stable steps, and the inversion x period-2 orbit at 10 / 10 steps refined to
+  ``area_cutoff = 1e-6`` (at 1e-5 two crossings of its reference window are
+  below the resolution threshold, outside N, B1): the deep runs every
+  non-mutating law holds on since WP10 (two crossings on one segment used to
+  cut a bridge past its own end there; two laws over-claimed on p3).
 * ``near_tangency`` -- the period-1 ``b = 1`` saddle at ``k = -0.999``, close to
   the saddle-centre bifurcation at ``k = -1`` where the splitting angle is
   exponentially small, each arm grown to 20 fixed-point separations of
@@ -1276,7 +1278,8 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         "p3_6_blasts": lambda: build_period3(blasts=6),
         "p3_16_12": lambda: _named(build_period3(unstable_steps=16, stable_steps=12), "p3_16_12"),
         "inversion_period2_10": lambda: _named(
-            build_inversion_period2(unstable_steps=10, stable_steps=10), "inversion_period2_10"
+            build_inversion_period2(unstable_steps=10, stable_steps=10, area_cutoff=1e-6),
+            "inversion_period2_10",
         ),
         "p3_coarse_blasts": build_period3_coarse_blasts,
         "near_tangency": build_near_tangency,
