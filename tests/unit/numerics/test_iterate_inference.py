@@ -125,13 +125,67 @@ def test_a_multi_match_is_recorded_and_a_second_pass_changes_nothing(
     monkeypatch.setattr(IterateInference, "_brackets", lambda crossing: ((0.0, 1e100), (0.0, 1e100)))
     registry.iterate_table = IterateTable()
     detected = [i for i, ix in registry if not ix.is_synthetic]
+    start = registry.generation
 
-    infer_iterates(workbench)
+    infer_iterates(workbench, detected)  # no anchor: recording is the pass's only mutation
     generation = registry.generation
-    infer_iterates(workbench)
+    infer_iterates(workbench, detected)
 
+    assert generation > start
     assert set(registry.unresolved_links) == set(detected)
     for source, candidates in registry.unresolved_links.items():
         assert len(candidates) > 1 and set(candidates) <= set(detected)
         assert registry.iterate_table[source, 1] is None
     assert registry.generation == generation
+
+
+def test_remove_iterate_forgets_the_link_its_twin_and_its_edge(henon_tangle_with_bridges):
+    """B8: removing ``x -> y`` leaves neither ``(x, 1)`` nor ``(y, -1)`` nor the graph edge."""
+    workbench, _fp = henon_tangle_with_bridges
+    registry = workbench.intersection_registry
+    x, y = min(_detected_links(registry))
+    assert registry.graph().has_edge(x, y, f"iter_{x}_1")
+    generation = registry.generation
+
+    registry.remove_iterate(x, 1)
+
+    assert registry.iterate_table[x, 1] is None and registry.iterate_table[y, -1] is None
+    assert not registry.graph().has_edge(x, y, f"iter_{x}_1")
+    assert registry.generation > generation
+
+
+def test_a_later_pass_does_not_relink_a_contested_image(henon_tangle_with_bridges):
+    """B8: a pass over one claimant re-decides only its own entry; the other
+    claimant, left contesting ``y`` by an earlier pass, still contests it."""
+    workbench, _fp = henon_tangle_with_bridges
+    registry = workbench.intersection_registry
+    x, y = min(_detected_links(registry))
+    z = min(i for i, ix in registry if not ix.is_synthetic and i not in (x, y))
+    registry.iterate_table = IterateTable()
+    registry.register_iterate(z, 1, y)
+    infer_iterates(workbench, [x])
+    generation = registry.generation
+
+    infer_iterates(workbench, [x])
+
+    assert registry.iterate_table[x, 1] is None and registry.iterate_table[y, -1] is None
+    assert registry.unresolved_links == {x: (y,), z: (y,)}
+    assert registry.generation == generation
+
+
+def test_a_pass_re_decides_its_own_sources(henon_tangle_with_bridges, monkeypatch):
+    """B8: once the brackets single out one image again, the next pass drops the
+    source's entry and links it: no entry outlives the pass that re-decides it."""
+    workbench, _fp = henon_tangle_with_bridges
+    registry = workbench.intersection_registry
+    links = set(registry.iterate_table.items())
+    with monkeypatch.context() as patch:
+        patch.setattr(IterateInference, "_brackets", lambda crossing: ((0.0, 1e100), (0.0, 1e100)))
+        registry.iterate_table = IterateTable()
+        infer_iterates(workbench)
+    assert registry.unresolved_links
+
+    infer_iterates(workbench)
+
+    assert registry.unresolved_links == {}
+    assert set(registry.iterate_table.items()) == links
