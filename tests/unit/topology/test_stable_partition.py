@@ -23,7 +23,7 @@ from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.StablePartition import partition_stable_manifold
 from tanglepack.topology.diagnostics import _bridge_side_of, _side_of
-from tanglepack.topology.TopologyResults import Hole
+from tanglepack.topology.TopologyResults import Hole, PseudoneighborPair
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch
 
@@ -709,7 +709,7 @@ class _FakePair:
     ("period", "iterate", "dropped"),
     [
         (1, 0, False),   # a reference
-        (1, -1, False),  # backward iterates always punch
+        (1, -1, False),  # not forward: a backward pair is asserted away instead
         (1, -7, False),
         (1, 1, True),
         (1, 2, True),
@@ -724,8 +724,7 @@ def test_forward_pairs_get_no_hole(period, iterate, dropped):
     """Holes propagate backward only: every forward iterate is the image of a
     hole still attached to the stable manifold and is never punched, the
     ``+1 .. +(k_value - 1)`` appearances on the other branches of a period-k
-    orbit included (author, 2026-10-09); references and backward iterates
-    always are."""
+    orbit included (author, 2026-10-09); references always are."""
     from tanglepack.topology.StablePartition import _is_forward_iterate
 
     fp = _fixed_point(period, 4.0)
@@ -735,3 +734,19 @@ def test_forward_pairs_get_no_hole(period, iterate, dropped):
     assert _is_forward_iterate(pair) is dropped
 
 
+
+
+def test_a_backward_pair_is_never_punched(stable_line):
+    """No backward pair is ever recorded (a reference lies in the window
+    ``S \\ f(S)``, so the backward walk leaves T at once), and ``punch_holes``
+    asserts it: the backward punch it no longer has is falsifiable."""
+    from tanglepack.topology.StablePartition import punch_holes
+
+    trellis, ids = stable_line
+    pair = PseudoneighborPair(
+        ids[0], ids[1], branch_key=(trellis.fixed_points[0], "stable", 0, 0),
+        iterate=-1, origin=(ids[2], ids[3]),
+    )
+
+    with pytest.raises(AssertionError):
+        punch_holes(trellis, [pair])

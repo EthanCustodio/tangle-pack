@@ -89,8 +89,7 @@ fixed in conversation with the author (July 2026):
   of the map here): the carried point places the hole, and the diagnostics
   replay it as the measured-side flag — two orbits landing in the same bridge
   differ exactly there, and BOTH are punched (per the author: no cross-orbit
-  deduplication, even on the same bridge and side; only a same-orbit
-  same-iterate duplicate of a recorded pair's hole is skipped).
+  deduplication, even on the same bridge and side).
 * Superseded: resonance-zone association (removed 2026-07-16). Holes used
   to carry an ``interior`` flag (in_zone point-in-polygon test, else a
   cdist-vs-strong-pip-cut fallback) and the partition split its intervals at
@@ -160,12 +159,14 @@ fixed in conversation with the author (July 2026):
   walks the whole unstable branch cycle. Punching the ``+j`` appearances (D5,
   2026-10-07) added holes the period-3 figures showed as forward iterates
   and four inert classes at 0-5 blasts.
-* Propagation start: a reference whose pair has no spanning Bridge object
-  (after a blast there is no bridge between a parent-manifold crossing and
-  a blast-child crossing) punches no direct hole, but its orbit still
-  propagates — the backward chain continues from the orbit's most-backward
-  directly-punched pair instead (author, 2026-07-09: the un-punchable pair
-  itself is fine to skip, its deeper backward holes are not).
+* Propagation start: every chain starts at its reference. No backward pair
+  is ever recorded (a reference lies in the window ``S \\ f(S)``, so one of
+  its preimages leaves T and the backward walk stops at once), which
+  ``punch_holes`` asserts; the direct punch of backward pairs, its two
+  de-duplications and the fallback that continued an orbit from its
+  most-backward directly punched pair (author, 2026-07-09) never ran on any
+  build and went in B4b (2026-10-13). A reference whose pair has no spanning
+  Bridge object punches no hole and starts no chain (``punch_holes`` warns).
 * Exact ownership (2026-10-07, stress campaign E11). Every partition boundary
   IS a registry float (asserted in :func:`_element_of_intersection`; the
   synthetic ``(None, 0.0)`` anchor aside), so a registered crossing is owned
@@ -273,22 +274,21 @@ def punch_holes(
     epsilon: float = 0.05,
 ) -> list[Hole]:
     """
-    Punch a hole in the region bounded by each pseudoneighbor pair.
+    Punch a hole in the region bounded by each reference pseudoneighbor pair.
 
-    Placement inside the bounded region depends on the pair's role: a
-    REFERENCE pair's hole hugs the stable manifold (the pair's chord midpoint,
-    nudged ``epsilon`` toward the bridge), while an iterated pair's hole sits
-    between the two neighbors on the unstable manifold (the bridge midpoint,
-    nudged ``epsilon`` toward the chord). Each hole's side of the pair's
-    bridge, in the bridge's dynamical orientation (``Hole.bridge_side``), and
-    its openings are read off the crossing signs (D6); it carries its orbit
-    identity (``origin``/``iterate``) and is attached to its pair
-    (``pair.hole``).
+    The hole hugs the stable manifold (the pair's chord midpoint, nudged
+    ``epsilon`` toward the bridge). Its side of the pair's bridge, in the
+    bridge's dynamical orientation (``Hole.bridge_side``), and its openings
+    are read off the crossing signs (D6); it carries its orbit identity
+    (``origin``/``iterate``) and is attached to its pair (``pair.hole``).
 
     Holes propagate BACKWARD only: a pair recorded at any forward iterate is
     the image of a region still attached to the stable manifold and gets no
     direct hole (it is logged at DEBUG and left with ``pair.hole = None``),
-    on a period-k orbit too. See the module Dev Notes.
+    on a period-k orbit too, and no backward pair is ever recorded (the
+    reference lies in the window ``S \\ f(S)``), so only the references
+    (``iterate == 0``) are punched here; their backward chains are
+    :func:`propagate_reference_holes`'. See the module Dev Notes.
 
     Args:
         trellis: The Trellis carrying the pairs and bridges.
@@ -300,10 +300,14 @@ def punch_holes(
     Returns:
         The punched holes. Pairs with no spanning bridge are skipped with a
         warning; forward-iterate pairs are skipped silently (DEBUG).
+
+    Raises:
+        AssertionError: If a pair is recorded at a backward iterate.
     """
     if pairs is None:
         pairs = trellis.pseudoneighbors
     pairs = list(pairs)
+    assert all(p.iterate >= 0 for p in pairs), "holes propagate backward only; no backward pair is recorded"
 
     # Punching is idempotent per call: a pair that gets no hole this time must
     # not keep the one an earlier call attached, because propagate_reference_holes
@@ -346,10 +350,7 @@ def punch_holes(
             continue
 
         chord_len = float(np.linalg.norm(far.get_point() - near.get_point()))
-        if pair.is_reference:
-            coords = _step_into(stable_mid, arc_point, epsilon, chord_len)
-        else:
-            coords = _step_into(arc_point, stable_mid, epsilon, chord_len)
+        coords = _step_into(stable_mid, arc_point, epsilon, chord_len)
         coords = (float(coords[0]), float(coords[1]))
 
         # A direct hole sits in the lobe between the bridge and the pair's own
@@ -415,7 +416,8 @@ def propagate_reference_holes(
     (PK-9).
 
     Requires the reference holes to exist already (call :func:`punch_holes`
-    first); references without a hole are skipped.
+    first); a reference without a hole (no Bridge spans its pair, which
+    :func:`punch_holes` warned about) starts no chain.
 
     Args:
         trellis: The Trellis carrying pairs, bridges, and eigen/orbit data.
@@ -425,87 +427,32 @@ def propagate_reference_holes(
     Returns:
         The newly punched holes. Every reference orbit punches its own chain —
         two orbits landing in the same bridge (even on the same side) each get
-        their own hole; only a hole whose orbit and iterate are already
-        represented by a recorded pair's hole is skipped as a true duplicate.
+        their own hole.
     """
     if references is None:
         references = [p for p in trellis.pseudoneighbors if p.is_reference]
     references = list(references)
 
     new_holes: list[Hole] = []
-    seen: set[tuple[Optional[tuple[int, int]], Optional[int]]] = {
-        (pair.origin, pair.iterate)
-        for pair in trellis.pseudoneighbors
-        if pair.hole is not None
-    }
-    # Regions already punched, per origin: a propagated hole must not land a
-    # second time on a region its orbit already punched directly (the
-    # references are punched before the chains run).
-    punched_regions: set[tuple] = {
-        _region_key(pair.origin, pair.hole)
-        for pair in trellis.pseudoneighbors
-        if pair.hole is not None and pair.hole.bounding_ids is not None
-    }
-
     orders: dict = {}
     for ref in references:
+        if ref.hole is None:
+            continue
         origin = ref.origin if ref.origin is not None else ref.as_tuple()
-        start = ref
-        bridge = bridge_for_pair(trellis, ref) if ref.hole is not None else None
-        if bridge is None:
-            # The reference itself punched nothing (typically: no spanning
-            # Bridge object between a parent-manifold crossing and a
-            # blast-child crossing). Its orbit still owns backward holes —
-            # continue the chain from the most-backward directly punched
-            # pair instead.
-            fallbacks = sorted(
-                (
-                    p
-                    for p in trellis.pseudoneighbors
-                    if p.origin == origin
-                    and p.hole is not None
-                    and p.iterate is not None
-                ),
-                key=lambda p: p.iterate,
-            )
-            start, bridge = next(
-                (
-                    (p, b)
-                    for p in fallbacks
-                    if (b := bridge_for_pair(trellis, p)) is not None
-                ),
-                (None, None),
-            )
-            if start is None:
-                logger.warning(
-                    "Orbit %s has no punched pair with a spanning bridge; "
-                    "cannot propagate (run punch_holes() first?)",
-                    origin,
-                )
-                continue
-            logger.info(
-                "Reference %s has no punched bridge; propagating backward "
-                "from its iterate %+d pair %s instead",
-                ref.as_tuple(),
-                start.iterate,
-                start.as_tuple(),
-            )
-
+        bridge = bridge_for_pair(trellis, ref)
         # The image span is tracked through the start bridge's two CROSSINGS,
         # each moved by image_cdist (the iterate table, else advance_key and
         # beta-scaling), on the branch the bridge itself lies on.
         start_key, start_ids = bridge.manifold_key, bridge.id
         advance = start_key[0].advance_key
-        carried = np.asarray(start.hole.coords, dtype=np.float64)
-        start_iterate = start.iterate or 0
-        start_side = start.hole.bridge_side
+        carried = np.asarray(ref.hole.coords, dtype=np.float64)
+        start_side = ref.hole.bridge_side
         preserving = trellis.orientation_preserving
         # A bridge lives on one branch, so meeting it again is meeting it at the
         # same branch-cycle residue: the backward orbit has become periodic.
         visited = {bridge.id}
 
         for step in count(1):
-            iterate = start_iterate - step
             span = tuple(sorted(
                 trellis.image_cdist(end_id, -step, "unstable", branch=start_key)[1]
                 for end_id in start_ids
@@ -522,22 +469,16 @@ def propagate_reference_holes(
                 break  # the backward orbit has become periodic — terminate
             visited.add(containing.id)
 
-            key = (origin, iterate)
-            if key not in seen:
-                # The side is CARRIED along the orbit (author, 2026-10-07): the
-                # map carries the bridge's dynamical orientation to the image
-                # bridge's, flipping it every step only when it reverses
-                # orientation. The carried point only places the hole.
-                hole = _punch_in_bridge(
-                    trellis, containing, bridge_side=side_after(start_side, -step, preserving),
-                    iterate=iterate, origin=origin, carried=carried, span=span,
-                )
-                if hole is not None:
-                    region = _region_key(origin, hole)
-                    if region not in punched_regions:
-                        punched_regions.add(region)
-                        seen.add(key)
-                        new_holes.append(hole)
+            # The side is CARRIED along the orbit (author, 2026-10-07): the
+            # map carries the bridge's dynamical orientation to the image
+            # bridge's, flipping it every step only when it reverses
+            # orientation. The carried point only places the hole.
+            hole = _punch_in_bridge(
+                trellis, containing, bridge_side=side_after(start_side, -step, preserving),
+                iterate=-step, origin=origin, carried=carried, span=span,
+            )
+            if hole is not None:
+                new_holes.append(hole)
 
     logger.debug("Propagated %d hole(s) from %d reference(s)", len(new_holes), len(references))
     return new_holes
@@ -604,20 +545,6 @@ def partition_stable_manifold(
 
 
 # ── geometric / bookkeeping helpers ─────────────────────────────────────────
-
-
-def _region_key(
-    origin: Optional[tuple[int, int]], hole: Hole
-) -> tuple[Optional[tuple[int, int]], tuple[int, ...], Optional[Side]]:
-    """Identity of the region one orbit punched, for propagation de-duplication.
-
-    The two defining crossings alone do not name a region: a bridge has a
-    region on EACH of its sides, and one orbit can legitimately land in both
-    (the author's "singleton bridge with a hole on either side"). The side is
-    therefore part of the key.
-    """
-    bounding = tuple(sorted(hole.bounding_ids)) if hole.bounding_ids else ()
-    return (origin, bounding, hole.bridge_side)
 
 
 def row_of_end(
