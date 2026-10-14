@@ -855,3 +855,39 @@ def test_own_orbit_does_not_puncture_stable_interval():
         trellis, x1, r_end, "stable", trellis.own_intersection_ids, COLLISION_RTOL
     )
     assert (x1, r_end) in _pairs(trellis)
+
+
+@pytest.mark.parametrize(
+    ("unstable_owner", "survives"), [("A", True), ("B", False)], ids=["own_orbit", "other_unstable"]
+)
+def test_collision_on_another_unstable_manifold_still_punctures_stable_interval(
+    unstable_owner, survives
+):
+    """The stable reading's 2D collision compares UNSTABLE cdists, so it only names
+    an endpoint's own orbit on the pair's own unstable manifold (D7 mirrored).
+
+    A heteroclinic window of ``W^u(A)`` crossings on B's stable branch (A: lambda
+    4, B: lambda 6), stable intervals (3, 6) and (1, 3). A crossing r on that
+    branch at stable cdist 0.4985 lands one step back at 2.991, inside (1, 3),
+    and its unstable cdist scaled one step back is 2.002, x1's 2 by numbers.
+    On ``W^u(A)`` that is x1's own orbit up to noise and the pair stays; on
+    ``W^u(B)`` (a B x B crossing) r's orbit never meets x1's, so it punctures."""
+    a, b = _fixed_point(1, 4.0), _fixed_point(1, 6.0)
+    a_u, b_u, b_s = (a, "unstable", 0, 0), (b, "unstable", 0, 0), (b, "stable", 0, 0)
+    reg = IntersectionRegistry()
+
+    def point(u, s, unstable=a_u):
+        return reg.add_synthetic((s, u), unstable_cdist=u, stable_cdist=s,
+                                 manifold_a_key=unstable, manifold_b_key=b_s)
+
+    r_n, x1, r_end = point(1.0, 6.0), point(2.0, 3.0), point(4.0, 1.0)
+    reg.register_iterate(r_n, 1, r_end)
+    if unstable_owner == "A":
+        point(2.002 * 4.0, 0.4985)
+    else:
+        point(2.002 * 6.0, 0.4985, unstable=b_u)
+
+    pairs = _pairs(_trellis(reg, a, b))
+
+    assert (r_n, x1) in pairs
+    assert ((x1, r_end) in pairs) is survives
