@@ -374,6 +374,25 @@ def test_henon_propagated_hole_point_is_on_its_side(henon_with_holes):
     assert checked > 0, "propagation should have punched holes"
 
 
+@pytest.mark.parametrize("with_map", [True, False], ids=["map", "no_map"])
+def test_a_hole_is_drawn_off_its_bridge(henon_with_holes, with_map):
+    """``hole_point`` steps every hole off its own bridge into the region, so
+    the drawing commits to a side; without a map (``dynamical_system`` None) a
+    propagated hole is nudged off its image sub-arc toward the stable arc."""
+    trellis, _references = henon_with_holes
+    if not with_map:
+        trellis.dynamical_system = None
+
+    for hole in trellis.holes:
+        point = hole_point(trellis, hole)
+        nodes = np.asarray(trellis.bridge_between(*hole.bounding_ids).get_point_array(), dtype=float)
+        a, b = nodes[:-1], nodes[1:]
+        t = np.clip(((point - a) * (b - a)).sum(axis=1) / ((b - a) ** 2).sum(axis=1), 0.0, 1.0)
+        assert np.isfinite(point).all()
+        assert np.linalg.norm(a + t[:, None] * (b - a) - point, axis=1).min() > 0.0, hole.bounding_ids
+    assert any(hole.pair is None for hole in trellis.holes), "propagation should have punched holes"
+
+
 def test_describe_reports(henon_with_holes):
     """The verbose reports are plain strings built from the trellis state."""
     trellis, references = henon_with_holes
