@@ -106,6 +106,28 @@ def _min_interior_distance(child: "Bridge", reference: np.ndarray) -> float:
     return float(np.min(dists))
 
 
+def _pip_orbits(
+    session: "TangleSession", fixed_points: list["FixedPoint"]
+) -> dict["FixedPoint", list[int]]:
+    """``[q0, f(q0), ..., f^m(q0)]`` per fixed point with a chosen pip: its registered orbit.
+
+    Composed link by link, as ``Trellis._pip_orbit_cuts`` reads the depth ``m`` of
+    ``T(q0)``: the iterate table holds ``+1`` links only, so
+    ``IterateTable.forward_depth`` is 1 for any linked crossing.
+    """
+    registry = session.workbench.intersection_registry
+    orbits = {}
+    for fp in fixed_points:
+        chosen = session.chosen_strong_pip(fp)
+        x = registry.find(chosen) if chosen is not None else None
+        if x is None:
+            continue
+        orbits[fp] = [x]
+        while (x := registry.iterate_table[x, 1]) is not None:
+            orbits[fp].append(x)
+    return orbits
+
+
 @dataclass
 class BlastStep:
     """
@@ -153,6 +175,13 @@ class BlastResult:
             ``max_points``).
         points_created: Points held by the bridges this blast added to the
             workbench (images that re-trace existing curve add none).
+        too_close: Children dropped by ``min_separation``, over every step.
+        already_known: Children that resolved to a bridge already enqueued in
+            this blast (kept as the one copy, not re-iterated), over every step.
+        pip_depth: ``m`` per selected fixed point with a chosen pip, read after
+            the final ``infer_iterates``: the length of the pip's registered
+            ``+1`` chain, ``f^m(q0)`` being its deepest registered iterate and
+            so the depth ``T(q0)`` is cut at (data, never a stop condition).
     """
 
     zone: "ResonanceZone"
@@ -167,6 +196,7 @@ class BlastResult:
     points_created: int = 0
     too_close: int = 0
     already_known: int = 0
+    pip_depth: dict["FixedPoint", int] = field(default_factory=dict)
 
     @property
     def terminated_early(self) -> bool:
@@ -204,12 +234,17 @@ def blast_zone(
         fixed_point: If given, only bridges emanating from this fixed point (or, if a
             list/iterable of fixed points is passed, any of them) participate;
             otherwise (``None``) every fixed point's interior bridges do.
-        min_separation: If given, a freshly produced interior bridge is dropped from
-            the frontier when its interior runs within ``min_separation`` of an
-            already-kept sibling. Unstable curves can never truly cross, so two
-            bridge images that come this close are about to merge into a numerical
-            artifact; stopping there keeps the blast on the well-resolved side of the
-            precision limit. ``None`` (default) disables the guard.
+        min_separation: A cost guard: if given, a freshly produced interior
+            bridge is dropped from the frontier when its interior runs within
+            ``min_separation`` of curve already in the tangle or of an
+            already-kept sibling. Unstable curves can never truly cross, so a
+            child this close re-traces existing curve and is about to merge into
+            a numerical artifact; stopping there keeps the blast on the
+            well-resolved side of the precision limit. A child ending on the
+            orbit of a selected fixed point's chosen pip is exempt (N-a, Q2,
+            2026-10-09) and logged at INFO, so the guard never decides the depth
+            of ``T(q0)``: that is decided by whether ``f^{m+1}(q0)`` is detected
+            and resolved (A.4). ``None`` (default) disables the guard.
         diagnose: If True (default) finish with ONE
             :meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.report_resolution`
             pass over the blasted fixed points: deep blasting is where
@@ -381,43 +416,59 @@ def blast_zone(
                 raise
 
             produced.extend(children)
-            for child in children:
-                # A bridge already in the trellis (the fixed-point bridge's self-image
-                # and any image piece that re-traces grown curve resolve to the
-                # existing persistent copy): keep the single copy, do not re-iterate.
-                if _seen_key(child) in seen:
-                    already_known.append(child)
-                    continue
 
-                if not (not child.iterated and fp_ok(child) and in_zone(child)):
-                    seen.add(_seen_key(child))
-                    discarded.append(child)
-                    continue
+        # N-a: iterating the bridge ending at f^m(q0) linked f^{m+1}(q0), so the
+        # orbit read now marks every child ending on it.
+        orbit = {
+            x: (fp, n)
+            for fp, chain in _pip_orbits(session, fixed_points).items()
+            for n, x in enumerate(chain)
+        }
+        for child in produced:
+            # A bridge already in the trellis (the fixed-point bridge's self-image
+            # and any image piece that re-traces grown curve resolve to the
+            # existing persistent copy): keep the single copy, do not re-iterate.
+            if _seen_key(child) in seen:
+                already_known.append(child)
+                continue
 
-                if min_separation is not None:
-                    interior = _interior_points(child)
-                    too_near_existing = (
-                        ref_tree is not None
-                        and len(interior)
-                        and float(ref_tree.query(interior)[0].min()) < min_separation
-                    )
-                    too_near_sibling = (
-                        bool(kept_points)
-                        and _min_interior_distance(child, np.vstack(kept_points))
-                        < min_separation
-                    )
-                    if too_near_existing or too_near_sibling:
-                        seen.add(_seen_key(child))
-                        too_close.append(child)
-                        continue
-
+            if not (not child.iterated and fp_ok(child) and in_zone(child)):
                 seen.add(_seen_key(child))
-                kept.append(child)
-                if min_separation is not None:
-                    interior = _interior_points(child)
-                    if len(interior):
-                        reference_points.append(interior)
-                        kept_points.append(interior)
+                discarded.append(child)
+                continue
+
+            pip_end = next((x for x in child.id or () if x in orbit), None)
+            if min_separation is not None and pip_end is not None:
+                owner, n = orbit[pip_end]
+                logger.info(
+                    "blast: child %s ends at f^%d(q0) of %s (crossing %d), "
+                    "kept regardless of separation",
+                    child.id, n, owner.label, pip_end,
+                )
+            elif min_separation is not None:
+                interior = _interior_points(child)
+                too_near_existing = (
+                    ref_tree is not None
+                    and len(interior)
+                    and float(ref_tree.query(interior)[0].min()) < min_separation
+                )
+                too_near_sibling = (
+                    bool(kept_points)
+                    and _min_interior_distance(child, np.vstack(kept_points))
+                    < min_separation
+                )
+                if too_near_existing or too_near_sibling:
+                    seen.add(_seen_key(child))
+                    too_close.append(child)
+                    continue
+
+            seen.add(_seen_key(child))
+            kept.append(child)
+            if min_separation is not None:
+                interior = _interior_points(child)
+                if len(interior):
+                    reference_points.append(interior)
+                    kept_points.append(interior)
 
         result.steps.append(
             BlastStep(
@@ -461,6 +512,9 @@ def blast_zone(
     # The table is exact after every blast (BCG-3, WP2): a crossing born early in
     # the blast may only now have its image registered.
     workbench.infer_iterates()
+    result.pip_depth = {
+        fp: len(orbit) - 1 for fp, orbit in _pip_orbits(session, fixed_points).items()
+    }
     if diagnose:
         workbench.report_resolution(fixed_points, new_bridges=added)
     return result
