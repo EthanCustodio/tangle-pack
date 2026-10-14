@@ -134,6 +134,29 @@ def test_propagated_holes_carry_their_orbit_side(p3: Case) -> None:
         assert measured.get((hole.origin, hole.iterate), expected) == expected
 
 
+def test_side_source_names_the_step_that_made_the_hole(
+    p3: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D2: the holes ``punch_holes`` makes read their side off their crossing
+    signs; the ones ``propagate_reference_holes`` maps backward carry it."""
+    (fp,) = p3.fixed_points
+    trellis = p3.session.trellis(fp)
+    made: dict[str, list] = {"signs": [], "carried": []}
+    for name, source in (("punch_holes", "signs"), ("propagate_reference_holes", "carried")):
+        real = getattr(stable_partition, name)
+
+        def recorded(*args: Any, _real=real, _source=source, **kwargs: Any) -> list:
+            holes = _real(*args, **kwargs)
+            made[_source] += holes
+            return holes
+
+        monkeypatch.setattr(stable_partition, name, recorded)
+    trellis.punch_holes(diagnose=False)
+    assert made["signs"] and made["carried"]
+    for source, holes in made.items():
+        assert {diagnostics.side_source(hole) for hole in holes} == {source}
+
+
 def test_punch_holes_flags_a_contradicting_measured_side(
     p3: Case, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -153,6 +176,21 @@ def test_punch_holes_flags_a_contradicting_measured_side(
     caplog.set_level(logging.WARNING, logger=_LOGGER)
     trellis.punch_holes()
     assert_logged(caplog, logging.WARNING, _LOGGER, count=1)
+
+
+def test_measured_sides_stay_off_the_assertion_path(
+    p3: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The measured side calls the inverse map, so only the flag path reads it:
+    ``punch_holes(diagnose=False)`` asserts I1/I2 without it, the default
+    ``diagnose=True`` builds it once (B4a)."""
+    (fp,) = p3.fixed_points
+    trellis = p3.session.trellis(fp)
+    calls = _spy(monkeypatch, diagnostics, "measured_sides")
+    trellis.punch_holes(diagnose=False)
+    assert not calls
+    trellis.punch_holes()
+    assert len(calls) == 1
 
 
 def test_punch_holes_raises_on_equal_signs(
