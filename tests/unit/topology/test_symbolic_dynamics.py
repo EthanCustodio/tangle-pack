@@ -343,33 +343,19 @@ def test_transition_graph_leaves_inert_classes_out(layout):
     assert set(dyn.transition_graph(refined=False).nodes) == {"a"}
 
 
-def test_inert_class_mapping_onto_inert_classes_is_silent(layout, caplog):
-    """An inert class whose word names only inert symbols is inertness holding
-    (on a period-k orbit it maps to the next branch's inert class, PK-8): it
-    stays out of the matrix and nothing is logged."""
-    dyn = layout.dynamics(
-        {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_1^1", "L_3")}
-    )
-    with caplog.at_level(logging.WARNING, logger=SD.__name__):
-        names, matrix = dyn.transition_matrix()
-    # u now occurs with two distinct pairs across the itineraries, so it refines
-    # (u_1, u_2 exist as refined symbols) but stays out of the matrix.
-    assert [child.name for child in dyn.refined[layout.u]] == ["u_1", "u_2"]
-    assert names == ["a_1", "a_2"]
-    assert matrix[0].tolist() == [1, 1]
-    assert_logged(caplog, logging.WARNING, SD.__name__, count=0)
+# --------------------------------------------------------------------------- #
+# Inertness is transience in the word graph (Q3, I-a)
+# --------------------------------------------------------------------------- #
+def test_inert_classes_are_the_ones_reaching_no_cycle(layout):
+    """``a -> b, b -> (empty), c -> c``: a and b reach no cycle, c is one."""
+    a, b, c = (BridgeClass(layout.R[i], layout.R[j]) for i, j in ((0, 1), (1, 2), (0, 2)))
+    assert SD.inert_classes({a: [b], b: [], c: [c]}) == {a, b}
 
 
-def test_inert_class_naming_an_active_class_warns_and_stays_out(layout, caplog):
-    """An inert class whose word names an ACTIVE class contradicts its own
-    inertness: one WARNING, and it still stays out of the matrix."""
-    dyn = layout.dynamics(
-        {layout.a: layout.k10_itinerary, layout.u: layout.refs("R_1^1", "R_3^3")}
-    )
-    with caplog.at_level(logging.WARNING, logger=SD.__name__):
-        names, _matrix = dyn.transition_matrix()
-    assert "u" not in names and not any(name.startswith("u_") for name in names)
-    assert_logged(caplog, logging.WARNING, SD.__name__, count=1)
+def test_an_unresolved_class_is_active_and_so_is_every_class_reaching_it(layout):
+    """``a -> b, b unresolved``: no word is no evidence of transience, so both are active."""
+    a, b = BridgeClass(layout.R[0], layout.R[1]), BridgeClass(layout.R[1], layout.R[2])
+    assert SD.inert_classes({a: [b], b: None}) == set()
 
 
 def test_describe_lists_every_class(layout):
@@ -526,11 +512,10 @@ def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
 
 def test_a_word_naming_a_spanned_class_closes_the_alphabet(layout, monkeypatch, caplog):
     """A word naming a class outside the alphabet that a registered bridge spans adds a
-    copy of its evidence entry: walked in turn, lettered (an active one by
-    ``letter_for``, an inert one in the inert series) and remembering the class that
-    named it. No WARNING."""
+    copy of its evidence entry: walked in turn, judged by its own word (an empty one
+    is inert, in the inert series; one naming the self-mapping ``a`` is active, lettered
+    by ``letter_for``) and remembering the class that named it. No WARNING."""
     alphabet = BridgeClassTable([layout.table[layout.a]])
-    walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
     members = layout.table[layout.u].members
     asked = []
 
@@ -538,10 +523,14 @@ def test_a_word_naming_a_spanned_class_closes_the_alphabet(layout, monkeypatch, 
         asked.append(cls)
         return "q"
 
-    for inert, letter in ((True, "u"), (False, "q")):
+    for image, letter, kind in (
+        (("L_3", "L_3"), "u", "inert"),
+        (("R_1^1", "R_3^3"), "q", "active"),
+    ):
         asked.clear()
+        walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs(*image)}
         evidence = BridgeClassTable(
-            [layout.table[layout.a], BridgeClassEntry(layout.u, members, inert=inert)]
+            [layout.table[layout.a], BridgeClassEntry(layout.u, members)]
         )
         caplog.clear()
         with caplog.at_level(logging.WARNING, logger=SD.__name__):
@@ -550,8 +539,9 @@ def test_a_word_naming_a_spanned_class_closes_the_alphabet(layout, monkeypatch, 
         assert dyn.table.classes == [layout.a, layout.u]
         closed = dyn.classes[layout.u]
         assert closed.named_by == layout.a and dyn.classes[layout.a].named_by is None
-        assert (closed.letter, closed.kind) == (letter, "inert" if inert else "active")
-        assert asked == ([] if inert else [layout.u])
+        assert (closed.letter, closed.kind) == (letter, kind)
+        assert closed.entry.inert is (kind == "inert")
+        assert asked == ([layout.u] if kind == "active" else [])
         assert closed.entry.members == members
         assert closed.itinerary == walks[layout.u]
         assert dyn.word("a", refined=False) == f"a {letter}^-1 a^-1"
@@ -560,12 +550,12 @@ def test_a_word_naming_a_spanned_class_closes_the_alphabet(layout, monkeypatch, 
 
 def test_a_pair_no_bridge_spans_is_a_flagged_class(layout, monkeypatch, caplog):
     """D11: words need no computed bridge. A pair of a walk that no registered bridge
-    spans is a class all the same: added to the table, lettered by ``letter_for``,
-    walked from its elements' landings, member-less and flagged ``spanned`` False
-    ("no computed bridge yet"). Nothing is unresolved, nothing is warned, and the
-    dynamics stays reliable."""
+    spans is a class all the same: added to the table, walked from its elements'
+    landings (here onto the self-mapping ``a``, so it is active), lettered by
+    ``letter_for``, member-less and flagged ``spanned`` False ("no computed bridge
+    yet"). Nothing is unresolved, nothing is warned, and the dynamics stays reliable."""
     alphabet = BridgeClassTable([layout.table[layout.a]])
-    walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
+    walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("R_1^1", "R_3^3")}
     asked = []
 
     def letter_for(cls):

@@ -25,16 +25,16 @@ Dev Notes:
   lettered by THIS layer only; the session's ``BridgeAlphabet`` letters the
   active ones with the same :func:`letter` (topology does not depend on loom).
 * The ALPHABET is the table handed in -- normally ``MinimalTrellis.alphabet``,
-  the classes of the minimal trellis's bridges, lettered by the session (D2) --
+  the classes of the minimal trellis's bridges (D2), lettered here once judged --
   closed under the word map (WP7, C9). Every pair of a walk is the class of one
   piece of ``f(B)``, and a word naming a class outside the alphabet adds it,
-  walked in turn, lettered (the session's ``letter_for`` when active) and
-  recording the class whose word first named it (``named_by``). When some
-  registered bridge spans the pair (the evidence table, ``minimal.classes``)
-  the class is a copy of its evidence entry (members, inertness); when none
+  walked in turn and recording the class whose word first named it
+  (``named_by``). When some registered bridge spans the pair (the evidence
+  table, ``minimal.classes``) the class is a copy of its evidence entry
+  (members); when none
   does it is a class all the same (D11, author 2026-10-08: "we do not need
   computed bridges to find words, we strictly use the dual graph unless it is
-  a singleton"): a member-less entry, active by the no-evidence convention,
+  a singleton"): a member-less entry,
   walked from its elements' landings and flagged "no computed bridge yet"
   (``BridgeClassEntry.spanned`` False), informational only. The closure runs
   until no word names a new pair, which ends because element pairs are
@@ -117,15 +117,21 @@ Dev Notes:
   members'. A tie no rule decides stays ambiguous, feeds the first candidate
   in the walk search's deterministic order into the refinement and the
   graph, and :attr:`SymbolicDynamics.is_reliable` is False.
+* INERT = TRANSIENT (author, Q3 I-a, 2026-10-09). Once the alphabet is
+  closed, a class is inert iff no cycle is reachable from it in the graph of
+  the class-level words: its word is empty or names only inert classes
+  (:func:`inert_classes`). An unresolved class (no word) is active, and so is
+  every class whose word names one. Only then are the classes lettered, in
+  table order: active ones by the session's ``letter_for``, inert ones in the
+  inert series. The minimal trellis decided before the words which hole
+  bridges to map, by the author's sufficient condition (a zeroth-hole bridge
+  is inert, 2026-10-14; ``MinimalTrellis``).
 * Inert classes are NOT nodes of the transition graph or the matrix (author,
   2026-09-23): they contribute nothing to the dynamics, and their symbols
   are still visible in the words. A token naming an inert class is dropped
-  from the edges. An inert class whose word names only inert symbols is
-  inertness holding (on a period-k orbit an inert class maps to the next
-  branch's inert class) and is silent; one whose word names an ACTIVE symbol
-  contradicts the table's inertness and is reported at WARNING when the graph
-  is built (PK-8, WP5). Every token of an active word names a class of the
-  closed table, so every edge target is a node.
+  from the edges; an inert word names only inert classes by definition.
+  Every token of an active word names a class of the closed table, so every
+  edge target is a node.
 * A landing that straddles a cut (``contained`` False) still resolves to its
   midpoint owner, so the walk exists (D3); but under a correct partition a
   homotopy element's image lies in ONE iterated element, so a straddle is a
@@ -136,7 +142,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from itertools import count, groupby
+from itertools import groupby
 from typing import Callable, Iterable, Literal, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
@@ -478,9 +484,39 @@ def inert_letters(table: BridgeClassTable) -> dict[BridgeClass, str]:
     return {entry.bridge_class: letter(i, inert=True) for i, entry in enumerate(table.inert)}
 
 
-def _active_letters(table: BridgeClassTable) -> dict[BridgeClass, str]:
-    """The active classes' letters; an unlettered one takes ``letter(i)`` by its table position."""
-    return {entry.bridge_class: entry.letter or letter(i) for i, entry in enumerate(table.active)}
+def _active_letters(
+    table: BridgeClassTable, letter_for: Optional[Callable[[BridgeClass], str]]
+) -> dict[BridgeClass, str]:
+    """The active classes' letters: an entry's own, else ``letter_for``'s, else
+    ``letter(i)`` by its table position."""
+    return {
+        entry.bridge_class: entry.letter
+        or (letter_for(entry.bridge_class) if letter_for is not None else letter(i))
+        for i, entry in enumerate(table.active)
+    }
+
+
+def inert_classes(words: dict[BridgeClass, Optional[list[BridgeClass]]]) -> set[BridgeClass]:
+    """
+    The transient classes of a word graph (Q3, I-a): no cycle is reachable from them.
+
+    Args:
+        words: ``{class: the classes its word names}``, loops dropped; ``None``
+            for an unresolved class.
+
+    Returns:
+        The fixed point "inert iff the word is empty or names only inert
+        classes". An unresolved class is active, and so is every class whose
+        word reaches one.
+    """
+    inert: set[BridgeClass] = set()
+    while grown := {
+        cls
+        for cls, word in words.items()
+        if cls not in inert and word is not None and all(token in inert for token in word)
+    }:
+        inert |= grown
+    return inert
 
 
 # ── itineraries → words ─────────────────────────────────────────────────────
@@ -906,23 +942,12 @@ class SymbolicDynamics:
         ``{(source, target): (weight, inverse count)}`` over the rules.
 
         Only active symbols are sources; tokens naming an inert class are
-        dropped (inert classes are not in the graph). An inert class whose
-        word names a non-inert symbol contradicts its inertness and is
-        reported at WARNING; one mapping onto inert classes is silent (PK-8).
+        dropped (inert classes are not in the graph).
         """
         nodes = {node.name for node in self.symbol_nodes(refined=refined)}
-        inert_names = {cd.letter for cd in self.classes.values() if cd.kind == "inert"}
         edges: dict[tuple[str, str], tuple[int, int]] = {}
         for name, symbols in self._rules_for(refined).items():
             if name not in nodes:
-                base = name.split("_", 1)[0] if refined else name
-                if base in inert_names and any(symbol.kind != "inert" for symbol in symbols):
-                    logger.warning(
-                        "inert class %s has the word %r, which names a non-inert class; "
-                        "inert classes are not part of the transition graph",
-                        name,
-                        " ".join(symbol.text for symbol in symbols),
-                    )
                 continue
             for symbol in symbols:
                 if symbol.kind == "inert":
@@ -1351,23 +1376,24 @@ def symbolic_dynamics(
     of the itinerary whose class is not in the alphabet yet adds that class
     (the closure under the word map, see the module Dev Notes), flagged "no
     computed bridge yet" when no registered bridge spans it (D11), and it is
-    walked in turn. Once the alphabet is closed every itinerary is translated
-    to a word and checked against the registered member images, and the words
-    of all classes drive the refinement and the rules.
+    walked in turn. Once the alphabet is closed the class-level words decide
+    which classes are inert (:func:`inert_classes`), the classes are lettered,
+    every itinerary is translated to a word and checked against the registered
+    member images, and the words of all classes drive the refinement and the
+    rules.
 
     Args:
         dual_graph: The dual graph of the minimal trellis, built over the
             iterated homotopy partition (its ``partition.homotopy`` is the
             homotopy family; its ``minimal.classes`` is the evidence table: a
             word may only name a class it holds).
-        classes: The ALPHABET: normally ``MinimalTrellis.alphabet`` lettered by
-            the session (D2). Unlettered active classes take ``letter(i)`` by
-            their table position.
+        classes: The ALPHABET: normally ``MinimalTrellis.alphabet`` (D2). Its
+            entries' ``inert`` and, on the active ones, ``letter`` are set here.
         max_walks: The cap on shortest walks enumerated per class.
-        letter_for: Letters an ACTIVE class the closure adds (normally the
-            session's ``BridgeAlphabet.letter_for``, so the letter persists);
-            without it the next unused active letter. An inert closure class
-            continues the inert series.
+        letter_for: Letters an ACTIVE class that carries no letter yet
+            (normally the session's ``BridgeAlphabet.letter_for``, so the
+            letter persists); without it ``letter(i)`` by its position among
+            the active classes. Inert classes take the inert series.
 
     Returns:
         The :class:`SymbolicDynamics`, its ``table`` the closed alphabet (the
@@ -1380,17 +1406,15 @@ def symbolic_dynamics(
     fixed_points = trellis.fixed_points
     evidence_table = dual_graph.minimal.classes
 
-    inert = inert_letters(classes)
-    letters: dict[BridgeClass, str] = {**_active_letters(classes), **inert}
-    assert len(set(letters.values())) == len(letters), "a letter names two classes"
     entries = list(classes)
+    listed = {entry.bridge_class for entry in entries}
     closure: dict[BridgeClass, BridgeClass] = {}  # added class -> the class that named it
 
     def add(named: BridgeClass, named_by: BridgeClass) -> BridgeClassEntry:
-        """A class a word names, lettered: a copy of its evidence entry, or a
-        member-less entry when no computed bridge spans it yet (D11)."""
+        """A class a word names: a copy of its evidence entry, or a member-less
+        entry when no computed bridge spans it yet (D11)."""
         if named in evidence_table:
-            entry = replace(evidence_table[named], letter=None)
+            entry = replace(evidence_table[named], letter=None, inert=None)
         else:
             # The table's tangle rule, its arcs (one step past its namer's, on the
             # same fixed points) standing in for the members.
@@ -1400,21 +1424,12 @@ def symbolic_dynamics(
                 (i for i, fp in enumerate(fixed_points) if {id(fp)} == owners), None
             )
             entry = BridgeClassEntry(named, tangle=tangle)
-        if entry.active and letter_for is not None:
-            letters[named] = entry.letter = letter_for(named)
-        else:
-            used = set(letters.values())
-            letters[named] = next(
-                text for i in count() if (text := letter(i, inert=entry.inert)) not in used
-            )
-            if entry.active:
-                entry.letter = letters[named]
-            else:
-                inert[named] = letters[named]
+        listed.add(named)
         closure[named] = named_by
         return entry
 
     records: dict[BridgeClass, ClassDynamics] = {}
+    words: dict[BridgeClass, Optional[list[BridgeClass]]] = {}
     # D13 / D14: images of disjoint arcs are disjoint, so the decided walk of a class
     # whose arcs lie on other unstable branches is a wall for every later class.
     branches: dict[BridgeClass, frozenset] = {}
@@ -1423,12 +1438,12 @@ def symbolic_dynamics(
         cls = entry.bridge_class
         namer = branches.get(closure.get(cls), frozenset())
         branches[cls] = mine = _arc_branches(trellis, entry, namer)
-        kind: Literal["active", "inert"] = "active" if entry.active else "inert"
         landings = tuple(
             land_element(trellis, homotopy, iterated, ref) for ref in (cls.source, cls.target)
         )
+        # Named by its label until the verdicts and letters are in.
         cd = ClassDynamics(
-            entry, letters[cls], kind, (landings[0], landings[1]), named_by=closure.get(cls)
+            entry, cls.label, "active", (landings[0], landings[1]), named_by=closure.get(cls)
         )
         walls = [wall for theirs, chords in decided if not theirs & mine for wall in chords]
         _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls)
@@ -1447,10 +1462,22 @@ def symbolic_dynamics(
             oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
             for x, y in zip(itinerary[::2], itinerary[1::2])
         ]
-        new = {pair: None for pair, direction in named if direction and pair not in letters}
+        words[cls] = None if cd.itinerary is None else [pair for pair, direction in named if direction]
+        new = {pair: None for pair, direction in named if direction and pair not in listed}
         entries.extend(add(pair, cls) for pair in new)
         records[cls] = cd
+
+    table = BridgeClassTable(entries)
+    inert_set = inert_classes(words)
+    for entry in table:
+        entry.inert = entry.bridge_class in inert_set
+    inert = inert_letters(table)
+    letters = {**_active_letters(table, letter_for), **inert}
     assert len(set(letters.values())) == len(letters), "a letter names two classes"
+    for entry in table.active:
+        entry.letter = letters[entry.bridge_class]
+    for cls, cd in records.items():
+        cd.letter, cd.kind = letters[cls], "inert" if cls in inert_set else "active"
     if closure:
         bare = [letters[named] for named in closure if named not in evidence_table]
         logger.info(
@@ -1462,7 +1489,6 @@ def symbolic_dynamics(
             ", ".join(bare) or "-",
         )
 
-    table = BridgeClassTable(entries)
     for cd in records.values():
         if cd.itinerary is not None:
             cd.symbols, cd.loops = translate_itinerary(

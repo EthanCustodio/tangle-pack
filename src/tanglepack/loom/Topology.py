@@ -141,15 +141,20 @@ class Topology:
         )
 
     @cached_property
-    def classes(self) -> BridgeClassTable:
-        """The ALPHABET (D2): the minimal trellis's classes, active ones lettered
-        by :meth:`identity` from the session alphabet, every one zoned."""
+    def _alphabet(self) -> BridgeClassTable:
+        """The minimal trellis's classes (D2), zoned, before the dynamics' verdicts."""
         table = self.minimal.alphabet
         for entry in table:
-            if entry.active:
-                entry.letter = self.letter_for(entry.bridge_class)
             entry.zone_key = self._zone_key(entry)
         return table
+
+    @property
+    def classes(self) -> BridgeClassTable:
+        """The ALPHABET (D2), every class zoned, with the dynamics' verdicts and the
+        active ones lettered by :meth:`identity` from the session alphabet: inertness
+        is transience in the word graph (Q3), so this runs the dynamics."""
+        self.dynamics
+        return self._alphabet
 
     def _zone_key(self, entry: BridgeClassEntry) -> Optional["FixedPoint"]:
         """The resonance zone every member bridge of a class lies in, or None
@@ -181,8 +186,8 @@ class Topology:
 
     @cached_property
     def dynamics(self) -> SymbolicDynamics:
-        """The words, closed under the word map, the closure lettered like the alphabet."""
-        return symbolic_dynamics(self.dual_graph, self.classes, letter_for=self.letter_for)
+        """The words, closed under the word map; the verdicts and letters follow them."""
+        return symbolic_dynamics(self.dual_graph, self._alphabet, letter_for=self.letter_for)
 
     def identity(self, bridge_class: BridgeClass) -> frozenset:
         """

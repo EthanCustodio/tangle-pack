@@ -28,7 +28,6 @@ from helpers.names import (
     refined_words_in_names,
     word_in_names,
 )
-from tanglepack.loom.BridgeAlphabet import BridgeAlphabet
 from tanglepack.topology.BridgeClass import bridge_classes
 from tanglepack.topology.DualGraph import DualGraph
 from tanglepack.topology.MinimalTrellis import minimal_trellis
@@ -107,22 +106,9 @@ class DirectBuild:
         return minimal_trellis(self.trellis, self.holes, self.evidence())
 
     def classes(self):
-        """The alphabet (the minimal trellis's classes, D2), lettered by element
-        bounds from a FRESH alphabet (letters are a session annotation; every
-        view here is letter-free)."""
-        table = self.minimal().alphabet
-        homotopy = self.homotopy()
-        alphabet = BridgeAlphabet()
-        for entry in table:
-            if entry.active:
-                bounds = (
-                    homotopy.element(ref)
-                    for ref in (entry.bridge_class.source, entry.bridge_class.target)
-                )
-                entry.letter = alphabet.letter_for(
-                    frozenset((e.branch_key, e.side, e.lo_id, e.hi_id) for e in bounds)
-                )
-        return table
+        """The alphabet (the minimal trellis's classes, D2), unlettered: the
+        dynamics decides inertness and letters (every view here is letter-free)."""
+        return self.minimal().alphabet
 
     def iterated(self) -> IteratedHomotopyPartition:
         """The iterated homotopy partition."""
