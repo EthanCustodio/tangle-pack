@@ -705,10 +705,13 @@ def _hole_openings(
     the bridge's row there (:func:`row_of_end`). With alternating signs this is
     the inward pair of a direct hole (outward of the near bound, anchorward of
     the far one); a hole facing a trimmed tail opens its removed outward half,
-    which still takes part in the singleton pinch. At an ANCHOR both stable
-    branches leave the point: the hole faces the outward half of the one on
-    which the bridge's row is its side, and opens nothing there when that
-    branch is not computed.
+    which still takes part in the singleton pinch. At an ANCHOR the same rule
+    reads on ``s(o, b)``, the branch the bridge of ``u(o, b)`` meets there
+    (:meth:`Trellis.stable_key_at`), with one identification: the two stable
+    branches of the point are one smooth curve through it, so the anchorward
+    half of ``s(o, b)`` IS the outward half of ``s(o, 1 - b)``. Nothing opens
+    when that branch was never computed (a point seeded on one
+    eigendirection).
 
     Returns:
         The ``Hole.openings`` records ``(intersection_id, which, row,
@@ -717,21 +720,17 @@ def _hole_openings(
     openings = []
     for endpoint, iid in zip(("first", "second"), bridge.id):
         ix = trellis.intersection(iid)
+        outward = (ix.crossing_sign > 0) == (bridge_side == "left")
         if ix.is_anchor:
-            # The bridge of u(o, b) meets s(o, b) with the anchor's own sign and
-            # s(o, 1 - b), which runs the other way, with the opposite one; the
-            # hole faces the outward half of the branch on which the bridge's
-            # row (left at the first end iff the sign is positive) is its side,
-            # and opens nothing when that branch was never computed (a point
-            # seeded on one eigendirection).
-            fp, _, orbit_index, branch_index = trellis.unstable_key_of(bridge.id)
-            if (ix.crossing_sign > 0) != (bridge_side == "left"):
-                branch_index = 1 - branch_index
-            key = (fp, "stable", orbit_index, branch_index)
+            key = trellis.stable_key_at(iid, trellis.unstable_key_of(bridge.id))
+            if not outward:
+                # s(o, b) and s(o, 1 - b) are one curve through the point: its
+                # anchorward half here is the outward half of s(o, 1 - b).
+                fp, stability, orbit_index, branch_index = key
+                key = (fp, stability, orbit_index, 1 - branch_index)
             if key in trellis.branches:
                 openings.append((iid, "outward", bridge_side, key))
             continue
-        outward = (ix.crossing_sign > 0) == (bridge_side == "left")
         openings.append((
             iid,
             "outward" if outward else "anchorward",
