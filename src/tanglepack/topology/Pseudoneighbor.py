@@ -6,9 +6,10 @@ and extends them to their full trajectories under the map.
 
 Dev Notes — Compute-Pseudoneighbors (Pseudoneighbor_Algorithm.pdf)
 
-Two intersections x, x' are a pseudoneighbor pair iff the open stable interval
-W^S(x, x') and the open unstable interval W^U(x, x') contain no trellis
-intersection nor any iterate M^n (n in Z) of one. For a finite trellis every
+Two intersections x, x' are a pseudoneighbor pair iff NEITHER open interval,
+the stable W^S(x, x') nor the unstable W^U(x, x'), holds a point of X: a
+trellis intersection or any iterate M^n (n in Z) of one. Both are tested,
+by one function (``_interval_is_clear``, B2, author decision Q1 2026-10-09). For a finite trellis every
 pair first appears on the reference window W^S(r_n, r_{n+p}), where r_n is the
 end of the stable manifold and p = the branch return period; the pairs found
 there are the *reference* pseudoneighbors, and the full trajectories are their
@@ -61,35 +62,38 @@ Implementation notes:
   WARNING (PK-6), never left uncut. A trajectory is extended only while its
   images are crossings of the trellis: one leaving T(q0) is a pair of X, not
   of N (its appearance on that branch is a gap, named like the stagger).
-* The algorithm walks *consecutive* intersections on the stable branch, so the
-  open stable interval between a candidate pair is empty by construction; all
-  the work is in the unstable-interval check.
 * Both members of a pair must lie on the SAME unstable branch: two distinct
   unstable curves (different orbit points, or the two inversion half-branches,
   which join only through their one anchor — itself a trellis point) cannot be
   connected by an open unstable arc, so such a pair is rejected outright.
 * Heteroclinic pairs (D7, WP9). Two consecutive crossings of ``W^u(A)`` on B's
   stable branch are a pair of B's tangle when the arc between them is clear.
-  The arc is A's, so it is tested with A's branch cycle, ``k`` and ``beta``,
-  against the crossings whose unstable side is A's (A x A and A x B; B's
-  unstable crossings never land on A's unstable manifold). The pair needs a
+  The unstable arc is A's, so it is tested with A's branch cycle, ``k`` and
+  ``beta``, against the crossings whose unstable side is A's (A x A and A x B;
+  B's unstable crossings never land on A's unstable manifold); the stable arc
+  is B's, tested with B's against the crossings whose stable side is B's
+  (A x B and B x B). The pair needs a
   trellis holding both tangles: a tangle's own trellis holds no heteroclinic
   crossing (``Trellis.from_workbench``), so the session runs this stage on the
   selection's trellis.
-* One map step scales an unstable canonical distance by
-  FixedPoint.per_step_beta("unstable") = |lambda_u|^(1/period); a crossing's
-  unlinked landing is placed by Trellis.image_cdist, the one crossing-level
-  scaling path. Both count MAP STEPS.
+* One map step scales a canonical distance by
+  FixedPoint.per_step_beta(stability): |lambda_u|^(1/period) > 1 on the
+  unstable side, its reciprocal on the stable side (never computed as
+  1/per_step_beta("unstable") here); a crossing's unlinked landing is placed
+  by Trellis.image_cdist, the one crossing-level scaling path. Both count MAP
+  STEPS.
 * The all-iterates membership test is closed-form, not a loop over n: a
-  candidate r on unstable branch at cycle position pos_r lands on the target
-  branch only for step counts n = d + m*k, d = (pos_target - pos_r) mod k,
-  where its unstable cdist becomes r_u * beta^d * (beta^k)^m. Since
-  beta > 1, only finitely many m put that inside the open interval
-  (lo, hi); the m-range comes from log ratios and each candidate m is then
-  tested against the strict inequalities directly.
+  candidate r at cycle position pos_r on the interval's branch cycle lands on
+  the target branch only for step counts n = d + m*k, d = (pos_target - pos_r)
+  mod k, where its cdist becomes c_r * beta^d * (beta^k)^m. One lap scales by
+  beta^k, so only finitely many m put that inside the open interval (lo, hi);
+  the m-range comes from log ratios, taken min/max because the two bounds swap
+  on the stable side (beta < 1: the stable cdist shrinks along forward
+  iterates), and each candidate m is then tested against the strict
+  inequalities directly.
 * Lookup before scaling. A landing M^steps(r) is first resolved through the
   iterate table (Trellis.iterate composes the +/-1 links); a linked landing
-  is a registered crossing, so "is it x0 or x1?" and its unstable cdist are
+  is a registered crossing, so "is it x0 or x1?" and its cdist are
   exact — no tolerance is involved. Only when the table has no chain is the
   landing placed by scaling r's cdists (Trellis.image_cdist; the cdist
   definition, never the map). Why the order matters: registered cdists carry
@@ -99,7 +103,7 @@ Implementation notes:
   M^6(9), linked in the table but 1.8% off on the scaled stable cdist.
   Lookup comes first on the PAIR's side too (BCG-5, WP8): when the table
   knows an image M^-steps of x0 or x1, an unlinked r is compared with those
-  images on r's OWN unstable branch (the image of an arc is an arc, cdist is
+  images on r's OWN branch (the image of an arc is an arc, cdist is
   monotone along one polyline), the other end placed by image_cdist. Only
   when neither image is registered is r scaled back onto the pair. Nested at
   10 outer blasts lost its only outer reference (37, 38) to scaling noise:
@@ -114,16 +118,21 @@ Implementation notes:
   shrink of the interval was tried first and swallowed GENUINE interior
   crossings on deep blast levels, where interval widths are small relative
   to the cdist magnitude.
-* Check set N = trellis.own_intersection_ids (the cut trellis), mirroring
-  StrongPip's same-fixed-point restriction: a candidate whose unstable side
-  belongs to a different fixed point than the PAIR'S ARC can never iterate onto
-  that unstable manifold (its key is absent from the arc's branch cycle, so the
-  position lookup drops it). The 2D endpoint collision of a scaled landing
-  compares stable cdists, so it applies only to a candidate on the pair's own
-  stable manifold (an A x A crossing's orbit stays on W^s(A), never x0's on
-  W^s(B)), in r's own frame as in the scaled fallback. Every detected crossing carries both branch keys (Tangle asserts
-  it). Landings stay RAW table lookups: X holds the iterates of N outside
-  T(q0) too.
+* Check set N = trellis.own_intersection_ids (the cut trellis) for both
+  intervals, mirroring StrongPip's same-fixed-point restriction: a candidate
+  whose side of the interval's stability belongs to a different fixed point
+  than the interval's arc can never iterate onto that manifold (its key is
+  absent from the arc's branch cycle, so the position lookup drops it). The
+  2D endpoint collision compares the OTHER side's cdists too, so it applies
+  only when the candidate's other side is the pair's fixed point (D7, and
+  mirrored: on the unstable arc of a heteroclinic pair an A x A crossing's
+  orbit stays on W^s(A), never x0's on W^s(B); on its stable arc a B x B
+  crossing's orbit stays on W^u(B), never x0's on W^u(A)), in r's own frame as
+  in the scaled fallback. Every detected crossing carries both branch keys
+  (Tangle asserts it). Landings stay RAW table lookups: X holds the iterates
+  of N outside T(q0) too. The candidates are never the whole registry: a
+  registered crossing past the unstable cut is no point of X unless its orbit
+  meets T (the law case ``inversion`` holds two inside its reference (2, 3)).
 """
 
 from __future__ import annotations
