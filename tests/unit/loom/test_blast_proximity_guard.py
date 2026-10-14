@@ -5,12 +5,14 @@ until distinct unstable curves run within machine precision and merge into an
 artifact. ``min_separation`` stops the blast on the well-resolved side of that
 limit by dropping a child whose interior comes too close to curve already in
 the tangle (the bridges present when the blast started and every child kept
-so far).
+so far). A child ending on the chosen pip's orbit is exempt (B3, N-a): the
+guard never decides the depth of ``T(q0)``.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from scipy.spatial import cKDTree
 
 MIN_SEPARATION = 0.02
@@ -52,22 +54,42 @@ def _distance(points: np.ndarray, cloud: list[np.ndarray]) -> float:
     return float(cKDTree(np.vstack(cloud)).query(points)[0].min())
 
 
-def test_min_separation_drops_close_bridges(henon_p3_session):
-    """Kept children keep their distance; dropped ones really were too close.
+def _pip_orbit(session, fp) -> set[int]:
+    """The chosen pip of ``fp`` and its registered forward iterates (empty without one)."""
+    chosen = session.chosen_strong_pip(fp)
+    if chosen is None:
+        return set()
+    trellis = session.trellis(fp)
+    orbit = [trellis.registry.find(chosen)]
+    while (image := trellis.iterate(orbit[-1], 1)) is not None:
+        orbit.append(image)
+    return set(orbit)
 
-    Guards the 2026 "zig-zag" fix: every kept child's interior stays at least
-    ``min_separation`` from the curve accumulated before it, and every child
-    the guard dropped came within ``min_separation`` of it.
+
+@pytest.mark.parametrize("pip_chosen", [True, False], ids=["pip", "no_pip"])
+def test_min_separation_drops_close_bridges(henon_p3_session, pip_chosen):
+    """Kept children keep their distance unless they end on the pip's orbit;
+    dropped ones really were too close.
+
+    Guards the 2026 "zig-zag" fix: every kept child's interior that does not
+    end on the chosen pip's orbit stays at least ``min_separation`` from the
+    curve accumulated before it, and every child the guard dropped came within
+    ``min_separation`` of it. With the pip forgotten nothing is exempt, so the
+    guard demonstrably fires (the fixture's one too-close child ends on the
+    orbit).
     """
     session, _fp3, fp1, zone = henon_p3_session
+    if not pip_chosen:
+        session.forget_strong_pip(fp1)
     reference = [_interior(b) for b in session.workbench.bridges]
 
     guarded = session.blast_zone(
         zone, num_iterations=3, fixed_point=fp1, min_separation=MIN_SEPARATION
     )
+    orbit = _pip_orbit(session, fp1)
 
-    # The guard actually fired and is recorded.
-    assert guarded.too_close > 0
+    if not pip_chosen:
+        assert guarded.too_close > 0
     assert sum(len(s.discarded_too_close) for s in guarded.steps) == guarded.too_close
     assert guarded.completed_iterations == 3
 
@@ -78,7 +100,8 @@ def test_min_separation_drops_close_bridges(henon_p3_session):
         accepted: list[np.ndarray] = []
         for child in step.kept_interior:
             interior = _interior(child)
-            assert _distance(interior, reference + accepted) >= MIN_SEPARATION
+            if not orbit.intersection(child.id or ()):
+                assert _distance(interior, reference + accepted) >= MIN_SEPARATION
             accepted.append(interior)
             checked += 1
         for child in step.discarded_too_close:
