@@ -131,9 +131,10 @@ from __future__ import annotations
 import logging
 import math
 from itertools import count
+from operator import attrgetter
 from typing import Iterable, Optional, TYPE_CHECKING
 
-from ..numerics.Intersection import ManifoldKey
+from ..numerics.Intersection import ManifoldKey, Stability
 from .TopologyResults import PseudoneighborPair
 from .Trellis import same_point
 
@@ -156,8 +157,9 @@ def compute_pseudoneighbors(
 
     Implements Compute-Pseudoneighbors(T): walk the consecutive intersection
     pairs of the SINGLE reference window W^S(r_n, r_{n+p}) toward the anchor
-    and keep each pair whose open unstable interval contains no trellis
-    intersection nor any iterate of one.
+    and keep each pair neither of whose open intervals, the unstable one
+    W^U(x0, x1) and the stable one W^S(x0, x1), holds a point of X: a trellis
+    intersection or any iterate of one.
 
     There is one reference window per fixed point, not one per branch: r_n is
     the chosen strong pip itself (the intersection with the globally greatest
@@ -214,7 +216,10 @@ def compute_pseudoneighbors(
                     branch.key,
                 )
                 break
-            if _unstable_interval_is_clear(trellis, x0, x1, candidates, collision_rtol):
+            if all(
+                _interval_is_clear(trellis, x0, x1, stability, candidates, collision_rtol)
+                for stability in ("unstable", "stable")
+            ):
                 pair = PseudoneighborPair(
                     x0, x1, branch_key=branch.key, is_reference=True, iterate=0
                 )
@@ -326,56 +331,71 @@ def _reference_branch(
     return best_branch, best_id
 
 
-def _unstable_interval_is_clear(
+def _interval_is_clear(
     trellis: "Trellis",
     x0: int,
     x1: int,
+    stability: Stability,
     candidates: Iterable[int],
     collision_rtol: float,
 ) -> bool:
-    """True if no trellis intersection (or iterate of one) lies on W^U(x0, x1).
+    """True if no trellis intersection (or iterate of one) lies on the open
+    ``stability`` interval between x0 and x1.
 
     Iterates over ALL n in Z (the definition's X uses the full orbit): a
     backward iterate counts even when it lands on the removed stable tail —
     e.g. the preimages of blasted crossings puncture the interval they land
     on, per the author. Each landing is resolved by iterate-table LOOKUP
     first (``Trellis.iterate``): a linked landing is a registered crossing,
-    so its identity (is it x0 or x1?) and its unstable cdist are exact. An
-    unlinked landing is read in r's own frame when the table knows an image
-    of x0 or x1 there: r punctures iff its registered cdist lies strictly
-    between the pair's images (one may be placed by ``image_cdist``, and an r
-    that 2D-collides with a placed end is that endpoint's own orbit). Only
-    when neither image is registered is the landing placed by scaling: its
-    unstable cdist by ``beta ** steps``, its stable one by
-    ``Trellis.image_cdist``. There the open interval is strict and the landing is
-    skipped only when it 2D-collides with an endpoint (both the scaled
-    unstable and stable positions match within ``collision_rtol``) — x0/x1's
-    own orbit up to cdist noise, ``Trellis.same_point``.
+    so its identity (is it x0 or x1?) and its cdist are exact. An unlinked
+    landing is read in r's own frame when the table knows an image of x0 or
+    x1 there: r punctures iff its registered cdist lies strictly between the
+    pair's images (one may be placed by ``image_cdist``, and an r that
+    2D-collides with a placed end is that endpoint's own orbit). Only when
+    neither image is registered is the landing placed by scaling (both cdists
+    by ``Trellis.image_cdist``'s factors). There the open interval is strict
+    and the landing is skipped only when it 2D-collides with an endpoint (both
+    the scaled unstable and stable positions match within ``collision_rtol``)
+    — x0/x1's own orbit up to cdist noise, ``Trellis.same_point``.
 
-    The arc is the unstable arc of the pair, so the cycle, ``k`` and ``beta`` are
-    those of ITS fixed point: A's for a heteroclinic pair of ``W^u(A)`` crossings
-    on B's stable branch (D7). Both 2D collisions compare stable cdists, so they
-    skip only an r on the pair's own stable manifold.
+    The arc is the pair's ``stability`` arc, so the cycle, ``k`` and ``beta``
+    are those of ITS fixed point: A's for the unstable arc of a heteroclinic
+    pair of ``W^u(A)`` crossings on B's stable branch, B's for its stable arc
+    (D7). Both 2D collisions compare the OTHER side's cdists too, so they skip
+    only an r whose other side lies on the pair's other-side fixed point.
     """
-    ix0 = trellis.intersection(x0)
-    ix1 = trellis.intersection(x1)
+    ix0, ix1 = trellis.intersection(x0), trellis.intersection(x1)
+    arc_key = attrgetter("manifold_a_key" if stability == "unstable" else "manifold_b_key")
+    other_key = attrgetter("manifold_b_key" if stability == "unstable" else "manifold_a_key")
+    cdist = attrgetter(f"{stability}_cdist")
+    other = "stable" if stability == "unstable" else "unstable"
 
-    u_key = ix0.manifold_a_key
-    if u_key is None or u_key != ix1.manifold_a_key:
+    def point(value: float, other_value: float) -> tuple[float, float]:
+        """``(value, other_value)`` as ``same_point`` reads it: (unstable, stable)."""
+        return (value, other_value) if stability == "unstable" else (other_value, value)
+
+    key = arc_key(ix0)
+    if stability == "stable":
+        assert key == arc_key(ix1), "the walk steps along one stable branch"
+    elif key is None or key != arc_key(ix1):
         return False  # no single unstable arc connects the pair (see Dev Notes)
 
-    owner = u_key[0]
-    pos_map, k = owner.branch_position_map("unstable")
-    beta = owner.per_step_beta("unstable")
-    pos_target = pos_map[u_key]
+    owner = key[0]
+    pos_map, k = owner.branch_position_map(stability)
+    beta = owner.per_step_beta(stability)  # < 1 for the stable arc: image_cdist's factor
+    pos_target = pos_map[key]
 
-    lo, hi = sorted((ix0.unstable_cdist, ix1.unstable_cdist))
+    lo, hi = sorted((cdist(ix0), cdist(ix1)))
     if hi == lo or lo <= 0.0:
         return False  # degenerate interval (near-tangency or anchor endpoint)
-    endpoints = (
-        (ix0.unstable_cdist, ix0.stable_cdist),
-        (ix1.unstable_cdist, ix1.stable_cdist),
-    )
+    endpoints = [(ix.unstable_cdist, ix.stable_cdist) for ix in (ix0, ix1)]
+
+    def log_puncture(r_id: int, steps: int, reading: str, value: float, ends: tuple) -> None:
+        logger.debug(
+            "Pair (%d, %d): %s interval punctured by %d at M^%d, %s reading "
+            "(cdist %.9g in (%.9g, %.9g))",
+            x0, x1, stability, r_id, steps, reading, value, *ends,
+        )
 
     lap = beta**k  # one branch return: k map steps (INV-2)
     log_lap = k * math.log(beta)
@@ -383,22 +403,22 @@ def _unstable_interval_is_clear(
         if r_id == x0 or r_id == x1:
             continue
         r = trellis.intersection(r_id)
-        if r.unstable_cdist <= 0.0:
-            continue  # the anchor: no position along any unstable branch
+        if cdist(r) <= 0.0:
+            continue  # the anchor: no position along any branch
 
-        pos_r = pos_map.get(r.manifold_a_key)
+        pos_r = pos_map.get(arc_key(r))
         if pos_r is None:
-            continue  # foreign unstable manifold: never lands on this branch
-        # A 2D endpoint collision compares stable cdists, so only an r on the
-        # pair's own stable manifold can be an endpoint's orbit (D7).
-        same_stable = r.manifold_b_key[0] is ix0.manifold_b_key[0]
+            continue  # foreign manifold: never lands on this branch
+        # A 2D endpoint collision compares the other side's cdists too, so only
+        # an r whose other side is the pair's fixed point's can be an
+        # endpoint's orbit (D7).
+        same_other = other_key(r)[0] is other_key(ix0)[0]
         d = (pos_target - pos_r) % k
-        c = r.unstable_cdist * beta**d
+        c = cdist(r) * beta**d
         # After d + m*k total steps the cdist is c * lap^m; only finitely many
-        # integers m can put it inside (lo, hi).
-        m_lo = math.floor(math.log(lo / c) / log_lap)
-        m_hi = math.ceil(math.log(hi / c) / log_lap)
-        for m in range(m_lo, m_hi + 1):
+        # integers m can put it inside (lo, hi). The bounds swap when beta < 1.
+        bounds = (math.log(lo / c) / log_lap, math.log(hi / c) / log_lap)
+        for m in range(math.floor(min(bounds)), math.ceil(max(bounds)) + 1):
             value = c * lap**m
             if not (lo < value < hi):
                 continue
@@ -412,60 +432,49 @@ def _unstable_interval_is_clear(
                 if landing == x0 or landing == x1:
                     continue  # the endpoint itself, by the table
                 z = trellis.intersection(landing)
-                if z.manifold_a_key != u_key:
+                if arc_key(z) != key:
                     logger.warning(
-                        "Iterate table maps %d by %d steps to %d on unstable "
+                        "Iterate table maps %d by %d steps to %d on %s "
                         "branch %s, not the pair's branch %s; ignoring it",
-                        r_id, steps, landing, z.manifold_a_key, u_key,
+                        r_id, steps, landing, stability, arc_key(z), key,
                     )
                     continue
-                if lo < z.unstable_cdist < hi:
-                    logger.debug(
-                        "Pair (%d, %d) punctured by %d = M^%d(%d) "
-                        "(registered cdist %.6g in (%.6g, %.6g))",
-                        x0, x1, landing, steps, r_id, z.unstable_cdist, lo, hi,
-                    )
+                if lo < cdist(z) < hi:
+                    log_puncture(r_id, steps, "table", cdist(z), (lo, hi))
                     return False
                 continue
 
             # Lookup first on the pair's side too: the images of x0 and x1 bound
-            # the image of W^U(x0, x1) on r's own polyline, where r's registered
+            # the image of the interval on r's own branch, where r's registered
             # cdist is exact.
             images = [trellis.iterate(x, -steps) for x in (x0, x1)]
             if any(image is not None for image in images):
                 ends = []
                 for x, image in zip((x0, x1), images):
                     if image is not None:
-                        ends.append(trellis.intersection(image).unstable_cdist)
+                        ends.append(cdist(trellis.intersection(image)))
                         continue
-                    _, u_e, _ = trellis.image_cdist(x, -steps, "unstable")
-                    _, s_e, _ = trellis.image_cdist(x, -steps, "stable")
-                    if same_stable and same_point(
-                        r.unstable_cdist, r.stable_cdist, u_e, s_e, collision_rtol
+                    _, c_e, _ = trellis.image_cdist(x, -steps, stability)
+                    _, o_e, _ = trellis.image_cdist(x, -steps, other)
+                    if same_other and same_point(
+                        r.unstable_cdist, r.stable_cdist, *point(c_e, o_e), collision_rtol
                     ):
                         continue  # r is x's own unlinked orbit (2D collision)
-                    ends.append(u_e)
+                    ends.append(c_e)
                 if r_id in images or len(ends) < 2:
                     continue  # an endpoint itself, or its own unlinked orbit
                 lo_r, hi_r = sorted(ends)
-                if lo_r < r.unstable_cdist < hi_r:
-                    logger.debug(
-                        "Pair (%d, %d) punctured by %d in its own frame "
-                        "(cdist %.9g in (%.9g, %.9g))",
-                        x0, x1, r_id, r.unstable_cdist, lo_r, hi_r,
-                    )
+                if lo_r < cdist(r) < hi_r:
+                    log_puncture(r_id, steps, "own frame", cdist(r), (lo_r, hi_r))
                     return False
                 continue
 
-            _, s_value, _ = trellis.image_cdist(r_id, steps, "stable")
-            if same_stable and any(
-                same_point(value, s_value, u_e, s_e, collision_rtol) for u_e, s_e in endpoints
+            _, other_value, _ = trellis.image_cdist(r_id, steps, other)
+            if same_other and any(
+                same_point(*point(value, other_value), u_e, s_e, collision_rtol)
+                for u_e, s_e in endpoints
             ):
-                continue  # the endpoint's own orbit (2D collision on one stable manifold)
-            logger.debug(
-                "Pair (%d, %d) punctured by %d at residue %d, m=%d "
-                "(scaled cdist %.6g in (%.6g, %.6g))",
-                x0, x1, r_id, d, m, value, lo, hi,
-            )
+                continue  # the endpoint's own orbit (2D collision)
+            log_puncture(r_id, steps, "scaled", value, (lo, hi))
             return False
     return True

@@ -5,6 +5,13 @@ The synthetic tests hand-build a registry (explicit canonical distances and
 branch keys) plus the TrellisBranch ordering, so every geometric case is pinned
 exactly. The structural validity of the reference pairs on real tangles is the
 law ``reference_pairs_valid`` of ``tests/invariants/test_law_partition.py``.
+
+The definition tests BOTH open intervals of a pair (B2), and every point of X
+visits the window once a lap, so an extra crossing on the window's stable branch
+lands strictly inside some pair's stable interval unless it is an iterate of a
+window crossing. A crossing that probes the unstable interval alone therefore
+sits on the saddle's OTHER stable branch, ``OTHER_STABLE`` (branch index 1, an
+independent chain without inversion): its stable orbit never visits the window.
 """
 
 from __future__ import annotations
@@ -23,6 +30,9 @@ from tanglepack.topology.Pseudoneighbor import (
     extend_pseudoneighbor_trajectories,
 )
 from tanglepack.topology.TopologyResults import PseudoneighborPair
+
+#: The no-inversion saddle's second stable branch: never on the window's cycle.
+OTHER_STABLE = 1
 
 #: The default slack of the 2D endpoint-collision fallback; the table-linked
 #: tests drift a landing by TWICE this, so the unlinked fallback must reject it.
@@ -81,7 +91,7 @@ def test_direct_intersection_punctures_interval():
     # outside the (2.0, 4.0) interval at every iterate (1.5 * 4^m).
     reg.add_synthetic(
         (0.5, 1.5), unstable_cdist=1.5, stable_cdist=0.5,
-        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, OTHER_STABLE),
     )
 
     pairs = compute_pseudoneighbors(_trellis(reg, fp))
@@ -101,7 +111,7 @@ def test_iterate_punctures_interval():
     r_n, x1, r_end = _reference_window(fp, reg)
     reg.add_synthetic(
         (0.5, 0.4), unstable_cdist=0.4, stable_cdist=0.5,
-        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, OTHER_STABLE),
     )
 
     pairs = compute_pseudoneighbors(_trellis(reg, fp))
@@ -256,8 +266,9 @@ def test_walk_stops_at_reference_window_end():
     fp = _fixed_point(1, 4.0)
     reg = IntersectionRegistry()
     r_n, x1, r_end = _reference_window(fp, reg)
+    # At M(r_end)'s cdists (unlinked): its orbit visits the window at r_end itself.
     below = reg.add_synthetic(
-        (0.5, 16.0), unstable_cdist=16.0, stable_cdist=0.5,
+        (0.25, 16.0), unstable_cdist=16.0, stable_cdist=0.25,
         manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
     )
 
@@ -298,7 +309,7 @@ def test_heteroclinic_candidate_ignored():
     _reference_window(fp, reg)
     reg.add_synthetic(
         (0.5, 1.5), unstable_cdist=1.5, stable_cdist=0.5,
-        manifold_a_key=(other, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+        manifold_a_key=(other, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, OTHER_STABLE),
     )
 
     pairs = compute_pseudoneighbors(_trellis(reg, fp, other))
@@ -597,7 +608,9 @@ def test_table_linked_deep_iterate_does_not_disqualify():
             s = 3.0 / 4.0**n
             if n == 6:
                 u *= 1.001  # scaled landing 2.002: strictly inside (2, 4)
-                s *= 1.0 + 2.0 * COLLISION_RTOL  # scaled stable 3.06 vs x1's 3: outside it
+                # Scaled stable 2.94 vs x1's 3: no collision, and inside the stable
+                # interval of (x1, r_end) only, which the landing punctures anyway.
+                s *= 1.0 - 2.0 * COLLISION_RTOL
             nxt = reg.add_synthetic(
                 (s, u), unstable_cdist=u, stable_cdist=s,
                 manifold_a_key=unstable, manifold_b_key=stable,
@@ -628,21 +641,21 @@ def test_table_linked_landing_uses_registered_cdist():
     sits inside (2, 4) but the linked landing is registered at 4.5, outside, so
     the pair (x1, r_end) survives; unlinked, the same candidate punctures."""
     fp = _fixed_point(1, 4.0)
-    stable = (fp, "stable", 0, 0)
     unstable = (fp, "unstable", 0, 0)
+    other_stable = (fp, "stable", 0, OTHER_STABLE)
 
     def candidate(reg, link: bool):
         z = reg.add_synthetic(
             (0.5, 4.5), unstable_cdist=4.5, stable_cdist=0.5,
-            manifold_a_key=unstable, manifold_b_key=stable,
+            manifold_a_key=unstable, manifold_b_key=other_stable,
         )
         z1 = reg.add_synthetic(
             (0.125, 18.0), unstable_cdist=18.0, stable_cdist=0.125,
-            manifold_a_key=unstable, manifold_b_key=stable,
+            manifold_a_key=unstable, manifold_b_key=other_stable,
         )
         r = reg.add_synthetic(
             (0.03125, 48.0), unstable_cdist=48.0, stable_cdist=0.03125,
-            manifold_a_key=unstable, manifold_b_key=stable,
+            manifold_a_key=unstable, manifold_b_key=other_stable,
         )
         if link:
             reg.register_iterate(z, 1, z1)
@@ -693,7 +706,7 @@ def test_unlinked_landing_is_read_against_the_pairs_images(r_unstable, survives)
             previous = image
     reg.add_synthetic(
         (0.01, r_unstable), unstable_cdist=r_unstable, stable_cdist=0.01,
-        manifold_a_key=unstable, manifold_b_key=stable,
+        manifold_a_key=unstable, manifold_b_key=(fp, "stable", 0, OTHER_STABLE),
     )
 
     pairs = [(p.intersection_a, p.intersection_b) for p in compute_pseudoneighbors(_trellis(reg, fp))]
