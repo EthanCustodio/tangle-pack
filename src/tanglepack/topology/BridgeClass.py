@@ -42,36 +42,23 @@ Dev Notes:
   chain reaches is an ORPHAN: logged once, recorded on
   :attr:`BridgeClassTable.orphans` and left unclassed, never lettered.
 * EVIDENCE vs ALPHABET (D2, 2026-10-07). :func:`bridge_classes` classes every
-  bridge of the trellis: that is the EVIDENCE table (inertness and the minimal
-  trellis read it). The ALPHABET the session letters, the words and the
+  bridge of the trellis: that is the EVIDENCE table (the minimal trellis
+  reads it). The ALPHABET the session letters, the words and the
   transition matrix use is its restriction to the classes with a member the
   minimal trellis keeps (``MinimalTrellis.alphabet``,
   :meth:`BridgeClassTable.restricted_to`); a blast child is image evidence
   only.
-* INERT = MAPS TO NO ACTIVE CLASS (user definition, 2026-09-16). Each non-loop
-  member's forward image is read from the iterate table alone
-  (:func:`_image_chain`: the ``+1`` iterates of its two endpoints and every
-  registered crossing between them on the image's unstable branch, as a chain
-  of consecutive pairs). Each image pair is classed by the same row/element
-  rule as a bridge — it needs only crossing ids, so a pair that NO ``Bridge``
-  object spans (the parent manifold ends before the image crossing, as on the
-  k=2.8 blasted tangle) still has a class or is still a loop. A class is INERT
-  when it has at least one resolvable image and every resolvable image is a
-  loop or lies in an inert class; it is ACTIVE when any resolvable image lies
-  in an active class, its own class included (the anchor bridge always maps
-  over itself). Computed as a fixed point over the table
-  (:func:`_resolve_inertness`); a class with no resolvable image at all stays
-  active for lack of evidence, and loop members contribute no images of their
-  own (a loop's image is a loop) but do count as loop evidence for the class
-  they folded into, so "holds a loop" still implies inert. On k=10 the
-  exterior class {(1,12), (9,11), loop (15,6)} is inert although (1,12) has no
-  registered image; on k=2.8 the class of (1,2) is inert through the virtual
-  loop (5,6) and the class {(2,5), loop (6,7)} through its folded loop, while
-  the anchor class stays active by mapping over itself. Inertness is still
-  evidence-based: grow the trellis (or blast) until the images are registered.
-  A loop produced by a too-coarse partition (an interior bridge whose ends the
-  partition failed to separate) folds by the same rule — the folding is the
-  diagnostic, not an error.
+* INERT = TRANSIENT IN THE WORD GRAPH (author, Q3 I-a, 2026-10-09). A class
+  is inert iff no cycle is reachable from it over the class-level words: its
+  word is empty or names only inert classes, and an unresolved class (no
+  word) is active, as is every class whose word names one. The verdict is the
+  dynamics' (``SymbolicDynamics.inert_classes``), so :attr:`BridgeClassEntry.inert`
+  is ``None`` here until the dynamics sets it. The minimal trellis decides
+  before the words with the author's sufficient condition (2026-10-14): a
+  bridge carrying a ZEROTH hole is inert, since its lobe holds one marker
+  whose image is none, so its word is empty. History: from 2026-09-16 until
+  B5 inertness was a fixed point over the members' REGISTERED images, active
+  for lack of evidence.
 * Partitions are passed in rather than read off the trellis because they do not
   live where the bridges do: a trellis holds a bridge under its UNSTABLE fixed
   point, while the partition owning that bridge's endpoints lives on the trellis
@@ -198,19 +185,8 @@ class BridgeClassEntry:
         bridge_class: The class.
         members: The member bridges, sorted by
             :data:`~tanglepack.numerics.Bridge.BridgeId`.
-        inert: True when the class maps to no active class (see the module Dev
-            Notes); set by :func:`bridge_classes` from the image evidence below.
-        image_classes: The classes the resolvable forward images of the non-loop
-            members land in (this class included when a member maps over
-            itself), in first-seen order without repeats. A class listed here
-            need not have an entry in the table: an image pair no bridge spans
-            still names one.
-        image_loops: The image pairs that are loops — both image ends in one
-            element — as ``(image pair, element)``, folded loop members included.
-            Any such pair is inert evidence.
-        unresolved: The non-loop members whose forward image the iterate table
-            cannot resolve (an endpoint without a registered ``+1`` iterate).
-            They contribute no evidence either way.
+        inert: True when the class is transient in the word graph (see the
+            module Dev Notes); ``None`` until the symbolic dynamics sets it.
         letter: The class's symbol letter (``"a"``, ``"b"``, ...), set by the
             session alphabet for active classes; ``None`` when unlettered.
         zone_key: The key of the resonance zone the class lies in (its fixed
@@ -227,10 +203,7 @@ class BridgeClassEntry:
 
     bridge_class: BridgeClass
     members: list[BridgeMember] = field(default_factory=list)
-    inert: bool = False
-    image_classes: list[BridgeClass] = field(default_factory=list)
-    image_loops: list[tuple["BridgeId", ElementRef]] = field(default_factory=list)
-    unresolved: list["BridgeId"] = field(default_factory=list)
+    inert: Optional[bool] = None
     letter: Optional[str] = None
     zone_key: Optional["FixedPoint"] = None
     min_unstable_cdist: float = float("inf")
@@ -246,11 +219,6 @@ class BridgeClassEntry:
         """False for a class a word names that no computed bridge spans yet (D11):
         lettered and walked like any other, informational only."""
         return bool(self.members)
-
-    @property
-    def has_image_evidence(self) -> bool:
-        """True when at least one member's forward image was resolved."""
-        return bool(self.image_classes or self.image_loops)
 
     @property
     def bridge_ids(self) -> list["BridgeId"]:
@@ -309,14 +277,9 @@ class BridgeClassEntry:
             )
         return f"{self.letter}^-1" if member.direction < 0 else self.letter
 
-    def describe(self, names: Optional[dict[BridgeClass, str]] = None) -> str:
+    def describe(self) -> str:
         """
-        One line: name, elements, activity, zone, members with symbols, and images.
-
-        Args:
-            names: How to print the classes in :attr:`image_classes` — normally
-                the table's ``{class: entry.name}`` so lettered classes show
-                their letter. A class missing from it prints its label.
+        One line: name, elements, activity, zone and members with symbols.
 
         Returns:
             The description line.
@@ -333,25 +296,13 @@ class BridgeClassEntry:
                 parts.append(f"{member.bridge_id} {self.symbol(member.bridge_id)}")
             else:
                 parts.append(f"{member.bridge_id} {'+' if member.direction > 0 else '-'}")
-        state = "inert" if self.inert else "active"
+        state = {None: "undecided", True: "inert", False: "active"}[self.inert]
         head = (
             f"{self.letter}: {self.bridge_class.label}"
             if self.letter is not None
             else self.bridge_class.label
         )
-        line = f"{head} [{state}, {zone}] {len(self.members)} bridge(s): " + ", ".join(parts)
-
-        names = names or {}
-        images = [
-            names.get(image_class, image_class.label) for image_class in self.image_classes
-        ] + [f"{pair} loop in {element}" for pair, element in self.image_loops]
-        if images:
-            line += "; images: " + ", ".join(images)
-        else:
-            line += "; images: none registered"
-        if self.unresolved:
-            line += f" ({len(self.unresolved)} member(s) with no registered image)"
-        return line
+        return f"{head} [{state}, {zone}] {len(self.members)} bridge(s): " + ", ".join(parts)
 
 
 @dataclass
@@ -395,12 +346,12 @@ class BridgeClassTable:
 
     @property
     def active(self) -> list[BridgeClassEntry]:
-        """The entries that map to some active class (or have no image evidence)."""
+        """The entries not known to be inert (every entry before the dynamics runs)."""
         return [entry for entry in self.entries if entry.active]
 
     @property
     def inert(self) -> list[BridgeClassEntry]:
-        """The entries that map to no active class."""
+        """The entries the dynamics found transient."""
         return [entry for entry in self.entries if entry.inert]
 
     @property
@@ -462,8 +413,7 @@ class BridgeClassTable:
             f"{len(self.entries)} bridge class(es): {len(self.active)} active, "
             f"{len(self.inert)} inert"
         )
-        names = {entry.bridge_class: entry.name for entry in self.entries}
-        lines = [head, *(f"  {entry.describe(names)}" for entry in self.entries)]
+        lines = [head, *(f"  {entry.describe()}" for entry in self.entries)]
         if self.orphans:
             lines.append(f"  orphan loop(s), unclassed: {self.orphans}")
         return "\n".join(lines)
@@ -597,10 +547,8 @@ def bridge_classes(
     elements make it a loop, which is folded FORWARD into the class of the first
     non-loop bridge up its image-chain parents; a loop with none is an orphan
     (see the module Dev Notes).
-    Each class is then marked inert or active from its members' forward images
-    (:func:`_image_chain`, :func:`_resolve_inertness`): inert when it maps only
-    to loops and inert classes, active when it maps to an active class (itself
-    included) or when no image is registered at all.
+    Inertness is left ``None``: it is a verdict on the words (the module Dev
+    Notes), which the symbolic dynamics sets.
 
     Args:
         trellis: The trellis whose crossings and bridges to read. Normally the
@@ -614,10 +562,9 @@ def bridge_classes(
         A :class:`BridgeClassTable` ordered by each class's smallest member
         first-crossing unstable canonical distance (``min_unstable_cdist``,
         ties by :func:`class_sort_key`), each entry's members sorted by
-        :data:`~tanglepack.numerics.Bridge.BridgeId` and its ``inert`` flag and
-        image evidence filled in, and the orphan loops listed on
-        :attr:`BridgeClassTable.orphans`. Letters and zone keys are left unset
-        (the session fills them).
+        :data:`~tanglepack.numerics.Bridge.BridgeId`, and the orphan loops
+        listed on :attr:`BridgeClassTable.orphans`. Letters, verdicts and zone
+        keys are left unset (the dynamics and the session fill them).
 
     Raises:
         ValueError: If two of ``partitions`` cover the same ``(branch, side)``;
@@ -709,15 +656,8 @@ def bridge_classes(
         )
         for bridge_class, members in sorted(grouped.items(), key=table_key)
     ]
-    for entry in entries:
-        _collect_image_evidence(chains, entry, ends, fixed_points)
-    _resolve_inertness(entries)
     logger.debug(
-        "classed %d bridges into %d classes (%d inert, %d orphan loops)",
-        len(ids),
-        len(entries),
-        sum(entry.inert for entry in entries),
-        len(orphans),
+        "classed %d bridges into %d classes (%d orphan loops)", len(ids), len(entries), len(orphans)
     )
     return BridgeClassTable(entries, orphans)
 
@@ -778,75 +718,6 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
             on_arc.append(image)
     on_arc.sort(key=lambda iid: trellis.intersection(iid).unstable_cdist)
     return list(zip(on_arc, on_arc[1:]))
-
-
-def _collect_image_evidence(
-    chains: dict["BridgeId", Optional[list["BridgeId"]]],
-    entry: BridgeClassEntry,
-    ends,
-    fixed_points: Sequence["FixedPoint"],
-) -> None:
-    """
-    Fill an entry's ``image_classes``, ``image_loops`` and ``unresolved``.
-
-    Every non-loop member's image chain (``chains``, from :func:`_image_chain`)
-    is classed pair by pair with the same row/element rule as the members themselves; a pair
-    with two different elements adds its class, a pair with one element adds a
-    loop. Loop members add themselves as loop evidence and no images of their
-    own (a loop's image is a loop). An image pair is a pair of trellis crossings
-    on selected branches, all partitioned, so ``ends`` classes it exactly as it
-    does a member (and raises the same ``ValueError`` if it cannot).
-    """
-    seen_classes: set[BridgeClass] = set()
-    seen_loops: set["BridgeId"] = set()
-
-    def add_loop(pair: "BridgeId", element: ElementRef) -> None:
-        if pair not in seen_loops:
-            seen_loops.add(pair)
-            entry.image_loops.append((pair, element))
-
-    for member in entry.members:
-        if member.is_loop:
-            add_loop(member.bridge_id, member.loop_element)
-            continue
-        chain = chains[member.bridge_id]
-        if chain is None:
-            entry.unresolved.append(member.bridge_id)
-            continue
-        for pair in chain:
-            x, y = ends(pair)
-            image_class, direction = oriented_class(x, y, fixed_points)
-            if direction == 0:
-                add_loop(pair, x)
-            elif image_class not in seen_classes:
-                seen_classes.add(image_class)
-                entry.image_classes.append(image_class)
-
-
-def _resolve_inertness(entries: Iterable[BridgeClassEntry]) -> None:
-    """
-    Mark the inert entries: those that map to no active class.
-
-    A fixed-point iteration from "every class active": an entry becomes inert
-    once it has image evidence and every class in its ``image_classes`` is
-    already inert (a loop image is never active; an image class with no entry
-    of its own — a virtual, uncut pair between two elements — is unknown and
-    therefore counts as active). A class among its own images keeps itself
-    active.
-    """
-    entries = list(entries)
-    inert: set[BridgeClass] = set()
-    changed = True
-    while changed:
-        changed = False
-        for entry in entries:
-            if entry.bridge_class in inert or not entry.has_image_evidence:
-                continue
-            if all(image_class in inert for image_class in entry.image_classes):
-                inert.add(entry.bridge_class)
-                changed = True
-    for entry in entries:
-        entry.inert = entry.bridge_class in inert
 
 
 def _non_loop_parent(

@@ -18,7 +18,7 @@ rejects bad input.
 the UNORDERED pair of elements a bridge connects, oriented anchor outward so a
 member runs ``source -> target`` (``+1``) or back (``-1``). A loop (both ends
 in one element) folds FORWARD into the class of the first non-loop bridge up
-its image-chain parents (D2) and makes that class inert; a loop no image chain
+its image-chain parents (D2); a loop no image chain
 reaches is an orphan, logged and left unclassed. The class laws on every law case (every bridge in one
 class, anchor-outward orientation and member directions, the anchor bridge's
 class, table order and tangle grouping, every orbit branch named, letters on
@@ -43,7 +43,6 @@ from helpers.logs import assert_logged
 from helpers.fakes import bare_fixed_point, make_result
 from tanglepack.topology.BridgeClass import (
     BridgeClass,
-    BridgeClassEntry,
     bridge_classes,
     oriented_class,
 )
@@ -200,9 +199,9 @@ def test_loop_folds_into_the_class_whose_image_holds_it(k10_partitioned):
     session, fp = k10_partitioned
     trellis, _partitions, table = _k10_table(session, fp)
 
-    folded = [e for e in table.inert if e.loops]
+    folded = [e for e in table if e.loops]
     if not folded:
-        pytest.skip("this build has no loop folded into an inert class")
+        pytest.skip("this build has no folded loop")
     entry = folded[0]
     loop = entry.loops[0]
     ancestor = entry.member(loop.folded_from)
@@ -226,10 +225,9 @@ def test_orphan_loop_is_logged_and_unclassed(k10_partitioned, monkeypatch, caplo
     trellis = session.trellis()
     partitions = _all_partitions(session, [fp])
     before = bridge_classes(trellis, partitions)
-    folded = [e for e in before.inert if e.loops]
+    folded = [e for e in before if e.loops]
     if not folded:
-        pytest.skip("this build has no loop folded into an inert class")
-    former = folded[0].bridge_class
+        pytest.skip("this build has no folded loop")
     loop_id = folded[0].loops[0].bridge_id
 
     monkeypatch.setattr(trellis, "iterate", lambda intersection_id, n: None)
@@ -241,8 +239,6 @@ def test_orphan_loop_is_logged_and_unclassed(k10_partitioned, monkeypatch, caplo
         table.entry_of(loop_id)
     assert not any(entry.bridge_class.is_loop for entry in table)
     assert_logged(caplog, logging.WARNING, "tanglepack.topology.BridgeClass")
-    # The class the loop used to fold into is now active: no loop evidence.
-    assert table[former].active
 
 
 def test_restricted_to_keeps_the_entries_with_a_member_in_table_order(k10_partitioned):
@@ -285,7 +281,7 @@ def test_classes_are_keyed_by_element_pairs(k10_partitioned):
 def test_table_lookups_symbols_and_report(k10_partitioned):
     session, fp = k10_partitioned
     _trellis, _partitions, table = _k10_table(session, fp)
-    active, inert = table.active[0], table.inert[0]
+    active = table.active[0]
 
     assert table.as_dict() == {e.bridge_class: e.bridge_ids for e in table}
     assert active.bridge_class in table and table[active.bridge_class] is active
@@ -339,66 +335,6 @@ def test_duplicate_partitions_are_rejected(k10_partitioned):
     partitions = _all_partitions(session, [fp])
     with pytest.raises(ValueError):
         bridge_classes(trellis, partitions + partitions[:1])
-
-
-# --------------------------------------------------------------------------- #
-# A.4 -- inertness: a class is inert iff it maps to no active class
-# --------------------------------------------------------------------------- #
-from tanglepack.topology.BridgeClass import _resolve_inertness  # noqa: E402
-
-
-_INERT_FP = bare_fixed_point(3)  # one fixed point, so refs compare by identity
-
-
-def _ref(element_id: int, side: str = "left") -> ElementRef:
-    return ElementRef((_INERT_FP, "stable", 0, 0), side, element_id)
-
-
-def _class(a: int, b: int) -> BridgeClass:
-    return BridgeClass(_ref(a), _ref(b))
-
-
-def _entry(bridge_class, *, classes=(), loops=(), unresolved=()) -> BridgeClassEntry:
-    return BridgeClassEntry(
-        bridge_class,
-        image_classes=list(classes),
-        image_loops=[((0, 0), element) for element in loops],
-        unresolved=list(unresolved),
-    )
-
-
-def test_resolve_inertness_fixed_point():
-    """The rule on a hand-built table: a class whose only image is a loop is
-    inert; one whose images are all inert is inert (propagated); a class that
-    maps to itself stays active; mutual images stay active; a class with no
-    resolvable image stays active for lack of evidence; and a class mapping to
-    a virtual class with no entry (unknown activity) stays active."""
-    loop_only = _class(0, 1)
-    onto_inert = _class(1, 2)
-    self_map = _class(2, 3)
-    mutual_a, mutual_b = _class(3, 4), _class(4, 5)
-    no_evidence = _class(5, 6)
-    onto_unknown = _class(6, 7)
-    unknown = _class(7, 8)  # no entry of its own
-
-    entries = [
-        _entry(loop_only, loops=[_ref(0)]),
-        _entry(onto_inert, classes=[loop_only]),
-        _entry(self_map, classes=[self_map, loop_only]),
-        _entry(mutual_a, classes=[mutual_b]),
-        _entry(mutual_b, classes=[mutual_a]),
-        _entry(no_evidence, unresolved=[(1, 2)]),
-        _entry(onto_unknown, classes=[unknown]),
-    ]
-    _resolve_inertness(entries)
-
-    by_class = {entry.bridge_class: entry for entry in entries}
-    assert by_class[loop_only].inert
-    assert by_class[onto_inert].inert
-    assert by_class[self_map].active
-    assert by_class[mutual_a].active and by_class[mutual_b].active
-    assert by_class[no_evidence].active and not by_class[no_evidence].has_image_evidence
-    assert by_class[onto_unknown].active
 
 
 # --------------------------------------------------------------------------- #
@@ -524,7 +460,7 @@ def _fold_born_trellis():
 
 def test_a_fold_born_loop_folds_forward():
     """BCG-2's kernel: a loop whose crossing has no ``-1`` link folds into the class of
-    the bridge whose image chain holds it, and is that class's loop evidence."""
+    the bridge whose image chain holds it."""
     trellis, partitions, bridges = _fold_born_trellis()
     table = bridge_classes(trellis, partitions)
 
@@ -533,7 +469,6 @@ def test_a_fold_born_loop_folds_forward():
     parent = table.entry_of((1, 2))
     loop = parent.member((4, 5))
     assert loop.is_loop and loop.folded_from == (1, 2)
-    assert ((4, 5), loop.loop_element) in parent.image_loops
     assert sorted(table.bridge_ids) == sorted(bridges)
 
 
