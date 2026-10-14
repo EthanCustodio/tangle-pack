@@ -750,3 +750,71 @@ def test_a_backward_pair_is_never_punched(stable_line):
 
     with pytest.raises(AssertionError):
         punch_holes(trellis, [pair])
+
+
+# --------------------------------------------------------------------------- #
+# A scaled span end next to a crossing is flagged (NUM-5)
+# --------------------------------------------------------------------------- #
+class _IdBridge(_NodeBridge):
+    """A node bridge on one unstable branch, with its BridgeId."""
+
+    def __init__(self, first: int, second: int, nodes, manifold_key) -> None:
+        super().__init__(first, second, nodes)
+        self.manifold_key = manifold_key
+        self.id = (first, second)
+
+
+@pytest.mark.parametrize("from_table", [False, True], ids=["scaled", "table"])
+def test_scaled_span_end_beside_a_crossing_warns(from_table, caplog):
+    """A backward image's span end that came from the scaling law is good to
+    ``SCALING_RTOL`` only, so one that close to a crossing of its branch may
+    have picked the neighbour container: a WARNING. The same end read off the
+    iterate table is exact (it is then the container's own end): no WARNING."""
+    from tanglepack.topology.StablePartition import propagate_reference_holes
+    from tanglepack.topology.Trellis import SCALING_RTOL
+
+    fp = _fixed_point(1, 4.0)
+    reg = IntersectionRegistry()
+    stable, unstable = (fp, "stable", 0, 0), (fp, "unstable", 0, 0)
+    cdists = (1.0, 2.0, 4.0, 8.0)
+    ids = [
+        reg.add_synthetic(
+            (u, 0.0), unstable_cdist=u, stable_cdist=u,
+            manifold_a_key=unstable, manifold_b_key=stable,
+        )
+        for u in cdists
+    ]
+    for i, iid in enumerate(ids):
+        reg[iid].crossing_sign = 1 if i % 2 == 0 else -1
+    branches = {
+        unstable: TrellisBranch(
+            key=unstable, fixed_point=fp, stability="unstable",
+            orbit_index=0, branch_index=0, intersection_ids=list(ids),
+        )
+    }
+    bridges = [
+        _IdBridge(lo, hi, [_Node((u, 1.0), u), _Node((v, 1.0), v)], unstable)
+        for (lo, u), (hi, v) in zip(zip(ids, cdists), zip(ids[1:], cdists[1:]))
+    ]
+    trellis = Trellis(fixed_points=[fp], registry=reg, branches=branches, bridges=bridges)
+    reference = PseudoneighborPair(
+        ids[2], ids[3], branch_key=stable, is_reference=True, iterate=0, origin=(ids[2], ids[3])
+    )
+    reference.hole = Hole(
+        coords=(6.0, 0.5), near_intersection_id=ids[2], pair=reference,
+        bridge_side="left", bounding_ids=(ids[2], ids[3]), iterate=0, origin=reference.origin,
+    )
+    # One step back the reference bridge lands inside (ids[0], ids[1]), its far end
+    # half a SCALING_RTOL short of ids[1]; the next step leaves the branch.
+    landing = {ids[2]: (1.2, True), ids[3]: (2.0 * (1.0 - 0.5 * SCALING_RTOL), from_table)}
+    trellis.image_cdist = lambda iid, n, stability, branch=None: (
+        (unstable, *landing[iid]) if n == -1 else (unstable, 0.1, True)
+    )
+    caplog.set_level(logging.WARNING, logger="tanglepack.topology.StablePartition")
+
+    holes = propagate_reference_holes(trellis, [reference])
+
+    assert [hole.bounding_ids for hole in holes] == [(ids[0], ids[1])]
+    assert_logged(
+        caplog, "WARNING", "tanglepack.topology.StablePartition", count=0 if from_table else 1
+    )

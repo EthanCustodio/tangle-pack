@@ -79,6 +79,10 @@ fixed in conversation with the author (July 2026):
   first, else ``advance_key`` and beta-scaling; nothing else scales a cdist
   here), on the branch ``advance_key`` names, and the container is a bisect
   over that branch's crossing order (:func:`_containing_bridge`; PERF-4).
+  A SCALED span end (no table entry) is good to ``SCALING_RTOL`` only, so one
+  that close to a crossing of the branch is one WARNING per branch: the
+  container could be its neighbour (NUM-5). A table end is exact; it is then
+  the container's own end crossing, and is not watched (B4b, 2026-10-13).
   The hole sits on the WHOLE containing bridge, by design (INT-2, checked
   2026-10-08 on every law case, the deep p3 runs and four deep E11 states:
   600+ lookups, every span a STRICT sub-arc of its container and at most one
@@ -222,6 +226,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .Pseudoneighbor import _branch_text
+from .Trellis import SCALING_RTOL
 from .TopologyResults import (
     Endpoint,
     endpoint_index,
@@ -435,6 +440,7 @@ def propagate_reference_holes(
 
     new_holes: list[Hole] = []
     orders: dict = {}
+    warned: set = set()
     for ref in references:
         if ref.hole is None:
             continue
@@ -453,18 +459,35 @@ def propagate_reference_holes(
         visited = {bridge.id}
 
         for step in count(1):
-            span = tuple(sorted(
-                trellis.image_cdist(end_id, -step, "unstable", branch=start_key)[1]
-                for end_id in start_ids
-            ))
+            # The span's interior is never a crossing of N (it lies past the pip cut); one end
+            # may be a registered crossing, which is then the container's own end.
+            ends = [trellis.image_cdist(end_id, -step, "unstable", branch=start_key) for end_id in start_ids]
+            span = tuple(sorted(c for _, c, _ in ends))
             carried = _map_backward(trellis, carried)
 
-            containing = _containing_bridge(trellis, span, advance(start_key, -step), orders)
+            branch_key = advance(start_key, -step)
+            containing = _containing_bridge(trellis, span, branch_key, orders)
             if containing is None:
                 logger.debug(
                     "Backward image of %s left the computed bridges", ref.as_tuple()
                 )
                 break
+            if branch_key not in warned:
+                # A scaled end is good to SCALING_RTOL only: that close to a crossing
+                # the bisect may have picked the neighbour bridge (NUM-5).
+                ids, cdists = orders[branch_key]
+                near = next((
+                    (c, iid) for _, c, from_table in ends if not from_table
+                    for iid, x in zip(ids, cdists) if abs(c - x) <= SCALING_RTOL * abs(x)
+                ), None)
+                if near is not None:
+                    warned.add(branch_key)
+                    logger.warning(
+                        "Backward image %+d of reference %s on %s: its scaled end %.9g lies "
+                        "within SCALING_RTOL of crossing %d, so its container %s could be the "
+                        "neighbour bridge (NUM-5); grow or blast to register the image",
+                        -step, ref.as_tuple(), _branch_text(branch_key), *near, containing.id,
+                    )
             if containing.id in visited:
                 break  # the backward orbit has become periodic — terminate
             visited.add(containing.id)
@@ -1014,7 +1037,7 @@ def _hole_marks_on_branch(
     for hole in trellis.holes:
         if not hole.openings:
             logger.debug(
-                "Hole at %s has no openings; it does not partition", hole.coords
+                "Hole on %s has no openings; it does not partition", hole.bounding_ids
             )
             continue
         for iid, which, row, opened in hole.openings:
