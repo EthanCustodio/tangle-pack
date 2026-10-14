@@ -1090,6 +1090,9 @@ class SeriesStep:
             being the pair of its elements' ``(branch_key, side, lo_id, hi_id)``
             read off ``session.homotopy_partition()`` here, never through the
             library's own identity.
+        pip_depth: ``m``, the depth of ``T(q0)``: the deepest registered forward
+            iterate of the blasted fixed point's chosen pip, composed here
+            through ``trellis.iterate`` (never the library's own count).
         history_free: Whether ``session.trellis()`` read BEFORE the recompute
             shows the crossings and bridges of the recomputed topology's
             trellis (D1: the snapshot never depends on what ran first).
@@ -1112,6 +1115,7 @@ class SeriesStep:
     references: frozenset
     unwitnessed: frozenset
     letters: frozenset
+    pip_depth: int
     history_free: bool
     crossings: tuple[frozenset, frozenset]
     recomputed: tuple[frozenset, frozenset]
@@ -1199,12 +1203,23 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
                     for entry in table
                     if entry.letter is not None
                 ),
+                pip_depth=_pip_depth(session, fp),
                 history_free=shown == trellis_view(session.topology().trellis),
                 crossings=_crossings_and_bridges(session.workbench),
                 recomputed=_recomputed(session.workbench),
             )
         )
     return tuple(steps)
+
+
+def _pip_depth(session: TangleSession, fp: "FixedPoint") -> int:
+    """The largest ``m`` with ``f^m(q0)`` registered, ``q0`` the chosen pip of ``fp``."""
+    trellis = session.trellis(fp)
+    pip = trellis.registry.find(session.chosen_strong_pip(fp))
+    m = 0
+    while trellis.iterate(pip, m + 1) is not None:
+        m += 1
+    return m
 
 
 def _crossings_and_bridges(workbench) -> tuple[frozenset, frozenset]:

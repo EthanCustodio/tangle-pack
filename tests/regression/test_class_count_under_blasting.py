@@ -36,7 +36,11 @@ pinned count:
   is one definition on every path (B1, Q13 (a); the blast path's vote on
   near-coincident detections made k=2.8 drift from blast 6);
 * no bridge ends at a detection outside N, as the blast left it or after the
-  recompute: an unresolved detection lies inside a bridge (B1).
+  recompute: an unresolved detection lies inside a bridge (B1);
+* the depth ``m`` of ``T(q0)`` never decreases (B3, Q2): a blast only adds
+  links to the pip's orbit. It need not deepen either: it stalls where
+  ``f^{m+1}(q0)`` is detected unresolved or not detected at all, which the
+  measured series record but no law pins.
 
 The per-kind counts are printed in every failure message as diagnostics.
 
@@ -169,3 +173,10 @@ def test_every_bridge_ends_at_crossings_of_n(name: str) -> None:
         if not set(bridge_id) <= crossings
     ]
     assert not stray, f"(blasts, cut by, bridge) ending outside N: {stray}"
+
+
+@pytest.mark.parametrize("name", _params("series_pip_orbit_never_shallower"))
+def test_pip_orbit_never_shallower(name: str) -> None:
+    """B3: one more blast never shortens the registered orbit of the chosen pip."""
+    depths = [s.pip_depth for s in _series(name)]
+    assert depths == sorted(depths), depths
