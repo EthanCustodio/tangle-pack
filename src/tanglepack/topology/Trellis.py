@@ -1192,7 +1192,6 @@ class Trellis:
         self,
         pairs: Optional[Iterable[PseudoneighborPair]] = None,
         *,
-        epsilon: float = 0.05,
         propagate: bool = True,
         diagnose: bool = True,
         verbose: bool = False,
@@ -1210,7 +1209,6 @@ class Trellis:
 
         Args:
             pairs: Pairs to punch holes for; defaults to every recorded pair.
-            epsilon: Inward nudge of the hole off the manifold it hugs.
             propagate: Also punch the backward-propagated holes.
             diagnose: Cross-check the sign rule against the polylines and log
                 one WARNING per kind of disagreement (a hole bridge whose
@@ -1253,7 +1251,7 @@ class Trellis:
         # already-punched orbits and regions from pair.hole).
         for pair in self.pseudoneighbors:
             pair.hole = None
-        holes = _punch(self, pairs, epsilon=epsilon)
+        holes = _punch(self, pairs)
         if propagate:
             holes += _propagate(self)
         self.holes.extend(holes)

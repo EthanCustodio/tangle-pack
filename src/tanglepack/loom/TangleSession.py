@@ -1318,7 +1318,7 @@ class TangleSession:
                 list), an iterable of them, or None for every fixed point (→
                 returns a ``{fixed_point: holes}`` dict).
             **kwargs: Forwarded to :meth:`Trellis.punch_holes` (``pairs``,
-                ``epsilon``, ``propagate``, ``diagnose``, ``verbose``).
+                ``propagate``, ``diagnose``, ``verbose``).
 
         Returns:
             A hole list for a single fixed point, or a dict mapping each fixed

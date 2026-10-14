@@ -68,7 +68,7 @@ def test_a_hole_with_no_spanning_bridge_contributes_nothing(k10_partitioned, cap
     session, _fp = k10_partitioned
     from tanglepack.topology.TopologyResults import Hole
 
-    ghost = Hole(coords=(0.0, 0.0), near_intersection_id=0, bounding_ids=(10**6, 10**6 + 1))
+    ghost = Hole(near_intersection_id=0, bounding_ids=(10**6, 10**6 + 1))
     with caplog.at_level(logging.WARNING, logger="tanglepack.topology.MinimalTrellis"):
         minimal = minimal_trellis(
             session.trellis(), _holes(session) + [ghost], session.bridge_classes()

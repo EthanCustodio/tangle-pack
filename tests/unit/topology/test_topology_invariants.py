@@ -66,7 +66,6 @@ def _hole(origin, iterate, side, *, direct=False) -> Hole:
     a direct hole has its pair (its side came from its signs), a propagated one
     has none (its side was carried)."""
     return Hole(
-        coords=(0.0, 0.0),
         near_intersection_id=0,
         pair=PseudoneighborPair(0, 1, iterate=iterate, origin=origin) if direct else None,
         bridge_side=side,

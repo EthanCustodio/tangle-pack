@@ -104,14 +104,14 @@ def endpoint_index(endpoint: Endpoint) -> int:
 @dataclass
 class Hole:
     """
-    A puncture placed in the region bounded by a pseudoneighbor pair.
+    A puncture in the region bounded by a pseudoneighbor pair and its bridge.
 
     Per the Pseudoneighbor Algorithm, for each pseudoneighbor pair a hole is
-    punched in the bounded region, placed infinitesimally close to one of the
-    two pseudoneighbors.
+    punched in the bounded region. A hole is combinatorial: its bridge, its
+    side of it and the stable halves it opens. Where to draw it is
+    :func:`topology.plotting.hole_point`.
 
     Attributes:
-        coords: Phase-space (x, y) where the hole is placed.
         near_intersection_id: Registry ID of the pseudoneighbor the hole hugs.
         pair: The pseudoneighbor pair this hole belongs to (back-reference).
         bridge_side: Which side of the hole's own bridge the hole sits on,
@@ -149,7 +149,6 @@ class Hole:
             marker). None when unknown.
     """
 
-    coords: tuple[float, float]
     near_intersection_id: int
     pair: Optional["PseudoneighborPair"] = None
     bridge_side: Optional[Side] = None

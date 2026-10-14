@@ -81,7 +81,7 @@ def _hole(
     """
     branch = trellis.intersection(near).manifold_b_key
     return Hole(
-        coords=(0.0, 0.0), near_intersection_id=near,
+        near_intersection_id=near,
         bridge_side=bridge_side, bounding_ids=(near, far),
         openings=[(near, near_which, row, branch), (far, far_which, row, branch)],
     )
@@ -391,7 +391,7 @@ def test_describe_reports(henon_with_holes):
 def _end_hole(trellis, iid: int, which: str, row: str) -> Hole:
     """A hole recording a single opening, at one end of the branch."""
     return Hole(
-        coords=(0.0, 0.0), near_intersection_id=iid,
+        near_intersection_id=iid,
         bridge_side="left", bounding_ids=(iid, iid),
         openings=[(iid, which, row, trellis.intersection(iid).manifold_b_key)],
     )
@@ -802,7 +802,7 @@ def test_scaled_span_end_beside_a_crossing_warns(from_table, caplog):
         ids[2], ids[3], branch_key=stable, is_reference=True, iterate=0, origin=(ids[2], ids[3])
     )
     reference.hole = Hole(
-        coords=(6.0, 0.5), near_intersection_id=ids[2], pair=reference,
+        near_intersection_id=ids[2], pair=reference,
         bridge_side="left", bounding_ids=(ids[2], ids[3]), iterate=0, origin=reference.origin,
     )
     # One step back the reference bridge lands inside (ids[0], ids[1]), its far end
