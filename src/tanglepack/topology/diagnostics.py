@@ -29,14 +29,14 @@ from __future__ import annotations
 import logging
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
-from typing import Iterable, Optional, TYPE_CHECKING
+from typing import Iterable, Literal, Optional, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
 
 from ..numerics.geometry import oriented_bridge_polyline
-from .StablePartition import row_of_end, rows_of_bridge
-from .TopologyResults import Hole, Side, SideSource, side_after
+from .StablePartition import bridge_for_pair, row_of_end, rows_of_bridge
+from .TopologyResults import Hole, Side, side_after
 
 if TYPE_CHECKING:
     from .Trellis import Trellis
@@ -45,6 +45,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+#: Where a hole's ``bridge_side`` came from (:func:`side_source`).
+SideSource = Literal["signs", "carried"]
 
 
 def _side_of(tangent: NDArray[np.float64], displacement: NDArray[np.float64]) -> Optional[Side]:
@@ -418,6 +421,67 @@ def bridge_row_violation(
     )
 
 
+def side_source(hole: Hole) -> SideSource:
+    """A direct hole reads its side off its crossing signs; a propagated one carries it."""
+    return "signs" if hole.pair is not None else "carried"
+
+
+def measured_sides(
+    trellis: "Trellis", holes: Iterable[Hole]
+) -> dict[tuple[tuple[int, int], int], Side]:
+    """
+    Each propagated hole's side MEASURED on the curves: the flag on its carried side.
+
+    Replays the backward chain of ``propagate_reference_holes`` on the curves:
+    the orbit's reference hole is carried back by the real inverse map, one
+    step at a time, and read at the nearest segment of the hole bridge's
+    image sub-arc (the reference bridge's crossings moved by
+    :meth:`Trellis.image_cdist`). The carried point escapes the lobe when the
+    reference lobe is under-resolved (NUM-2), so a side other than
+    ``bridge_side`` is a flag (D6), never an error.
+
+    Args:
+        trellis: The Trellis the holes were punched on.
+        holes: The holes to measure, typically ``trellis.holes``.
+
+    Returns:
+        ``{(origin, iterate): side}`` for every propagated hole whose orbit has
+        a reference hole among ``holes``; ``(origin, iterate)`` is unique per
+        propagation. Empty without an inverse map; a hole whose carried point
+        sits on the arc has no entry.
+
+    Note:
+        It calls the map, so it runs on the flag path only
+        (``Trellis.punch_holes(diagnose=True)``), never on an assertion. The
+        placement of propagated holes still carries the same point
+        (``StablePartition._map_backward``, until B4b).
+    """
+    if trellis.dynamical_system is None:
+        return {}
+    holes = list(holes)
+    references = {h.origin: h for h in holes if h.pair is not None and h.pair.is_reference}
+    sides = {}
+    for hole in holes:
+        reference = references.get(hole.origin)
+        if hole.pair is not None or reference is None:
+            continue
+        steps = -hole.iterate
+        carried = np.asarray(reference.coords, dtype=np.float64)
+        for _ in range(steps):
+            carried = np.asarray(
+                trellis.dynamical_system.map_inv(carried), dtype=np.float64
+            ).ravel()
+        bridge = bridge_for_pair(trellis, reference.pair)
+        span = tuple(sorted(
+            trellis.image_cdist(end_id, -steps, "unstable", branch=bridge.manifold_key)[1]
+            for end_id in bridge.id
+        ))
+        side = _bridge_side_of(trellis, trellis.bridge_between(*hole.bounding_ids), carried, span)
+        if side is not None:
+            sides[(hole.origin, hole.iterate)] = side
+    return sides
+
+
 def _orbit_side(hole: Hole, orientation_preserving: bool) -> Optional[Side]:
     """A hole's bridge side carried back to iterate 0 of its orbit (None without
     a side, or without an iterate to carry it by under a reversing map)."""
@@ -435,9 +499,10 @@ class SideDiagnosis:
         bounding_ids: The hole's bridge (its two defining crossings).
         origin: The hole's orbit (``Hole.origin``).
         iterate: The hole's place on it (``Hole.iterate``).
-        side_source: Where its ``bridge_side`` came from (``Hole.side_source``).
+        side_source: Where its ``bridge_side`` came from (:func:`side_source`).
         bridge_side: The stored side.
-        measured_side: The side measured on the curves (``Hole.measured_side``).
+        measured_side: The side measured on the curves (:func:`measured_sides`;
+            None when not measured).
         expected_side: The orbit's side at this iterate, from the first hole of
             the origin (parity-flipped under an orientation-reversing map);
             None when the orbit check does not apply.
@@ -480,7 +545,10 @@ class SideDiagnosis:
 
 
 def side_diagnoses(
-    holes: Iterable[Hole], *, orientation_preserving: bool = True
+    holes: Iterable[Hole],
+    *,
+    orientation_preserving: bool = True,
+    measured: Optional[dict[tuple[tuple[int, int], int], Side]] = None,
 ) -> list[SideDiagnosis]:
     """
     Diagnose every hole that disagrees with its orbit or with its measured side.
@@ -496,18 +564,21 @@ def side_diagnoses(
     orbit (its references, each read off its own crossing signs) and the
     carrying itself.
 
-    The MEASURED reading is the geometric cross-check: a hole whose
-    ``measured_side`` (the reference hole carried back by the real inverse
-    map, read on the image sub-arc) contradicts its stored side is
+    The MEASURED reading is the geometric cross-check: a hole whose measured
+    side (:func:`measured_sides`: the reference hole carried back by the real
+    inverse map, read on the image sub-arc) contradicts its stored side is
     under-resolved. It is a flag (:func:`geometry_flags`), never an error (D6).
 
     Holes with no ``origin`` or no comparable side skip the orbit check, and
-    holes with no ``measured_side`` skip the measured one; both counts are
-    logged at INFO.
+    propagated holes with no entry in ``measured`` skip the measured one; both
+    counts are logged at INFO (the second only when ``measured`` is given).
 
     Args:
         holes: The holes to check, typically ``trellis.holes``.
         orientation_preserving: True when the map has det J > 0.
+        measured: The measured sides by ``(origin, iterate)``
+            (:func:`measured_sides`); None for the orbit check alone, which
+            never calls the map.
 
     Returns:
         One :class:`SideDiagnosis` per disagreeing hole, in input order.
@@ -521,8 +592,10 @@ def side_diagnoses(
             unplaced += 1
         else:
             orbit_side.setdefault(hole.origin, (side, hole.iterate))
-    unmeasured = sum(
-        1 for hole in holes if hole.side_source == "carried" and hole.measured_side is None
+    unmeasured = 0 if measured is None else sum(
+        1
+        for hole in holes
+        if side_source(hole) == "carried" and (hole.origin, hole.iterate) not in measured
     )
     if unplaced or unmeasured:
         logger.info(
@@ -540,9 +613,9 @@ def side_diagnoses(
             bounding_ids=hole.bounding_ids,
             origin=hole.origin,
             iterate=hole.iterate,
-            side_source=hole.side_source,
+            side_source=side_source(hole),
             bridge_side=hole.bridge_side,
-            measured_side=hole.measured_side,
+            measured_side=None if measured is None else measured.get((hole.origin, hole.iterate)),
             expected_side=expected,
             reference_iterate=reference_iterate,
         )
@@ -591,7 +664,8 @@ def geometry_flags(
     Args:
         trellis: The Trellis carrying the bridges and manifolds.
         bridges: The bridges to read, typically the hole bridges.
-        holes: The holes whose measured sides to compare.
+        holes: The holes whose measured sides (:func:`measured_sides`) to
+            compare.
 
     Returns:
         ``(rows, sides)``: the :class:`RowDiagnosis` of every bridge whose
@@ -603,17 +677,20 @@ def geometry_flags(
         for diagnosis in (bridge_row_diagnosis(trellis, bridge) for bridge in bridges)
         if diagnosis is not None and diagnosis.geometry_disagrees
     ]
+    holes = list(holes)
     sides = [
         diagnosis
         for diagnosis in side_diagnoses(
-            holes, orientation_preserving=trellis.orientation_preserving
+            holes,
+            orientation_preserving=trellis.orientation_preserving,
+            measured=measured_sides(trellis, holes),
         )
         if diagnosis.measured_disagrees
     ]
     return rows, sides
 
 
-def _warn_geometry_flags(
+def warn_geometry_flags(
     trellis: "Trellis", bridges: Iterable["Bridge"], holes: Iterable[Hole]
 ) -> None:
     """One WARNING per kind of :func:`geometry_flags` (a resolution flag, D6)."""

@@ -57,8 +57,6 @@ logger.addHandler(logging.NullHandler())
 # facade all name the same thing.
 Side = Literal["left", "right"]
 Endpoint = Literal["first", "second"]
-#: Where a hole's ``bridge_side`` came from (see :class:`Hole`).
-SideSource = Literal["signs", "carried"]
 
 OPPOSITE_SIDE: dict[Side, Side] = {"left": "right", "right": "left"}
 
@@ -127,19 +125,8 @@ class Hole:
             is unchanged along the backward chain under an orientation-preserving
             map and alternates with the parity of the step under a reversing one.
             The crossing signs turn it into the openings (D6). None only on a
-            hand-built hole.
-        measured_side: A propagated hole's side MEASURED on the curves: the
-            reference hole's coordinates carried back by the real inverse map,
-            read at the nearest segment of the containing bridge's image
-            sub-arc. None for a direct hole, without an inverse map, or when
-            the point sits on the arc. It is a resolution FLAG, never a
-            decision: a disagreement with ``bridge_side`` means an
-            under-resolved lobe (or a carried point that left it) and is
-            logged once per ``Trellis.punch_holes``
-            (:func:`topology.StablePartition.geometry_flags`), never asserted.
-        side_source: Where ``bridge_side`` came from: ``"signs"`` (a direct
-            hole, from its crossing signs) or ``"carried"`` (a propagated hole,
-            from its orbit's side). None for a hand-built hole.
+            hand-built hole. The side measured on the curves is a resolution
+            flag computed on demand (:func:`topology.diagnostics.geometry_flags`).
         bounding_ids: Registry IDs of the two intersections defining the bridge
             the hole belongs to — the pair's own bridge for a directly punched
             hole, the containing bridge for a propagated one. These are the
@@ -170,8 +157,6 @@ class Hole:
     openings: Optional[list[tuple[int, str, str, "ManifoldKey"]]] = None
     iterate: Optional[int] = None
     origin: Optional[tuple[int, int]] = None
-    measured_side: Optional[Side] = None
-    side_source: Optional[SideSource] = None
 
 
 @dataclass

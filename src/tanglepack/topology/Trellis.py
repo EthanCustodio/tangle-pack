@@ -1237,7 +1237,7 @@ class Trellis:
             bridge, not once per hole. Only the bridges that actually carry a
             hole are checked; the rest are not part of this result.
         """
-        from .diagnostics import _warn_geometry_flags
+        from .diagnostics import warn_geometry_flags
         from .StablePartition import (
             check_bridge_rows_consistent as _check_rows,
             check_holes_share_bridge_side as _check_sides,
@@ -1274,7 +1274,7 @@ class Trellis:
             self.holes, orientation_preserving=self.orientation_preserving
         )
         if diagnose:
-            _warn_geometry_flags(self, hole_bridges, self.holes)
+            warn_geometry_flags(self, hole_bridges, self.holes)
 
         if verbose:
             _log_report(self.describe_holes())

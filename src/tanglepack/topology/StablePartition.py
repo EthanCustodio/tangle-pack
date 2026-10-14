@@ -38,11 +38,11 @@ fixed in conversation with the author (July 2026):
   i.e. of the unstable manifold, in the bridge's dynamical orientation —
   forward flow points AWAY from the fixed point, so the bridge is oriented by
   increasing unstable cdist; standing on it looking that way, positive
-  cross(tangent, displacement) = left (``_side_of``). It is decided ONCE and
-  stored as ``Hole.bridge_side``: a direct hole reads it off its crossing
-  signs (2026-10-02), a propagated hole CARRIES it from the hole it was
-  propagated from, parity-flipped under an orientation-reversing map
-  (author, 2026-10-07; ``Hole.side_source``). Holes know nothing of the
+  cross(tangent, displacement) = left (``diagnostics._side_of``). It is
+  decided ONCE and stored as ``Hole.bridge_side``: a direct hole reads it off
+  its crossing signs (2026-10-02), a propagated hole CARRIES it from the hole
+  it was propagated from, parity-flipped under an orientation-reversing map
+  (author, 2026-10-07). Holes know nothing of the
   stable manifold's sides or of resonance zones. The stable partition keeps
   its own left/right, the ROW, defined by the STABLE dynamical direction
   (looking toward the anchor).
@@ -54,13 +54,14 @@ fixed in conversation with the author (July 2026):
   ``u+`` and enters ``second`` along ``u-``), and the stable half on a
   hole's side of its bridge is ``outward iff (sign > 0) == (side ==
   "left")`` (:func:`_hole_openings`). No polyline decides anything. The
-  geometry stays as a cross-check that FLAGS under-resolution
-  (:func:`geometry_flags`, one WARNING per kind per ``Trellis.punch_holes``):
-  :func:`bridge_row_diagnosis` reads each end's approach on the polyline,
-  which on a 2-4 node bridge is the vector to the far node (NUM-1, the E11
-  p3 / nested_inner 1e-5 cells from blast 6), and ``Hole.measured_side``
-  reads the backward-carried reference point at the nearest segment of the
-  image sub-arc, which escapes the lobe when the reference lobe is
+  geometry stays as a cross-check that FLAGS under-resolution, in
+  ``topology/diagnostics.py`` (``geometry_flags``, one WARNING per kind per
+  ``Trellis.punch_holes(diagnose=True)``): ``bridge_row_diagnosis`` reads
+  each end's approach on the polyline, which on a 2-4 node bridge is the
+  vector to the far node (NUM-1, the E11 p3 / nested_inner 1e-5 cells from
+  blast 6), and the MEASURED side of a propagated hole reads the
+  backward-carried reference point at the nearest segment of the image
+  sub-arc, which escapes the lobe when the reference lobe is
   under-resolved (NUM-2, k28 1e-5/1e-6 blasts 15-17; inversion x period 2 at
   10 steps). Before WP4 the openings and the I2 assertion read the polyline
   (a nearest vertex of the WHOLE bridge for the halves, INT-4), which opened
@@ -85,11 +86,11 @@ fixed in conversation with the author (July 2026):
   unstable branch with ``f^-1(W^s)``, beyond the trimmed stable manifold, so
   the trellis has no node to cut the sub-arc at). The reference hole's
   coordinates are carried backward with the real inverse map (the one use
-  of the map here): the carried point places the hole and is the measured
-  side's flag — two orbits landing in the same bridge differ exactly there,
-  and BOTH are punched (per the author: no cross-orbit deduplication, even
-  on the same bridge and side; only a same-orbit same-iterate duplicate of a
-  recorded pair's hole is skipped).
+  of the map here): the carried point places the hole, and the diagnostics
+  replay it as the measured-side flag — two orbits landing in the same bridge
+  differ exactly there, and BOTH are punched (per the author: no cross-orbit
+  deduplication, even on the same bridge and side; only a same-orbit
+  same-iterate duplicate of a recorded pair's hole is skipped).
 * Superseded: resonance-zone association (removed 2026-07-16). Holes used
   to carry an ``interior`` flag (in_zone point-in-polygon test, else a
   cdist-vs-strong-pip-cut fallback) and the partition split its intervals at
@@ -183,7 +184,7 @@ fixed in conversation with the author (July 2026):
   landing end, ``collision_rtol`` in ``Trellis.same_point``). Forcing the slack
   to 0 moved no output on any fixture. ``cdist_tol`` survives only as
   geometry -- clipping a polyline to its arc (``Arc._interior_polyline``,
-  ``_oriented_bridge_polyline``) -- never as identity or ownership.
+  ``diagnostics._oriented_bridge_polyline``) -- never as identity or ownership.
 * The anchor (WP3, 2026-10-08). A periodic point is ONE crossing on every
   branch attached to it (D4). Both stable branches leave it, so an anchor
   opening faces the outward half of the branch the signs pick
@@ -371,7 +372,6 @@ def punch_holes(
             openings=openings,
             iterate=pair.iterate,
             origin=pair.origin,
-            side_source="signs",
         )
         pair.hole = hole
         holes.append(hole)
@@ -527,7 +527,7 @@ def propagate_reference_holes(
                 # The side is CARRIED along the orbit (author, 2026-10-07): the
                 # map carries the bridge's dynamical orientation to the image
                 # bridge's, flipping it every step only when it reverses
-                # orientation. The carried point is measured against it.
+                # orientation. The carried point only places the hole.
                 hole = _punch_in_bridge(
                     trellis, containing, bridge_side=side_after(start_side, -step, preserving),
                     iterate=iterate, origin=origin, carried=carried, span=span,
@@ -975,14 +975,13 @@ def _punch_in_bridge(
     containing bridge — the two imaged pseudoneighbor points bound it, and the
     hole plots at the middle of that sub-arc (two orbits landing in the same
     bridge occupy different sub-arcs). ``bridge_side`` is the side carried
-    from the orbit (``Hole.bridge_side``, ``side_source == "carried"``); the
-    crossing signs turn it into the intervals the hole opens at the bridge's
-    defining intersections (:func:`_hole_openings`). ``carried`` is the
-    reference hole's coordinates mapped backward alongside — a point inside
-    the true image region — which places the hole and is read on the image
-    sub-arc as ``Hole.measured_side``, the geometric FLAG on the carried side.
-    Without it (no inverse map) the containing bridge's own midpoint and
-    chord place the hole.
+    from the orbit (``Hole.bridge_side``); the crossing signs turn it into the
+    intervals the hole opens at the bridge's defining intersections
+    (:func:`_hole_openings`). ``carried`` is the reference hole's coordinates
+    mapped backward alongside — a point inside the true image region — which
+    places the hole (the diagnostics read the same point on the image sub-arc
+    as the measured-side flag). Without it (no inverse map) the containing
+    bridge's own midpoint and chord place the hole.
     """
     near_id, far_id = _near_far(
         trellis, bridge.first_intersection, bridge.second_intersection
@@ -1015,11 +1014,6 @@ def _punch_in_bridge(
     else:
         coords = _step_into(midpoint, stable_mid, 0.05, arc_chord)
 
-    from .diagnostics import _bridge_side_of
-
-    measured_side = (
-        _bridge_side_of(trellis, bridge, carried, span) if carried is not None else None
-    )
     return Hole(
         coords=(float(coords[0]), float(coords[1])),
         near_intersection_id=near_id,
@@ -1028,8 +1022,6 @@ def _punch_in_bridge(
         openings=_hole_openings(trellis, bridge, bridge_side),
         iterate=iterate,
         origin=origin,
-        measured_side=measured_side,
-        side_source="carried",
     )
 
 
