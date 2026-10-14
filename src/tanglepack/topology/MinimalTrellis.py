@@ -4,14 +4,14 @@ The minimal trellis: the bridges needed to express a trellis's topology, no more
 A grown trellis carries every bridge the numerics happened to cut. Most of them
 are redundant for the combinatorics: the stable-manifold partition is defined by
 the bridges that carry holes, and the only other bridges the dual graph needs are
-the first forward images of those hole bridges whose bridge class is still
-active. So the minimal trellis is
+the first forward images of those hole bridges. So the minimal trellis is
 
 * every bridge with a hole attached (``Hole.bounding_ids`` names it), and
-* for each such bridge whose class is ACTIVE, the bridges tiling its first
+* for each such bridge without a ZEROTH hole, the bridges tiling its first
   forward image, read from the iterate table alone.
 
-An inert hole bridge is kept but not mapped forward. The stable manifold is kept
+A bridge carrying a zeroth hole is kept but not mapped forward (author,
+2026-10-14): its image is homotopic to a stable segment, its class word empty. The stable manifold is kept
 whole; the crossings that survive as nodes are the kept bridges' endpoints, the
 anchors and the outermost crossing of each stable branch (the ends of the
 partitioned stretch).
@@ -24,24 +24,31 @@ with ``sparse=True``) so that an absent bridge is an absent wall, not a slit.
 
 Dev Notes:
 
-* :data:`image_chain` IS ``BridgeClass._image_chain`` (the bridge-class
-  inertness evidence and the minimal trellis read a bridge's image the same
-  way: the ``+1`` iterates of its endpoints and every registered crossing
-  between them on the image branch).
+* :data:`image_chain` IS ``BridgeClass._image_chain`` (loop folding and the
+  minimal trellis read a bridge's image the same way: the ``+1`` iterates of
+  its endpoints and every registered crossing between them on the image
+  branch).
 * A subdivided image (the parent bridge crossed the trimmed-away part of the
   stable manifold, so its image crosses the computed part in the middle)
   contributes EVERY consecutive pair of the chain. A pair no ``Bridge`` object
   spans is manifold that was never computed (the grown manifold stops short of
   it, or it is the image of a bridge no blast iterated, INT-9 / D9): it is
-  skipped with a WARNING, the minimal trellis is evidence-based, like
-  inertness, and grows as the trellis does.
-* "Active" is read from the EVIDENCE table (every bridge's class, the
-  :class:`~tanglepack.topology.BridgeClass.BridgeClassTable` of
-  :func:`~tanglepack.topology.BridgeClass.bridge_classes`), never from the
-  alphabet: activity is a fixed point over the images of ALL bridges, and the
-  alphabet is DEFINED by what this trellis keeps, so reading it here would be
-  circular. The order is evidence -> minimal trellis -> alphabet
-  (:attr:`MinimalTrellis.alphabet`, D2, WP6).
+  skipped with a WARNING, the minimal trellis is evidence-based and grows as
+  the trellis does.
+* ZEROTH HOLES ARE INERT (author, 2026-10-14). A zeroth hole is punched on a
+  pseudoneighbor pair (``hole.pair is not None``). Its bridge ``b`` and the
+  stable segment ``sigma`` between its ends hold no point of X, so the lobe
+  ``b + sigma`` holds one marker, its own hole; holes propagate backward only,
+  so that hole's image is no marker and ``f(b) + f(sigma)`` encloses none.
+  ``f(b)`` is then homotopic to ``f(sigma)``, its ends lie in one element and
+  the class word is empty. That is decided from the holes alone, before the
+  dual graph; it is sufficient, not the definition (inertness is transience
+  in the word graph, decided by the dynamics after the words; law
+  ``zeroth_hole_classes_have_empty_words``).
+* The class table is the EVIDENCE table (every bridge's class), never the
+  alphabet: the alphabet is DEFINED by what this trellis keeps. The order is
+  evidence -> minimal trellis -> alphabet (:attr:`MinimalTrellis.alphabet`,
+  D2, WP6).
 * Anchors are kept as nodes even when no kept bridge ends there: a periodic
   point is the crossing of its own two manifolds and the stable branch's
   partition starts at it. The outermost crossing is kept because the
@@ -78,7 +85,7 @@ image_chain = _image_chain
 @dataclass
 class MinimalTrellis:
     """
-    A trellis reduced to its hole bridges and the images of the active ones.
+    A trellis reduced to its hole bridges and the images of those without a zeroth hole.
 
     Built by :func:`minimal_trellis`. The full snapshot stays reachable as
     :attr:`trellis` (registry lookups, iterates, strong pips all read from it);
@@ -88,15 +95,16 @@ class MinimalTrellis:
         trellis: The full trellis this was reduced from.
         hole_bridge_ids: Every bridge with a hole attached, in branch-then-cdist
             order. These define the homotopy partition.
-        inert_hole_bridge_ids: The hole bridges whose class is inert: kept, not
-            mapped forward.
+        inert_hole_bridge_ids: The hole bridges carrying a zeroth hole: their
+            image is homotopic to a stable segment (the class word is empty),
+            so they are kept and never mapped.
         unclassed_hole_bridge_ids: Hole bridges the class table does not know
             (logged as a WARNING at build time): kept, not mapped forward.
         image_chains: For each hole bridge that WAS mapped forward, the pairs of
             its image chain that were kept (hole bridges included when the image
             lands on one).
-        unmapped: The active hole bridges whose image could not be read from
-            the iterate table (no ``+1`` entry for an endpoint).
+        unmapped: The mapped-eligible hole bridges with no registered image
+            (no ``+1`` entry for an endpoint).
         skipped_pairs: ``(hole bridge, image pair)`` for every image pair with
             no ``Bridge`` object behind it (logged as a WARNING).
         image_bridge_ids: The kept image pairs that are NOT hole bridges: the
@@ -106,8 +114,8 @@ class MinimalTrellis:
             trellis that was not kept.
         sparse: The synthetic filtered trellis (kept crossings and kept
             bridges only, sharing the parent's registry and manifolds).
-        classes: The evidence table activity was read from (every bridge's
-            class); :attr:`alphabet` is its restriction to the kept bridges.
+        classes: The evidence table (every bridge's class); :attr:`alphabet`
+            is its restriction to the kept bridges.
         holes: The holes it was reduced by: the markers of the non-crossing
             rule (D13, :attr:`~.DualGraph.DualGraph.markers`).
     """
@@ -263,17 +271,17 @@ def minimal_trellis(
     classes: "BridgeClassTable",
 ) -> MinimalTrellis:
     """
-    Reduce a trellis to its hole bridges and the first images of the active ones.
+    Reduce a trellis to its hole bridges and the first images of those without a zeroth hole.
 
     Args:
         trellis: The full trellis (normally the ALL-fixed-points snapshot, so
             that heteroclinic bridges and every stable branch are present).
         holes: The punched holes whose ``bounding_ids`` name the hole bridges;
-            normally every cached per-fixed-point trellis's ``holes``.
+            a zeroth hole (``pair`` set) keeps its bridge from being mapped.
         classes: The EVIDENCE table (every bridge's class over the homotopy
-            partition, :func:`~tanglepack.topology.BridgeClass.bridge_classes`);
-            each hole bridge's ``entry.active`` decides whether it is mapped
-            forward. Kept as :attr:`MinimalTrellis.classes`.
+            partition, :func:`~tanglepack.topology.BridgeClass.bridge_classes`).
+            It decides no mapping: a hole bridge it does not know is kept
+            unmapped and logged. Kept as :attr:`MinimalTrellis.classes`.
 
     Returns:
         The :class:`MinimalTrellis`.
@@ -292,6 +300,7 @@ def minimal_trellis(
 
     # 1. Hole bridges.
     hole_ids: dict[frozenset, "BridgeId"] = {}
+    zeroth: set[frozenset] = set()
     for hole in holes:
         if hole.bounding_ids is None:
             continue
@@ -305,9 +314,11 @@ def minimal_trellis(
             )
             continue
         hole_ids.setdefault(frozenset(bridge.id), bridge.id)
+        if hole.pair is not None:
+            zeroth.add(frozenset(bridge.id))
     hole_bridge_ids = sorted(hole_ids.values(), key=lambda b: _bridge_sort_key(trellis, b))
 
-    # 2. Images of the active hole bridges.
+    # 2. Images of the hole bridges without a zeroth hole.
     inert: list["BridgeId"] = []
     unclassed: list["BridgeId"] = []
     chains: dict["BridgeId", list["BridgeId"]] = {}
@@ -316,20 +327,20 @@ def minimal_trellis(
     image_ids: dict[frozenset, "BridgeId"] = {}
     for bid in hole_bridge_ids:
         try:
-            entry = classes.entry_of(bid)
+            classes.entry_of(bid)
         except KeyError:
             logger.warning(
                 "hole bridge %s is in no bridge class; kept, not mapped forward", bid
             )
             unclassed.append(bid)
             continue
-        if not entry.active:
+        if frozenset(bid) in zeroth:
             inert.append(bid)
             continue
         chain = image_chain(trellis, bid)
         if chain is None:
             logger.debug(
-                "active hole bridge %s has no registered image; not mapped", bid
+                "hole bridge %s has no registered image; not mapped", bid
             )
             unmapped.append(bid)
             continue

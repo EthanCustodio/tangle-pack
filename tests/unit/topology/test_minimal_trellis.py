@@ -1,15 +1,16 @@
 """
-The minimal trellis: hole bridges, images of the active ones, nothing else.
+The minimal trellis: hole bridges, images of those without a zeroth hole, nothing else.
 
 These tests pin the WARNING paths (a pair no bridge spans, an unclassed hole
 bridge, a hole no bridge spans); the structural invariants (hole bridges kept,
-active ones mapped along their image chains, kept nodes, the sparse
+those without a zeroth hole mapped along their image chains, kept nodes, the sparse
 arrangement) run on every law case in ``tests/invariants/test_law_iterated.py``.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 from helpers.logs import assert_logged
 from tanglepack.topology.MinimalTrellis import image_chain, minimal_trellis
@@ -79,18 +80,32 @@ def test_a_hole_with_no_spanning_bridge_contributes_nothing(k10_partitioned, cap
     assert_logged(caplog, logging.WARNING, "tanglepack.topology.MinimalTrellis")
 
 
-def test_an_active_hole_bridge_without_a_registered_image_is_unmapped(p3_partitioned):
-    """An active hole bridge whose image chain is not registered is listed as
-    unmapped (kept, never mapped) instead of contributing image bridges.
+def test_a_hole_bridge_without_a_registered_image_is_unmapped(p3_partitioned):
+    """A hole bridge without a zeroth hole whose image chain is not registered is
+    listed as unmapped (kept, never mapped) instead of contributing image bridges;
+    one carrying a zeroth hole is never mapped at all, so it is never unmapped.
 
-    The unblasted nested tangle has such bridges; the law cases do not.
+    The unblasted nested tangle has hole bridges with no registered image, and
+    they carry zeroth holes; the same holes read as propagated (no pair) make
+    them unmapped. The law cases have none.
     """
     session, _fp3, _fp1 = p3_partitioned
     minimal = session.minimal_trellis()
-    table = session.bridge_classes()
-    assert minimal.unmapped, "the unblasted nested tangle has an unmapped hole bridge"
+    trellis = minimal.trellis
+    zeroth = {
+        frozenset(trellis.bridge_between(*hole.bounding_ids).id)
+        for hole in trellis.holes
+        if hole.pair is not None
+    }
     for bid in minimal.unmapped:
-        assert minimal.is_hole_bridge(bid) and bid not in minimal.image_chains
-        assert table.entry_of(bid).active
-        assert image_chain(minimal.trellis, bid) is None
-    assert minimal.describe()
+        assert frozenset(bid) not in zeroth
+    unchained = [bid for bid in minimal.hole_bridge_ids if image_chain(trellis, bid) is None]
+    assert unchained, "the unblasted nested tangle has a hole bridge with no registered image"
+
+    propagated = [replace(hole, pair=None) for hole in minimal.holes]
+    as_propagated = minimal_trellis(trellis, propagated, minimal.classes)
+    assert as_propagated.inert_hole_bridge_ids == []
+    assert sorted(as_propagated.unmapped) == sorted(unchained)
+    for bid in as_propagated.unmapped:
+        assert as_propagated.is_hole_bridge(bid) and bid not in as_propagated.image_chains
+    assert as_propagated.describe()
