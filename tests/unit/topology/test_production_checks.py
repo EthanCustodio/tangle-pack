@@ -25,6 +25,7 @@ from cases import Case, build_nested, build_period3
 from helpers.logs import assert_logged
 
 stable_partition = importlib.import_module("tanglepack.topology.StablePartition")
+diagnostics = importlib.import_module("tanglepack.topology.diagnostics")
 dual_graph_module = importlib.import_module("tanglepack.topology.DualGraph")
 _LOGGER = "tanglepack.topology.diagnostics"
 
@@ -114,23 +115,23 @@ def test_punch_holes_raises_on_a_corrupted_hole_side(
 def test_propagated_holes_carry_their_orbit_side(p3: Case) -> None:
     """D2 (author, 2026-10-07): a direct hole reads its side off its crossing
     signs, a propagated one carries its orbit's (parity-flipped per step under an
-    orientation-reversing map) and keeps the curves' reading as
-    ``measured_side``, which agrees wherever it is defined."""
+    orientation-reversing map); the curves' reading (``measured_sides``) agrees
+    wherever it is defined."""
     (fp,) = p3.fixed_points
     trellis = p3.session.trellis(fp)
     flips = not trellis.orientation_preserving
     direct = {hole.origin: hole for hole in trellis.holes if hole.pair is not None}
+    measured = diagnostics.measured_sides(trellis, trellis.holes)
+    assert measured, "the period-3 case measures its propagated holes"
     for hole in trellis.holes:
-        if hole.pair is not None:
-            assert hole.side_source == "signs"
+        if diagnostics.side_source(hole) == "signs":
             continue
-        assert hole.side_source == "carried"
         source = direct[hole.origin]
         expected = source.bridge_side
         if flips and (source.iterate - hole.iterate) % 2:
             expected = "left" if expected == "right" else "right"
         assert hole.bridge_side == expected
-        assert hole.measured_side in (None, hole.bridge_side)
+        assert measured.get((hole.origin, hole.iterate), expected) == expected
 
 
 def test_punch_holes_flags_a_contradicting_measured_side(
@@ -140,15 +141,15 @@ def test_punch_holes_flags_a_contradicting_measured_side(
     disagreement is one WARNING, never an error (D6)."""
     (fp,) = p3.fixed_points
     trellis = p3.session.trellis(fp)
-    real = stable_partition.propagate_reference_holes
+    real = diagnostics.measured_sides
 
-    def contradicted(*args: Any, **kwargs: Any) -> list:
-        holes = real(*args, **kwargs)
-        hole = next(hole for hole in holes if hole.measured_side is not None)
-        hole.measured_side = "left" if hole.measured_side == "right" else "right"
-        return holes
+    def contradicted(*args: Any, **kwargs: Any) -> dict:
+        sides = real(*args, **kwargs)
+        key = next(iter(sides))
+        sides[key] = "left" if sides[key] == "right" else "right"
+        return sides
 
-    monkeypatch.setattr(stable_partition, "propagate_reference_holes", contradicted)
+    monkeypatch.setattr(diagnostics, "measured_sides", contradicted)
     caplog.set_level(logging.WARNING, logger=_LOGGER)
     trellis.punch_holes()
     assert_logged(caplog, logging.WARNING, _LOGGER, count=1)

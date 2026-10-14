@@ -1205,7 +1205,6 @@ def check_holes_are_classified(case: "Case") -> int:
     count = 0
     for trellis, hole in _holes(case):
         assert hole.bridge_side in ("left", "right")
-        assert hole.side_source == ("signs" if hole.pair is not None else "carried")
         near, far = hole.bounding_ids
         assert hole.near_intersection_id == near
         assert float(trellis.intersection(near).stable_cdist) <= float(

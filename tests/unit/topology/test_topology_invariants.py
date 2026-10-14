@@ -41,6 +41,7 @@ from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
+from tanglepack.topology import diagnostics
 from tanglepack.topology.StablePartition import (
     check_bridge_rows_consistent,
     check_holes_share_bridge_side,
@@ -52,7 +53,7 @@ from tanglepack.topology.diagnostics import (
     geometry_flags,
     side_diagnoses,
 )
-from tanglepack.topology.TopologyResults import Hole
+from tanglepack.topology.TopologyResults import Hole, PseudoneighborPair
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch
 
@@ -60,18 +61,19 @@ from tanglepack.topology.TrellisBranch import TrellisBranch
 # --------------------------------------------------------------------------- #
 # I1 — holes of one origin share their side of the bridge
 # --------------------------------------------------------------------------- #
-def _hole(origin, iterate, side, *, measured=None, source=None) -> Hole:
-    """A bare hole carrying only the orbit identity and the sides the check reads."""
+def _hole(origin, iterate, side, *, direct=False) -> Hole:
+    """A bare hole carrying only the orbit identity and the side the check reads;
+    a direct hole has its pair (its side came from its signs), a propagated one
+    has none (its side was carried)."""
     return Hole(
         coords=(0.0, 0.0),
         near_intersection_id=0,
+        pair=PseudoneighborPair(0, 1, iterate=iterate, origin=origin) if direct else None,
         bridge_side=side,
         bounding_ids=(0, 1),
         openings=[],
         iterate=iterate,
         origin=origin,
-        measured_side=measured,
-        side_source=source,
     )
 
 
@@ -154,33 +156,35 @@ def test_orientation_from_the_single_step_jacobian(caplog, periods, solved):
     assert_logged(caplog, logging.DEBUG, "tanglepack.topology.Trellis", count=int(not solved))
 
 
-def test_measured_side_disagreement_is_a_flag_not_an_error():
+def test_measured_side_disagreement_is_a_flag_not_an_error(monkeypatch):
     """A propagated hole carries its orbit's side, so I1 holds for it by
     construction; its measured side is the geometric cross-check, and a
     disagreement is a resolution flag, never an error (D6)."""
-    agreeing = [
-        _hole((3, 4), 0, "left", source="signs"),
-        _hole((3, 4), -1, "left", measured="left", source="carried"),
+    holes = [
+        _hole((3, 4), 0, "left", direct=True),
+        _hole((3, 4), -1, "left"),
+        _hole((3, 4), -2, "left"),
     ]
-    contradicted = agreeing + [_hole((3, 4), -2, "left", measured="right", source="carried")]
-    check_holes_share_bridge_side(contradicted)
-    assert bridge_side_violations(contradicted) == []
-    (diagnosis,) = side_diagnoses(contradicted)
+    measured = {((3, 4), -1): "left", ((3, 4), -2): "right"}
+    check_holes_share_bridge_side(holes)
+    assert bridge_side_violations(holes) == []
+    (diagnosis,) = side_diagnoses(holes, measured=measured)
     assert diagnosis.measured_disagrees and not diagnosis.orbit_disagrees
     trellis, _a_id, _b_id = _row_trellis()
-    rows, sides = geometry_flags(trellis, [], contradicted)
+    monkeypatch.setattr(diagnostics, "measured_sides", lambda _trellis, _holes: measured)
+    rows, sides = geometry_flags(trellis, [], holes)
     assert rows == [] and sides == [diagnosis]
 
 
 def test_side_diagnoses_name_each_disagreeing_hole():
     """One diagnosis per disagreeing hole, saying which reading disagrees."""
     holes = [
-        _hole((3, 4), 0, "left", source="signs"),
-        _hole((3, 4), -1, "left", measured="right", source="carried"),
-        _hole((3, 4), -2, "right", measured="right", source="carried"),
-        _hole((5, 6), 0, "right", source="signs"),
+        _hole((3, 4), 0, "left", direct=True),
+        _hole((3, 4), -1, "left"),
+        _hole((3, 4), -2, "right"),
+        _hole((5, 6), 0, "right", direct=True),
     ]
-    diagnoses = side_diagnoses(holes)
+    diagnoses = side_diagnoses(holes, measured={((3, 4), -1): "right", ((3, 4), -2): "right"})
     assert [d.iterate for d in diagnoses] == [-1, -2]
     measured, orbit = diagnoses
     assert measured.measured_disagrees and not measured.orbit_disagrees
@@ -197,10 +201,13 @@ def test_side_diagnoses_expect_the_parity_flip():
 
 
 def test_unmeasured_propagated_holes_are_logged(caplog):
-    """A propagated hole with no measured side skips that check, at INFO."""
-    holes = [_hole((3, 4), 0, "left", source="signs"), _hole((3, 4), -1, "left", source="carried")]
+    """A propagated hole with no measured side skips that check, at INFO; the
+    orbit check alone (no ``measured``, the I1 path) measures nothing."""
+    holes = [_hole((3, 4), 0, "left", direct=True), _hole((3, 4), -1, "left")]
     with caplog.at_level(logging.INFO, logger="tanglepack.topology.diagnostics"):
         assert side_diagnoses(holes) == []
+        assert not caplog.records
+        assert side_diagnoses(holes, measured={}) == []
     assert_logged(caplog, logging.INFO, "tanglepack.topology.diagnostics", count=1)
 
 
