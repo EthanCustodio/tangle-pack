@@ -68,13 +68,12 @@ from tanglepack.topology.DualWalk import walk_chords
 from tanglepack.topology.MinimalTrellis import image_chain
 from tanglepack.topology.Pseudoneighbor import compute_pseudoneighbors
 from tanglepack.topology.StablePartition import (
-    _side_of,
     bridge_for_pair,
-    bridge_row_violation,
     owns_cdist,
     row_of_end,
     rows_of_bridge,
 )
+from tanglepack.topology.diagnostics import _side_of, bridge_row_violation
 from tanglepack.topology.Trellis import SCALING_RTOL
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from cases import Case

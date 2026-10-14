@@ -26,7 +26,7 @@ from helpers.logs import assert_logged
 
 stable_partition = importlib.import_module("tanglepack.topology.StablePartition")
 dual_graph_module = importlib.import_module("tanglepack.topology.DualGraph")
-_LOGGER = "tanglepack.topology.StablePartition"
+_LOGGER = "tanglepack.topology.diagnostics"
 
 
 @pytest.fixture

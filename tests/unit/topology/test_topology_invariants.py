@@ -42,11 +42,13 @@ from helpers.logs import assert_logged
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.StablePartition import (
+    check_bridge_rows_consistent,
+    check_holes_share_bridge_side,
+)
+from tanglepack.topology.diagnostics import (
     bridge_row_diagnosis,
     bridge_row_violation,
     bridge_side_violations,
-    check_bridge_rows_consistent,
-    check_holes_share_bridge_side,
     geometry_flags,
     side_diagnoses,
 )
@@ -197,9 +199,9 @@ def test_side_diagnoses_expect_the_parity_flip():
 def test_unmeasured_propagated_holes_are_logged(caplog):
     """A propagated hole with no measured side skips that check, at INFO."""
     holes = [_hole((3, 4), 0, "left", source="signs"), _hole((3, 4), -1, "left", source="carried")]
-    with caplog.at_level(logging.INFO, logger="tanglepack.topology.StablePartition"):
+    with caplog.at_level(logging.INFO, logger="tanglepack.topology.diagnostics"):
         assert side_diagnoses(holes) == []
-    assert_logged(caplog, logging.INFO, "tanglepack.topology.StablePartition", count=1)
+    assert_logged(caplog, logging.INFO, "tanglepack.topology.diagnostics", count=1)
 
 
 def test_orientation_reversing_skips_holes_without_iterate():

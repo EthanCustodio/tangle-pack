@@ -373,7 +373,7 @@ class Trellis:
         an orientation-preserving map carries a bridge's dynamical orientation
         to its image's unchanged, while a reversing one flips the side at
         every step (see
-        :func:`topology.StablePartition.bridge_side_violations`).
+        :func:`topology.diagnostics.bridge_side_violations`).
 
         Returns:
             True if the map preserves orientation, False if it reverses it.
@@ -1216,7 +1216,7 @@ class Trellis:
                 one WARNING per kind of disagreement (a hole bridge whose
                 geometric row is not its signs', a propagated hole measured on
                 the other side of its bridge): resolution flags, never errors
-                (D6; :func:`topology.StablePartition.geometry_flags`).
+                (D6; :func:`topology.diagnostics.geometry_flags`).
             verbose: Report :meth:`describe_holes` when done —
                 logged at INFO (this module's logger is raised to INFO for the
                 call, so a higher application-level setting cannot swallow it),
@@ -1237,8 +1237,8 @@ class Trellis:
             bridge, not once per hole. Only the bridges that actually carry a
             hole are checked; the rest are not part of this result.
         """
+        from .diagnostics import _warn_geometry_flags
         from .StablePartition import (
-            _warn_geometry_flags,
             check_bridge_rows_consistent as _check_rows,
             check_holes_share_bridge_side as _check_sides,
             punch_holes as _punch,

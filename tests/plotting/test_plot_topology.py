@@ -22,7 +22,7 @@ import pytest  # noqa: E402
 from cases import Case, build_k10, build_nested, build_period3  # noqa: E402
 from tanglepack.topology import plotting  # noqa: E402
 from tanglepack.topology.DualWalk import Walk  # noqa: E402
-from tanglepack.topology.StablePartition import _side_of  # noqa: E402
+from tanglepack.topology.diagnostics import _side_of  # noqa: E402
 
 
 @pytest.fixture

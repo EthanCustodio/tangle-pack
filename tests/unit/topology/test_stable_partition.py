@@ -21,11 +21,8 @@ from helpers.logs import assert_logged
 from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
-from tanglepack.topology.StablePartition import (
-    _bridge_side_of,
-    _side_of,
-    partition_stable_manifold,
-)
+from tanglepack.topology.StablePartition import partition_stable_manifold
+from tanglepack.topology.diagnostics import _bridge_side_of, _side_of
 from tanglepack.topology.TopologyResults import Hole
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch

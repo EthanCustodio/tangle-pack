@@ -22,11 +22,11 @@ from cases import BUILDERS
 from helpers import laws
 from tanglepack.topology import bridge_row_diagnosis
 
-_LOGGER = "tanglepack.topology.StablePartition"
+_LOGGER = "tanglepack.topology.diagnostics"
 
 
 def _warnings(caplog) -> int:
-    """WARNING records of the partition logger captured so far."""
+    """WARNING records of the diagnostics logger captured so far."""
     return sum(
         1 for r in caplog.records if r.name == _LOGGER and r.levelno == logging.WARNING
     )

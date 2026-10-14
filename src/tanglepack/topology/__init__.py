@@ -118,24 +118,26 @@ from .SymbolicDynamics import (
     translate_itinerary,
 )
 from .StablePartition import (
-    RowDiagnosis,
-    RowEnd,
-    SideDiagnosis,
     bridge_for_pair,
-    bridge_row_diagnosis,
-    bridge_row_violation,
-    bridge_side_violations,
     check_bridge_rows_consistent,
     check_holes_share_bridge_side,
-    geometry_flags,
     owns_cdist,
     partition_stable_manifold,
     propagate_reference_holes,
     punch_holes,
     row_of_end,
     rows_of_bridge,
-    side_diagnoses,
     span_contains,
+)
+from .diagnostics import (
+    RowDiagnosis,
+    RowEnd,
+    SideDiagnosis,
+    bridge_row_diagnosis,
+    bridge_row_violation,
+    bridge_side_violations,
+    geometry_flags,
+    side_diagnoses,
 )
 
 __all__ = [
