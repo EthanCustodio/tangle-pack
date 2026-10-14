@@ -2005,6 +2005,7 @@ def check_anchor_bridge_class_leads_its_tangle(case: "Case") -> int:
     map onto a loop, an inert class."""
     trellis = _full(case)
     table = _evidence(case)
+    dyn = case.session.symbolic_dynamics()
     entries = list(table)
     anchors = set(_anchor_ids(case))
     tol = _tol(case)
@@ -2021,7 +2022,7 @@ def check_anchor_bridge_class_leads_its_tangle(case: "Case") -> int:
         entry = table.entry_of(bridge.id)
         if entry.tangle not in complete:
             continue
-        assert entry.active, bridge.id
+        assert dyn.classes[entry.bridge_class].kind == "active", bridge.id
         assert entry.member(bridge.id).direction == +1, bridge.id
         assert entry.min_unstable_cdist == pytest.approx(0.0, abs=tol)
         group = [other for other in entries if other.tangle == entry.tangle]
@@ -2293,25 +2294,31 @@ def check_names_agree_with_structure(case: "Case") -> int:
 
 
 def check_minimal_trellis_bridges(case: "Case") -> int:
-    """The minimal trellis keeps every hole bridge, maps exactly the active ones along
-    their registered image chains (``image_chain``, skipped pairs excepted), and
-    keeps nothing else."""
+    """The minimal trellis keeps every hole bridge, maps every one without a zeroth hole
+    along its registered image chain (``image_chain``, skipped pairs excepted) or lists
+    it unmapped, never maps a zeroth-hole bridge (author, 2026-10-14), and keeps
+    nothing else."""
     session = case.session
     minimal = session.minimal_trellis()
     full = minimal.trellis
-    table = minimal.classes
     hole_set = {frozenset(b) for b in minimal.hole_bridge_ids}
+    zeroth = set()
     for _trellis, hole in _holes(case):
         bridge = full.bridge_between(*hole.bounding_ids)
         if bridge is not None and bridge.id is not None:
             assert frozenset(bridge.id) in hole_set, hole.bounding_ids
+            if hole.pair is not None:
+                zeroth.add(frozenset(bridge.id))
     assert len(hole_set) == len(minimal.hole_bridge_ids)
     for bid in minimal.inert_hole_bridge_ids + minimal.unclassed_hole_bridge_ids:
         assert minimal.is_hole_bridge(bid) and bid not in minimal.image_chains
-    for bid in minimal.inert_hole_bridge_ids:
-        assert not table.entry_of(bid).active
+    assert {frozenset(b) for b in minimal.inert_hole_bridge_ids} == zeroth
+    for bid in [*minimal.image_chains, *minimal.unmapped]:
+        assert frozenset(bid) not in zeroth, bid
+    unclassed = {frozenset(b) for b in minimal.unclassed_hole_bridge_ids}
+    mapped = {frozenset(b) for b in [*minimal.image_chains, *minimal.unmapped]}
+    assert hole_set - zeroth == unclassed | mapped
     for bid, chain in minimal.image_chains.items():
-        assert table.entry_of(bid).active
         expected = image_chain(full, bid)
         assert expected is not None, bid
         skipped = {frozenset(p) for parent, p in minimal.skipped_pairs if parent == bid}
@@ -3015,6 +3022,52 @@ def check_inert_classes_outside_transitions(case: "Case") -> int:
     return len(dyn.classes)
 
 
+def check_inert_is_transient(case: "Case") -> int:
+    """Q3 (I-a): a class of the closed table is inert iff, in the graph of its
+    class-level words (loops dropped), neither a cycle nor an unresolved class is
+    reachable from it. Reachability by its own search, never by ``inert_classes``."""
+    dyn = case.session.symbolic_dynamics()
+    edges = {cls: {symbol.bridge_class for symbol in cd.symbols} for cls, cd in dyn.classes.items()}
+    unresolved = {cls for cls, cd in dyn.classes.items() if cd.itinerary is None}
+
+    def reachable(start) -> set:
+        seen, stack = set(), list(edges[start])
+        while stack:
+            node = stack.pop()
+            if node not in seen:
+                seen.add(node)
+                stack.extend(edges[node])
+        return seen
+
+    reach = {cls: reachable(cls) for cls in edges}
+    for cls, cd in dyn.classes.items():
+        persistent = any(
+            node in unresolved or node in reach[node] for node in reach[cls] | {cls}
+        )
+        assert (cd.kind == "inert") is not persistent, (cd.letter, cd.kind, cls.label)
+        assert cd.entry.inert is (cd.kind == "inert"), (cd.letter, cls.label)
+    return len(dyn.classes)
+
+
+def check_zeroth_hole_classes_have_empty_words(case: "Case") -> int:
+    """The author's rule (2026-10-14): the class of a bridge carrying a zeroth hole
+    (punched on a pseudoneighbor pair) walks, its word is empty -- the lobe's one
+    marker maps to no marker -- and so it is inert."""
+    dyn = case.session.symbolic_dynamics()
+    table = case.session.minimal_trellis().classes
+    count = 0
+    for trellis, hole in _holes(case):
+        if hole.pair is None:
+            continue
+        cls = table.entry_of(trellis.bridge_between(*hole.bounding_ids).id).bridge_class
+        cd = dyn.classes[cls]
+        assert cd.itinerary is not None, (cd.letter, cls.label, cd.unresolved_reason)
+        assert not cd.symbols, (cd.letter, cls.label, cd.word)
+        assert cd.kind == "inert", (cd.letter, cls.label)
+        count += 1
+    return count
+
+
 def check_matrix_is_token_counts(case: "Case") -> int:
     """Entry ``(i, j)`` counts the tokens of symbol ``j`` (inert tokens skipped) in the
     refined word of active symbol ``i``; every token of an active word is a node."""
@@ -3176,6 +3229,8 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_refined_children_inherit_word,
         check_member_matching_consistent,
         check_inert_classes_outside_transitions,
+        check_inert_is_transient,
+        check_zeroth_hole_classes_have_empty_words,
         check_matrix_is_token_counts,
         check_k10_is_the_full_shift,
     ],
