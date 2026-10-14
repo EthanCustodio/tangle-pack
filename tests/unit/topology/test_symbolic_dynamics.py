@@ -713,6 +713,23 @@ def test_unlettered_active_classes_get_fallback_letters(k10_partitioned):
     assert set(inert) == set(dyn.inert_letters.values())
 
 
+def test_the_session_alphabet_carries_the_dynamics_verdicts(k10_partitioned):
+    """``session.bridge_classes()`` is the first read of the dynamics on a fresh session,
+    and it already holds every verdict: inertness is transience in the word graph (Q3),
+    so the classes are lettered only after the words, the active ones alone."""
+    session, _fp = k10_partitioned
+    assert "dynamics" not in vars(session.topology())
+
+    table = session.bridge_classes()
+    read = [(entry.bridge_class, entry.inert, entry.letter) for entry in table]
+
+    dyn = session.symbolic_dynamics()
+    assert any(inert for _cls, inert, _letter in read), "k=10 has an inert class"
+    for cls, inert, letter in read:
+        assert inert is (dyn.classes[cls].kind == "inert"), cls.label
+        assert (letter is None) is inert, cls.label
+
+
 def test_unresolved_class_carries_a_reason_and_warns(caplog):
     """The unblasted nested tangle is not grown far enough for every class: a
     class whose landing is a singleton and none of whose members has a
