@@ -30,6 +30,7 @@ from tanglepack.topology.Pseudoneighbor import (
     extend_pseudoneighbor_trajectories,
 )
 from tanglepack.topology.TopologyResults import PseudoneighborPair
+from tanglepack.topology.Trellis import Trellis
 
 #: The no-inversion saddle's second stable branch: never on the window's cycle.
 OTHER_STABLE = 1
@@ -780,3 +781,77 @@ def test_collision_on_another_stable_manifold_still_punctures(frame):
 
     assert (r_n, x1) in pairs
     assert (x1, r_end) not in pairs
+
+
+# --------------------------------------------------------------------------- #
+# The open STABLE interval (B2): the same three readings as the unstable one
+# --------------------------------------------------------------------------- #
+def _pairs(trellis) -> list[tuple[int, int]]:
+    return [(p.intersection_a, p.intersection_b) for p in compute_pseudoneighbors(trellis)]
+
+
+def test_scaled_iterate_punctures_stable_interval():
+    """A crossing below the window with no table links whose stable cdist, scaled
+    one step back (0.5 * 4 = 2), lands inside the stable interval (1, 3) of
+    (x1, r_end) kills that pair; neither end has a registered image, so only
+    scaling can place it. Its unstable orbit (16 * 4^m) only touches the
+    window's unstable ends, so the unstable interval stays clear: the stable
+    interval decides."""
+    fp = _fixed_point(1, 4.0)
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    reg.add_synthetic(
+        (0.5, 16.0), unstable_cdist=16.0, stable_cdist=0.5,
+        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+    )
+
+    assert _pairs(_trellis(reg, fp)) == [(r_n, x1)]
+
+
+def test_table_landing_punctures_stable_interval():
+    """A table landing inside the stable interval kills the pair by id. The
+    landing ``w`` (stable cdist 3.5 in (3, 4), unstable 8, outside both pairs'
+    unstable intervals) is no crossing of the trellis, as past a cut, so x0 and
+    x1 stay consecutive and ``w`` is no candidate; ``r = M(w)`` is one, and the
+    table names ``M^-1(r) = w`` inside (r_n, x1)."""
+    fp = _fixed_point(1, 4.0)
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    stable, unstable = (fp, "stable", 0, 0), (fp, "unstable", 0, 0)
+    w = reg.add_synthetic(
+        (3.5, 8.0), unstable_cdist=8.0, stable_cdist=3.5,
+        manifold_a_key=unstable, manifold_b_key=stable,
+    )
+    r = reg.add_synthetic(
+        (0.875, 32.0), unstable_cdist=32.0, stable_cdist=0.875,
+        manifold_a_key=unstable, manifold_b_key=stable,
+    )
+    reg.register_iterate(w, 1, r)
+    branches = _trellis(reg, fp).branches
+    for branch in branches.values():
+        branch.intersection_ids.remove(w)
+    trellis = Trellis(fixed_points=[fp], registry=reg, branches=branches, bridges=[])
+    assert w not in trellis and r in trellis
+
+    assert _pairs(trellis) == [(x1, r_end)]
+
+
+def test_own_orbit_does_not_puncture_stable_interval():
+    """An unlinked crossing at M(x1)'s cdists up to noise (8.008, 0.7495) scales
+    back to (2.002, 2.998): inside the stable interval (1, 3) of (x1, r_end), but
+    it 2D-collides with x1, so it is x1's own orbit and the pair stays."""
+    from tanglepack.topology.Pseudoneighbor import _interval_is_clear
+
+    fp = _fixed_point(1, 4.0)
+    reg = IntersectionRegistry()
+    r_n, x1, r_end = _reference_window(fp, reg)
+    reg.add_synthetic(
+        (0.7495, 8.008), unstable_cdist=8.008, stable_cdist=0.7495,
+        manifold_a_key=(fp, "unstable", 0, 0), manifold_b_key=(fp, "stable", 0, 0),
+    )
+    trellis = _trellis(reg, fp)
+
+    assert _interval_is_clear(
+        trellis, x1, r_end, "stable", trellis.own_intersection_ids, COLLISION_RTOL
+    )
+    assert (x1, r_end) in _pairs(trellis)
