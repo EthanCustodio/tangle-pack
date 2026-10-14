@@ -23,6 +23,7 @@ from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.topology.StablePartition import partition_stable_manifold
 from tanglepack.topology.diagnostics import _bridge_side_of, _side_of
+from tanglepack.topology.plotting import hole_point
 from tanglepack.topology.TopologyResults import Hole, PseudoneighborPair
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch
@@ -351,9 +352,9 @@ def henon_with_holes(henon_tangle_with_bridges):
     return trellis, references
 
 
-def test_henon_propagated_hole_side_matches_coords(henon_with_holes):
-    """A propagated hole's coordinates are nudged toward the carried point's
-    side of the containing bridge, so re-classifying them reproduces the
+def test_henon_propagated_hole_point_is_on_its_side(henon_with_holes):
+    """A propagated hole is drawn nudged toward the carried point's side of
+    the containing bridge, so re-classifying its point reproduces the
     stored bridge_side."""
     trellis, _references = henon_with_holes
 
@@ -367,7 +368,7 @@ def test_henon_propagated_hole_side_matches_coords(henon_with_holes):
             for b in trellis.bridges
             if {b.first_intersection, b.second_intersection} == wanted
         )
-        recomputed = _bridge_side_of(trellis, bridge, np.asarray(hole.coords))
+        recomputed = _bridge_side_of(trellis, bridge, hole_point(trellis, hole))
         assert recomputed == hole.bridge_side
         checked += 1
     assert checked > 0, "propagation should have punched holes"

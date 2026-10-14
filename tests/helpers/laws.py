@@ -74,6 +74,7 @@ from tanglepack.topology.StablePartition import (
     rows_of_bridge,
 )
 from tanglepack.topology.diagnostics import _side_of, bridge_row_violation
+from tanglepack.topology.plotting import hole_point
 from tanglepack.topology.Trellis import SCALING_RTOL
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from cases import Case
@@ -1197,7 +1198,7 @@ def check_partition_singletons(case: "Case") -> int:
 
 
 def check_holes_are_classified(case: "Case") -> int:
-    """Every hole has a bridge side, its anchorward bound first, finite coordinates and an orbit.
+    """Every hole has a bridge side, its anchorward bound first, a finite drawing point and an orbit.
 
     A direct hole's side comes from its crossing signs, a propagated hole's is
     carried along its orbit (author, 2026-10-07).
@@ -1210,7 +1211,7 @@ def check_holes_are_classified(case: "Case") -> int:
         assert float(trellis.intersection(near).stable_cdist) <= float(
             trellis.intersection(far).stable_cdist
         ) or trellis.intersection(near).manifold_b_key != trellis.intersection(far).manifold_b_key
-        assert np.isfinite(np.asarray(hole.coords, dtype=float)).all()
+        assert np.isfinite(hole_point(trellis, hole)).all()
         assert hole.iterate is not None and hole.origin is not None
         count += 1
     return count
@@ -1222,7 +1223,7 @@ def check_backward_holes_keep_bridge_side(case: "Case") -> int:
 
     Every hole of an origin carries the ``bridge_side`` of the origin's
     reference hole (iterate 0), parity-flipped under an orientation-reversing
-    map; and, measured on the curves, the reference hole's coordinates carried
+    map; and, measured on the curves, the reference hole's point carried
     back ``|iterate|`` steps by the real inverse map sit on that side of the
     propagated hole's own bridge. Nothing is asserted about the stable-manifold
     ROW of a backward hole: it may differ from its origin's, and that is
@@ -1251,7 +1252,7 @@ def check_backward_holes_keep_bridge_side(case: "Case") -> int:
             f"{hole.bridge_side}, origin {origin.bridge_side}"
         )
         if hole.pair is None:
-            point = np.asarray(origin.coords, dtype=float)
+            point = hole_point(trellis, origin)
             for _ in range(-hole.iterate):
                 point = np.asarray(inverse(point), dtype=float)
             bridge = trellis.bridge_between(*hole.bounding_ids)
@@ -1266,7 +1267,7 @@ def check_backward_holes_keep_bridge_side(case: "Case") -> int:
 
 
 def check_direct_hole_side_is_coordinate_side(case: "Case") -> int:
-    """A direct hole's ``bridge_side`` is the side of its bridge its coordinates sit on.
+    """A direct hole's ``bridge_side`` is the side of its bridge its drawing point sits on.
 
     The combinatorial crossing-sign rule (2026-10-02) must reproduce the
     geometric measurement hole for hole.
@@ -1277,7 +1278,7 @@ def check_direct_hole_side_is_coordinate_side(case: "Case") -> int:
             continue
         bridge = bridge_for_pair(trellis, hole.pair)
         assert bridge is not None, hole.pair
-        measured = _point_side_of_bridge(case, bridge, np.asarray(hole.coords, dtype=float))
+        measured = _point_side_of_bridge(case, bridge, hole_point(trellis, hole))
         assert hole.bridge_side == measured, (
             f"direct hole {hole.bounding_ids} (iterate {hole.iterate}): side "
             f"{hole.bridge_side}, coordinates on the {measured}"

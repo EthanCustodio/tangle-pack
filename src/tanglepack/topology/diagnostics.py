@@ -453,9 +453,10 @@ def measured_sides(
     Note:
         It calls the map, so it runs on the flag path only
         (``Trellis.punch_holes(diagnose=True)``), never on an assertion. The
-        placement of propagated holes still carries the same point
-        (``StablePartition._map_backward``, until B4b).
+        reference point is the one figures draw (:func:`plotting.hole_point`).
     """
+    from .plotting import hole_point
+
     if trellis.dynamical_system is None:
         return {}
     holes = list(holes)
@@ -466,7 +467,7 @@ def measured_sides(
         if hole.pair is not None or reference is None:
             continue
         steps = -hole.iterate
-        carried = np.asarray(reference.coords, dtype=np.float64)
+        carried = hole_point(trellis, reference)
         for _ in range(steps):
             carried = np.asarray(
                 trellis.dynamical_system.map_inv(carried), dtype=np.float64

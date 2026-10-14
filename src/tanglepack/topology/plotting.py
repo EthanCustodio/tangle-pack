@@ -48,10 +48,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numpy.typing import NDArray
 
-from .TopologyResults import PartitionInterval, StablePartitionResult
+from .TopologyResults import Hole, PartitionInterval, StablePartitionResult
 
 if TYPE_CHECKING:
-    from ..numerics.Bridge import BridgeId
+    from ..numerics.Bridge import Bridge, BridgeId
+    from ..numerics.Intersection import Intersection
     from .DualGraph import DualGraph, FaceNode, StableNode
     from .DualWalk import Walk
     from .MinimalTrellis import MinimalTrellis
@@ -282,20 +283,20 @@ def plot_holes(
     )
     for origin in groups:
         batch = [h for h in trellis.holes if h.origin == origin]
-        coords = np.array([h.coords for h in batch])
+        points = np.array([hole_point(trellis, h) for h in batch])
         marker, color = style_of.get(origin, ("x", "gray"))
         kwargs = dict(scatter_kwargs)
         kwargs.setdefault("marker", marker)
         kwargs.setdefault("color", color)
-        handles.append(target.scatter(coords[:, 0], coords[:, 1], **kwargs))
+        handles.append(target.scatter(points[:, 0], points[:, 1], **kwargs))
         if show_iterates:
             axes = target if ax is not None else plt.gca()
-            for hole in batch:
+            for hole, point in zip(batch, points):
                 if hole.iterate is None:
                     continue
                 axes.annotate(
                     str(hole.iterate),
-                    hole.coords,
+                    tuple(point),
                     textcoords="offset points",
                     xytext=(4, 4),
                     fontsize=8,
@@ -303,6 +304,206 @@ def plot_holes(
                     zorder=15,
                 )
     return handles
+
+
+# ── where a hole is drawn ───────────────────────────────────────────────────
+
+
+def hole_point(trellis: "Trellis", hole: Hole, epsilon: float = 0.05) -> NDArray[np.float64]:
+    """
+    A point inside the region a hole stands for, to draw it at.
+
+    A hole is combinatorial (its bridge, side and openings); where it sits in
+    the plane is a view, computed here on demand. A REFERENCE hole steps off
+    the middle of its pair's stable arc toward the nearest node of its bridge.
+    A propagated hole sits by the middle of its IMAGE SUB-ARC (the reference
+    bridge's crossings moved back by :meth:`Trellis.image_cdist`), nudged off
+    the arc toward the reference hole's point carried back ``-iterate`` steps
+    by the real inverse map: a view may call the map, the hole algorithm never
+    does. Both step between the middles of the two boundary arcs, never off a
+    chord midpoint, which can lie outside a narrow curved lobe (author-reported
+    on the period-3 tangle).
+
+    Args:
+        trellis: The Trellis the hole was punched on (it holds the orbit's
+            reference hole).
+        hole: The hole to place.
+        epsilon: The step off the boundary arc, as a fraction of the region's
+            chord.
+
+    Returns:
+        The ``(2,)`` point.
+
+    Note:
+        Without a map (``trellis.dynamical_system`` None) a propagated hole is
+        nudged toward its containing bridge's stable arc instead.
+    """
+    near, far = (trellis.intersection(i) for i in hole.bounding_ids)
+    stable_mid, _stable_tangent = _stable_arc_midpoint(trellis, near, far)
+    bridge = trellis.bridge_between(*hole.bounding_ids)
+    if hole.pair is not None:
+        chord_len = float(np.linalg.norm(far.get_point() - near.get_point()))
+        point = _step_into(stable_mid, _nearest_arc_point(bridge, stable_mid), epsilon, chord_len)
+        return np.array([float(point[0]), float(point[1])])
+
+    reference = next(h for h in trellis.holes if h.origin == hole.origin and h.pair is not None)
+    start = trellis.bridge_between(*reference.bounding_ids)
+    steps = -hole.iterate
+    span = tuple(sorted(
+        trellis.image_cdist(end_id, -steps, "unstable", branch=start.manifold_key)[1]
+        for end_id in start.id
+    ))
+    midpoint, u_tangent, arc_chord = _image_arc_midpoint(bridge, span)
+    normal = None if u_tangent is None else np.array([-u_tangent[1], u_tangent[0]])
+    if trellis.dynamical_system is None or normal is None or not np.linalg.norm(normal) > 0.0:
+        point = _step_into(midpoint, stable_mid, epsilon, arc_chord)
+        return np.array([float(point[0]), float(point[1])])
+
+    carried = hole_point(trellis, reference, epsilon)
+    for _ in range(steps):
+        carried = np.asarray(trellis.dynamical_system.map_inv(carried), dtype=np.float64).ravel()
+    # Off the unstable arc toward the carried point's side of it, capped by the
+    # distance to the carried point so a narrow lobe is not overshot.
+    normal /= float(np.linalg.norm(normal))
+    if float(np.dot(normal, carried - midpoint)) < 0.0:
+        normal = -normal
+    step = min(epsilon * arc_chord, 0.5 * float(np.linalg.norm(carried - midpoint)))
+    point = midpoint + step * normal
+    return np.array([float(point[0]), float(point[1])])
+
+
+def _step_into(
+    anchor: NDArray[np.float64],
+    target: NDArray[np.float64],
+    epsilon: float,
+    chord_len: float,
+) -> NDArray[np.float64]:
+    """Step off a boundary-arc midpoint toward the opposite boundary's midpoint.
+
+    The step is ``epsilon`` times the smaller of the pair chord and the
+    arc-to-arc distance: the chord cap keeps a huge lobe (whose opposite
+    boundary is far away, and whose interior curves off the straight line)
+    from carrying the hole visibly away, the distance cap keeps a narrow lobe
+    from being overshot.
+    """
+    direction = target - anchor
+    dist = float(np.linalg.norm(direction))
+    if dist == 0.0:
+        return anchor
+    return anchor + epsilon * min(chord_len, dist) * direction / dist
+
+
+def _stable_arc_midpoint(
+    trellis: "Trellis",
+    near: "Intersection",
+    far: "Intersection",
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Middle of the stable arc between two intersections, and its tangent.
+
+    Walks the actual stable-manifold nodes between the pair's stable cdists
+    (the trellis carries a live reference to the workbench manifolds), so the
+    point lies ON the region's stable boundary even when the arc curves far
+    from the pair's chord; the tangent is the local curve direction there,
+    oriented toward the anchor (decreasing cdist). Falls back to the chord
+    midpoint and chord direction when the manifold nodes are unavailable, and
+    when the two bounds sit on DIFFERENT stable branches (heteroclinic, or a
+    bridge of a period > 1 orbit): there is then no single arc between them,
+    and walking one branch's nodes between two cdists measured on different
+    branches would return an unrelated piece of curve.
+    """
+    key = near.manifold_b_key
+    if key is None or key != far.manifold_b_key:
+        logger.debug(
+            "Stable bounds sit on different branches (%s, %s); using the chord "
+            "midpoint",
+            key,
+            far.manifold_b_key,
+        )
+        return (
+            (near.get_point() + far.get_point()) / 2.0,
+            near.get_point() - far.get_point(),
+        )
+    manifold = trellis.manifolds.get(key)
+    if manifold is not None:
+        lo, hi = sorted((near.stable_cdist, far.stable_cdist))
+        inside = [
+            node.get_point()
+            for node in manifold.get_point_array(return_nodes=True)
+            if lo <= node.cdist <= hi
+        ]
+        if len(inside) >= 2:
+            mid = len(inside) // 2
+            prev_i, next_i = max(mid - 1, 0), min(mid + 1, len(inside) - 1)
+            # Nodes run root -> tail = increasing cdist; toward the anchor
+            # is the decreasing-cdist direction.
+            tangent = np.asarray(inside[prev_i], dtype=np.float64) - np.asarray(
+                inside[next_i], dtype=np.float64
+            )
+            return np.asarray(inside[mid], dtype=np.float64), tangent
+        if inside:
+            return (
+                np.asarray(inside[0], dtype=np.float64),
+                near.get_point() - far.get_point(),
+            )
+    return (
+        (near.get_point() + far.get_point()) / 2.0,
+        near.get_point() - far.get_point(),
+    )
+
+
+def _nearest_arc_point(
+    bridge: "Bridge", point: NDArray[np.float64]
+) -> Optional[NDArray[np.float64]]:
+    """The bridge node closest to ``point``, excluding the flanking end nodes.
+
+    A bridge's root and tail sit just PAST its intersections (see Bridge), on
+    the stable curve rather than across the lobe, so they are skipped when
+    enough nodes exist.
+    """
+    points = bridge.get_point_array()
+    if points is None or len(points) == 0:
+        return None
+    points = np.asarray(points, dtype=np.float64)
+    if len(points) > 4:
+        points = points[1:-1]
+    distances = np.linalg.norm(points - point, axis=1)
+    return points[int(np.argmin(distances))]
+
+
+def _image_arc_midpoint(
+    bridge: "Bridge", span: Optional[tuple[float, float]]
+) -> tuple[Optional[NDArray[np.float64]], Optional[NDArray[np.float64]], float]:
+    """Middle of the image sub-arc of a bridge: (coords, local tangent, chord).
+
+    ``span`` bounds the sub-arc in unstable cdist; the node closest to the
+    span's middle is taken, with its local curve tangent and the straight-line
+    chord length between the sub-arc's endpoints. Without a span the whole
+    bridge is the arc.
+    """
+    nodes = bridge.get_point_array(return_nodes=True)
+    if not nodes:
+        return None, None, 0.0
+    if span is None:
+        lo_i, mid_i, hi_i = 0, len(nodes) // 2, len(nodes) - 1
+    else:
+        cdists = [node.cdist for node in nodes]
+        u_lo, u_hi = span
+        lo_i = min(range(len(nodes)), key=lambda i: abs(cdists[i] - u_lo))
+        hi_i = min(range(len(nodes)), key=lambda i: abs(cdists[i] - u_hi))
+        mid_i = min(
+            range(len(nodes)), key=lambda i: abs(cdists[i] - (u_lo + u_hi) / 2.0)
+        )
+    midpoint = nodes[mid_i].get_point()
+    prev_i, next_i = max(mid_i - 1, 0), min(mid_i + 1, len(nodes) - 1)
+    tangent = (
+        nodes[next_i].get_point() - nodes[prev_i].get_point()
+        if next_i > prev_i
+        else None
+    )
+    arc_chord = float(
+        np.linalg.norm(nodes[hi_i].get_point() - nodes[lo_i].get_point())
+    )
+    return midpoint, tangent, arc_chord
 
 
 # ── the stable-manifold partition number line ───────────────────────────────
