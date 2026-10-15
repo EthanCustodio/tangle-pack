@@ -1,6 +1,18 @@
 """
 Symbolic dynamics of a trellis, read off bridge classes and dual-graph walks.
 
+The word of a bridge class has two definitions (A.8c). The OBJECT: the image
+``f(b)`` of a member bridge ``b``, read as the classes it crosses and freely
+reduced (:func:`free_reduce`: ``c c^-1`` cancels), is a class invariant. The
+ALGORITHM (D3): the shortest walk of the dual graph between the landings of
+the class's two elements, under the non-crossing rule, is that word; the
+registered image chains are only its cross-check (``diagnostics.verify_words``).
+A class is ``resolved``, ``trivial`` (its word is empty), ``ambiguous`` (a tie
+no rule decides) or ``unresolved``: its walk search failed for one of the six
+reasons of :data:`~tanglepack.topology.DualWalk.WalkReason`, its member lobes
+hold different markers (``MembersDisagree``), or it lands on a singleton and no
+member has a registered image chain.
+
 Each bridge class ``{X, Y}`` (:mod:`~tanglepack.topology.BridgeClass`) is an
 arc between two homotopy elements of the stable manifold. One map step sends
 ``X`` and ``Y`` into the iterated elements ``X'`` and ``Y'``
@@ -77,27 +89,10 @@ Dev Notes:
   of its first non-loop member that has one, read by
   :func:`~tanglepack.topology.DualWalk.trellis_itinerary`. No registered chain
   → unresolved ("grow or blast").
-* Registered member images are EVIDENCE, the walk is the answer: every
-  non-loop member with a registered image chain is translated with the same
-  function and compared at word level (``verified``) and at exact-itinerary
-  level (``itinerary_verified``, INFO only). A word-level disagreement carries
-  an :class:`EvidenceDiagnosis`: ``"stable end"`` when two consecutive
-  crossings of the registered chain on ONE stable branch share a crossing sign
-  (the image passed around the end of the computed stable branch, so its
-  crossings with the trimmed-away part are not registered and the pairing
-  shifts: k=2.8 at 6 blasts); ``"order flip"`` when a member end and a bound
-  of its own element have registered images in the REVERSE stable order (the
-  map preserves the order along a branch, so the registered cdists there are
-  noise: a deep lambda-lemma copy hugging the hole-bridge end it sits 1e-6
-  beside, k=2.8 at 9-13 blasts and k=3.2 at 9, INT-11); else ``"walk"`` (no
-  numerical explanation). A ``"walk"`` disagreement is a WARNING and counts
-  against :attr:`SymbolicDynamics.is_reliable`; ``"stable end"`` evidence is
-  INCOMPLETE and ``"order flip"`` evidence is NOISE, and neither gives a
-  verdict (C11, WP10; C21, WP12: ``word_agrees`` None, INFO), since the walk
-  is the word and the chain is only its cross-check (D3). Both words are
-  freely reduced (:func:`free_reduce`), so a word is compared with a word.
-  Evidence never adds a symbol: a class outside the closed table is named by
-  its label (D2).
+* Registered member images are EVIDENCE, the walk is the answer (D3): the
+  comparison lives in ``diagnostics.verify_words``, runs once every word is
+  final and never changes one. Evidence never adds a symbol: a class outside
+  the closed table is named by its label (D2).
 * A pair whose two elements sit on
   different sides of ONE stable branch is flagged on the symbol
   (``cross_side``) with a WARNING and not asserted. Across two branches there
@@ -156,7 +151,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from itertools import groupby
 from typing import Callable, Iterable, Literal, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
@@ -182,6 +176,7 @@ from .DualWalk import (
 )
 from .ElementNaming import ElementNaming
 from .TopologyResults import ElementRef
+from .diagnostics import verify_words
 
 if TYPE_CHECKING:
     import networkx
@@ -190,6 +185,7 @@ if TYPE_CHECKING:
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Intersection import ManifoldKey
     from .DualGraph import Chord, DualGraph, FaceNode
+    from .diagnostics import ImageEvidence
     from .PartitionFamily import PartitionFamily
     from .Trellis import Trellis
 
@@ -263,75 +259,6 @@ class Symbol:
         return self.text
 
 
-@dataclass(frozen=True)
-class EvidenceDiagnosis:
-    """
-    Why a registered image disagrees with the walked word (INT-1).
-
-    Attributes:
-        position: The first token where the two words differ.
-        walked: The walked token's occurrence there (iterated pair, class
-            source end first), ``None`` past the end of the walked word.
-        registered: The registered token's occurrence there, ``None`` past the
-            end of the registered word.
-        cause: ``"stable end"`` when two consecutive crossings of the
-            registered chain on one stable branch share a crossing sign: the
-            image passed around the end of the computed stable branch, so its
-            crossings with the trimmed-away part are not registered and the
-            registered word is incomplete. ``"order flip"`` when a member
-            end and a bound of its own element have registered images in the
-            reverse stable order: the map preserves the order along a branch,
-            so the registered cdists contradict the dynamics there and the
-            evidence is noise (C21). ``"walk"`` otherwise: no numerical
-            explanation, the shortest walk is not the image's class.
-        crossings: The equal-sign run behind ``"stable end"``, the
-            ``(end, bound)`` behind ``"order flip"``, else ``()``.
-    """
-
-    position: int
-    walked: Optional[tuple[ElementRef, ElementRef]]
-    registered: Optional[tuple[ElementRef, ElementRef]]
-    cause: Literal["stable end", "order flip", "walk"]
-    crossings: tuple[int, ...] = ()
-
-
-@dataclass
-class ImageEvidence:
-    """
-    The registered forward image of one member bridge, as a word.
-
-    Attributes:
-        bridge_id: The member.
-        direction: Its direction in its class.
-        itinerary: The iterated elements along its image chain, in the same
-            even-length, disjoint-pair format as a dual-graph walk, running
-            from the image of the class source to the image of the target.
-        symbols: The itinerary translated (loops dropped), freely reduced.
-        chain: The registered image chain the itinerary was read off.
-        word_agrees: True when the non-loop ``(class, direction)`` sequence
-            equals the class's primary word, False when it does not; ``None``
-            when the class has no itinerary to compare with, or when the
-            evidence is incomplete or noise (a ``"stable end"`` or
-            ``"order flip"`` diagnosis, C11 / C21).
-        itinerary_agrees: True when the iterated refs agree exactly.
-        diagnosis: Why the word disagrees, when it does.
-    """
-
-    bridge_id: "BridgeId"
-    direction: int
-    itinerary: tuple[ElementRef, ...]
-    symbols: list[Symbol]
-    chain: tuple["BridgeId", ...] = ()
-    word_agrees: Optional[bool] = None
-    itinerary_agrees: Optional[bool] = None
-    diagnosis: Optional[EvidenceDiagnosis] = None
-
-    @property
-    def word(self) -> str:
-        """The registered word as text."""
-        return " ".join(symbol.text for symbol in self.symbols)
-
-
 @dataclass
 class ClassDynamics:
     """
@@ -361,7 +288,8 @@ class ClassDynamics:
             or a singleton landing with no registered member image), else
             ``None``. A pair no computed bridge spans unresolves nothing
             (D11): it is a class of its own, ``entry.spanned`` False.
-        evidence: The registered member images, one record each.
+        evidence: The registered member images, one record each
+            (``diagnostics.verify_words``).
         verified: Word-level agreement of every piece of evidence that gives a
             verdict; ``None`` without such evidence or without an itinerary.
         itinerary_verified: Exact-itinerary agreement, reported only.
@@ -705,62 +633,6 @@ def _refined_symbol(
         if child.occurrence == symbol.occurrence:
             return replace(symbol, refined_index=child.index)
     return symbol
-
-
-# ── registered evidence ─────────────────────────────────────────────────────
-
-
-def registered_evidence(
-    trellis: "Trellis",
-    iterated: "PartitionFamily",
-    naming: ElementNaming,
-    table: BridgeClassTable,
-    letters: dict[BridgeClass, str],
-    entry: BridgeClassEntry,
-) -> list[ImageEvidence]:
-    """
-    The registered forward images of a class's members, as words.
-
-    Args:
-        trellis: The full trellis (iterate table, crossings).
-        iterated: The iterated partition family owning the image crossings.
-        naming: Resolves iterated refs to their homotopy parents.
-        table: The bridge classes.
-        letters: The letter map (see :func:`translate_itinerary`).
-        entry: The class whose members to read.
-
-    Returns:
-        One :class:`ImageEvidence` per non-loop member with a registered image
-        chain, in member order, with ``word_agrees`` / ``itinerary_agrees``
-        left ``None`` (the driver fills them). Loop members and members without
-        a registered chain contribute nothing.
-    """
-    evidence: list[ImageEvidence] = []
-    for member in entry.members:
-        if member.is_loop:
-            continue
-        chain = _image_chain(trellis, member.bridge_id)
-        if not chain:
-            continue
-        try:
-            itinerary = tuple(trellis_itinerary(trellis, iterated, chain, member.direction))
-        except ValueError as error:
-            logger.warning(
-                "registered image of member %s of class %s cannot be read as an "
-                "itinerary; it contributes no evidence (%s)",
-                member.bridge_id,
-                entry.letter if entry.letter is not None else entry.bridge_class.label,
-                error,
-            )
-            continue
-        symbols, _loops = translate_itinerary(
-            itinerary, naming, table, letters, trellis.fixed_points
-        )
-        word = [symbols[i] for i in free_reduce(_signature(symbols))]
-        evidence.append(
-            ImageEvidence(member.bridge_id, member.direction, itinerary, word, tuple(chain))
-        )
-    return evidence
 
 
 def _member_pair(
@@ -1292,120 +1164,6 @@ def _resolve_itinerary(
     cd.ambiguous = search.status == "ambiguous"
 
 
-def _diagnose(
-    trellis: "Trellis",
-    homotopy: "PartitionFamily",
-    cls: BridgeClass,
-    evidence: ImageEvidence,
-    symbols: Sequence[Symbol],
-) -> EvidenceDiagnosis:
-    """Where a registered word parts from the walked one, and why (see :class:`EvidenceDiagnosis`)."""
-    pairs = list(zip(_signature(symbols), _signature(evidence.symbols)))
-    position = next((i for i, (w, r) in enumerate(pairs) if w != r), len(pairs))
-    walked = symbols[position].occurrence if position < len(symbols) else None
-    registered = (
-        evidence.symbols[position].occurrence if position < len(evidence.symbols) else None
-    )
-    chain = evidence.chain
-    crossings = [chain[0][0], *(pair[1] for pair in chain)] if chain else []
-    # The first two or more consecutive crossings on one stable branch with one sign.
-    def mark(crossing: int) -> tuple:
-        ix = trellis.intersection(crossing)
-        return ix.manifold_b_key, ix.crossing_sign
-
-    runs = (tuple(run) for _, run in groupby(crossings, key=mark))
-    run = next((run for run in runs if len(run) > 1), None)
-    if run:
-        return EvidenceDiagnosis(position, walked, registered, "stable end", run)
-    flip = _order_flip(trellis, homotopy, cls, evidence)
-    if flip:
-        return EvidenceDiagnosis(position, walked, registered, "order flip", flip)
-    return EvidenceDiagnosis(position, walked, registered, "walk")
-
-
-def _order_flip(
-    trellis: "Trellis", homotopy: "PartitionFamily", cls: BridgeClass, evidence: ImageEvidence
-) -> Optional[tuple[int, int]]:
-    """A member end and a bound of its own element whose registered images run in
-    the reverse stable order (C21): the map preserves the order along a branch, so
-    the registered cdists there are noise. Lookup only."""
-    ends = evidence.bridge_id if evidence.direction >= 0 else evidence.bridge_id[::-1]
-    for end, ref in zip(ends, (cls.source, cls.target)):
-        element = homotopy.element(ref)
-        for bound in (element.lo_id, element.hi_id):
-            if bound is None or bound == end:
-                continue
-            images = trellis.iterate(end, 1), trellis.iterate(bound, 1)
-            if None in images:
-                continue
-            x, y = (trellis.intersection(i) for i in (end, bound))
-            fx, fy = (trellis.intersection(i) for i in images)
-            if x.manifold_b_key == y.manifold_b_key and fx.manifold_b_key == fy.manifold_b_key and (
-                (x.stable_cdist < y.stable_cdist) != (fx.stable_cdist < fy.stable_cdist)
-            ):
-                return end, bound
-    return None
-
-
-def _compare_evidence(cd: ClassDynamics, trellis: "Trellis", homotopy: "PartitionFamily") -> None:
-    """Fill the evidence agreement flags, the diagnoses and the class's ``verified`` fields."""
-    if not cd.evidence or cd.itinerary is None:
-        cd.verified = None
-        cd.itinerary_verified = None
-        return
-    signature = _signature(cd.symbols)
-    for evidence in cd.evidence:
-        evidence.itinerary_agrees = tuple(evidence.itinerary) == tuple(cd.itinerary)
-        if _signature(evidence.symbols) == signature:
-            evidence.word_agrees = True
-            continue
-        evidence.diagnosis = diagnosis = _diagnose(
-            trellis, homotopy, cd.entry.bridge_class, evidence, cd.symbols
-        )
-        incomplete = diagnosis.cause in ("stable end", "order flip")
-        evidence.word_agrees = None if incomplete else False
-        if diagnosis.cause == "stable end":
-            why = (
-                f"incomplete: the image passes the end of the computed stable branch at "
-                f"crossings {list(diagnosis.crossings)} (same branch, same sign), so it "
-                "gives no verdict"
-            )
-        elif diagnosis.cause == "order flip":
-            end, bound = diagnosis.crossings
-            gaps = [
-                trellis.intersection(a).stable_cdist - trellis.intersection(b).stable_cdist
-                for a, b in ((end, bound), (trellis.iterate(end, 1), trellis.iterate(bound, 1)))
-            ]
-            why = (
-                f"noise: member end {end} and its element's bound {bound} are "
-                f"{gaps[0]:+.2e} apart in stable cdist but their registered images "
-                f"{gaps[1]:+.2e}, an order the map cannot reverse, so it gives no verdict"
-            )
-        else:
-            why = "no numerical explanation: the shortest walk is not the image's class"
-        (logger.info if incomplete else logger.warning)(
-            "class %s: the registered image of member %s reads %r but the %s itinerary "
-            "reads %r; they part at token %d: %s",
-            cd.letter,
-            evidence.bridge_id,
-            evidence.word,
-            cd.source,
-            cd.word,
-            diagnosis.position,
-            why,
-        )
-    verdicts = [evidence.word_agrees for evidence in cd.evidence if evidence.word_agrees is not None]
-    cd.verified = all(verdicts) if verdicts else None
-    cd.itinerary_verified = all(evidence.itinerary_agrees for evidence in cd.evidence)
-    if cd.verified and not cd.itinerary_verified:
-        logger.info(
-            "class %s: word verified but the registered itinerary differs from the "
-            "%s one at element level",
-            cd.letter,
-            cd.source,
-        )
-
-
 def symbolic_dynamics(
     dual_graph: "DualGraph",
     classes: BridgeClassTable,
@@ -1540,15 +1298,7 @@ def symbolic_dynamics(
                 cd.itinerary, naming, table, letters, fixed_points
             )
             cd.symbols = [symbols[i] for i in free_reduce(_signature(symbols))]
-        cd.evidence = registered_evidence(trellis, iterated, naming, table, letters, cd.entry)
-        _compare_evidence(cd, trellis, homotopy)
-        logger.debug(
-            "class %s: %s, word %r, verified %s",
-            cd.letter,
-            cd.status,
-            cd.word,
-            cd.verified,
-        )
+    verify_words(records.values(), trellis, naming, table, letters)
 
     dynamics = SymbolicDynamics(naming, table, fixed_points, records, inert_letters=inert)
     dynamics.match_members(trellis, iterated)

@@ -107,8 +107,6 @@ from .DualWalk import (
 )
 from .SymbolicDynamics import (
     ClassDynamics,
-    EvidenceDiagnosis,
-    ImageEvidence,
     RefinedClass,
     Symbol,
     SymbolicDynamics,
@@ -116,7 +114,6 @@ from .SymbolicDynamics import (
     inert_letters,
     letter,
     refine,
-    registered_evidence,
     symbolic_dynamics,
     translate_itinerary,
 )
@@ -133,6 +130,8 @@ from .StablePartition import (
     span_contains,
 )
 from .diagnostics import (
+    EvidenceDiagnosis,
+    ImageEvidence,
     RowDiagnosis,
     RowEnd,
     SideDiagnosis,
@@ -140,6 +139,7 @@ from .diagnostics import (
     bridge_row_violation,
     bridge_side_violations,
     geometry_flags,
+    registered_evidence,
     side_diagnoses,
 )
 

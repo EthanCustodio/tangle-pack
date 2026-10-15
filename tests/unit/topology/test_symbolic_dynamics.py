@@ -28,6 +28,7 @@ from tanglepack.topology.BridgeClass import (
 from tanglepack.topology.TopologyResults import ElementRef
 
 SD = importlib.import_module("tanglepack.topology.SymbolicDynamics")
+DG = importlib.import_module("tanglepack.topology.diagnostics")
 Symbol = SD.Symbol
 ClassDynamics = SD.ClassDynamics
 SymbolicDynamics = SD.SymbolicDynamics
@@ -475,10 +476,10 @@ def test_unreadable_image_chain_is_skipped_as_evidence(layout, monkeypatch, capl
             raise ValueError("crossing 2 of the image chain has no owner")
         return good
 
-    monkeypatch.setattr(SD, "_image_chain", fake_chain)
-    monkeypatch.setattr(SD, "trellis_itinerary", fake_itinerary)
-    with caplog.at_level(logging.WARNING, logger=SD.__name__):
-        evidence = SD.registered_evidence(
+    monkeypatch.setattr(DG, "_image_chain", fake_chain)
+    monkeypatch.setattr(DG, "trellis_itinerary", fake_itinerary)
+    with caplog.at_level(logging.WARNING, logger=DG.__name__):
+        evidence = DG.registered_evidence(
             _FakeTrellis(layout.fixed_points),
             object(),
             layout.naming,
@@ -488,7 +489,7 @@ def test_unreadable_image_chain_is_skipped_as_evidence(layout, monkeypatch, capl
         )
     assert [e.bridge_id for e in evidence] == [(0, 5)]
     assert evidence[0].itinerary == good
-    assert_logged(caplog, logging.WARNING, SD.__name__)
+    assert_logged(caplog, logging.WARNING, DG.__name__)
 
 
 def test_registered_evidence_never_extends_the_letters(layout, monkeypatch):
@@ -501,10 +502,10 @@ def test_registered_evidence_never_extends_the_letters(layout, monkeypatch):
         def __init__(self, fixed_points):
             self.fixed_points = fixed_points
 
-    monkeypatch.setattr(SD, "_image_chain", lambda _trellis, _bid: [(0, 1), (1, 2)])
-    monkeypatch.setattr(SD, "trellis_itinerary", lambda *_args: outside)
+    monkeypatch.setattr(DG, "_image_chain", lambda _trellis, _bid: [(0, 1), (1, 2)])
+    monkeypatch.setattr(DG, "trellis_itinerary", lambda *_args: outside)
     letters = dict(layout.letters)
-    evidence = SD.registered_evidence(
+    evidence = DG.registered_evidence(
         _FakeTrellis(layout.fixed_points), object(), layout.naming, layout.table, letters, entry
     )
     assert letters == layout.letters
@@ -571,13 +572,18 @@ def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
     def owner_pair(*_args):
         raise ValueError("no owners in the synthetic layout")
 
-    monkeypatch.setattr(SD, "ElementNaming", lambda _homotopy, _iterated: layout.naming)
+    def naming(homotopy, iterated):
+        layout.naming.homotopy, layout.naming.iterated = homotopy, iterated
+        return layout.naming
+
+    monkeypatch.setattr(SD, "ElementNaming", naming)
     monkeypatch.setattr(SD, "land_element", land)
     if walks is not None:
         monkeypatch.setattr(SD, "_resolve_itinerary", resolve)
     monkeypatch.setattr(SD, "_member_pair", owner_pair)
-    monkeypatch.setattr(SD, "_image_chain", lambda _t, bid: (chains or {}).get(bid))
-    monkeypatch.setattr(SD, "trellis_itinerary", lambda _t, _i, chain, _d: registered[tuple(chain)])
+    # The registered evidence is read in diagnostics (B6b): its lookups are patched there.
+    monkeypatch.setattr(DG, "_image_chain", lambda _t, bid: (chains or {}).get(bid))
+    monkeypatch.setattr(DG, "trellis_itinerary", lambda _t, _i, chain, _d: registered[tuple(chain)])
     dual = dual_graph if dual_graph is not None else SimpleNamespace()
     dual.trellis = _Crossings(layout.fixed_points, crossings or {})
     # Elements with no bounding crossings: no order flip to read (C21).
@@ -667,7 +673,7 @@ def test_evidence_disagreement_names_a_stable_end(layout, monkeypatch, caplog, s
     registered = {chain: layout.refs("R_1^1", "R_3^3", "R_1^3", "R_3^1")}  # a a
     crossings = {cid: (layout.key, sign) for cid, sign in zip((10, 11, 12, 13), signs)}
     walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
-    with caplog.at_level(logging.INFO, logger=SD.__name__):
+    with caplog.at_level(logging.INFO, logger=DG.__name__):
         dyn = _drive(
             layout, monkeypatch, layout.table, layout.table, walks,
             crossings=crossings, chains={(0, 5): list(chain)}, registered=registered,
@@ -681,7 +687,7 @@ def test_evidence_disagreement_names_a_stable_end(layout, monkeypatch, caplog, s
     incomplete = cause == "stable end"
     assert evidence.word_agrees is (None if incomplete else False)
     assert cd.verified is (None if incomplete else False)
-    assert_logged(caplog, logging.WARNING, SD.__name__, count=0 if incomplete else 1)
+    assert_logged(caplog, logging.WARNING, DG.__name__, count=0 if incomplete else 1)
     assert any("registered image" in r.getMessage() for r in caplog.records if r.levelno == logging.INFO) == incomplete
     assert dyn.is_reliable == incomplete
 

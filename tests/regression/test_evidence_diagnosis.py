@@ -2,7 +2,7 @@
 
 D3: the shortest walk IS the word and the registered image chain is the
 cross-check. When the two disagree the evidence carries an
-:class:`~tanglepack.topology.SymbolicDynamics.EvidenceDiagnosis`: ``"stable
+:class:`~tanglepack.topology.diagnostics.EvidenceDiagnosis`: ``"stable
 end"`` when two consecutive crossings of the chain on ONE stable branch share a
 crossing sign (the image passed around the end of the computed stable branch,
 so its crossings with the trimmed-away part are not registered); else
@@ -81,7 +81,7 @@ def test_disagreeing_evidence_carries_its_cause(k28_six_blasts, caplog):
     session = k28_six_blasts
     trellis = session.minimal_trellis().trellis
     homotopy = session.homotopy_partition()
-    with caplog.at_level(logging.INFO, logger="tanglepack.topology.SymbolicDynamics"):
+    with caplog.at_level(logging.INFO, logger="tanglepack.topology.diagnostics"):
         dyn = session.symbolic_dynamics(rebuild=True)
     evidences = [evidence for cd in dyn.classes.values() for evidence in cd.evidence]
     diagnosed = [(cd, ev) for cd in dyn.classes.values() for ev in cd.evidence if ev.diagnosis]
@@ -94,7 +94,11 @@ def test_disagreeing_evidence_carries_its_cause(k28_six_blasts, caplog):
     assert all(evidence.diagnosis is None for evidence in evidences if evidence.word_agrees)
 
     walk_blamed = [evidence for _cd, evidence in diagnosed if evidence.word_agrees is False]
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING and "registered image" in r.getMessage()]
+    warnings = [
+        r for r in caplog.records
+        if r.name == "tanglepack.topology.diagnostics"
+        and r.levelno == logging.WARNING and "registered image" in r.getMessage()
+    ]
     assert len(warnings) == len(walk_blamed)
     for cd in dyn.classes.values():
         assert (cd.verified is False) == any(evidence.word_agrees is False for evidence in cd.evidence)
@@ -116,7 +120,7 @@ def test_an_order_flip_gives_no_verdict(caplog):
         )
     trellis = session.minimal_trellis().trellis
     homotopy = session.homotopy_partition()
-    with caplog.at_level(logging.INFO, logger="tanglepack.topology.SymbolicDynamics"):
+    with caplog.at_level(logging.INFO, logger="tanglepack.topology.diagnostics"):
         dyn = session.symbolic_dynamics()
     flipped = [
         (cd, ev)
