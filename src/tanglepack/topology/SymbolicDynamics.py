@@ -14,6 +14,22 @@ forward or backward, i.e. one SYMBOL of the class's word. The words of all
 classes are the rewriting rules; their transition matrix is the symbolic
 dynamics.
 
+The refined level (alignment plan A.8d). Each token also carries the pair of
+elements of the iterated partition ``P1`` it lands on, its OCCURRENCE; the
+occurrences of a class across all words are its refined symbols ``c_1, c_2,
+...`` (:func:`refine`). **Theorem T**: every member of a class has the same
+``P1``-level freely reduced itinerary (the strip two members bound with the
+stable manifold holds no hole, so no ``P1`` cut separates their images). The
+refined word of ``c_k`` is the class word with every token written as the
+child its occurrence names; by T it is the word of every member of ``c_k``,
+not an inheritance. The refined matrix ``M_1`` is then the IN-SPLITTING of the
+class matrix ``M``: siblings have equal rows and the children's columns sum to
+the parent's, a conjugacy with the same entropy. T and the in-splitting are
+laws on every build (``members_share_the_P1_itinerary``,
+``refined_matrix_is_an_in_splitting``); T is a known issue on ``k32_series`` at
+6-7 blasts, where base-branch chord pairing in chain order cuts ``P1`` wrongly
+under one spiralling lobe (``PartitionFamily``, slice B7b).
+
 Dev Notes:
 
 * Directions are always shown, inert classes included (author's decision,
@@ -46,9 +62,9 @@ Dev Notes:
   hole-bridge transport chain. Every other bridge is image evidence only.
 * Refinement occurrences come ONLY from the walked (or trellis) itineraries of
   all classes, never from registered member images. A class is split when
-  its symbol occurs with two or more distinct iterated pairs; every refined
-  child inherits the parent's word rewritten in refined symbols
-  (``a_1 -> a_1 u^-1 a_2^-1`` AND ``a_2 -> a_1 u^-1 a_2^-1``). Members are
+  its symbol occurs with two or more distinct iterated pairs; the refined
+  word of every child is the word of every member, by T, written in refined
+  symbols (``a_1 -> a_1 u^-1 a_2^-1`` AND ``a_2 -> a_1 u^-1 a_2^-1``). Members are
   matched to refined children only for classes that actually split, by their
   OWN endpoint owners: under the empty-stretch cut of ``PartitionFamily`` an
   image crossing is owned by the element of the stable edge the walk crosses
@@ -756,8 +772,9 @@ class SymbolicDynamics:
         rules: ``{letter: word}`` over unrefined symbols, one per resolved
             class.
         refined_rules: ``{name: word}`` over refined symbols; a split class
-            contributes one rule per child (all with the same word), an
-            unsplit one keeps its letter.
+            contributes one rule per child, each the word of every member,
+            by Theorem T (so all children share it); an unsplit one keeps
+            its letter.
     """
 
     def __init__(
@@ -996,8 +1013,13 @@ class SymbolicDynamics:
         """
         The transition matrix over the symbols in :meth:`symbol_nodes` order.
 
+        Over refined symbols it is ``M_1``, the in-splitting of the class
+        matrix ``M`` (A.8d): sibling rows are equal, and the children's
+        columns sum to the parent's column of ``M``.
+
         Args:
-            refined: Over refined symbols (default) or bare letters.
+            refined: Over refined symbols (default, ``M_1``) or bare letters
+                (``M``).
 
         Returns:
             ``(symbols, matrix)``: row ``i`` counts the occurrences of symbol
