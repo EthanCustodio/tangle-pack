@@ -3,11 +3,9 @@
 A hole's image lobe sits on the stable branch of its BASE (the image chain's
 ``(x_0, x_m)``) and folds through stable branches along chords:
 
-* on the base branch the interior crossings pair in CHAIN order (the author's
-  rule, 2026-09-23);
-* on any other stable branch they pair in STABLE order: walking that branch from
-  its anchor, which no lobe image holds, the image is entered and left in turn
-  (Jordan alternation);
+* on every stable branch, the base branch included, the interior crossings pair
+  in STABLE order: walking a branch from its anchor, which no lobe image holds,
+  the image is entered and left in turn (Jordan alternation; C19, B7b);
 * the base lies on ONE branch (its ends are images of one branch's crossings), read
   at a non-anchor end, since an anchor lies on every branch of its point (D4); a
   base across two branches asserts;
@@ -93,8 +91,7 @@ def test_foreign_crossings_pair_in_stable_order(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The p3_6_blasts excursion: 41..44 on a foreign branch at stable cdists 1.158,
-    1.025, 0.973, 1.285 pair as (43, 42) and (41, 44), never in chain order; the
-    base branch's own interior crossings keep the chain order."""
+    1.025, 0.973, 1.285 pair as (43, 42) and (41, 44), never as the chain visits them."""
     crossings = {
         **{iid: _crossing(OWN) for iid in (10, 11, 12, 13)},
         41: _crossing(FOREIGN, 1.158),
@@ -105,9 +102,20 @@ def test_foreign_crossings_pair_in_stable_order(
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         empty = _empty_stretches(monkeypatch, crossings, _chain([10, 11, 41, 42, 43, 44, 12, 13]))
     assert (13, "base") in empty[10]
-    assert (12, "chord") in empty[11]
     assert empty[43] == [(42, "chord")] and empty[41] == [(44, "chord")]
     assert_logged(caplog, logging.WARNING, LOGGER, count=0)
+
+
+def test_base_crossings_pair_in_stable_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The k32_series hole (6, 7)'s lobe: its chain 8..13 spirals back across its
+    own base branch, interior stable order 11, 10, 9, 12, so the chords are (11, 10)
+    and (9, 12), the gaps inside the lobe image, not the chain's (9, 10), (11, 12)."""
+    cdists = {8: 0.176, 9: 6.786, 10: 6.665, 11: 6.571, 12: 7.418, 13: 0.036}
+    crossings = {iid: _crossing(OWN, cdist) for iid, cdist in cdists.items()}
+    empty = _empty_stretches(monkeypatch, crossings, _chain(list(range(8, 14))))
+    assert (13, "base") in empty[8]
+    assert (10, "chord") in empty[11] and (12, "chord") in empty[9]
+    assert (10, "chord") not in empty[9] and (12, "chord") not in empty[11]
 
 
 def test_the_base_is_read_at_a_non_anchor_end(
