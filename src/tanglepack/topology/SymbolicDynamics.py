@@ -25,10 +25,9 @@ child its occurrence names; by T it is the word of every member of ``c_k``,
 not an inheritance. The refined matrix ``M_1`` is then the IN-SPLITTING of the
 class matrix ``M``: siblings have equal rows and the children's columns sum to
 the parent's, a conjugacy with the same entropy. T and the in-splitting are
-laws on every build (``members_share_the_P1_itinerary``,
-``refined_matrix_is_an_in_splitting``); T is a known issue on ``k32_series`` at
-6-7 blasts, where base-branch chord pairing in chain order cuts ``P1`` wrongly
-under one spiralling lobe (``PartitionFamily``, slice B7b).
+laws on the law cases and every blast series (``members_share_the_P1_itinerary``,
+``refined_matrix_is_an_in_splitting``); the base-branch chords pair in stable
+order since B7b (``PartitionFamily``).
 
 Dev Notes:
 
