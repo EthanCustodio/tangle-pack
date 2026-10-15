@@ -1806,16 +1806,12 @@ def _class_cell(
 
 
 def _class_status(class_dynamics) -> str:
-    """unique / trivial / ambiguous / unresolved: reason / trellis."""
+    """The class's status (A.8c; trivial = empty word), ``unresolved: reason``, or ``trellis``."""
     if class_dynamics.unresolved_reason:
         return f"unresolved: {class_dynamics.unresolved_reason}"
-    if class_dynamics.ambiguous:
-        return "ambiguous"
     if class_dynamics.source == "trellis":
         return "trellis"
-    if class_dynamics.search is not None:
-        return str(class_dynamics.search.status)
-    return "-"
+    return class_dynamics.status
 
 
 def _table_columns(refined: bool, columns: Optional[Sequence[str]]) -> list[str]:

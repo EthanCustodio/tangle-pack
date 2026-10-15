@@ -2,6 +2,20 @@
 Walks over the dual graph: where a homotopy element lands, and the shortest
 route between two iterated elements.
 
+The word of a bridge class (A.8c) has two definitions. The OBJECT: the
+freely reduced itinerary of ``f(b)`` for a member bridge ``b``, read in the
+classes it crosses -- a class invariant. The ALGORITHM (D3): the shortest
+walk of the dual graph between the landings of the class's two elements,
+under the non-crossing rule. This module is the algorithm's search; a search
+is ``"resolved"`` (one walk, zero crossings included), ``"ambiguous"`` (a tie
+no rule decides) or ``"unresolved"`` for one of six reasons
+(:data:`WalkReason`): ``no_start_node`` / ``no_goal_node`` (a singleton
+element has no node), ``span_meets_no_node``, ``unreachable``,
+``no_admissible_walk`` and ``truncated``. A class is also unresolved when its
+member lobes disagree on a marker (:class:`MembersDisagree`, no search runs)
+or when it lands on a singleton with no registered image chain
+(``SymbolicDynamics``).
+
 This module is the walking half of the symbolic dynamics. Given a bridge
 class ``{X, Y}`` of HOMOTOPY elements, :func:`land_element` says which
 ITERATED element each of ``X`` and ``Y`` maps into under one map step
@@ -92,16 +106,14 @@ Dev Notes:
   paths (``multiplicity > 1``) is never rejected, and its class makes no
   wall: which face the image runs through is unknown. When every walk crosses
   a wall the tie stands (never observed).
-* When the ``max_walks`` cap cuts the enumeration short the status still
-  says ``"unique"`` or ``"ambiguous"`` for the itineraries that survived and
-  :attr:`WalkSearch.truncated` is set (with a WARNING): the search reports its
-  best candidate, but a truncated search decides nothing, so the symbolic
-  dynamics leaves the class unresolved (B6a). Only a constrained search
-  (D13) that runs out before any judged walk holds the markers reports
-  ``"truncated"`` as its status, with no walk: it has no candidate, and
-  ``"no_admissible_walk"`` would claim every walk up to the detour cap broke
-  the rule. The cap counts judgements there, and the other walks of an
-  itinerary already holding the markers are counted, not judged.
+* When the ``max_walks`` cap cuts the enumeration short the search is
+  ``"unresolved"`` with reason ``"truncated"`` (with a WARNING) and keeps the
+  walks found so far for inspection: a truncated search decides nothing. A
+  constrained search (D13) that runs out before any judged walk holds the
+  markers is truncated too, with no walk: ``"no_admissible_walk"`` would
+  claim every walk up to the detour cap broke the rule. The cap counts
+  judgements there, and the other walks of an itinerary already holding the
+  markers are counted, not judged.
 """
 
 from __future__ import annotations
@@ -551,13 +563,13 @@ class Walk:
         return f"Walk({self.length} step(s), x{self.multiplicity}: {route})"
 
 
-#: The outcome of a shortest-walk search. :func:`shortest_walks` reports the
-#: cap through :attr:`WalkSearch.truncated`; ``"truncated"`` is the status only
-#: when a constrained search ran out with no walk (see the module Dev Notes).
-WalkStatus = Literal[
-    "unique",
-    "trivial",
-    "ambiguous",
+#: The outcome of a shortest-walk search (A.8c): one decided walk, a tie, or
+#: no answer. A zero-crossing walk is ``"resolved"`` like any other decided one;
+#: only a class whose word is empty is called trivial (``ClassDynamics.status``).
+WalkStatus = Literal["resolved", "ambiguous", "unresolved"]
+
+#: Why a search is ``"unresolved"`` (:attr:`WalkSearch.reason`).
+WalkReason = Literal[
     "unreachable",
     "no_start_node",
     "no_goal_node",
@@ -579,27 +591,24 @@ class WalkSearch:
     Attributes:
         start: The iterated element the walk starts in.
         goal: The iterated element it ends in.
-        status: ``"trivial"`` (start and goal share a face, or are equal),
-            ``"unique"`` (one distinct shortest itinerary), ``"ambiguous"``
-            (several distinct shortest itineraries, all kept),
-            ``"unreachable"``, ``"no_start_node"``, ``"no_goal_node"``,
-            ``"no_admissible_walk"`` (the non-crossing rule rejected every
-            walk up to :data:`MAX_DETOUR` crossings past the shortest),
-            ``"truncated"`` (the ``max_walks`` cap ran out before any walk
-            judged under that rule held the markers) or
-            ``"span_meets_no_node"`` (a landing span overlaps none of its
-            element's stable nodes).
+        status: ``"resolved"`` (one distinct shortest itinerary, zero
+            crossings included), ``"ambiguous"`` (several, all kept) or
+            ``"unresolved"`` (see ``reason``).
         walks: The distinct shortest walks in deterministic order (by the
             :func:`~tanglepack.topology.BridgeClass.element_sort_key` of
-            their itineraries); empty unless the status is ``"trivial"``,
-            ``"unique"`` or ``"ambiguous"``.
+            their itineraries). Empty when unresolved, except for a search the
+            ``max_walks`` cap cut short, which keeps its candidates for
+            inspection: a truncated search decides nothing.
         start_faces: The distinct faces on ``start``'s side of the nodes the
             walk may leave from.
-        truncated: True when the ``max_walks`` cap stopped the enumeration of
-            shortest face paths (of judged walks, when constrained), so
-            ``walks`` (and their multiplicities) may be incomplete: the status
-            is the best candidate so far, and the symbolic dynamics leaves
-            such a class unresolved.
+        reason: Set iff the status is ``"unresolved"``: ``"no_start_node"`` /
+            ``"no_goal_node"`` (an element owns no stable node),
+            ``"span_meets_no_node"`` (a landing span overlaps none of its
+            element's stable nodes), ``"unreachable"`` (the search exhausts
+            the faces), ``"no_admissible_walk"`` (the non-crossing rule
+            rejected every walk up to :data:`MAX_DETOUR` crossings past the
+            shortest) or ``"truncated"`` (the ``max_walks`` cap stopped the
+            enumeration).
         constrained: True when the markers of a member lobe were imposed
             (the non-crossing rule, D13).
         rejected: How many itineraries, no longer than the one chosen, broke
@@ -611,7 +620,7 @@ class WalkSearch:
     status: WalkStatus
     walks: list[Walk] = field(default_factory=list)
     start_faces: list["FaceNode"] = field(default_factory=list)
-    truncated: bool = False
+    reason: Optional[WalkReason] = None
     constrained: bool = False
     rejected: int = 0
 
@@ -629,7 +638,7 @@ class WalkSearch:
     def __repr__(self) -> str:
         return (
             f"WalkSearch({self.start.label} -> {self.goal.label}: {self.status}, "
-            f"{len(self.walks)} walk(s){', truncated' if self.truncated else ''})"
+            f"{len(self.walks)} walk(s){f', {self.reason}' if self.reason else ''})"
         )
 
 
@@ -1070,9 +1079,8 @@ def shortest_walks(
         max_walks: Cap on the number of shortest face paths enumerated (on
             the walks judged against the markers, with ``wanted``: the other
             walks of an itinerary already holding them are counted, not
-            judged). When it is hit ``truncated`` is set and a WARNING
-            logged; the status still reports the itineraries that survived,
-            or is ``"truncated"`` when none did.
+            judged). When it is hit the search is unresolved with reason
+            ``"truncated"`` (WARNING), keeping whatever walks survived.
         fixed_points: The ordering context for
             :func:`~tanglepack.topology.BridgeClass.element_sort_key`. By
             default it is derived from the refs themselves (start, goal, then
@@ -1087,16 +1095,10 @@ def shortest_walks(
             ``multiplicity > 1`` is never rejected by a wall.
 
     Returns:
-        The :class:`WalkSearch`. ``"no_start_node"`` / ``"no_goal_node"``
-        when an element owns no stable node (a singleton, or a ref of the
-        wrong family); ``"trivial"`` when ``start == goal`` or a start face
-        is a goal face (itinerary ``(start, goal)``); ``"unique"`` for one
-        distinct shortest itinerary; ``"ambiguous"`` for several (all kept,
-        WARNING); ``"unreachable"`` when the search exhausts the faces;
-        ``"no_admissible_walk"`` when the non-crossing rule rejects every
-        walk up to the detour cap; ``"truncated"`` when the cap ran out
-        before any judged walk held the markers; ``"span_meets_no_node"``
-        when a landing span overlaps none of its element's stable nodes.
+        The :class:`WalkSearch`: ``"resolved"`` for one distinct shortest
+        itinerary (``(start, goal)`` when ``start == goal`` or a start face
+        is a goal face), ``"ambiguous"`` for several (all kept, WARNING),
+        else ``"unresolved"`` with the :attr:`WalkSearch.reason`.
     """
     start_nodes = list(dual.stable_nodes_of(start))
     if not start_nodes:
@@ -1106,7 +1108,7 @@ def shortest_walks(
             start.label,
             goal.label,
         )
-        return WalkSearch(start, goal, "no_start_node")
+        return WalkSearch(start, goal, "unresolved", reason="no_start_node")
     goal_nodes = list(dual.stable_nodes_of(goal))
     if not goal_nodes:
         logger.warning(
@@ -1115,12 +1117,12 @@ def shortest_walks(
             start.label,
             goal.label,
         )
-        return WalkSearch(start, goal, "no_goal_node")
+        return WalkSearch(start, goal, "unresolved", reason="no_goal_node")
     if landings is not None:
         start_nodes = _nodes_meeting(start_nodes, landings[0], start)
         goal_nodes = _nodes_meeting(goal_nodes, landings[1], goal)
         if not start_nodes or not goal_nodes:
-            return WalkSearch(start, goal, "span_meets_no_node")
+            return WalkSearch(start, goal, "unresolved", reason="span_meets_no_node")
 
     start_faces = _distinct_faces(node.face_on(start.side) for node in start_nodes)
     goal_faces = _distinct_faces(node.face_on(goal.side) for node in goal_nodes)
@@ -1150,7 +1152,7 @@ def shortest_walks(
             start_node=node_on(start_nodes, start.side, shared[0]),
             goal_node=node_on(goal_nodes, goal.side, shared[0]),
         )
-        return WalkSearch(start, goal, "trivial", [walk], start_faces)
+        return WalkSearch(start, goal, "resolved", [walk], start_faces)
     shortest = 0
     if not shared:
         predecessors, reached, shortest = _bfs_layers(start_faces, goal_indices)
@@ -1161,7 +1163,7 @@ def shortest_walks(
                 start.label,
                 goal.label,
             )
-            return WalkSearch(start, goal, "unreachable", [], start_faces)
+            return WalkSearch(start, goal, "unresolved", [], start_faces, reason="unreachable")
 
     budget = _Budget(max_walks)
     rejected = 0
@@ -1197,7 +1199,6 @@ def shortest_walks(
             if budget.truncated:
                 break
         found_walks = list(by_itinerary.values())
-        length: Optional[int] = shortest
     else:
         found_walks, rejected, length = _admissible_walks(
             dual, start, goal, start_nodes, goal_nodes, shortest, wanted, budget
@@ -1221,7 +1222,10 @@ def shortest_walks(
                 length,
                 rejected,
             )
-            return WalkSearch(start, goal, "truncated", [], start_faces, True, True, rejected)
+            return WalkSearch(
+                start, goal, "unresolved", [], start_faces,
+                reason="truncated", constrained=True, rejected=rejected,
+            )
         if not found_walks:
             logger.warning(
                 "walk %s -> %s: no walk up to %d crossings holds the markers of the "
@@ -1231,8 +1235,10 @@ def shortest_walks(
                 shortest + MAX_DETOUR,
                 rejected,
             )
-            return WalkSearch(start, goal, "no_admissible_walk", [], start_faces, False, True, rejected)
-    truncated = budget.truncated
+            return WalkSearch(
+                start, goal, "unresolved", [], start_faces,
+                reason="no_admissible_walk", constrained=True, rejected=rejected,
+            )
 
     context = (
         list(fixed_points)
@@ -1266,10 +1272,10 @@ def shortest_walks(
             )
             rejected += crossing
             walks = clear
-    if truncated:
+    if budget.truncated:
         logger.warning(
             "walk %s -> %s: more than %d %s; enumeration truncated after %d "
-            "distinct itinerar%s",
+            "distinct itinerar%s, the search decides nothing",
             start.label,
             goal.label,
             max_walks,
@@ -1277,10 +1283,11 @@ def shortest_walks(
             len(walks),
             "y" if len(walks) == 1 else "ies",
         )
-    status: WalkStatus = (
-        "trivial" if length == 0 else "unique" if len(walks) == 1 else "ambiguous"
-    )
-    if status == "ambiguous":
+        return WalkSearch(
+            start, goal, "unresolved", walks, start_faces,
+            reason="truncated", constrained=wanted is not None, rejected=rejected,
+        )
+    if len(walks) > 1:
         logger.warning(
             "walk %s -> %s: %d distinct shortest itineraries of %d crossing(s); "
             "the class is ambiguous:\n  %s",
@@ -1291,7 +1298,13 @@ def shortest_walks(
             "\n  ".join(" ".join(ref.label for ref in walk.itinerary) for walk in walks),
         )
     return WalkSearch(
-        start, goal, status, walks, start_faces, truncated, wanted is not None, rejected
+        start,
+        goal,
+        "resolved" if len(walks) == 1 else "ambiguous",
+        walks,
+        start_faces,
+        constrained=wanted is not None,
+        rejected=rejected,
     )
 
 

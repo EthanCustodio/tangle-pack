@@ -92,7 +92,9 @@ from .ElementNaming import (
 )
 from .DualWalk import (
     ElementLanding,
+    MembersDisagree,
     Walk,
+    WalkReason,
     WalkSearch,
     WalkStatus,
     WalkStep,
@@ -165,7 +167,9 @@ __all__ = [
     "ElementName",
     "ElementNaming",
     "ElementLanding",
+    "MembersDisagree",
     "Walk",
+    "WalkReason",
     "WalkSearch",
     "WalkStatus",
     "WalkStep",

@@ -109,21 +109,19 @@ Dev Notes:
   (:func:`~tanglepack.topology.DualWalk.lobe_image_markers`). It applies to
   EVERY such class, not only to ties (C13): a unique shortest walk can break
   it (the heteroclinic ``bh``). No walk up to the detour cap holding the
-  markers leaves the class unresolved (``"no_admissible_walk"``), and so does
-  the walk budget running out before any judged walk held them
-  (``"truncated"``). A walk is a claim only when it is established (B6a):
-  a search the budget cut short (:attr:`WalkSearch.truncated`, whatever its
-  status), a landing span overlapping no stable node
-  (``"span_meets_no_node"``) and two member lobes holding different markers
-  (:class:`~tanglepack.topology.DualWalk.MembersDisagree`, caught before
-  walking) all leave the class unresolved, and an unresolved class is no
-  wall.
+  markers leaves the class unresolved (``"no_admissible_walk"``). A walk is a
+  claim only when it is established (B6a): a search the budget cut short
+  (reason ``"truncated"``, even with candidates), a landing span overlapping
+  no stable node (``"span_meets_no_node"``) and two member lobes holding
+  different markers (:class:`~tanglepack.topology.DualWalk.MembersDisagree`,
+  caught before walking) all leave the class unresolved, and an unresolved
+  class is no wall.
 * Walls (D13's own words, "f(bridge) cannot cross the images of the unstable
   arcs"; WP9c, C17). Every class's arcs lie on known unstable branches: its
   members' (``Trellis.unstable_key_of``), or, for a class no computed bridge
   spans yet (D11), one map step past the arcs of the class that named it.
   Arcs on different unstable branches are disjoint, so are their images, so
-  the decided walk (``unique`` / ``trivial``) of a class walked EARLIER whose
+  the decided walk (a ``resolved`` search) of a class walked EARLIER whose
   branches are disjoint from this class's is a wall: a tie loses the walks
   whose chords cross one (``shortest_walks(walls=)``). Every bridge is the
   same (D14): a class joining two stable branches or two tangles has no member
@@ -1246,12 +1244,12 @@ def _resolve_itinerary(
         walls=walls,
     )
     cd.search = search
-    walk = search.walk
-    if walk is None or search.status not in ("unique", "trivial", "ambiguous"):
-        cd.unresolved_reason = f"dual-graph walk {search.status}"
-    elif search.truncated:  # a budget cut short decides nothing, whatever the status
-        cd.unresolved_reason = "search budget reached before uniqueness was established"
-    if cd.unresolved_reason is not None:
+    if search.status == "unresolved":
+        cd.unresolved_reason = (
+            "search budget reached before uniqueness was established"
+            if search.reason == "truncated"
+            else f"dual-graph walk {search.reason}"
+        )
         logger.warning(
             "class %s unresolved: walk from %s to %s: %s",
             cd.letter,
@@ -1260,7 +1258,7 @@ def _resolve_itinerary(
             cd.unresolved_reason,
         )
         return
-    cd.itinerary = tuple(walk.itinerary)
+    cd.itinerary = tuple(search.walk.itinerary)
     cd.source = "walk"
     cd.ambiguous = search.status == "ambiguous"
 
@@ -1471,12 +1469,7 @@ def symbolic_dynamics(
         # A walk standing for several face paths names none of them, and an unresolved
         # class (a truncated search, B6a) established none: no wall.
         search = cd.search
-        if (
-            search
-            and cd.itinerary is not None
-            and search.status in ("unique", "trivial")
-            and search.walk.multiplicity == 1
-        ):
+        if search and search.status == "resolved" and search.walk.multiplicity == 1:
             decided.append((mine, walk_chords(search.walk)))
         itinerary = cd.itinerary or ()
         named = [

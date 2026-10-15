@@ -2765,14 +2765,14 @@ def check_cross_side_only_within_a_branch(case: "Case") -> int:
 
 def check_every_active_class_walks(case: "Case") -> int:
     """D3: the shortest dual-graph walk IS the word, so it exists: every active class
-    whose landings are not singletons has a ``unique`` or ``trivial`` walk (a singleton
+    whose landings are not singletons has a ``resolved`` walk (a singleton
     takes ``f(bridge)``, the trellis itinerary)."""
     dyn = case.session.symbolic_dynamics()
     count = 0
     for cd in dyn.classes.values():
         if cd.kind != "active" or any(l is not None and l.singleton for l in cd.landings):
             continue
-        assert cd.search is not None and cd.search.status in ("unique", "trivial"), (
+        assert cd.search is not None and cd.search.status == "resolved", (
             cd.letter, cd.status, cd.unresolved_reason)
         count += 1
     return count
@@ -2797,10 +2797,10 @@ def check_walks_agree_with_registered_images(case: "Case") -> int:
 
 def check_member_lobe_classes_have_one_walk(case: "Case") -> int:
     """D13: a walked class with a member lobe -- a non-loop member the minimal trellis
-    keeps whose two ends lie on one stable branch -- has exactly one walk (``unique``
-    or ``trivial``): the non-crossing rule picks its side, so only a class without one
+    keeps whose two ends lie on one stable branch -- has exactly one walk (a ``resolved``
+    search): the non-crossing rule picks its side, so only a class without one
     may stay ambiguous, and the image of the member is a walk holding the right
-    markers, so one is found (no ``no_admissible_walk``, no ``truncated``)."""
+    markers, so one is found (no ``no_admissible_walk``, no ``truncated`` reason)."""
     dyn = case.session.symbolic_dynamics()
     kept = set(case.session.minimal_trellis().kept_bridge_ids)
     count = 0
@@ -2814,7 +2814,7 @@ def check_member_lobe_classes_have_one_walk(case: "Case") -> int:
         ]
         if cd.search is None or not lobes:
             continue
-        assert cd.search.status in ("unique", "trivial"), (
+        assert cd.search.status == "resolved", (
             cd.letter, cd.search.status, [walk.itinerary for walk in cd.search.walks])
         count += 1
     return count
@@ -2917,8 +2917,8 @@ def _chords_interleave(face, chord, other) -> bool:
 def check_walks_avoid_disjoint_images(case: "Case") -> int:
     """D13, D14: the map is a homeomorphism and two unstable arcs never cross, so the
     images of arcs on disjoint sets of unstable branches are disjoint. Two classes whose
-    arcs lie on disjoint branch sets (``_arc_branches``) have decided walks (``unique``
-    or ``trivial``, of multiplicity 1: a walk standing for several face paths names
+    arcs lie on disjoint branch sets (``_arc_branches``) have decided walks (``resolved``,
+    of multiplicity 1: a walk standing for several face paths names
     none of them) whose chords never interleave on a ring of a face both visit. Counts
     the class pairs judged (a pair sharing no face cannot cross: a deep run may judge
     only such pairs)."""
@@ -2929,7 +2929,7 @@ def check_walks_avoid_disjoint_images(case: "Case") -> int:
         (cls, cd, walk_chords(cd.search.walk))
         for cls, cd in dyn.classes.items()
         if cd.search is not None
-        and cd.search.status in ("unique", "trivial")
+        and cd.search.status == "resolved"
         and cd.search.walk.multiplicity == 1
     ]
     count = 0

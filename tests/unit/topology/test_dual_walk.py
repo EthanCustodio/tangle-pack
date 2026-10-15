@@ -2,7 +2,7 @@
 Dual-graph walks, element landings and the trellis itinerary.
 
 Synthetic graphs (real ``StableNode`` / ``FaceNode`` objects, arcs with no
-geometry) pin the walk: trivial cases, entry-then-exit recording, walls never
+geometry) pin the walk: zero-crossing walks, entry-then-exit recording, walls never
 crossed, merged-face self-adjacency, ties, dedupe of parallel nodes,
 unreachability, missing nodes, several start faces, the ``max_walks`` cap, the
 landing span and the non-crossing rule's search (its marker verdict stubbed,
@@ -77,7 +77,7 @@ def _pairs(itinerary):
     [(0, "start"), (1, "shared")],
     ids=["start_is_goal", "start_face_is_goal_face"],
 )
-def test_trivial_walks_stay_on_the_start_face(key, goal_index, faces):
+def test_zero_crossing_walks_stay_on_the_start_face(key, goal_index, faces):
     """A goal equal to the start, or one on the start's face, needs no crossing."""
     dual = FakeDual()
     f0, f1, f2 = dual.face(), dual.face(), dual.face()
@@ -85,7 +85,7 @@ def test_trivial_walks_stay_on_the_start_face(key, goal_index, faces):
     if faces == "shared":
         dual.unified(f0, f2, L(key, 1), R(key, 1))
     search = shortest_walks(dual, L(key, 0), L(key, goal_index))
-    assert search.status == "trivial"
+    assert search.status == "resolved" and search.reason is None
     assert search.walk is not None
     assert search.walk.itinerary == (L(key, 0), L(key, goal_index))
     assert search.itinerary == search.walk.itinerary
@@ -113,7 +113,7 @@ def test_single_crossing_records_entry_then_exit(key, entry_side):
     node = edge("unified", f0, f1, 1)
     edge("wall", f1, fy, 2)
     search = shortest_walks(dual, near(key, 0), near(key, 2))
-    assert search.status == "unique" and not search.truncated
+    assert search.status == "resolved" and search.reason is None
     walk = search.walk
     assert isinstance(walk, Walk)
     assert walk.itinerary == (near(key, 0), near(key, 1), far(key, 1), near(key, 2))
@@ -136,7 +136,7 @@ def test_walls_are_never_crossed(key, caplog):
     dual.wall(f1, f0, L(key, 1), R(key, 1))
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         search = shortest_walks(dual, L(key, 0), L(key, 1))
-    assert search.status == "unreachable"
+    assert search.status == "unresolved" and search.reason == "unreachable"
     assert search.walks == [] and search.walk is None
     assert search.start_faces == [f0]
     assert_logged(caplog, logging.WARNING, LOGGER)
@@ -147,7 +147,8 @@ def test_unreachable_isolated_goal(key):
     f0, f1, f2, f3 = dual.face(), dual.face(), dual.face(), dual.face()
     dual.unified(f0, f1, L(key, 0), R(key, 0))
     dual.unified(f2, f3, L(key, 1), R(key, 1))
-    assert shortest_walks(dual, L(key, 0), L(key, 1)).status == "unreachable"
+    search = shortest_walks(dual, L(key, 0), L(key, 1))
+    assert search.status == "unresolved" and search.reason == "unreachable"
 
 
 def test_merged_face_self_adjacency_is_skipped(key):
@@ -158,7 +159,7 @@ def test_merged_face_self_adjacency_is_skipped(key):
     dual.unified(f0, f1, L(key, 1), R(key, 1))
     dual.wall(f1, fy, L(key, 2), R(key, 2))
     search = shortest_walks(dual, L(key, 0), L(key, 2))
-    assert search.status == "unique"
+    assert search.status == "resolved"
     assert search.walk.itinerary == (L(key, 0), L(key, 1), R(key, 1), L(key, 2))
     assert search.walk.length == 1
 
@@ -171,7 +172,7 @@ def test_only_the_shortest_layer_is_kept(key):
     dual.unified(f2, f1, L(key, 2), R(key, 2))
     dual.wall(f1, fy, L(key, 3), R(key, 3))
     search = shortest_walks(dual, L(key, 0), L(key, 3))
-    assert search.status == "unique"
+    assert search.status == "resolved"
     assert search.walk.length == 1
     assert search.walk.faces == [f0, f1]
 
@@ -185,7 +186,7 @@ def test_tie_with_different_itineraries_is_ambiguous(key, caplog):
     dual.wall(f1, fy, L(key, 3), R(key, 3))
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         search = shortest_walks(dual, L(key, 0), L(key, 3))
-    assert search.status == "ambiguous" and not search.truncated
+    assert search.status == "ambiguous" and search.reason is None
     assert [walk.itinerary for walk in search.walks] == [
         (L(key, 0), L(key, 1), R(key, 1), L(key, 3)),
         (L(key, 0), L(key, 2), R(key, 2), L(key, 3)),
@@ -195,7 +196,7 @@ def test_tie_with_different_itineraries_is_ambiguous(key, caplog):
     assert search.walk.itinerary[1] == L(key, 1)  # deterministic first candidate
 
 
-def test_parallel_nodes_with_equal_elements_dedupe_to_unique(key, caplog):
+def test_parallel_nodes_with_equal_elements_dedupe_to_one_walk(key, caplog):
     dual = FakeDual()
     f0, f1, fx, fy = dual.face(), dual.face(), dual.face(), dual.face()
     dual.wall(f0, fx, L(key, 0), R(key, 0))
@@ -204,7 +205,7 @@ def test_parallel_nodes_with_equal_elements_dedupe_to_unique(key, caplog):
     dual.wall(f1, fy, L(key, 3), R(key, 3))
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         search = shortest_walks(dual, L(key, 0), L(key, 3))
-    assert search.status == "unique"
+    assert search.status == "resolved"
     assert len(search.walks) == 1
     assert search.walk.multiplicity == 2
     assert search.walk.itinerary == (L(key, 0), L(key, 1), R(key, 1), L(key, 3))
@@ -218,8 +219,8 @@ def test_no_start_node_and_no_goal_node(key, caplog):
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         missing_start = shortest_walks(dual, L(key, 7), L(key, 0))
         missing_goal = shortest_walks(dual, L(key, 0), R(key, 9))
-    assert missing_start.status == "no_start_node"
-    assert missing_goal.status == "no_goal_node"
+    assert missing_start.status == missing_goal.status == "unresolved"
+    assert missing_start.reason == "no_start_node" and missing_goal.reason == "no_goal_node"
     assert missing_start.walks == [] and missing_goal.walks == []
     assert missing_start.start_faces == [] and missing_goal.start_faces == []
     assert_logged(caplog, logging.WARNING, LOGGER, count=2)
@@ -235,13 +236,14 @@ def test_multiple_start_faces_are_all_searched(key, caplog):
     dual.wall(f1, fy, L(key, 2), R(key, 2))
     with caplog.at_level(logging.INFO, logger=LOGGER):
         search = shortest_walks(dual, L(key, 0), L(key, 2))
-    assert search.status == "unique"
+    assert search.status == "resolved"
     assert [face.index for face in search.start_faces] == [f0.index, f3.index]
     assert search.walk.faces == [f3, f1]
     assert_logged(caplog, logging.INFO, LOGGER)
 
 
-def test_max_walks_cap_sets_truncated(key, caplog):
+def test_max_walks_cap_leaves_the_search_unresolved(key, caplog):
+    """A search the cap cut short decides nothing, but keeps its candidates (B6a, B6b)."""
     dual = FakeDual()
     f0, f1, f2, fx, fy = dual.face(), dual.face(), dual.face(), dual.face(), dual.face()
     dual.wall(f0, fx, L(key, 0), R(key, 0))
@@ -251,13 +253,12 @@ def test_max_walks_cap_sets_truncated(key, caplog):
         dual.unified(f1, f2, L(key, index), R(key, index))
     dual.wall(f2, fy, L(key, 9), R(key, 9))
     full = shortest_walks(dual, L(key, 0), L(key, 9), max_walks=9)
-    assert full.status == "ambiguous" and not full.truncated
+    assert full.status == "ambiguous" and full.reason is None
     assert len(full.walks) == 9
     assert all(len(walk.itinerary) == 6 for walk in full.walks)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         capped = shortest_walks(dual, L(key, 0), L(key, 9), max_walks=4)
-    assert capped.truncated
-    assert capped.status == "ambiguous"
+    assert capped.status == "unresolved" and capped.reason == "truncated"
     assert len(capped.walks) == 4
     assert_logged(caplog, logging.WARNING, LOGGER)
 
@@ -276,6 +277,15 @@ def test_walks_are_sorted_deterministically(key):
     assert [walk.itinerary for walk in explicit.walks] == [
         walk.itinerary for walk in search.walks
     ]
+
+
+def test_a_cap_cutting_a_tie_short_keeps_its_candidate_unresolved(key, tie, caplog):
+    """B6b: one shortest face path out of two is no answer, whatever it reads."""
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        search = shortest_walks(tie, L(key, 0), L(key, 3), max_walks=1)
+    assert search.status == "unresolved" and search.reason == "truncated"
+    assert search.walk is not None
+    assert_logged(caplog, logging.WARNING, LOGGER)
 
 
 # --------------------------------------------------------------------------- #
@@ -324,7 +334,7 @@ def test_the_walk_leaves_from_the_edges_the_landing_span_meets(key, two_starts, 
     assert shortest_walks(dual, L(key, 0), L(key, 3)).status == "ambiguous"
     landings = (_landing(L(key, 0), span, from_table), _landing(L(key, 3), (0.0, 1.0)))
     search = shortest_walks(dual, L(key, 0), L(key, 3), landings=landings)
-    assert search.status == "unique" and search.start_faces == [f0]
+    assert search.status == "resolved" and search.start_faces == [f0]
     assert search.walk.faces[0] is f0
     assert search.walk.start_node.face_on("left") is f0
     assert search.walk.goal_node in dual.stable_nodes_of(L(key, 3))
@@ -341,7 +351,7 @@ def test_a_span_narrower_than_its_error_starts_from_the_edge_it_lies_in(key, two
     )
     search = shortest_walks(dual, L(key, 0), L(key, 3), landings=landings)
     assert search.start_faces == [f3]
-    assert search.status == "unique" and search.walk.faces[0] is f3
+    assert search.status == "resolved" and search.walk.faces[0] is f3
 
 
 def test_a_span_meeting_no_edge_leaves_the_walk_undecided(key, caplog):
@@ -356,7 +366,7 @@ def test_a_span_meeting_no_edge_leaves_the_walk_undecided(key, caplog):
     landings = (_landing(L(key, 0), (5.0, 6.0)), _landing(L(key, 2), (0.0, 1.0)))
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         search = shortest_walks(dual, L(key, 0), L(key, 2), landings=landings)
-    assert search.status == "span_meets_no_node"
+    assert search.status == "unresolved" and search.reason == "span_meets_no_node"
     assert search.walks == [] and search.walk is None
     assert_logged(caplog, logging.WARNING, LOGGER, count=1)
 
@@ -376,7 +386,7 @@ def tie(key):
 def test_the_markers_break_a_tie(key, tie, monkeypatch):
     monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: walk.itinerary[1] == L(key, 2))
     search = shortest_walks(tie, L(key, 0), L(key, 3), wanted={})
-    assert search.status == "unique" and search.constrained and search.rejected == 1
+    assert search.status == "resolved" and search.constrained and search.rejected == 1
     assert search.walk.itinerary == (L(key, 0), L(key, 2), R(key, 2), L(key, 3))
     assert not shortest_walks(tie, L(key, 0), L(key, 3)).constrained
 
@@ -407,7 +417,7 @@ def test_the_markers_may_ask_for_a_detour_through_a_face_twice(key, monkeypatch)
         DualWalk, "holds_markers", lambda dual, walk, wanted: bool(walk.steps) and walk.steps[0].node is out
     )
     search = shortest_walks(dual, L(key, 0), L(key, 3), wanted={})
-    assert search.status == "unique" and search.rejected >= 1
+    assert search.status == "resolved" and search.rejected >= 1
     assert search.walk.length == 3
     assert search.walk.faces == [f0, f2, f0, f1]
 
@@ -438,7 +448,7 @@ def test_a_walk_crossing_sigma_prime_is_rejected(key):
     )
     assert across.steps[0].node is inside and DualWalk.holds_markers(dual, across, {}) is False
     assert DualWalk.holds_markers(dual, around, {}) is True
-    assert search.status == "unique" and search.rejected == 1
+    assert search.status == "resolved" and search.rejected == 1
     assert search.walk.steps[0].node is beyond
 
 
@@ -447,7 +457,7 @@ def test_a_budget_spent_before_any_walk_holds_the_markers_is_truncated(key, tie,
     monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: False)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         search = shortest_walks(tie, L(key, 0), L(key, 3), wanted={}, max_walks=1)
-    assert search.status == "truncated" and search.truncated and search.walk is None
+    assert search.status == "unresolved" and search.reason == "truncated" and search.walk is None
     assert_logged(caplog, logging.WARNING, LOGGER)
 
 
@@ -463,7 +473,7 @@ def test_walks_of_an_admitted_itinerary_are_counted_not_judged(key, monkeypatch)
     judged = []
     monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: judged.append(walk) or True)
     search = shortest_walks(dual, L(key, 0), L(key, 3), wanted={}, max_walks=1)
-    assert search.status == "unique" and not search.truncated
+    assert search.status == "resolved" and search.reason is None
     assert len(judged) == 1 and search.walk.multiplicity == 2
 
 
@@ -471,10 +481,51 @@ def test_no_admissible_walk_within_the_detour_cap(key, tie, monkeypatch, caplog)
     monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: False)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         search = shortest_walks(tie, L(key, 0), L(key, 3), wanted={})
-    assert search.status == "no_admissible_walk" and search.constrained
+    assert search.status == "unresolved" and search.reason == "no_admissible_walk"
+    assert search.constrained
     assert search.walks == [] and search.walk is None and search.rejected == 2
     assert MAX_DETOUR >= 1
     assert_logged(caplog, logging.WARNING, LOGGER)
+
+
+def _no_start_node(key, dual, monkeypatch):
+    return shortest_walks(dual, L(key, 7), L(key, 3))
+
+
+def _no_goal_node(key, dual, monkeypatch):
+    return shortest_walks(dual, L(key, 0), R(key, 9))
+
+
+def _span_meets_no_node(key, dual, monkeypatch):
+    landings = (_landing(L(key, 0), (5.0, 6.0)), _landing(L(key, 3), (0.0, 1.0)))
+    return shortest_walks(dual, L(key, 0), L(key, 3), landings=landings)
+
+
+def _unreachable(key, dual, monkeypatch):
+    return shortest_walks(dual, L(key, 0), R(key, 0))  # behind the wall at node 0
+
+
+def _no_admissible_walk(key, dual, monkeypatch):
+    monkeypatch.setattr(DualWalk, "holds_markers", lambda dual, walk, wanted: False)
+    return shortest_walks(dual, L(key, 0), L(key, 3), wanted={})
+
+
+def _truncated(key, dual, monkeypatch):
+    return shortest_walks(dual, L(key, 0), L(key, 3), max_walks=1)
+
+
+@pytest.mark.parametrize(
+    "search_for",
+    [_no_start_node, _no_goal_node, _span_meets_no_node, _unreachable, _no_admissible_walk, _truncated],
+    ids=lambda search_for: search_for.__name__.strip("_"),
+)
+def test_every_failure_is_unresolved_with_its_reason(key, tie, monkeypatch, search_for):
+    """The six reasons (B6b): each failure of the tie's search reads ``unresolved`` and
+    names itself; a decided search carries no reason."""
+    search = search_for(key, tie, monkeypatch)
+    assert search.status == "unresolved"
+    assert search.reason == search_for.__name__.strip("_")
+    assert shortest_walks(tie, L(key, 0), L(key, 3)).reason is None
 
 
 def _crossing_into(node) -> Callable:
@@ -491,7 +542,7 @@ def test_a_wall_breaks_a_tie(key, tie, caplog):
     walls = [(tie.faces[0], ("wall chord",))]
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         search = shortest_walks(tie, L(key, 0), L(key, 3), walls=walls)
-    assert search.status == "unique" and search.rejected == 1 and not search.constrained
+    assert search.status == "resolved" and search.rejected == 1 and not search.constrained
     assert search.walk.itinerary == (L(key, 0), L(key, 2), R(key, 2), L(key, 3))
     assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
 

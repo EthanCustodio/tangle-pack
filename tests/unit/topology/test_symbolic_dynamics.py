@@ -751,7 +751,8 @@ def test_a_truncated_search_decides_nothing_and_is_no_wall(layout, monkeypatch):
     monkeypatch.setattr(SD, "shortest_walks", spy)
     dyn = _drive(layout, monkeypatch, alphabet, alphabet, None, dual_graph=tie, max_walks=1)
     first = dyn.classes[a]
-    assert first.search.truncated and first.search.walk is not None
+    assert first.search.status == "unresolved" and first.search.reason == "truncated"
+    assert first.search.walk is not None
     assert first.itinerary is None and "budget" in first.unresolved_reason
     assert not dyn.is_reliable
     (_, _, walls_a), (start, goal, walls_b) = calls
@@ -828,12 +829,12 @@ def test_a_budget_too_small_to_decide_a_walk_leaves_its_class_unresolved(max_wal
     topo = build_heteroclinic().session.topology()
     dyn = symbolic_dynamics(topo.dual_graph, topo.classes, max_walks=max_walks, letter_for=topo.letter_for)
 
-    truncated = [cd for cd in dyn.classes.values() if cd.search is not None and cd.search.truncated]
+    truncated = [cd for cd in dyn.classes.values() if cd.search is not None and cd.search.reason == "truncated"]
     assert truncated, "the heteroclinic tie needs more than two walks"
     for cd in truncated:
+        assert cd.search.status == "unresolved"
         assert cd.itinerary is None and not cd.symbols
-        if cd.search.walk is not None:
-            assert "budget" in cd.unresolved_reason
+        assert "budget" in cd.unresolved_reason
     assert not dyn.is_reliable
 
 

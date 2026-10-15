@@ -73,7 +73,7 @@ def test_a_tie_no_lobe_decides_is_broken_by_the_images_of_disjoint_arcs():
     connecting = _connecting(dyn)
     assert connecting
     for cd in connecting:
-        assert cd.search is not None and cd.search.status in ("unique", "trivial"), (
+        assert cd.search is not None and cd.search.status == "resolved", (
             cd.letter, cd.status)
     assert any(
         cd.search is not None and cd.search.rejected and not cd.search.constrained
@@ -91,6 +91,6 @@ def test_registered_connecting_images_agree_with_the_wall_rule():
     judged = [cd for cd in _connecting(dyn) if cd.evidence]
     assert judged
     for cd in judged:
-        assert cd.search is not None and cd.search.status in ("unique", "trivial"), (
+        assert cd.search is not None and cd.search.status == "resolved", (
             cd.letter, cd.status)
         assert cd.verified is not False, cd.letter
