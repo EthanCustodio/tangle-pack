@@ -212,10 +212,21 @@ def test_odd_itinerary_rejected(layout):
 
 
 def test_loops_dropped_from_word_but_recorded(layout):
+    """The translation drops loops only; the word it gives, ``a a^-1``, freely reduces
+    to the empty word (A.8c), which the driver keeps."""
     itinerary = layout.refs("R_1^1", "R_3^3", "L_1^1", "L_1^2", "R_3^1", "R_1^3")
     symbols, loops = layout.translate(itinerary)
     assert [symbol.text for symbol in symbols] == ["a", "a^-1"]
+    assert SD.free_reduce(SD._signature(symbols)) == []
     assert loops == [layout.refs("L_1^1", "L_1^2")]
+
+
+def test_free_reduction_cancels_adjacent_inverses_only(layout):
+    """A token next to its inverse cancels, to the fixed point; inverses apart stay."""
+    a, b = layout.a, layout.u
+    assert SD.free_reduce([(a, 1), (b, 1), (b, -1), (a, -1)]) == []
+    assert SD.free_reduce([(a, 1), (b, 1), (a, -1)]) == [0, 1, 2]
+    assert SD.free_reduce([(a, -1), (a, 1), (b, 1)]) == [2]
 
 
 def test_a_class_outside_the_table_is_named_by_its_label(layout, caplog):
@@ -653,7 +664,7 @@ def test_evidence_disagreement_names_a_stable_end(layout, monkeypatch, caplog, s
     no verdict, INFO, the dynamics stays reliable (C11, WP10). Otherwise the walk is
     to blame: a WARNING, and the dynamics is not reliable."""
     chain = ((10, 11), (11, 12), (12, 13))
-    registered = {chain: layout.refs("R_1^1", "R_3^3", "R_3^1", "R_1^3")}  # a a^-1
+    registered = {chain: layout.refs("R_1^1", "R_3^3", "R_1^3", "R_3^1")}  # a a
     crossings = {cid: (layout.key, sign) for cid, sign in zip((10, 11, 12, 13), signs)}
     walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
     with caplog.at_level(logging.INFO, logger=SD.__name__):
@@ -673,6 +684,29 @@ def test_evidence_disagreement_names_a_stable_end(layout, monkeypatch, caplog, s
     assert_logged(caplog, logging.WARNING, SD.__name__, count=0 if incomplete else 1)
     assert any("registered image" in r.getMessage() for r in caplog.records if r.levelno == logging.INFO) == incomplete
     assert dyn.is_reliable == incomplete
+
+
+def test_a_walk_reading_c_cinv_is_the_empty_word(layout, monkeypatch):
+    """A.8c: the word is the freely reduced itinerary, so a walk crossing ``a`` and
+    straight back reads the empty word: the class is trivial, its loops untouched."""
+    walks = {layout.a: layout.refs("R_1^1", "R_3^3", "R_3^1", "R_1^3"), layout.u: layout.refs("L_3", "L_3")}
+    dyn = _drive(layout, monkeypatch, layout.table, layout.table, walks)
+    cd = dyn.classes[layout.a]
+    assert cd.itinerary == walks[layout.a]
+    assert cd.symbols == [] and cd.word == "" and cd.loops == []
+    assert cd.status == "trivial"
+
+
+def test_a_class_named_only_inside_a_cancelled_pair_is_not_added(layout, monkeypatch):
+    """The closure reads the same reduced word as the class (one reduction, two readers):
+    a walk crossing ``u`` and straight back names no class, so ``u``, outside the
+    alphabet, stays out of the closed table."""
+    alphabet = BridgeClassTable([layout.table[layout.a]])
+    # ``u`` has a walk of its own, read only if the closure (wrongly) adds it.
+    walks = {layout.a: layout.refs("L_1^2", "L_3", "L_3", "L_1^2"), layout.u: layout.refs("L_3", "L_3")}
+    dyn = _drive(layout, monkeypatch, alphabet, layout.table, walks)
+    assert dyn.table.classes == [layout.a]
+    assert dyn.classes[layout.a].symbols == [] and dyn.classes[layout.a].status == "trivial"
 
 
 # --------------------------------------------------------------------------- #

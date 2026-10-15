@@ -94,7 +94,8 @@ Dev Notes:
   against :attr:`SymbolicDynamics.is_reliable`; ``"stable end"`` evidence is
   INCOMPLETE and ``"order flip"`` evidence is NOISE, and neither gives a
   verdict (C11, WP10; C21, WP12: ``word_agrees`` None, INFO), since the walk
-  is the word and the chain is only its cross-check (D3).
+  is the word and the chain is only its cross-check (D3). Both words are
+  freely reduced (:func:`free_reduce`), so a word is compared with a word.
   Evidence never adds a symbol: a class outside the closed table is named by
   its label (D2).
 * A pair whose two elements sit on
@@ -305,7 +306,7 @@ class ImageEvidence:
         itinerary: The iterated elements along its image chain, in the same
             even-length, disjoint-pair format as a dual-graph walk, running
             from the image of the class source to the image of the target.
-        symbols: The itinerary translated (loops dropped).
+        symbols: The itinerary translated (loops dropped), freely reduced.
         chain: The registered image chain the itinerary was read off.
         word_agrees: True when the non-loop ``(class, direction)`` sequence
             equals the class's primary word, False when it does not; ``None``
@@ -348,7 +349,7 @@ class ClassDynamics:
             ``"trellis"`` (image chain of a member, singleton path) or ``None``
             when unresolved.
         itinerary: The primary itinerary (even length), or ``None``.
-        symbols: The itinerary's non-loop tokens — the class's word.
+        symbols: The itinerary's non-loop tokens, freely reduced — the class's word.
         loops: The itinerary pairs that fell into one element (dropped from
             the word).
         ambiguous: True when several shortest walks disagree (after the
@@ -613,6 +614,33 @@ def _signature(symbols: Iterable[Symbol]) -> tuple[tuple[BridgeClass, int], ...]
     return tuple((symbol.bridge_class, symbol.direction) for symbol in symbols)
 
 
+def free_reduce(tokens: Sequence[tuple[BridgeClass, int]]) -> list[int]:
+    """
+    The positions of a word surviving free reduction (A.8c).
+
+    A token next to its own inverse cancels, ``c c^-1`` as ``c^-1 c``; one
+    stack pass reaches the fixed point. The class word (``ClassDynamics.symbols``),
+    the closure and inertness words and the registered evidence are all reduced
+    by this one function, so a word is always compared with a word.
+    :func:`translate_itinerary` stays unreduced: the T law reads the finer
+    same-occurrence reduction at the ``P1`` level.
+
+    Args:
+        tokens: The ``(class, direction)`` sequence of a word, loops dropped.
+
+    Returns:
+        The indices of the tokens kept, in order.
+    """
+    kept: list[int] = []
+    for i, (cls, direction) in enumerate(tokens):
+        if kept and tokens[kept[-1]] == (cls, -direction):
+            logger.debug("free reduction cancels %s^%+d against its inverse", cls.label, direction)
+            kept.pop()
+        else:
+            kept.append(i)
+    return kept
+
+
 # ── refinement ──────────────────────────────────────────────────────────────
 
 
@@ -728,8 +756,9 @@ def registered_evidence(
         symbols, _loops = translate_itinerary(
             itinerary, naming, table, letters, trellis.fixed_points
         )
+        word = [symbols[i] for i in free_reduce(_signature(symbols))]
         evidence.append(
-            ImageEvidence(member.bridge_id, member.direction, itinerary, symbols, tuple(chain))
+            ImageEvidence(member.bridge_id, member.direction, itinerary, word, tuple(chain))
         )
     return evidence
 
@@ -1476,8 +1505,10 @@ def symbolic_dynamics(
             oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
             for x, y in zip(itinerary[::2], itinerary[1::2])
         ]
-        words[cls] = None if cd.itinerary is None else [pair for pair, direction in named if direction]
-        new = {pair: None for pair, direction in named if direction and pair not in listed}
+        tokens = [(pair, direction) for pair, direction in named if direction]
+        word = [tokens[i][0] for i in free_reduce(tokens)]
+        words[cls] = None if cd.itinerary is None else word
+        new = {pair: None for pair in word if pair not in listed}
         entries.extend(add(pair, cls) for pair in new)
         records[cls] = cd
 
@@ -1505,9 +1536,10 @@ def symbolic_dynamics(
 
     for cd in records.values():
         if cd.itinerary is not None:
-            cd.symbols, cd.loops = translate_itinerary(
+            symbols, cd.loops = translate_itinerary(
                 cd.itinerary, naming, table, letters, fixed_points
             )
+            cd.symbols = [symbols[i] for i in free_reduce(_signature(symbols))]
         cd.evidence = registered_evidence(trellis, iterated, naming, table, letters, cd.entry)
         _compare_evidence(cd, trellis, homotopy)
         logger.debug(
