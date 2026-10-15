@@ -715,6 +715,26 @@ def test_a_class_named_only_inside_a_cancelled_pair_is_not_added(layout, monkeyp
     assert dyn.classes[layout.a].symbols == [] and dyn.classes[layout.a].status == "trivial"
 
 
+def test_the_registered_word_is_reduced_before_it_is_compared(layout, monkeypatch):
+    """B6b, question 3: the registered image reads ``a u^-1 a^-1 a a^-1``, the walked
+    word ``a u^-1 a^-1``; reduced alike, the words agree (a word is compared with a
+    word). The evidence keeps its raw itinerary, so the element-level reading differs."""
+    chain = ((10, 11), (11, 12))
+    raw = layout.k10_itinerary + layout.refs("R_1^1", "R_3^3", "R_3^1", "R_1^3")
+    crossings = {cid: (layout.key, sign) for cid, sign in zip((10, 11, 12), (1, -1, 1))}
+    walks = {layout.a: layout.k10_itinerary, layout.u: layout.refs("L_3", "L_3")}
+    dyn = _drive(
+        layout, monkeypatch, layout.table, layout.table, walks,
+        crossings=crossings, chains={(0, 5): list(chain)}, registered={chain: raw},
+    )
+    cd = dyn.classes[layout.a]
+    (evidence,) = cd.evidence
+    assert evidence.itinerary == raw and evidence.word == cd.word
+    assert evidence.word_agrees is True and evidence.diagnosis is None
+    assert cd.verified is True and cd.itinerary_verified is False
+    assert dyn.is_reliable
+
+
 # --------------------------------------------------------------------------- #
 # A walk the search did not establish is no word (B6a)
 # --------------------------------------------------------------------------- #
@@ -798,6 +818,46 @@ def test_a_truncated_search_decides_nothing_and_is_no_wall(layout, monkeypatch):
     (_, _, walls_a), (start, goal, walls_b) = calls
     assert walls_a == [] and walls_b == []
     assert len(real(tie, start, goal, walls=walls_b).walks) == 2
+
+
+def test_an_ambiguous_search_marks_its_class_and_is_no_wall(layout, monkeypatch):
+    """The wall gate reads ``resolved`` only (C17, B6b): the tie of the truncated test,
+    searched in full, is ``ambiguous``; the class says so, the dynamics is unreliable,
+    and the later class is walked with no wall."""
+    fp = layout.fp
+    a = BridgeClass(layout.L[0], layout.L[2])
+    b = BridgeClass(layout.L[1], layout.L[2])
+    tie = FakeDual()
+    f0, f1, fx, fy = (tie.face() for _ in range(4))
+    tie.wall(f0, fx, layout.L[0], ElementRef(layout.key, "right", 0))
+    tie.wall(f0, fx, layout.L[1], ElementRef(layout.key, "right", 1))
+    tie.unified(f0, f1, ElementRef(layout.key, "left", 5), ElementRef(layout.key, "right", 5))
+    tie.unified(f0, f1, ElementRef(layout.key, "left", 6), ElementRef(layout.key, "right", 6))
+    tie.wall(f1, fy, layout.L[2], ElementRef(layout.key, "right", 2))
+    tie.unstable_edges = {}
+    tie.chords_cross = lambda _face, _chord, _wall: True  # any wall would cut every walk
+    alphabet = BridgeClassTable(
+        [
+            BridgeClassEntry(a, [BridgeMember((1, 2), +1)], inert=False, letter="a"),
+            BridgeClassEntry(b, [BridgeMember((3, 4), +1)], inert=False, letter="b"),
+        ]
+    )
+    layout.naming = _FakeNaming(defaultdict(lambda: layout.L[0]), defaultdict(lambda: "X"))
+    monkeypatch.setattr(_Crossings, "unstable_key_of", lambda _self, pair: (fp, "unstable", pair[0], 0))
+    calls = []
+    real = SD.shortest_walks
+
+    def spy(dual, start, goal, **kwargs):
+        calls.append(list(kwargs["walls"]))
+        return real(dual, start, goal, **kwargs)
+
+    monkeypatch.setattr(SD, "shortest_walks", spy)
+    dyn = _drive(layout, monkeypatch, alphabet, alphabet, None, dual_graph=tie)
+    first = dyn.classes[a]
+    assert first.search.status == "ambiguous" and first.search.reason is None
+    assert first.ambiguous and first.status == "ambiguous"
+    assert not dyn.is_reliable
+    assert calls == [[], []]
 
 
 # --------------------------------------------------------------------------- #
