@@ -17,6 +17,7 @@ import pytest
 
 from helpers.logs import assert_logged
 from helpers.fakes import FakeDual, bare_fixed_point
+from helpers.laws import check_refined_matrix_is_an_in_splitting
 from tanglepack.topology.BridgeClass import (
     BridgeClass,
     BridgeClassEntry,
@@ -326,6 +327,72 @@ def test_transition_matrix(layout):
     assert matrix.tolist() == [[2]]
     assert matrix.dtype == np.int64
     assert dyn.word("a", refined=False) == "a u^-1 a^-1", "the word still shows u"
+
+
+def _k28_dynamics() -> SymbolicDynamics:
+    """A.8d's k=2.8 shape by hand: ``a = {R_1, R_5}``, ``b = {R_3, R_5}``, ``c = {R_1,
+    R_3}`` active, ``u = {L_1, L_3}`` inert; ``a -> a u^-1 b^-1``, ``b -> c``, ``c -> a
+    u^-1 a^-1``, the three occurrences of ``a`` falling into two ``P1`` pairs."""
+    fp = bare_fixed_point()
+    key = (fp, "stable", 0, 0)
+    R = [ElementRef(key, "right", i) for i in range(5)]
+    L = [ElementRef(key, "left", i) for i in range(3)]
+    a, b, c, u = (BridgeClass(R[0], R[4]), BridgeClass(R[2], R[4]),
+                  BridgeClass(R[0], R[2]), BridgeClass(L[0], L[2]))
+    iR = [ElementRef(key, "right", i) for i in range(10)]
+    iL = [ElementRef(key, "left", i) for i in range(4)]
+    occurrence = {"a_1": (iR[0], iR[9]), "a_2": (iR[2], iR[7]), "b": (iR[5], iR[7]),
+                  "c": (iR[0], iR[5]), "u": (iL[0], iL[3])}
+    classes = {"a": a, "b": b, "c": c, "u": u}
+
+    def token(name: str, direction: int = 1) -> Symbol:
+        letter = name[0]
+        kind = "inert" if letter == "u" else "active"
+        return Symbol(classes[letter], letter, direction, kind, occurrence[name], None, False)
+
+    words = {
+        "a": [token("a_1"), token("u", -1), token("b", -1)],
+        "b": [token("c")],
+        "c": [token("a_1"), token("u", -1), token("a_2", -1)],
+        "u": [],
+    }
+    records = {}
+    for letter, cls in classes.items():
+        kind = "inert" if letter == "u" else "active"
+        entry = BridgeClassEntry(cls, [], inert=kind == "inert", letter=letter)
+        cd = ClassDynamics(entry, letter, kind, (None, None))
+        cd.itinerary, cd.symbols = (), words[letter]
+        records[cls] = cd
+    return SymbolicDynamics(SimpleNamespace(), BridgeClassTable(
+        [cd.entry for cd in records.values()]), [fp], records)
+
+
+def test_refined_matrix_is_the_in_splitting_of_the_class_matrix():
+    """A.8d on the k=2.8 shape: ``M = [[1,1,0],[0,0,1],[2,0,0]]``; ``a`` splits into
+    ``a_1, a_2``, whose rows of ``M_1`` are equal, and every row's children columns
+    sum to the parent's entry of ``M``."""
+    dyn = _k28_dynamics()
+    names, class_matrix = dyn.transition_matrix(refined=False)
+    assert names == ["a", "b", "c"]
+    assert class_matrix.tolist() == [[1, 1, 0], [0, 0, 1], [2, 0, 0]]
+    refined_names, matrix = dyn.transition_matrix()
+    assert refined_names == ["a_1", "a_2", "b", "c"]
+    parent = {"a_1": 0, "a_2": 0, "b": 1, "c": 2}
+    assert matrix[0].tolist() == matrix[1].tolist()
+    for row, name in enumerate(refined_names):
+        assert matrix[row, :2].sum() == class_matrix[parent[name], 0]
+        assert matrix[row, 2:].tolist() == class_matrix[parent[name], 1:].tolist()
+
+
+def test_the_in_splitting_law_fails_on_a_sub_word():
+    """``refined_matrix_is_an_in_splitting`` holds on the k=2.8 shape and fails once
+    one child's rule is cut down to a sub-word of the class word."""
+    dyn = _k28_dynamics()
+    case = SimpleNamespace(session=SimpleNamespace(symbolic_dynamics=lambda: dyn))
+    assert check_refined_matrix_is_an_in_splitting(case) == 4
+    dyn.refined_rules["a_2"] = dyn.refined_rules["a_2"][:1]
+    with pytest.raises(AssertionError):
+        check_refined_matrix_is_an_in_splitting(case)
 
 
 def test_transition_graph_leaves_inert_classes_out(layout):
