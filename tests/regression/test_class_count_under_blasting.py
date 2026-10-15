@@ -185,7 +185,7 @@ def test_pip_orbit_never_shallower(name: str) -> None:
     assert depths == sorted(depths), depths
 
 
-@pytest.mark.parametrize("name", _params("members_share_the_P1_itinerary"))
+@pytest.mark.parametrize("name", _params("series_members_share_the_P1_itinerary"))
 def test_members_share_the_P1_itinerary_under_blasting(name: str) -> None:
     """Theorem T after every blast: no class's members read different ``P1``
     itineraries (``helpers.laws.p1_itinerary_disagreements``)."""

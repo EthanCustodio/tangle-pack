@@ -112,10 +112,10 @@ Dev Notes:
   stretch empty: on ``k32_series`` at 6 and 7 blasts a sibling's image
   crosses such a stretch, and one hole-bridge member's ``P1`` itinerary
   differs from its siblings' (the strict-xfail known issue
-  ``(members_share_the_P1_itinerary, k32_series)``). Pairing the base branch
-  in stable order too is slice B7b. Every empty stretch lies on one branch,
-  and the base is read at a non-anchor end (an anchor lies on every branch);
-  both are asserted.
+  ``(series_members_share_the_P1_itinerary, k32_series)``). Pairing the base
+  branch in stable order too is slice B7b. Every empty stretch lies on one
+  branch, and the base is read at a non-anchor end (an anchor lies on every
+  branch); both are asserted.
 * Cross-branch pieces (a period-k orbit only; a bridge whose two crossings
   lie on different stable branches) are cut like any other: the rule reads
   the crossing's own branch.

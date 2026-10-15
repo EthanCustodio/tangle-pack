@@ -1351,7 +1351,7 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "C3",
             raises=ValueError,
         ),
-        ("members_share_the_P1_itinerary", "k32_series"): KnownIssue(
+        ("series_members_share_the_P1_itinerary", "k32_series"): KnownIssue(
             "B7: at 6 and 7 blasts the hole-bridge member (6, 7) of the class "
             "R_7 <-> R_9 lands in other P1 elements than its siblings: the "
             "iterated cut pairs a lobe image's base-branch chords in CHAIN order "
