@@ -40,7 +40,10 @@ pinned count:
 * the depth ``m`` of ``T(q0)`` never decreases (B3, Q2): a blast only adds
   links to the pip's orbit. It need not deepen either: it stalls where
   ``f^{m+1}(q0)`` is detected unresolved or not detected at all, which the
-  measured series record but no law pins.
+  measured series record but no law pins;
+* Theorem T (A.8d, B7): after every blast, the members of a class whose
+  images are registered share one ``P1``-level itinerary (stable-end chains
+  skipped); the per-step count of classes tested is printed.
 
 The per-kind counts are printed in every failure message as diagnostics.
 
@@ -180,3 +183,13 @@ def test_pip_orbit_never_shallower(name: str) -> None:
     """B3: one more blast never shortens the registered orbit of the chosen pip."""
     depths = [s.pip_depth for s in _series(name)]
     assert depths == sorted(depths), depths
+
+
+@pytest.mark.parametrize("name", _params("members_share_the_P1_itinerary"))
+def test_members_share_the_P1_itinerary_under_blasting(name: str) -> None:
+    """Theorem T after every blast: no class's members read different ``P1``
+    itineraries (``helpers.laws.p1_itinerary_disagreements``)."""
+    steps = _series(name)
+    print(f"{name} p1_tested per step:", [s.p1_tested for s in steps])
+    disagreements = [(s.blasts, text) for s in steps for text in s.p1_disagreements]
+    assert not disagreements, "\n".join(f"step {blasts}: {text}" for blasts, text in disagreements)

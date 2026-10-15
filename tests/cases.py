@@ -123,7 +123,7 @@ from tanglepack.examples import (
 from tanglepack.examples import henon_cases
 
 from helpers.direct import trellis_view
-from helpers.laws import reference_witness
+from helpers.laws import p1_itinerary_disagreements, reference_witness
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from tanglepack import FixedPoint, IntersectionRegistry, TangleWorkbench
@@ -1102,6 +1102,11 @@ class SeriesStep:
         recomputed: The same pair after a plain
             ``compute_intersections(preserve_ids=True)`` and
             ``rebuild_bridges()`` (B1: N is one definition on every path).
+        p1_tested: How many classes Theorem T was tested on (two or more members
+            with readable registered image chains;
+            ``helpers.laws.p1_itinerary_disagreements``).
+        p1_disagreements: One text per class whose members' ``P1`` itineraries
+            differ; recorded, never asserted here.
     """
 
     blasts: int
@@ -1119,6 +1124,8 @@ class SeriesStep:
     history_free: bool
     crossings: tuple[frozenset, frozenset]
     recomputed: tuple[frozenset, frozenset]
+    p1_tested: int
+    p1_disagreements: tuple
 
 
 class Series(NamedTuple):
@@ -1178,6 +1185,7 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
         family = session.homotopy_partition()
         trellis = session.topology().trellis
         dynamics = session.symbolic_dynamics()
+        p1_tested, _skipped, p1_disagreements = p1_itinerary_disagreements(session)
         references = frozenset(p.as_tuple() for p in trellis.reference_pseudoneighbors)
         lost = steps[-1].references - references if steps else frozenset()
         steps.append(
@@ -1207,6 +1215,8 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
                 history_free=shown == trellis_view(session.topology().trellis),
                 crossings=_crossings_and_bridges(session.workbench),
                 recomputed=_recomputed(session.workbench),
+                p1_tested=p1_tested,
+                p1_disagreements=p1_disagreements,
             )
         )
     return tuple(steps)
@@ -1340,6 +1350,14 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "saddle with exactly one negative eigenvalue",
             "C3",
             raises=ValueError,
+        ),
+        ("members_share_the_P1_itinerary", "k32_series"): KnownIssue(
+            "B7: at 6 and 7 blasts the hole-bridge member (6, 7) of the class "
+            "R_7 <-> R_9 lands in other P1 elements than its siblings: the "
+            "iterated cut pairs a lobe image's base-branch chords in CHAIN order "
+            "(author, 2026-09-23), and where the image spirals back across its "
+            "base branch that declares the wrong stretch empty",
+            "B7b",
         ),
     }
 )
