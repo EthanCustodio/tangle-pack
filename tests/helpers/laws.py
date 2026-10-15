@@ -64,7 +64,7 @@ from tanglepack.topology.BridgeClass import (
     oriented_class,
 )
 from tanglepack.topology.DualGraph import face_side
-from tanglepack.topology.DualWalk import walk_chords
+from tanglepack.topology.DualWalk import trellis_itinerary, walk_chords
 from tanglepack.topology.MinimalTrellis import image_chain
 from tanglepack.topology.Pseudoneighbor import compute_pseudoneighbors
 from tanglepack.topology.StablePartition import (
@@ -73,11 +73,14 @@ from tanglepack.topology.StablePartition import (
     row_of_end,
     rows_of_bridge,
 )
+from tanglepack.topology.SymbolicDynamics import translate_itinerary
 from tanglepack.topology.diagnostics import _side_of, bridge_row_violation
 from tanglepack.topology.plotting import hole_point
 from tanglepack.topology.Trellis import SCALING_RTOL
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from cases import Case
+    from tanglepack import TangleSession
+    from tanglepack.numerics.Bridge import BridgeId
 
 #: Relative slack of the per-link area check: the library's own iterate
 #: identification slack (``collision_rtol`` default of ``StrongPip`` and
@@ -2976,7 +2979,7 @@ def check_landings_contained(case: "Case") -> int:
 
 def check_refined_children_inherit_word(case: "Case") -> int:
     """A split class's children keep the parent ``BridgeClass`` and each carries the
-    parent's word, rewritten in refined symbols."""
+    word of every member, by T (A.8d), rewritten in refined symbols: the class word."""
     dyn = case.session.symbolic_dynamics()
     count = 0
     for cls, children in dyn.refined.items():
@@ -2990,6 +2993,137 @@ def check_refined_children_inherit_word(case: "Case") -> int:
         assert len(children) >= 2
         count += len(children)
     return count
+
+
+def p1_itinerary_disagreements(
+    session: "TangleSession",
+) -> tuple[int, tuple["BridgeId", ...], tuple[str, ...]]:
+    """
+    Theorem T read off the registered images (A.8d), lookup only.
+
+    Every non-loop member of every class whose image chain is registered is
+    read at the ``P1`` level: ``trellis_itinerary`` on the topology's trellis and
+    the iterated partition, then ``translate_itinerary``, as ``(class,
+    direction, occurrence)`` tokens, freely reduced (a token next to its inverse
+    on the same occurrence cancels). A chain with two consecutive crossings on
+    one stable branch with one crossing sign passed the end of the computed
+    stable branch (the "stable end" of C11, recomputed here from the chain) and
+    a chain the iterated partition does not cover is unreadable: both are
+    incomplete evidence and skipped.
+
+    Args:
+        session: A session with its symbolic dynamics built.
+
+    Returns:
+        ``(tested, skipped, disagreements)``: how many classes had two or more
+        readable members, the skipped members, and one text per class whose
+        members' reduced itineraries differ (its letter and label, then each
+        distinct itinerary with the members reading it).
+    """
+    dyn = session.symbolic_dynamics()
+    trellis = session.topology().trellis
+    iterated = session.iterated_partition()
+    letters = {cls: cd.letter for cls, cd in dyn.classes.items()}
+
+    def stable_end(chain) -> bool:
+        crossings = [chain[0][0], *(second for _first, second in chain)]
+        marks = [
+            (trellis.intersection(c).manifold_b_key, trellis.intersection(c).crossing_sign)
+            for c in crossings
+        ]
+        return any(a == b for a, b in zip(marks, marks[1:]))
+
+    def reduced(symbols) -> tuple:
+        word: list = []
+        for symbol in symbols:
+            token = (symbol.bridge_class, symbol.direction, symbol.occurrence)
+            if word and word[-1] == (token[0], -token[1], token[2]):
+                word.pop()
+            else:
+                word.append(token)
+        return tuple(word)
+
+    def text(word) -> str:
+        return " ".join(
+            f"{letters.get(cls, cls.label)}{'^-1' if direction < 0 else ''}"
+            f"({dyn.naming.name(lo).text}, {dyn.naming.name(hi).text})"
+            for cls, direction, (lo, hi) in word
+        )
+
+    tested, skipped, disagreements = 0, [], []
+    for cls, cd in dyn.classes.items():
+        readings: dict[tuple, list] = {}
+        for member in cd.entry.members:
+            chain = None if member.is_loop else image_chain(trellis, member.bridge_id)
+            if not chain:
+                continue
+            if stable_end(chain):
+                skipped.append(member.bridge_id)
+                continue
+            try:
+                itinerary = trellis_itinerary(trellis, iterated, chain, member.direction)
+            except ValueError:
+                skipped.append(member.bridge_id)
+                continue
+            symbols, _loops = translate_itinerary(
+                itinerary, dyn.naming, dyn.table, letters, dyn.fixed_points
+            )
+            readings.setdefault(reduced(symbols), []).append(member.bridge_id)
+        if sum(map(len, readings.values())) < 2:
+            continue
+        tested += 1
+        if len(readings) > 1:
+            disagreements.append(
+                f"class {cd.letter} {cls.label}: "
+                + " | ".join(f"{members}: {text(word)}" for word, members in readings.items())
+            )
+    return tested, tuple(skipped), tuple(disagreements)
+
+
+def check_members_share_the_P1_itinerary(case: "Case") -> int:
+    """Theorem T (A.8d): every member of a class whose image is registered has the same
+    ``P1``-level freely reduced itinerary; stable-end chains are skipped."""
+    tested, _skipped, disagreements = p1_itinerary_disagreements(case.session)
+    assert not disagreements, "\n".join(disagreements)
+    return tested
+
+
+def check_refined_matrix_is_an_in_splitting(case: "Case") -> int:
+    """``M_1`` is the in-splitting of ``M`` (A.8d): sibling rows are equal, every row's
+    children columns sum to its parent's entry of ``M``, and the nodes are the
+    children of the split active classes and the letters of the unsplit ones."""
+    dyn = case.session.symbolic_dynamics()
+    names, class_matrix = dyn.transition_matrix(refined=False)
+    refined_names, matrix = dyn.transition_matrix(refined=True)
+    parent: dict[str, str] = {}
+    for cls, cd in dyn.classes.items():
+        if cd.kind == "active":
+            children = dyn.refined.get(cls)
+            parent.update({child.name: cd.letter for child in children or ()})
+            if not children:
+                parent[cd.letter] = cd.letter
+    assert sorted(refined_names) == sorted(parent), (refined_names, sorted(parent))
+    assert sorted(set(parent.values())) == sorted(names), (names, sorted(set(parent.values())))
+    rows = {name: position for position, name in enumerate(refined_names)}
+    columns = {letter: position for position, letter in enumerate(names)}
+    children_of: dict[str, list[int]] = defaultdict(list)
+    for name, letter in parent.items():
+        children_of[letter].append(rows[name])
+    for letter, siblings in children_of.items():
+        for row in siblings[1:]:
+            assert matrix[row].tolist() == matrix[siblings[0]].tolist(), (
+                f"sibling rows of {letter} differ: {refined_names[siblings[0]]} "
+                f"{matrix[siblings[0]].tolist()} vs {refined_names[row]} {matrix[row].tolist()}"
+            )
+    for name, row in rows.items():
+        for letter, siblings in children_of.items():
+            summed = int(matrix[row, siblings].sum())
+            expected = int(class_matrix[columns[parent[name]], columns[letter]])
+            assert summed == expected, (
+                f"row {name}: the columns of {letter}'s children sum to {summed}, "
+                f"M[{parent[name]}][{letter}] = {expected}"
+            )
+    return len(refined_names)
 
 
 def check_member_matching_consistent(case: "Case") -> int:
@@ -3227,6 +3361,8 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_itinerary_pairs_are_classes,
         check_landings_contained,
         check_refined_children_inherit_word,
+        check_members_share_the_P1_itinerary,
+        check_refined_matrix_is_an_in_splitting,
         check_member_matching_consistent,
         check_inert_classes_outside_transitions,
         check_inert_is_transient,
@@ -3237,9 +3373,15 @@ LAYERS: dict[str, list[LawCheck]] = {
 }
 
 #: The laws that run on ``cases.LAW_CASES`` only, never on a deep build: the
-#: scaling-only pair oracle (scaling alone is wrong at depth, A.5) and the k=10
-#: textbook pin (plan B0, section 6).
-LAW_CASES_ONLY: tuple[str, ...] = ("reference_pairs_clear_of_X", "k10_is_the_full_shift")
+#: scaling-only pair oracle (scaling alone is wrong at depth, A.5), the k=10
+#: textbook pin (plan B0, section 6) and Theorem T, which has no class with two
+#: chained members to test on p3_15, p3_6_blasts and inversion_period2_10 (B7);
+#: its depth is the blast series' (``test_members_share_the_P1_itinerary_under_blasting``).
+LAW_CASES_ONLY: tuple[str, ...] = (
+    "reference_pairs_clear_of_X",
+    "k10_is_the_full_shift",
+    "members_share_the_P1_itinerary",
+)
 
 #: The layers whose laws mutate their session: run on ONE fresh build per case,
 #: never the shared one (the checks run in order on that build).

@@ -1349,6 +1349,7 @@ _NO_ANCHOR_OPENING = "no hole is bounded by the anchor"
 _NO_IMAGE_BRIDGES = "the minimal trellis maps no hole bridge forward (no image bridges)"
 _NO_REFINEMENT = "no class splits (no refined children)"
 _NO_DISJOINT_WALLS = "no two classes with decided walks have arcs on disjoint unstable branches"
+_NO_TWO_CHAINED_MEMBERS = "no class has two members with registered image chains"
 
 #: ``(law_id, case) -> reason``: the law has nothing to check on that case. The
 #: layer test leaves it out; its set-aside test runs it, insists it still checks
@@ -1388,6 +1389,13 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
             ("walks_avoid_disjoint_images", name): _NO_DISJOINT_WALLS
             for name in (
                 "k10", "k28_one_blast", "k28_two_blasts", "p3", "inversion", "inversion_period2"
+            )
+        },
+        **{
+            ("members_share_the_P1_itinerary", name): _NO_TWO_CHAINED_MEMBERS
+            for name in (
+                "k28_one_blast", "k28_two_blasts", "p3", "nested", "nested_inner_blasts",
+                "inversion", "inversion_one_blast", "inversion_period2",
             )
         },
         **{
