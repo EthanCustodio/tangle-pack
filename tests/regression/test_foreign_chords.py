@@ -1,53 +1,53 @@
-"""PK-4 / C19: the chords of a lobe image on a FOREIGN stable branch pair in stable order.
+"""PK-4 / C19 / B7b: the chords of a lobe image pair in stable order, on every branch.
 
-A hole's image chain can leave its base branch for an excursion across another
-stable branch (another orbit branch or fixed point). Before WP10b those
-crossings were left out of the chord pairing, so a crossing such as 44 on
-``p3_6_blasts`` abutted no empty stretch and two cuts were skipped. A lobe image
-holds no anchor, so walking the foreign branch from its anchor enters and leaves
-it in turn (Jordan alternation): the stretches inside are the crossings paired
-in stable order. The geometric check below is that statement, measured.
+One statement, two branch kinds. A lobe image holds no anchor, so walking any
+stable branch from its anchor enters and leaves it in turn (Jordan
+alternation): the stretches inside are the crossings paired in stable order.
+
+* A FOREIGN branch: a hole's image chain can leave its base branch for an
+  excursion across another stable branch (another orbit branch or fixed point).
+  Before WP10b those crossings were left out of the chord pairing, so a crossing
+  such as 44 on ``p3_6_blasts`` abutted no empty stretch and two cuts were
+  skipped.
+* The BASE branch, the base counting as inside
+  (``helpers.laws.base_chord_misreadings``): until B7b its chords paired in the
+  order the chain visits them, which differs only where the image spirals back
+  across its own base, at a blast step of ``k32_series`` (checked per step in
+  ``test_class_count_under_blasting.py``); here the builds, the anchor-cornered
+  inversion lobe among them.
+
+The geometric checks below are that statement, measured.
 """
 
 from __future__ import annotations
 
-import numpy as np
+from functools import cache
+
 import pytest
 
 import cases
+from helpers.laws import _lobe_image, base_chord_misreadings
 from tanglepack.numerics.geometry import arc_polyline, point_in_polygon
 from tanglepack.topology.BridgeClass import _image_chain
 from tanglepack.topology.PartitionFamily import IteratedHomotopyPartition
 
 CASES = ["p3_6_blasts", "p3_15", "p3_16", "heteroclinic"]
+BASE_CASES = ["k10", "inversion", "inversion_period2", "heteroclinic", "p3_6_blasts"]
+#: Builds whose lobes cross their base branch at most once: a visible skip.
+NO_BASE_LOBE = {"p3_6_blasts"}
+
+_build = cache(lambda name: cases.BUILDERS[name]())
 
 
-@pytest.fixture(scope="module", params=CASES)
+@pytest.fixture(params=CASES)
 def case(request: pytest.FixtureRequest) -> cases.Case:
-    return cases.BUILDERS[request.param]()
+    return _build(request.param)
 
 
 def test_every_image_crossing_abuts_an_empty_stretch(case: cases.Case) -> None:
     cuts = case.session.iterated_partition().cuts
     assert cuts
     assert not [cut for cut in cuts if cut.reason == "no empty stretch"]
-
-
-def _lobe_image(trellis, workbench, chain: list, base_key) -> np.ndarray:
-    """The polygon of ``f(H)``: the image chain's arcs, closed along the base."""
-    def arc(a: int, b: int) -> np.ndarray:
-        bridge = trellis.bridge_between(a, b)
-        assert bridge is not None, (a, b)
-        ends = [np.ravel(trellis.intersection(c).coords).astype(float) for c in (a, b)]
-        lo, hi = sorted(trellis.intersection(c).unstable_cdist for c in (a, b))
-        return np.vstack([ends[0], arc_polyline(bridge, lo, hi), ends[1]])
-
-    first, last = chain[0][0], chain[-1][1]
-    lo, hi = sorted(trellis.intersection(c).stable_cdist for c in (first, last))
-    base = arc_polyline(workbench.manifolds[base_key], lo, hi, stability="stable")
-    if trellis.intersection(last).stable_cdist > trellis.intersection(first).stable_cdist:
-        base = base[::-1]
-    return np.vstack([*(arc(a, b) for a, b in chain), base])
 
 
 def test_foreign_chords_are_inside_the_lobe_image(case: cases.Case) -> None:
@@ -93,3 +93,15 @@ def test_foreign_chords_are_inside_the_lobe_image(case: cases.Case) -> None:
                     )
             checked += 1
     assert checked, "the case must carry an image chain across a foreign stable branch"
+
+
+@pytest.mark.parametrize("name", BASE_CASES)
+def test_base_chords_are_inside_the_lobe_image(name: str) -> None:
+    """Along a lobe image's own base branch, from its anchor, the gaps between
+    its crossings lie outside, inside, ... the image (the base inside), and the
+    empty stretches there are its inside gaps (``base_chord_misreadings``)."""
+    checked, misreadings = base_chord_misreadings(_build(name).session)
+    if name in NO_BASE_LOBE:
+        assert not checked, f"{name} now has a base lobe: test it"
+        pytest.skip("no stretched hole crosses its base branch twice")
+    assert checked and misreadings == (), "\n".join(misreadings)
