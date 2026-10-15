@@ -36,14 +36,14 @@ The stable manifold has EMPTY stretches and the rest is the inclusive shape:
   the manifold along one CHORD per pair of consecutive interior crossings
   (``(x_1, x_2), (x_3, x_4), ...``, the doorways to its folds on the other
   side). Base and chords are read off the hole bridge's full image chain
-  (:func:`~.BridgeClass._image_chain`, iterate table only): on the base
-  branch the interior crossings pair in CHAIN order (the author's rule,
-  2026-09-23), on any other branch in STABLE order (C19, 2026-10-09). The
-  anchor's hole, which opens only beyond the manifold end, has no stretch and
-  its image contributes nothing. An odd count of interior crossings on one
-  branch means the chain left the computed stable manifold there: its last
-  crossing stays unpaired, no stretch beyond the pairs formed is declared
-  empty, and the footprint is recorded in
+  (:func:`~.BridgeClass._image_chain`, iterate table only): on every branch,
+  the base branch included, the interior crossings pair in STABLE order (C19,
+  2026-10-09, off the base; B7b, 2026-10-15, on it). The anchor's hole, which
+  opens only beyond the manifold end, has no stretch and its image contributes
+  nothing. An odd count of interior crossings on one branch means the chain
+  left the computed stable manifold there: its outermost crossing stays
+  unpaired, no stretch beyond the pairs formed is declared empty, and the
+  footprint is recorded in
   :attr:`IteratedHomotopyPartition.incomplete_footprints` (data, INFO; B7).
 
 Empty stretches are empty on BOTH sides of the manifold. An image bridge's
@@ -51,11 +51,11 @@ crossing ``x`` belongs, on the row the bridge cuts, to the element AWAY from
 the empty stretch it abuts: the flank toward the empty stretch is opened
 (``open_anchorward`` when the empty stretch is anchorward of ``x``,
 ``open_outward`` when it is outward). k=2.8 two blasts: the lobe of the hole
-``(6, 5)`` has base ``(10, 7)`` and chord ``(8, 9)`` (its fold is the
-reference hole on the left), so the right row reads ``R_1^1 = [0, 10]``,
-``R_1^2 = (10, 7)``, ``R_1^3 = [7, 6]`` and ``R_5^1 = [3, 8]``, ``R_5^2 =
-(8, 9)``, ``R_5^3 = [9, 4]``; the anchor lobe's fold ``(4, 3)`` on the left
-abuts the hole ``(1, 3)`` at ``3``, so ``L_1^1 = [0, 3)``, ``L_1^2 = [3, 8]``.
+``(6, 7)`` has base ``(8, 11)`` and chord ``(9, 10)`` (its fold is the
+reference hole on the left), so the right row reads ``R_1^1 = [0, 11]``,
+``R_1^2 = (11, 8)``, ``R_1^3 = [8, 7]`` and ``R_5^1 = [4, 9]``, ``R_5^2 =
+(9, 10)``, ``R_5^3 = [10, 3]``; the anchor lobe's fold ``(3, 4)`` on the left
+abuts the hole ``(4, 5)`` at ``4``, so ``L_1^1 = [0, 4)``, ``L_1^2 = [4, 9]``.
 Every crossing then lies in the element of the stable edge the dual-graph
 walk crosses at it (a walk never enters a hole face), so a refined class's
 occurrence names exactly the elements its member bridges land in. A boundary
@@ -87,9 +87,12 @@ Dev Notes:
   for the same reason; :meth:`PartitionFamily.interval_at` is exact.
 * History. The rule is the author's of 2026-09-23: "all of the stretched and
   folded shape is inclusive, the empty parts between the bends are open",
-  read only off holes with a stretch. It replaced the closed cut (commit
-  ``2a2e35a``) and the footprint rule of 2026-09-21; foreign chords pair in
-  stable order since C19 (2026-10-09).
+  read only off holes with a stretch. Closed cut (commit ``2a2e35a``) ->
+  footprint (2026-09-21) -> empty stretch, base chords in chain order
+  (2026-09-23) -> foreign chords in stable order (C19, 2026-10-09) -> stable
+  order everywhere (B7b, 2026-10-15): on ``k32_series`` the hole ``(6, 7)``'s
+  lobe spirals back across its base branch, and pairing along the chain
+  declared ``(9, 10)`` empty though it lies outside ``f(H)``.
 * A crossing that abuts no empty stretch gets no cut. When it lies on the
   image chain of a hole bridge whose hole has no stretch of its own (the
   anchor's one-sided hole, or a lobe whose stable span holds other holes'
@@ -98,24 +101,19 @@ Dev Notes:
   occurrence on the law cases and the deep builders to be this kind:
   inversion_two_blasts, 13 on k28_deep_blast_sliver, 13 / 47 per recompute on
   k28 / k32 at depth). Anything else is a WARNING, ``"no empty stretch"``.
-* Foreign chords (C19, WP10b; PK-4). An image chain can leave its base branch
+* Chords (C19, WP10b, PK-4; B7b). An image chain can leave its base branch
   for an excursion across another stable branch (another orbit branch or fixed
-  point: p3_6_blasts, p3_15, p3_16, heteroclinic). A lobe ``H`` (its bridge and
-  the stable segment between the bridge's ends) holds no point of any stable
-  branch of the trellis, so ``f(H)`` holds no anchor; walking another branch
-  from its anchor therefore enters and leaves ``f(H)`` at successive crossings
-  with the image chain, and the stretches inside are its crossings paired in
-  STABLE order (checked by point-in-polygon on the four cases:
-  ``tests/regression/test_foreign_chords.py``). The base branch keeps the
-  author's chain-order pairing. Where a lobe image spirals back across its own
-  base branch the two orders differ, and chain order can declare the wrong
-  stretch empty: on ``k32_series`` at 6 and 7 blasts a sibling's image
-  crosses such a stretch, and one hole-bridge member's ``P1`` itinerary
-  differs from its siblings' (the strict-xfail known issue
-  ``(series_members_share_the_P1_itinerary, k32_series)``). Pairing the base
-  branch in stable order too is slice B7b. Every empty stretch lies on one
-  branch, and the base is read at a non-anchor end (an anchor lies on every
-  branch); both are asserted.
+  point: p3_6_blasts, p3_15, p3_16, heteroclinic), or spiral back across its
+  own (``k32_series`` from 2 blasts). A lobe ``H`` (its bridge and the stable
+  segment between the bridge's ends) holds no point of any stable branch of
+  the trellis, so ``f(H)`` holds no anchor; walking ANY branch from its anchor
+  therefore enters and leaves ``f(H)`` at successive crossings with the image
+  chain, the base counting as inside, and the stretches inside are its
+  crossings paired in STABLE order (checked by point-in-polygon on both
+  branch kinds: ``tests/regression/test_foreign_chords.py``, and per blast
+  step in ``tests/regression/test_class_count_under_blasting.py``). Every
+  empty stretch lies on one branch, and the base is read at a non-anchor end
+  (an anchor lies on every branch); both are asserted.
 * Cross-branch pieces (a period-k orbit only; a bridge whose two crossings
   lie on different stable branches) are cut like any other: the rule reads
   the crossing's own branch.
@@ -947,11 +945,11 @@ class IteratedHomotopyPartition(PartitionFamily):
             only), read for every hole bridge whose stretch is an open
             interval of the homotopy partition; the anchor's one-sided hole
             has none. Its ``(x_0, x_m)`` is the base, on one stable branch.
-            Interior crossings pair as chords per stable branch: in chain order
-            on the base branch (the author's rule), in stable order on any
-            other (C19: a lobe image holds no anchor, so walking a branch from
-            its anchor enters and leaves it in turn). An odd count on a branch
-            leaves its last crossing unpaired: the footprint is incomplete
+            Interior crossings pair as chords per stable branch, in stable
+            order on every branch, the base branch included (C19, B7b: a lobe
+            image holds no anchor, so walking a branch from its anchor enters
+            and leaves it in turn). An odd count on a branch leaves its
+            outermost crossing unpaired: the footprint is incomplete
             (:meth:`_incomplete_footprints`).
         """
         trellis = minimal.trellis
@@ -980,18 +978,15 @@ class IteratedHomotopyPartition(PartitionFamily):
                 if not trellis.intersection(c).is_anchor
             }
             assert len(ends) == 1, (hole_bridge, chain)
-            (base_branch,) = ends
             stretches.setdefault(frozenset((crossings[0], crossings[-1])), "base")
-            # Chords: on the base branch the author's pairing in chain order; on any
-            # other stable branch f(H) is entered and left in turn along the branch
-            # from its anchor, which no lobe image holds (C19, Jordan alternation),
-            # so its crossings pair in STABLE order.
+            # Chords: f(H) holds no anchor, so walking any branch from its anchor
+            # enters and leaves it in turn, the base branch no exception (Jordan;
+            # C19 off the base, B7b on it, 2026-10-15): crossings pair in STABLE order.
             folds: dict = {}
             for c in crossings[1:-1]:
                 folds.setdefault(trellis.intersection(c).manifold_b_key, []).append(c)
-            for branch_key, on_branch in folds.items():
-                if branch_key != base_branch:
-                    on_branch.sort(key=lambda c: trellis.intersection(c).stable_cdist)
+            for on_branch in folds.values():
+                on_branch.sort(key=lambda c: trellis.intersection(c).stable_cdist)
                 for x, y in zip(on_branch[::2], on_branch[1::2]):
                     stretches.setdefault(frozenset((x, y)), "chord")
         empty: dict[int, list[tuple[int, str]]] = {}
@@ -1020,7 +1015,7 @@ class IteratedHomotopyPartition(PartitionFamily):
             chain of a hole with a stretch crosses an ODD number of times at
             its interior crossings: the chain left the computed stable
             manifold there (a "stable end", C11), so :meth:`_empty_stretches`
-            leaves the last crossing unpaired. Logged once at INFO when there
+            leaves the outermost crossing unpaired. Logged once at INFO when there
             is any: data, never a reliability failure (B7, Q14).
         """
         trellis = minimal.trellis
