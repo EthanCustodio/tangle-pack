@@ -15,10 +15,15 @@ keys, and a report. Two kinds live here:
 
 A third kind is expected later and will inherit :class:`PartitionFamily` too.
 
-The iterated cut, in bridges
-----------------------------
-Each NEW bridge of the minimal trellis (an image pair that is not itself a hole
-bridge) lies on one side of the stable manifold — its row, from
+The iterated partition ``P1 = P ∨ f(∂P)``
+-----------------------------------------
+``P`` is the homotopy partition. ``P1`` cuts each stable branch, in addition
+to ``P``'s cuts, at every crossing of the minimal trellis's image bridges -- the
+first images of the hole bridges -- with the stable manifold: the images of
+``∂P`` at a chain's ends and the folds of the hole images at its interior
+crossings (alignment plan A.8d). Each NEW bridge of the minimal trellis (an
+image pair that is not itself a hole bridge) lies on one side of the stable
+manifold — its row, from
 :func:`~tanglepack.topology.StablePartition.row_of_end` — and cuts the
 partition on THAT side only, by the EMPTY-STRETCH rule (author, 2026-09-23).
 The stable manifold has EMPTY stretches and the rest is the inclusive shape:
@@ -31,9 +36,15 @@ The stable manifold has EMPTY stretches and the rest is the inclusive shape:
   the manifold along one CHORD per pair of consecutive interior crossings
   (``(x_1, x_2), (x_3, x_4), ...``, the doorways to its folds on the other
   side). Base and chords are read off the hole bridge's full image chain
-  (:func:`~.BridgeClass._image_chain`, iterate table only). The anchor's
-  hole, which opens only beyond the manifold end, has no stretch and its
-  image contributes nothing.
+  (:func:`~.BridgeClass._image_chain`, iterate table only): on the base
+  branch the interior crossings pair in CHAIN order (the author's rule,
+  2026-09-23), on any other branch in STABLE order (C19, 2026-10-09). The
+  anchor's hole, which opens only beyond the manifold end, has no stretch and
+  its image contributes nothing. An odd count of interior crossings on one
+  branch means the chain left the computed stable manifold there: its last
+  crossing stays unpaired, no stretch beyond the pairs formed is declared
+  empty, and the footprint is recorded in
+  :attr:`IteratedHomotopyPartition.incomplete_footprints` (data, INFO; B7).
 
 Empty stretches are empty on BOTH sides of the manifold. An image bridge's
 crossing ``x`` belongs, on the row the bridge cuts, to the element AWAY from
@@ -74,17 +85,11 @@ Dev Notes:
   blasts) had its midpoint within the tolerance of the closed pip singleton,
   so the containment assertion fired. The ``cut_by`` covering test is exact
   for the same reason; :meth:`PartitionFamily.interval_at` is exact.
-* History. Commit ``2a2e35a`` closed the element under every image bridge at
-  both crossings; the footprint rule of 2026-09-21 opened the base and the
-  chords of every lobe, the anchor lobe's included, so the anchor lobe's fold
-  ``(4, 3)`` put ``3`` into the outer element ``L_1^1`` (rejected 2026-09-23:
-  "the bridge is included in the interior partition elements"); closing every
-  bridge's stretch instead put ``9`` into ``R_5^2`` (rejected the same day:
-  ``R_5^3`` must hold the ``a_1`` bridge that lands there). The empty-stretch
-  rule is the author's amendment: "all of the stretched and folded shape is
-  inclusive, the empty parts between the bends are open". It differs from the
-  footprint rule only in which chains count — those of holes with a stretch —
-  and from the closed cut in reading holes, not bridges.
+* History. The rule is the author's of 2026-09-23: "all of the stretched and
+  folded shape is inclusive, the empty parts between the bends are open",
+  read only off holes with a stretch. It replaced the closed cut (commit
+  ``2a2e35a``) and the footprint rule of 2026-09-21; foreign chords pair in
+  stable order since C19 (2026-10-09).
 * A crossing that abuts no empty stretch gets no cut. When it lies on the
   image chain of a hole bridge whose hole has no stretch of its own (the
   anchor's one-sided hole, or a lobe whose stable span holds other holes'
@@ -102,9 +107,15 @@ Dev Notes:
   with the image chain, and the stretches inside are its crossings paired in
   STABLE order (checked by point-in-polygon on the four cases:
   ``tests/regression/test_foreign_chords.py``). The base branch keeps the
-  author's chain-order pairing. It changes refinement labels only, never walks
-  or words. Every empty stretch lies on one branch, and the base is read at a
-  non-anchor end (an anchor lies on every branch); both are asserted.
+  author's chain-order pairing. Where a lobe image spirals back across its own
+  base branch the two orders differ, and chain order can declare the wrong
+  stretch empty: on ``k32_series`` at 6 and 7 blasts a sibling's image
+  crosses such a stretch, and one hole-bridge member's ``P1`` itinerary
+  differs from its siblings' (the strict-xfail known issue
+  ``(members_share_the_P1_itinerary, k32_series)``). Pairing the base branch
+  in stable order too is slice B7b. Every empty stretch lies on one branch,
+  and the base is read at a non-anchor end (an anchor lies on every branch);
+  both are asserted.
 * Cross-branch pieces (a period-k orbit only; a bridge whose two crossings
   lie on different stable branches) are cut like any other: the rule reads
   the crossing's own branch.
@@ -121,6 +132,7 @@ Dev Notes:
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from typing import ClassVar, Iterable, Iterator, Optional, TYPE_CHECKING
 
 from .BridgeClass import _image_chain, _index_partitions
@@ -638,6 +650,10 @@ class IteratedHomotopyPartition(PartitionFamily):
         homotopy: The family this one refines.
         minimal: The minimal trellis whose image bridges cut it.
         cuts: One :class:`Cut` per new-bridge end, applied or skipped.
+        incomplete_footprints: ``(hole bridge, stable branch, count)`` for every
+            branch where a hole's image chain crosses an ODD number of times:
+            the chain left the computed stable manifold there, so its last
+            crossing is unpaired (data, never a reliability failure; Q14).
     """
 
     kind: ClassVar[str] = "iterated_homotopy"
@@ -650,6 +666,7 @@ class IteratedHomotopyPartition(PartitionFamily):
         homotopy: Optional[HomotopyPartition] = None,
         minimal: Optional["MinimalTrellis"] = None,
         cuts: Optional[list[Cut]] = None,
+        incomplete_footprints: Iterable[tuple["BridgeId", "ManifoldKey", int]] = (),
     ) -> None:
         """
         Args:
@@ -658,11 +675,24 @@ class IteratedHomotopyPartition(PartitionFamily):
             homotopy: The family refined.
             minimal: The minimal trellis that cut it.
             cuts: The audit records.
+            incomplete_footprints: The hole images with an odd crossing count
+                on a branch, ``(hole bridge, branch, count)``.
         """
         super().__init__(results, trellis=trellis)
         self.homotopy = homotopy
         self.minimal = minimal
         self.cuts: list[Cut] = list(cuts or [])
+        self.incomplete_footprints = list(incomplete_footprints)
+
+    def describe(self) -> str:
+        """The family's report, then one line per incomplete footprint."""
+        lines = [super().describe()]
+        lines.extend(
+            f"incomplete footprint: hole bridge {bridge} crosses stable branch "
+            f"{branch[1:]} {count} time(s), the last crossing unpaired"
+            for bridge, branch, count in self.incomplete_footprints
+        )
+        return "\n".join(lines)
 
     @classmethod
     def from_minimal(
@@ -874,7 +904,12 @@ class IteratedHomotopyPartition(PartitionFamily):
             )
 
         family = cls(
-            results, trellis=trellis, homotopy=homotopy, minimal=minimal, cuts=cuts
+            results,
+            trellis=trellis,
+            homotopy=homotopy,
+            minimal=minimal,
+            cuts=cuts,
+            incomplete_footprints=cls._incomplete_footprints(minimal, homotopy),
         )
         applied = sum(1 for cut in cuts if cut.opened is not None)
         logger.info(
@@ -916,7 +951,8 @@ class IteratedHomotopyPartition(PartitionFamily):
             on the base branch (the author's rule), in stable order on any
             other (C19: a lobe image holds no anchor, so walking a branch from
             its anchor enters and leaves it in turn). An odd count on a branch
-            leaves its last crossing unpaired (WARNING).
+            leaves its last crossing unpaired: the footprint is incomplete
+            (:meth:`_incomplete_footprints`).
         """
         trellis = minimal.trellis
         stretches = dict.fromkeys(_hole_stretches(homotopy), "hole")
@@ -956,14 +992,6 @@ class IteratedHomotopyPartition(PartitionFamily):
             for branch_key, on_branch in folds.items():
                 if branch_key != base_branch:
                     on_branch.sort(key=lambda c: trellis.intersection(c).stable_cdist)
-                if len(on_branch) % 2:
-                    logger.warning(
-                        "image chain of hole bridge %s crosses stable branch %s an odd "
-                        "number of times (%d); the last crossing there is left unpaired",
-                        hole_bridge,
-                        branch_key[1:],
-                        len(on_branch),
-                    )
                 for x, y in zip(on_branch[::2], on_branch[1::2]):
                     stretches.setdefault(frozenset((x, y)), "chord")
         empty: dict[int, list[tuple[int, str]]] = {}
@@ -974,6 +1002,51 @@ class IteratedHomotopyPartition(PartitionFamily):
             empty.setdefault(a, []).append((b, kind))
             empty.setdefault(b, []).append((a, kind))
         return empty
+
+    @staticmethod
+    def _incomplete_footprints(
+        minimal: "MinimalTrellis", homotopy: HomotopyPartition
+    ) -> list[tuple["BridgeId", "ManifoldKey", int]]:
+        """
+        The lobe images whose footprint on some stable branch is incomplete.
+
+        Args:
+            minimal: The minimal trellis (its hole bridges and full trellis).
+            homotopy: The homotopy partition, whose open intervals are the
+                holes' stretches.
+
+        Returns:
+            ``(hole bridge, stable branch, count)`` for every branch the image
+            chain of a hole with a stretch crosses an ODD number of times at
+            its interior crossings: the chain left the computed stable
+            manifold there (a "stable end", C11), so :meth:`_empty_stretches`
+            leaves the last crossing unpaired. Logged once at INFO when there
+            is any: data, never a reliability failure (B7, Q14).
+        """
+        trellis = minimal.trellis
+        stretched = _hole_stretches(homotopy)
+        incomplete = []
+        for hole_bridge in minimal.hole_bridge_ids:
+            if frozenset(hole_bridge) not in stretched:
+                continue
+            chain = _image_chain(trellis, hole_bridge) or []
+            if any(pair[1] != after[0] for pair, after in zip(chain, chain[1:])):
+                continue  # marks no empty stretch (``_empty_stretches`` warns)
+            folds = Counter(
+                trellis.intersection(second).manifold_b_key for _first, second in chain[:-1]
+            )
+            incomplete.extend(
+                (hole_bridge, branch_key, count)
+                for branch_key, count in folds.items()
+                if count % 2
+            )
+        if incomplete:
+            logger.info(
+                "an odd number of fold crossings, last one unpaired (incomplete "
+                "footprint): %s",
+                [(bridge, branch[1:], count) for bridge, branch, count in incomplete],
+            )
+        return incomplete
 
     @staticmethod
     def _unmarked_lobes(

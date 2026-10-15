@@ -7,19 +7,32 @@ midpoint ownership is unique
 across the full arrangement; the marks round trip reproduces every result
 exactly (the refinement rebuilds with the homotopy partition's own
 ``StablePartition.intervals_from_marks``; the round trip checks that the marks
-of a result carry everything ``_build_intervals`` added).
+of a result carry everything ``_build_intervals`` added); an image chain
+crossing a stable branch an odd number of times is an incomplete footprint of
+the iterated family, recorded and logged once at INFO, never a WARNING (B7).
 """
 
 from __future__ import annotations
 
+import importlib
+import logging
+from types import SimpleNamespace
+
 import pytest
 
+from helpers.logs import assert_logged
 from tanglepack.topology.PartitionFamily import (
     HomotopyPartition,
+    IteratedHomotopyPartition,
     PartitionFamily,
     _marks_of,
 )
 from tanglepack.topology.StablePartition import intervals_from_marks
+from tanglepack.topology.TopologyResults import PartitionInterval
+
+#: The module (the package attribute of the same name is the class).
+family_module = importlib.import_module("tanglepack.topology.PartitionFamily")
+LOGGER = "tanglepack.topology.PartitionFamily"
 
 
 def _boundaries(result):
@@ -134,3 +147,33 @@ def test_marks_round_trip_on_the_nested_fixture(p3_partitioned):
             ]
 
 
+def test_an_odd_fold_count_is_an_incomplete_footprint(monkeypatch, caplog):
+    """The hole ``(1, 2)``'s image chain ``10 -> 11 -> 12 -> 13 -> 14`` has three
+    interior crossings on its base branch: the last is unpaired, the footprint is
+    recorded as ``(bridge, branch, 3)`` and logged once at INFO, never WARNING."""
+    branch = ("fp", "stable", 0, 0)
+    crossings = {
+        iid: SimpleNamespace(manifold_b_key=branch, stable_cdist=float(iid), is_anchor=False)
+        for iid in (1, 2, 10, 11, 12, 13, 14)
+    }
+    trellis = SimpleNamespace(intersection=crossings.__getitem__)
+    minimal = SimpleNamespace(trellis=trellis, hole_bridge_ids=[(1, 2)])
+    hole = PartitionInterval(
+        lo_id=1, hi_id=2, lo_cdist=1.0, hi_cdist=2.0, closed_lo=False, closed_hi=False
+    )
+    homotopy = SimpleNamespace(results={(branch, "right"): SimpleNamespace(intervals=[hole])})
+    chain = [(10, 11), (11, 12), (12, 13), (13, 14)]
+    monkeypatch.setattr(family_module, "_image_chain", lambda trellis, bid: chain)
+
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        empty = IteratedHomotopyPartition._empty_stretches(minimal, homotopy)
+        incomplete = IteratedHomotopyPartition._incomplete_footprints(minimal, homotopy)
+    assert incomplete == [((1, 2), branch, 3)]
+    assert (14, "base") in empty[10] and (12, "chord") in empty[11]
+    assert 13 not in empty, "the unpaired crossing abuts no chord"
+    assert_logged(caplog, logging.INFO, LOGGER, count=1)
+    assert_logged(caplog, logging.WARNING, LOGGER, count=0)
+
+    family = IteratedHomotopyPartition([], incomplete_footprints=incomplete)
+    assert family.incomplete_footprints == incomplete
+    assert "incomplete footprint" in family.describe()
