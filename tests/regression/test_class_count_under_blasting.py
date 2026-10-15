@@ -43,7 +43,12 @@ pinned count:
   measured series record but no law pins;
 * Theorem T (A.8d, B7): after every blast, the members of a class whose
   images are registered share one ``P1``-level itinerary (stable-end chains
-  skipped); the per-step count of classes tested is printed.
+  skipped); the per-step count of classes tested is printed;
+* walking a lobe image's base branch from its anchor enters and leaves the
+  image in turn, and the iterated cut's empty stretches there are its inside
+  gaps (B7b, ``helpers.laws.base_chord_misreadings``): the lobe whose chain and
+  stable orders differ, ``k32_series``'s hole ``(6, 7)``, exists only at a
+  blast step; the per-step count of lobes read is printed.
 
 The per-kind counts are printed in every failure message as diagnostics.
 
@@ -193,3 +198,14 @@ def test_members_share_the_P1_itinerary_under_blasting(name: str) -> None:
     print(f"{name} p1_tested per step:", [s.p1_tested for s in steps])
     disagreements = [(s.blasts, text) for s in steps for text in s.p1_disagreements]
     assert not disagreements, "\n".join(f"step {blasts}: {text}" for blasts, text in disagreements)
+
+
+@pytest.mark.parametrize("name", _params("series_base_chords_inside_the_lobe_image"))
+def test_base_chords_are_inside_the_lobe_image_under_blasting(name: str) -> None:
+    """B7b after every blast: the base-branch gaps of every lobe image alternate
+    out/in from the anchor, and the empty ones are exactly its inside gaps
+    (``helpers.laws.base_chord_misreadings``)."""
+    steps = _series(name)
+    print(f"{name} chords_checked per step:", [s.chords_checked for s in steps])
+    misreadings = [(s.blasts, text) for s in steps for text in s.chord_misreadings]
+    assert not misreadings, "\n".join(f"step {blasts}: {text}" for blasts, text in misreadings)

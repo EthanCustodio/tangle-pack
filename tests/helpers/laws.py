@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import inspect
 from collections import defaultdict
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
@@ -56,7 +57,7 @@ from helpers.invariants import (
     assert_no_geometric_spikes,
     assert_one_to_one,
 )
-from tanglepack.numerics.geometry import oriented_bridge_polyline, point_in_polygon
+from tanglepack.numerics.geometry import arc_polyline, oriented_bridge_polyline, point_in_polygon
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.BridgeClass import (
     anchor_outward_key,
@@ -66,6 +67,7 @@ from tanglepack.topology.BridgeClass import (
 from tanglepack.topology.DualGraph import face_side
 from tanglepack.topology.DualWalk import trellis_itinerary, walk_chords
 from tanglepack.topology.MinimalTrellis import image_chain
+from tanglepack.topology.PartitionFamily import IteratedHomotopyPartition, _hole_stretches
 from tanglepack.topology.Pseudoneighbor import compute_pseudoneighbors
 from tanglepack.topology.StablePartition import (
     bridge_for_pair,
@@ -3078,6 +3080,135 @@ def p1_itinerary_disagreements(
                 + " | ".join(f"{members}: {text(word)}" for word, members in readings.items())
             )
     return tested, tuple(skipped), tuple(disagreements)
+
+
+def _lobe_image(trellis, workbench, chain: list, base_key) -> np.ndarray:
+    """The polygon of ``f(H)``: the image chain's arcs, closed along the base."""
+    def arc(a: int, b: int) -> np.ndarray:
+        bridge = trellis.bridge_between(a, b)
+        assert bridge is not None, (a, b)
+        ends = [np.ravel(trellis.intersection(c).coords).astype(float) for c in (a, b)]
+        lo, hi = sorted(trellis.intersection(c).unstable_cdist for c in (a, b))
+        return np.vstack([ends[0], arc_polyline(bridge, lo, hi), ends[1]])
+
+    first, last = chain[0][0], chain[-1][1]
+    lo, hi = sorted(trellis.intersection(c).stable_cdist for c in (first, last))
+    base = arc_polyline(workbench.manifolds[base_key], lo, hi, stability="stable")
+    if trellis.intersection(last).stable_cdist > trellis.intersection(first).stable_cdist:
+        base = base[::-1]
+    return np.vstack([*(arc(a, b) for a, b in chain), base])
+
+
+def _arclength_midpoint(points: np.ndarray) -> np.ndarray:
+    """The point halfway along a polyline by arc length."""
+    lengths = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    along = np.concatenate([[0.0], np.cumsum(lengths)])
+    i = min(int(np.searchsorted(along, along[-1] / 2, side="right")) - 1, len(lengths) - 1)
+    t = (along[-1] / 2 - along[i]) / lengths[i] if lengths[i] else 0.0
+    return points[i] + t * (points[i + 1] - points[i])
+
+
+def base_chord_misreadings(session: "TangleSession") -> tuple[int, tuple[str, ...]]:
+    """
+    The base-branch chords of every lobe image, read by point-in-polygon (B7b).
+
+    A lobe image ``f(H)`` holds no anchor, so walking its BASE branch from the
+    anchor enters and leaves it in turn, the base counting as inside (Jordan).
+    For every hole with a stretch whose consecutive image chain crosses its base
+    branch at two or more interior crossings, the branch is cut at the chain's
+    crossings on it (and the anchor and the branch tail at its ends); each gap,
+    closed at its two crossings' own coordinates, is read at its arc-length
+    midpoint against :func:`_lobe_image`, ``tol=0``. Polylines numerics already
+    computed only; the map is never called. Checked:
+
+    * (a) the base is a single gap;
+    * (b) the readings alternate, the first gap outside unless it is the base
+      (an anchor-cornered lobe, the inversion's);
+    * (c) every inside gap but the base is an empty stretch of the iterated cut;
+    * (d) every base or chord the cut declares for THIS lobe on its base branch
+      (``_empty_stretches`` over this hole bridge alone) is one inside gap.
+
+    Args:
+        session: A session with its minimal trellis and homotopy partition.
+
+    Returns:
+        ``(lobes checked, one text per misreading)``.
+    """
+    minimal = session.minimal_trellis()
+    homotopy = session.homotopy_partition()
+    trellis, workbench = minimal.trellis, session.workbench
+    at = trellis.intersection
+    empty = IteratedHomotopyPartition._empty_stretches(minimal, homotopy)
+    stretched = _hole_stretches(homotopy)
+    checked, misreadings = 0, []
+    for hole_bridge in minimal.hole_bridge_ids:
+        if frozenset(hole_bridge) not in stretched:
+            continue
+        chain = image_chain(trellis, hole_bridge)
+        if not chain or any(pair[1] != after[0] for pair, after in zip(chain, chain[1:])):
+            continue
+        crossings = [chain[0][0], *(second for _first, second in chain)]
+        (base_key,) = {
+            at(c).manifold_b_key for c in (crossings[0], crossings[-1]) if not at(c).is_anchor
+        }
+        if sum(at(c).manifold_b_key == base_key for c in crossings[1:-1]) < 2:
+            continue
+        checked += 1
+        manifold = workbench.manifolds[base_key]
+        ring = _lobe_image(trellis, workbench, chain, base_key)
+        on_branch = sorted(
+            {c for c in crossings if at(c).manifold_b_key == base_key or at(c).is_anchor},
+            key=lambda c: at(c).stable_cdist,
+        )
+        ends = [
+            ("anchor", 0.0, np.array([manifold.root.x, manifold.root.y], float)),
+            *((c, at(c).stable_cdist, np.ravel(at(c).coords).astype(float)) for c in on_branch),
+            ("tail", manifold.tail.get_cdist("stable"), np.array([manifold.tail.x, manifold.tail.y], float)),
+        ]
+        base = frozenset((crossings[0], crossings[-1]))
+        gaps = {}  # (lo, hi) -> inside, anchor outward
+        for (lo, lo_cdist, lo_point), (hi, hi_cdist, hi_point) in zip(ends, ends[1:]):
+            if hi_cdist <= lo_cdist:
+                continue  # the anchor is a chain crossing: no gap before it
+            nodes = arc_polyline(manifold, lo_cdist, hi_cdist, stability="stable")
+            gap = np.vstack([lo_point, nodes.reshape(-1, 2), hi_point])
+            gaps[lo, hi] = frozenset((lo, hi)) == base or point_in_polygon(
+                _arclength_midpoint(gap), ring, tol=0.0
+            )
+        readings = " ".join(
+            f"({lo},{hi}){'B' if frozenset((lo, hi)) == base else 'in' if inside else 'out'}"
+            for (lo, hi), inside in gaps.items()
+        )
+
+        def misread(clause: str) -> None:
+            misreadings.append(f"hole bridge {hole_bridge} on {base_key[1:]}: {clause}; {readings}")
+
+        if sum(frozenset(gap) == base for gap in gaps) != 1:
+            misread("(a) the base is not one gap")
+        inside = list(gaps.values())
+        first_is_base = frozenset(next(iter(gaps))) == base
+        if inside[0] != first_is_base or any(a == b for a, b in zip(inside, inside[1:])):
+            misread("(b) the gaps do not alternate")
+        for (lo, hi), is_inside in gaps.items():
+            if is_inside and frozenset((lo, hi)) != base and not any(
+                other == hi for other, _kind in empty.get(lo, ())
+            ):
+                misread(f"(c) the inside gap ({lo},{hi}) is not empty")
+        own = IteratedHomotopyPartition._empty_stretches(
+            SimpleNamespace(trellis=trellis, hole_bridge_ids=[hole_bridge]), homotopy
+        )
+        inside_gaps = {frozenset(gap) for gap, is_inside in gaps.items() if is_inside}
+        for lo, stretches in own.items():
+            for hi, kind in stretches:
+                on_base = {at(c).manifold_b_key for c in (lo, hi) if not at(c).is_anchor}
+                if (
+                    lo < hi
+                    and kind in ("base", "chord")
+                    and on_base == {base_key}
+                    and frozenset((lo, hi)) not in inside_gaps
+                ):
+                    misread(f"(d) its {kind} ({lo},{hi}) is not one inside gap")
+    return checked, tuple(misreadings)
 
 
 def check_members_share_the_P1_itinerary(case: "Case") -> int:
