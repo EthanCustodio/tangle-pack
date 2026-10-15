@@ -39,6 +39,7 @@ _STANDALONE_ISSUES = {
     "series_class_count_never_decreases",
     "series_class_count_constant_while_holes_constant",
     "series_alphabet_inside_minimal_trellis",
+    "series_members_share_the_P1_itinerary",
 }
 
 
@@ -96,6 +97,6 @@ def test_every_law_runs_in_the_tier() -> None:
     untagged = [
         pair
         for pair, issue in KNOWN_ISSUES.items()
-        if not re.fullmatch(r"WP\d+|C\d|DEC-\d+", issue.wp)
+        if not re.fullmatch(r"WP\d+|C\d|DEC-\d+|B\d+[a-z]?", issue.wp)
     ]
     assert not untagged, untagged
