@@ -59,15 +59,19 @@ print(f"points! {initial_unstable_segments[(0, 0)].get_point_array()}")
 
 # grow unstable manifold
 num_iterations = 13
-man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
-man_machine.grow_x_times(fixed_point, "stable", num_iterations)
+for _ in range(num_iterations):
+    man_machine.new_grow_manifold(fixed_point, "unstable")
+for _ in range(num_iterations):
+    man_machine.new_grow_manifold(fixed_point, "stable")
 
 man_machine.area_cutoff = 1e-4
 
 # grow stable manifold
 num_iterations = 7
-man_machine.grow_x_times(fixed_point_zero, "stable", num_iterations)
-man_machine.grow_x_times(fixed_point_zero, "unstable", num_iterations)
+for _ in range(num_iterations):
+    man_machine.new_grow_manifold(fixed_point_zero, "stable")
+for _ in range(num_iterations):
+    man_machine.new_grow_manifold(fixed_point_zero, "unstable")
 
 fig = plt.figure()
 

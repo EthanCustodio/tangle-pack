@@ -48,10 +48,12 @@ print(f"stable stretchiness: {stable_manifold.stretch_param}")
 # explode exponentially past ~8 iterations, so those counts now run for hours.
 num_iterations = 8
 
-man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
+for _ in range(num_iterations):
+    man_machine.new_grow_manifold(fixed_point, "unstable")
 unstable_manifold._find_tail()
 
-man_machine.grow_x_times(fixed_point, "stable", num_iterations)
+for _ in range(num_iterations):
+    man_machine.new_grow_manifold(fixed_point, "stable")
 stable_manifold._find_tail()
 
 

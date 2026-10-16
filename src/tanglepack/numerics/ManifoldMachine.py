@@ -125,7 +125,7 @@ class ManifoldMachine:
     * :meth:`refine_manifold` -- insert points wherever the curvature area
       between two neighbours exceeds :attr:`area_cutoff`, breadth-first and one
       batched map call per layer.
-    * :meth:`grow_x_times` -- drive the two above around a periodic orbit.
+    * :meth:`new_grow_manifold` -- drive the two above around a periodic orbit.
 
     Invariants every method preserves:
 
@@ -486,26 +486,6 @@ class ManifoldMachine:
         """
 
         return self.iterate_manifold(manifold)
-
-    def grow_x_times(
-        self,
-        fixed_point: FixedPoint,
-        stability: Stability,
-        num_times: int = 1,
-        branch_index: Optional[int] = None,
-    ) -> None:
-        """
-        Grows all the manifolds of the given stability from the fixed point
-        by iterating them num_times and merging them back together
-
-        Parameters:
-            fixed_point: fixed point to grow the manifolds from
-            stability: stability of the manifolds to grow
-            num_times: number of times iterating the manifolds
-        """
-
-        for _ in range(num_times):
-            self.new_grow_manifold(fixed_point, stability, branch_index)
 
     def merge_manifolds(
         self, manifold_1: BaseManifold, manifold_2: BaseManifold

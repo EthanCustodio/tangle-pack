@@ -47,11 +47,13 @@ stable_manifold = initial_stable_segment[(0, 0)]
 num_iterations = 6
 
 # grow unstable manfold
-man_machine.grow_x_times(fixed_point, "unstable", num_iterations)
+for _ in range(num_iterations):
+    man_machine.new_grow_manifold(fixed_point, "unstable")
 unstable_manifold._find_tail()
 
 # grow stable manifold
-man_machine.grow_x_times(fixed_point, "stable", num_iterations)
+for _ in range(num_iterations):
+    man_machine.new_grow_manifold(fixed_point, "stable")
 stable_manifold._find_tail()
 
 
