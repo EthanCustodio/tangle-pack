@@ -27,8 +27,9 @@ canonical-distance scaling by the branch's per-step factor (`Trellis.image_cdist
 path; `FixedPoint.advance_key` and `FixedPoint.per_step_beta`). Nothing in `topology/` reads an
 eigenvalue directly. There are exactly three exceptions, none of them part of an algorithm:
 
-- `Arrangement.image_of` maps a region's boundary with the real map to VERIFY an image face (an
-  acceptance filter: an image whose area disagrees is rejected and None returned);
+- `Arrangement.image_of` carries a region's corners by the iterate table (a corner whose image is
+  not in the trellis gives None) and VERIFIES the candidate face by its area and by mapping ONE
+  interior point (`representative_point`) with the real map (an acceptance filter, `_verify_image`);
 - `diagnostics.measured_sides` carries a reference hole back with the real inverse map to measure a
   propagated hole's side, as a resolution flag; it runs on the default
   `Trellis.punch_holes(diagnose=True)` path;
@@ -371,8 +372,9 @@ rule (A.8b). Inert classes keep their symbols in the words and are no nodes of t
 
 **Definition.** The minimal trellis keeps every hole bridge, and maps every hole bridge EXCEPT one
 carrying a ZEROTH (reference) hole (the author's rule, B5): the bridges tiling a mapped bridge's first
-forward image are kept too. Which bridges to map is read from `holes`, before the dual graph and
-without the class table. A zeroth-hole bridge's lobe holds
+forward image are kept too. The zeroth-hole rule, read from `holes`, decides which bridges to map;
+the class table only places them (`classes.entry_of`): a hole bridge in no class is kept with a
+WARNING but not mapped. A zeroth-hole bridge's lobe holds
 no point of X and one marker (its own hole), whose image is no marker, so its image is homotopic to a
 stable segment and its class word is empty; the law "zeroth_hole_classes_have_empty_words" checks
 it. The rule is SUFFICIENT, not the definition of inertness: the heteroclinic class `u` is inert with
@@ -498,9 +500,10 @@ two members bound with the stable manifold holds no hole, so no `P1` cut separat
 Then the refined word of c_k is the class word with every token written as the child its
 occurrence names: the word of every member, not an inheritance. The refined matrix M_1 is the
 IN-SPLITTING of `M`: siblings have equal rows and the children's columns sum to the parent's, a
-conjugacy with the same entropy. T and the in-splitting are LAWS on the law cases and on every blast
-series ("members_share_the_P1_itinerary", "refined_matrix_is_an_in_splitting"), not on every build:
-T is in `LAW_CASES_ONLY` and skipped by the deep runs. Under the zeroth-hole rule `P1`, the minimal
+conjugacy with the same entropy. Both are LAWS, not on every build: T ("members_share_the_P1_itinerary",
+in `LAW_CASES_ONLY`) runs on the law cases and after every blast of the series
+("series_members_share_the_P1_itinerary"), not on the deep builds; the in-splitting
+("refined_matrix_is_an_in_splitting") runs on the law cases and the deep builds, with no series test. Under the zeroth-hole rule `P1`, the minimal
 trellis and the refined classes are what they were under the evidence rule on every build.
 
 **Implemented by.** `IteratedHomotopyPartition.from_minimal`, `IteratedHomotopyPartition._empty_stretches`,
@@ -584,7 +587,8 @@ outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
 - B4a `holes-algorithm-vs-diagnostics` (`f166573`): the geometric readings moved to
   `topology/diagnostics.py`; `Hole.measured_side` and `Hole.side_source` removed.
 - B4b `holes-are-combinatorial` (`ba23a1f`): references only; the direct backward punch, its two
-  dedups, the fallback, `from_table`, `epsilon` and `_step_into` deleted; one NUM-5 WARNING.
+  dedups, the fallback, `epsilon` and `_step_into` deleted; the backward span keeps `image_cdist`'s
+  table flag (`from_table`) so the one NUM-5 WARNING watches scaled ends only.
 - B2 `pseudoneighbor-both-intervals` (`9cd29d5`): both open intervals tested (Q1, S-a).
 - B3 `depth-of-n` (`7d3a294`): N-a, the `min_separation` exemption, `BlastResult.pip_depth`. N-b (an
   explicit depth parameter) was offered and NOT chosen.
@@ -639,6 +643,8 @@ outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
 - The "known asymmetry" of the stable interval (2026-09-15) -> both intervals (B2).
 - The resonance-zone association of holes (July 2026) and the earlier partition rules (outermost
   beyond-cut hole, piece containment) -> holes know only their side of their own bridge.
+- The initializer's `for orbit_index: for branch_index:` walk (before 2026-09), which visited
+  `(0, 1)` before `(1, 0)` -> the physical chain of `FixedPoint.advance_key`.
 
 **Audit divergences closed without a chalkboard row** (the 2026-10-09 fidelity audit,
 `docs/code_fidelity_audit_2026-10-09.md`):
