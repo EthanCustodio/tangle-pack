@@ -1,6 +1,6 @@
 # testing — knowledge file
 
-Last updated 2026-10-15 (B12 analyst at `94fca6b`: law classification, id facts, sphinx -- see "B12 analyst" at the end. Before that, B9b OUTCOME, branch `refactor/one-element-at-end` @ `94fca6b`: 1207 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 209 s, see "B9b outcome" at the end. Before that, B9b analyst at `HEAD` `5f0db5f` = B9a merged: 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 199 s). Before that (B9a OUTCOME, branch `refactor/session-three-concerns` @ `5f0db5f`: 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3); see "B9a outcome" at the end). Before that (B9 analyst at `HEAD` `517aa01` (B10 merged): 1215 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 204 s; see the last section). Before that 2026-10-15 (B6b `word-finished` OUTCOME on branch `65edec4`, base `63477e3`: 1223 passed / 47 skipped / 5 deselected / 1 xfailed (C3), see the last section). Before that: B6b analyst at HEAD `63477e3` (B7b merged): 1211 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 214 s; see the last section). Before that: 2026-10-14 (B7 `refined-level-defined` outcome: 1200 passed / 46 skipped / 5 deselected / 2 xfailed on branch `a6a4f68`, base `3fb310a`, see the last section; before that B5 `inertness-is-transience` outcome (MERGED, main `3fb310a`): 1193 passed / 38 / 5 / 1 xfailed on branch `3fb310a`, see the last section; before that B3 `depth-of-n` outcome: 1193 passed / 38 / 5 / 1 xfailed on branch `7d3a294`, see the B3 bullets; before that 2026-10-12 B1 `resolved-crossings` outcome audit, branch @ `76d0710`: 1157 passed / 38 skipped / 5 deselected / 1 xfailed in ~200 s, base `1029fcc` 1117 / 38 / 5 / 1 in ~162 s; see the last section. Before that: B0 `oracle-laws`, branch `refactor/oracle-laws` HEAD `1029fcc`, base `a3bd8f0`; NOT merged at writing): suite 1117 passed, 38 skipped, 5 deselected, 1 xfailed (C3). Base `a3bd8f0` (after D15 `74a19da`): 1117 / 27 / 5 / 1 -- the 1122 / 26 of WP12 predates D15.
+Last updated 2026-10-16 (B12b OUTCOME, branch `refactor/laws-and-loose-ends` @ `e163f7a`: 1208 passed / 43 skipped / 5 deselected / 1 xfailed (C3) in 195 s, 1257 collected, 97 laws; see "B12b outcome" at the end. Before that B12b analyst at `a550a5d` = B12a merged: 1207 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 200 s, 1260 collected; see "B12b analyst" at the end. Before that B12 analyst at `94fca6b`: law classification, id facts, sphinx -- see "B12 analyst" at the end. Before that, B9b OUTCOME, branch `refactor/one-element-at-end` @ `94fca6b`: 1207 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 209 s, see "B9b outcome" at the end. Before that, B9b analyst at `HEAD` `5f0db5f` = B9a merged: 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 199 s). Before that (B9a OUTCOME, branch `refactor/session-three-concerns` @ `5f0db5f`: 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3); see "B9a outcome" at the end). Before that (B9 analyst at `HEAD` `517aa01` (B10 merged): 1215 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 204 s; see the last section). Before that 2026-10-15 (B6b `word-finished` OUTCOME on branch `65edec4`, base `63477e3`: 1223 passed / 47 skipped / 5 deselected / 1 xfailed (C3), see the last section). Before that: B6b analyst at HEAD `63477e3` (B7b merged): 1211 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 214 s; see the last section). Before that: 2026-10-14 (B7 `refined-level-defined` outcome: 1200 passed / 46 skipped / 5 deselected / 2 xfailed on branch `a6a4f68`, base `3fb310a`, see the last section; before that B5 `inertness-is-transience` outcome (MERGED, main `3fb310a`): 1193 passed / 38 / 5 / 1 xfailed on branch `3fb310a`, see the last section; before that B3 `depth-of-n` outcome: 1193 passed / 38 / 5 / 1 xfailed on branch `7d3a294`, see the B3 bullets; before that 2026-10-12 B1 `resolved-crossings` outcome audit, branch @ `76d0710`: 1157 passed / 38 skipped / 5 deselected / 1 xfailed in ~200 s, base `1029fcc` 1117 / 38 / 5 / 1 in ~162 s; see the last section. Before that: B0 `oracle-laws`, branch `refactor/oracle-laws` HEAD `1029fcc`, base `a3bd8f0`; NOT merged at writing): suite 1117 passed, 38 skipped, 5 deselected, 1 xfailed (C3). Base `a3bd8f0` (after D15 `74a19da`): 1117 / 27 / 5 / 1 -- the 1122 / 26 of WP12 predates D15.
 Run: `MPLBACKEND=Agg env/bin/python -m pytest -q -rxX -p no:cacheprovider` (~150 s; `-m perf` adds the 5 timing tests).
 
 - Suite history: 782 at `2315204` (2026-10-02); 833 / 11 xfail after the stress integration
@@ -1338,3 +1338,48 @@ Tests that read the names B4a moves, the two `Hole` fields, or the StablePartiti
   (`-D extensions=sphinx.ext.autodoc,sphinx.ext.napoleon -D html_theme=alabaster`) the build
   finishes with 1,206 WARNINGs (duplicate cross-reference targets from the package re-exports,
   docutils indentation). A `-W` build is not a feasible rubric; an automodule-list check is.
+
+## B12b analyst (2026-10-16, `HEAD` `a550a5d`, read-only; scratch copies under scratchpad `b12b/`)
+
+- Baseline at HEAD: 1260 collected (5 deselected), 1207 passed / 47 skipped / 1 xfailed (C3), 200 s.
+- The nine TAUTOLOGY laws (B12a Q2) deleted in a scratch copy (`b12b/delete_laws.py`): 106 -> 97
+  `check_*` functions, laws.py -209 lines (9 functions + trailing blanks, 9 `LAYERS` lines, and the
+  two imports only they used: `assert_iterate_relation` (helpers.invariants, still used by two unit
+  tests) and `class_sort_key` (BridgeClass)). The `NOT_APPLICABLE` "four entries" are ONE dict
+  comprehension (`cases.py:1395-1399`): the edit is `for law in ("member_matching_consistent",)`.
+  Collected ids: exactly the 4 `test_symbolic_set_aside[refined_children_inherit_word-{inversion,
+  inversion_period2,k28_one_blast,p3}]` go (they were skips). With the smoke test: 1257 collected,
+  1208 passed / 43 skipped / 1 xfailed (C3). Rubric script `b12b/laws_rubric.py` (deleted / LAYERS /
+  imports / no surviving body changed by AST dump).
+- `DualGraph.graph()` has exactly one caller in src/tests/scripts/stress/notebooks:
+  `laws.py:2716` (`check_dual_bipartite_degree`).
+- `test_coarse_blasts_rows_by_signs.py:52`: replacing `check_openings_follow_signs` by
+  `check_partition_covers_branch` passes (count 6 on `p3_coarse_blasts`); `_sign_openings`
+  (`laws.py:1086`) uses the same D6 formula but checks the PARTITION, not `hole.openings`.
+- Smoke test for `loom.plot_resonance_zones` on `k28_partitioned`: 1 passed, 0.22 s setup.
+- PNG reproducibility: matplotlib SVGs carry `<dc:date>` and random ids (`svg.hashsalt` unset);
+  pickles differ byte-wise on every run but re-render identically. With `SOURCE_DATE_EPOCH` and an
+  rc `svg.hashsalt` the SVGs reproduce; PNGs reproduce always (same interpreter).
+- 63-item probe (`b10/probe/run.sh REPO OUTNAME`, writes `b10/probe/OUTNAME/`): 34 s for two trees.
+
+## B12b outcome (2026-10-16, branch `refactor/laws-and-loose-ends` @ `e163f7a`, base `a550a5d`; auditor)
+
+- Suite at head (auditor's own run): 1208 passed / 43 skipped / 5 deselected / 1 xfailed in 195 s;
+  `-rxX` lists only C3, no XPASS. Collected 1257 (1252 + 5 deselected); diff vs base = exactly the
+  four `test_symbolic_set_aside[refined_children_inherit_word-*]` out and
+  `tests/plotting/test_plot_smoke.py::test_plot_resonance_zones_shades_every_zone` in.
+- `tests/helpers/laws.py`: 97 laws. Gone (TAUTOLOGY, each restated an implementation):
+  `manifold_iterate_law`, `bridge_partial_iff_no_id`, `openings_on_own_bridge_row`,
+  `openings_follow_signs`, `class_table_order`, `classes_do_not_mix_tangles`,
+  `dual_unified_is_pip_segment`, `itinerary_pairs_are_classes` (= `translate_itinerary`'s loop,
+  `SymbolicDynamics.py:511-518`), `refined_children_inherit_word`. `check_dual_bipartite_degree`
+  stays and is still the ONE caller of `DualGraph.graph()`. `NOT_APPLICABLE` (`tests/cases.py`)
+  is now `member_matching_consistent` only. `test_blast_budget.py` lost its call to the
+  partial-iff law; `test_coarse_blasts_rows_by_signs.py:52` calls `check_partition_covers_branch`.
+- Smoke test `test_plot_resonance_zones_shades_every_zone` (`k28_partitioned`): pins
+  `len(plot_resonance_zones(zones)) == len(zones)` and `[] -> []` only. Weak: a stub returning
+  `[None] * len(zones)` stays green (TE break); breaking the `poly.size == 0` branch turns it red.
+- Rubric tools that worked: `scratchpad/b12b/laws_rubric.py` (AST dump per function, LAYERS order,
+  imports), `scratchpad/b12/stripped_ast.py` (docstring-stripped AST per src file), the 63-item probe
+  `b10/probe/run.sh`. One that did not: `b12b/png/svgnorm.py` misses the salted SVG marker ids
+  (6/18 equal; 18/18 with `te/svgnorm2.py`).

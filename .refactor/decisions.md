@@ -747,3 +747,45 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   by B9a for pip memory); note cosmetics (`:506` unwrapped, `:377` broken line, `:695` "990-line
   cap" vs 988); commit trailers say `Claude Opus 5.5`. These notes were appended in the MAIN tree
   after commit 0 copied it: the branch's `.refactor/` is one entry behind main's working copy.
+
+## 2026-10-16 — B12b `laws-and-loose-ends`, outcome (the campaign's LAST run; plan approved round 1 with all six defaults Q1-Q6; review revise in round 1, pass in round 2; branch `refactor/laws-and-loose-ends` @ `e163f7a`, base `a550a5d`, nine commits)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved 2026-10-16): "Author approved the B12b
+  laws-and-loose-ends plan 2026-10-16 (the campaign's last run) with all six defaults": (Q1) the
+  design note's "Verified against" line goes in a final docs-only commit naming the last commit
+  that touches code, tests or figures; (Q2) the other 13 figure folders are NOT regenerated (all
+  pixel-identical; three differ only in the PNG `Software` chunk); (Q3) no reproducible-SVG
+  machinery: figures are judged by PNG bytes, normalised SVGs and pickles re-rendered to PNG;
+  (Q4) `CLAUDE.md:162` and `:101` fixed as well as `:60`, one line each; (Q5) `outer_blasts=2`
+  keeps the author's phrase "chosen to make the case closed" plus the measured distinction (one
+  outer blast resolves every class through the trellis path, two make every outer class walk);
+  (Q6) the coarse-blasts regression's call to the deleted `check_openings_follow_signs` is
+  REPLACED by `check_partition_covers_branch`, not dropped.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`):
+  - Nine TAUTOLOGY laws deleted whole with their `LAYERS` entries and two imports only they used
+    (`laws.py` 106 -> 97 laws, -209 lines); `dual_bipartite_degree` and every MIXED/ORACLE law
+    unchanged by AST. Collected ids 1260 -> 1257 (the four `refined_children_inherit_word`
+    set-aside skips out, `test_plot_resonance_zones_shades_every_zone` in). Suite 1208 passed /
+    43 skipped / 5 deselected / 1 xfailed (C3), no XPASS.
+  - `topology.__all__` = 51 (adds `MembersDisagree`, `WalkReason`, `free_reduce`), 53 unused
+    imports dropped (`__init__` 195 -> 133 lines); side effects: `tanglepack.topology.ElementNaming`
+    / `.PartitionFamily` are now the submodules, `import tanglepack` no longer loads `StrongPip`.
+  - Stripped AST equal on 50 of 51 `src` files (the 51st is `__init__`); 63-item probe equal.
+  - rst automodule set == module set (51); `conf.py` path `../../src`; chalkboard closed in place
+    (5th column); alignment plan's Outcome section (17 rows); note "Verified against `ad1d96a`".
+  - Three figure folders regenerated (51 files, `partitions.png` byte-identical so untouched);
+    PNGs byte-reproducible with system `python3` (18/18).
+- **Round-1 defects** (caught by reading, not grep): `henon_cases.py` "real (``unique``) walks"
+  (no such status since B6b; the word came from base through the plan's text) and `geometry.py`
+  "pure functions on plain arrays ... one tolerance" (two of four take a manifold / bridge; four
+  different tolerances); plus "pre-2.2" left dangling in `BridgeIterator.py`, the note's index
+  still "B0-B12a", and the Outcome intro calling every hash a branch tip. All fixed in round 2 as
+  two appended commits (`ad1d96a`, `e163f7a`), history not rewritten.
+- **Left open after the campaign:** `topology/plotting.py:1947` stale ``unique`` status wording;
+  the `plot_resonance_zones` smoke test pins the handle count only;
+  `scripts/henon_symbolic_itineraries_period3.py:23-27` stale period-3 facts;
+  `scripts/henon_blast_period_3.py:95` dead (standing rule: reported only); DEC-25; B11 deferred;
+  `ManifoldMachine.py:627` unused `final_node`; `BaseManifold.py:11` stray to-do; ignored
+  `src/tanglepack_gui/`, `src/tanglepack_webdash/` (only `__pycache__`); `conf.py:35` `_static`
+  missing; no Sphinx build without `myst_parser` / `furo`; commit trailers mix Fable 5.1 / Opus
+  5.5. No debrief verdict yet. Not merged: the merge is the author's.
