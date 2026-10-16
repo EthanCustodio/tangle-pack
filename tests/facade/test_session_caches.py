@@ -132,9 +132,9 @@ def _repartition_by_hand(case: Case) -> None:
     trellis.clear_results()
     trellis.classify_strong_pips()
     trellis.set_strong_pip(_alternate_pip(session, fp))
-    session.compute_pseudoneighbors(fp)
-    session.punch_holes(fp)
-    session.partition_stable_manifold(fp)
+    trellis.compute_pseudoneighbors()
+    trellis.punch_holes()
+    trellis.partition_stable_manifold()
     trellis.set_strong_pip(original)
 
     assert session.workbench.generation == generation

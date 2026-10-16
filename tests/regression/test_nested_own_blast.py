@@ -75,9 +75,6 @@ def test_nested_blast_order_does_not_matter(caplog):
         session.classify_strong_pips()
         for fp, pip in zip(outer_first.fixed_points, outer_first.pips):
             session.set_strong_pip(fp, pip)
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
 
     for one, other in zip(inner_first.fixed_points, outer_first.fixed_points):
         words = _tangle_words(inner_first, one)

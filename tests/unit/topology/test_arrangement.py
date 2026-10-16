@@ -313,9 +313,7 @@ def test_regions_at_and_bounded_by_agree_with_the_regions(k10_session):
 def test_stable_arcs_report_their_partition_elements(k10_session):
     session, fp = k10_session
     session.classify_strong_pips()
-    session.compute_pseudoneighbors(fp)
-    session.punch_holes(fp)
-    session.partition_stable_manifold(fp)
+    session.topology(fp)
 
     trellis = session.trellis(fp)
     arrangement = session.arrangement()

@@ -80,7 +80,7 @@ trellis.classify_strong_pips(choose_default=False)
 trellis.set_strong_pip(1)
 
 # 1. Reference pseudoneighbors + full trajectories.
-reference_pseudoneighbors = session.compute_pseudoneighbors(fp, verbose=True)
+reference_pseudoneighbors = trellis.compute_pseudoneighbors(verbose=True)
 
 # 2. Holes: one per pair, plus the backward-propagated ones. Each hole is
 # classified by its side of its bridge in the dynamical orientation

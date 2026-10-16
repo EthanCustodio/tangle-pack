@@ -29,13 +29,10 @@ from tanglepack.loom.BridgeAlphabet import BridgeAlphabet
 # helpers
 # --------------------------------------------------------------------------- #
 def _repartition_at(session, fp, pip):
-    """Trim at ``pip``, then redo the topological steps the trim invalidates."""
+    """Trim at ``pip`` and choose it again; the products recompute the rest."""
     zone = session.resonance_zone(pip)
     session.classify_strong_pips()
     session.set_strong_pip(fp, pip)
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
     return zone
 
 

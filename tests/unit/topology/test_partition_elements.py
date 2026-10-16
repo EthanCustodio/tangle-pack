@@ -8,10 +8,7 @@ of every crossing, positional ids and singletons are laws of
 
 * every non-partial bridge with an endpoint on the branch resolves to the element
   at that endpoint (``elements_at_bridge`` / :meth:`Trellis.element_for`), with a
-  ``None`` for an endpoint that sits on a different branch;
-* the cross-trellis fan-out (:meth:`TangleSession.partition_element_for`) finds an
-  element for a bridge whose endpoint lands on a stable branch belonging to a
-  *different* trellis of the same session — the gap a single trellis cannot close.
+  ``None`` for an endpoint that sits on a different branch.
 
 An element's forward image is ``DualWalk.land_element`` (``test_dual_walk.py``).
 """
@@ -159,36 +156,6 @@ def test_element_for_resolves_a_bridge_missing_from_the_snapshot(henon_p3_sessio
 
             name = "first" if index == 0 else "second"
             assert trellis.element_for(dropped.id, name, side) == expected
-            assert session.partition_element_for(dropped.id, name, side) == expected
-
-
-def test_session_closes_the_cross_trellis_gap(p3_partitioned):
-    """A bridge of one tangle finds its element through the session, not one trellis.
-
-    Covers the session's fan-out over the trellis CACHE, not the heteroclinic
-    endpoint case (the nested fixture has no heteroclinic crossings — every
-    crossing's two manifold keys share a fixed point; see
-    ``test_element_for_resolves_a_bridge_missing_from_the_snapshot`` for that
-    mechanism). The period-1 and period-3 tangles live in separate trellises of
-    one session, so the period-3 trellis cannot answer for a period-1 bridge —
-    neither its bridge list nor its partitions mention it — while the session
-    scans every cached trellis and finds the answer in the period-1 one.
-    """
-    session, fp3, fp1 = p3_partitioned
-    t3 = session.trellis(fp3)
-    t1 = session.trellis(fp1)
-
-    foreign = next(b for b in t1.bridges if b.id is not None)
-    assert t3.element_for(foreign.id, "first", "left") is None
-    assert t3.element_for(foreign.id, "second", "left") is None
-
-    resolved = [
-        session.partition_element_for(foreign.id, endpoint, "left")
-        for endpoint in ("first", "second")
-    ]
-    assert any(element is not None for element in resolved)
-    for endpoint, element_id in zip(("first", "second"), resolved):
-        assert element_id == t1.element_for(foreign.id, endpoint, "left")
 
 
 def test_element_for_rejects_an_unknown_endpoint_name(p3_partitioned):

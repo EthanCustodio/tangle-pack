@@ -183,9 +183,7 @@ def main() -> None:
         session.set_strong_pip(fp, pip)
     logger.info("%s", session.trellis(fp).summary())
 
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
+    session.topology(fp)
     pip = session.strong_pip(fp)
 
     logger.info(
@@ -193,7 +191,7 @@ def main() -> None:
         pip,
         np.round(session.trellis(fp).intersection(pip).get_point(), 3),
     )
-    logger.info("%s", session.describe_stable_partitions(fp))
+    logger.info("%s", session.trellis(fp).describe_stable_partitions())
 
     # 5. Bridge classes and the dual graph.
     dual_graph = session.dual_graph()

@@ -59,7 +59,7 @@ def build_k10() -> tuple[TangleSession, list[FixedPoint]]:
     Mirrors the ``k10_session`` / ``k10_partitioned`` fixtures of
     ``tests/conftest.py``: the saddle at ``[4, -4]``, unstable grown 9 steps,
     stable grown to turnaround, then intersections, trimming, bridges, the
-    iterate table, and the four partition fan-outs.
+    iterate table, and the topology.
 
     Returns:
         ``(session, [fp])``.
@@ -80,9 +80,7 @@ def build_k10() -> tuple[TangleSession, list[FixedPoint]]:
     session.create_bridges(fp)
 
     session.classify_strong_pips()
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
+    session.topology()
     return session, [fp]
 
 
@@ -94,8 +92,8 @@ def build_p3() -> tuple[TangleSession, list[FixedPoint]]:
     ``tests/conftest.py`` (equivalently ``scripts/henon_blast_period_3.py``),
     minus the resonance-zone step this script has no use for: the period-3
     orbit and the outer period-1 saddle are grown and crossed, then intersected,
-    trimmed, bridged, the iterate table inferred, and the four partition
-    fan-outs run over both fixed points.
+    trimmed, bridged, the iterate table inferred, and each fixed point's
+    topology computed on its own trellis.
 
     Returns:
         ``(session, [fp3, fp1])``.
@@ -131,9 +129,8 @@ def build_p3() -> tuple[TangleSession, list[FixedPoint]]:
     session.create_bridges(fp1)
 
     session.classify_strong_pips()
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
+    for fp in (fp3, fp1):
+        session.topology(fp)  # per tangle: the selection's topology leaves these trellises empty
     return session, [fp3, fp1]
 
 

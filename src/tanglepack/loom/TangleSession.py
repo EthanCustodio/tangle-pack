@@ -27,7 +27,6 @@ from ..topology.DualGraph import DualGraph
 from ..topology.MinimalTrellis import MinimalTrellis
 from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
 from ..topology.SymbolicDynamics import SymbolicDynamics
-from ..topology.TopologyResults import endpoint_index
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from .ResonanceZone import ResonanceZone, define_resonance_zone
 from .Blast import BlastResult, blast_zone
@@ -35,10 +34,9 @@ from .BridgeAlphabet import BridgeAlphabet
 from .Topology import Topology
 
 if TYPE_CHECKING:
-    from ..numerics.Bridge import Bridge, BridgeId
+    from ..numerics.Bridge import Bridge
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Intersection import Intersection
-    from ..topology.TopologyResults import Endpoint, Side
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -539,38 +537,6 @@ class TangleSession:
             return [fixed_point]
         return list(fixed_point)
 
-    def _fanout_call(
-        self,
-        name: str,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]",
-        **kwargs,
-    ):
-        """
-        Run one Trellis method across a fixed-point selection.
-
-        Every non-plot fan-out shares this shape: build (or reuse) each selected
-        fixed point's trellis via :meth:`trellis` — so a snapshot left stale by a
-        resonance-zone recompute is rebuilt rather than silently reused — call
-        ``name`` on it, and collect the results.
-
-        Args:
-            name: The :class:`Trellis` method to call.
-            fixed_point: A single FixedPoint, an iterable of them, or None for
-                every fixed point on the workbench.
-            **kwargs: Forwarded to the trellis method.
-
-        Returns:
-            The single fixed point's own result when one FixedPoint was passed,
-            otherwise a ``{fixed_point: result}`` dict.
-        """
-        results = {
-            fp: getattr(self.trellis(fp), name)(**kwargs)
-            for fp in self._resolve_fixed_points(fixed_point)
-        }
-        if _is_single_fixed_point(fixed_point):
-            return results[fixed_point]
-        return results
-
     # ── strong-pip convenience (per fixed point) ─────────────────────────────
     #
     # Each fixed point owns its own (single-fixed-point) Trellis, so a nested
@@ -668,188 +634,6 @@ class TangleSession:
     def strong_pip_candidates(self, fixed_point: "FixedPoint") -> list[int]:
         """The strong-pip candidate ids for ``fixed_point``'s trellis."""
         return self.trellis(fixed_point).strong_pip_candidates
-
-    # ── pseudoneighbor convenience (per fixed point) ─────────────────────────
-
-    def compute_pseudoneighbors(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        **kwargs,
-    ):
-        """
-        Find reference pseudoneighbors for one, several, or every fixed point.
-
-        For each selected fixed point this builds (or reuses) its
-        per-fixed-point Trellis and runs
-        :meth:`Trellis.compute_pseudoneighbors`, so each tangle of a nested
-        session is checked against its own crossings.
-
-        Args:
-            fixed_point: A single FixedPoint (→ returns that fixed point's
-                reference-pair list), an iterable of them, or None for every
-                fixed point (→ returns a ``{fixed_point: references}`` dict).
-            **kwargs: Forwarded to :meth:`Trellis.compute_pseudoneighbors`
-                (``extend``, ``collision_rtol``).
-
-        Returns:
-            A reference-pair list for a single fixed point, or a dict mapping
-            each fixed point to its list.
-        """
-        return self._fanout_call("compute_pseudoneighbors", fixed_point, **kwargs)
-
-    # ── hole / partition convenience (per fixed point) ───────────────────────
-
-    def punch_holes(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        **kwargs,
-    ):
-        """
-        Punch the holes of one, several, or every fixed point.
-
-        For each selected fixed point this builds (or reuses) its per-fixed-point
-        Trellis and runs :meth:`Trellis.punch_holes`, so each tangle of a nested
-        session is punched from its own pseudoneighbor pairs.
-
-        Args:
-            fixed_point: A single FixedPoint (→ returns that fixed point's hole
-                list), an iterable of them, or None for every fixed point (→
-                returns a ``{fixed_point: holes}`` dict).
-            **kwargs: Forwarded to :meth:`Trellis.punch_holes` (``pairs``,
-                ``propagate``, ``diagnose``, ``verbose``).
-
-        Returns:
-            A hole list for a single fixed point, or a dict mapping each fixed
-            point to its list.
-
-        Raises:
-            AssertionError: Propagated from :meth:`Trellis.punch_holes` when one
-                of its two topological invariants fails (I1 on the carried
-                sides, I2 on the crossing signs); a geometric disagreement is a
-                WARNING, never an error (D6).
-        """
-        return self._fanout_call("punch_holes", fixed_point, **kwargs)
-
-    def partition_stable_manifold(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        **kwargs,
-    ):
-        """
-        Partition the stable branches of one, several, or every fixed point.
-
-        For each selected fixed point this builds (or reuses) its per-fixed-point
-        Trellis and runs :meth:`Trellis.partition_stable_manifold`, which by
-        default covers every stable branch of that trellis on both sides.
-
-        Args:
-            fixed_point: A single FixedPoint (→ returns that fixed point's
-                result list), an iterable of them, or None for every fixed point
-                (→ returns a ``{fixed_point: results}`` dict).
-            **kwargs: Forwarded to :meth:`Trellis.partition_stable_manifold`
-                (``branch_key``, ``verbose``).
-
-        Returns:
-            A StablePartitionResult list for a single fixed point, or a dict
-            mapping each fixed point to its list.
-        """
-        return self._fanout_call(
-            "partition_stable_manifold", fixed_point, **kwargs
-        )
-
-    def partition_element_for(
-        self,
-        bridge_id: "BridgeId",
-        endpoint: "Endpoint",
-        side: "Side",
-    ) -> Optional[int]:
-        """
-        The partition element at one end of a bridge, searched across trellises.
-
-        A session keeps one trellis per tangle, and
-        :meth:`Trellis.element_for` only reads its own partitions, so no single
-        trellis can answer for an endpoint whose stable branch belongs to a
-        different one. This scans every cached (non-stale) trellis and returns
-        the first element found. Bridge ids and registry ids are session-wide
-        (one registry), so there is no ambiguity about which bridge is meant.
-
-        A HETEROCLINIC bridge (a piece of W^u(fp1) between crossings with
-        W^s(fp3)) exists only in a trellis holding both tangles (a tangle alone
-        holds no heteroclinic crossing), so it is answered by the selection's
-        trellis once ``topology()`` has partitioned it;
-        :meth:`Trellis.element_for` reads the endpoint id carried by the
-        BridgeId itself, never the bridge object.
-
-        Args:
-            bridge_id: The bridge's :data:`~tanglepack.numerics.Bridge.BridgeId`.
-            endpoint: ``"first"`` or ``"second"`` — which end of the id.
-            side: Which side's partition to read.
-
-        Returns:
-            The element id in the trellis whose branch carries that endpoint, or
-            None when no cached trellis has partitioned it.
-
-        Raises:
-            ValueError: If ``endpoint`` is neither "first" nor "second" — checked
-                here, so an empty trellis cache cannot swallow a typo.
-
-        Note:
-            Only trellises already cached are searched, and only while they are
-            still valid for the current workbench generation: a stale snapshot's
-            partitions are keyed by ids the workbench may have renumbered, so
-            answering from one would be worse than answering None. Call
-            :meth:`partition_stable_manifold` first to populate the cache.
-        """
-        endpoint_index(endpoint)  # reject a bad name even with nothing cached
-        for trellis in self._trellises.values():
-            if self._is_stale(trellis):
-                continue
-            element_id = trellis.element_for(bridge_id, endpoint, side)
-            if element_id is not None:
-                return element_id
-        return None
-
-    def describe_holes(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-    ) -> str:
-        """
-        Human-readable hole report for one, several, or every fixed point.
-
-        Args:
-            fixed_point: Fixed point selector; None (default) reports on every one.
-
-        Returns:
-            The per-trellis reports, each under a header naming its fixed point.
-        """
-        return self._describe("describe_holes", fixed_point)
-
-    def describe_stable_partitions(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-    ) -> str:
-        """
-        Human-readable partition report for one, several, or every fixed point.
-
-        Args:
-            fixed_point: Fixed point selector; None (default) reports on every one.
-
-        Returns:
-            The per-trellis reports, each under a header naming its fixed point.
-        """
-        return self._describe("describe_stable_partitions", fixed_point)
-
-    def _describe(
-        self,
-        method: str,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]",
-    ) -> str:
-        """Concatenate one Trellis describe_* report per selected fixed point."""
-        sections = []
-        for fp in self._resolve_fixed_points(fixed_point):
-            sections.append(f"{fp!r}:")
-            sections.append(getattr(self.trellis(fp), method)())
-        return "\n".join(sections)
 
     # ── cross-layer ("loom") algorithms ──────────────────────────────────────
 
