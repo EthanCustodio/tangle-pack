@@ -2,8 +2,8 @@
 Drawing routines for the topological layer.
 
 Every ``plot_*`` of the topological layer lives here so the marker, colour and
-z-order conventions are defined once; :class:`~.Trellis.Trellis` and
-:class:`~..loom.TangleSession.TangleSession` keep thin delegating wrappers.
+z-order conventions are defined once; :class:`~.Trellis.Trellis` keeps thin
+delegating wrappers.
 
 Dev Notes — topological plotting.
 

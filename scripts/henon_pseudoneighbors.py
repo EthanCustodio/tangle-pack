@@ -92,9 +92,9 @@ stable_partition = trellis.partition_stable_manifold(verbose=True)
 
 plt.figure(figsize=(8, 8))
 
-session.plot_holes(fp, color="tab:purple", lw=0.8)
-session.plot_pseudoneighbors(fp, color="tab:orange", lw=0.8)
-session.plot_strong_pip(fp, color="tab:green", lw=0.8)
+trellis.plot_holes(color="tab:purple", lw=0.8)
+trellis.plot_pseudoneighbors(color="tab:orange", lw=0.8)
+trellis.plot_strong_pip(color="tab:green", lw=0.8)
 session.workbench.plot_tangle(fp, "unstable", color="tab:blue", lw=0.8)
 session.workbench.plot_all_bridges()
 session.workbench.plot_tangle(fp, "stable", color="tab:red", lw=0.8)

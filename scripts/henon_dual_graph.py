@@ -44,7 +44,7 @@ from tanglepack.examples import (
 )
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.topology.DualGraph import DualGraph
-from tanglepack.topology.plotting import dual_graph_legend_handles
+from tanglepack.topology.plotting import dual_graph_legend_handles, plot_dual_graph
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -241,7 +241,7 @@ def report_and_plot(
 
     for ax, zoomed in panels:
         _draw_tangle(session, fixed_points, ax)
-        session.plot_dual_graph(dual_graph, ax=ax, clip_to_arcs=not zoomed)
+        plot_dual_graph(dual_graph, ax=ax, clip_to_arcs=not zoomed)
         if zoomed:
             _zoom(ax, session, zoom_fixed_point)
         where = (

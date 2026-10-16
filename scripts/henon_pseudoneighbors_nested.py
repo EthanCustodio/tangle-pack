@@ -6,8 +6,8 @@ pipeline for BOTH tangles: strong pips → resonance zones (one batched
 recompute) → reference pseudoneighbors → holes (classified by bridge side) →
 left/right partitions of every stable branch.
 
-Each fixed point runs on its own per-fixed-point trellis (the session fans
-that out); within a trellis, hole punching and partitioning cover all of its
+Each fixed point runs on its own per-fixed-point trellis (the loops below
+visit both); within a trellis, hole punching and partitioning cover all of its
 stable branches automatically — the period-3 trellis partitions all three.
 
 Figure 1 shows both tangles with pseudoneighbors and holes; figure 2 stacks
@@ -94,8 +94,9 @@ for fp in (fp3, fp1):
     session.plot_tangle(fp, "stable", color="r", linewidth=1)
     session.plot_tangle(fp, "unstable", color="b", linewidth=1)
     session.plot_intersections(fp, show_ids=True)
-session.plot_pseudoneighbors(compute=False, s=40)
-session.plot_holes()
+for fp in (fp3, fp1):
+    session.trellis(fp).plot_pseudoneighbors(s=40)
+    session.trellis(fp).plot_holes()
 plt.title(
     "Nested tangles: pseudoneighbors (orange), holes (marker+color = orbit, "
     "label = iterate)"

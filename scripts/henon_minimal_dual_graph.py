@@ -115,10 +115,9 @@ def draw_minimal_trellis(ax, session: TangleSession, fp, view: tuple, title: str
     _draw_stable(ax, session, fp)
     minimal = session.minimal_trellis()
     plotting.plot_minimal_trellis(minimal, ax=ax)
-    session.plot_holes(fp, ax=ax)
-    session.plot_strong_pip(
-        fp, ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20
-    )
+    trellis = session.trellis(fp)
+    trellis.plot_holes(ax=ax)
+    trellis.plot_strong_pip(ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20)
     ax.legend(handles=plotting.minimal_trellis_legend_handles(), loc="upper right", fontsize=8)
     _apply_plane_view(ax, view)
     ax.set_title(f"{title} -- minimal trellis", fontsize=10)
@@ -146,7 +145,7 @@ def draw_dual_graph(ax, session: TangleSession, fp, view: tuple, title: str) -> 
         minimal, ax=ax, show_dropped=False, color="lightgray", linewidth=0.8, linestyle="-"
     )
     dual = session.dual_graph()
-    session.plot_dual_graph(dual, ax=ax, clip_to_arcs=False)
+    plotting.plot_dual_graph(dual, ax=ax, clip_to_arcs=False)
     ax.legend(handles=plotting.dual_graph_legend_handles(), loc="upper right", fontsize=8)
     _apply_plane_view(ax, view)
     ax.set_title(f"{title} -- dual graph", fontsize=10)

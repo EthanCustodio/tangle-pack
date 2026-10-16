@@ -1,4 +1,4 @@
-"""Plotting tier, smoke half: every plotter and session delegate runs headless.
+"""Plotting tier, smoke half: every plotter runs headless.
 
 Each test draws on the Agg backend and checks only that the call runs, hands
 back its documented type and (where it is mathtext) that the canvas renders.
@@ -43,7 +43,7 @@ def fig_ax():
 
 
 # --------------------------------------------------------------------------- #
-# Trellis plotters and the session fan-outs over them
+# Trellis plotters
 # --------------------------------------------------------------------------- #
 def test_trellis_plotters_draw_on_a_real_tangle(k10_partitioned, fig_ax) -> None:
     """Every ``Trellis.plot_*`` returns its handle(s) on the partitioned k=10 trellis."""
@@ -54,30 +54,6 @@ def test_trellis_plotters_draw_on_a_real_tangle(k10_partitioned, fig_ax) -> None
         handle = getattr(trellis, name)(ax=ax)
         assert handle is not None, name
     assert trellis.plot_holes(ax=ax), "the k=10 trellis has holes to draw"
-
-
-def test_session_plot_fanouts_draw_every_fixed_point(henon_p3_session, fig_ax) -> None:
-    """Each session ``plot_*`` fan-out draws one handle per fixed point (two tangles)."""
-    session, fp3, fp1, _zone = henon_p3_session
-    session.compute_pseudoneighbors()
-    session.punch_holes()
-    session.partition_stable_manifold()
-    _fig, ax = fig_ax
-    for name in ("plot_strong_pip_candidates", "plot_strong_pip",
-                 "plot_pseudoneighbors", "plot_stable_partition"):
-        handles = getattr(session, name)(ax=ax)
-        assert len(handles) == 2, name
-        assert len(getattr(session, name)(fp3, ax=ax)) == 1, name
-    assert session.plot_holes(ax=ax), "both tangles have holes"
-
-
-def test_session_plot_pseudoneighbors_computes_on_demand(k10_session, fig_ax) -> None:
-    """``plot_pseudoneighbors`` computes the pairs first; ``plot_holes`` draws punched holes."""
-    session, fp = k10_session
-    _fig, ax = fig_ax
-    assert len(session.plot_pseudoneighbors(ax=ax)) == 1
-    session.trellis(fp).punch_holes()
-    assert session.plot_holes(ax=ax)
 
 
 def test_plot_stable_partition_rows_and_element_labels(k10_partitioned, fig_ax) -> None:
@@ -272,42 +248,8 @@ def test_legend_handles_are_artists(k10_partitioned) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Session plot delegates
+# The cartoon's toggles
 # --------------------------------------------------------------------------- #
-def test_session_plot_delegates_return_their_types(k10_partitioned) -> None:
-    """The session's symbolic-dynamics and dual-graph delegates draw on the given axes.
-
-    Forwarded keywords are checked by their effect, not by spying on the
-    plotting module.
-    """
-    session, fp = k10_partitioned
-    dyn = session.symbolic_dynamics([fp])
-    walk = next(cd.search.walk for cd in dyn.classes.values()
-                if cd.search is not None and cd.search.walk is not None)
-    fig, (ax_graph, ax_table, ax_plane) = plt.subplots(1, 3)
-    try:
-        graph = session.plot_transition_graph(ax=ax_graph, fixed_points=[fp])
-        assert isinstance(graph, networkx.DiGraph)
-        unrefined = session.plot_transition_graph(dyn, ax=ax_graph, refined=False)
-        assert set(unrefined.nodes) == set(dyn.transition_graph(refined=False).nodes)
-
-        table = session.plot_itinerary_table(ax=ax_table, fixed_points=[fp])
-        assert isinstance(table, Table) and table.axes is ax_table
-        assert isinstance(session.plot_itinerary_table(dyn, ax=ax_table, refined=True), Table)
-
-        colours = session.plot_bridges_by_class(ax=ax_plane, fixed_points=[fp])
-        assert isinstance(colours, dict) and colours
-        assert session.plot_bridges_by_class(dyn, ax=ax_plane, refined=False)
-        assert session.plot_dual_graph(session.dual_graph([fp]), ax=ax_plane) is ax_plane
-        assert session.plot_dual_graph(ax=ax_plane, show_labels=True) is ax_plane
-        assert session.plot_minimal_trellis(ax=ax_plane) is ax_plane
-        line = session.plot_walk(walk, ax=ax_plane, fixed_points=[fp], color="k")
-        assert isinstance(line, Line2D) and line.axes is ax_plane
-        assert ax_plane.lines, "the bridges and the walk are drawn on the plane axes"
-    finally:
-        plt.close(fig)
-
-
 def test_cartoon_honours_its_toggles(k10_partitioned, fig_ax) -> None:
     """With every toggle off, the cartoon draws no bridge, walk or crossing."""
     session, fp = k10_partitioned

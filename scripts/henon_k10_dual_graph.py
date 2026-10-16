@@ -34,7 +34,7 @@ import numpy as np
 
 from tanglepack import TangleSession
 from tanglepack.examples import HENON_K10, henon_map, henon_map_inverse
-from tanglepack.topology.plotting import dual_graph_legend_handles
+from tanglepack.topology.plotting import dual_graph_legend_handles, plot_dual_graph
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -216,27 +216,26 @@ def main() -> None:
 
     # Both tangle panels share the pre-trim view (see _tangle_view) rather
     # than the dual-graph plotter's own clip to the surviving arcs.
-    session.plot_dual_graph(dual_graph, ax=ax_dual, clip_to_arcs=False)
+    plot_dual_graph(dual_graph, ax=ax_dual, clip_to_arcs=False)
     ax_dual.legend(
         handles=dual_graph_legend_handles(), loc="best", fontsize=7, framealpha=0.8
     )
     ax_dual.set_title(f"{title} -- dual graph")
 
-    session.plot_pseudoneighbors(fp, ax=ax_tangle)
-    session.plot_holes(fp, ax=ax_tangle)
+    trellis = session.trellis(fp)
+    trellis.plot_pseudoneighbors(ax=ax_tangle)
+    trellis.plot_holes(ax=ax_tangle)
     session.workbench.plot_intersections(fp, show_ids=True, ax=ax_tangle)
     # The pip is also a pseudoneighbor and a crossing, so a filled dot the
     # same size vanishes under those markers: draw it last, as a green ring.
-    session.plot_strong_pip(
-        fp, ax=ax_tangle, s=120, facecolors="none", linewidths=1.5, zorder=20
-    )
+    trellis.plot_strong_pip(ax=ax_tangle, s=120, facecolors="none", linewidths=1.5, zorder=20)
     for ax in (ax_tangle, ax_dual):
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
     ax_tangle.set_title(f"{title} -- tangle, strong pip, pseudoneighbors, holes")
 
     # The partition plot lives on a canonical-distance axis of its own.
-    session.plot_stable_partition(fp, ax=ax_partition)
+    trellis.plot_stable_partition(ax=ax_partition)
     ax_partition.set_title(f"{title} -- stable partition")
 
     fig.tight_layout()

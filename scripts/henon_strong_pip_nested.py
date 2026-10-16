@@ -1,10 +1,10 @@
 """Nested (period-1 outer + period-3 inner) Hénon strong-pip example.
 
 Demonstrates the one-call session-level strong-pip API: instead of building a
-Trellis per fixed point and repeating classify/plot for each, a single
-``session.classify_strong_pips()`` classifies every tangle and a single
-``session.plot_strong_pip_candidates()`` / ``session.plot_strong_pip()`` draws
-them all. Pass a fixed point to either to scope it to one tangle.
+Trellis per fixed point and repeating classify for each, a single
+``session.classify_strong_pips()`` classifies every tangle (pass a fixed point
+to scope it to one); each tangle's trellis then draws its own candidates and
+chosen pip.
 """
 
 import logging
@@ -75,11 +75,10 @@ for fp in (fp3, fp1):
     session.plot_tangle(fp, "unstable", color="b", linewidth=1)
     session.plot_intersections(fp, show_ids=True)
 
-# One call each draws candidates (magenta) and the chosen strong pips (green)
-# for every tangle. Pass a fixed point to scope it, e.g.
-# session.plot_strong_pip_candidates(fp3).
-session.plot_strong_pip_candidates()
-session.plot_strong_pip(s=12)
+# Each tangle's trellis draws its candidates (magenta) and chosen strong pip (green).
+for fp in (fp3, fp1):
+    session.trellis(fp).plot_strong_pip_candidates()
+    session.trellis(fp).plot_strong_pip(s=12)
 
 plt.xlim([-15, 15])
 plt.ylim([-15, 15])

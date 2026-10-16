@@ -148,26 +148,6 @@ def test_a_pip_trimmed_away_is_not_replaced_by_classifying(k10_session, caplog):
         session.bridge_classes()
 
 
-@pytest.mark.parametrize("plotter", ["plot_strong_pip", "plot_strong_pip_candidates"])
-def test_a_pip_trimmed_away_is_not_replaced_by_plotting(k10_session, plotter):
-    """The plot fan-outs classify through the session: drawing after the trim
-    leaves the pip unset, so the products still refuse to run."""
-    import matplotlib.pyplot as plt
-
-    session, fp = k10_session
-    session.classify_strong_pips()
-    q0 = session.strong_pip(fp)
-    define_resonance_zone(session.workbench, session.trellis(fp).iterate(q0, 1))
-
-    fig, ax = plt.subplots()
-    getattr(session, plotter)(ax=ax)
-    plt.close(fig)
-
-    assert session.strong_pip(fp) is None
-    with pytest.raises(ValueError, match="no longer a strong-pip candidate"):
-        session.bridge_classes()
-
-
 # --------------------------------------------------------------------------- #
 # (c) the alphabet on its own (the letter series is ``test_symbolic_dynamics``)
 # --------------------------------------------------------------------------- #

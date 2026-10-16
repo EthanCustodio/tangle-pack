@@ -250,8 +250,8 @@ def draw_tangle(ax, session: TangleSession, fp, view: tuple, title: str) -> None
     session.workbench.plot_all_bridges()
     session.plot_tangle(fp, "stable", color="tab:red", linewidth=0.8)
     session.workbench.plot_intersections(fp, show_ids=True, ax=ax, s=12, zorder=15)
-    session.plot_strong_pip(
-        fp, ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20
+    session.trellis(fp).plot_strong_pip(
+        ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20
     )
     _apply_view(ax, view)
     ax.set_title(f"{title} -- tangle")
@@ -264,8 +264,8 @@ def draw_classes(
     plt.sca(ax)
     session.plot_tangle(fp, "unstable", color="lightgray", linewidth=0.5)
     session.plot_tangle(fp, "stable", color="tab:red", linewidth=0.8)
-    session.plot_strong_pip(
-        fp, ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20
+    session.trellis(fp).plot_strong_pip(
+        ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20
     )
 
     handles = []
@@ -329,7 +329,7 @@ def main() -> None:
         ax_tangle, ax_classes, ax_partition = row
         draw_tangle(ax_tangle, session, fp, view, case.title)
         draw_classes(ax_classes, session, fp, view, table, case.title)
-        session.plot_stable_partition(fp, ax=ax_partition)
+        session.trellis(fp).plot_stable_partition(ax=ax_partition)
         ax_partition.set_title(f"{case.title} -- stable partition")
 
     fig.tight_layout()

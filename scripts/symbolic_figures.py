@@ -179,7 +179,9 @@ def draw_trellis(ax, session, fixed_points, dynamics, view, title) -> None:
     )
     trellis.plot_holes(ax=ax)  # the topology's holes: stages 4-6 ran on this trellis
     for fp in fixed_points:
-        session.plot_strong_pip(fp, ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20)
+        session.trellis(fp).plot_strong_pip(
+            ax=ax, s=120, facecolors="none", linewidths=1.5, zorder=20
+        )
     legend = ax.get_legend()
     if legend is not None:
         legend.remove()

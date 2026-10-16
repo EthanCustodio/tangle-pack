@@ -11,7 +11,7 @@ zones and blasting -- that need both halves at once.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Iterable, Optional, TYPE_CHECKING
+from typing import Iterable, Optional, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
@@ -21,7 +21,6 @@ from ..numerics.DynamicalSystem import MapFunc, JacFunc
 from ..numerics.ManifoldMachine import DEFAULT_AREA_CUTOFF
 from ..numerics.budget import DEFAULT_MAX_POINTS_PER_STEP
 from ..numerics.geometry import polyline_midpoint
-from ..topology import plotting
 from ..topology.Arrangement import Arrangement
 from ..topology.BridgeClass import BridgeClassTable
 from ..topology.DualGraph import DualGraph
@@ -36,15 +35,9 @@ from .BridgeAlphabet import BridgeAlphabet
 from .Topology import Topology
 
 if TYPE_CHECKING:
-    import networkx
-    from matplotlib.axes import Axes
-    from matplotlib.lines import Line2D
-    from matplotlib.table import Table
-
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
     from ..numerics.Intersection import Intersection
-    from ..topology.DualWalk import Walk
     from ..topology.TopologyResults import Endpoint, Side
 
 logger = logging.getLogger(__name__)
@@ -526,195 +519,6 @@ class TangleSession:
         """
         return self.symbolic_dynamics(fixed_points).describe()
 
-    def plot_transition_graph(
-        self,
-        dynamics: Optional[SymbolicDynamics] = None,
-        ax: Optional["Axes"] = None,
-        *,
-        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        **kwargs,
-    ) -> "networkx.DiGraph":
-        """
-        Draw a transition graph, defaulting to :meth:`symbolic_dynamics`'s own
-        (cached) result for ``fixed_points``.
-
-        Thin delegate to
-        :func:`~tanglepack.topology.plotting.plot_transition_graph`.
-
-        Args:
-            dynamics: The dynamics to draw. Defaults to
-                ``self.symbolic_dynamics(fixed_points)``.
-            ax: Optional matplotlib Axes to draw on. Defaults to the current
-                axes (plt).
-            fixed_points: The trellis selection used when ``dynamics`` is
-                omitted.
-            **kwargs: Forwarded to
-                :func:`~tanglepack.topology.plotting.plot_transition_graph`
-                (e.g. ``refined``).
-
-        Returns:
-            The ``networkx.DiGraph`` drawn, as the plotting function returns it.
-        """
-        target = dynamics if dynamics is not None else self.symbolic_dynamics(fixed_points)
-        return plotting.plot_transition_graph(target, ax=ax, **kwargs)
-
-    def plot_walk(
-        self,
-        walk: "Walk",
-        ax: Optional["Axes"] = None,
-        *,
-        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        **kwargs,
-    ) -> "Optional[Line2D]":
-        """
-        Highlight one dual-graph walk over the plane, on
-        :meth:`dual_graph`'s (cached) graph for ``fixed_points``.
-
-        Thin delegate to :func:`~tanglepack.topology.plotting.plot_walk`. The
-        walk is normally one of a class's
-        :attr:`~tanglepack.topology.SymbolicDynamics.ClassDynamics.search`
-        results from :meth:`symbolic_dynamics`.
-
-        Args:
-            walk: The :class:`~tanglepack.topology.DualWalk.Walk` to draw.
-            ax: Optional matplotlib Axes to draw on. Defaults to the current
-                axes (plt).
-            fixed_points: The trellis selection whose dual graph the walk
-                belongs to.
-            **kwargs: Forwarded to
-                :func:`~tanglepack.topology.plotting.plot_walk` (line
-                overrides).
-
-        Returns:
-            The ``Line2D`` of the walk, or None when the walk visits no face,
-            as the plotting function returns it.
-        """
-        graph = self.dual_graph(fixed_points)
-        return plotting.plot_walk(graph, walk, ax=ax, **kwargs)
-
-    def plot_bridges_by_class(
-        self,
-        dynamics: Optional[SymbolicDynamics] = None,
-        ax: Optional["Axes"] = None,
-        *,
-        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        **kwargs,
-    ) -> dict[str, object]:
-        """
-        Draw every classed bridge coloured by its (refined) class, defaulting
-        to :meth:`symbolic_dynamics`'s own (cached) result for ``fixed_points``.
-
-        Thin delegate to
-        :func:`~tanglepack.topology.plotting.plot_bridges_by_class`, drawn over
-        the (cached) :meth:`trellis` of the same selection.
-
-        Args:
-            dynamics: The dynamics whose classes colour the bridges. Defaults
-                to ``self.symbolic_dynamics(fixed_points)``.
-            ax: Optional matplotlib Axes to draw on. Defaults to the current
-                axes (plt).
-            fixed_points: The trellis selection.
-            **kwargs: Forwarded to
-                :func:`~tanglepack.topology.plotting.plot_bridges_by_class`
-                (e.g. ``refined``, ``show_inert``).
-
-        Returns:
-            ``{symbol name: colour}`` for every symbol drawn, in legend order,
-            as the plotting function returns it.
-        """
-        trellis = self.trellis(fixed_points)
-        target = dynamics if dynamics is not None else self.symbolic_dynamics(fixed_points)
-        return plotting.plot_bridges_by_class(trellis, target, ax=ax, **kwargs)
-
-    def plot_itinerary_table(
-        self,
-        dynamics: Optional[SymbolicDynamics] = None,
-        ax: Optional["Axes"] = None,
-        *,
-        fixed_points: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        **kwargs,
-    ) -> "Optional[Table]":
-        """
-        Tabulate a symbolic dynamics (one row per class), defaulting to
-        :meth:`symbolic_dynamics`'s own (cached) result for ``fixed_points``.
-
-        Thin delegate to
-        :func:`~tanglepack.topology.plotting.plot_itinerary_table`.
-
-        Args:
-            dynamics: The dynamics to tabulate. Defaults to
-                ``self.symbolic_dynamics(fixed_points)``.
-            ax: Optional matplotlib Axes to draw on. Defaults to the current
-                axes (plt).
-            fixed_points: The trellis selection used when ``dynamics`` is
-                omitted.
-            **kwargs: Forwarded to
-                :func:`~tanglepack.topology.plotting.plot_itinerary_table`
-                (e.g. ``refined``).
-
-        Returns:
-            The matplotlib ``Table``, or None when the dynamics has no class,
-            as the plotting function returns it.
-        """
-        target = dynamics if dynamics is not None else self.symbolic_dynamics(fixed_points)
-        return plotting.plot_itinerary_table(target, ax=ax, **kwargs)
-
-    def plot_dual_graph(
-        self,
-        dual_graph: Optional[DualGraph] = None,
-        ax: Optional["Axes"] = None,
-        **kwargs,
-    ) -> "Axes":
-        """
-        Draw a dual graph, defaulting to :meth:`dual_graph`'s own (all fixed
-        points, cached) result.
-
-        Thin delegate to
-        :func:`~tanglepack.topology.plotting.plot_dual_graph`; see its
-        docstring for the drawing itself.
-
-        Args:
-            dual_graph: The graph to draw. Defaults to ``self.dual_graph()``.
-            ax: Optional matplotlib Axes to draw on. Defaults to the current
-                axes (plt).
-            **kwargs: Forwarded to
-                :func:`~tanglepack.topology.plotting.plot_dual_graph` (e.g.
-                ``show_labels``, ``clip_to_arcs``).
-
-        Returns:
-            The Axes drawn on.
-        """
-        graph = dual_graph if dual_graph is not None else self.dual_graph()
-        return plotting.plot_dual_graph(graph, ax=ax, **kwargs)
-
-    def plot_minimal_trellis(
-        self,
-        minimal: Optional[MinimalTrellis] = None,
-        ax: Optional["Axes"] = None,
-        **kwargs,
-    ) -> "Axes":
-        """
-        Draw a minimal trellis, defaulting to :meth:`minimal_trellis`'s own
-        (all fixed points, cached) result.
-
-        Thin delegate to
-        :func:`~tanglepack.topology.plotting.plot_minimal_trellis`.
-
-        Args:
-            minimal: The minimal trellis to draw. Defaults to
-                ``self.minimal_trellis()``.
-            ax: Optional matplotlib Axes to draw on. Defaults to the current
-                axes (plt).
-            **kwargs: Forwarded to
-                :func:`~tanglepack.topology.plotting.plot_minimal_trellis`
-                (e.g. ``show_dropped``).
-
-        Returns:
-            The Axes drawn on.
-        """
-        target = minimal if minimal is not None else self.minimal_trellis()
-        return plotting.plot_minimal_trellis(target, ax=ax, **kwargs)
-
     def _is_stale(self, trellis: Trellis) -> bool:
         """Whether a cached Trellis snapshot predates the workbench's current state."""
         return trellis._built_generation != self.workbench.generation
@@ -766,48 +570,6 @@ class TangleSession:
         if _is_single_fixed_point(fixed_point):
             return results[fixed_point]
         return results
-
-    def _fanout_plot(
-        self,
-        name: str,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]",
-        ax,
-        *,
-        prepare: Optional[Callable[[Trellis], None]] = None,
-        flatten: bool = False,
-        **kwargs,
-    ) -> list:
-        """
-        Draw one Trellis plotter across a fixed-point selection.
-
-        Args:
-            name: The :class:`Trellis` ``plot_*`` method to call.
-            fixed_point: A single FixedPoint, an iterable of them, or None for
-                every fixed point on the workbench.
-            ax: Optional matplotlib Axes, forwarded to every plotter.
-            prepare: Optional callable run on each trellis before drawing, for
-                the plotters that compute their input on demand.
-            flatten: True when the plotter returns a LIST of handles (extend the
-                result) rather than a single handle (append it).
-            **kwargs: Forwarded to the trellis plotter.
-
-        Returns:
-            The matplotlib handles drawn, skipping every trellis whose plotter
-            returned None (nothing to draw).
-        """
-        handles: list = []
-        for fp in self._resolve_fixed_points(fixed_point):
-            trellis = self.trellis(fp)
-            if prepare is not None:
-                prepare(trellis)
-            handle = getattr(trellis, name)(ax=ax, **kwargs)
-            if handle is None:
-                continue
-            if flatten:
-                handles.extend(handle)
-            else:
-                handles.append(handle)
-        return handles
 
     # ── strong-pip convenience (per fixed point) ─────────────────────────────
     #
@@ -907,83 +669,6 @@ class TangleSession:
         """The strong-pip candidate ids for ``fixed_point``'s trellis."""
         return self.trellis(fixed_point).strong_pip_candidates
 
-    def plot_strong_pip_candidates(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        *,
-        classify: bool = True,
-        ax=None,
-        **scatter_kwargs,
-    ) -> list:
-        """
-        Scatter the strong-pip candidates of one, several, or every fixed point.
-
-        Loops over the selected fixed points' trellises (default: all), so the
-        candidates of both the inner and outer tangle of a nested session are
-        drawn in a single call — no per-trellis bookkeeping. See
-        :meth:`Trellis.plot_strong_pip_candidates`.
-
-        Args:
-            fixed_point: Fixed point selector; None (default) plots every one.
-            classify: If a trellis has no candidates yet, classify it first
-                (default True). Pass False to plot only already-classified trellises.
-            ax: Optional matplotlib Axes (defaults to the current axes).
-            **scatter_kwargs: Forwarded to :meth:`Trellis.plot_strong_pip_candidates`.
-
-        Returns:
-            List of the matplotlib handles drawn (one per fixed point that had
-            candidates to plot).
-        """
-
-        def prepare(trellis: Trellis) -> None:
-            if classify and not trellis.strong_pip_candidates:
-                self.classify_strong_pips(*trellis.fixed_points)
-
-        return self._fanout_plot(
-            "plot_strong_pip_candidates",
-            fixed_point,
-            ax,
-            prepare=prepare,
-            **scatter_kwargs,
-        )
-
-    def plot_strong_pip(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        *,
-        classify: bool = True,
-        ax=None,
-        **scatter_kwargs,
-    ) -> list:
-        """
-        Scatter the chosen strong-pip cut points of one, several, or every fixed point.
-
-        Companion to :meth:`plot_strong_pip_candidates`. For each selected fixed
-        point this draws the strong pip (and, for a period-k anchor, its iterates
-        bounding the resonance zone) via :meth:`Trellis.plot_strong_pip`.
-
-        Args:
-            fixed_point: Fixed point selector; None (default) plots every one.
-            classify: If a trellis has no strong pip chosen yet, classify it first
-                through :meth:`classify_strong_pips` (the default pip, unless one
-                was chosen before: a lost chosen pip stays unset and is not drawn).
-                Pass False to plot only trellises that already have one.
-            ax: Optional matplotlib Axes (defaults to the current axes).
-            **scatter_kwargs: Forwarded to :meth:`Trellis.plot_strong_pip`.
-
-        Returns:
-            List of the matplotlib handles drawn (one per fixed point with a strong
-            pip).
-        """
-
-        def prepare(trellis: Trellis) -> None:
-            if classify and trellis.strong_pip is None:
-                self.classify_strong_pips(*trellis.fixed_points)
-
-        return self._fanout_plot(
-            "plot_strong_pip", fixed_point, ax, prepare=prepare, **scatter_kwargs
-        )
-
     # ── pseudoneighbor convenience (per fixed point) ─────────────────────────
 
     def compute_pseudoneighbors(
@@ -1011,64 +696,6 @@ class TangleSession:
             each fixed point to its list.
         """
         return self._fanout_call("compute_pseudoneighbors", fixed_point, **kwargs)
-
-    def plot_pseudoneighbors(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        *,
-        compute: bool = True,
-        ax=None,
-        **scatter_kwargs,
-    ) -> list:
-        """
-        Scatter the pseudoneighbors of one, several, or every fixed point.
-
-        Args:
-            fixed_point: Fixed point selector; None (default) plots every one.
-            compute: If a trellis has no pseudoneighbors yet, compute them
-                first (default True). Pass False to plot only already-computed
-                trellises.
-            ax: Optional matplotlib Axes (defaults to the current axes).
-            **scatter_kwargs: Forwarded to :meth:`Trellis.plot_pseudoneighbors`
-                (including ``include_trajectories``).
-
-        Returns:
-            List of the matplotlib handles drawn (one per fixed point with
-            pairs to plot).
-        """
-
-        def prepare(trellis: Trellis) -> None:
-            if compute and not trellis.pseudoneighbors:
-                trellis.compute_pseudoneighbors()
-
-        return self._fanout_plot(
-            "plot_pseudoneighbors", fixed_point, ax, prepare=prepare, **scatter_kwargs
-        )
-
-    def plot_holes(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        *,
-        ax=None,
-        **scatter_kwargs,
-    ) -> list:
-        """
-        Scatter the punched holes of one, several, or every fixed point.
-
-        Holes must have been punched already (:meth:`Trellis.punch_holes`);
-        trellises without holes are skipped.
-
-        Args:
-            fixed_point: Fixed point selector; None (default) plots every one.
-            ax: Optional matplotlib Axes (defaults to the current axes).
-            **scatter_kwargs: Forwarded to :meth:`Trellis.plot_holes`.
-
-        Returns:
-            List of the matplotlib handles drawn.
-        """
-        return self._fanout_plot(
-            "plot_holes", fixed_point, ax, flatten=True, **scatter_kwargs
-        )
 
     # ── hole / partition convenience (per fixed point) ───────────────────────
 
@@ -1181,31 +808,6 @@ class TangleSession:
             if element_id is not None:
                 return element_id
         return None
-
-    def plot_stable_partition(
-        self,
-        fixed_point: "Optional[FixedPoint | Iterable[FixedPoint]]" = None,
-        *,
-        ax=None,
-        **line_kwargs,
-    ) -> list:
-        """
-        Draw the stable partitions of one, several, or every fixed point.
-
-        Partitions must have been built already
-        (:meth:`partition_stable_manifold`); trellises without them are skipped.
-
-        Args:
-            fixed_point: Fixed point selector; None (default) plots every one.
-            ax: Optional matplotlib Axes (defaults to the current axes).
-            **line_kwargs: Forwarded to :meth:`Trellis.plot_stable_partition`.
-
-        Returns:
-            List of the Axes drawn on (one per fixed point with partitions).
-        """
-        return self._fanout_plot(
-            "plot_stable_partition", fixed_point, ax, **line_kwargs
-        )
 
     def describe_holes(
         self,
