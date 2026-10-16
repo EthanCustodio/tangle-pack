@@ -6,9 +6,13 @@ glued to. These tests pin the lookups the region layer needs (unique ownership
 of every crossing, positional ids and singletons are laws of
 ``tests/invariants/test_law_partition.py``):
 
-* every non-partial bridge with an endpoint on the branch resolves to the element
-  at that endpoint (``elements_at_bridge`` / :meth:`Trellis.element_for`), with a
-  ``None`` for an endpoint that sits on a different branch.
+* every non-partial bridge with an endpoint on the branch resolves, on either
+  side, to the element owning that endpoint
+  (:meth:`PartitionFamily.owner_of_intersection` on the branch
+  :meth:`Trellis.stable_key_at` names), read off the endpoint id its BridgeId
+  carries, never off the trellis's bridge list;
+* ``elements_at_bridge`` agrees with the ownership table, with a ``None`` for
+  an endpoint that sits on a different branch.
 
 An element's forward image is ``DualWalk.land_element`` (``test_dual_walk.py``).
 """
@@ -20,6 +24,7 @@ import matplotlib
 matplotlib.use("Agg")  # headless: the session fixtures touch the plotting stack
 import pytest
 
+from tanglepack.topology.PartitionFamily import HomotopyPartition
 
 
 # --------------------------------------------------------------------------- #
@@ -36,6 +41,21 @@ def _wrapping_bridge(trellis):
     return None
 
 
+def _owner(trellis, family, bridge_id, endpoint, side):
+    """The element owning one end of ``bridge_id`` on ``side`` (any side, not just its row)."""
+    branch_key = trellis.stable_key_at(endpoint, trellis.unstable_key_of(bridge_id))
+    return family.owner_of_intersection(endpoint, side, branch_key)
+
+
+def _expected(trellis, endpoint, side):
+    """The owner read straight off the result of the endpoint's own stable branch."""
+    key = trellis.intersection(endpoint).manifold_b_key
+    result = next(
+        r for r in trellis.stable_partitions if r.branch_key == key and r.side == side
+    )
+    return result.ref(result.element_of_intersection[endpoint])
+
+
 # --------------------------------------------------------------------------- #
 # bridge -> element
 # --------------------------------------------------------------------------- #
@@ -44,14 +64,14 @@ def test_every_workbench_bridge_touching_the_branch_resolves(p3_partitioned):
 
     The expected set is derived independently: every non-partial bridge the
     workbench holds, keyed to a branch by its endpoints' ``manifold_b_key``. Each
-    such endpoint must resolve through :meth:`Trellis.element_for` to the element
-    ``element_of_intersection`` names — which is the real contract, and is
-    stronger than what ``elements_at_bridge`` alone can carry (that table only
-    covers the bridges the snapshot happens to hold; see
-    ``test_element_for_resolves_a_bridge_missing_from_the_snapshot``).
+    such endpoint must resolve, on both sides, to the element
+    ``element_of_intersection`` names — stronger than what ``elements_at_bridge``
+    alone can carry (that table only covers the bridges the snapshot happens to
+    hold; see ``test_a_bridge_missing_from_the_snapshot_resolves``).
     """
     session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)
+    family = HomotopyPartition.from_results(trellis.stable_partitions, trellis=trellis)
     workbench_bridge_ids = [b.id for b in session.workbench.bridges if b.id is not None]
     assert workbench_bridge_ids
 
@@ -59,14 +79,12 @@ def test_every_workbench_bridge_touching_the_branch_resolves(p3_partitioned):
     for result in trellis.stable_partitions:
         expected_keys = set()
         for bridge_id in workbench_bridge_ids:
-            for index, endpoint in enumerate(bridge_id):
+            for endpoint in bridge_id:
                 if trellis.intersection(endpoint).manifold_b_key != result.branch_key:
                     continue
                 expected_keys.add(bridge_id)
-                name = "first" if index == 0 else "second"
-                assert (
-                    trellis.element_for(bridge_id, name, result.side)
-                    == result.element_of_intersection[endpoint]
+                assert _owner(trellis, family, bridge_id, endpoint, result.side) == (
+                    result.ref(result.element_of_intersection[endpoint])
                 )
                 checked += 1
         # The table may not carry every one of them (a heteroclinic bridge is
@@ -93,30 +111,26 @@ def test_elements_at_bridge_entries_agree_with_the_ownership_table(p3_partitione
                     assert element_id is None
 
 
-def test_element_for_resolves_both_ends_of_a_branch_wrapping_bridge(p3_partitioned):
+def test_both_ends_of_a_branch_wrapping_bridge_resolve(p3_partitioned):
     """A bridge spanning two stable branches resolves both ends in one trellis."""
     session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)
+    family = HomotopyPartition.from_results(trellis.stable_partitions, trellis=trellis)
 
     bridge = _wrapping_bridge(trellis)
     assert bridge is not None, "the period-3 tangle has branch-wrapping bridges"
 
     for side in ("left", "right"):
-        first = trellis.element_for(bridge.id, "first", side)
-        second = trellis.element_for(bridge.id, "second", side)
-        assert first is not None and second is not None
+        first, second = (
+            _owner(trellis, family, bridge.id, endpoint, side) for endpoint in bridge.id
+        )
         # Each end resolves against its OWN branch's result.
-        for endpoint, element_id in ((bridge.id[0], first), (bridge.id[1], second)):
-            key = trellis.intersection(endpoint).manifold_b_key
-            result = next(
-                r
-                for r in trellis.stable_partitions
-                if r.branch_key == key and r.side == side
-            )
-            assert result.element_of_intersection[endpoint] == element_id
+        assert first.branch_key != second.branch_key
+        assert first == _expected(trellis, bridge.id[0], side)
+        assert second == _expected(trellis, bridge.id[1], side)
 
 
-def test_element_for_resolves_a_bridge_missing_from_the_snapshot(henon_p3_session):
+def test_a_bridge_missing_from_the_snapshot_resolves(henon_p3_session):
     """A bridge absent from ``trellis.bridges`` still resolves, via its BridgeId.
 
     This is the heteroclinic case in miniature, and the reason the lookup must
@@ -142,27 +156,22 @@ def test_element_for_resolves_a_bridge_missing_from_the_snapshot(henon_p3_sessio
     )
     trellis.bridges = [b for b in trellis.bridges if b is not dropped]
     trellis.partition_stable_manifold()
+    family = HomotopyPartition.from_results(trellis.stable_partitions, trellis=trellis)
 
     for side in ("left", "right"):
-        for index, endpoint in enumerate(dropped.id):
-            key = trellis.intersection(endpoint).manifold_b_key
-            result = next(
-                r
-                for r in trellis.stable_partitions
-                if r.branch_key == key and r.side == side
+        for endpoint in dropped.id:
+            assert all(dropped.id not in r.elements_at_bridge for r in trellis.stable_partitions)
+            assert _owner(trellis, family, dropped.id, endpoint, side) == _expected(
+                trellis, endpoint, side
             )
-            expected = result.element_of_intersection[endpoint]
-            assert dropped.id not in result.elements_at_bridge
-
-            name = "first" if index == 0 else "second"
-            assert trellis.element_for(dropped.id, name, side) == expected
 
 
-def test_element_for_rejects_an_unknown_endpoint_name(p3_partitioned):
+def test_owner_at_end_rejects_an_unknown_endpoint_name(p3_partitioned):
     """Only "first" and "second" name a bridge endpoint."""
     session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)
+    family = HomotopyPartition.from_results(trellis.stable_partitions, trellis=trellis)
     bridge = next(b for b in trellis.bridges if b.id is not None)
 
     with pytest.raises(ValueError):
-        trellis.element_for(bridge.id, "third", "left")
+        family.owner_at_end(trellis, bridge.id, "third")

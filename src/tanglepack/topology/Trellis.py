@@ -74,13 +74,10 @@ from ..numerics.IntersectionRegistry import IntersectionRegistry
 from . import plotting
 from .TrellisBranch import TrellisBranch
 from .TopologyResults import (
-    Endpoint,
     Hole,
     PseudoneighborPair,
-    Side,
     StablePartitionResult,
     StrongPipResult,
-    endpoint_index,
 )
 
 from ..numerics.Bridge import Bridge
@@ -1375,59 +1372,6 @@ class Trellis:
                     f"({lo_name} → {hi_name}){singleton}"
                 )
         return "\n".join(lines)
-
-    # ── partition elements ──────────────────────────────────────────────────
-
-    def element_for(
-        self,
-        bridge_id: "BridgeId",
-        endpoint: Endpoint,
-        side: Side,
-    ) -> Optional[int]:
-        """
-        The partition element at one end of a bridge, on one side.
-
-        Reads the result of the stable branch the bridge meets at that end
-        (:meth:`stable_key_at`: the crossing's own branch, or at an anchor the
-        branch of the bridge's own orbit point and branch index, C7). A bridge's
-        two endpoints need not lie on the same stable branch (on a period-q
-        orbit the bridge spanning an anchor has one end on each of two branches
-        of the cycle).
-
-        A :data:`~tanglepack.numerics.Bridge.BridgeId` IS the ordered pair of its
-        endpoints' registry ids, so the answer never depends on this trellis
-        holding the bridge object: the endpoint id is looked up in
-        :attr:`StablePartitionResult.element_of_intersection`. A heteroclinic
-        bridge's ends are crossings of the trellis of BOTH its tangles (a tangle
-        alone holds no heteroclinic crossing), whose partitions own them.
-
-        Args:
-            bridge_id: The bridge's :data:`~tanglepack.numerics.Bridge.BridgeId`.
-            endpoint: ``"first"`` or ``"second"`` — which end of the id.
-            side: Which side's partition to read.
-
-        Returns:
-            The element id within the result for that endpoint's branch, or
-            ``None`` when no partition of this trellis covers that endpoint —
-            the branch was not partitioned, or belongs to another trellis, which
-            :meth:`~tanglepack.loom.TangleSession.TangleSession.partition_element_for`
-            searches.
-
-        Raises:
-            ValueError: If ``endpoint`` is neither "first" nor "second".
-
-        Note:
-            The element id alone only names an element within one result; pair
-            it with the branch key and side (or read
-            :attr:`~.TopologyResults.PartitionInterval.branch_key`) to identify
-            the element globally.
-        """
-        intersection_id = bridge_id[endpoint_index(endpoint)]
-        branch_key = self.stable_key_at(intersection_id, self.unstable_key_of(bridge_id))
-        for result in self.stable_partitions:
-            if (result.branch_key, result.side) == (branch_key, side):
-                return result.element_of_intersection.get(intersection_id)
-        return None
 
     def clear_results(self) -> None:
         """Empty all algorithm-output slots, leaving the input trellis intact."""
