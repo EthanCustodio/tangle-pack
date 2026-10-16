@@ -1294,7 +1294,7 @@ Every slice was merged into `main` as a fast-forward, so each merge hash is the 
 | 14 | B9a | `session-three-concerns` | `5f0db5f` | Fan-outs, plot delegates, `partition_element_for` off the session; cartoon code → `loom/cartoon.py` |
 | 15 | B9b | `one-element-at-end` | `94fca6b` | One reader of a bridge end, `owner_at_end`; four helpers deleted |
 | 16 | B12a | `one-design-note` | `a550a5d` | `docs/design_note.md`; campaign ids out of `src/`; CLAUDE.md rewritten to HEAD |
-| 17 | B12b | `laws-and-loose-ends` | (see commit 7) | 9 tautological laws deleted; `plot_resonance_zones` smoke test; `topology.__all__` = 51; rst lists + `conf.py`; chalkboard closed; recipe reasons; 3 figure folders; narration reworded |
+| 17 | B12b | `laws-and-loose-ends` | `bd1e30c` | 9 tautological laws deleted; `plot_resonance_zones` smoke test; `topology.__all__` = 51; rst lists + `conf.py`; chalkboard closed; recipe reasons; 3 figure folders; narration reworded |
 
 Not done:
 

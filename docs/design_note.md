@@ -1,5 +1,7 @@
 # tanglepack design note
 
+*Verified against `HEAD` `bd1e30c` on 2026-10-16.*
+
 The library's design, one section per pipeline stage, as the code at `HEAD` implements it. It is
 section A of `docs/alignment_plan_2026-10-09.md` rewritten after the slices B0-B9b closed: the
 planning text is gone, every rule is the one the code runs, and each section names the functions that
@@ -611,6 +613,9 @@ outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
   `StablePartitionResult.elements_at_bridge` and `BridgeClass._element_at_end` deleted; one reader,
   `owner_at_end`.
 - B12a `one-design-note` (`a550a5d`): this note; campaign ids out of `src/`; `CLAUDE.md` rewritten to `HEAD`.
+- B12b `laws-and-loose-ends` (`bd1e30c`): nine tautological laws deleted; `plot_resonance_zones` smoke
+  test; `topology.__all__` = 51; rst lists and `conf.py`; chalkboard closed; recipe reasons; three
+  figure folders; narration reworded.
 
 **The work packages** of the open-issues round (2026-10-07 .. 10-09; table at
 `docs/open_issues.md` "Work packages", outcomes after it):
