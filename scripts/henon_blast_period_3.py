@@ -120,7 +120,7 @@ for name, result in (("small", result_small), ("large", result_large)):
     print(f"\nBlast of the {name} resonance zone")
     print("=" * 60)
     print(f"completed iterations:      {result.completed_iterations}")
-    print(f"terminated early:          {result.terminated_early}")
+    print(f"terminated early:          {result.stop_reason == 'frontier_empty'}")
     print(f"distinct interior bridges: {len(result.all_interior_bridges())}")
     print("interior frontier size by generation:")
     print("  " + ", ".join(str(len(f)) for f in result.interior_bridges_by_iteration))

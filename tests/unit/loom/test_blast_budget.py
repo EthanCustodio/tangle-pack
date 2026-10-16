@@ -3,9 +3,9 @@
 ``blast_zone(max_points=...)`` stops BETWEEN iterations, before one predicted to
 take the blast over budget, on a state that can be blasted again; the machine's
 per-call cap (``max_points_per_step``) is the backstop that raises mid-image.
-``BlastResult.terminated_early`` is the ``"frontier_empty"`` stop reason, so the
-two can never disagree. No point count, factor or iteration count of the fixture
-is pinned: only the relations the budget promises.
+``BlastResult.stop_reason`` says which stop ended a blast. No point count,
+factor or iteration count of the fixture is pinned: only the relations the
+budget promises.
 """
 
 from __future__ import annotations
@@ -51,7 +51,6 @@ def test_budget_stops_between_iterations_and_resumes():
     num_iterations = 4
     second = _blast(case, zone, num_iterations, max_points=first.points_created + 1)
     assert second.stop_reason == "point_budget"
-    assert not second.terminated_early
     assert second.completed_iterations < num_iterations
     assert len(second.steps) == second.completed_iterations
     _assert_bridges_consistent(case)
@@ -87,12 +86,11 @@ def test_without_prediction_the_budget_stops_once_reached():
 
 
 def test_stop_reason_without_budget():
-    """No budget never stops on points, and ``terminated_early`` IS the
-    ``"frontier_empty"`` reason."""
+    """No budget never stops on points; an empty fixed-point filter stops on
+    ``"frontier_empty"``."""
     case, zone = _k28_zone()
     for result in (_blast(case, zone, 2), case.session.blast_zone(zone, 2, fixed_point=[])):
         assert result.stop_reason in {"max_iterations", "frontier_empty"}
-        assert result.terminated_early == (result.stop_reason == "frontier_empty")
     assert result.stop_reason == "frontier_empty"  # an empty fixed-point filter
 
 

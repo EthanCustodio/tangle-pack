@@ -198,11 +198,6 @@ class BlastResult:
     already_known: int = 0
     pip_depth: dict["FixedPoint", int] = field(default_factory=dict)
 
-    @property
-    def terminated_early(self) -> bool:
-        """True if no interior bridge remained before ``num_iterations`` ran."""
-        return self.stop_reason == "frontier_empty"
-
     def all_interior_bridges(self) -> list["Bridge"]:
         """Every distinct bridge that was ever an interior survivor, in order."""
         seen: dict[int, "Bridge"] = {}
