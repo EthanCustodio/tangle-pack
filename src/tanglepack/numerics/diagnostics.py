@@ -16,14 +16,14 @@ things go silently wrong where the polylines are too coarse for the geometry:
   curves never cross, nor do two stable ones, and no curve crosses itself. A
   polyline that does -- a Z-kink of one manifold, two branches, a blast's image
   bridge over another curve -- is a polygon ARTIFACT, never a real crossing.
-  ``Tangle`` never pairs two segments of one stability, so these were not
-  detected before; :func:`same_stability_crossings` finds them, and
+  ``Tangle`` never pairs two segments of one stability, so it cannot see
+  them; :func:`same_stability_crossings` finds them, and
   :func:`count_same_stability_crossings` counts the ones a blast's new image
-  bridges take part in (C5: a blast adds no stable curve, and every hit it can
+  bridges take part in (a blast adds no stable curve, and every hit it can
   add involves one of its images).
 
 Nothing here changes the tangle. An unresolved detection is out of N by the
-registry's definition (B1, Q13 (a)), not by this report, which only names it;
+registry's definition, not by this report, which only names it;
 a same-stability crossing is a FLAG. :meth:`~.TangleWorkbench.TangleWorkbench.check_resolution`
 bundles the two into a :class:`ResolutionReport`.
 
@@ -107,7 +107,7 @@ class SameStabilityCrossing:
 @dataclass(frozen=True)
 class SameStabilityCount:
     """
-    The unstable polyline crossings some new curves take part in, counted (C5).
+    The unstable polyline crossings some new curves take part in, counted.
 
     Attributes:
         in_region: Hits inside the padded box of the registered crossings.
@@ -136,7 +136,7 @@ class ResolutionReport:
         same_stability_crossings: Every same-stability polyline crossing (empty
             when only a count was taken).
         same_stability_count: The count of the hits a blast's new image bridges
-            take part in, when the report was a blast's (C5); else None.
+            take part in, when the report was a blast's; else None.
     """
 
     threshold: Optional[float]
@@ -201,7 +201,7 @@ def count_same_stability_crossings(
     workbench: "TangleWorkbench", bridges: Iterable["Bridge"], *, pad: float = 0.1
 ) -> SameStabilityCount:
     """
-    Count the unstable polyline crossings that involve one of ``bridges`` (C5).
+    Count the unstable polyline crossings that involve one of ``bridges``.
 
     The field is every unstable curve of the bridges' fixed points, as in
     :func:`same_stability_crossings`; only the segment pairs with a segment of

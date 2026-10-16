@@ -6,7 +6,7 @@ dedupes on (unstable cdist, stable cdist, unstable branch, stable branch), and
 keeps the ordered per-branch views plus the
 :class:`~.IterateTable.IterateTable` that maps an id to its iterates.
 
-It also decides which detections are crossings of N (A.2, Q13 (a), B1): every
+It also decides which detections are crossings of N (design note §A.2): every
 detection is registered, and :meth:`IntersectionRegistry.resolved_ids` keeps the
 ones the polylines resolve. A run of detections closer along the unstable
 polyline than their chord deviation is judged over the WHOLE registry, because
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 #: Two detections are the same crossing when their branch keys agree and both
-#: canonical distances agree to this RELATIVE tolerance (NUM-8, WP2). A
+#: canonical distances agree to this RELATIVE tolerance. A
 #: re-detection is bit-identical in practice (the same polylines); distinct
 #: crossings on one branch pair stay >= 4e-3 apart even at 11 k=2.8 blasts, while
 #: an absolute 1e-6 would merge deep ones. An anchor (cdists exactly 0.0) matches
@@ -74,8 +74,8 @@ class IntersectionRegistry:
     second entry. The branch keys are required because canonical distance is
     measured per branch: the anchor of every periodic point sits at cdist (0, 0),
     so cdist alone would wrongly merge the distinct anchors of a period-p orbit
-    into one. A periodic point is ONE anchor, on every branch attached to it
-    (D4), so at exactly (0, 0) two keys match when they name the same fixed
+    into one. A periodic point is ONE anchor, on every branch attached to it,
+    so at exactly (0, 0) two keys match when they name the same fixed
     point and orbit index. Branch keys are used rather than phase-space coordinates because the
     coordinates are only approximate (drift under the nonlinear map), while the
     cdists and branch identity are exact/stable.
@@ -98,13 +98,13 @@ class IntersectionRegistry:
         cdist_tol: float  — an ABSOLUTE canonical-distance slack for geometry
             only: a degenerate bridge cut (``Tangle.create_bridges``,
             ``BridgeIterator``) and clipping a polyline to an arc. Never
-            identity, ownership or containment (the topology reads none, C15,
-            WP11), and NOT the dedup rule, which is :data:`DEDUP_RTOL`
+            identity, ownership or containment (the topology reads none),
+            and NOT the dedup rule, which is :data:`DEDUP_RTOL`
         iterate_table: IterateTable  — a partial bijection: the map is injective
         unresolved_links: dict[int, tuple[int, ...]]  — source id -> the candidate
             images the exact rule cannot decide between (several bracketed
             images, or one image claimed by several sources); none of them is
-            linked, so the set is disjoint from the table's ``+1`` sources (B8)
+            linked, so the set is disjoint from the table's ``+1`` sources
         _generation: int  — bumped by every mutation; read via :attr:`generation`
         _orders_version: int  — bumped by the mutations that change the stored
             crossings (insert, renumber); the ordering-derived views key on it
@@ -407,7 +407,7 @@ class IntersectionRegistry:
 
     def resolved_ids(self, threshold: Optional[float]) -> frozenset[int]:
         """
-        N: the registered crossings the polylines resolve (A.2, Q13 (a)).
+        N: the registered crossings the polylines resolve (design note §A.2).
 
         A crossing is in N when it is synthetic, or when (clause 1) its
         resolution ratio is at least ``threshold`` and (clause 2) it is in no
@@ -621,7 +621,7 @@ class IntersectionRegistry:
         anchors of a period-p orbit apart: they all sit at cdist (0, 0) but on
         the branches of different orbit points. At exactly (0, 0) only the fixed
         point and orbit index of the two keys are compared, because a periodic
-        point is one crossing of all its branches (D4): the root segments of
+        point is one crossing of all its branches: the root segments of
         branch pairs other than the anchor's own resolve to the anchor. Branch
         keys are exact discrete labels, and the (approximate, drift-prone)
         phase-space coordinates are never read.
@@ -634,7 +634,7 @@ class IntersectionRegistry:
         choice.
         """
         u, s = intersection.unstable_cdist, intersection.stable_cdist
-        # A periodic point is ONE crossing of every branch attached to it (D4):
+        # A periodic point is ONE crossing of every branch attached to it:
         # at exactly (0, 0) any two of its branches meet at its one anchor.
         at_anchor = u == 0.0 and s == 0.0
 

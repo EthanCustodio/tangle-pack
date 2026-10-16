@@ -17,7 +17,7 @@ host<->device transfer for two numbers.
 Measured result
 ---------------
 GPU acceleration is opt-in and, as measured by the numerics stress campaign
-(2026-10-07, experiments E1/E2 in ``stress/numerics/report/report.pdf``), gives
+(``stress/numerics/report/report.pdf``), gives
 **no gain**:
 
 * end to end the GPU runs at 0.96-1.00x the CPU speed (median of three repeats:
@@ -30,8 +30,8 @@ GPU acceleration is opt-in and, as measured by the numerics stress campaign
   points per batch, so ``min_batch_points`` has nothing to tune.
 
 It could pay only once refinement and the linked list themselves live on the
-device as arrays, so that a growth step no longer round-trips through host
-memory batch by batch. Until then leave it off.
+device as arrays, so that a growth step does not round-trip through host
+memory batch by batch. Leave it off.
 
 Map requirements
 ----------------

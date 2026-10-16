@@ -9,10 +9,10 @@ is :mod:`~.FixedPointSolver`'s job, not this module's.
 
 Dev Notes:
 
-Shapes (API-6, WP11): an orbit point and an eigenvector are ``(2,)`` arrays, as
+Shapes: an orbit point and an eigenvector are ``(2,)`` arrays, as
 in ``BasePoint``, and an eigenvalue is a float, so no reader ravels.
 
-Eigenvectors under inversion (answered, WP3 2026-10-08): one vector per orbit
+Eigenvectors under inversion: one vector per orbit
 point is enough. It orients branch 0; branch 1 of an inversion point is the
 second half of the same chain, reached by mapping the branch-0 seed around
 ``k_value`` steps (``ManifoldInitializer.construct_kevin_way``), so it runs along
@@ -177,7 +177,7 @@ class FixedPoint:
 
         An area-preserving map has a Jacobian determinant of constant sign, so
         the solver's single-step Jacobian at the first orbit point settles it,
-        for any period (C16, WP11: orientation is a fact of the orbit, read by
+        for any period (orientation is a fact of the orbit, read by
         the topology, never computed there).
 
         Returns:
@@ -281,8 +281,7 @@ class FixedPoint:
             The stable factor is taken as ``1 / per_step_beta("unstable")``
             whenever ``lambda_u * lambda_s == 1`` within 1e-9 -- i.e. for the
             area-preserving (det J = +1) maps this package is written for. That
-            is exactly what every call site did before this method existed
-            (``stable_cdist / beta_unstable``), so results are unchanged, and it
+            is ``stable_cdist / beta_unstable``, and it
             is the more accurate of the two on such a map because the two
             eigenvalues are then one number, not two independent estimates.
             Otherwise the stable eigenvalue's own magnitude is used. A stable

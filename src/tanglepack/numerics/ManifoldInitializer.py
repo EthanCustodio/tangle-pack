@@ -8,11 +8,10 @@ around the orbit, and orients the eigenvectors consistently.
 
 Dev Notes:
 
-One construction (WP11): one fundamental segment is seeded per chain and mapped
-around it (``construct_kevin_way``); the per-orbit-point seeding ("Ethan way")
-was never kept in code.
+One construction: one fundamental segment is seeded per chain and mapped
+around it (``construct_kevin_way``).
 
-branch_index (answered, WP3 2026-10-08): a branch index names an
+branch_index: a branch index names an
 EIGENDIRECTION, and each one seeds one chain of ``k_value`` pieces walked by
 ``FixedPoint.advance_key``. An inversion chain covers both branches, so asking
 for branch 1 there adds nothing; without inversion branch 1 is its own chain.
@@ -30,9 +29,9 @@ this is the intended behaviour. The floor only guards the degenerate case: once 
 solver (fsolve) locates an orbit exactly (the rational period-3 orbit at Henon k=2),
 the residual is 0 and the bare step would be 0, giving a 0/0 nan. Note the side
 effect of an accurate solver: for a generic k the residual is ~machine eps so the
-seed is ~5e-6 and tangles develop more slowly per iteration than they used to (more
-iterations are needed for a full tangle). The point-count blow-up that used to be
-blamed on refinement (at k=2.1 fp3 stable: ~628 points at iter 6, ~240k at iter 7)
+seed is ~5e-6 and tangles develop slowly per iteration (many
+iterations are needed for a full tangle). The point-count blow-up of a late step
+(at k=2.1 fp3 stable: ~628 points at iter 6, ~240k at iter 7)
 is NOT an open refinement bug -- see the ManifoldMachine Dev Notes: the arm is
 escaping to infinity, and the answer is to grow with a stop condition rather than a
 large fixed iteration count.

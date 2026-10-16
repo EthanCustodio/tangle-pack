@@ -20,8 +20,7 @@ if TYPE_CHECKING:
     from .Point import Point
 
 #: The single spelling of a manifold's stability. Every ``stability`` parameter
-#: in :mod:`tanglepack.numerics` is annotated with this alias; it lived
-#: open-coded as ``Literal["unstable", "stable"]`` in a dozen modules before.
+#: in :mod:`tanglepack.numerics` is annotated with this alias.
 Stability = Literal["unstable", "stable"]
 
 # ManifoldKey = (fixed_point, stability, orbit_index, branch_index)
@@ -219,7 +218,7 @@ class Intersection:
             index of its keys are what keep them apart in the registry's
             collision test. An anchor is stored under its HOME pair
             ``(u(o, 0), s(o, 0))`` with that pair's crossing sign; branch 1 of
-            either stability leaves it the opposite way (D4).
+            either stability leaves it the opposite way.
         """
         return cls(
             coords=coords,
@@ -235,7 +234,7 @@ class Intersection:
     # --- helpers ---
     @property
     def is_anchor(self) -> bool:
-        """A periodic point's own crossing: synthetic, at canonical distance (0, 0) (D4)."""
+        """A periodic point's own crossing: synthetic, at canonical distance (0, 0)."""
         return self.seg_ids is None and self.unstable_cdist == 0.0 and self.stable_cdist == 0.0
 
     @property

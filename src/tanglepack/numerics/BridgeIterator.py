@@ -20,7 +20,7 @@ uses it is the one made on that curve. Widening the cut set to every crossing wh
 cdist falls in the image's span would reintroduce the cross-curve bridges plan row
 1.1 removed, so it must not be done without a per-curve span test.
 
-Every image curve is computed manifold (NUM-12, D1, C20): the workbench keeps it
+Every image curve is computed manifold: the workbench keeps it
 in ``_image_curves``, every ``compute_intersections`` re-indexes it query-only (as
 the blast did) until growth has merged it into a branch, and ``create_bridges``
 cuts it like any curve. A recompute, a growth round or a zone (re)definition after
@@ -338,7 +338,7 @@ class BridgeIterator:
         # image is indexed -- is what lets every crossing detected on it carry its
         # unstable branch identity (and lets its children advance the key again).
         # The image is computed manifold the branches do not hold: the workbench
-        # keeps it, and every recompute re-indexes it (NUM-12).
+        # keeps it, and every recompute re-indexes it.
         image_key = bridge.fixed_point.advance_key(bridge.manifold_key, 1)
         if not isinstance(iterated, Bridge):
             iterated = Bridge(
@@ -373,7 +373,7 @@ class BridgeIterator:
         # 4. cut at crossings. Only the crossings of N just born on this image are
         #    cut at: they alone carry bracketing points that lie on the image's own
         #    polyline. N is the registry's verdict over every detection, because a
-        #    run of unresolved detections can straddle two images (B1); an
+        #    run of unresolved detections can straddle two images; an
         #    unresolved one lies inside a bridge.
         resolved = registry.resolved_ids(workbench.resolution_ratio_threshold)
         cut_at = [ix for ix in new_intersections if ix.id in resolved]
@@ -425,7 +425,7 @@ class BridgeIterator:
         Iterate all bridges that have not yet been mapped forward.
 
         Ends with a registry-wide :meth:`~.TangleWorkbench.TangleWorkbench.infer_iterates`,
-        so crossings that only now have an image are linked (BCG-3).
+        so crossings that only now have an image are linked.
 
         Returns:
             All new bridges produced across all iterations.

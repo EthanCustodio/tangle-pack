@@ -21,11 +21,10 @@ Dev Notes:
 
 The ``grow_until_*`` drivers cap their rounds at ``max_iterations``; the default
 (None) scales the cap with the stretch the stop condition needs,
-``max(10, ceil(log_stretch / ln(stretch per round)) + 1)`` (NUM-15, WP10), so a
-small ``lambda_u`` gets the depth it needs and no recipe that ran under the old
-fixed cap of 10 changes. ``grow_until_arclength`` stops on the polyline ARC
-LENGTH of the grown branch (NUM-13, WP10; it stopped on the tail's canonical
-distance before, which agrees only in the linear regime).
+``max(10, ceil(log_stretch / ln(stretch per round)) + 1)``, so a
+small ``lambda_u`` gets the depth it needs and no cap falls below 10. ``grow_until_arclength`` stops on the polyline ARC
+LENGTH of the grown branch (not the tail's canonical distance, which agrees
+only in the linear regime).
 """
 
 from __future__ import annotations
@@ -65,7 +64,7 @@ logger.addHandler(logging.NullHandler())
 
 #: How much a stable segment must be stretched (log of the factor) before it
 #: turns around: rounds * ln(stretch per round) measured 14.8-17.1 on the Hénon
-#: saddle over k = 0.3 .. 10 from the default ~5e-6 seed (2026-10-07), with margin.
+#: saddle over k = 0.3 .. 10 from the default ~5e-6 seed, with margin.
 TURNAROUND_LOG_STRETCH = 18.0
 
 
@@ -223,7 +222,7 @@ class TangleWorkbench:
             escape_radius (Optional[float]): ``max|coordinate|`` above which a
                 growth step warns; ``None`` (default) never warns.
             resolution_ratio_threshold (Optional[float]): Part of the
-                definition of N (A.2, Q13 (a)): a detection whose
+                definition of N (design note §A.2): a detection whose
                 :attr:`~.Intersection.Intersection.resolution_ratio` is below it
                 is registered but no crossing of N -- nothing is cut at it,
                 linked to it or trimmed at it, and :meth:`report_resolution`
@@ -231,7 +230,7 @@ class TangleWorkbench:
                 of 1 the segments separate by no more than the polygon error,
                 and the crossing cannot be told apart from noise. The default
                 keeps a margin 3 above it; the corpus minimum, over the law
-                cases, is 3.038 (heteroclinic, 2026-10-12). None turns this
+                cases, is 3.038 (heteroclinic). None turns this
                 clause off; a run of detections closer than their chord
                 deviation is out of N whatever the threshold. It is read by
                 every detection pass and every trellis built afterwards: after
@@ -266,7 +265,7 @@ class TangleWorkbench:
         # What report_resolution has already logged, so a repeated pass (a zone
         # recompute, the next blast) only speaks about NEW findings: the flagged
         # crossing ids with the registry id epoch they belong to, and the
-        # same-stability hits of a full listing (a blast only counts its own, C5).
+        # same-stability hits of a full listing (a blast only counts its own).
         self._reported_flags: tuple[int, frozenset[int]] = (0, frozenset())
         self._reported_artifacts: set[tuple] = set()
         # Bridges are keyed by their topological identity (the ordered endpoint
@@ -278,7 +277,7 @@ class TangleWorkbench:
         self._partial_bridges: list[Bridge] = []
         self._bridges_at: dict[int, list[BridgeId]] = {}
         # Every blast image curve: computed unstable manifold the branches do not
-        # hold, re-indexed by every recompute until growth covers it (NUM-12).
+        # hold, re-indexed by every recompute until growth covers it.
         self._image_curves: list[Bridge] = []
         # A BridgeId is a pair of REGISTRY ids, so it only means anything while the
         # registry still numbers its crossings the same way. This counter is bumped
@@ -632,9 +631,8 @@ class TangleWorkbench:
             Growth refines the existing curve as well as extending it, so it
             bumps the generation and drops every memoised point array. It also
             re-finds the physical end of every branch of the grown stability, so
-            stable growth undoes a stable trim (a resonance zone's included, C22):
-            the trim is a view, and the topology is cut at the pip orbit anyway
-            (D10).
+            stable growth undoes a stable trim (a resonance zone's included):
+            the trim is a view, and the topology is cut at the pip orbit anyway.
 
         Note:
             A fixed count has no notion of escape: an arm leaving the trapped
@@ -815,9 +813,9 @@ class TangleWorkbench:
 
         The escape stop: an arm leaving the trapped region is caught on the step
         it crosses ``radius``, before the steps whose point count explodes (the
-        stress campaign's E7 found it the one stop condition that does). The
+        stress campaign found it the one stop condition that does). The
         driver to prefer at the default :attr:`area_cutoff` (1e-7), where a step
-        past escape costs ~10x the points it did at the old 1e-4.
+        past escape costs ~10x the points it costs at 1e-4.
 
         Args:
             fixed_point (FixedPoint): The fixed point whose manifold is grown.
@@ -1017,7 +1015,7 @@ class TangleWorkbench:
             (:meth:`rebuild_bridges`): growth inserts new crossings between the
             endpoints of existing bridges, so the old cut stops describing the
             curve. A blast's image curves are recomputed and recut with the
-            branches (NUM-12), so the blast frontier, its partial pieces and the
+            branches, so the blast frontier, its partial pieces and the
             ``iterated`` flags survive the round.
         """
         stabilities = tuple(grow)
@@ -1237,7 +1235,7 @@ class TangleWorkbench:
 
         Note:
             A crossing on the outer envelope never closes, the inversion anchor
-            included (one degree-4 node of its four branches, D4): that is a
+            included (one degree-4 node of its four branches): that is a
             fact about where it sits, not a missing growth step. A
             non-inversion anchor seeded on one eigendirection keeps virtual
             ``u-`` / ``s-`` stubs (the other half of each manifold is not
@@ -1342,7 +1340,7 @@ class TangleWorkbench:
             manifolds_to_index.extend(self._iter_manifolds(fp, "unstable"))
             manifolds_to_index.extend(self._iter_manifolds(fp, "stable"))
         self.Tangle.add_manifolds(manifolds_to_index)
-        # A blast image is computed manifold too (D1, NUM-12): re-indexed query-only,
+        # A blast image is computed manifold too: re-indexed query-only,
         # as the blast indexed it. On a FRESH index a curve that adds no segment of
         # its own lies on a grown branch now (growth merged it in) and is dropped;
         # an accumulating call cannot tell (the bridges cut out of the curve still
@@ -1361,7 +1359,7 @@ class TangleWorkbench:
         # and declaring it beats detecting it (see _register_anchors).
         self._register_anchors(fixed_points)
 
-        # Registration order is the order along each unstable branch (INT-7), never
+        # Registration order is the order along each unstable branch, never
         # the iteration order of a set of segment ids: ids are reproducible.
         position = {id(fp): i for i, fp in enumerate(self.fixed_points)}
 
@@ -1429,8 +1427,8 @@ class TangleWorkbench:
         One WARNING when unresolved detections appear that were not reported
         before, naming every unresolved one (id, coordinates, ratio, clause,
         and for a run its partner and separation) and ending with the remedy
-        "refine: lower `area_cutoff` or grow the stretch; NUM-3/4"; one WARNING
-        when same-stability polyline crossings
+        "refine: lower `area_cutoff` or grow the stretch" and the issue id; one
+        WARNING when same-stability polyline crossings
         appear in the tangle region, one INFO when they appear only outside it
         (an escaping arm). Each finding is reported once, so the zone
         recomputes and the next blast stay quiet about what is already known.
@@ -1438,7 +1436,7 @@ class TangleWorkbench:
 
         Args:
             fixed_points: As in :meth:`check_resolution`.
-            new_bridges: A blast's new image bridges (C5): the same-stability
+            new_bridges: A blast's new image bridges: the same-stability
                 part is then only COUNTED, over the hits these bridges take part
                 in (:func:`~.diagnostics.count_same_stability_crossings`), and
                 nothing is remembered -- every such hit is new. A blast adds no
@@ -1591,7 +1589,7 @@ class TangleWorkbench:
         A periodic point sits at canonical distance 0 on every branch attached to
         it, so it IS a crossing -- the ``(0, 0)`` anchor the topological layer
         treats as the innermost node of every one of those branches. It is ONE
-        crossing (D4): at an inversion point the two stable and two unstable
+        crossing: at an inversion point the two stable and two unstable
         branches all meet there, and the arrangement draws it as one degree-4
         node.
 
@@ -1740,12 +1738,12 @@ class TangleWorkbench:
         the duplicate gives up the segments the cut claimed for it. Partial pieces
         have no id and are simply appended.
 
-        Every bridge enters here, so this is where its invariants are asserted
-        (NUM-14): a bridge is an arc of ITS unstable branch between its two
+        Every bridge enters here, so this is where its invariants are asserted:
+        a bridge is an arc of ITS unstable branch between its two
         crossings. A non-anchor end sits on the bridge's own branch, inside its node
         span up to the registry's dedup tolerance; an anchor end comes first and is
-        the bridge's own periodic point (one anchor on every branch there, D4); and
-        the id runs in unstable-cdist order (NUM-19).
+        the bridge's own periodic point (one anchor on every branch there); and
+        the id runs in unstable-cdist order.
         """
         bid = bridge.id
         if bid is None:
@@ -1781,9 +1779,9 @@ class TangleWorkbench:
         """
         Cut indexed unstable manifolds into bridges.
 
-        The cut is at the crossings of N (B1): an unresolved detection lies inside
-        a bridge. A blast's image curves are indexed unstable manifold too
-        (NUM-12): one crossed twice or more is cut like a branch, one crossed fewer
+        The cut is at the crossings of N: an unresolved detection lies inside
+        a bridge. A blast's image curves are indexed unstable manifold too:
+        one crossed twice or more is cut like a branch, one crossed fewer
         than twice is held whole as a partial piece.
 
         Args:
@@ -1815,7 +1813,7 @@ class TangleWorkbench:
         self._bump_generation(invalidate_walks=True)
         cut = [self._register_bridge(bridge) for bridge in bridges]
         # An image curve of an indexed fixed point crossed fewer than twice is one
-        # partial piece, as at blast time (NUM-12).
+        # partial piece, as at blast time.
         crossings_on = Counter(id(ix.unstable_manifold) for ix in crossings)
         indexed = {id(ix.manifold_a_key[0]) for ix in crossings if ix.is_anchor}
         held = {id(piece) for piece in self._partial_bridges}
@@ -1842,8 +1840,8 @@ class TangleWorkbench:
             Every production call reaches here just after a recompute, which has
             already run ``Tangle.clear_all()`` -- so the release is usually a no-op
             on an empty index. It matters on the direct path (``clear_bridges`` or
-            ``rebuild_bridges`` with no recompute in between), which is exactly the
-            path that used to leak.
+            ``rebuild_bridges`` with no recompute in between), where the index
+            would otherwise leak.
 
         Args:
             fixed_point: If given, discard only that fixed point's bridges (and
@@ -1889,7 +1887,7 @@ class TangleWorkbench:
         old id back, and the carry stands.
 
         A blast's image curves are recut too: they are computed manifold, indexed by
-        every recompute (NUM-12), so a rebuild keeps every image bridge, every partial
+        every recompute, so a rebuild keeps every image bridge, every partial
         piece (an image curve crossed fewer than twice, whose ``iterated`` flag lives
         on the curve itself) and every flag carried by id.
 
@@ -2151,7 +2149,7 @@ class TangleWorkbench:
         return beta if stability == "unstable" else 1.0 / beta
 
     def _default_cap(self, fixed_point: FixedPoint, stability: Stability, log_stretch: float) -> int:
-        """A driver's default round cap: the rounds the needed stretch takes, never below 10 (NUM-15)."""
+        """A driver's default round cap: the rounds the needed stretch takes, never below 10."""
         rounds = math.ceil(log_stretch / math.log(self._stretch_per_round(fixed_point, stability)))
         return max(10, rounds + 1)
 

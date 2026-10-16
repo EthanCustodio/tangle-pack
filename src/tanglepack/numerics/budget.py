@@ -1,7 +1,7 @@
 """The point budget of one growth step.
 
 Past the escape step a manifold arm's point count can jump by orders of
-magnitude in ONE refinement step (the stress campaign's E3/E7 runs went from
+magnitude in ONE refinement step (the stress campaign's runs went from
 ~1e4 to ~1e6 points and then out of memory inside a single call), so the only
 place that can stop the killer step is inside it.
 :class:`~.ManifoldMachine.ManifoldMachine` counts the points each top-level

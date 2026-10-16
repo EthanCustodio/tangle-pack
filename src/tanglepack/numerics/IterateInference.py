@@ -88,10 +88,10 @@ def infer_iterates(workbench: "TangleWorkbench", sources: Optional[Iterable[int]
     carried one map step (module docstring), confirmed by the real map in one
     batched call. Idempotent: a source already linked is skipped.
 
-    Only crossings of N are linked (B1): an unresolved detection is neither a
+    Only crossings of N are linked: an unresolved detection is neither a
     source nor a candidate image, so no link starts or ends at one.
 
-    What the brackets cannot decide is recorded, never guessed (B8): a source
+    What the brackets cannot decide is recorded, never guessed: a source
     whose brackets meet several images, and every claimant of an image named
     by two sources (this pass's, the one already linked to it, or one an
     earlier pass left contested), go to ``registry.unresolved_links`` and none

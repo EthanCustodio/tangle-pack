@@ -9,15 +9,14 @@ handed.
 Dev Notes:
 
 A periodic point IS a crossing here: ``TangleWorkbench._register_anchors`` puts
-ONE anchor at canonical distance ``(0, 0)`` on every branch attached to it (D4:
-two stable and two unstable branches at an inversion point). It carries no
+ONE anchor at canonical distance ``(0, 0)`` on every branch attached to it
+(two stable and two unstable branches at an inversion point). It carries no
 curve of its own, so ``create_bridges`` cuts every unstable branch rooted at the
 periodic point at that branch's own root.
 
-The Tangle holds no resolved crossings (plan row 2.1): every crossing lives in the
-workbench's IntersectionRegistry. What used to make that impossible was geometry --
-cutting a bridge needs the two real manifold nodes bracketing the crossing, which
-only the segment index knew. Each Intersection now carries that itself, as
+The Tangle holds no resolved crossings: every crossing lives in the workbench's
+IntersectionRegistry. Cutting a bridge needs the two real manifold nodes
+bracketing the crossing, and each Intersection carries them itself, as
 ``unstable_manifold`` (the curve it was detected on) and ``unstable_segment`` (the
 crossing's two bracketing points, captured at resolve time and never re-read off
 the mutable segment afterwards). So a registered crossing is self-sufficient: it
@@ -26,19 +25,17 @@ argument rather than reaching back into the index.
 
 ``create_bridges`` groups by the unstable manifold OBJECT, not by manifold_key: a
 bridge and the manifold it was cut out of legitimately share a key while being
-distinct polylines, so key-grouping would let one cut span two curves. Phase 3's
-BridgeId may make a key-plus-generation grouping viable; until then the object is
-the only unambiguous grouping.
+distinct polylines, so key-grouping would let one cut span two curves; the object
+is the only unambiguous grouping.
 
-Crossing resolution (2026-10-07; B1, Q13 (a), 2026-10-12). Below a
+Crossing resolution. Below a
 ``resolution_ratio`` of a few, a crossing of two near-tangent polylines is
 undecidable at the current ``area_cutoff``: the polylines may straddle where the
 curves do not cross, or miss a pair of crossings the curves do have. Every
 detection is registered with its ratio and chord deviation, and the registry
-decides which are crossings of N (A.2: ratio at least the threshold, and in no
-run of detections closer than their chord deviation); an unresolved one is reported with the remedy "refine" and read by no path. There
-is no vote: the blast path once kept the median of a run of near-coincident
-detections and nothing else did, so a recompute changed N. Deciding them
+decides which are crossings of N (design note §A.2: ratio at least the threshold, and in no
+run of detections closer than their chord deviation); an unresolved one is reported with the remedy "refine" and read by no path. No
+parity vote decides a run, so a recompute keeps N. Deciding them
 would need a validated method, and interval arithmetic alone is not enough: the
 splitting angle near ``k = -1`` reaches ~1e-31, below double precision, so it
 would need multiprecision (and a parameterisation of the curves) as well. That is
@@ -561,7 +558,7 @@ class Tangle:
             Every new detection, the unresolved ones included (which of them are
             crossings of N is the registry's decision, over all its detections),
             in unstable cdist order: the caller registers them in this order,
-            never in that of a set of segment ids, so ids are reproducible (INT-7).
+            never in that of a set of segment ids, so ids are reproducible.
         """
         manifold_seg_ids = self._manifold_segs.get(manifold, set())
         resolved = (
@@ -888,7 +885,7 @@ class Tangle:
                 (float(intersection.unstable_cdist), intersection, p0, p1)
             )
 
-        # An anchor is ONE crossing on every branch of its periodic point (D4):
+        # An anchor is ONE crossing on every branch of its periodic point:
         # it cuts each unstable branch rooted there at that branch's own root.
         anchors = {
             (ix.manifold_a_key[0], ix.manifold_a_key[2]): ix for ix in crossings if ix.is_anchor

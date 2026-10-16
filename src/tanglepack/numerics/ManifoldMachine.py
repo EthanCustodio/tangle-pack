@@ -53,9 +53,9 @@ iteration count that walks an escaping arm out to infinity. The ``< 1e-8`` spati
 guard in ``_refine_layer`` stays as-is; it is fine for the regime we actually use.
 See project memory ``solver-rootcause-and-seed-step``.
 
-The point budget (2026-10-07, after the numerics stress campaign): a fixed
+The point budget: a fixed
 iteration count has no notion of escape, and past the escape step the point
-count can jump 5-8x in ONE refinement step -- the E3 last-factor prediction
+count can jump 5-8x in ONE refinement step -- the last-factor prediction
 underestimated it by an order of magnitude -- so a step could run out of memory
 before anything outside it got a say. Every top-level call (one growth step of
 a whole ``k_value`` chain, one bridge image, one initializer image) therefore
@@ -68,7 +68,7 @@ included. Prefer the ``grow_until_*`` drivers (``grow_until_bounded`` stops on
 ``max|x|``, the only condition shown to stop before take-off) over
 ``grow_n_times`` with a large count.
 
-The default cutoff is 1e-7 (2026-10-07, was 1e-4): the stress campaign's E4
+The default cutoff is 1e-7: the numerics stress campaign
 found it the cheapest cutoff converged on every case tested (at 1e-4 the
 period-3 crossing count still moves with the cutoff at fixed depth; a coarse
 polygon both misses true crossings and makes spurious ones). It costs ~8-12x
@@ -104,8 +104,8 @@ from .geometry import curvature_area_batch
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-#: Library default for :attr:`ManifoldMachine.area_cutoff` (1e-4 before
-#: 2026-10-07; see the module Dev Notes).
+#: Library default for :attr:`ManifoldMachine.area_cutoff` (see the module
+#: Dev Notes).
 DEFAULT_AREA_CUTOFF = 1e-7
 
 
@@ -375,7 +375,7 @@ class ManifoldMachine:
                 new_points, manifold.stability, manifold.stretch_param, manifold.fixed_point
             )
 
-        # The images that already exist may lie on several curves (NUM-9): merge
+        # The images that already exist may lie on several curves: merge
         # each contiguous chain of them in turn.
         chains = self._image_chains(manifold, old_points)
 
@@ -425,7 +425,7 @@ class ManifoldMachine:
 
         A bridge's images are usually one run of one curve, but a bridge whose
         straddle nodes it shares with a neighbour that was iterated first has its
-        images on TWO curves (NUM-9: the grown manifold's tip, then the start of the
+        images on TWO curves (the grown manifold's tip, then the start of the
         neighbour's image). Walking the curve from the first image, the images it
         reaches (to the end of that curve, or past the last image's cdist) form one
         chain from the first to the last reached; the next chain starts at the

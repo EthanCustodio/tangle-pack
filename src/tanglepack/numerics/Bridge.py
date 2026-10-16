@@ -128,8 +128,8 @@ class Bridge(BaseManifold):
         the last piece's tail.
 
         The trellis cut at a strong pip's orbit drops the crossings past it, and
-        the unstable arc across a dropped crossing is one arc of the cut trellis
-        (D10). No map call and no registry write: the workbench never holds the
+        the unstable arc across a dropped crossing is one arc of the cut trellis.
+        No map call and no registry write: the workbench never holds the
         joined arc.
 
         Args:
