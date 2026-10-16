@@ -398,10 +398,11 @@ class StablePartitionResult:
     named in the hole's ``openings`` records; which endpoints are open is
     derived from the hole's side of its bridge.
 
-    The intervals double as the branch's partition *elements*; the two lookup
-    tables built alongside them answer the two questions the region layer asks:
-    "which element owns this crossing" and "which elements sit at this bridge's
-    two ends".
+    The intervals double as the branch's partition *elements*; the lookup
+    table built alongside them answers "which element owns this crossing" (a
+    bridge end's element is the owner of its endpoint id, which the
+    :data:`~tanglepack.numerics.Bridge.BridgeId` carries:
+    :meth:`~.PartitionFamily.PartitionFamily.owner_of_intersection`).
 
     Attributes:
         branch_key: Manifold key of the partitioned stable branch.
@@ -412,25 +413,11 @@ class StablePartitionResult:
             with a shared endpoint owned by whichever neighbour is closed there
             (a pinched singleton owns its own point). Keyed by registry ID, so
             the table survives everything but a renumbering of the registry.
-        elements_at_bridge: Convenience index over the bridges the building
-            trellis actually held: every non-partial one of them with at least
-            one endpoint on this branch, mapped to ``(element at first, element
-            at second)`` in :data:`~tanglepack.numerics.Bridge.BridgeId` order,
-            with ``None`` for an end that lies on a different stable branch.
-            It is NOT the authority on bridge-to-element: a heteroclinic
-            bridge of W^u(fp1) whose endpoints sit on W^s(fp3) exists only in
-            a trellis holding both tangles (a tangle alone holds no
-            heteroclinic crossing). Because a BridgeId IS the endpoint id pair,
-            :meth:`Trellis.element_for` falls back to
-            ``element_of_intersection`` and answers anyway — go through it, or
-            through
-            :meth:`~tanglepack.loom.TangleSession.TangleSession.partition_element_for`
-            for the cross-trellis case, rather than reading this table directly.
 
     Note:
-        Both tables are keyed by registry ids and element indices of *this*
-        result, so they are only meaningful for the trellis snapshot that built
-        them. A trellis is dropped and rebuilt whenever the workbench generation
+        The table is keyed by registry ids and element indices of *this*
+        result, so it is only meaningful for the trellis snapshot that built
+        it. A trellis is dropped and rebuilt whenever the workbench generation
         moves (which is what a registry renumbering does), and its results go
         with it — nothing migrates ids across a reindex.
     """
@@ -439,9 +426,6 @@ class StablePartitionResult:
     side: Side
     intervals: list[PartitionInterval] = field(default_factory=list)
     element_of_intersection: dict[int, int] = field(default_factory=dict)
-    elements_at_bridge: dict["BridgeId", tuple[Optional[int], Optional[int]]] = field(
-        default_factory=dict
-    )
 
     def element(self, element_id: int) -> PartitionInterval:
         """

@@ -21,15 +21,12 @@ fixed in conversation with the author (July 2026):
   ``near_intersection_id`` is fixed by convention to the toward-anchor member
   (smaller stable cdist) — the choice is arbitrary but must be consistent.
 * Partition elements (Phase 5): every interval is stamped with
-  ``(branch_key, side, element_id)`` and two lookup tables are built beside it,
+  ``(branch_key, side, element_id)`` and one lookup table is built beside it,
   ``element_of_intersection`` (crossing -> owning element, by id at a
-  boundary and by EXACT cdist elsewhere, see "Exact ownership" below) and
-  ``elements_at_bridge``. The latter is only a
-  convenience index over the bridges the building trellis HELD: a heteroclinic
-  bridge exists only in a trellis holding both its tangles (a tangle alone
-  holds no heteroclinic crossing, WP9). The authoritative lookup is
-  :meth:`Trellis.element_for`, which reads the endpoint ids carried by the
-  BridgeId itself.
+  boundary and by EXACT cdist elsewhere, see "Exact ownership" below). A
+  bridge end's element is read from it by the endpoint id the BridgeId
+  carries (``PartitionFamily.owner_at_end`` on the end's row,
+  ``owner_of_intersection`` on any side), never from the bridge list.
 * Side (author, 2026-07-16): a hole's side is left/right of its own BRIDGE,
   i.e. of the unstable manifold, in the bridge's dynamical orientation —
   forward flow points AWAY from the fixed point, so the bridge is oriented by
@@ -497,11 +494,9 @@ def partition_stable_manifold(
     singleton (see the module Dev Notes).
 
     Each interval is stamped with its element identity (``element_id``,
-    ``branch_key``, ``side``) and the two element lookup tables are built on top
+    ``branch_key``, ``side``) and the element lookup table is built on top
     of it: :attr:`StablePartitionResult.element_of_intersection` (which element
-    owns each crossing on the branch) and
-    :attr:`StablePartitionResult.elements_at_bridge` (which elements sit at each
-    bridge's two endpoints).
+    owns each crossing on the branch).
 
     Args:
         trellis: The Trellis carrying the holes to partition by.
@@ -533,9 +528,6 @@ def partition_stable_manifold(
         side=side,
         intervals=intervals,
         element_of_intersection=element_of_intersection,
-        elements_at_bridge=_elements_at_bridge(
-            trellis, branch_key, element_of_intersection
-        ),
     )
 
 
@@ -1054,38 +1046,3 @@ def _element_of_intersection(
         )
         owners[intersection_id] = matches[0]
     return owners
-
-
-def _elements_at_bridge(
-    trellis: "Trellis",
-    branch_key: "ManifoldKey",
-    element_of_intersection: dict[int, int],
-) -> dict["BridgeId", tuple[Optional[int], Optional[int]]]:
-    """Map each bridge touching this branch to the elements at its two endpoints.
-
-    Only non-partial bridges have an id and appear here. An endpoint whose stable
-    side lies on a different branch is ``None``: this result cannot name it, and
-    the caller resolves it through the trellis (another branch of the same
-    trellis) or the session (another trellis's branch).
-    """
-    at_bridge: dict["BridgeId", tuple[Optional[int], Optional[int]]] = {}
-    for bridge in trellis.bridges:
-        bridge_id = bridge.id
-        if bridge_id is None:
-            continue  # a partial arc is not a bridge and has no identity
-        ends: list[Optional[int]] = []
-        unstable_key = trellis.unstable_key_of(bridge_id)
-        for endpoint in bridge_id:
-            if trellis.stable_key_at(endpoint, unstable_key) != branch_key:
-                ends.append(None)
-                continue
-            element_id = element_of_intersection.get(endpoint)
-            assert element_id is not None, (
-                f"crossing {endpoint} of bridge {bridge_id} lies on "
-                f"{branch_key[1:]} but no partition element owns it"
-            )
-            ends.append(element_id)
-        if ends[0] is None and ends[1] is None:
-            continue  # neither end touches this branch
-        at_bridge[bridge_id] = (ends[0], ends[1])
-    return at_bridge

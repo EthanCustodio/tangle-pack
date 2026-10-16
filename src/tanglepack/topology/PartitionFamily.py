@@ -137,7 +137,6 @@ from .BridgeClass import _image_chain, _index_partitions
 from .StablePartition import (
     Marks,
     _element_of_intersection,
-    _elements_at_bridge,
     intervals_from_marks,
     owns_cdist,
     partition_stable_manifold,
@@ -895,9 +894,6 @@ class IteratedHomotopyPartition(PartitionFamily):
                     side=side,
                     intervals=intervals,
                     element_of_intersection=owners,
-                    elements_at_bridge=_elements_at_bridge(
-                        minimal.sparse, branch_key, owners
-                    ),
                 )
             )
 

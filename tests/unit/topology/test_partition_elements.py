@@ -10,9 +10,7 @@ of every crossing, positional ids and singletons are laws of
   side, to the element owning that endpoint
   (:meth:`PartitionFamily.owner_of_intersection` on the branch
   :meth:`Trellis.stable_key_at` names), read off the endpoint id its BridgeId
-  carries, never off the trellis's bridge list;
-* ``elements_at_bridge`` agrees with the ownership table, with a ``None`` for
-  an endpoint that sits on a different branch.
+  carries, never off the trellis's bridge list.
 
 An element's forward image is ``DualWalk.land_element`` (``test_dual_walk.py``).
 """
@@ -65,9 +63,7 @@ def test_every_workbench_bridge_touching_the_branch_resolves(p3_partitioned):
     The expected set is derived independently: every non-partial bridge the
     workbench holds, keyed to a branch by its endpoints' ``manifold_b_key``. Each
     such endpoint must resolve, on both sides, to the element
-    ``element_of_intersection`` names — stronger than what ``elements_at_bridge``
-    alone can carry (that table only covers the bridges the snapshot happens to
-    hold; see ``test_a_bridge_missing_from_the_snapshot_resolves``).
+    ``element_of_intersection`` names.
     """
     session, fp3, _fp1 = p3_partitioned
     trellis = session.trellis(fp3)
@@ -77,38 +73,15 @@ def test_every_workbench_bridge_touching_the_branch_resolves(p3_partitioned):
 
     checked = 0
     for result in trellis.stable_partitions:
-        expected_keys = set()
         for bridge_id in workbench_bridge_ids:
             for endpoint in bridge_id:
                 if trellis.intersection(endpoint).manifold_b_key != result.branch_key:
                     continue
-                expected_keys.add(bridge_id)
                 assert _owner(trellis, family, bridge_id, endpoint, result.side) == (
                     result.ref(result.element_of_intersection[endpoint])
                 )
                 checked += 1
-        # The table may not carry every one of them (a heteroclinic bridge is
-        # filtered out of this trellis), but it must never invent a key.
-        assert set(result.elements_at_bridge) <= expected_keys
     assert checked, "the period-3 bridges should touch the partitioned branches"
-
-
-def test_elements_at_bridge_entries_agree_with_the_ownership_table(p3_partitioned):
-    """Each stored entry names the owning element per end, None off-branch."""
-    session, fp3, _fp1 = p3_partitioned
-    trellis = session.trellis(fp3)
-
-    for result in trellis.stable_partitions:
-        for bridge_id, ends in result.elements_at_bridge.items():
-            assert len(ends) == 2
-            for endpoint, element_id in zip(bridge_id, ends):
-                on_branch = (
-                    trellis.intersection(endpoint).manifold_b_key == result.branch_key
-                )
-                if on_branch:
-                    assert element_id == result.element_of_intersection[endpoint]
-                else:
-                    assert element_id is None
 
 
 def test_both_ends_of_a_branch_wrapping_bridge_resolve(p3_partitioned):
@@ -160,7 +133,6 @@ def test_a_bridge_missing_from_the_snapshot_resolves(henon_p3_session):
 
     for side in ("left", "right"):
         for endpoint in dropped.id:
-            assert all(dropped.id not in r.elements_at_bridge for r in trellis.stable_partitions)
             assert _owner(trellis, family, dropped.id, endpoint, side) == _expected(
                 trellis, endpoint, side
             )
