@@ -169,7 +169,7 @@ def category(filename: str, function: str) -> str:
     ):
         return "refinement"
     if any(name in filename for name in ("Point.py", "BaseManifold.py")) or function in {
-        "_collect", "_get_iterate", "_get_preiterate", "_cache_preiterate"
+        "_collect", "_get_preiterate", "_cache_preiterate"
     } or "insert" in function:
         return "linked_list"
     if "Tangle.py" in filename or "rtree" in filename or "Intersection" in filename:

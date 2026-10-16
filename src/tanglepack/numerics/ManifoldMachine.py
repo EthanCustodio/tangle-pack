@@ -792,43 +792,6 @@ class ManifoldMachine:
 
         return next_layer
 
-    def _get_refined_point(
-        self,
-        p0: Point | BranchPoint,
-        p1: Point | BranchPoint,
-        viewer: ManifoldView,
-        stability: Stability,
-    ):
-        """
-        Reference single-pair refinement: the midpoint of the two preiterates
-        mapped one step forward. The batched _refine_layer is the live path;
-        this scalar version is kept as the pinned reference implementation.
-        """
-
-        p0_preiterate = self._get_preiterate(p0, stability)
-        p1_preiterate = self._get_preiterate(p1, stability)
-
-        new_point_coords_back = 0.5 * (
-            p1_preiterate.get_point() + p0_preiterate.get_point()
-        )
-
-        new_distance = 0.5 * (float(p0.cdist) + float(p1.cdist))
-
-        new_point_coords = self._get_iterate(new_point_coords_back, viewer)
-
-        x = new_point_coords[0]
-        y = new_point_coords[1]
-        new_point = Point(x, y, float(new_distance), stretch_param=p0.stretch_param)
-
-        self._cache_preiterate(new_point, new_point_coords_back, stability)
-
-        return new_point
-
-    @staticmethod
-    def _get_iterate(point: Point | BranchPoint, viewer: ManifoldView):
-        """Map a point one step forward in the manifold's stability direction."""
-        return viewer.map_fwd(point)
-
     @staticmethod
     def _get_preiterate(
         point: Point | BranchPoint,

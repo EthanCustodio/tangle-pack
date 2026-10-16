@@ -31,7 +31,7 @@ def _adjacent_pair_with_preiterates(manifold):
 
 
 def test_refined_cdist_lies_strictly_between_its_neighbours(grown_unstable):
-    """``_get_refined_point`` (the refinement kernel, no public single-point
+    """The batched refinement kernel (``_refine_layer``, no public single-pair
     route) places the new point's cdist strictly inside its neighbours'."""
     workbench, fp, manifold = grown_unstable
     machine = workbench._man_machine
@@ -43,6 +43,9 @@ def test_refined_cdist_lies_strictly_between_its_neighbours(grown_unstable):
     lo, hi = sorted((float(p0.cdist), float(p1.cdist)))
     assert lo < hi
 
-    new_point = machine._get_refined_point(p0, p1, viewer, "unstable")
+    machine.area_cutoff = 0.0  # refine this pair whatever its curvature area
+    next_layer = machine._refine_layer([(p0, p1)], manifold, viewer, None, set())
+    (_, new_point), (after, _) = next_layer
+    assert after is new_point
 
     assert lo < float(new_point.cdist) < hi
