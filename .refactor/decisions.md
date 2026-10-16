@@ -704,3 +704,46 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   `StablePartition.py:238`; `henon_blast_period_3.py` still dead at `:95`; four stale committed
   higher-period PNGs; the rewritten `test_partition_elements.py` does not catch a broken C7 anchor
   rule or a wrong row in `owner_at_end` (the law tier does).
+
+## 2026-10-15 — B12a `one-design-note`, outcome (plan approved round 1 with the B12a/B12b split and every default Q1-Q12; review revise in round 1, pass in round 2; branch `refactor/one-design-note` @ `b39c7e2`, base `94fca6b`)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved 2026-10-15): "Author approved the B12
+  plan 2026-10-15 with the split (Q11: B12a now = commit 0 + design note + src de-citation +
+  CLAUDE.md; B12b next = laws, smoke test, __init__ trim, rst lists, chalkboard, Q10 reasons, PNG
+  regeneration, plan Outcome) and all twelve defaults": (Q1) the 649 MB `figures/henon_period3_*`
+  sweeps are NOT committed, their two scripts and CLAUDE.md lines are; (Q2) B12b deletes the 9
+  TAUTOLOGY laws, keeps `dual_bipartite_degree`, every MIXED and ORACLE law (-4 ids); (Q3) B12b
+  regenerates only the 3 content-stale PNG folders (`heteroclinic_p1_p3`, `nested_p1_p3_inner6`,
+  `inversion_blast2`) in their own commit; (Q4) the note is `docs/design_note.md`, sections
+  A.0-A.11 (+ H, S, O, I); (Q5) CLAUDE.md's physics sections stay byte-identical, their ids
+  (`WP10`, `NUM-20`, `WP10b`, a date) exempt; (Q6) the 8 log strings (7 ids + 1 date) stay in
+  `src/`; (Q7) B12b: `topology.__all__` -> 51 with `MembersDisagree`, `WalkReason`, `free_reduce`,
+  the other 53 unused imports dropped; (Q8) the other id families (`B*`, `Q*`, `E*`, `F7`, `N-a`)
+  and dates leave `src/` too, "design note §A.x" stays; (Q9) Sphinx: a list check only (+12
+  modules, -graphviz, `conf.py` path `../../src`), no `-W` build; (Q10) the chalkboard's 17 rows
+  closed in place in B12b, the 9 audit divergences closed without a row listed in the note's H now;
+  (Q11) two branches, B12a first; (Q12) the recipe reason for zones at `f(q0)` is the measured
+  equivalence (zone at `f(q0)` after n blasts = zone at `q0` after n-1, k28/k32, n <= 2), written
+  in B12b. No debrief verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`):
+  - `docs/design_note.md` (722 lines) is the design: one section per stage, every one of the 86
+    ids `src/` cited at base anchored, plus H (slices, WPs, superseded rules), S, O, I.
+    `src/` keeps only the 7 log-string ids and the 1 log-string date; 15 "design note §A.x"
+    pointers. Stripped AST equal on 51 files; src -60 lines (+441/-501), 35 files (34 planned +
+    `FixedPointSolver.py`, a recorded deviation the reviewer asked for).
+  - CLAUDE.md: "Bridge classes and the dual graph" replaced by "The pipeline, stage by stage" (one
+    paragraph per stage, each naming its functions and ending "design note §A.x"); table at HEAD;
+    80,246 -> 62,737 bytes (173 -> 185 lines); `:1-27` and Coding Style byte-identical.
+  - Suite 1207 passed / 47 skipped / 5 deselected / 1 xfailed (C3), collected ids identical.
+- **Round-1 defects** (caught by reading, no script could): the note said `image_of` maps the
+  boundary with the real map, listed `from_table` as deleted by B4b (B4b added it), said the
+  in-splitting runs on the series (only T does), and that the minimal trellis ignores the class
+  table; plus history sentences in `FixedPoint.py` / `FixedPointSolver.py`. All fixed in round 2.
+- **Left open:** B12b (laws, smoke test, `__init__` trim, rst, chalkboard, Q10 reasons, PNGs, the
+  plan's Outcome section); old-code narration outside the rubric's word list (`BridgeIterator.py`
+  "plan row 1.1/2.2 removed", `BaseManifold.py:16-17`, `ManifoldMachine.py:632,700-701`,
+  `Tangle.py:593,1017-1018`, `DualGraph.py:50-51`, `geometry.py:9-11`); the note and CLAUDE.md say
+  "no fan-outs" though `TangleSession.classify_strong_pips` still fans out over fixed points (kept
+  by B9a for pip memory); note cosmetics (`:506` unwrapped, `:377` broken line, `:695` "990-line
+  cap" vs 988); commit trailers say `Claude Opus 5.5`. These notes were appended in the MAIN tree
+  after commit 0 copied it: the branch's `.refactor/` is one entry behind main's working copy.

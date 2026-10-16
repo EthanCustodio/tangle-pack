@@ -107,6 +107,12 @@ below are each WP's notes, kept as the record.
   `scripts/henon_blast_period_3.py` is still dead at `:95` (pinned pip 12 is no candidate since B3,
   candidates `[31, 32, 33]`); B10 changed only its `:123` print.
 
+- `TangleSession.classify_strong_pips` (`TangleSession.py:548` on the B12a branch) is the ONE
+  remaining fan-out over fixed points (dict-or-list return), kept by B9a for pip memory; the B12a
+  design note (A.11) and CLAUDE.md (`:60`) say "no fan-outs", which is imprecise. The section
+  comment above it (`:540-546`) is accurate, not stale. All `loom/` docstrings are de-cited on the
+  B12a branch (ids live in `docs/design_note.md`).
+
 ## Features
 
 - Blasting a single zone (re-measured by E12, WP12, at 1e-7): k28 to 13 blasts reliable from

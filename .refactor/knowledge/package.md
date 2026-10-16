@@ -1,6 +1,41 @@
 # package — knowledge file (what crosses the layers: docs, CLAUDE.md, Sphinx, campaign references)
 
-Created 2026-10-15 by the B12 analyst at `HEAD` `94fca6b` (read-only run).
+Created 2026-10-15 by the B12 analyst at `HEAD` `94fca6b` (read-only run). Updated 2026-10-16 by
+the B12a auditor: branch `refactor/one-design-note` @ `b39c7e2` (NOT yet merged; main is still
+`94fca6b`). Where the two differ, "B12a" below is the branch state.
+
+## B12a state (branch `b39c7e2`)
+
+- `docs/design_note.md` (722 lines) is THE design: `## A.0` global rules, `A.1`-`A.8`, `A.8b`
+  minimal trellis, `A.8c` word, `A.8d` iterated partition / refined level, `A.9`-`A.11`, then
+  `H` history (slices B0-B12a with merge hashes, WPs, superseded rules, the 9 audit divergences
+  closed without a chalkboard row), `S` stress findings that bind, `O` open items, `I` id index.
+  Each stage: Definition / anchors "(D13)" with the statement folded in / "Implemented by" names.
+  Ids resolve in `.refactor/decisions.md` and `docs/open_issues.md`.
+- `src/`: 0 decision ids except 7 inside log strings (`TangleWorkbench.py:1529` NUM-3,
+  `BridgeClass.py:618` D2, `MinimalTrellis.py:355` D9, `StablePartition.py:338` D9, `:430` NUM-5,
+  `topology/diagnostics.py:713,721` D6) and 1 date (`PartitionFamily.py:812`); 0 `B*/Q*/E*/F7/N-a`;
+  15 "design note §A.x" pointers. Old-code narration outside the history-word list survives:
+  `BridgeIterator.py:20-21,44` ("plan row 1.1/2.2 removed"), `BaseManifold.py:16-17`,
+  `ManifoldMachine.py:632,700-701`, `Tangle.py:593,1017-1018`, `DualGraph.py:50-51`,
+  `geometry.py:9-11`.
+- `CLAUDE.md`: 185 lines / 62,737 bytes; `## The pipeline, stage by stage` (`:28-61`, one
+  paragraph per stage + "Global rules", each ending "(design note §A.x)") replaces "Bridge classes
+  and the dual graph"; `:1-27` and `## Coding Style`..EOF byte-identical to the pre-B12a copy;
+  table has `cartoon.py` and `topology/diagnostics.py` rows (numerics `diagnostics` is in the
+  "Intersection detection" prose because `rowcheck.py` keys rows by basename). namecheck: 23
+  "misses", all builtins / protected lines / panel names, none a dead name.
+- Both the note (A.11) and CLAUDE.md (`:60`) say the session has "no fan-outs": imprecise,
+  `TangleSession.classify_strong_pips(fixed_point=None)` still loops over fixed points (B9a kept it
+  for pip memory); the comment above it (`TangleSession.py:540-546`) is accurate.
+- MERGE HAZARD (believed, not run): main's working tree holds the same paths as commit 0 as
+  modified / untracked files, so `git merge --ff-only` in main refuses until they are cleared;
+  commit 0 equals main's copies except the post-copy auditor edits to `.refactor/`.
+- Proof tools (scratchpad `b12/`): `stripped_ast.py BASE BRANCH` (docstring-free AST equality per
+  file; comments never reach the AST), `namecheck.py ROOT FILE`, `rowcheck.py`, `cites_src.txt`
+  (the 313 base citations, 86 ids). Reuse them for any comments-only slice.
+
+## Pre-B12a state (main `94fca6b`, still main's HEAD)
 
 ## Map
 
