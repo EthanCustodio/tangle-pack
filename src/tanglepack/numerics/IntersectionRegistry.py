@@ -21,7 +21,6 @@ from collections import defaultdict
 from typing import Callable, Iterator, Optional, TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import NDArray
 
 from .Intersection import Intersection, ManifoldKey, Stability
 from .IterateTable import IterateTable
@@ -90,9 +89,7 @@ class IntersectionRegistry:
         registry.resolved_ids(threshold)         → frozenset[int]  (N)
 
     Query interface (all return list[Intersection]):
-        registry.on_cdist_range(lo, hi)          → intersections with cdist in [lo, hi]
         registry.from_fixed_point(fp)            → intersections involving fp
-        registry.from_branch(branch_index)       → intersections on given branch
         registry.filter(predicate)               → arbitrary predicate
 
     Attributes:
@@ -237,7 +234,7 @@ class IntersectionRegistry:
         crossing (e.g., a manually placed reference point).
 
         For most workflows, prefer computing real intersections and querying them
-        with on_cdist_range() and related methods.
+        with filter() and related methods.
         """
         return self.add(
             Intersection.synthetic(
@@ -581,28 +578,6 @@ class IntersectionRegistry:
         """
         return [ix for ix in self._store.values() if predicate(ix)]
 
-    def on_cdist_range(
-        self,
-        lo: float,
-        hi: float,
-        stability: Stability = "unstable",
-    ) -> list[Intersection]:
-        """
-        Return all intersections whose CURRENT cdist on `stability` is in [lo, hi].
-
-        No iteration is applied: this filters by where the intersection sits.
-
-        Args:
-            lo: Lower bound of the cdist range.
-            hi: Upper bound of the cdist range.
-            stability: Which manifold cdist to filter on.
-
-        Returns:
-            List of matching Intersection objects sorted by the chosen cdist.
-        """
-        attr = "unstable_cdist" if stability == "unstable" else "stable_cdist"
-        return self.filter(lambda ix: lo <= getattr(ix, attr) <= hi)
-
     def from_fixed_point(
         self,
         fp: FixedPoint,
@@ -633,78 +608,6 @@ class IntersectionRegistry:
             return a_match or b_match
 
         return self.filter(pred)
-
-    def from_branch(
-        self,
-        branch_index: int,
-        stability: Optional[Stability] = None,
-    ) -> list[Intersection]:
-        """
-        Return all intersections on the given branch.
-
-        Args:
-            branch_index: 0 or 1.
-            stability: If given, only check the corresponding manifold key side.
-
-        Returns:
-            List of matching Intersection objects. An anchor matches every
-            branch index: the periodic point lies on every branch attached to
-            it (D4), although it is stored under its home pair.
-        """
-
-        def pred(ix: Intersection) -> bool:
-            if ix.is_anchor:
-                return True
-            a_match = (
-                ix.manifold_a_key is not None and ix.manifold_a_key[3] == branch_index
-            )
-            b_match = (
-                ix.manifold_b_key is not None and ix.manifold_b_key[3] == branch_index
-            )
-            if stability == "unstable":
-                return a_match
-            if stability == "stable":
-                return b_match
-            return a_match or b_match
-
-        return self.filter(pred)
-
-    # ── cdist-based lookup ─────────────────────────────────────────────────
-
-    def nearest_by_unstable_cdist(self, cdist: float) -> Optional[int]:
-        """
-        Return the ID of the intersection whose unstable_cdist is closest to cdist.
-
-        Uses the sorted _unstable_order list for O(log n) positioning.
-
-        Args:
-            cdist: Target unstable cdist value.
-
-        Returns:
-            Matching ID, or None if the registry is empty.
-        """
-        if not self._unstable_order:
-            return None
-        pos = bisect.bisect_left(self._unstable_keys, cdist)
-        candidates = []
-        if pos < len(self._unstable_order):
-            candidates.append(self._unstable_order[pos])
-        if pos > 0:
-            candidates.append(self._unstable_order[pos - 1])
-        return min(candidates, key=lambda id_: abs(self._store[id_].unstable_cdist - cdist))
-
-    # ── array exports ──────────────────────────────────────────────────────
-
-    def as_forward_array(self, max_depth: int = 5) -> NDArray[np.int64]:
-        """
-        Dense array A[i, d-1] = ID of f^d(ids[i]) where ids = all_ids() in order.
-        Shape: (N, max_depth). -1 = unknown.
-        """
-        return self.iterate_table.as_forward_array(self.all_ids(), max_depth)
-
-    def as_backward_array(self, max_depth: int = 5) -> NDArray[np.int64]:
-        """Dense array B[i, d-1] = ID of f^{-d}(ids[i]). Shape (N, max_depth). -1 = unknown."""
-        return self.iterate_table.as_backward_array(self.all_ids(), max_depth)
 
     # ── internal helpers ───────────────────────────────────────────────────
 

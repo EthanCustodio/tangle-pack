@@ -111,8 +111,6 @@ def test_registry_generation_stands_still_on_reads():
     registry.all_ids()
     registry.unstable_rank(first)
     registry.stable_rank(first)
-    registry.nearest_by_unstable_cdist(1.4)
-    registry.on_cdist_range(0.0, 10.0)
     registry[first]
 
     assert registry.generation == before
@@ -138,7 +136,6 @@ def test_registry_orderings_and_ranks_track_insertions():
     assert registry.unstable_rank(ids[1]) == 0
     assert registry.unstable_rank(ids[0]) == 2
     assert registry.stable_rank(ids[0]) == 0
-    assert registry.nearest_by_unstable_cdist(2.9) == ids[0]
 
 
 # --------------------------------------------------------------------------- #

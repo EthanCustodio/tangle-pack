@@ -86,14 +86,16 @@ sources = [
 print(f"{len(sources)} intersections map into s-cdist [5, 10]")
 
 # All intersections currently sitting in a cdist range (no iteration)
-in_range = registry.on_cdist_range(0.0, 1.0, stability="stable")
+in_range = registry.filter(lambda ix: 0.0 <= ix.stable_cdist <= 1.0)
 print(f"{len(in_range)} intersections have s-cdist in [0, 1]")
 
 # All intersections involving the period-3 fixed point
 from_fp3 = registry.from_fixed_point(fp3)
 
 # Only branch-0 intersections on the stable side
-branch0_stable = registry.from_branch(0, stability="stable")
+branch0_stable = registry.filter(
+    lambda ix: ix.is_anchor or (ix.manifold_b_key is not None and ix.manifold_b_key[3] == 0)
+)
 
 # Custom filter: only intersections whose iterate is also registered
 has_iterate = registry.filter(lambda ix: (ix.id, 1) in registry.iterate_table)
@@ -112,9 +114,5 @@ plt.xlim([-1, 1])
 plt.ylim([0.28, 3.1])
 plt.title("k=2, b=1 Period 3 Nested Tangle")
 plt.tight_layout()
-
-# --- Dense array exports ---
-F = registry.as_forward_array(max_depth=5)  # shape (N, 5), -1 = unknown
-B = registry.as_backward_array(max_depth=5)
 
 plt.show()

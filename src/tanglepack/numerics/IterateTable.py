@@ -9,8 +9,6 @@ one direction automatically records the reverse.
 from __future__ import annotations
 
 from typing import Iterator, Optional
-import numpy as np
-from numpy.typing import NDArray
 
 
 class IterateTable:
@@ -94,35 +92,6 @@ class IterateTable:
             chain.append(nxt)
             n += 1
         return chain
-
-    def as_forward_array(self, ids: list[int], max_depth: int) -> NDArray[np.int64]:
-        """
-        Dense 2D array A where A[i, d-1] = ID of f^d(ids[i]), or -1 if unknown.
-
-        Args:
-            ids: Ordered list of intersection IDs (defines row order).
-            max_depth: Number of forward iterate columns.
-
-        Returns:
-            Array of shape (len(ids), max_depth), dtype int64.
-        """
-        arr = np.full((len(ids), max_depth), fill_value=-1, dtype=np.int64)
-        for i, iid in enumerate(ids):
-            for d in range(1, max_depth + 1):
-                target = self[iid, d]
-                if target is not None:
-                    arr[i, d - 1] = target
-        return arr
-
-    def as_backward_array(self, ids: list[int], max_depth: int) -> NDArray[np.int64]:
-        """Dense array B[i, d-1] = ID of f^{-d}(ids[i]), or -1 if unknown."""
-        arr = np.full((len(ids), max_depth), fill_value=-1, dtype=np.int64)
-        for i, iid in enumerate(ids):
-            for d in range(1, max_depth + 1):
-                target = self[iid, -d]
-                if target is not None:
-                    arr[i, d - 1] = target
-        return arr
 
     def register_iterate(self, source_id: int, n: int, target_id: int) -> None:
         """Explicit named method — delegates to __setitem__."""

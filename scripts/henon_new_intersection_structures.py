@@ -60,14 +60,16 @@ sources = [
 print(f"{len(sources)} intersections map into s-cdist [5, 10]")
 
 # All intersections currently sitting in a cdist range (no iteration)
-in_range = registry.on_cdist_range(2.0, 6.0, stability="stable")
+in_range = registry.filter(lambda ix: 2.0 <= ix.stable_cdist <= 6.0)
 print(f"{len(in_range)} intersections have s-cdist in [2, 8]")
 
 # All intersections involving the specific fixed point
 from_fp = registry.from_fixed_point(fp)
 
 # Only branch-0 intersections on the stable side
-branch0_stable = registry.from_branch(0, stability="stable")
+branch0_stable = registry.filter(
+    lambda ix: ix.is_anchor or (ix.manifold_b_key is not None and ix.manifold_b_key[3] == 0)
+)
 
 # Custom filter: only intersections whose iterate is also registered
 has_iterate = registry.filter(lambda ix: (ix.id, 1) in registry.iterate_table)
@@ -79,7 +81,3 @@ wb.plot_all_bridges()
 
 plt.xlim([-15, 15])
 plt.ylim([-15, 15])
-
-# --- Dense array exports ---
-F = registry.as_forward_array(max_depth=5)  # shape (N, 5), -1 = unknown
-B = registry.as_backward_array(max_depth=5)
