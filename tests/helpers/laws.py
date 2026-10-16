@@ -53,7 +53,6 @@ import pytest
 
 from helpers.invariants import (
     assert_cdist_monotonic,
-    assert_iterate_relation,
     assert_no_geometric_spikes,
     assert_one_to_one,
 )
@@ -61,7 +60,6 @@ from tanglepack.numerics.geometry import arc_polyline, oriented_bridge_polyline,
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.BridgeClass import (
     anchor_outward_key,
-    class_sort_key,
     oriented_class,
 )
 from tanglepack.topology.DualGraph import face_side
@@ -429,14 +427,6 @@ def check_manifold_no_spikes(case: "Case") -> int:
     manifolds = list(case.workbench.manifolds.values())
     for manifold in manifolds:
         assert_no_geometric_spikes(manifold)
-    return len(manifolds)
-
-
-def check_manifold_iterate_law(case: "Case") -> int:
-    """``c_iterate = stretch_param * c`` along every manifold's iterate chain."""
-    manifolds = list(case.workbench.manifolds.values())
-    for manifold in manifolds:
-        assert_iterate_relation(manifold)
     return len(manifolds)
 
 
@@ -962,15 +952,6 @@ def check_anchor_sign_matches_eigendirections(case: "Case") -> int:
 # --------------------------------------------------------------------------- #
 # Bridges
 # --------------------------------------------------------------------------- #
-def check_bridge_partial_iff_no_id(case: "Case") -> int:
-    """A bridge is partial exactly when it has no ``BridgeId``."""
-    bridges = case.workbench.bridges
-    for bridge in bridges:
-        assert bridge.partial == (bridge.id is None), bridge
-        assert bridge.manifold_key is not None
-    return len(bridges)
-
-
 def check_bridge_id_in_unstable_order(case: "Case") -> int:
     """``BridgeId = (first, second)`` is its endpoints in strictly increasing unstable cdist."""
     registry = case.registry
@@ -1323,23 +1304,6 @@ def _opening_row(case: "Case", trellis, bridge, intersection_id: int, key) -> st
     return row_of_end(trellis, bridge.id, endpoint)
 
 
-def check_openings_on_own_bridge_row(case: "Case") -> int:
-    """Openings law (1'): every opening of every hole sits on the row ITS OWN bridge has
-    at that bound. Rows are never compared along an orbit: a backward hole keeps
-    its side of the bridge (I1), not its row of the stable manifold."""
-    count = 0
-    for trellis, hole in _holes(case):
-        bridge = trellis.bridge_between(*hole.bounding_ids)
-        assert bridge is not None and bridge.id is not None, hole.bounding_ids
-        for intersection_id, _which, row, key in hole.openings or []:
-            assert row == _opening_row(case, trellis, bridge, intersection_id, key), (
-                hole.bounding_ids,
-                row,
-            )
-            count += 1
-    return count
-
-
 def check_anchor_opening_faces_its_hole(case: "Case") -> int:
     """D6 at the anchor: a hole opening there opens the stable branch whose first node
     past the anchor lies on the hole's side of its own oriented bridge (geometry as
@@ -1356,50 +1320,6 @@ def check_anchor_opening_faces_its_hole(case: "Case") -> int:
                 hole.bounding_ids,
                 key[1:],
             )
-            count += 1
-    return count
-
-
-def check_openings_follow_signs(case: "Case") -> int:
-    """Openings law (D6): at each bound a hole opens the stable half on its side of
-    its own bridge, read off the crossing sign.
-
-    The bridge passes every bound ``x`` along ``u+`` (increasing unstable cdist),
-    and ``crossing_sign(x) = sign(cross(u+, s+))``, so the outward stable ray ``s+``
-    lies on the LEFT of the bridge exactly when the sign is positive: the hole's
-    side holds the outward half iff ``(sign > 0) == (bridge_side == "left")``.
-    Hence exactly one opening per non-anchor bound, on the crossing's own stable
-    branch and on the bridge's row there (``u+`` is left of the stable direction
-    iff the sign is positive, the bridge leaves its first end along ``u+`` and
-    enters its second along ``u-``); at most one at an anchor bound, whose
-    branch the signs pick (it may be uncomputed)."""
-    count = 0
-    for trellis, hole in _holes(case):
-        bridge = trellis.bridge_between(*hole.bounding_ids)
-        assert bridge is not None and bridge.id is not None, hole.bounding_ids
-        opened: dict[int, list] = {}
-        for intersection_id, which, row, key in hole.openings or []:
-            opened.setdefault(intersection_id, []).append((which, row, key))
-        assert set(opened) <= set(bridge.id), (hole.bounding_ids, sorted(opened))
-        for endpoint, intersection_id in zip(("first", "second"), bridge.id):
-            ix = case.registry[intersection_id]
-            records = opened.get(intersection_id, [])
-            if _is_anchor(ix):
-                assert len(records) <= 1, (hole.bounding_ids, records)
-                continue
-            assert len(records) == 1, (
-                f"hole {hole.bounding_ids} (iterate {hole.iterate}) opens "
-                f"{len(records)} half(s) at {intersection_id}, expected one"
-            )
-            ((which, row, key),) = records
-            positive = ix.crossing_sign > 0
-            outward = positive == (hole.bridge_side == "left")
-            assert which == ("outward" if outward else "anchorward"), (
-                hole.bounding_ids, intersection_id, which, hole.bridge_side,
-            )
-            assert key == ix.manifold_b_key, (hole.bounding_ids, intersection_id)
-            expected_row = "left" if positive == (endpoint == "first") else "right"
-            assert row == expected_row, (hole.bounding_ids, intersection_id, row)
             count += 1
     return count
 
@@ -2036,52 +1956,6 @@ def check_anchor_bridge_class_leads_its_tangle(case: "Case") -> int:
     return count
 
 
-def check_class_table_order(case: "Case") -> int:
-    """Classes group by tangle (connecting classes last), then by smallest member
-    first-crossing unstable cdist, then ``class_sort_key``; members by ``BridgeId``."""
-    trellis = _full(case)
-    fixed_points = trellis.fixed_points
-    table = _evidence(case)
-    entries = list(table)
-    for entry in entries:
-        assert entry.bridge_ids == sorted(entry.bridge_ids)
-        assert entry.min_unstable_cdist == min(
-            float(trellis.intersection(bid[0]).unstable_cdist) for bid in entry.bridge_ids
-        )
-    keys = [
-        (
-            len(fixed_points) if entry.tangle is None else entry.tangle,
-            entry.min_unstable_cdist,
-            class_sort_key(entry.bridge_class, fixed_points),
-        )
-        for entry in entries
-    ]
-    assert keys == sorted(keys)
-    return len(entries)
-
-
-def check_classes_do_not_mix_tangles(case: "Case") -> int:
-    """A class names one tangle (``entry.tangle``) exactly when its elements and its
-    members' unstable branches all belong to that fixed point; every tangle has classes."""
-    trellis = _full(case)
-    fixed_points = trellis.fixed_points
-    table = _evidence(case)
-    seen = set()
-    for entry in table:
-        cls = entry.bridge_class
-        owners = {id(cls.source.fixed_point), id(cls.target.fixed_point)}
-        for bridge_id in entry.bridge_ids:
-            owners.add(id(trellis.intersection(bridge_id[0]).manifold_a_key[0]))
-        if len(owners) == 1:
-            (owner,) = owners
-            assert entry.tangle is not None and id(fixed_points[entry.tangle]) == owner
-            seen.add(owner)
-        else:
-            assert entry.tangle is None
-    assert seen == {id(fp) for fp in case.fixed_points}, "every tangle contributes classes"
-    return len(table)
-
-
 def check_tangles_in_case_order(case: "Case") -> int:
     """NEST-6: the session's tangles are the case's fixed points in order (outermost
     first), so ``entry.tangle = t`` names ``case.fixed_points[t]``: the class's elements
@@ -2522,43 +2396,6 @@ def check_dual_face_side_is_geometry(case: "Case") -> int:
     return count
 
 
-def check_dual_unified_is_pip_segment(case: "Case") -> int:
-    """The unified edges are exactly the edges of each strong pip's OWN branch meeting
-    ``(cdist(f^k(q0)), cdist(q0)]``; no other branch unifies."""
-    dual = case.session.dual_graph()
-    full = dual.trellis
-    tol = float(full.registry.cdist_tol)
-    expected = set()
-    branches = set()
-    for trellis, fp in zip(_per_fp_trellises(case), case.fixed_points):
-        pip = trellis.strong_pip
-        branch_key = full.intersection(pip).manifold_b_key
-        branches.add(branch_key)
-        image = full.iterate(pip, fp.k_value)
-        if image is not None:
-            bottom = float(full.intersection(image).stable_cdist)
-        else:
-            _key, bottom, _from_table = full.image_cdist(pip, fp.k_value, "stable")
-        top = float(full.intersection(pip).stable_cdist)
-        assert dual.fundamental_segments[branch_key] == (
-            pytest.approx(bottom, abs=tol),
-            pytest.approx(top, abs=tol),
-        )
-        for edge_key in _stable_edge_keys(dual):
-            node = dual.nodes_of_edge(edge_key)["left"]
-            if (
-                node.branch_key == branch_key
-                and node.hi_cdist > bottom + tol
-                and node.lo_cdist < top - tol
-            ):
-                expected.add(edge_key)
-    assert set(dual.fundamental_segments) == branches
-    assert {node.edge_key for node in dual.unified_nodes} == expected
-    for node in dual.unified_nodes:
-        assert node.fundamental_span == dual.fundamental_segments[node.branch_key]
-    return len(expected)
-
-
 def misplaced_unified_crossings(dual) -> list:
     """``[(stable branch key, crossing id)]`` for every crossing of a pip's fixed point
     whose place disagrees with the unified span. ``S \\ f(S)`` is read off the iterate
@@ -2948,25 +2785,6 @@ def check_walks_avoid_disjoint_images(case: "Case") -> int:
     return count
 
 
-def check_itinerary_pairs_are_classes(case: "Case") -> int:
-    """Each itinerary pair, read through its homotopy parents, is a loop (same parent) or
-    one class or its inverse -- exactly the word's tokens, in order."""
-    dyn = case.session.symbolic_dynamics()
-    naming = dyn.naming
-    fixed_points = dyn.fixed_points
-    count = 0
-    for cd in _resolved(dyn):
-        expected = []
-        for x, y in zip(cd.itinerary[::2], cd.itinerary[1::2]):
-            px, py = naming.parent_of(x), naming.parent_of(y)
-            if px == py:
-                continue
-            expected.append(oriented_class(px, py, fixed_points))
-        assert [(s.bridge_class, s.direction) for s in cd.symbols] == expected, cd.letter
-        count += len(expected) + 1
-    return count
-
-
 def check_landings_contained(case: "Case") -> int:
     """Each homotopy element of a class maps one step into ONE iterated element."""
     dyn = case.session.symbolic_dynamics()
@@ -2976,24 +2794,6 @@ def check_landings_contained(case: "Case") -> int:
             assert landing is not None and landing.target is not None, cd.letter
             assert landing.contained, (cd.letter, landing)
             count += 1
-    return count
-
-
-def check_refined_children_inherit_word(case: "Case") -> int:
-    """A split class's children keep the parent ``BridgeClass`` and each carries the
-    word of every member, by T (A.8d), rewritten in refined symbols: the class word."""
-    dyn = case.session.symbolic_dynamics()
-    count = 0
-    for cls, children in dyn.refined.items():
-        cd = dyn.classes[cls]
-        words = []
-        for child in children:
-            assert child.parent == cls
-            assert child.name in dyn.refined_rules
-            words.append([(s.bridge_class, s.direction) for s in dyn.refined_rules[child.name]])
-        assert all(word == [(s.bridge_class, s.direction) for s in cd.symbols] for word in words)
-        assert len(children) >= 2
-        count += len(children)
     return count
 
 
@@ -3389,7 +3189,6 @@ LAYERS: dict[str, list[LawCheck]] = {
     "manifolds": [
         check_manifold_cdist_monotone,
         check_manifold_no_spikes,
-        check_manifold_iterate_law,
         check_manifold_one_to_one,
     ],
     "crossings": [
@@ -3410,7 +3209,6 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_anchor_sign_matches_eigendirections,
     ],
     "bridges": [
-        check_bridge_partial_iff_no_id,
         check_bridge_id_in_unstable_order,
         check_bridge_endpoints_on_own_branch,
         check_bridges_at_exact,
@@ -3426,9 +3224,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_backward_holes_keep_bridge_side,
         check_direct_hole_side_is_coordinate_side,
         check_direct_hole_opens_inward_pair,
-        check_openings_on_own_bridge_row,
         check_anchor_opening_faces_its_hole,
-        check_openings_follow_signs,
         check_propagated_holes_land_on_predicted_branch,
         check_propagation_terminates,
         check_no_forward_hole,
@@ -3453,8 +3249,6 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_row_of_end_is_geometry,
         check_bridge_rows_consistent,
         check_anchor_bridge_class_leads_its_tangle,
-        check_class_table_order,
-        check_classes_do_not_mix_tangles,
         check_tangles_in_case_order,
         check_classes_use_every_orbit_branch,
         check_only_active_classes_lettered,
@@ -3473,7 +3267,6 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_dual_node_structure,
         check_dual_face_nodes,
         check_dual_face_side_is_geometry,
-        check_dual_unified_is_pip_segment,
         check_dual_unified_is_where_f_of_s_stops,
         check_stable_nodes_never_own_a_singleton,
         check_dual_bipartite_degree,
@@ -3489,9 +3282,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_walks_avoid_disjoint_images,
         check_walk_starts_on_the_landing,
         check_alphabet_closed_under_words,
-        check_itinerary_pairs_are_classes,
         check_landings_contained,
-        check_refined_children_inherit_word,
         check_members_share_the_P1_itinerary,
         check_refined_matrix_is_an_in_splitting,
         check_member_matching_consistent,

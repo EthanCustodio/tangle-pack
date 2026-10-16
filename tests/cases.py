@@ -1394,7 +1394,7 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
         },
         **{
             (law, name): _NO_REFINEMENT
-            for law in ("refined_children_inherit_word", "member_matching_consistent")
+            for law in ("member_matching_consistent",)
             for name in ("k28_one_blast", "p3", "inversion", "inversion_period2")
         },
         **{

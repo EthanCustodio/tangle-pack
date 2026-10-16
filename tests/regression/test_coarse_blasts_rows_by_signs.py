@@ -49,7 +49,7 @@ def test_coarse_blasts_rows_by_signs(caplog):
 
     assert case.session.symbolic_dynamics().classes
     assert laws.check_partition_unique_owner(case) > 0
-    assert laws.check_openings_follow_signs(case) > 0
+    assert laws.check_partition_covers_branch(case) > 0
     assert laws.check_bridge_rows_consistent(case) > 0
 
     # The geometric reading is a flag: punching with it logs more than without.

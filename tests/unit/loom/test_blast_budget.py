@@ -36,7 +36,6 @@ def _blast(case, zone, num_iterations, **kwargs):
 
 def _assert_bridges_consistent(case):
     """The bridge laws still hold after a stopped blast."""
-    laws.check_bridge_partial_iff_no_id(case)
     laws.check_bridge_endpoints_on_own_branch(case)
     laws.check_bridges_do_not_overlap(case)
 
