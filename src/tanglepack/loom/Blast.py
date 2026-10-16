@@ -8,11 +8,11 @@ bridges at its new crossings with the stable manifold), then keeps only the chil
 whose innermost zone is *still* this one. Those survivors are the next step's input, so
 the process recurses up to ``num_iterations`` times.
 
-Zones nest (C4, WP9): a bridge belongs to the smallest zone containing its midpoint
+Zones nest: a bridge belongs to the smallest zone containing its midpoint
 (:meth:`TangleSession.classify_bridge`), so an outer zone's blast never iterates a
 bridge inside a smaller zone of another fixed point stored on the session, and nested
 blasting does not depend on the order of the zones. The blasted zone itself need not
-be stored (:func:`define_resonance_zone`, a handle the session has since replaced). With ``fixed_point=None`` an outer blast still iterates an inner tangle's bridges
+be stored (:func:`define_resonance_zone`, or a replaced handle). With ``fixed_point=None`` an outer blast still iterates an inner tangle's bridges
 lying in the annulus between the two zones: they are the outer zone's bridges. The
 recipes pass the zone's own fixed point, which leaves them alone.
 
@@ -22,9 +22,8 @@ iterate, so iterating an *exterior* bridge many times would blow up exponentiall
 zone interior is the only region where iterating many times stays bounded, and is the
 intended use of this feature.
 
-A bridge whose forward map fails aborts the blast (NUM-10, WP10): every such
-failure is a bug, and the "rare under-resolved iterate" once tolerated here was
-NUM-9.
+A bridge whose forward map fails aborts the blast: every such
+failure is a bug.
 
 Memory is budgeted at two levels. The machine's per-call cap
 (``max_points_per_step``) is always on and RAISES
@@ -236,17 +235,17 @@ def blast_zone(
             child this close re-traces existing curve and is about to merge into
             a numerical artifact; stopping there keeps the blast on the
             well-resolved side of the precision limit. A child ending on the
-            orbit of a selected fixed point's chosen pip is exempt (N-a, Q2,
-            2026-10-09) and logged at INFO, so the guard never decides the depth
+            orbit of a selected fixed point's chosen pip is exempt and logged
+            at INFO, so the guard never decides the depth
             of ``T(q0)``: that is decided by whether ``f^{m+1}(q0)`` is detected
-            and resolved (A.4). ``None`` (default) disables the guard.
+            and resolved (design note §A.4). ``None`` (default) disables the guard.
         diagnose: If True (default) finish with ONE
             :meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.report_resolution`
             pass over the blasted fixed points: deep blasting is where
             under-resolved crossings and same-stability polyline crossings
             appear, and ``iterate_bridge`` never passes through
             ``compute_intersections``. Its same-stability part only COUNTS the
-            hits of the bridges this blast added (C5). It logs on the workbench's
+            hits of the bridges this blast added. It logs on the workbench's
             logger, never on this module's.
         max_points: Opt-in point budget of the whole blast (points its new
             bridges hold). Checked BETWEEN iterations: the blast stops, without
@@ -290,7 +289,7 @@ def blast_zone(
             "session.resonance_zone()/add_resonance_zones() before blasting."
         )
 
-    # C4: a bridge belongs to its INNERMOST zone. The blasted zone need not be
+    # A bridge belongs to its INNERMOST zone. The blasted zone need not be
     # stored (define_resonance_zone, a replaced handle), so it is compared with
     # the stored zones of the OTHER fixed points rather than looked up.
     inner_zones = [
@@ -412,7 +411,7 @@ def blast_zone(
 
             produced.extend(children)
 
-        # N-a: iterating the bridge ending at f^m(q0) linked f^{m+1}(q0), so the
+        # Iterating the bridge ending at f^m(q0) linked f^{m+1}(q0), so the
         # orbit read now marks every child ending on it.
         orbit = {
             x: (fp, n)
@@ -504,7 +503,7 @@ def blast_zone(
         )
         frontier = kept
 
-    # The table is exact after every blast (BCG-3, WP2): a crossing born early in
+    # The table is exact after every blast: a crossing born early in
     # the blast may only now have its image registered.
     workbench.infer_iterates()
     result.pip_depth = {

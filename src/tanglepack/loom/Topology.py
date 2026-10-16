@@ -4,8 +4,8 @@ state and one strong-pip choice.
 
 Dev Notes:
 
-* Why it exists (SIMP-8, WP8). Topology is a pure function of the numerical
-  state and the pip choice (D1), so the session holds ONE result per
+* Why it exists (design note §A.10). Topology is a pure function of the
+  numerical state and the pip choice, so the session holds ONE result per
   ``(generation, fixed points, pips)``
   (:meth:`~tanglepack.loom.TangleSession.TangleSession.topology`) instead of a
   hand-rolled cache per stage keyed on a partition signature. Stages 3-6
@@ -14,20 +14,20 @@ Dev Notes:
   minimal trellis, iterated partition, dual graph, words) are lazy and
   computed once.
 * Partitions, holes and pips come from the SELECTED fixed points only
-  (API-2), and every stable branch of the selection is partitioned, so the
-  old "branch missing a partition" WARNING is gone: a heteroclinic bridge's
+  and every stable branch of the selection is partitioned, so no branch
+  misses a partition: a heteroclinic bridge's
   class needs both its fixed points selected, and ``bridge_classes`` raises
   naming the end it cannot resolve otherwise (``henon_cases.build_heteroclinic``
   is the first such case).
-* The selection's trellis is cut at every selected pip's orbit (D10, D12) by
+* The selection's trellis is cut at every selected pip's orbit by
   ``TangleSession.trellis`` itself: a per-fixed-point trellis when its pip is
   set, a selection of several at its fixed points' pips on every read. Stage 3
   (the pip) runs first on each fixed point's own trellis, so a default pip is
   chosen before the selection is read. A class member may be a joined arc of
   the cut, which the workbench does not hold, so bridges are resolved through
   the trellis (``bridge_between``).
-* Stages 4-6 run on the SELECTION's trellis (WP9): a heteroclinic pair of
-  ``W^u(A)`` crossings on B's stable branch is a pair of B (D7) only on a
+* Stages 4-6 run on the SELECTION's trellis: a heteroclinic pair of
+  ``W^u(A)`` crossings on B's stable branch is a pair of B only on a
   trellis holding both tangles, and its backward chain runs into A's bridges.
   So heteroclinic pairs and their holes exist only when both tangles are
   selected, ``topology()`` and ``topology(fp)`` differ exactly where they do,
@@ -36,7 +36,7 @@ Dev Notes:
   point the selection's trellis IS its trellis.
 * Letters follow :meth:`Topology.identity`, the pair of the bounding crossings
   of a class's two elements, so a class keeps its letter across recomputes
-  while its elements keep their bounds (C2, BCG-7). Element NAMES
+  while its elements keep their bounds. Element NAMES
   (``R_(o.b;i)``) stay positional.
 """
 
@@ -70,7 +70,7 @@ logger.addHandler(logging.NullHandler())
 
 class Topology:
     """
-    Stages 3-9 of the chalkboard for one numerical state and pip choice (D1).
+    Stages 3-9 of the chalkboard for one numerical state and pip choice.
 
     Attributes:
         generation: The workbench generation it was computed at.
@@ -142,7 +142,7 @@ class Topology:
 
     @cached_property
     def _alphabet(self) -> BridgeClassTable:
-        """The minimal trellis's classes (D2), zoned, before the dynamics' verdicts."""
+        """The minimal trellis's classes, zoned, before the dynamics' verdicts."""
         table = self.minimal.alphabet
         for entry in table:
             entry.zone_key = self._zone_key(entry)
@@ -150,9 +150,9 @@ class Topology:
 
     @property
     def classes(self) -> BridgeClassTable:
-        """The ALPHABET (D2), every class zoned, with the dynamics' verdicts and the
+        """The ALPHABET, every class zoned, with the dynamics' verdicts and the
         active ones lettered by :meth:`identity` from the session alphabet: inertness
-        is transience in the word graph (Q3), so this runs the dynamics."""
+        is transience in the word graph, so this runs the dynamics."""
         self.dynamics
         return self._alphabet
 
@@ -191,7 +191,7 @@ class Topology:
 
     def identity(self, bridge_class: BridgeClass) -> frozenset:
         """
-        A class across recomputes: the identities of its two elements (C2).
+        A class across recomputes: the identities of its two elements.
 
         Args:
             bridge_class: A class of this topology (its refs name homotopy

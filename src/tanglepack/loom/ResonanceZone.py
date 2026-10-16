@@ -37,15 +37,15 @@ which carry the canonical distances and branch keys and are stable across
 recomputes, and the primary pip's id is resolved against the live registry on
 demand by ``resolve_boundary_intersection_id``.
 
-A trim is a view, not a state (C22). Growing the stable manifold re-finds every
+A trim is a view, not a state. Growing the stable manifold re-finds every
 branch's physical end, so it un-trims the zone: ``trim_stable_manifolds`` trims at
 the outermost crossing, and a trim that survived growth would hide every crossing
-the growth was meant to discover (D1). The topology never depends on the trim,
-since the trellis is cut at the pip orbit (D10); :meth:`ResonanceZone.restore`
+the growth was meant to discover. The topology never depends on the trim,
+since the trellis is cut at the pip orbit; :meth:`ResonanceZone.restore`
 never shortens a branch that growth has already run past. A zone that re-trims
-itself after growth is API work (the D8 plan).
+itself after growth is API work for a later plan.
 
-One zone per fixed point (C8): an inversion chain's two branches bound ONE zone,
+One zone per fixed point: an inversion chain's two branches bound ONE zone,
 keyed by the fixed point (:attr:`ResonanceZone.key`).
 """
 
@@ -129,7 +129,7 @@ class ResonanceZone:
 
     @property
     def key(self) -> "FixedPoint":
-        """Storage key: the fixed point -- one zone per fixed point (C8).
+        """Storage key: the fixed point -- one zone per fixed point.
 
         An inversion point's two branches are one chain, and its zone is the
         union of the two loops through the periodic point (:func:`ring_cycles`).
@@ -342,7 +342,7 @@ class ResonanceZone:
                 points and rebuild the bridges so both reflect the restored manifolds.
 
         Note:
-            A restore never shortens a branch (C22). Stable growth after the trim
+            A restore never shortens a branch. Stable growth after the trim
             re-finds every branch's physical end (:meth:`TangleWorkbench.grow_n_times`),
             so the trim is already undone on a grown branch and it is left as is.
 
@@ -359,7 +359,7 @@ class ResonanceZone:
             raise ValueError("Resonance zone has no captured tails to restore.")
         for key, tail in self.previous_tails.items():
             manifold = workbench.manifolds[key]
-            # Stable growth since the trim re-found the physical end (C22): the trim
+            # Stable growth since the trim re-found the physical end: the trim
             # is already undone there, and restoring would cut the grown branch back.
             if tail.get_cdist("stable") > manifold.tail.get_cdist("stable"):
                 manifold.tail = tail
@@ -387,7 +387,7 @@ def ring_cycles(cuts: list[Intersection]) -> list[list[int]]:
     to that branch's periodic point, then out along ``u(o, b)`` -- the same
     orbit point AND branch index -- to the cut on that unstable branch. A
     period-k orbit closes one cycle through all its cuts; an inversion point
-    closes one loop per branch pair, both through the same point (D4).
+    closes one loop per branch pair, both through the same point.
 
     Args:
         cuts: The zone's cut crossings (:attr:`ResonanceZone.boundary_intersections`).

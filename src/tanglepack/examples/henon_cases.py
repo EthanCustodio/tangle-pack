@@ -29,45 +29,43 @@ Dev Notes:
   image is already a hole bridge on the next branch (``a -> b -> c -> a u^-1
   w^-1``), so the minimal trellis has no image bridges. At 6 blasts (or at 15
   unstable steps) deep crossings fold onto the fundamental window and the
-  reference pair switches (BCG-4, a discovery under D1): 12 -> 42 holes, and
-  the alphabet plateaus at 25 classes from 8 blasts (re-measured to 20 blasts,
-  WP12), every class walks and the runs are reliable. A pair no computed
-  bridge spans is a class of its own, flagged "no computed bridge yet" (D11).
+  reference pair switches (a discovery, not a bug): 12 -> 42 holes, and
+  the alphabet plateaus at 25 classes from 8 blasts (measured to 20 blasts),
+  every class walks and the runs are reliable. A pair no computed
+  bridge spans is a class of its own, flagged "no computed bridge yet".
   The default stays at 13 steps, unblasted. Every period-3 build has its own
   figure folder (:func:`_period3_slug`).
-* Each nested zone blasts only its own fixed point (2026-10-02): blasting
-  both from either zone also iterated the other tangle's bridges, made the
-  result depend on blast order and collapsed the period-3 pseudoneighbors at
-  6 or more outer blasts.
+* Each nested zone blasts only its own fixed point: blasting both from
+  either zone would iterate the other tangle's bridges, make the result
+  depend on blast order and collapse the period-3 pseudoneighbors at 6 or
+  more outer blasts.
 * The nested case's outer zone is blasted twice (the k=2.8 recipe): with no
   blast the outer class ``e`` is unresolved (a singleton landing with no
   registered chain); after two blasts every class resolves and the outer
   classes reproduce the k=2.8 two-blast words, with real (``unique``) walks.
-* Construction order is OUTERMOST first (NEST-6, WP9): the period-1 saddle is
+* Construction order is OUTERMOST first: the period-1 saddle is
   constructed first, so it is ``A`` and tangle 0 of the session, matching
   ``TangleBuild.fixed_points``; the orbits are still grown period 3 first, each
   at its own ``area_cutoff``, so the session ends at period 1's.
-* The heteroclinic recipe (:func:`build_heteroclinic`, WP9; scan of
-  ``build_nested`` on 2026-10-08): period 3 at 13-15 unstable steps (any stable
+* The heteroclinic recipe (:func:`build_heteroclinic`; a scan of
+  ``build_nested``): period 3 at 13-15 unstable steps (any stable
   growth 9-12) has NO heteroclinic crossing; at 16 unstable steps it has four
   ``W^u(p3) x W^s(p1)`` crossings (0.6-0.8 s), two inside both pip-orbit cuts
-  (the other two past p3's unstable cut: points of X). 16 / 10 was chosen while
-  the law ``dual_face_side_is_geometry`` was a half-plane test that failed at
-  16 / 9 and 16 / 12 (WP10 made it a local probe, which passes there); it is
-  kept. 17 / 9 has 22 heteroclinic crossings but builds in 34 s; 13 / 15 has
-  seven ``W^u(p1) x W^s(p3)`` crossings, two of them on one unstable segment,
-  which cut a bridge past its own end until WP10 bracketed the cut (it builds
-  now; its iterate links fail the beta and area laws, NUM-20). None of the four
+  (the other two past p3's unstable cut: points of X). 16 / 10 is kept: it passes
+  the law ``dual_face_side_is_geometry`` in every form the law has had (a
+  half-plane test failed at 16 / 9 and 16 / 12). 17 / 9 has 22 heteroclinic crossings but builds in 34 s; 13 / 15 has
+  seven ``W^u(p1) x W^s(p3)`` crossings, two of them on one unstable segment
+  (it builds; its iterate links fail the beta and area laws). None of the four
   crossings has an iterate link (the preimage lies past p1's stable trim, the
-  image past p3's unstable cut: escape-lobe images, WP10).
+  image past p3's unstable cut: escape-lobe images).
 * The inversion recipe is the law cases' (``tests/cases.build_inversion``):
   11 unstable and 11 stable steps at ``area_cutoff = 1e-5`` (step 12 escapes
   into the point budget), no ``orient_eigenvectors`` (the solver's
   eigenvectors pick branch 0), the zone at ``f(q0)``; the blasts' separation
   is 1e-5. Its class count drops at 6 blasts by a genuine reference switch
-  (BCG-8, DEC-25, open).
+  (open).
 * The pips are the default strong pips, never pinned by id. The session
-  carries them across every blast (API-1, WP8): a zone remembers the pip it
+  carries them across every blast: a zone remembers the pip it
   was cut at, and each recompute finds it again by its cdists and keys.
 """
 

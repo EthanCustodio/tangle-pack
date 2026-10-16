@@ -119,13 +119,13 @@ class TangleSession:
         self._trellises: dict[frozenset, Trellis] = {}
         self._topologies: dict[frozenset, Topology] = {}
         # The chosen strong pip of each fixed point, carried across generations
-        # as a crossing (its cdists and keys), never as an id (API-1).
+        # as a crossing (its cdists and keys), never as an id.
         self._strong_pips: dict["FixedPoint", "Intersection"] = {}
         # The letters of the bridge classes seen so far, keyed by class identity
         # (Topology.identity). Outlives every recompute so a class keeps its
         # letter across growth and blasts and a new class takes the next one.
         self.bridge_alphabet = BridgeAlphabet()
-        # One resonance zone per fixed point (C8): an inversion point's zone is the
+        # One resonance zone per fixed point: an inversion point's zone is the
         # union of its two loops. Insertion order is preserved so plotting/shading
         # is deterministic.
         self.resonance_zones: dict["FixedPoint", ResonanceZone] = {}
@@ -207,16 +207,16 @@ class TangleSession:
         the same registry, a re-cut, a trim, a resonance zone or its restore —
         advances that counter, so the cached snapshot is dropped and rebuilt on
         the next call. No caller has to invalidate by hand. A rebuilt
-        single-fixed-point trellis gets its fixed point's chosen strong pip back
-        (API-1): the remembered pip is found again by its cdists and keys and
-        tested alone (the other candidates are classified only when read, WP10);
+        single-fixed-point trellis gets its fixed point's chosen strong pip back:
+        the remembered pip is found again by its cdists and keys and
+        tested alone (the other candidates are classified only when read);
         a pip that is no longer a candidate is left unset with a WARNING. Once
         a pip is chosen the trellis is cut at its orbit
-        (``Trellis.cut_at_pip_orbit``, D10, D12): a single fixed point's when
+        (``Trellis.cut_at_pip_orbit``): a single fixed point's when
         the pip is set or restored, a selection of several at the pips of its
         fixed points on every read (a no-op while they are unchanged), so the
         snapshot is a function of the generation and the pips alone, never of
-        which product ran first (D1). A trellis holds a crossing only when both
+        which product ran first. A trellis holds a crossing only when both
         its branches are selected: a fixed point's own trellis holds no
         heteroclinic crossing (its arcs are joined across them), the
         selection's holds them.
@@ -283,7 +283,7 @@ class TangleSession:
         rebuild: bool = False,
     ) -> Topology:
         """
-        The topology of a selection: stages 3-9 of the chalkboard, recomputed (D1).
+        The topology of a selection: stages 3-9 of the chalkboard, recomputed.
 
         One :class:`~tanglepack.loom.Topology.Topology` per selection, rebuilt
         when the workbench generation or the selection's strong pips change:
@@ -302,7 +302,7 @@ class TangleSession:
             fixed_points: A single FixedPoint, an iterable of them, or None (the
                 default) for all of them. Partitions, holes and pips come from
                 the selection only, so a heteroclinic bridge needs both its
-                fixed points selected, and so does a heteroclinic pair (D7: a
+                fixed points selected, and so does a heteroclinic pair (a
                 pair of ``W^u(A)`` crossings on B's stable branch, holed in B's
                 partition, its backward chain holing A's).
             rebuild: Force a recompute at the same state.
@@ -335,13 +335,13 @@ class TangleSession:
         """
         The ALPHABET of a selection: its minimal trellis's classes, lettered and zoned.
 
-        A stage of :meth:`topology`. D2: the alphabet is the classes of the
+        A stage of :meth:`topology`. The alphabet is the classes of the
         minimal trellis's ``kept_bridge_ids``; ``minimal_trellis().classes``
         holds every bridge's class (the evidence table, see
         :func:`tanglepack.topology.BridgeClass.bridge_classes` for the class
         semantics). Every ACTIVE class gets its letter from
         :attr:`bridge_alphabet` by its identity (the bounding crossings of its
-        two elements, C2): a class seen before keeps its letter across
+        two elements): a class seen before keeps its letter across
         recomputes, a new one takes the next unused, inert classes stay
         unlettered. Every class records the resonance zone its member bridges
         lie in (:meth:`classify_bridge`, unanimous over the members, else a
@@ -559,7 +559,7 @@ class TangleSession:
         crossings. A fixed point whose pip was chosen before gets it back, or
         is left without one (one WARNING) when it is no longer a candidate:
         a chosen pip is never replaced by the default. Otherwise the default
-        choice is remembered (API-1).
+        choice is remembered.
 
         Args:
             fixed_point: A single FixedPoint (→ returns that fixed point's candidate
@@ -592,7 +592,7 @@ class TangleSession:
     def _restore_strong_pip(self, trellis: Trellis, *, warn: bool = True) -> None:
         """Choose the remembered pip on a single-fixed-point trellis, leaving it
         unset (with a WARNING when ``warn``) if it is no longer a candidate. Only
-        that crossing is tested (F7): the candidates stay unclassified until read."""
+        that crossing is tested: the candidates stay unclassified until read."""
         (fixed_point,) = trellis.fixed_points
         chosen = self._strong_pips[fixed_point]
         pip = trellis.registry.find(chosen)
@@ -618,7 +618,7 @@ class TangleSession:
     def forget_strong_pip(self, fixed_point: "FixedPoint") -> None:
         """Drop the pip chosen for ``fixed_point``: its trellis is uncut and the
         next :meth:`topology` chooses the default again. The remedy for a pip
-        that is no longer a candidate (B8)."""
+        that is no longer a candidate."""
         self._strong_pips.pop(fixed_point, None)
         self.trellis(fixed_point).strong_pip = None
 
@@ -652,7 +652,7 @@ class TangleSession:
         different fixed point does not overwrite it. The zone's pip becomes
         that fixed point's chosen strong pip (the zone is cut at it) when it is
         a strong-pip candidate on the trimmed trellis; otherwise the zone is
-        still stored, the previous choice stays and a WARNING says so (B8).
+        still stored, the previous choice stays and a WARNING says so.
         Trims are cumulative (each sets a manifold's tail), so building zones for
         several fixed points nests correctly — the inner zone ends up a subset of the
         outer one. A recompute advances the workbench generation, so any cached
@@ -789,7 +789,7 @@ class TangleSession:
         Repeatedly iterate the bridges inside a resonance zone.
 
         Each step maps every un-iterated bridge whose INNERMOST zone is this one
-        (:meth:`classify_bridge`, C4) forward (cutting the image into child bridges
+        (:meth:`classify_bridge`) forward (cutting the image into child bridges
         at its new stable-manifold crossings) and keeps the children that land back
         in it, recursing up to ``num_iterations`` times. An outer zone's blast never
         iterates a bridge inside a smaller stored zone of another fixed point (the
@@ -827,7 +827,7 @@ class TangleSession:
             re-establish its strong pip) before continuing topological work.
 
         Note:
-            Any failure of one bridge's image propagates (NUM-10). A
+            Any failure of one bridge's image propagates. A
             :class:`~tanglepack.numerics.budget.PointBudgetExceeded` leaves the
             session not resumable; rebuild it.
         """

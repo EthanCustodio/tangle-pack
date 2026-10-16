@@ -13,17 +13,17 @@ Dev Notes:
   :attr:`~tanglepack.topology.TopologyResults.PartitionInterval.identity`
   (their bounding crossings; ``loom.Topology.identity``), never by the
   ``BridgeClass`` object: an ``ElementRef``'s ``element_id`` is positional,
-  so a new hole renumbered every element after it and re-lettered classes
-  that had not changed (BCG-7). A class keeps its letter while its two
-  elements keep their bounding crossings (C2, WP8). Any hashable works.
+  so a new hole renumbers every element after it and would re-letter
+  classes that had not changed. A class keeps its letter while its two
+  elements keep their bounding crossings. Any hashable works.
 * Letters run ``a``..``t`` then ``aa``, ``ab``, ... (the active series of
   :func:`~tanglepack.topology.SymbolicDynamics.letter`), so ``a`` and ``aa``
   never collide with a refined symbol such as ``a_1``.
 * This alphabet letters ACTIVE classes only, and only the alphabet's (the
-  minimal trellis's classes, D2). Inert classes take the disjoint series
+  minimal trellis's classes). Inert classes take the disjoint series
   ``u..z, uu, ...`` from ``topology/SymbolicDynamics.inert_letters``: the two
   series share one generator over disjoint digits, so they never collide and
-  nothing is skipped (SIMP-6, WP6).
+  nothing is skipped.
 """
 
 from __future__ import annotations
