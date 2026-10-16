@@ -12,13 +12,13 @@ and forwards the four public methods to it, so no caller changes.
 
 Dev Notes:
 
-Cutting an iterated bridge (plan row 2.2) only ever cuts at the crossings just
+Cutting an iterated bridge only ever cuts at the crossings just
 born on that image -- the ones whose ``unstable_manifold`` IS the image. A crossing
 found on an edge the image SHARES with an already-indexed curve is registered but
 not cut at here, because its bracketing points lie on the other curve; the cut that
 uses it is the one made on that curve. Widening the cut set to every crossing whose
-cdist falls in the image's span would reintroduce the cross-curve bridges plan row
-1.1 removed, so it must not be done without a per-curve span test.
+cdist falls in the image's span would cut bridges across two curves (a bridge is
+an arc of ONE curve), so it must not be done without a per-curve span test.
 
 Every image curve is computed manifold: the workbench keeps it
 in ``_image_curves``, every ``compute_intersections`` re-indexes it query-only (as
@@ -40,8 +40,8 @@ keep in mind:
 * ``image_bridges`` can therefore lose a mid-arc leading/trailing piece of an
   image, so the derived frontier is the bridges of the image, not the whole image.
 
-Both are by definition, not a gap to be papered over with a cdist-only signature --
-that guesswork is exactly what plan row 2.2 removed.
+Both are by definition, not a gap to be papered over with a cdist-only signature:
+genealogy is read off the exact bridge ids, never guessed from cdists.
 """
 
 from __future__ import annotations

@@ -231,9 +231,9 @@ class FixedPointSolver:
 
         Raises:
             ValueError: If MINPACK reports anything other than convergence
-                (``ier != 1``); the message carries MINPACK's own diagnosis. The
-                old behaviour was to return the non-converged vector silently,
-                which produced a "fixed point" that is not on any orbit.
+                (``ier != 1``); the message carries MINPACK's own diagnosis.
+                Returning the non-converged vector would give a "fixed point"
+                that is not on any orbit.
         """
 
         initial_guess_flattened = self.flatten_trajectory(initial_guess)

@@ -628,8 +628,8 @@ class ManifoldMachine:
 
         Note:
             The per-pair decision depends only on local geometry and preiterates,
-            so the breadth-first traversal reaches the same ``area < cutoff``
-            stopping condition as the old depth-first scheme.
+            so the traversal order does not matter: breadth-first reaches the
+            same ``area < cutoff`` stopping condition as any other order.
         """
         logger.debug("Refining manifold: %r", manifold.get_point_array())
 
@@ -697,9 +697,9 @@ class ManifoldMachine:
         stability = manifold.stability
 
         # Gather node references and per-pair geometry, dropping pairs that are
-        # degenerate or missing the data needed to refine (mirrors the old
-        # per-pair guards: dead endpoints, near-coincident points, and missing
-        # preiterates on bridge boundary points).
+        # degenerate or missing the data needed to refine (dead endpoints,
+        # near-coincident points, and missing preiterates on bridge boundary
+        # points).
         p0_nodes, p1_nodes = [], []
         p0_xy, p1_xy, left_xy, right_xy = [], [], [], []
         pre_mid, c0_list, c1_list = [], [], []

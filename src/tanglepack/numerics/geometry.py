@@ -2,14 +2,11 @@
 
 Dev Notes:
 
-Before this module the same four operations existed in three places: the
-resonance-zone boundary closure walked a manifold between two canonical
-distances, :func:`topology.StablePartition._build_oriented_bridge_polyline`
-normalized a bridge's storage order against its dynamical direction,
-``ResonanceZone.area`` inlined a shoelace sum, and ``ResonanceZone.contains_point``
-inlined an even-odd ray cast. Each copy had its own tolerance and its own
-end-inclusion convention. They live here now as pure functions on plain arrays,
-so a Region, a resonance zone and a partition midpoint all measure the same way.
+Four operations live here as pure functions on plain arrays (walking a manifold
+between two canonical distances, orienting a bridge polyline along its dynamical
+direction, the shoelace area, the even-odd point test), with one tolerance and one
+end-inclusion convention, so a Region, a resonance zone and a partition midpoint
+all measure the same way.
 
 Two conventions are fixed here and relied on everywhere downstream:
 

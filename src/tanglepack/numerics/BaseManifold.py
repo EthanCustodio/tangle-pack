@@ -13,11 +13,10 @@ Include return type hints including hints like Union[np.ndarray, list[Point]]
 The five array getters are one walk: :meth:`BaseManifold._collect` takes the
 node filter (all / iterated / non-iterated), what to read off each node (point
 or cdist), and whether to stop at the tail; every public getter is a thin
-wrapper over it. The old string-dispatched ``_iter_method`` /
-``getattr(node, "exists_next_iterate")`` trick is gone -- ``_has_iterate`` and
-``_iterate_of`` branch on the stability directly.
+wrapper over it. ``_has_iterate`` and ``_iterate_of`` branch on the stability
+directly.
 
-Versioning and the point-array memo (Phase 4): every manifold carries a
+Versioning and the point-array memo: every manifold carries a
 ``_version`` bumped by :meth:`bump_version` and by the ``root``/``tail``
 setters, and :attr:`TangleWorkbench.generation` sums those versions, so a
 retrim or a regrow invalidates every derived cache. The point-array memo built

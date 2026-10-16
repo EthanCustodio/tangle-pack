@@ -407,8 +407,8 @@ class TangleWorkbench:
             counts observed changes, not mutations.
 
         Note:
-            This is orthogonal to ``_registry_id_epoch`` / ``_bridge_id_epoch``
-            (Phase 3), which answer a different question: whether registry ids
+            This is orthogonal to ``_registry_id_epoch`` / ``_bridge_id_epoch``,
+            which answer a different question: whether registry ids
             still NAME the same crossings. Adding a crossing changes the
             generation but preserves every existing id, so the epochs stay put;
             a renumbering recompute moves both. Staleness reads the generation,
@@ -643,8 +643,8 @@ class TangleWorkbench:
             and with :attr:`escape_radius` set a step reaching it warns too.
             Prefer the stop-condition drivers (:meth:`grow_until_bounded`,
             :meth:`grow_until_turnaround`, :meth:`grow_until`). At the default
-            :attr:`area_cutoff` (1e-7) a step makes ~10x the points it made at
-            the old 1e-4, so a count tuned at 1e-4 can now run into the budget
+            :attr:`area_cutoff` (1e-7) a step makes ~10x the points it makes at
+            1e-4, so a step count tuned at 1e-4 can run into the budget
             (k=10: 11 steps at 1e-7 is ~2e7 points).
 
             One iteration stretches a branch by ``per_step_beta("unstable")``

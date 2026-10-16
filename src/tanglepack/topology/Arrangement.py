@@ -53,8 +53,8 @@ node has a one-element rotation, so ``next`` of the edge into it is the edge bac
 out: the traversal reflects off the dangling end and carries on, exactly as a face
 must wrap around a slit. Any face that picks up such a half-edge is bounded partly
 by "we have not computed this far", not by manifold, so it is **open** and is not a
-region. Growing the manifolds closes some of them; that is what the Phase 7 growth
-driver is for.
+region. Growing the manifolds closes some of them; that is what the
+``grow_until_*`` drivers are for.
 
 Disconnected trellises and faces that are not regions
 ----------------------------------------------------

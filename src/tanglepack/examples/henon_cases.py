@@ -12,7 +12,8 @@ figure scripts and the test fixtures so the two can never drift apart:
 and one on ``HENON_K4 = (4, 1)``:
 
 * :func:`build_inversion` -- the saddle with both eigenvalues negative, its
-  zone at ``f(q0)`` (the recipe of the inversion law cases).
+  zone at ``f(q0)`` (the recipe of the inversion law cases; why ``f(q0)``:
+  Dev Notes).
 
 All end at ``session.topology()`` (holes, partition, classes, minimal
 trellis, dual graph and words of every fixed point, from the pips the zones
@@ -27,11 +28,11 @@ Dev Notes:
   11 unstable steps and ``grow_until_turnaround`` on the stable side.
 * Period 3 at 13 steps is closed up to 5 blasts: every active hole bridge's
   image is already a hole bridge on the next branch (``a -> b -> c -> a u^-1
-  w^-1``), so the minimal trellis has no image bridges. At 6 blasts (or at 15
+  v^-1``), so the minimal trellis has no image bridges. At 6 blasts (or at 15
   unstable steps) deep crossings fold onto the fundamental window and the
-  reference pair switches (a discovery, not a bug): 12 -> 42 holes, and
-  the alphabet plateaus at 25 classes from 8 blasts (measured to 20 blasts),
-  every class walks and the runs are reliable. A pair no computed
+  reference pair switches (a discovery, not a bug): 8 -> 42 holes, and the
+  alphabet plateaus at 23 seed / 43 closed classes from 6 blasts (measured to
+  20 blasts), every class walks and the runs are reliable. A pair no computed
   bridge spans is a class of its own, flagged "no computed bridge yet".
   The default stays at 13 steps, unblasted. Every period-3 build has its own
   figure folder (:func:`_period3_slug`).
@@ -39,10 +40,12 @@ Dev Notes:
   either zone would iterate the other tangle's bridges, make the result
   depend on blast order and collapse the period-3 pseudoneighbors at 6 or
   more outer blasts.
-* The nested case's outer zone is blasted twice (the k=2.8 recipe): with no
-  blast the outer class ``e`` is unresolved (a singleton landing with no
-  registered chain); after two blasts every class resolves and the outer
-  classes reproduce the k=2.8 two-blast words, with real (``unique``) walks.
+* The nested case's outer zone is blasted twice (the k=2.8 recipe), chosen to
+  make the case closed: with no blast the outer class ``b`` is unresolved (a
+  singleton landing with no registered chain); one blast resolves it through
+  the trellis path; two blasts are the fewest at which every outer class
+  walks, and the outer classes reproduce the k=2.8 two-blast words with real
+  (``unique``) walks.
 * Construction order is OUTERMOST first: the period-1 saddle is
   constructed first, so it is ``A`` and tangle 0 of the session, matching
   ``TangleBuild.fixed_points``; the orbits are still grown period 3 first, each
@@ -64,6 +67,13 @@ Dev Notes:
   eigenvectors pick branch 0), the zone at ``f(q0)``; the blasts' separation
   is 1e-5. Its class count drops at 6 blasts by a genuine reference switch
   (open).
+* Why ``f(q0)`` and not ``q0`` (measured, not designed): on the k=2.8 and
+  k=3.2 recipes (``tests/cases.py``) the zone at ``f(q0)`` after n blasts has
+  the topology of the zone at ``q0`` after n-1 (holes, classes, words;
+  n = 1..3), so ``f(q0)`` costs one blast and keeps the unblasted
+  singleton-to-singleton case (the trellis path). On the inversion saddle this
+  holds for n = 1 only: its zone at ``q0`` after one blast already has 15
+  holes.
 * The pips are the default strong pips, never pinned by id. The session
   carries them across every blast: a zone remembers the pip it
   was cut at, and each recompute finds it again by its cdists and keys.

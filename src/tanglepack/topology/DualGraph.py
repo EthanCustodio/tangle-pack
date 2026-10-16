@@ -47,8 +47,8 @@ Dev Notes:
   ``hi -> lo`` runs in the stable dynamical direction, so ``reverse`` alone
   gives the side (:func:`face_side`, which reads an unstable arc the same way
   in ITS dynamical direction, ``lo -> hi``).
-* The fundamental segment is declared by the strong pip, exactly as the old
-  fill was: on the pip's own stable branch, the arcs meeting
+* The fundamental segment is declared by the strong pip: on the pip's own
+  stable branch, the arcs meeting
   ``(cdist(f^k(q0)), cdist(q0)]`` with ``k = k_value``, via
   :meth:`~tanglepack.topology.Trellis.Trellis.image_cdist`; nothing on any
   other branch. A straddling arc is unified and logged at INFO; no pip unifies

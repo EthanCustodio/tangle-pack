@@ -590,8 +590,8 @@ class Tangle:
         An edge that is already registered is NOT duplicated: the existing
         segment id is claimed by ``seg.manifold`` and returned. A bridge is cut
         out of a live manifold and so reuses that manifold's points; dropping
-        those edges (the old behaviour) left ``_manifold_segs[bridge]`` empty and
-        made every ``for_manifold=`` filter and segment lookup blind to it.
+        those edges would leave ``_manifold_segs[bridge]`` empty and make every
+        ``for_manifold=`` filter and segment lookup blind to it.
 
         Parameters:
             seg (_Segment): segment to be inserted
@@ -1014,8 +1014,8 @@ class Tangle:
         Interpolate the cdist of `seg`'s manifold at the true crossing `point`.
 
         Uses the fractional projection of `point` onto the segment, so two
-        crossings that share one segment receive distinct cdists (unlike the old
-        segment-midpoint value).
+        crossings that share one segment receive distinct cdists (a
+        segment-midpoint value would give them one).
         """
         return self._cdist_between(
             seg.p0, seg.p0_seg1, seg.manifold.stability, point

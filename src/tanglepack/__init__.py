@@ -10,7 +10,7 @@ The library is organized into three subpackages:
   results and act on the numerical layer (``TangleSession``, resonance zones).
 
 The most-used names from every layer are re-exported here, so ``tanglepack.X``
-keeps working regardless of which subpackage ``X`` now lives in.
+works without naming the subpackage ``X`` lives in.
 """
 
 from __future__ import annotations
