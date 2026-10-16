@@ -113,7 +113,6 @@ def test_registry_generation_stands_still_on_reads():
     registry.stable_rank(first)
     registry.nearest_by_unstable_cdist(1.4)
     registry.on_cdist_range(0.0, 10.0)
-    registry.graph()
     registry[first]
 
     assert registry.generation == before

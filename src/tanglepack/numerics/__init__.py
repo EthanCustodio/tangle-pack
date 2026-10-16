@@ -32,7 +32,6 @@ from .Tangle import Tangle
 from .BridgeIterator import BridgeIterator
 from .IterateInference import infer_iterates
 from .TangleWorkbench import TangleWorkbench, MaxIterationsReached, TURNAROUND_LOG_STRETCH
-from . import graphviz
 from . import diagnostics
 from .diagnostics import ResolutionReport, SameStabilityCount, SameStabilityCrossing
 
@@ -64,7 +63,6 @@ __all__ = [
     "TangleWorkbench",
     "MaxIterationsReached",
     "TURNAROUND_LOG_STRETCH",
-    "graphviz",
     "diagnostics",
     "ResolutionReport",
     "SameStabilityCrossing",

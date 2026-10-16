@@ -6,13 +6,12 @@ index, the :class:`~.IntersectionRegistry.IntersectionRegistry` and the bridge
 set -- and drives construction, growth, intersection detection, bridge cutting,
 trimming and manifold plotting.
 
-Three collaborators own the work that reads and extends that state without
+Two collaborators own the work that reads and extends that state without
 being part of the orchestration:
 
 * :mod:`~.BridgeIterator` -- mapping a bridge forward, and deriving the bridge
   genealogy from the crossing iterate table;
-* :mod:`~.IterateInference` -- filling that iterate table;
-* :mod:`~.graphviz` -- the networkx/matplotlib view of the intersection graph.
+* :mod:`~.IterateInference` -- filling that iterate table.
 
 Each is reached through a same-named method on the workbench, so no caller has
 to know where the body lives. The Dev Notes for each of those areas live in the
@@ -38,9 +37,7 @@ from typing import Callable, Literal, Iterable, Optional, Sequence, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
-import networkx as nx
 
-from . import graphviz
 from .BridgeIterator import BridgeIterator
 from .DynamicalSystem import DynamicalSystem, MapFunc, JacFunc
 from .FixedPointSolver import FixedPointSolver
@@ -168,11 +165,11 @@ class TangleWorkbench:
             constructor).
 
     Note:
-        Bridge iteration, iterate-table inference and graph plotting are
-        delegated to :class:`~.BridgeIterator.BridgeIterator`,
-        :func:`~.IterateInference.infer_iterates` and :mod:`~.graphviz`. The
-        methods here forward to them and their signatures are the contract; the
-        bodies (and their Dev Notes) live in those modules.
+        Bridge iteration and iterate-table inference are delegated to
+        :class:`~.BridgeIterator.BridgeIterator` and
+        :func:`~.IterateInference.infer_iterates`. The methods here forward to
+        them and their signatures are the contract; the bodies (and their Dev
+        Notes) live in those modules.
     """
 
     # Fixed palette of cool hues (blues, cyans, teals, greens, purples) used to
@@ -403,8 +400,8 @@ class TangleWorkbench:
         into a linked list by code driving :class:`ManifoldMachine` directly
         without calling ``bump_version``, an ``Intersection``'s fields edited in
         place, or a ``FixedPoint``'s eigendata replaced. Reads never advance it,
-        including the lazy rebuilds of derived caches (the registry graph's
-        adjacency edges, the rank maps).
+        including the lazy rebuilds of derived caches (the registry's rank
+        maps).
 
         Returns:
             int: The current generation. Compare for equality only; the value
@@ -2043,54 +2040,6 @@ class TangleWorkbench:
             Number of new iterate relationships recorded.
         """
         return infer_iterates(self, sources)
-
-    # ── graph view (see graphviz) ────────────────────────────────────────────
-
-    def build_intersection_graph(self) -> nx.MultiDiGraph:
-        """
-        The registry's intersection graph, decorated with this workbench's bridges.
-
-        Delegates to :func:`~.graphviz.build_intersection_graph`.
-
-        Returns:
-            nx.MultiDiGraph: A copy of the registry graph.
-        """
-        return graphviz.build_intersection_graph(self)
-
-    def visualize_intersection_graph(
-        self,
-        G: nx.MultiDiGraph,
-        layout: str = "auto",
-        figsize: tuple[int, int] = (12, 8),
-        display_mode: str = "auto",
-        compact_threshold: int = 20,
-        node_size: Optional[int] = None,
-        label_mode: str = "id",
-        node_color_by: str = "none",
-        show_iterate_edges: bool = True,
-        save_path: Optional[str] = None,
-    ) -> tuple:
-        """
-        Draw an intersection graph.
-
-        Delegates to :func:`~.graphviz.visualize_intersection_graph`, which
-        documents every option.
-
-        Returns:
-            (fig, ax) matplotlib Figure and Axes.
-        """
-        return graphviz.visualize_intersection_graph(
-            G,
-            layout=layout,
-            figsize=figsize,
-            display_mode=display_mode,
-            compact_threshold=compact_threshold,
-            node_size=node_size,
-            label_mode=label_mode,
-            node_color_by=node_color_by,
-            show_iterate_edges=show_iterate_edges,
-            save_path=save_path,
-        )
 
     def plot_all_bridges(self, bridges: Optional[list[Bridge]] = None) -> None:
         """

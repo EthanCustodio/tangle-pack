@@ -1,14 +1,11 @@
-"""Plan 2.5 / 2.7 -- one map step on FixedPoint, and the per-branch intersection graph.
+"""Plan 2.5 / 2.7 -- one map step on FixedPoint, and the iterate table's relations.
 
 2.5: ``FixedPoint`` owns the map step. ``advance_key`` (Phase 1.7) advances a
 manifold key, ``per_step_beta`` is the per-map-step canonical-distance factor and
 ``branch_cycle`` is the chain of manifold pieces one map step visits in turn.
 Nothing else may re-derive any of the three.
 
-2.7: adjacency in the intersection graph is per BRANCH. Canonical distances are
-measured from each branch's own anchor, so a global cdist sort is meaningless for
-a period > 1 orbit -- it interleaves branches and joins crossings that are not
-neighbours on any curve.
+2.7: ``IterateTable.items()`` yields every recorded relation once.
 """
 
 from __future__ import annotations
@@ -196,103 +193,3 @@ def test_iterate_table_items_yields_every_relation_once():
 
 def test_iterate_table_items_is_empty_for_a_fresh_table():
     assert list(IterateTable().items()) == []
-
-
-# --------------------------------------------------------------------------- #
-# 2.7 -- graph adjacency is per branch
-# --------------------------------------------------------------------------- #
-def _adjacency(graph, stability):
-    return [
-        (u, v)
-        for u, v, d in graph.edges(data=True)
-        if d.get("type") == "adjacency" and d.get("stability") == stability
-    ]
-
-
-def test_stable_edges_join_consecutive_crossings_on_one_branch(henon_p3_session):
-    """A stable edge is a stable ARC: same branch, adjacent in that branch's order."""
-    session, _fp3, _fp1, _zone = henon_p3_session
-    workbench = session.workbench
-    registry = workbench.intersection_registry
-    graph = workbench.build_intersection_graph()
-
-    per_branch: dict[tuple, list[int]] = {}
-    for ix_id, ix in registry:
-        if ix.manifold_b_key is not None:
-            per_branch.setdefault(ix.manifold_b_key, []).append(ix_id)
-    for ids in per_branch.values():
-        ids.sort(key=lambda i: registry[i].stable_cdist)
-    rank = {i: r for ids in per_branch.values() for r, i in enumerate(ids)}
-
-    edges = _adjacency(graph, "stable")
-    assert edges, "the period-3 session must have stable adjacency edges"
-    for u, v in edges:
-        assert registry[u].manifold_b_key == registry[v].manifold_b_key, (
-            f"stable edge {u}->{v} joins two different stable branches: "
-            f"{registry[u].manifold_b_key[1:]} vs {registry[v].manifold_b_key[1:]}"
-        )
-        assert abs(rank[u] - rank[v]) == 1, (
-            f"stable edge {u}->{v} joins non-consecutive crossings on the branch "
-            f"(ranks {rank[u]} and {rank[v]})"
-        )
-
-    expected = sum(len(ids) - 1 for ids in per_branch.values())
-    assert len(edges) == expected
-
-
-def test_unstable_edges_are_exactly_the_bridges(henon_p3_session):
-    session, _fp3, _fp1, _zone = henon_p3_session
-    workbench = session.workbench
-    graph = workbench.build_intersection_graph()
-
-    bridge_pairs = sorted(
-        (b.first_intersection, b.second_intersection)
-        for b in workbench.bridges
-        if b.first_intersection is not None
-        and b.second_intersection is not None
-        and b.first_intersection != b.second_intersection
-    )
-    assert sorted(_adjacency(graph, "unstable")) == bridge_pairs
-
-
-def test_registry_graph_falls_back_to_per_branch_unstable_order(henon_p3_session):
-    """Without bridges the registry orders the unstable side by its own branch."""
-    session, _fp3, _fp1, _zone = henon_p3_session
-    registry = session.workbench.intersection_registry
-    graph = registry.graph()
-
-    per_branch: dict[tuple, list[int]] = {}
-    for ix_id, ix in registry:
-        if ix.manifold_a_key is not None:
-            per_branch.setdefault(ix.manifold_a_key, []).append(ix_id)
-    for ids in per_branch.values():
-        ids.sort(key=lambda i: registry[i].unstable_cdist)
-
-    expected = sorted(
-        (ids[i], ids[i + 1]) for ids in per_branch.values() for i in range(len(ids) - 1)
-    )
-    assert sorted(_adjacency(graph, "unstable")) == expected
-
-
-def test_registry_graph_takes_the_bridges_it_is_given(henon_p3_session):
-    session, _fp3, _fp1, _zone = henon_p3_session
-    registry = session.workbench.intersection_registry
-    ids = registry.all_ids()[:4]
-    bridges = [(ids[0], ids[1]), (ids[2], ids[3])]
-
-    graph = registry.graph(bridges=bridges)
-    assert sorted(_adjacency(graph, "unstable")) == sorted(bridges)
-
-
-def test_build_intersection_graph_does_not_mutate_the_registry_graph(
-    henon_tangle_with_bridges,
-):
-    """The workbench decorates a COPY: its extra attributes stay out of the registry."""
-    workbench, _fp = henon_tangle_with_bridges
-    registry = workbench.intersection_registry
-
-    decorated = workbench.build_intersection_graph()
-    decorated.add_node("sentinel")
-    decorated.add_edge("sentinel", "sentinel", type="adjacency", stability="stable")
-
-    assert "sentinel" not in registry.graph()

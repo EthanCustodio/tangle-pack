@@ -98,17 +98,6 @@ branch0_stable = registry.from_branch(0, stability="stable")
 # Custom filter: only intersections whose iterate is also registered
 has_iterate = registry.filter(lambda ix: (ix.id, 1) in registry.iterate_table)
 
-# --- Live graph ---
-G = wb.build_intersection_graph()
-print(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
-
-# Adjacency edges along W^u
-adj_u = [(u, v) for u, v, d in G.edges(data=True) if d.get("stability") == "unstable"]
-# Iterate edges
-iter_edges = [
-    (u, v, d["n"]) for u, v, d in G.edges(data=True) if d.get("type") == "iterate"
-]
-
 # ── Tangle plot ────────────────────────────────────────────────────────────
 plt.figure()
 wb.plot_tangle(fp3, "unstable", color="b")

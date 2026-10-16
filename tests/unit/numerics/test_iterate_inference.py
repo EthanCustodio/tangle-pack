@@ -82,7 +82,7 @@ def test_an_image_claimed_across_passes_links_neither_claimant(henon_tangle_with
     z = min(i for i, ix in registry if not ix.is_synthetic and i not in (x, y))
     registry.iterate_table = IterateTable()
     registry.register_iterate(z, 1, y)
-    assert registry.graph().has_edge(z, y, f"iter_{z}_1")
+    assert registry.iterate_table[z, 1] == y
 
     with caplog.at_level(logging.WARNING, logger="tanglepack.numerics.IterateInference"):
         infer_iterates(workbench, [x])
@@ -92,7 +92,6 @@ def test_an_image_claimed_across_passes_links_neither_claimant(henon_tangle_with
     assert registry.unresolved_links == {x: (y,), z: (y,)}
     (record,) = assert_logged(caplog, logging.WARNING, "tanglepack.numerics.IterateInference", count=1)
     assert record.args[0] == y
-    assert not registry.graph().has_edge(z, y, f"iter_{z}_1")
 
 
 def test_an_image_claimed_three_times_in_one_pass_links_none(henon_tangle_with_bridges, monkeypatch):
@@ -139,18 +138,17 @@ def test_a_multi_match_is_recorded_and_a_second_pass_changes_nothing(
     assert registry.generation == generation
 
 
-def test_remove_iterate_forgets_the_link_its_twin_and_its_edge(henon_tangle_with_bridges):
-    """B8: removing ``x -> y`` leaves neither ``(x, 1)`` nor ``(y, -1)`` nor the graph edge."""
+def test_remove_iterate_forgets_the_link_and_its_twin(henon_tangle_with_bridges):
+    """B8: removing ``x -> y`` leaves neither ``(x, 1)`` nor ``(y, -1)``."""
     workbench, _fp = henon_tangle_with_bridges
     registry = workbench.intersection_registry
     x, y = min(_detected_links(registry))
-    assert registry.graph().has_edge(x, y, f"iter_{x}_1")
+    assert registry.iterate_table[x, 1] == y
     generation = registry.generation
 
     registry.remove_iterate(x, 1)
 
     assert registry.iterate_table[x, 1] is None and registry.iterate_table[y, -1] is None
-    assert not registry.graph().has_edge(x, y, f"iter_{x}_1")
     assert registry.generation > generation
 
 
