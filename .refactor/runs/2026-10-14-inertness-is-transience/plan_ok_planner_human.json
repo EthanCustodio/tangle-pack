@@ -1,0 +1,6 @@
+{
+  "status": "approved",
+  "allowed": ["approved", "revise", "answered"],
+  "notes": "Author approved the round-2 B5 inertness-is-transience plan as written (2026-10-14): the author's zeroth-hole rule (a bridge holding a reference hole, iterate 0, is inert: its lobe holds one marker whose image is no marker, so its word is empty) decides before the dual graph which hole bridges the minimal trellis maps (every hole bridge except zeroth-hole bridges, read from trellis.holes); transience over the words is the verdict for every class (Q3, I-a); new law zeroth_hole_classes_have_empty_words checks the rule; nine files (question 1's default). Behaviour: words, minimal trellis, P1, refined classes, is_reliable unchanged on all 15 builds; five verdicts go active -> inert; unmapped shrinks; no new WARNINGs.",
+  "iteration": 2
+}

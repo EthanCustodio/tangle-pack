@@ -1,0 +1,1 @@
+{"status": "confirmed", "notes": "Author confirmed the B10 dead-api debrief 2026-10-15. Branch refactor/dead-api @517aa01, 8 commits off 65edec4, suite 1215/47/1 xfail C3, net -1013 lines src+tests, 63-item probe byte-identical. Merge waits for the author's 'continue'."}

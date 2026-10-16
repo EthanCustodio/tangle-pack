@@ -26,8 +26,9 @@ where the complexity and the piecemeal rules live.**
    heuristic tie-breaks (shortest, walls, detour cap, judgement budget, first in order).
    Measured on every law case and three deep runs, it reproduces the registered image chain
    wherever one exists. What it adds, net of that, is words for classes no computed bridge
-   spans. The refined transition matrix is not computed: every refined child inherits the
-   parent's word verbatim.
+   spans. Every refined child inherits the parent's word verbatim; that is correct iff all
+   members of a class share one iterated-level itinerary, a theorem the code never stated
+   or checked (revised, see stage 9).
 4. The code is three to five times the size of a faithful implementation. 31.8k library
    lines; the session facade (1.7k) contains no mathematics; stage 5+6 needs ~150 lines
    and has ~1,950; 303 bug-ticket ids are cited inside `src/`.
@@ -253,13 +254,22 @@ a walked word; one is needed for the trellis reading.
 
 ### Stage 9, refinement and the transition matrix
 
-`refine` splits a class by occurrence; `match_members` is ~90 clean lines. But every
+`refine` splits a class by occurrence; `match_members` is ~90 clean lines. Every
 refined child receives the parent's word verbatim (`SymbolicDynamics.py:762`,
-`for child in children: refined_rules[child.name] = list(refined_word)`). Nothing computes
-f(a_i). The k=10 matrix `[[1,1],[1,1]]` is right for the horseshoe because the full shift
-makes every child map over every child; in general the matrix needs the next level of the
-partition. The documentation states this as design; as a transition matrix it is an
-assumption.
+`for child in children: refined_rules[child.name] = list(refined_word)`); nothing computes
+f(a_i) separately.
+
+Revised after the planning round (same day). The inheritance is correct exactly when every
+member of a class has the same itinerary at the iterated level (the alignment plan's
+"Theorem T", with a planar argument: a hole-bridge image separating two members' images
+would pull back to a hole inside the hole-free strip between them). Under T the refined
+graph is the in-splitting of the class graph: identical sibling rows, children's columns
+summing to the parent's, conjugate and of the same entropy, and k=10's `[[1,1],[1,1]]` is
+derived from `[[2]]`. T holds on every class where it can be tested today, which is only 8
+classes across the corpus (k10 1, inversion2 2, heteroclinic 2, k28 8 blasts 3); no other
+build has two members with registered chains. So the defect is not the arithmetic but that
+T was unstated and unchecked, and the matrix had not been derived. The plan's slice B7 states
+T and adds the law.
 
 ### Stage 10, recompute and the session
 
@@ -336,7 +346,7 @@ plotting, legend handles, diagnosis dataclasses and sort keys. Four implementati
 | # | Finding | Where | Severity |
 |---|---|---|---|
 | 1 | Crossing collapse only on the blast path; recompute does not commute at depth; the only rule the pipeline has for under-resolution, and it decides k28x8's topology | `Tangle.py:569-627`, `BridgeIterator.py:363` | wrong |
-| 2 | Refined children inherit the parent's word; the matrix is not computed | `SymbolicDynamics.py:762` | wrong as a matrix, documented as design |
+| 2 | Refined children inherit the parent's word; correct iff Theorem T, which was unstated and unchecked (8 classes testable today) | `SymbolicDynamics.py:762` | smell (was: wrong); see stage 9 |
 | 3 | `min_separation` and the zone polygon set the depth of N | `Blast.py:271-277, 397-412` | wrong by the chalkboard's own definition |
 | 4 | Stable interval of a pseudoneighbor pair never tested against X | `Pseudoneighbor.py:149-230` | definitional gap, author-accepted |
 | 5 | Backward hole chain is scaling on every call; "table first" is documentation only; flag discarded | `StablePartition.py:513` | smell now, risk at depth |

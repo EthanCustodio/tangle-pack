@@ -1,0 +1,31 @@
+{
+  "agent": "analyst",
+  "artifact": "outcome_auditor_human_2",
+  "counter": 1,
+  "edgeId": "auditor_human_2",
+  "history": [
+    {
+      "agentId": "af2ba5297231906b4",
+      "at": "2026-10-15T02:17:20.577Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/outcome_auditor_human_2.md",
+      "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.9",
+      "status": null,
+      "traversal": 1
+    }
+  ],
+  "latest": {
+    "agentId": "af2ba5297231906b4",
+    "at": "2026-10-15T02:17:20.577Z",
+    "fanIndex": null,
+    "notes": null,
+    "payload": "artifacts/outcome_auditor_human_2.md",
+    "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.9",
+    "status": null,
+    "traversal": 1
+  },
+  "preamble": null,
+  "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.9",
+  "schemaVersion": 1
+}

@@ -1,0 +1,4 @@
+{
+  "status": "approved",
+  "notes": "Approved as written (2026-10-15). All six questions take their defaults: (1) WalkSearch.status has three values resolved/ambiguous/unresolved and 'trivial' belongs only to a class (empty word); (2) a search cut short with candidates becomes unresolved with reason 'truncated', walks kept, the truncated field goes; (3) class-level free reduction per A.8c as one free_reduce applied to cd.symbols and to the closure/inertness words, translate_itinerary stays unreduced so the T law keeps its same-occurrence reading, the registered evidence word is reduced by the same function before comparison; (4) members_disagree stays on the class only (six walk reasons); (5) MembersDisagree exported from tanglepack.topology; (6) one slice, ten files."
+}

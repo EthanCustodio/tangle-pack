@@ -1,4 +1,4 @@
-# Aligning tanglepack to its mathematics — the plan (final draft, 2026-10-09)
+# Aligning tanglepack to its mathematics — the plan (decided 2026-10-09; Q5 kept)
 
 Written against `docs/code_fidelity_audit_2026-10-09.md` (the audit), `docs/pipeline_chalkboard.md`,
 the three algorithm notes in `docs/`, `CLAUDE.md`, `.refactor/decisions.md` (D1-D15, C1-C22) and the
@@ -13,12 +13,14 @@ option; section E collects those for the author. Slices (section B) are ordered 
 before the deletions that depend on them and every slice leaves the suite green or changes a law on
 purpose.
 
-Final draft (awaiting the author's answers to E): A and E complete (E gained Q11-Q13); the slices B0, B1, B4a, B4b, B6a, B8, B10 are
-in house-planner form (B1 waits on Q13, the others are decision-free); B2, B3, B5, B6b, B7, B9, B11,
-B12 wait on the author and stay as skeletons.
+Decided 2026-10-09 (author, via the orchestrator: "Do not drop the refined matrix and iterated
+partition. They are very important. The rest is fine."): every question of E takes its default except
+Q5, where the refined level is a GOAL — so A.8d/A.9 now define it and B7 computes it rather than removing
+it. Slices B0-B8 and B10 are in house-planner form; B9, B11, B12 stay skeletons. The decisions are
+recorded in `.refactor/decisions.md` (entry of 2026-10-09, "alignment plan").
 C and D cover the expanded slices in full and the rest as estimates. Probe results quoted below were
 run by the orchestrator (`scratchpad/plan/probe_q123.py`, `probe_q2b.py`, `probe_p1to5.py`,
-`probe_q3b.py`) or here (`probe_p2.py`).
+`probe_q3b.py`, `probe_T.py`) or here (`probe_p2.py`).
 
 ---
 
@@ -30,8 +32,12 @@ One definition per stage. "Code today" says how far the code is from it; "Change
 
 - **Stage 5, "lookup first is a fiction".** Measured correctly (`from_table` False on every call on
   k10/k28/inversion/heteroclinic), but it is not a defect of the algorithm: a reference pair lies in the
-  window `S \ f(S)`, whose preimage leaves `S`, so its backward images are NEVER registered crossings,
-  by construction. The PDF's own mechanism is "simple division". The defect is the documentation
+  window `S \ f(S)`, whose preimage leaves `S`, so its backward images are never crossings of N
+  (they lie past the pip cut). The REGISTRY may still hold them as points of X: on `k28_one_blast`,
+  `inversion` and `inversion_period2` the iterate table links a reference bridge's far END to its
+  container's own end crossing (`iterate(5, -1) = 3`, `iterate(3, -2) = 1`; B0 planner probe,
+  2026-10-12), and the real `map_inv` overshoots that crossing by 1e-7..7e-4 relative. So "table
+  first" is not a fiction at the ends, only along the span. The PDF's own mechanism is "simple division". The defect is the documentation
   ("table first") and the silently discarded flag at `StablePartition.py:513`. The fix is to state the
   rule (containment is decided in the canonical coordinate, exact up to each cdist's own noise), drop the
   flag, and add ONE WARNING where the container can be wrong: a scaled span end within `SCALING_RTOL`
@@ -186,13 +192,28 @@ interval is "consecutive on the computed branch", which excludes registered cros
 - **(S-b)** keep the asymmetry and WRITE it as the definition ("N-consecutive on S, X-clear on U").
   Consequence: the code matches a definition that is not the PDF's; the orphan pairs stay.
 
-**Change.** Slice B2.
+**Why the asymmetry was harmless on the pip branch (orchestrator, 2026-10-09; checked).** Under D10 the
+references lie in the window `(c_s(M^k q0), c_s(q0)]` on the pip's branch, which is exactly one lap of
+stable cdist, so the orbit of every crossing `r` of `N` has exactly ONE visit to that branch inside the
+window. `r` lies inside the cut (`c_s(r) ≤ c_s(M^j q0)` on its branch), so that visit is reached by
+BACKWARD steps; backward steps divide the unstable cdist by `β`, and the computed unstable manifold is
+closed under `M^{-1}` (each branch is the image of the one before it), so the visit is a point of
+computed `W^u` on the computed window of `W^s`: a registered crossing, when resolved. Consecutiveness
+along the pip branch therefore already excludes every orbit of `N` from the open stable interval —
+heteroclinic pairs included (the same steps on A's unstable and B's stable cdists). Measured: the
+stable clause finds 0 punctures on every law case, k28 x8 and p3 x6 (steps −40..40, every crossing of
+the pair's fixed point). What the clause adds is robustness to a MISSING representative: a window visit
+that is an unresolved detection (Q13 (a)) or deduped is caught through a deeper registered point of its
+orbit, scaled back. NUM-18's orphan pairs were on the other branches' windows, which are no longer
+walked.
+
+**Change.** Slice B2 (behaviour-neutral on the corpus; the definition, and the robustness above).
 
 ### A.6 Stage 5 — holes
 
 **Definition.** Each reference pair's bridge gets a hole beside it, on its `bridge_side` read off the
 signs. The reference bridge is mapped BACKWARD: both ends move by `c ↦ c β^{-1}` on `advance_key(key, -1)`
-(the table never holds these points, A.0), the bridge whose consecutive crossings bracket the span is
+(the table holds at most the END crossings, past the cut, A.0), the bridge whose consecutive crossings bracket the span is
 the container and gets a hole with the carried side (`side_after`), until the container was visited
 (periodic) or none exists (left the trellis). Containment is decided in the canonical coordinate; its
 only uncertainty is each cdist's own noise, flagged when a span end lies within `SCALING_RTOL` of a
@@ -274,10 +295,15 @@ spans is uncomputed manifold (D9/INT-9): skipped with a WARNING, never invented.
 `f(X)` to `f(Y)`; it meets the stable manifold `S` only at its ends and inside the window `S \ f(S)` (its
 interior crossings are images of crossings of `b` with `f^{-1}(S) \ S`). The **itinerary** of `f(b)`
 lists, at each crossing, the element on the entry row then the element on the exit row; consecutive
-pairs are classes or their inverses (`a`, `a^-1`); pairs in one element are loops and drop. The
-**word** `w(C)` is that reduced itinerary. It is a class invariant: two members are homotopic relative
-to `S ∪ holes`, so are their images, and the reduced itinerary is the homotopy invariant of an arc in
-the complement. (This is the statement the audit says is missing; both readings compute it.)
+pairs are classes or their inverses (`a`, `a^-1`); pairs in one element are loops and drop, and an
+adjacent pair `c c^-1` cancels (free reduction: the two sub-arcs are homotopic with sliding ends, so
+their concatenation is the identity at the element). The **word** `w(C)` is that reduced itinerary.
+It is a class invariant: two members are homotopic relative to `S ∪ holes` (the strip `D` between them
+holds no hole and no computed stable manifold), so are their images, and the reduced itinerary is the
+element of the fundamental groupoid of the complement, between the two landing elements, written in
+the class generators. (This is the statement the audit says is missing; both readings compute it. The
+code drops loops but does not cancel adjacent inverses — `translate_itinerary`; B6b adds the
+cancellation, expected a no-op on the corpus, with a probe.)
 
 **Definition (the algorithm, D3).** `w(C)` is read off the dual graph of the minimal trellis: the walk
 from the stable edges the landing span `f(X)` meets to those `f(Y)` meets (C14), crossing `S` only at
@@ -306,44 +332,86 @@ measured 100 % agreement wherever a chain gives a verdict (except the already-fl
 
 **Change.** B6a (decision-free), B6b (after Q4 and B7).
 
-### A.8d Stage 8 — the iterated partition
+### A.8d Stage 8 — the iterated partition and the refined level (Q5: a goal)
 
-`DECISION R (shared with A.9) — is the refined level a goal?` The iterated partition exists to give
-refined symbols `a_1, a_2, …`. Today:
-- `IteratedHomotopyPartition.from_minimal` is an ENDPOINT rule (at each image-bridge crossing that ends
-  an empty stretch — hole, lobe base, chord — open the flank facing it), rewritten three times against
-  fixture expectations; its odd foreign-chord count (C19) is a parity violation treated as a WARNING;
-  no mathematical object is named.
-- every refined child inherits the parent's word verbatim (`SymbolicDynamics.py:762`), so the refined
-  matrix is NOT computed: its rows per parent are identical and its spectral radius equals the
-  unrefined matrix's. For k=10 `[[1,1],[1,1]]` is right because the horseshoe is the full shift.
-- Orchestrator probe: landing spans at the HOMOTOPY level straddle nothing (296 landings over 14 builds,
-  0 straddles, 0 unresolved), so under R-a `contained` is an assertion, not a status.
+The author keeps the refined matrix and the iterated partition ("very important"). The audit's finding —
+every refined child inherits the parent's word verbatim (`SymbolicDynamics.py:762`), "the matrix is
+assumed" — must therefore be SOLVED: the refined word needs a definition under which the inheritance is a
+theorem, and a law that checks the theorem's premise on every build. Here it is.
 
-Candidates:
-- **(R-a, recommended default)** Words in CLASSES; the transition matrix is over the active classes
-  (`M[C][D]` = multiplicity of `D^{±1}` in `w(C)`; k=10: `[[2]]`, radius 2, the full 2-shift). The
-  iterated partition and refinement are REMOVED: the dual graph's stable nodes carry the homotopy
-  element of their edge (edges still end at image-bridge crossings), the walk reads homotopy elements,
-  `land_element` returns the span only. Deletes `IteratedHomotopyPartition`, `Cut`, `_empty_stretches`,
-  `refine`, `RefinedClass`, `match_members`, `refined_rules`, the iterated naming (~1,000 lines) and the
-  `R_1^2`-style names. Figures lose the refined labels. The level-2 object, if wanted later, is (R-c).
-- **(R-b)** keep the iterated partition as LABELS only, matrix over classes. Honest, but keeps ~1,000
-  lines whose definition is still the endpoint rule (and I-a changes those labels on 6 builds).
-- **(R-c)** define the refined level: the iterated partition is `P ∨ f(P)` — `S` cut at every crossing
-  of the images of the hole bridges, a cut point belonging to the side away from the empty footprint
-  (`∪ holes ∪ f(hole lobes) ∩ S`) — and `f(a_i)` is computed by walking at level 2. The audit's
-  set-theoretic candidate reproduces the endpoint rule on the 11 shallow cases and cuts MORE at depth.
-  New mathematics and a new stage; its own plan after R-a, if the author wants the refined matrix.
+**Definition (the iterated partition `P1`).** `P` is the homotopy partition (A.7). The ends of a hole
+bridge `h` bound an element of `P`; the hole `H` beside `h` and its lobe (`h` plus the stable segment
+`σ_h`) is what a class may not cross. `P1 = P ∨ f(∂P)`: each stable branch is cut, in addition to `P`'s
+cuts, at every crossing of the kept image bridges — the first images of the hole bridges — with `S`
+(the images of `∂P` at the chain's ends, and the folds of `f(H)` through the window at its interior
+crossings). A cut point belongs to the side AWAY from the empty stretch it bounds: the footprint of
+`f(H)` on that branch (its base `(x_0, x_m)` and its chords `(x_1, x_2), …` in chain order on the base
+branch, in stable order elsewhere — C19), because `f(H)` is swept out of `S` by `f` and no arc the
+dynamics follows enters it; a crossing abutting no footprint is no cut (author, 2026-09-23). An image
+chain whose crossings on a branch are ODD in number has left the computed stable manifold there
+(a "stable end", C11): its footprint on that branch is INCOMPLETE; the known crossings still cut, no
+stretch beyond the pairs formed is declared empty, and the branch is recorded in
+`IteratedHomotopyPartition.incomplete_footprints` (data, not a WARNING to walk past; B7). The endpoint
+rule is the author's; the set-theoretic alternative (a stretch is empty iff a hole or a hole image covers
+it) differs only where a crossing lies INSIDE a footprint (a bridge nested in another's lobe) and is not
+pursued.
+
+**Definition (refined symbols).** The walk of every class is read at the `P1` level: each token is the
+class `c` of its pair of homotopy parents AND the pair of `P1` elements `(X'_k, Y'_k)` it lands on, its
+OCCURRENCE. The occurrences of `c` across all words are the refined children `c_1, c_2, …` (anchor
+outward); `c_k` is the sub-class of `c` whose members' ends lie in `X'_k` and `Y'_k` (`match_members`,
+by endpoint owners). A member whose endpoint pair is no occurrence is `unmatched` (an arc no computed
+image traces; informational).
+
+**Theorem T (what makes the refined word well defined).** *Every member of a class has the same `P1`-level
+freely reduced itinerary.* Sketch: let `b_1, b_2` be members of `C = {X, Y}` and `D` the strip they
+bound with the stable segments `σ_X, σ_Y` — hole-free and free of computed stable manifold in its
+interior, by the definition of the class. A `P1` cut separating the images' corresponding crossings on a
+window element `Z` would be a crossing `f(h) ∩ Z` between them, `h` a hole bridge; pulled back, `h`
+crosses the stable arc `f^{-1}(Z) ∩ D` between the two members, so `h` enters `D` and, unable to cross
+`b_1` or `b_2`, lies in `D` with its ends on `σ_X ∪ σ_Y`; the hole beside `h` is then in `D` —
+contradiction. Non-corresponding crossings come in pairs that cancel at the `P1` level by the same
+argument (the stable arc between them lies in `f(D)`, which no `f(h)` enters). The one place the
+argument needs care is a member that IS a hole bridge: its image crossing is itself a cut point, and
+the empty-stretch rule assigns it to the side away from `f(H)`, which is the side of every sibling
+(the hole is outside `D`). **T is the premise the refined level stands on, so it is a LAW on every
+build** (B7): for every class with two or more members whose image chains are registered, the members'
+`P1`-level itineraries (occurrence pairs, read off `trellis_itinerary`) coincide after reduction.
+
+**Definition (the refined word and matrix).** `w(c_k) = w(c)` with every token written as the child its
+occurrence names. By T this is the word of every member of `c_k`, not an inheritance. The refined
+transition graph is therefore the **in-splitting** of the class graph (each class split by its incoming
+occurrences; children have identical outgoing edges) — a standard conjugacy of symbolic dynamics: the
+refined shift is conjugate to the class shift, same entropy, and the refined matrix `M_1` satisfies
+`M_1[c_i][·] = M_1[c_j][·]` for siblings and `Σ_k M_1[·][d_k] = M[·][d]` (children's columns sum to the
+parent's). Those two identities are a law on every build (B7). What the refinement adds is not
+dynamics but RESOLUTION: which sub-arc of the manifold each symbol names — the author's reason for
+keeping it. A second level (`P2 = P1 ∨ f(∂P1)`, children of children) is another in-splitting; it is
+available by the same construction and adds no entropy (Q16, default not built).
+
+**Worked cases (theorems of the definition, not pins).** k=10: `w(a) = a u^-1 a^-1`, the two
+occurrences of `a` are two distinct `P1` pairs, so `a` in-splits into `a_1, a_2`, each with the row
+`[1, 1]`: `M_1 = [[1,1],[1,1]]` = the in-splitting of `M = [[2]]` — the full 2-shift, as the audit
+requires, now derived. k=2.8 two blasts: `M = [[1,1,0],[0,0,1],[2,0,0]]` over `(a, b, c)`; `a` has three
+occurrences (one in `w(a)`, two in `w(c)`) that fall into two `P1` pairs `a_1, a_2`; `M_1` over
+`(a_1, a_2, b, c)` has equal rows for `a_1, a_2` and columns summing back to `M` — the law checks exactly
+that, the specific split is read off the build, not pinned.
+
+**Code today.** `refine` + `_refined_symbol` + `match_members` + `refined_rules` ARE this construction;
+what is missing is the statement, the law T, the in-splitting law, the `incomplete_footprints` record
+(today a WARNING, `PartitionFamily.py:960-967`) and the k=10 derivation as an oracle (B0 step 4).
+`IteratedHomotopyPartition.from_minimal` is the endpoint rule above. I-a (B5) adds the inert hole
+bridges' images to the cuts: `P1` gets finer on 6 of 11 cases and the refined names there change, the
+class-level words do not (probe).
 
 **Change.** Slice B7.
 
 ### A.9 Stage 9 — the transition matrix
 
-**Definition.** Nodes = the active classes (inert classes are transient, A.8); `M[C][D]` = the number of
-tokens `D` or `D^{-1}` in `w(C)`. No spectral radius shown (author 2026-09-23) until its meaning is
-settled; with R-a it is well defined (the entropy bound of the class shift) and can return as a
-documented number if the author wants (Q6).
+**Definition.** Over the active classes: `M[C][D]` = the number of tokens `D` or `D^{-1}` in `w(C)`;
+over the refined symbols: `M_1`, the in-splitting of `M` (A.8d), the matrix shown by default. Inert
+classes (transient, A.8) are not nodes. No spectral radius shown (author 2026-09-23; Q6 default kept);
+it is well defined and equal for `M` and `M_1`.
 
 ### A.10 Stage 10 — recompute
 
@@ -366,10 +434,11 @@ through `forget_strong_pip`, never a `topology()` that raises with no way out.
 
 ## B. Slices
 
-Order of execution. Decision-free slices (full form below): **B0 → B6a → B8 → B4a → B4b → B10.**
-B1 is in full form too but waits on **Q13** (it puts a resolution criterion inside the definition of
-N; it goes first once answered). Waiting on the author (skeleton): B2 (Q1), B3 (Q2), B5 (Q3), B7 (Q5),
-B6b (Q4, after B7 under R-a), B9, B11 (Q7), B12 (last).
+Order of execution, all decided: **B0 → B1 → B6a → B8 → B4a → B4b → B2 → B3 → B5 → B7 → B6b → B10**,
+then the skeletons B9, B11, B12. B1 first because every later fingerprint is read on the resolved
+crossing set; B2/B3 before B5/B7 so the hole set and depth are settled before inertness and the refined
+level are read; B7 (the definition and its laws) before B6b (statuses and evidence) so the free
+reduction and the `P1` itinerary land once.
 
 ### B0 — `oracle-laws` (tests only)
 
@@ -400,21 +469,25 @@ Q12.
    open interval (finite by `β > 1`), skipping the table-linked landings that ARE `x0` / `x1` and the
    scaled ones colliding with an endpoint on both cdists; assert none remains. Scaling only, on the LAW
    cases only (shallow; the library's "own frame" reading exists for depth and is not reproduced).
-   On base the STABLE half fails on `p3` and `inversion` (NUM-18's orphan pairs):
-   `KNOWN_ISSUES[("reference_pairs_clear_of_X", name)] = KnownIssue("NUM-18 …", wp="B2")` for those,
-   strict xfail, so B2 is falsifiable by the entry's removal.
+   Whether the STABLE half fails on any law case on base is NOT known: NUM-18's orphan pairs were
+   found when walking the other branches' windows, which the code no longer does. The slice runs the
+   law on base first; every failing case gets
+   `KNOWN_ISSUES[("reference_pairs_clear_of_X", name)] = KnownIssue("NUM-18 …", wp="B2")`, strict
+   xfail, so B2 is falsifiable by the entry's removal; none failing means B2 changes no law case and
+   bites at depth only (its behaviour section says which).
 3. `check_propagated_hole_inside_container(case)` in layer `partition`: for each hole with
    `iterate = n < 0`, carry the reference bridge's two END crossings back `|n|` times with the REAL
    `map_inv` (test side), project each onto the container bridge's polyline (nearest segment), and
    assert both projected cdists lie strictly between the container's two crossing cdists. Independent
    of `image_cdist` and `_containing_bridge`.
-4. `check_k10_is_the_full_shift(case)` in layer `symbolic` (gated by Q11): letter-free — exactly one
-   ACTIVE class; its word's active tokens are two occurrences of itself with opposite directions; the
-   class matrix is `[[2]]`; while refinement exists, the refined matrix is `[[1,1],[1,1]]`.
+4. `check_k10_is_the_full_shift(case)` in layer `symbolic` (Q11: yes, the one textbook pin): letter-free
+   — exactly one ACTIVE class; its word's active tokens are two occurrences of itself with opposite
+   directions; the class matrix is `[[2]]`; the refined matrix is its in-splitting `[[1,1],[1,1]]`
+   (A.8d: two occurrences, two children, each row `[1, 1]`).
    `NOT_APPLICABLE[(law, name)] = "the textbook answer is known for k=10 only"` for every other law
    case (the set-aside test keeps it visible).
-5. (Q12, default yes) `build_inversion_period2(stable_steps=10)`; the docstring's "10 runs the stable
-   manifold past the pip orbit" remark is moot since D10 and goes.
+5. (Q12: yes) `build_inversion_period2(stable_steps=10)`; the docstring's "10 runs the stable manifold
+   past the pip orbit" remark is moot since D10 and goes.
 
 **Behaviour.** None in the library. The suite gains 4 laws × 11 cases; two strict xfails
 (step 2 on `p3`, `inversion`) until B2.
@@ -431,15 +504,15 @@ rewritten); no deep-series oracle (scaling-only is wrong at depth by design, A.5
    second candidate, check 1 fails on `k10`; with `_unstable_interval_is_clear` patched to `True`,
    check 2 fails on `k28_two_blasts`; with `_containing_bridge` patched to return the NEXT bridge on the
    branch, check 3 fails on `k10`.
-4. Check 2's stable half fails on base for `p3` and `inversion` and nowhere else (the KNOWN_ISSUES
-   entries are exactly those two).
+4. Check 2's stable half on base: the KNOWN_ISSUES entries are exactly the failing cases (possibly
+   none), each citing NUM-18 and `wp="B2"`.
 5. Check 4 passes on `k10` on base; `-rxX` lists its 10 not-applicable set-asides.
 6. `inversion_period2` at `stable_steps=10`: `topology().dynamics.is_reliable` True, 6 classes, 10 holes
    (the probe's numbers; not pinned in a test, read by the reviewer).
 
-**Questions.** Q11, Q12 (section E).
+**Questions.** None left (Q11, Q12 decided yes).
 
-### B1 — `resolved-crossings` (waits on Q13)
+### B1 — `resolved-crossings` (Q13 decided: (a), margin 3 recorded)
 
 **The answer.** The blast path votes on near-coincident detections (`_collapse_noise_crossings`:
 odd run → median, even run → dropped) and every other path does not, so a plain recompute after deep
@@ -527,8 +600,7 @@ hit is never a crossing anyway).
 6. The hand-built zig-zag test (step 5) fails on base (base registers and cuts at all three).
 7. `Tangle.py` shorter by ≥ 60 lines; no parity test (`% 2`) anywhere in `Tangle.py`.
 
-**Questions.** Q13 (section E), both parts: the criterion, and the margin (3 today, derived bound 1,
-heteroclinic at 3.04).
+**Questions.** None left (Q13: (a); the margin stays 3 and the corpus minimum is recorded).
 
 ### B6a — `walk-bounds-honest`
 
@@ -776,20 +848,260 @@ mention (`CLAUDE.md` table rows updated in B12, not here).
 3. `import tanglepack` and `from tanglepack.topology import *` succeed; `len(topology.__all__)` ≤ 70.
 4. The law tier is unchanged (no `laws.py` edit in the diff).
 
-### Skeletons (wait on the author)
+### B2 — `pseudoneighbor-both-intervals` (Q1: S-a)
 
-| # | Slug | Goal | Implements | Depends on |
-|---|---|---|---|---|
-| B2 | `pseudoneighbor-both-intervals` | One `_interval_is_clear(stability)`; the stable interval tested against X; Dev Notes shortened; B0's KNOWN_ISSUES entries removed; re-measure BCG-4/BCG-8 series and report before DEC-25. | A.5 (S-a) | B0, Q1 |
-| B3 | `depth-of-N` | `min_separation` never drops a pip-orbit child (N-a); optionally `depth=` (N-b) and the sharp D1 law at fixed depth. | A.4 | Q2 |
-| B5 | `inertness-is-transience` | Minimal trellis maps every hole bridge; inert read off the word graph after the words; evidence bookkeeping deleted. Law: class-level words unchanged on every law case (the probe's result, made a rubric). | A.8 (I-a) | Q3, B4b |
-| B7 | `words-in-classes` | Remove the iterated partition and refinement (R-a); matrix over classes; dual-graph nodes carry homotopy elements; `contained` an assertion; one "element at a bridge end"; figures follow. LARGE (~1,000 lines deleted). | A.8d, A.9 | Q5, B5 |
-| B6b | `word-finished` | Statuses → `resolved / trivial / ambiguous / unresolved(reason)`; evidence comparison out of the algorithm into `topology/diagnostics.py`; the definition of the word in the module docstring; walls and markers kept as theorems. | A.8c (W-a) | Q4, B7 |
-| B9 | `session-three-concerns` | Plot delegates and cartoon geometry to `plotting`; fan-outs and `partition_element_for` deleted; zones computed from `Trellis.pips`. LARGE (~700 lines moved/deleted). | A.11 | B7, B8 |
-| B11 | `manifold-arrays` | Arrays `xy, c, pre_xy, mapped` per branch; same refinement kernel; bridges as index ranges. LARGE, numerics-only; its own plan. | A.1 | Q7, B1 |
-| B12 | `one-design-note` | The 303 decision ids leave `src/` for one design note; CLAUDE.md rewritten as section A (one paragraph per stage); the tautological laws replaced or deleted now that the code they mirrored is gone; chalkboard divergence table closed. | all | last |
+**The answer.** The PDF tests BOTH open intervals of a candidate pair against `X`; the code tests the
+unstable one against all iterates and the stable one against registered crossings only
+(`Pseudoneighbor.py:329-470`, Dev Notes "all the work is in the unstable-interval check"). One function
+for both intervals finishes the definition; what it kills at depth is a discovery.
 
----
+**Scope.** Slug `pseudoneighbor-both-intervals`. Files: `src/tanglepack/topology/Pseudoneighbor.py`,
+`tests/unit/topology/test_pseudoneighbor.py`, `tests/cases.py` (B0's KNOWN_ISSUES entries removed), and
+a read-only re-measurement script `stress/numerics/e13_both_intervals.py` (series to depth, report only).
+
+**Steps.**
+1. `_interval_is_clear(trellis, x0, x1, stability, candidates, collision_rtol)` generalises
+   `_unstable_interval_is_clear`: for `"unstable"` exactly today's body; for `"stable"` the arc is the
+   stable branch `ix0.manifold_b_key` (asserted equal for both), the owner is ITS fixed point, the cycle
+   `branch_position_map("stable")`, a forward step scales the stable cdist by `1/β`
+   (`per_step_beta("unstable")`), the candidates are the crossings whose STABLE side is that fixed point
+   (D7 mirrored: for a heteroclinic pair on B's branch, A×B and B×B crossings), and the same three
+   readings in the same order — table landing by id, `r` read against the pair's registered images in
+   its own frame, β-scaling with the 2-D collision guard. The closed-form `m`-range uses `β^{-k}` per
+   lap (the stable cdist shrinks along forward iterates), i.e. the same code with `lap = β^{-k}` and the
+   inequalities unchanged.
+2. `compute_pseudoneighbors` keeps a consecutive pair iff BOTH calls return True; the `lo <= 0` rejection
+   (anchor) applies to both.
+3. Dev Notes: delete the paragraphs "the open stable interval between a candidate pair is empty by
+   construction" and the NUM-18 asymmetry; state the definition once.
+4. Unit tests (the only place the clause bites today): a hand-built trellis whose window lacks the
+   representative of a deeper registered crossing — its scaled backward image lands inside the stable
+   interval of a consecutive pair → no pair; the same with a table link → no pair, by id; the pair's
+   own orbit (2-D collision) → still a pair. Each fails on base.
+5. `e13_both_intervals.py`: for every series of `cases.SERIES` and the E12 depths, the reference set per
+   blast before/after, each lost pair with `reference_witness`, and the seed/closed/holes series; its
+   output is the report the author reads before DEC-25 (BCG-8) is decided.
+
+**Behaviour.** None on the corpus: B0's law found the stable clause vacuous on every law case, k28 x8
+and p3 x6 (A.5: on the pip branch consecutiveness implies it when `N` is complete inside the cut), so
+`KNOWN_ISSUES` for B2 is EMPTY and every fingerprint is unchanged. The clause bites only where a
+window representative is missing (an unresolved detection under Q13, a dedup) — the hand-built unit
+tests, and possibly the deep series, which e13 re-measures and reports. No tolerance added
+(`collision_rtol` reused as is).
+
+**Not doing.** DEC-25 itself (the author decides on the e13 report); any change to the window or to
+trajectory extension.
+
+**Rubric.**
+1. Suite passes; `git diff --stat` touches only the four files; the law `reference_pairs_clear_of_X`
+   passes on every law case (no KNOWN_ISSUES entry exists for it).
+2. Fingerprints of every law case equal on base and branch.
+3. The three unit tests fail on base.
+4. `grep -n "_unstable_interval_is_clear" src` → nothing; one function, one `stability` parameter.
+5. The e13 report exists and lists, per series step, the references lost or gained with witnesses.
+
+### B3 — `depth-of-N` (Q2: N-a)
+
+**The answer.** `m` (the depth of `T_m(q0)`) is "the deepest registered forward iterate of the pip",
+and the blast's `min_separation` (passed as 1e-5 by every recipe) can drop the child that carries
+`f^{m+1}(q0)` and never feed it again (k32 blast 9: `f^10(q0)` dropped, the orbit stalls, N keeps
+deepening elsewhere; BCG-5's root cause). N-a: a child holding a pip-orbit point is never dropped.
+
+**Scope.** Slug `depth-of-N`. Files: `src/tanglepack/loom/Blast.py`, `tests/unit/loom/test_blast_budget.py`
+(or a new `test_blast_pip_orbit.py`), `tests/regression/test_class_count_under_blasting.py`, `tests/cases.py`.
+
+**Steps.**
+1. In the child filter (`Blast.py:397-412`), before the `min_separation` test: a child is
+   `pip_bearing` iff one of its end crossings is a forward iterate of a selected fixed point's chosen pip
+   (`session.chosen_strong_pip(fp)` → `registry.iterate_table` forward chain; the point `f^{m+1}(q0)` is
+   born as an END of a child of the bridge ending at `f^m(q0)`); a pip-bearing child is kept regardless
+   of separation (one INFO naming it).
+2. `BlastResult.pip_depth: dict[FixedPoint, int]` = `forward_depth(pip)` after the blast (data).
+3. `cases.blast_series` records `pip_depth` per step; regression law
+   `test_pip_orbit_deepens_under_blasting(name)`: `pip_depth` is non-decreasing and increases by one on
+   every step whose frontier contained the bridge ending at `f^m(q0)` (read off the result).
+4. Docstring of `blast_zone`: `min_separation` is a cost guard on children that re-trace existing
+   curve; it never decides the depth of `T(q0)` (A.4).
+
+**Behaviour.** Law cases: none (no law case blasts past a stall; k28 x1/x2 and inversion x1/x2 keep
+their frontiers). k32 series: `forward_depth(pip)` on base reads `[1, 2, …, 9, 10, 10]` over blasts
+0..10 — the stall is at blast 10; on the branch the orbit keeps deepening (11 at blast 10), so N and
+the hole/class series at blast 10 may change (a discovery; the numbers go in the report beside E12's).
+nested_outer at blast 10 likewise.
+
+**Not doing.** N-b (`depth=` parameter): not chosen; the sharp D1 law stays a measured series law.
+
+**Rubric.**
+1. Suite passes; `git diff --stat` touches only the four files.
+2. On `k32_series`, `pip_depth` over blasts 0..10 is `[1, …, 10, 11]` on the branch (`[1, …, 10, 10]` on
+   base, probe: the law fails on base at blast 10, the `9 → 10 → 10` plateau).
+3. Fingerprints of every law case equal on base and branch.
+4. A unit test: a child whose end is `f^{m+1}(q0)` with interior points under `min_separation` of an
+   existing curve is KEPT; the same child without the pip end is dropped; fails on base.
+
+### B5 — `inertness-is-transience` (Q3: I-a)
+
+**The answer.** Inertness today is a fixed point over REGISTERED image evidence (`_resolve_inertness`,
+`has_image_evidence`), monotone in evidence, and it decides which hole bridges the minimal trellis maps.
+Under I-a every hole bridge is mapped and inertness is read AFTER the words: a class is inert iff no
+infinite forward path leaves it in the class transition graph (transient). Probe: class-level words
+unchanged on 14 builds; image bridges +0..2; `P1` finer on 6 builds.
+
+**Scope.** Slug `inertness-is-transience`. Files: `src/tanglepack/topology/BridgeClass.py`,
+`src/tanglepack/topology/MinimalTrellis.py`, `src/tanglepack/topology/SymbolicDynamics.py`,
+`src/tanglepack/loom/Topology.py`, `tests/helpers/laws.py`, `tests/unit/topology/test_bridge_class.py`,
+`tests/unit/topology/test_symbolic_dynamics.py`. Seven files — flagged: one rule moved from the class
+table to the dynamics, with the lettering following it.
+
+**Steps.**
+1. `minimal_trellis` maps EVERY hole bridge (the `entry.active` test and the `inert` list go);
+   `MinimalTrellis.alphabet` unchanged (classes with a kept member).
+2. `BridgeClass.py`: delete `_resolve_inertness`, `has_image_evidence`, the `image_classes` /
+   `image_loops` / `unresolved` evidence slots and their collection (the image chain is still read for
+   loop folding); `BridgeClassEntry.inert` stays a slot, `None` until the dynamics sets it.
+3. `symbolic_dynamics`: walk every class of the closed alphabet (provisional symbols by class label),
+   then `inert = {C : every forward path from C reaches the empty word}` computed as the fixed point
+   "a class is inert iff its word is empty or every token's class is inert" (the exact negation of
+   "reaches a cycle"); an UNRESOLVED class (no word) is active by convention and so is every class
+   whose word names it. Then letters: active classes via `letter_for` (the session's persistent
+   `BridgeAlphabet`, by identity), inert ones from `inert_letters`; `entry.inert` and `entry.letter`
+   set here. `Topology.classes` no longer letters (its loop at `Topology.py:148` goes); `zone_key`
+   stays there.
+4. Law (layer `symbolic`): `inert_is_transient` — for every class, `inert` equals "no cycle reachable
+   from it in the transition graph over ALL classes"; `inert_classes_outside_transitions` unchanged.
+   Law `minimal_trellis_bridges` updated: every hole bridge with a registered image contributes its
+   chain.
+5. PK-8's WARNING ("inert class u has the non-empty word v") goes: an inert class mapping onto inert
+   classes is the definition.
+
+**Behaviour.** Class-level words: unchanged on every law case and deep run (probe; rubric 2). `P1` and
+the refined names change on k28_one_blast, p3, nested, inversion x0, heteroclinic (+1..2 image bridges,
++0..6 iterated elements; the refined matrix in-splits finer there, conjugate to the same class matrix).
+Inertness verdicts: a class active today for LACK of evidence becomes inert when its word is empty or
+leads only to inert classes (its letter moves from `a..` to `u..`; which classes, per case, in the
+report); no class inert today becomes active unless its word names an active class (then the old
+verdict was the evidence-starved one). `is_reliable` unchanged in meaning.
+
+**Not doing.** Refinement rules (B7); the inert series' letters (`u, v, …`) unchanged; no quotient.
+
+**Rubric.**
+1. Suite passes; `git diff --stat` touches only the seven files.
+2. Letter-free `rules` (class level) equal on base and branch for every law case, `p3_6_blasts`, `p3_16`,
+   `k28` at 8 blasts, nested with 6 inner blasts.
+3. `grep -rn "has_image_evidence\|_resolve_inertness\|image_classes\|image_loops" src` → nothing.
+4. The `inert_is_transient` law passes on every law case; a unit test builds a three-class word table
+   `a -> b, b -> (empty), c -> c` and asserts `a, b` inert, `c` active.
+5. Per case, the report lists the classes whose inert verdict changed and the image-bridge /
+   iterated-element deltas (expected: the probe's numbers).
+
+### B7 — `refined-level-defined`
+
+**The answer.** The refined matrix is computed today by inheritance (`refined_rules[child] =
+refined_word`), which the audit calls an assumption. Under A.8d it is the in-splitting of the class
+graph, correct by Theorem T. The slice states the definition where the code is, makes T and the
+in-splitting identities laws on every build, turns the odd-chord WARNING into the
+`incomplete_footprints` record, and derives the k=10 answer. The arithmetic does not change; what the
+code claims does.
+
+**Scope.** Slug `refined-level-defined`. Files: `src/tanglepack/topology/PartitionFamily.py`,
+`src/tanglepack/topology/SymbolicDynamics.py`, `tests/helpers/laws.py`,
+`tests/unit/topology/test_symbolic_dynamics.py`, `tests/unit/topology/test_partition_family.py`.
+
+**Steps.**
+1. `PartitionFamily.py` module docstring: `P1 = P ∨ f(∂P)` and the empty-stretch rule as in A.8d (the
+   Dev Notes' three-rewrite history condensed to the rule and its date).
+2. `IteratedHomotopyPartition.incomplete_footprints: list[tuple[BridgeId, ManifoldKey, int]]` — the
+   hole bridge, branch and odd count — set where `PartitionFamily.py:960-967` warns today; the WARNING
+   becomes one INFO per build naming them; `describe()` prints them.
+3. `SymbolicDynamics.py` docstring: Theorem T and the in-splitting; `refined_rules` unchanged in
+   arithmetic, renamed in its docstring from "inherits" to "the word of every member, by T";
+   `transition_matrix(refined=True)` documented as `M_1`, the in-splitting of `M`.
+4. Law `members_share_the_P1_itinerary` (layer `symbolic`): for every class with two or more members
+   with registered image chains, the occurrence sequences of `trellis_itinerary(member)` translated by
+   `translate_itinerary`, loops dropped, coincide (T on the real build). Probe (2026-10-09): such
+   classes exist on k10 (1), inversion at 2 blasts (2), heteroclinic (2) and k28 x8 (3) — 8 classes,
+   0 disagreements, NONE on the other builds (k28 x1/x2, p3, p3 x6, nested, nested_inner, inversion
+   x0/x1, inversion_period2: NOT_APPLICABLE, the set-aside says so). The evidence is thin, so the same
+   check also runs as a regression law over every step of `cases.SERIES` (k28 to 8, p3 to 9, inversion
+   to 4, k32 to 10, nested_outer to 11), reporting the number of classes tested per step, and B7's
+   report lists the total; a period-k class must be among them (p3 or k32 at depth) or the report says
+   T is untested on period-k orbits.
+5. Law `refined_matrix_is_an_in_splitting` (layer `symbolic`): sibling rows of `M_1` equal; for every
+   parent column `d`, `Σ_k M_1[·][d_k] = M[·][d]`; `M_1`'s node set = refined active symbols. Unit test on
+   a hand-built table (A.8d's k=2.8 shape: `M = [[1,1,0],[0,0,1],[2,0,0]]` with `a` in two children).
+6. B0's `check_k10_is_the_full_shift` already asserts `M_1 = [[1,1],[1,1]]`; its docstring cites A.8d.
+
+**Behaviour.** None in any number (words, children, matrices identical on every build); one WARNING
+becomes INFO + data.
+
+**Not doing.** A second level (`P2`, Q16 default no); the set-theoretic empty rule; any change to
+`from_minimal`'s cuts; "one element at a bridge end" (moved to B9, where two of the four die with the
+session's `partition_element_for`).
+
+**Rubric.**
+1. Suite passes; `git diff --stat` touches only the five files.
+2. Fingerprints, `refined_rules` and `transition_matrix()` (both levels) equal on base and branch for
+   every law case and deep run.
+3. The two new laws pass on every law case where applicable (T on exactly k10, inversion x2,
+   heteroclinic today — 5 classes — plus the series steps, with the per-step class counts printed); the
+   in-splitting unit test fails if `refined_rules` for one child is replaced by a sub-word (the sanity
+   check that the law has teeth).
+4. `grep -n "crosses stable branch .* an odd" src` → an INFO, and `incomplete_footprints` is populated on
+   a hand-built chain with three crossings on one branch (unit test).
+5. If `members_share_the_P1_itinerary` FAILS on any build, the slice STOPS and reports the class and the
+   two members' itineraries: T's premise is violated there and A.8d needs the author (Q15).
+
+### B6b — `word-finished` (Q4: W-a)
+
+**The answer.** With B6a's honest bounds in, what remains between the walk and A.8c's definition is
+vocabulary and placement: eight `WalkSearch` statuses where the definition has four outcomes, the
+evidence comparison (`registered_evidence`, `EvidenceDiagnosis`, the C11 "stable end" and C21 "order
+flip" detectors, `_compare_evidence`, `_diagnose`, `_order_flip`, ~300 lines) living inside the
+algorithm module though it is a verification record, and a reduction rule that drops loops but does not
+cancel adjacent inverses.
+
+**Scope.** Slug `word-finished`. Files: `src/tanglepack/topology/DualWalk.py`,
+`src/tanglepack/topology/SymbolicDynamics.py`, `src/tanglepack/topology/diagnostics.py`,
+`tests/helpers/laws.py` (`walks_agree_with_registered_images` imports from `diagnostics`),
+`tests/unit/topology/test_symbolic_dynamics.py`. Six files with `topology/__init__.py` — flagged (a move).
+
+**Steps.**
+1. `WalkSearch.status ∈ {resolved, trivial, ambiguous, unresolved}` plus `reason` (the old fine statuses
+   as reasons: `unreachable`, `no_admissible_walk`, `truncated`, `no_start_node`, `no_goal_node`,
+   `span_meets_no_node`, `members_disagree`); `ClassDynamics.status` already has the four.
+2. `translate_itinerary` freely reduces: after dropping loops, an adjacent `c c^-1` pair cancels
+   (repeat to a fixed point), with a DEBUG naming the cancelled pair; `trellis_itinerary` goes through the
+   same translation. Probe (2026-10-09): 0 adjacent `c c^-1` pairs in any class word on 13 builds, so
+   the cancellation is a no-op on the corpus; the slice re-runs the probe and attaches it.
+3. Move `registered_evidence`, `ImageEvidence`, `EvidenceDiagnosis`, `_compare_evidence`, `_diagnose`,
+   `_order_flip` to `topology/diagnostics.py`; `ClassDynamics.evidence` / `verified` are filled by
+   `symbolic_dynamics` calling `diagnostics.verify_words(dynamics, trellis)` after the words (the
+   algorithm never reads them); `is_reliable` keeps `verified is not False` (a "walk" disagreement
+   remains a reliability failure, C11/C21 remain no-verdict).
+4. `DualWalk.py` and `SymbolicDynamics.py` module docstrings open with A.8c's two definitions (object,
+   algorithm) and the list of what makes a class `unresolved`.
+
+**Behaviour.** None (rubric 2); statuses print differently (`describe()`).
+
+**Not doing.** W-b/W-c; `MAX_DETOUR`, `max_walks` values; the marker and wall rules.
+
+**Rubric.**
+1. Suite passes; `git diff --stat` touches only the six files.
+2. Letter-free `rules`, `refined_rules`, `is_reliable` and `verified` equal on base and branch for every
+   law case and deep run.
+3. `grep -n "EvidenceDiagnosis\|_order_flip" src/tanglepack/topology/SymbolicDynamics.py` → nothing;
+   `SymbolicDynamics.py` ≤ 1,100 lines, `DualWalk.py` ≤ 1,250.
+4. A unit test: an itinerary `c, c^-1` on a hand-built table reduces to the empty word (fails on base).
+5. The free-reduction probe's output (0 cancellations on the corpus, as on 2026-10-09) is attached to
+   the report.
+
+### Skeletons (no decision pending; scoped later)
+
+| # | Slug | Goal | Depends on |
+|---|---|---|---|
+| B9 | `session-three-concerns` | Plot delegates and cartoon geometry to `plotting`; fan-outs and `partition_element_for` deleted; zones computed from `Trellis.pips`; one "element at a bridge end" (`PartitionFamily.owner_at_end`; `Trellis.element_for`, `StablePartition._elements_at_bridge`, `BridgeClass._element_at_end` fold into it). LARGE (~700 lines moved/deleted). | B7, B8 |
+| B11 | `manifold-arrays` | Arrays `xy, c, pre_xy, mapped` per branch; same refinement kernel; bridges as index ranges. LARGE, numerics-only; its own plan (Q7: later). | B1 |
+| B12 | `one-design-note` | The 303 decision ids leave `src/` for one design note; CLAUDE.md rewritten as section A (one paragraph per stage); the tautological laws replaced or deleted now that the code they mirrored is gone; chalkboard divergence table closed; Q10's recipe reasons written. | last |
 
 ## C. What is deleted overall
 
@@ -804,16 +1116,16 @@ Decision-free slices (firm):
 | B4b | placement MOVED to `plotting.py`; direct backward-pair path, dedups, fallback, `from_table` flag, `Hole.coords`, `epsilon` | −170 moved, −90 |
 | B10 | dead API, registry networkx graph, `graphviz.py` | −900 (src + tests) |
 
-Pending the author (estimates):
+Decided slices not yet in full line counts (estimates):
 
 | Slice | What | Lines | Condition |
 |---|---|---|---|
-| B2 | the asymmetry's Dev Notes, one function for both intervals | −40 | Q1 |
-| B5 | inertness evidence bookkeeping | −90 | Q3 |
-| B7 | `IteratedHomotopyPartition`, `Cut`, `_empty_stretches`, `refine`, `RefinedClass`, `match_members`, `refined_rules`, iterated naming, three of four "element at a bridge end" | −1,000 | Q5 (R-a) |
-| B6b | walk statuses, 3-valued logic; evidence comparison moved out | −250, −300 moved | Q4 |
-| B9 | session plot delegates, cartoon geometry, fan-outs, `partition_element_for` | −700 (≈250 moved) | — |
-| B11 | linked-list data model → arrays | ~1,200 → ~500 | Q7 |
+| B2 | the asymmetry's Dev Notes, one function for both intervals | −40 | — |
+| B5 | inertness evidence bookkeeping, `Topology.classes` lettering loop | −110 | — |
+| B7 | nothing deleted: the refined level is KEPT (Q5); one WARNING → data; +2 laws | +60 | — |
+| B6b | walk statuses, 3-valued logic; evidence comparison moved out; free reduction added | −200, −300 moved | — |
+| B9 | session plot delegates, cartoon geometry, fan-outs, `partition_element_for`, three of four "element at a bridge end" | −750 (≈250 moved) | — |
+| B11 | linked-list data model → arrays | ~1,200 → ~500 | later (Q7) |
 | B12 | 303 decision-id citations in `src/`; tautological laws | −300 comments, tests ±0 | — |
 | not planned | walk machinery (only under W-c) | −1,500 | not the default |
 
@@ -847,21 +1159,31 @@ Pending the author (estimates):
   `side_diagnoses` identical; `hole_point` equals the base's `Hole.coords` to 1e-12. The one new
   WARNING fires on no law case and is exercised by a hand-built container.
 - **B10** is deletion of unused code. Proof: grep-clean; the law tier untouched.
-- **B2** (pending) changes which pairs survive at depth: intended, a discovery under the PDF
-  definition. Proof: B0(iii) passes on every law case; the series are re-measured and each lost or
+- **B2** changes which pairs survive only where a window representative is missing (A.5: the clause is
+  implied by consecutiveness when `N` is complete inside the cut; 0 punctures on the corpus). Proof:
+  every fingerprint equal; the hand-built tests fail on base; the series are re-measured and any lost or
   gained reference is listed with its witness (`reference_witness`) before DEC-25 is decided.
-- **B3** (pending) changes `m`: intended. Proof: the pip orbit never stalls on k32 (`f^10(q0)`
+- **B3** changes `m`: intended. Proof: the pip orbit never stalls on k32 (`f^10(q0)`
   registered at blast 9); under N-b the class count is non-decreasing at fixed depth by the sharp law.
-- **B5** (pending) changes iterated elements on 6/11 cases; class-level words must not move. Proof: the
-  orchestrator's probe made a rubric (letter-free `rules` equal on all 14 builds).
-- **B7/B6b** (pending) must not change any class-level word. Proof: letter-free `rules` equal on every
-  law case, deep run and series step; the k=10 oracle; the registered-chain oracle on every clean chain.
-- **B11** (pending) is the only slice that could change the polylines. Proof: identical crossing sets
+- **B5** changes `P1` on 6/11 cases (finer in-splitting, conjugate) and inert verdicts where evidence was
+  missing; class-level words must not move. Proof: the orchestrator's probe made a rubric (letter-free
+  `rules` equal on all 14 builds); the `inert_is_transient` law.
+- **B7** changes no number; its risk is that Theorem T is FALSE on some build (a hole bridge's image
+  separating two members' images), which would make the refined word member-dependent. Proof: the law
+  `members_share_the_P1_itinerary` on every build with two chained members; a failure stops the slice
+  and goes to the author (Q15). The in-splitting law proves the matrix is the construction A.8d names.
+- **B6b** must not change any word. Proof: letter-free `rules`/`refined_rules` equal on every law case
+  and deep run; the free-reduction probe shows the new cancellation is a no-op on the corpus (a
+  cancellation that fires would be a word the walk and the chain disagree on today — none do).
+- **B11** is the only slice that could change the polylines. Proof: identical crossing sets
   and cdists to `DEDUP_RTOL` on every case.
 
 ---
 
-## E. Open questions for the author (each with a default so "yes to all defaults" is a usable answer)
+## E. Questions for the author — DECIDED 2026-10-09 ("Do not drop the refined matrix and iterated partition. They are very important. The rest is fine.")
+
+Every question below took its default except Q5. Q14-Q16 are new (raised by A.8d); each has a default
+the plan proceeds on unless the author objects.
 
 1. **Q1 (DECISION S) — Test the open STABLE interval of a pseudoneighbor pair against X, exactly as the
    unstable one is tested?** Default: **yes** (S-a). You chose "no change" on 2026-09-15 as a known
@@ -882,10 +1204,13 @@ Pending the author (estimates):
    **yes** (W-a). W-b (a clean chain decides a tie) changes D3; W-c (the chain is the word) reverses D3
    and D11 and deletes the walk. The decision-free half (honest bounds, B6a) proceeds either way.
 
-5. **Q5 (DECISION R) — Is the REFINED transition matrix a goal?** Today it is inherited, not computed.
-   Default: **R-a**: words in classes, matrix over active classes (k=10 → `[[2]]`), iterated partition
-   and refinement removed (~1,000 lines), with the level-2 object (`P ∨ f(P)`, `f(a_i)` walked at level
-   2) as a later plan if you want it. R-b keeps the refined names as labels only.
+5. **Q5 (DECISION R) — Is the REFINED transition matrix a goal?** **Author: YES — "Do not drop the
+   refined matrix and iterated partition. They are very important."** Consequence: A.8d defines the
+   iterated partition (`P1 = P ∨ f(∂P)` with the empty-stretch rule), the refined symbols (occurrences)
+   and the refined word, states Theorem T (members share the `P1` itinerary) under which the inherited
+   word is the in-splitting of the class graph — a theorem, not an assumption — and B7 makes T and the
+   in-splitting identities laws on every build. k=10's `[[1,1],[1,1]]` is derived as the in-splitting
+   of `[[2]]`. Nothing is removed.
 
 6. **Q6 — The spectral radius.** With R-a the class matrix's radius is well defined (entropy bound of
    the class shift). Default: **still not shown** (your 2026-09-23 rule) until you say otherwise.
@@ -931,3 +1256,17 @@ Pending the author (estimates):
     minimum in the rubric (a drift under it is a visible behaviour change), OR say the value you want
     (1 = the derived bound; 2 = a factor-two margin). Note clause 2 (a run closer than the chord
     deviation) has no free constant and is the clause that decides k28 x8.
+
+14. **Q14 — Incomplete footprints.** An image chain with an odd number of crossings on a branch has left
+    the computed stable manifold (C19's parity "violation" is incompleteness, not error). Default: record
+    it as data (`incomplete_footprints`), INFO, never a reliability failure — the walk does not read it,
+    only the refined names on that branch might. Say if you want it to count against `is_reliable`.
+
+15. **Q15 — If Theorem T fails on a build.** B7's law checks that every member of a class has the same
+    `P1`-level itinerary. The planar argument (A.8d) says it holds; if a build contradicts it, the refined
+    word is member-dependent there. Default: the slice stops and shows you the class and the two
+    itineraries; no fallback is coded in advance.
+
+16. **Q16 — A second refinement level.** `P2 = P1 ∨ f(∂P1)` and children of children are another
+    in-splitting: finer names, the same dynamics (conjugate). Default: **not built**; say so if you want
+    the names.

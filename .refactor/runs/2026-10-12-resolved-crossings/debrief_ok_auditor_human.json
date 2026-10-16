@@ -1,0 +1,6 @@
+{
+  "status": "confirmed",
+  "allowed": ["confirmed", "touchup", "figures"],
+  "notes": "Author confirmed the B1 resolved-crossings outcome (2026-10-12): branch refactor/resolved-crossings at 76d0710 off 1029fcc, 18 paths, suite 1157 passed / 1 KNOWN_ISSUES xfail. Open for the author: (1) an unresolved pip-orbit point freezes T(q0) at the previous iterate under further blasting (remedy 'refine'; alternative: place it by image_cdist as PK-6 does); (2) two regression tests reach their defects only with resolution_ratio_threshold=None; (3) CLAUDE.md stale on 'flags never discard' and the k=2.8 x8 facts until B12; Trellis.__init__ resolved_ids default for the MinimalTrellis snapshot (MinimalTrellis.py:411). Merge is the author's.",
+  "iteration": 1
+}

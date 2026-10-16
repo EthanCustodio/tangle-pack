@@ -1,0 +1,6 @@
+{
+  "status": "confirmed",
+  "allowed": ["confirmed", "touchup", "figures"],
+  "notes": "Author confirmed the B2 pseudoneighbor-both-intervals outcome (2026-10-14): branch refactor/pseudoneighbor-both-intervals at 9cd29d5 off ba23a1f, four files, suite 1183 passed / 1 KNOWN_ISSUES xfail, no change on the corpus (fingerprints and reference pairs identical on all 11 law cases; e13 14 cells, 0 stable fires over 182 blast steps). One _interval_is_clear(..., stability) tests both open intervals against X. Seven hand-built fixtures changed in data only (their data contradicted the both-intervals definition), accepted. DEC-25: no new input (inversion still 2 -> 1 references at blast 6, stable clause plays no part). Open for the author: the m-range min/max is guarded only by an uncommitted hand check; two older tests are toothless (walk_stops_at_reference_window_end, heteroclinic_candidate_ignored); CLAUDE.md's 'a crossing past a cut is a point of X' wording contradicts the code's note (B12). Merge is the author's.",
+  "iteration": 1
+}

@@ -1,0 +1,31 @@
+{
+  "agent": "coder",
+  "artifact": "change_coder_test_engineer",
+  "counter": 1,
+  "edgeId": "coder_test_engineer",
+  "history": [
+    {
+      "agentId": "a7e7512f7758234cb",
+      "at": "2026-10-14T06:53:22.512Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/change_coder_test_engineer.t1.md",
+      "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.5",
+      "status": null,
+      "traversal": 1
+    }
+  ],
+  "latest": {
+    "agentId": "a7e7512f7758234cb",
+    "at": "2026-10-14T06:53:22.512Z",
+    "fanIndex": null,
+    "notes": null,
+    "payload": "artifacts/change_coder_test_engineer.t1.md",
+    "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.5",
+    "status": null,
+    "traversal": 1
+  },
+  "preamble": "`test_engineer` reads this and its work is then assayed by `code_reviewer`, which grades it \"pass\" or \"revise\".",
+  "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.5",
+  "schemaVersion": 1
+}

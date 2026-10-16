@@ -250,3 +250,457 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   switch (BCG-4): the references become blast-born crossings at unstable cdist ~2600-3100 whose
   backward chain runs ~20 iterates (42 holes). DEC-25's "no window hole on the second branch"
   is no longer a gap under D15.
+
+## 2026-10-09 — the alignment plan (`docs/alignment_plan_2026-10-09.md`, section E, Q1-Q13)
+
+- **Said** (via the orchestrator, verbatim): "Do not drop the refined matrix and iterated partition.
+  They are very important. The rest is fine."
+- **Consequence — Q5 (the refined level) is a GOAL.** The audit's finding (refined children inherit the
+  parent's word; the matrix is "assumed") is to be SOLVED, not removed: plan A.8d defines the iterated
+  partition `P1 = P ∨ f(∂P)` with the author's empty-stretch rule (2026-09-23), the refined symbols as
+  occurrences, and the refined word; states Theorem T (every member of a class has the same
+  `P1`-level freely reduced itinerary), under which the inherited word is the IN-SPLITTING of the class
+  graph (conjugate; identical sibling rows; children's columns sum to the parent's); slice B7 makes T
+  and the in-splitting identities laws on every build and derives k=10's `[[1,1],[1,1]]` from `[[2]]`.
+  Nothing of the iterated partition or refinement is deleted.
+- **Consequence — every other question took the plan's default:**
+  - Q1 (S-a): the pseudoneighbor test checks BOTH open intervals against X (the stable one too),
+    reversing the 2026-09-15 "known asymmetry, no change" (slice B2; the series re-measured before
+    DEC-25).
+  - Q2 (N-a): the blast never drops a child holding a pip-orbit point; `m` stays "deepest registered"
+    (B3). N-b (an explicit `depth`) not chosen.
+  - Q3 (I-a): the minimal trellis maps EVERY hole bridge; inertness = transience in the class
+    transition graph, read after the words; the evidence fixed point goes (B5). Measured: no
+    class-level word moves on 14 builds; the iterated partition gets finer on 6.
+  - Q4 (W-a): D3 stands (the walk is the word, the registered chain an oracle); search bounds become
+    honest — a walk found under a truncated budget, a span meeting no node, members disagreeing on
+    markers are `unresolved` (B6a); the evidence comparison moves out of the algorithm (B6b); the word
+    is FREELY reduced (loops dropped, adjacent `c c^-1` cancelled).
+  - Q6: the spectral radius stays unshown (2026-09-23 rule).
+  - Q7: the manifold data model (arrays) is a later plan (B11).
+  - Q8: D1 restated — at fixed depth `m` the hole set and class count are non-decreasing under
+    blasting; a deeper `m` is a discovery; D1 does not bind the closed alphabet.
+  - Q9: a class exists iff a computed bridge spans it or the word of an existing class names it
+    (closure from the spanned classes; D11 and D14 read together).
+  - Q10: recipe constants kept, their reasons written (B12).
+  - Q11: the suite may pin ONE textbook result, the k=10 full 2-shift (the single exception to the
+    2026-10-05 no-fixture-fact policy; B0).
+  - Q12: `build_inversion_period2` takes `stable_steps=10` (class `e` resolves, same 6 classes /
+    10 holes; B0).
+  - Q13 (a): a detection the polylines cannot resolve — `resolution_ratio` below the threshold, or a
+    neighbour of the same two curves closer along the unstable polyline than the chord deviation (a
+    near-coincident run is one unresolved stretch, whatever its parity) — is registered and reported
+    with the remedy "refine" and is NOT a crossing of N on any path; the blast-path parity vote
+    (`Tangle._collapse_noise_crossings`) goes. The margin stays 3 and the corpus minimum (heteroclinic
+    3.04) is recorded in the rubric (B1). Reverses "flags never discard" for this one case; NUM-4 is
+    thereby decided.
+- **Claude's defaults pending the author's objection (plan Q14-Q16):** an incomplete footprint (odd
+  chain crossings on a branch) is data, never a reliability failure; a build contradicting Theorem T
+  stops slice B7 and comes back to the author; no second refinement level is built.
+
+## 2026-10-12 — B0 `oracle-laws` (alignment plan slice B0; plan `artifacts/plan_planner_human_2.md`)
+
+- **Said** (via the orchestrator, verbatim): "Go ahead and run B0 through the planner and coder
+  agents", then "Do you need to do more? If you do just do it".
+- **Consequence — B0 approved as planned** (`plan_ok_planner_human.json`, iteration 1), with the
+  planner's corrections standing: the hole-containment law is CLOSED at an end the iterate table
+  links to a container crossing and strict elsewhere; no check-2 `KNOWN_ISSUES` (none failed on
+  base); `inversion_period2` joins `every_active_class_walks`' NOT_APPLICABLE.
+- **Plan question 1 took its default (yes):** the Q11 exception (the k=10 full-2-shift pin) is
+  recorded in one sentence of `tests/conftest.py`'s no-pin paragraph.
+- **Scope widened by one file** (orchestrator addendum, under the second instruction):
+  `tests/regression/test_open_p3_deep_runs.py`, because its loop reads `LAYERS` and failed the
+  k10 pin as vacuous on the deep builds. Rule adopted: `laws.LAW_CASES_ONLY =
+  ("reference_pairs_clear_of_X", "k10_is_the_full_shift")`, skipped by the deep-run loop, so the
+  scaling-only pair oracle never runs at depth (A.5). Six files in all, none under `src/`.
+- **Test-engineer and code-reviewer stages ran on the orchestrator's judgement** (the second
+  instruction); review passed in one round (`cycle_ok_test_engineer_code_reviewer.json`).
+- **Not changed, left for the author:** check 3 bounds no distance between a carried end and the
+  container polyline (reviewer's note; measured, see `artifacts/outcome_auditor_human_2.md`).
+
+## 2026-10-12 — B1 `resolved-crossings`, review round 1 (author decision at the revise)
+
+- **Said** (plan assay): approved the plan as written; the three questions take their defaults.
+- **Said** (after the reviewer's `revise` on rubric 1-2): "Rule stands; widen scope to fix the four tests."
+- **Consequence.** Q13 (a) holds everywhere: `N` is the resolved set, the trellis of the pip is cut at the
+  deepest RESOLVED point of the pip's orbit, and an unresolved orbit point (k28 x8's f^8(q0) at ratio
+  2.991; k32 x9 at 1.48; nested_outer x9 at 1.78) shortens `T(q0)` by one iterate. The remedy is
+  "refine". The deep-run numbers that follow (k28 x8 24/15/23 -> 4/4/4; k32 x9-10 holes 58 -> 56,
+  closed 39 -> 45, reliable) are reported, never pinned. The plan's file list is widened by the four
+  files the failures live in: `tests/helpers/laws.py` (the pip-orbit-cut oracle reads `N`),
+  `tests/regression/test_coarse_blasts_rows_by_signs.py`, `tests/regression/test_evidence_diagnosis.py`,
+  `tests/regression/test_pip_orbit_cut.py` (rework their preconditions or builds, e.g. a finer
+  `area_cutoff` so the detection resolves; never delete the defect they guard). Rubric 1's "none of the
+  tests named in section 6 is edited" is amended to these four; rubric 3 lists 18 paths.
+
+## 2026-10-12 — B1 `resolved-crossings`, outcome (review passed in round 2; branch `refactor/resolved-crossings` @ `76d0710`, base `1029fcc`)
+
+- **Said:** nothing new since the revise-round decision above (the rule stands; scope 18 paths).
+  The review passed in round 2 (`cycle_ok_test_engineer_code_reviewer.json`, iteration 2); no
+  debrief verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): N = `resolved_ids(threshold)`
+  on seven readers; law cases unchanged; every deep-run change is one mechanism -- the pip orbit's
+  deepest detection is unresolved (k28 x8 `f^9(q0)` id 245, ratio 2.991 -- the entry above calls it
+  f^8, counted from the pip it is f^9; k32 x9 `f^10(q0)` 523, 1.48; nested_outer x9 `f^10(q0)` 447,
+  1.78), is never linked, and `T(q0)` stays at the previous blast's trellis under every further
+  blast until refined (k32 x9-10 and nested_outer x9-11 equal x8; k28 x8 equals x7).
+- **Open for the author (from the audit):** (1) freeze vs placing an unresolved orbit point by
+  `image_cdist`; (2) the two `threshold = None` regression builds (keep / NOT_APPLICABLE / unit
+  re-guard); (3) `CLAUDE.md`'s "flags never discard" and k=2.8 x8 fixture facts stay stale until
+  B12; `Trellis.py:204` default for the `MinimalTrellis` sparse snapshot (fix at `MinimalTrellis.py:411`).
+
+## 2026-10-12 — B6a `walk-bounds-honest`, outcome (review passed in round 1; branch `refactor/walk-bounds-honest` @ `8a1cdc3`, base `76d0710`)
+
+- **Said** (plan assay): asked for a plain description of the issue first, then approved the plan
+  as written; question 1 takes its default (`lobe_image_markers` raises `MembersDisagree`, caught
+  in `_resolve_itinerary` before any walk). No debrief verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): a walk is a word only when
+  established. A truncated search (any status), a landing span overlapping no stable node (new status
+  `span_meets_no_node`) and member lobes disagreeing on a marker each leave the class unresolved with
+  its reason; an unresolved class lends no wall. `_nodes_meeting` keeps a second tier (overlap > 0) so a
+  span narrower than its own scaling error keeps the one edge it lies in (k32 blasts 6/8). No rule,
+  reliability or closed-size change on any law case, deep run or series step; heteroclinic at
+  `max_walks=2` becomes unreliable (was reliable on a truncated `unique`).
+- **Left open:** export `MembersDisagree` from `tanglepack.topology` (out of scope); `CLAUDE.md` still
+  describes the old "falls back to all of them" span rule; whether `SCALING_RTOL * |c|` is too coarse
+  for narrow landing spans (numerics, later).
+
+## 2026-10-13 — B8 `unresolved-sets`, outcome (review passed in round 1; branch `refactor/unresolved-sets` @ `ae18859`, base `8a1cdc3`)
+
+- **Said** (plan assay, 2026-10-13): approved the plan as written -- eight files, the order-free
+  collision rule, `forget_strong_pip` resets the cached trellis, the candidacy test runs after the
+  zone is defined; question 1 takes its default (test candidacy inside `resonance_zone` as is,
+  `add_resonance_zones` unchanged). No debrief verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): an image claimed by two or
+  more crossings links none of them (held link removed by `IntersectionRegistry.remove_iterate`), and
+  a multi-match is recorded; both go to `registry.unresolved_links`, which the law
+  `iterate_table_complete` keeps disjoint from the `+1` sources. `TangleSession.forget_strong_pip`
+  exists; `resonance_zone` adopts its pip only when it is a candidate on the trimmed trellis (else one
+  WARNING, previous choice kept). No state change on any law case or series step (`unresolved_links`
+  empty everywhere but `near_tangency`); the workbench generation counter reads one higher per zone.
+- **Left open:** candidates that make `topology()` assert once set (k10 2, k28 x1/x2 4, inversion
+  2/14); `registry._generation += 1` written from `IterateInference`; the law's new clauses guarded
+  only by a review probe; `check_iterate_table_complete` scans the registry, not N.
+
+## 2026-10-13 — B4a `holes-algorithm-vs-diagnostics`, outcome (review passed in round 1; branch `refactor/holes-algorithm-vs-diagnostics` @ `f166573`, base `ae18859`)
+
+- **Said** (plan assay, 2026-10-13): approved the plan as written -- eleven files, three commits
+  (verbatim move, measured side on demand, tests), no behaviour change; question 1 takes its default:
+  the inverse-map placement of propagated holes (`_map_backward`) stays in `StablePartition` until
+  B4b, and the "no map in `StablePartition`" rubric moves to B4b. No debrief verdict yet. Not merged:
+  the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): the 16 geometric readings
+  live in `topology/diagnostics.py` (byte-identical move); `Hole` has no `measured_side` /
+  `side_source`; the measured side is `diagnostics.measured_sides(trellis, holes)`, built only on the
+  flag path (`punch_holes(diagnose=True)`), and `side_source(hole)` is a function. I1/I2 stay
+  assertions in `StablePartition` as wrappers over cores in `diagnostics`. Every hole, measured side,
+  row diagnosis, flag and fingerprint is identical on the 11 law cases and `p3_coarse_blasts`.
+  StablePartition.py 1,947 -> 1,354 lines.
+- **Left open:** `_map_backward` (B4b); stale references outside the file list (`numerics/geometry.py:7`,
+  `scripts/refactor_proof/hole-side-and-own-blast/hole_sides.py`, `CLAUDE.md` holes bullet and `Hole`
+  row); `measured_sides` cannot replay an orbit started from the propagation fallback (B4b removes it).
+
+## 2026-10-14 — B4b `holes-are-combinatorial`, outcome (review passed in round 1; branch `refactor/holes-are-combinatorial` @ `ba23a1f`, base `f166573`)
+
+- **Said** (plan assay, 2026-10-13): approved the plan as written -- nine files plus one
+  `TangleSession` docstring line; a hole is its five combinatorial fields; placement moves to
+  `plotting.hole_point`; question 1 takes its default (a): `hole_point` carries the reference point
+  back with `trellis.dynamical_system.map_inv`, so figures are identical and `StablePartition` calls
+  no map; the new WARNING watches scaled span ends only. No debrief verdict yet. Not merged: the merge
+  is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `Hole` is
+  `(near_intersection_id, pair, bridge_side, bounding_ids, openings, iterate, origin)`; `punch_holes`
+  punches references only and asserts no backward pair; propagation starts at the reference, no
+  dedups, no fallback; `_hole_openings` names the anchor branch by `stable_key_at` plus the one-curve
+  identification; `StablePartition.py` 1,091 lines, no numpy, no map; drawing is
+  `plotting.hole_point` (which calls `map_inv`), also read by `measured_sides` and three laws. Every
+  hole's five fields, fingerprint, word and measured side identical on the 11 law cases and
+  `p3_coarse_blasts`; drawn points identical (0.0). Logs: `near_tangency`'s 14 "cannot propagate"
+  WARNINGs gone; one new NUM-5 WARNING (fires on `k28_deep_blast_sliver`, no law case).
+- **Left open:** `hole_point` raises a bare `StopIteration` on a propagated hole with no reference
+  (unreachable through `Trellis.punch_holes`); stale "seeds already-punched orbits and regions"
+  comments (`Trellis.py:1250`, `StablePartition.py:306`); I1/I2 cores in diagnostics (B4a);
+  `CLAUDE.md` holes bullet and `Hole` row (B12).
+
+## 2026-10-14 — B2 `pseudoneighbor-both-intervals`, outcome (review passed in round 1; branch `refactor/pseudoneighbor-both-intervals` @ `9cd29d5`, base `ba23a1f`)
+
+- **Said** (plan assay, 2026-10-14): approved the plan as written -- one
+  `_interval_is_clear(..., stability, ...)` with a min/max m-range, `per_step_beta(stability)`,
+  candidates `own_intersection_ids` with the D7 guard mirrored; a pair kept only when both open
+  intervals are clear; three unit tests; e13 over the seven E12 cases at both cutoffs (14 cells); the
+  one question takes its default: e13's results jsonl is committed as the fourth file. No debrief
+  verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): the pseudoneighbor test now
+  matches the PDF definition (both open intervals against X, one function). No behaviour change on
+  any law case or any of e13's 14 cells (0 stable fires in 182 steps). Seven unit-test fixtures whose
+  data contradicted the definition were changed in data only (probe crossings moved to the other
+  stable branch, or nudged); the reviewer accepted this against rubric 2's literal wording. DEC-25
+  gets no new input: the inversion series still drops 2 -> 1 references at blast 6, with the stable
+  clause playing no part.
+- **Left open:** the m-range `min/max` is guarded only by an uncommitted hand check; two older tests
+  (`walk_stops_at_reference_window_end`, `heteroclinic_candidate_ignored`) have no teeth for their
+  named rule; `CLAUDE.md` "a crossing past a cut is a point of X" wording (B12); the old function name
+  in `docs/` and `docs/open_issues.md`.
+
+## 2026-10-14 — B3 `depth-of-n`, outcome (review passed in round 1; branch `refactor/depth-of-n` @ `7d3a294`, base `9cd29d5`)
+
+- **Said** (plan assay, 2026-10-14): approved the plan as written, question 1 = (a) -- N-a as
+  decided and restated: a child ending on the chosen pip's composed `+1` orbit is exempt from
+  `min_separation` (one INFO), `BlastResult.pip_depth` composed (never `forward_depth`), the
+  `blast_zone` docstring, `SeriesStep.pip_depth` measured test-side, the series law
+  "non-decreasing" (question 2's default), the proximity-guard test restated, a new unit-test module
+  on a multi-iteration call. Five files. The series stalls -- (ii) unresolved `f^{m+1}(q0)`, (iii)
+  undetected, (iv) the zone filter -- left for a later decision. No debrief verdict yet. Not merged:
+  the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `m` = the registered `+1`
+  chain from the chosen pip; `min_separation` never decides it. No change on any law case or on any
+  step of the five series (pip_depth k28 `[1..8, 8]`, k32 `[1..9, 9, 9]`, nested_outer
+  `[1..9, 9, 9, 9]`, p3 `[14..23]`, inversion `[5..9]`). Inside one multi-iteration call a
+  pip-bearing child is kept: nested_outer 11 iterations ends at m = 9 (was 7), and that call now
+  fires the existing 361 same-stability and 1 unresolved-detection WARNINGs (the exemption keeps
+  near-coincident curve). One INFO per exempted child (one per single-iteration blast with the
+  recipes' 1e-5). The child filter runs after every parent of the iteration is mapped (no effect of
+  its own, instrumented by the reviewer). Suite 1193 pass / 1 xfail (KNOWN_ISSUES).
+- **Left open:** the stalls (ii) on k28 / k32 / nested_outer / inversion, (iii) on p3 /
+  heteroclinic, (iv) the zone filter -- options: refine (B1), place by `image_cdist` (PK-6-like,
+  reverses B1 for the pip orbit, drifts toward N-b), a finer image near the anchor for (iii); whether
+  the guard should win over the exemption when the curve is truly under-resolved; the stale B3
+  section and decision N in `docs/alignment_plan_2026-10-09.md` (`:149-154`, `:903-943`,
+  `:1166-1167`); `scripts/henon_blast_period_3.py` dead on `main` (pinned pip 12 not a candidate);
+  the test-side orbit composition written three times.
+
+## 2026-10-14 — B5 `inertness-is-transience`, plan round 1 sent back (author note at the revise)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, status `revise`): "I believe you can determine if
+  a bridge is inert before constructing the dual graph. Every bridge that has an initial hole punched
+  in it should be inert. The zeroth holes."
+- **Consequence:** the analyst tested the rule on all 15 builds (`artifacts/findings_analyst_planner.t2.md`).
+  It holds everywhere: every class holding a zeroth-hole (reference-hole) bridge has an EMPTY word,
+  and it is a theorem when no selected orbit sits inside the zeroth lobe and no other hole sits beside
+  the bridge (the lobe holds one marker, its image holds none). It is sufficient, not the definition:
+  heteroclinic `u` is a hole-free inert class. Re-planned: the minimal trellis maps every hole bridge
+  EXCEPT one carrying a zeroth hole, decided from `holes` before the dual graph (no class table read);
+  transience over the words (Q3, I-a) stays the verdict for every class; a new law
+  `zeroth_hole_classes_have_empty_words` checks the theorem. Minimal trellis, `P1`, image bridges,
+  refined classes and words stay as at `HEAD` on all 15 builds (round 1's "P1 finer on 8 builds" and
+  its three new D9 WARNINGs are gone); only five verdicts change.
+
+## 2026-10-14 — B5 `inertness-is-transience`, outcome (plan approved at round 2; review passed in round 1 of coding; branch `refactor/inertness-is-transience` @ `3fb310a`, base `7d3a294`)
+
+- **Said** (plan assay, round 2, 2026-10-14): approved the round-2 plan as written -- the author's
+  zeroth-hole rule (a bridge carrying a reference hole, iterate 0, is inert: its lobe holds one
+  marker whose image is no marker, so its word is empty) decides, before the dual graph, which hole
+  bridges the minimal trellis maps (every hole bridge except the zeroth-hole ones, read from
+  `holes`); transience over the words is the verdict for every class (Q3, I-a); new law
+  `zeroth_hole_classes_have_empty_words`; nine files (question 1's default). No debrief verdict yet.
+  Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): the registered-evidence
+  inertness is deleted (`_resolve_inertness`, `_collect_image_evidence`, `has_image_evidence`, the
+  `image_classes` / `image_loops` / `unresolved` slots); `entry.inert` is `None` until
+  `symbolic_dynamics` sets it from `inert_classes(words)`, then letters (active via `letter_for`,
+  inert series); `Topology.classes` runs the dynamics; PK-8's WARNING gone. Words, minimal
+  trellis, `P1`, refined classes and `is_reliable` unchanged on all 15 builds; five verdicts active
+  -> inert (inversion_two_blasts `g`, heteroclinic `d` / `bj`, p3_6_blasts `ab`, nested inner 6
+  `ae`); `unmapped` shrinks by those bridges. Suite 1193 pass / 1 xfail (KNOWN_ISSUES).
+- **Left open:** the zeroth-hole rule is a sufficient condition, not the definition (heteroclinic
+  `u` is a hole-free inert class); the unblasted nested fixture `p3_partitioned` has a zeroth-hole
+  class (bridge `(4,5)`) that is UNRESOLVED and therefore active while its bridge is not mapped
+  (outside the theorem's hypothesis); `inert_classes` not re-exported from `tanglepack.topology`;
+  `CLAUDE.md` inertness text stale (B12).
+
+## 2026-10-14 — B7 `refined-level-defined`, outcome (plan approved round 1 with question 1's default, option (ii); review passed in round 1 of coding; branch `refactor/refined-level-defined` @ `a6a4f68`, base `3fb310a`)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved): "Question 1 takes the default, option
+  (ii): keep the base-branch chain-order chord pairing in B7, register
+  (members_share_the_P1_itinerary, k32_series) as a strict-xfail KNOWN_ISSUE naming B7b, and plan B7b
+  base-chords-in-stable-order as the next slice. Seven files; no number changes." No debrief verdict
+  yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `P1 = P ∨ f(∂P)` and the
+  empty-stretch rule (base chords chain order 2026-09-23, foreign chords stable order C19) stated in
+  the `PartitionFamily` module docstring; the odd-fold-count WARNING is gone, replaced by
+  `IteratedHomotopyPartition.incomplete_footprints` (+ one INFO per build, a `describe()` line),
+  collected by a sibling `_incomplete_footprints` because `_empty_stretches`' signature is
+  monkeypatched by out-of-scope tests; Theorem T and the in-splitting stated in `SymbolicDynamics`
+  (docstrings only, AST-equal); laws `members_share_the_P1_itinerary` (law cases only) and
+  `refined_matrix_is_an_in_splitting`; the series run of T under its own id
+  `series_members_share_the_P1_itinerary`, strict-xfail on `k32_series` (wp `B7b`). No number changes
+  on the 15 builds; suite 1200 passed / 46 skipped / 5 deselected / 2 xfailed.
+- **Deviations the author did not approve in advance:** an EIGHTH file
+  (`tests/invariants/test_law_case_sanity.py`, +2/-1: the series id in `_STANDALONE_ISSUES`, the wp
+  regex accepts `B\d+[a-z]?`), ordered by the orchestrator because the seven-file plan could not carry
+  the approved known issue past that guard; the known-issue key carries the `series_` prefix, not the
+  verdict's literal `members_share_the_P1_itinerary`.
+- **Left open (for B7b or the author):** the k32 class is `{R_(0.0;8), R_(0.0;10)}` in ElementNaming
+  (the KnownIssue text's "R_7 <-> R_9" is the positional `R#7`/`R#9`); the walked word agrees with the
+  siblings and only the hole-bridge member `(6, 7)` disagrees; the module docstring's "laws on every
+  build" overstates T (law cases + series only); B7b reverses the author's 2026-09-23 base-branch
+  chain-order rule; commit trailers say `Claude Opus 5.5` though the orchestrator asked for another name.
+
+## 2026-10-15 — B7b `base-chords-in-stable-order`, outcome (plan approved round 1 with both defaults; review passed in round 1 of coding; branch `refactor/base-chords-in-stable-order` @ `63477e3`, base `a6a4f68`)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved 2026-10-15): "Approved as written. Both
+  questions take their defaults: question 1 no fold of _incomplete_footprints into _empty_stretches;
+  question 2 yes, the geometric reading goes in tests/helpers/laws.py with a series test in the
+  regression tier. Seven files. The base-branch chords pair in stable order, reversing the 2026-09-23
+  chain-order rule on the base branch." No debrief verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): ONE chord rule on every stable
+  branch -- a lobe image's interior crossings pair in STABLE order, base branch included (C19's Jordan
+  argument; `_empty_stretches` drops the `branch_key != base_branch` test and the dead
+  `(base_branch,) = ends`). The 2026-09-23 chain-order clause is REVERSED. Evidence: on all 47 base-lobe
+  readings of the corpus (16 builds + 47 series steps) the gaps alternate out/in from the anchor (base
+  inside) and the covered gaps are the stable-order pairs; the one lobe where the orders differ is
+  `k32_series` hole `(6,7)` at steps 2-10; the stop rule did not fire. Behaviour changes on `k32_series`
+  only: iterated elements (2-5 23->24, 6-7 40->39, 8-10 113->111), `unmatched_members` 1->0 and Theorem T
+  1->0 disagreements at 6-7, `refined_rules` at 8-10 (inert `v` 4 children -> 3, one token `v_4 -> v_3`).
+  Letter-free words, `M`, `M_1`, all class counts, split counts and `is_reliable` identical on all 63.
+  The request's "split inert -1 on 15 builds" was an artefact of B7's buggy scratch patch (it lost the
+  `empty.setdefault(b, ...)` line). KNOWN_ISSUES shrinks to C3 alone. New test reading
+  `helpers.laws.base_chord_misreadings` (point-in-polygon, clauses a-d) on 4 builds + 5 series. Suite
+  1211 passed / 47 skipped / 5 deselected / 1 xfailed.
+- **Left open:** the CLAUDE.md "Partition families" bullet still states base chords in chain order
+  (B12); `_incomplete_footprints`' INFO log, `describe()` line and the class attribute doc still say
+  "last" crossing (now the outermost); the new build test reads 4 of the 11 build lobes (the other 7
+  read clean by hand); outside the k32 lobe the base tests cannot catch a DROPPED chord (the one inside
+  gap is also a hole stretch), only a wrong one; commit trailers say `Claude Fable 5.1`.
+
+## 2026-10-15 — B6b `word-finished`, outcome (plan approved round 1 with all six defaults; review passed in round 1 of coding; branch `refactor/word-finished` @ `65edec4`, base `63477e3`)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved 2026-10-15): "Approved as written. All six
+  questions take their defaults: (1) WalkSearch.status has three values resolved/ambiguous/unresolved
+  and 'trivial' belongs only to a class (empty word); (2) a search cut short with candidates becomes
+  unresolved with reason 'truncated', walks kept, the truncated field goes; (3) class-level free
+  reduction per A.8c as one free_reduce applied to cd.symbols and to the closure/inertness words,
+  translate_itinerary stays unreduced so the T law keeps its same-occurrence reading, the registered
+  evidence word is reduced by the same function before comparison; (4) members_disagree stays on the
+  class only (six walk reasons); (5) MembersDisagree exported from tanglepack.topology; (6) one slice,
+  ten files." No debrief verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`):
+  - "trivial" now means only an empty class word. `WalkSearch.status` takes the values `resolved`,
+    `ambiguous` and `unresolved`. `WalkSearch.reason` holds one of six failure values (`unreachable`,
+    `no_start_node`, `no_goal_node`, `no_admissible_walk`, `truncated`, `span_meets_no_node`). The
+    `WalkSearch.truncated` flag is gone, and a search cut short by the budget keeps its walks but is
+    `unresolved`.
+  - `SymbolicDynamics.free_reduce` cancels at class level. It has three readers: `cd.symbols`, the
+    closure/inertness words and the registered evidence word. `translate_itinerary` and the T law
+    are unreduced.
+  - The evidence comparison now lives in `topology/diagnostics.py`, behind
+    `verify_words(records, trellis, naming, table, letters)`. `_compare_evidence` was folded into
+    `verify_words`. `_member_pair` stays in SD.
+  - No number changes on the 63 corpus items. Free reduction fires 0 times there.
+  - Suite: 1223 passed / 47 skipped / 5 deselected / 1 xfailed (C3).
+  - Line counts: SD 1537 -> 1312, DualWalk 1370 -> 1383, diagnostics 713 -> 990 (exactly at its cap).
+- **Deviations the author did not approve in advance:**
+  - `WalkReason` and `free_reduce` were also exported.
+  - The per-class DEBUG line `class %s: %s, word %r, verified %s` was dropped.
+  - A capped search with several walks logs the max_walks WARNING (now ending "the search decides
+    nothing") and no longer also the ambiguous WARNING.
+  - `plotting._class_status` lost its `-` fallback and now returns `cd.status`.
+  - The loops unit test still pins the unreduced `translate_itinerary` and adds `free_reduce == []`.
+  - The plan's rubric 7 said the capped tie reads `ambiguous` on base. It actually reads `unique`
+    with `truncated=True`.
+- **Left open:**
+  - The `CLAUDE.md` symbolic-dynamics bullet and the `DualWalk` table row still list the old
+    statuses and `WalkSearch.truncated` (B12).
+  - `diagnostics.py` has zero headroom under its 990 cap.
+  - `free_reduce` runs twice per class (closure, then `cd.symbols`), so a cancellation's DEBUG line
+    would print twice.
+  - `plotting._class_status` is untested.
+  - The ambiguous, failure and truncated rows of the status mapping are exercised by unit tests
+    only, because the corpus has none.
+  - Commit trailers say `Claude Fable 5.1`.
+
+## 2026-10-15 — B10 `dead-api`, outcome (plan approved round 1 with all eight defaults; review passed in round 1 of coding; branch `refactor/dead-api` @ `517aa01`, base `65edec4`)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved 2026-10-15): "Author approved the B10
+  dead-api plan 2026-10-15 with all eight defaults": (Q1) rewrite the two `*_new_intersection_structures.py`
+  demo scripts with `filter`, dropping their graph and array sections; (Q2) delete
+  `TangleSession.classify_bridges` and rewrite its script and test as a comprehension over
+  `classify_bridge`; (Q3 (a)) change only `henon_blast_period_3.py:123` and report the script dead;
+  (Q4) delete the `from_branch` test with the method; (Q5) drop the `"_get_iterate"` string in
+  `e02_gpu_end_to_end.py`; (Q6) leave the notebooks; (Q7) delete `IterateTable.as_forward_array` /
+  `as_backward_array` in C5; (Q8) trim `topology.__all__` to 48 names and keep every import line.
+  No debrief verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`):
+  - Deleted: `grow_x_times`, `_get_refined_point`, `_get_iterate`, `trim_stable_at_intersection`,
+    the registry's networkx graph, `graphviz.py`, `build_intersection_graph`,
+    `visualize_intersection_graph`, `on_cdist_range`, `from_branch`, `nearest_by_unstable_cdist`,
+    both `as_*_array` pairs, `classify_bridges`, `BlastResult.terminated_early`. Kept:
+    `release_manifold` (live), every law-tier oracle, `refine_manifold`, `filter` /
+    `from_fixed_point` / `iterate_orbit`.
+  - `import tanglepack` no longer loads networkx. `topology.__all__` 104 -> 48.
+  - No number changes on the 63 corpus items (probe byte-identical). Suite 1215 passed / 47 skipped /
+    5 deselected / 1 xfailed (C3); 8 test ids gone as planned, 1 renamed.
+  - Net −1013 lines over src + tests (−1034 with scripts and stress).
+- **Deviations the author did not approve in advance:** an unused `TYPE_CHECKING` import dropped in
+  C3; the `Iterable` import went in C4, not C5; `remove_iterate` no longer reads `target_id`; a few
+  extra docstrings reworded so none mentions a registry graph; the comment in
+  `henon_bridge_classification.py` moved (2 lines, not 1).
+- **Left open:** CLAUDE.md rows `:133` (`graph(bridges=)`), `:136` (`graphviz`), `:154`
+  (`terminated_early`) and `docs/source/tanglepack.numerics.rst:183-189` (automodule of the deleted
+  `graphviz`) are stale (B12); the 56 F401s in `topology/__init__.py` (B12's import block);
+  `scripts/manifold_cutting_test.ipynb` and `notebooks/archive/period_three.ipynb` still call
+  `grow_x_times` (Q6); `henon_blast_period_3.py` still dead at `:95`;
+  `test_map_step_and_graph.py` keeps "graph" in its name; commit trailers say `Claude Fable 5.1`.
+
+## 2026-10-15 — B9a `session-three-concerns`, outcome (plan approved round 1 with every default Q0-Q6; review passed in round 1 of coding; branch `refactor/session-three-concerns` @ `5f0db5f`, base `517aa01`)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved 2026-10-15): "Author approved the B9
+  plan 2026-10-15 with every default": (Q0) split B9 into B9a `session-three-concerns` now and B9b
+  `one-element-at-end` next; (Q1) no thin plot delegate stays on the session; (Q2 (a))
+  `cartoon_zones` moves verbatim to `loom/cartoon.py` and reads the STORED zones -- zones are NOT
+  computed from `Trellis.pips` (that would change `inversion_period2`'s circle cartoon and pull the
+  zone boundary builder and `ring_cycles` / `ring_order` into topology); (Q3) `plot_resonance_zones`
+  goes to the same module, taking zones; (Q4) the describe fan-outs (`describe_holes`,
+  `describe_stable_partitions`, `_describe`) are deleted; (Q5) the
+  `test_a_pip_trimmed_away_is_not_replaced_by_plotting` test is deleted (`Trellis.plot_*` never
+  touches the pip memory); (Q6) no new "element on any side" API. No debrief verdict yet. Not
+  merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`):
+  - `TangleSession.py` 1744 -> 843 lines; it holds no `plot_*`, no cartoon geometry, no fan-out,
+    no `partition_element_for`, no describe fan-out. `cartoon_zones` / `plot_resonance_zones` live
+    in `loom/cartoon.py` (exported from `tanglepack.loom`); `cartoon_enclosures(trellis, bridge_ids,
+    parents, fixed_points)` in `topology/plotting.py` (not in `topology.__all__`, still 48 names).
+  - Callers draw a circle cartoon in three explicit steps (`cartoon_zones` -> `cartoon_enclosures`
+    when `parents` -> `plotting.plot_dual_graph_cartoon`); per-fixed-point plots go through
+    `session.trellis(fp).plot_*`; manual stage calls through `session.topology(fp)` or the trellis.
+  - No number, figure or script stdout changes (63-item probe byte-identical, 32 canvases, 42
+    itinerary PNGs, 11 scripts). Suite 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3);
+    7 test ids deleted, 3 renamed, as planned. Net -749 lines (src -613, tests -143, scripts +7).
+- **Deviations the author did not approve in advance:** imports pruned in the commit that stops
+  using them; the `plotting.py:6` docstring fix in C2, not C1; small docstring edits in listed
+  scripts and `test_partition_elements.py`; a test-engineer commit strengthening
+  `test_session_caches._repartition_by_hand` (pre-existing toothless assertion).
+- **Left open:** B9b (the element-at-end fold); stale docstring citations of
+  `TangleSession.partition_element_for` at `Trellis.py:1413`, `TopologyResults.py:427` (B9b) and of
+  "the nested-zone classifier in TangleSession" at `ResonanceZone.py:295`; CLAUDE.md `TangleSession`
+  row (B12); `tanglepack.loom.plot_resonance_zones` untested; `henon_blast_period_3.py` still dead
+  at `:95`; commit trailers say `Claude Fable 5.1`.
+
+## 2026-10-15 — B9b `one-element-at-end`, outcome (plan approved round 1 with every default Q1-Q5; review passed in round 1 of coding; branch `refactor/one-element-at-end` @ `94fca6b`, base `5f0db5f`)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved 2026-10-15): "Author approved the B9b
+  one-element-at-end plan 2026-10-15 with all five defaults": (Q1 (B)) a function-level import of
+  `HomotopyPartition` in `bridge_classes`, which calls `owner_at_end`; `_element_at_end` deleted
+  (not option A's two shared helpers beside `row_of_end`); (Q2) the class rule's unowned-crossing
+  AssertionError becomes `owner_of_intersection`'s ValueError on that unreachable path; (Q3) the
+  three tests citing `element_for` are renamed; (Q4) no `plot_resonance_zones` smoke test here
+  (B12); (Q5) `ResonanceZone.py` untouched (its two `TangleSession` citations are accurate). No
+  debrief verdict yet. Not merged: the merge is the author's.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`):
+  - `PartitionFamily.owner_at_end` is the one reader of "which element owns this bridge end on its
+    row", on every computed path; the class rule's `ends` calls it. `Trellis.element_for`,
+    `StablePartition._elements_at_bridge`, the `StablePartitionResult.elements_at_bridge` field
+    (with its two writers) and `BridgeClass._element_at_end` are deleted. The any-side reading is
+    `owner_of_intersection` on the `stable_key_at` branch; no "any side" API added (B9a Q6).
+  - No number changes: agreement probe 7,090 / 14,180 / 1,776 with readings byte-identical to
+    base; 63-item outcome probe byte-identical. Suite 1207 passed / 47 skipped / 5 deselected / 1
+    xfailed (C3). One test deleted, three renamed. Net -168 lines (src -149, tests -19).
+- **Deviations the author did not approve in advance:** docstring wording beyond the analyst's
+  candidate (the `bridge_classes` Note, the singular "it" in the `StablePartitionResult` Note);
+  the missing-partition ValueError text is now `owner_of_intersection`'s (type unchanged, still
+  names the branch); commit trailers say `Claude Opus 5.5` (the spawn asked for `Fable 5.1`).
+- **Left open:** CLAUDE.md `Trellis` row still lists `element_for` (`:139` in the working tree,
+  B12); `plot_resonance_zones` untested (B12); the unused `Intersection` import at
+  `StablePartition.py:238`; `henon_blast_period_3.py` still dead at `:95`; four stale committed
+  higher-period PNGs; the rewritten `test_partition_elements.py` does not catch a broken C7 anchor
+  rule or a wrong row in `owner_at_end` (the law tier does).

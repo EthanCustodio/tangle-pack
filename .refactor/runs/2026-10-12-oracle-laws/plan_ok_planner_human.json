@@ -1,0 +1,10 @@
+{
+"status": "approved",
+"allowed": [
+"approved",
+"revise",
+"answered"
+],
+"notes": "Approved. The author authorised this run in conversation on 2026-10-12 (\"Go ahead and run B0 through the planner and coder agents\") after deciding Q11 and Q12 on 2026-10-09; the orchestrator recorded the verdict. The plan's one question (record the Q11 exception in tests/conftest.py's policy docstring, a fifth file) takes its default: yes, one sentence. The planner's five [changed] corrections to B0 stand: check 3 closed at an end the iterate table links to a container crossing, strict elsewhere; check-1 break-it forces a pip is_strong_pip rejects; check-3 break-it also patches _map_backward; inversion_period2 added to every_active_class_walks' NOT_APPLICABLE; no xfails expected from check 2, confirmed by a base run. ADDENDUM 2026-10-12 (orchestrator, after the coder's first report): the file list widens by ONE file, tests/regression/test_open_p3_deep_runs.py, because its law loop reads LAYERS too and fails a law that checks nothing on the deep builds. Rule adopted: laws.py declares LAW_CASES_ONLY = ('reference_pairs_clear_of_X', 'k10_is_the_full_shift') beside LAYERS, and the deep-run test skips those names; this keeps section 6 ('no deep-series oracle') true for the scaling-only check 2 as well. Six files total.",
+"iteration": 1
+}

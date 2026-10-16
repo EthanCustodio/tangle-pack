@@ -1,7 +1,9 @@
 # numerics — knowledge file
 
 Created 2026-10-08 (open-issues round WP2, branch `oi/wp02-exact-iterates`, base `f39f617`); last
-updated 2026-10-09 (WP12, branch `oi/wp12-reverify`, base `a2e0e65`; line numbers on that branch).
+updated 2026-10-13 (B8 `unresolved-sets` OUTCOME audit, branch `refactor/unresolved-sets` @
+`ae18859`, NOT merged at writing: the iterate-table map entries; the older sections' line numbers are at
+their own branches).
 Only the crossing / iterate-table path is described; growth, refinement and budgets are in
 `CLAUDE.md`.
 
@@ -11,22 +13,54 @@ Only the crossing / iterate-table path is described; growth, refinement and budg
   resolves each u x s segment pair; `_resolve_crossing_pair` builds each `Intersection` with both
   keys (`_key_of` asserts a key on EVERY curve since WP2), `unstable_segment` and
   `stable_segment` (the two nodes either side of the crossing on each curve), `crossing_sign`,
-  `resolution_ratio`; registration is in unstable-cdist order per branch (reproducible ids, WP8).
-- `numerics/Intersection.py` — the crossing record; `stable_segment` added in WP2.
+  `resolution_ratio` and (B1) `chord_deviation` = unfloored `max(h_u, h_s)` (`_resolution_ratio`
+  :343 returns both); registration is in unstable-cdist order per branch (reproducible ids, WP8);
+  `populate_intersections_for_manifold` :548 (blast path) returns EVERY detection sorted by
+  `(unstable_cdist, stable_cdist)` (B1: the noise vote is deleted; the sort keeps INT-7).
+- `numerics/Intersection.py` — the crossing record; `stable_segment` added in WP2;
+  `chord_deviation` (B1), None exactly when synthetic.
 - `numerics/IntersectionRegistry.py` — the store. `DEDUP_RTOL = 1e-9` :35 and `_find_collision`
   :762 (keys equal AND both cdists equal to 1e-9 relative; an anchor at exactly `(0, 0)` matches
   only another exact `(0, 0)`); `register_iterate` :546 asserts the partial bijection;
   `reindex_from` :261 re-gives re-detected crossings their old ids (rematch by `_find_collision`).
   `cdist_tol` (absolute 1e-6) is only the slack of degenerate bridge cuts and polyline clipping
-  (C15, WP11).
+  (C15, WP11). B1: N lives here -- `resolved_ids(threshold)` :441 (synthetic, or ratio >= threshold
+  [clause 1, off at None] and in no run [clause 2]), `unresolved_crossings` its complement in
+  unstable order, `run_separation` :421 / `run_partner`, `_runs` :489 (per `(u_key, s_key)` group,
+  consecutive in unstable order, `_polyline_gap` :50 on the same / node-sharing ORIGINAL segment,
+  run iff gap <= max of the PAIR's two deviations), cached on `_orders_version` (not on iterate links).
 - `numerics/IterateInference.py` — the EXACT rule (module docstring is the statement):
-  `infer_iterates(workbench, sources=None)` :82 (a module function since WP11) → anchors by
-  `_register_anchor_iterate` :138 (advanced keys at `(0, 0)`, `registry.find`), everything else by
-  `_bracketed_image` :199 (carry `U(x)` by the unstable curve's `stretch_param`, `S(x)` by
+  `infer_iterates(workbench, sources=None)` :82 (a module function since WP11; reads N via
+  `resolved_ids` since B1: pending = sources in N with no `+1` link, candidates in N only) → anchors by
+  `_register_anchor_iterate` :142 (advanced keys at `(0, 0)`, `registry.find`), everything else by
+  `_bracketed_image` (multi-match = INFO + recorded in `unresolved_links` since B8; carry `U(x)` by the unstable curve's `stretch_param`, `S(x)` by
   `1/stretch_s` of the stable manifold; candidates = a bisected window of the advanced stable
   branch widened by its widest stable bracket `_widest_stable_brackets` :185; unique match on both
-  brackets with `BRACKET_PAD = 1e-12`), then `_map_gated` :238 (ONE `map_batch` call over
+  brackets with `BRACKET_PAD = 1e-12`), then `_map_gated` :244 (ONE `map_batch` call over
   `[x, p0, p1]` per source; keep iff `|f(x) - y| <= |f(p1) - f(p0)| + |q1 - q0|`).
+- Undecidable links are DATA (B8, branch `refactor/unresolved-sets` @ `ae18859`):
+  `IntersectionRegistry.unresolved_links: dict[int, tuple[int, ...]]` (source -> candidate images,
+  none linked; reset in `__init__` and `reindex_from`). `_bracketed_image` records a multi-match
+  (`unresolved_links[src] = tuple(images)`, INFO kept). `infer_iterates` (IterateInference.py
+  ~:118-156) snapshots the set, pops its own sources' entries (each pass re-decides them), groups the
+  gated matches BY IMAGE, and for each image `j` forms `contested` = this pass's claimants + the held
+  `table[j, -1]` + every earlier entry equal to `(j,)`; one member -> linked, else ONE WARNING
+  "image %d is claimed by crossings %s; none linked", `remove_iterate(held, 1)` and every claimant
+  recorded as `(j,)`. Order-free (grouping happens before any link); the generation is bumped
+  (`registry._generation += 1`, a private write from another module) only when the set changed, so a
+  no-op re-pass is silent. The early `return` on "no detected source" is gone (the compare must run).
+  Measured: fires NOWHERE in the corpus after B1 (every builder, all five SERIES, k28 x8); the set is
+  empty on every law case and series step; `near_tangency` records 25 multi-match entries (e.g.
+  25, 27 -> (61, 59)), which nothing reads.
+- `IterateTable.forward_depth(x)` / `forward_chain(x)` (`IterateTable.py:81-96`) read DIRECT
+  entries `[x, n]` only; only `n = 1` links are ever registered (`IterateInference.py:147,202`), so
+  they return 1 and `[x, f(x)]` for any linked crossing. The real depth is the composed `+1` chain
+  (`Trellis._pip_orbit_cuts`, `Trellis.py:322-324`). Misleading names (B3 analyst, 2026-10-14).
+- `IterateTable.remove(source, n)` pops the forward link and its backward twin (KeyError if absent);
+  `IntersectionRegistry.remove_iterate(source, n)` calls it, bumps the generation and drops the graph
+  edge `iter_{src}_{n}` (added by `register_iterate`).
+- `reindex_from` runs on a FRESH registry (`compute_intersections` replaces it), so any per-registry
+  set (B8's `unresolved_links`) starts empty after a recompute; `reset=False` keeps it.
 - Callers: `TangleWorkbench.compute_intersections` :1264, `BridgeIterator.iterate_bridge` :264
   (sources = the parent's endpoints + the crossings just born, searched against the whole
   registry), `iterate_all_bridges` :419 and `loom/Blast.blast_zone` (:463, registry-wide, after
@@ -59,7 +93,10 @@ Only the crossing / iterate-table path is described; growth, refinement and budg
 - The iterate table is a partial bijection (`register_iterate` asserts; law
   `iterate_table_partial_bijection`). Every detected `+1` link passes the map gate (law
   `iterate_links_pass_the_map_gate`) and no unlinked detected crossing has a bracket+gate image
-  (law `iterate_table_complete`; regression `test_iterates_after_blasts` on p3 at ten blasts).
+  (law `iterate_table_complete`; regression `test_iterates_after_blasts` on p3 at ten blasts),
+  except the sources in `registry.unresolved_links` (B8): each entry has >= 1 candidate and no `+1`
+  link, and a single-candidate entry `(j,)` never coexists with a `(j, -1)` link. The table never
+  holds a link chosen by the order of the passes.
 - Every detected crossing carries both branch keys (PK-7 closed).
 
 ## Smells / deferred
@@ -78,6 +115,32 @@ Only the crossing / iterate-table path is described; growth, refinement and budg
 - `_widest_stable_brackets` is an O(N) scan per inference pass (one per `iterate_bridge`); the
   suite time did not move (106 s vs 108 s base), but a deep blast series could feel it.
 - `IterateInference` is a stateless holder; module functions would read better (API pass, D8).
+
+- B10 `dead-api` (branch `refactor/dead-api`, 8 commits `1867f41..517aa01` off `65edec4`, 2026-10-15)
+  DELETED: the registry's networkx graph (`IntersectionRegistry.graph`, `_rebuild_adjacency_edges`,
+  `_consecutive_on_branch`, the `_graph*` fields, node adds in `add`/`reindex_from`, edges in
+  `register_iterate`/`remove_iterate`), `numerics/graphviz.py` (358 lines) with
+  `TangleWorkbench.build_intersection_graph` / `visualize_intersection_graph` (commit `7eaf64d`);
+  the registry queries `on_cdist_range`, `from_branch`, `nearest_by_unstable_cdist`,
+  `as_forward_array` / `as_backward_array` and `IterateTable.as_forward_array` / `as_backward_array`
+  (`3a9db04`); `ManifoldMachine.grow_x_times` (`1867f41`, callers loop `new_grow_manifold`);
+  `_get_refined_point` / `_get_iterate` (`88d5a75`; the kernel test now calls `_refine_layer` at
+  `area_cutoff = 0`). To recover any of them: `git show 65edec4:<path>`.
+  - The registry now has NO graph: iterate relations live only in `iterate_table[id, n]`
+    (`IterateTable`), per-branch order only in the sorted cdist arrays and `Trellis`. The query
+    surface is `filter`, `from_fixed_point`, `iterate_orbit` (all live). A `from_branch` query is
+    `filter(lambda ix: ix.is_anchor or (ix.manifold_b_key is not None and ix.manifold_b_key[3] == b))`
+    (the two demo scripts use exactly that).
+  - `import tanglepack` no longer loads `networkx` (topology imports it lazily for
+    `DualGraph.graph()` and the transition graph; it stays in `pyproject.toml`).
+  - `Tangle.release_manifold` stays (live): `compute_intersections`, `_register_bridge` and
+    `clear_bridges` call it; a no-op on a full build, real work on the direct `clear_bridges` path,
+    pinned by `test_bridge_identity.py:257`.
+  - Stale outside src after B10 (B12's): `CLAUDE.md` registry row ("per-branch `graph(bridges=)`")
+    and `BridgeIterator ... graphviz` row; `docs/source/tanglepack.numerics.rst:183-189` still
+    automodules `tanglepack.numerics.graphviz` (a Sphinx build will warn);
+    `scripts/manifold_cutting_test.ipynb` and `notebooks/archive/period_three.ipynb` still call
+    `grow_x_times` (plan Deferred list).
 
 ## Open-issues round WP3 (2026-10-08, branch `oi/wp03-inversion`)
 
@@ -108,7 +171,8 @@ Only the crossing / iterate-table path is described; growth, refinement and budg
   stable_cdist))`, positions from `self.fixed_points`. Before, the order was the iteration order of
   a set of frozensets of segment ids, and `Tangle._ids` is a process-wide counter: reproducible for
   the first build of a process, not for a second build in the same process. Anchors are still
-  registered first; blast registration was already ordered (`_collapse_noise_crossings`).
+  registered first; blast registration was ordered by the vote's sort until B1, now by
+  `populate_intersections_for_manifold`'s own sort (`e201ddc`).
 
 ## Open-issues round WP9 (2026-10-08, branch `oi/wp09-heteroclinic`)
 
@@ -170,7 +234,7 @@ Only the crossing / iterate-table path is described; growth, refinement and budg
 - Dead code deleted: `IterateTable.backward_chain` / `all_registered_ids`, the registry's
   `unstable_order_array` / `stable_order_array`, the scalar `_curvature_area` and its three helpers
   (`_parabolic_fit` stayed then; deleted in WP10b, it had no caller), three `Intersection.synthetic` keywords;
-  `reindex_from` returns None. `from_branch(b)` holds the anchor for every b (D4).
+  `reindex_from` returns None. (`from_branch`, which held the anchor for every b (D4), was deleted in B10.)
 - `PointBudgetExceeded.blast_context` declared; `MaxIterationsReached`, `TURNAROUND_LOG_STRETCH`
   exported.
 - `cdist_tol` (registry) is documented as geometry-only: degenerate bridge cuts and polyline clipping.
@@ -206,3 +270,40 @@ Only the crossing / iterate-table path is described; growth, refinement and budg
   `area_along_iterate_links` / `iterate_link_scales_by_beta` now read each side's own
   `per_step_beta` (product factor `beta_u(A) * beta_s(B)`, exactly 1 homoclinic).
 - `ManifoldMachine._parabolic_fit` deleted with its pinning test (no caller).
+
+## Resolved crossings — B1 (2026-10-12, branch `refactor/resolved-crossings` @ `76d0710`, base `1029fcc`)
+
+- **Rule** (A.2, Q13 (a)): every detection is registered; N = `registry.resolved_ids(
+  workbench.resolution_ratio_threshold)`. Seven readers: `TangleWorkbench._frozen_ids` :1102,
+  `create_bridges` :1803, `trim_stable_manifolds` :2178, `BridgeIterator.iterate_bridge` :378 (cut
+  and inference sources), `infer_iterates` :109 / `_bracketed_image` :226, `Trellis.from_workbench`
+  :422 (records `Trellis.resolved_ids`), `StrongPip.is_strong_pip` :169. An unresolved detection
+  lies INSIDE a bridge, is never linked, sets no trim, disqualifies no pip.
+- **Report:** `_report_unresolved` -- ONE WARNING per call when a not-yet-reported id is
+  unresolved, naming each (id, coords, ratio, clause, partner + separation) and ending "refine: lower
+  `area_cutoff` or grow the stretch; NUM-3/4". `threshold=None` keeps clause 2, so it can fire.
+- **Threshold docstring** (`TangleWorkbench.__init__`): derived bound 1, margin 3, part of the
+  definition of N, corpus minimum 3.038 (heteroclinic); re-run `compute_intersections` after a change.
+- **Measured (outcome audit):** law cases unchanged (min ratios k10 522, k28 x1 5783 / x2 2455, p3
+  family 8.70, inversion 124 / 19.5 / 12.2, period2 19.8, heteroclinic 3.038). k28 series: run
+  {75,76,77} at blast 6 (u = 8356210.197, sep 8.5e-10 / 2e-8 vs h 4.7e-6, median ratio 30.2) out
+  whole; blast 8 adds 148 (2.572) and 245 = `f^9(q0)` (2.991). Recompute exact on all 5 series.
+- **The pip-orbit freeze** (not predicted by plan or analyst): an unresolved pip-orbit point is
+  never linked, so `Trellis.cut_at_pip_orbit`'s `m` (`Trellis.py:322-323`, `iterate` walk) stops
+  before it and no later blast can extend `T(q0)` until a finer rebuild. k28 x8 = x7 (143 crossings,
+  4/4/4 vs base 24/15/23); k32 x9-10 = x8 (300; 56/34/45 reliable vs base 58/34/39 unreliable;
+  523 = `f^10(q0)`, 1.477); nested_outer x9-11 = x8 (276; 12/9/9 both; 447 = `f^10(q0)`, 1.775).
+- Suite cost of the per-step recompute in `cases.blast_series`: +38 s (162 -> 200 s).
+
+## Smells (crossing set)
+
+- `Trellis.py:204`: a hand-built `Trellis` (tests, the `MinimalTrellis` sparse snapshot) defaults
+  `resolved_ids` to the whole registry; harmless while no N reader runs on the sparse snapshot; the
+  fix is `MinimalTrellis.py:411` passing `parent.resolved_ids`.
+- `_runs` neighbours are consecutive in unstable order within a KEY group, but blast image curves
+  share their branch's key; a run interleaved with a same-key detection on another curve would be
+  missed (believed; the probe's any-curve cross-check found none on the law cases or k28 x8).
+- A crossing already cut and linked can be demoted later in the same blast (plan Q1, no repair);
+  the recompute law over `SERIES` is the guard.
+- `CLAUDE.md` still says resolution flags "never discard" and states the old k=2.8 x8 fixture
+  facts; deferred to B12.

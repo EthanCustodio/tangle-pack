@@ -1,0 +1,6 @@
+{
+  "status": "confirmed",
+  "allowed": ["confirmed", "touchup", "figures"],
+  "notes": "Author confirmed the B8 unresolved-sets outcome (2026-10-13): branch refactor/unresolved-sets at ae18859 off 8a1cdc3, eight files, suite 1171 passed / 1 KNOWN_ISSUES xfail, no state change on any law case or series step (workbench generation counter reads higher on the seven zone-defining cases: a read, not a change). Open for the author: the add_resonance_zones candidacy test runs before the batch recompute (accepted default); the law's new clauses are guarded only by a review probe; legitimate candidates that make topology() assert (k10 2, k28 x1/x2 4, inversion 2 and 14) are the next pip-path defect; IterateInference bumps the registry's private _generation. Merge is the author's.",
+  "iteration": 1
+}

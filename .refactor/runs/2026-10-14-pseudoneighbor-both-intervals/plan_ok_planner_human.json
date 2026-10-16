@@ -1,0 +1,6 @@
+{
+  "status": "approved",
+  "allowed": ["approved", "revise", "answered"],
+  "notes": "Author approved the B2 pseudoneighbor-both-intervals plan as written (2026-10-14): one _interval_is_clear(..., stability, ...) with min/max m-range, per_step_beta(stability), candidates own_intersection_ids with the D7 guard mirrored; a pair kept only when both intervals are clear; three unit tests; e13 over the seven E12 cases at both cutoffs (14 cells); the one question takes its default: e13's results jsonl is committed as the fourth file.",
+  "iteration": 1
+}

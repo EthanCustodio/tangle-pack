@@ -1,0 +1,41 @@
+{
+  "agent": "test-engineer",
+  "artifact": "test_evidence_test_engineer_code_reviewer_2",
+  "counter": 2,
+  "edgeId": "test_engineer_code_reviewer_2",
+  "history": [
+    {
+      "agentId": "afe934fe7b33b0746",
+      "at": "2026-10-13T02:24:51.759Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/test_evidence_test_engineer_code_reviewer_2.md",
+      "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.1",
+      "status": null,
+      "traversal": 1
+    },
+    {
+      "agentId": "a570f2f035772e144",
+      "at": "2026-10-13T03:08:55.452Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/test_evidence_test_engineer_code_reviewer_2.md",
+      "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.1",
+      "status": null,
+      "traversal": 2
+    }
+  ],
+  "latest": {
+    "agentId": "a570f2f035772e144",
+    "at": "2026-10-13T03:08:55.452Z",
+    "fanIndex": null,
+    "notes": null,
+    "payload": "artifacts/test_evidence_test_engineer_code_reviewer_2.md",
+    "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.1",
+    "status": null,
+    "traversal": 2
+  },
+  "preamble": null,
+  "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.1",
+  "schemaVersion": 1
+}

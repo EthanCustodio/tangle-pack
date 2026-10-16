@@ -1,0 +1,4 @@
+{
+  "status": "confirmed",
+  "notes": "Confirmed by the author 2026-10-15. B6b word-finished: WalkSearch.status collapses to resolved/ambiguous/unresolved with six reasons ('trivial' only for a class with an empty word); one class-level free_reduce on cd.symbols, the closure/inertness words and the registered evidence word (translate_itinerary unreduced, T law keeps its same-occurrence reading); the evidence comparison moved to topology/diagnostics.py behind verify_words; A.8c docstrings; MembersDisagree exported. No number changed on all 63 builds/steps; 0 cancellations on the corpus; 553 walk statuses map unique/trivial -> resolved. Branch refactor/word-finished @65edec4 off 63477e3 (3 coder commits + 1 TE commit), ten files, NOT merged until the author says so."
+}

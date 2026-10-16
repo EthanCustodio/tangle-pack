@@ -1,0 +1,6 @@
+{
+  "status": "approved",
+  "allowed": ["approved", "revise", "answered"],
+  "notes": "Author approved the B4a holes-algorithm-vs-diagnostics plan as written (2026-10-13): eleven files, three commits (verbatim move, measured side on demand, tests), no behaviour change; the one question takes its default (the inverse-map placement of propagated holes stays in StablePartition until B4b; the 'no map in StablePartition' rubric moves to B4b).",
+  "iteration": 1
+}

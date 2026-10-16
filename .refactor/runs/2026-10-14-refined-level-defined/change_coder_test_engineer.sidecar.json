@@ -1,0 +1,51 @@
+{
+  "agent": "coder",
+  "artifact": "change_coder_test_engineer",
+  "counter": 3,
+  "edgeId": "coder_test_engineer",
+  "history": [
+    {
+      "agentId": "ae7abed54e0e27046",
+      "at": "2026-10-15T01:42:58.861Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/change_coder_test_engineer.t1.md",
+      "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.9",
+      "status": null,
+      "traversal": 1
+    },
+    {
+      "agentId": "ae7abed54e0e27046",
+      "at": "2026-10-15T01:47:20.202Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/change_coder_test_engineer.t2.md",
+      "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.9",
+      "status": null,
+      "traversal": 2
+    },
+    {
+      "agentId": "ae7abed54e0e27046",
+      "at": "2026-10-15T01:47:32.031Z",
+      "fanIndex": null,
+      "notes": null,
+      "payload": "artifacts/change_coder_test_engineer.t3.md",
+      "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.9",
+      "status": null,
+      "traversal": 3
+    }
+  ],
+  "latest": {
+    "agentId": "ae7abed54e0e27046",
+    "at": "2026-10-15T01:47:32.031Z",
+    "fanIndex": null,
+    "notes": null,
+    "payload": "artifacts/change_coder_test_engineer.t3.md",
+    "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.9",
+    "status": null,
+    "traversal": 3
+  },
+  "preamble": "`test_engineer` reads this and its work is then assayed by `code_reviewer`, which grades it \"pass\" or \"revise\".",
+  "runId": "c679944b-fa37-474d-8e9a-1a75fda47087.9",
+  "schemaVersion": 1
+}
