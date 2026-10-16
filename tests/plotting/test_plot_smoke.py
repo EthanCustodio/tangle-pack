@@ -23,6 +23,7 @@ from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.table import Table  # noqa: E402
 
 from cases import build_k10  # noqa: E402
+from tanglepack.loom import plot_resonance_zones  # noqa: E402
 from tanglepack.topology import plotting  # noqa: E402
 
 TRELLIS_PLOTTERS = (
@@ -261,6 +262,19 @@ def test_cartoon_honours_its_toggles(k10_partitioned, fig_ax) -> None:
     assert isinstance(layout, plotting.CartoonLayout)
     assert layout.bridges_drawn == 0 and layout.walks_drawn == 0
     assert not ax.patches
+
+
+# --------------------------------------------------------------------------- #
+# Resonance zones
+# --------------------------------------------------------------------------- #
+def test_plot_resonance_zones_shades_every_zone(k28_partitioned, fig_ax) -> None:
+    """One filled polygon per zone, none for no zone."""
+    session, _fp = k28_partitioned
+    zones = list(session.resonance_zones.values())
+    assert zones
+    _fig, ax = fig_ax
+    assert len(plot_resonance_zones(zones, ax=ax)) == len(zones)
+    assert plot_resonance_zones([], ax=ax) == []
 
 
 # --------------------------------------------------------------------------- #
