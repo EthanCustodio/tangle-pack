@@ -5,8 +5,8 @@ The sparse arrangement of a :class:`~tanglepack.topology.MinimalTrellis.MinimalT
 cuts the plane into faces whose walls are the kept bridges and the stable
 manifold. This module turns that picture into a graph built for walks:
 
-* one CLOSED node per face of the plane (:class:`FaceNode`), after the same
-  outer-face merging as before (union-find glues each component's outer face
+* one CLOSED node per face of the plane (:class:`FaceNode`), after
+  outer-face merging (union-find glues each component's outer face
   onto the innermost face of another component that geometrically contains it,
   or onto one global unbounded node);
 * one OPEN node per (stable edge, side) — a :class:`StableNode` that is a wall:
@@ -53,7 +53,7 @@ Dev Notes:
   :meth:`~tanglepack.topology.Trellis.Trellis.image_cdist`; nothing on any
   other branch. A straddling arc is unified and logged at INFO; no pip unifies
   nothing and warns.
-* The trellis is cut at the pip orbit (``Trellis.cut_at_pip_orbit``, D10), so
+* The trellis is cut at the pip orbit (``Trellis.cut_at_pip_orbit``), so
   ``S \\ f(S)``, where the image of a bridge may cross the stable manifold
   away from the images of its ends, is exactly the pip window, and the other
   ``k - 1`` branches are walls as a consequence.
@@ -65,15 +65,15 @@ Dev Notes:
 * A sparse component may have no closed face at all (a stable branch with no
   kept bridge). Its single open face is merged into the unbounded node with a
   WARNING rather than raising.
-* A component's outer face is read off the rotation system, never an area
-  (INT-10, WP10): it is the face whose sector at the component's EASTERNMOST
+* A component's outer face is read off the rotation system, never an area:
+  it is the face whose sector at the component's EASTERNMOST
   polyline vertex holds due east, since everything else lies west of that
-  vertex. The positive-traversal-area rule it replaces raised on the
+  vertex. An area rule would fail on the
   self-intersecting slivers of deep blasts, where no area is trustworthy.
   Nesting is then one point-in-polygon test per component
   (:meth:`DualGraph._innermost_container`), the chalkboard's one containment
   test per tangle.
-* Markers and enclosure (D13, WP9b). The map is a homeomorphism, so a closed
+* Markers and enclosure (design note §A.8c). The map is a homeomorphism, so a closed
   curve made of manifold pieces holds a marker -- a periodic point or a hole
   -- exactly when its image holds the marker's image. :attr:`DualGraph.markers`
   places them combinatorially: a periodic point at its anchor vertex (``f``
@@ -81,8 +81,8 @@ Dev Notes:
   bridge side (``f`` moves hole ``(origin, n)`` to ``(origin, n + 1)``). The
   hole sits beside its own bridge, not in the trellis lobe between the bridge
   and the stable manifold, because a propagated hole lies beside the image
-  SUB-ARC of its containing bridge (INT-2): the lobe-corner placement got 2 of
-  83 member images wrong, all iterate ``-1`` holes. An unstable arc is never
+  SUB-ARC of its containing bridge: the lobe corner would read 2 of 83 member
+  images wrong, all iterate ``-1`` holes. An unstable arc is never
   cut by a curve (curves cross the stable manifold only), so beside it is one
   piece of one face. A hole whose image is no hole (a reference, or the last
   ``+j`` of a period-k orbit) has that image placed beside the registered image
@@ -93,7 +93,7 @@ Dev Notes:
   component on either side, so every placement is returned and the caller
   asks whether SOME routing holds the right markers: the routing is free
   because nothing but the markers and the walls is known inside a face.
-* Crossing chords (D13 / D14, WP9c). Two disjoint simple arcs through a disk
+* Crossing chords. Two disjoint simple arcs through a disk
   face never interleave their ends on its ring, so :meth:`DualGraph.chords_cross`
   is the walls' test: the four ends on ONE ring at four distinct positions,
   alternating. Ends on one edge side, or on two rings, can always be drawn
@@ -145,7 +145,7 @@ FaceKind = Literal["region", "open", "outer"]
 #: Which side(s) of its stable edge a stable node faces.
 NodeSide = Literal["left", "right", "both"]
 
-#: A point the map carries along an orbit (D13): ``("orbit", fixed-point
+#: A point the map carries along an orbit: ``("orbit", fixed-point
 #: position, orbit index)`` for a periodic point, ``("hole", origin, iterate)``
 #: for a hole.
 Marker = tuple
@@ -764,7 +764,7 @@ class DualGraph:
 
     def _outer_face(self, members: list[int]) -> int:
         """
-        The outer face of one component, from the rotation system (INT-10).
+        The outer face of one component, from the rotation system.
 
         Every face is traversed with itself on the RIGHT, so at a vertex ``v``
         reached from ``prev`` and left towards ``next`` its sector runs clockwise
@@ -1105,7 +1105,7 @@ class DualGraph:
         image = self.arrangement.image_of(face.faces[0], n)
         return None if image is None else self._face_node_of.get(id(image))
 
-    # ── markers and enclosure (D13) ─────────────────────────────────────────
+    # ── markers and enclosure ───────────────────────────────────────────────
 
     @cached_property
     def unstable_edges(self) -> dict["BridgeId", tuple]:

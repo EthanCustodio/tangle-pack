@@ -2,9 +2,9 @@
 Walks over the dual graph: where a homotopy element lands, and the shortest
 route between two iterated elements.
 
-The word of a bridge class (A.8c) has two definitions. The OBJECT: the
+The word of a bridge class (design note §A.8c) has two definitions. The OBJECT: the
 freely reduced itinerary of ``f(b)`` for a member bridge ``b``, read in the
-classes it crosses -- a class invariant. The ALGORITHM (D3): the shortest
+classes it crosses -- a class invariant. The ALGORITHM: the shortest
 walk of the dual graph between the landings of the class's two elements,
 under the non-crossing rule. This module is the algorithm's search; a search
 is ``"resolved"`` (one walk, zero crossings included), ``"ambiguous"`` (a tie
@@ -27,7 +27,7 @@ then the element on the side it left to (:class:`Walk`, :class:`WalkSearch`).
 The itinerary has even length and splits into disjoint consecutive pairs,
 each of which is one bridge class (or its inverse) -- the caller
 (``SymbolicDynamics``) turns those pairs into symbols. Between the landing
-spans, the walk obeys the non-crossing rule (D13): :func:`lobe_image_markers`
+spans, the walk obeys the non-crossing rule: :func:`lobe_image_markers`
 reads which markers a member's lobe holds and :func:`holds_markers` whether a
 walk's closed curve holds their images, and the decided walks of classes on
 other unstable branches are walls a tie may not cross (:func:`walk_chords`).
@@ -72,36 +72,36 @@ Dev Notes:
   forward chain and reversing the tuple gives the walk that traverses the
   same bridges the other way: it enters each crossing on the row the forward
   walk left it on, and leaves on the row it entered.
-* The non-crossing rule (D13, author 2026-10-09; WP9b). ``f`` is a
+* The non-crossing rule (the author's). ``f`` is a
   homeomorphism and an unstable arc never crosses another one, so the image
   ``f(b)`` of a member bridge cannot cross the images of the unstable arcs
   around it. Two consequences make it combinatorial. (1) The walk runs
-  between the landing SPANS (C14): the hole bridges bounding a homotopy
+  between the landing SPANS: the hole bridges bounding a homotopy
   element ``X`` map onto the kept image bridges at the ends of ``f(X)``, so
   ``f(b)`` leaves the stable manifold from an edge ``f(X)`` meets; a span
   that overlaps no edge at all is ``"span_meets_no_node"``, never a walk from
-  every edge (B6a). (2) The
+  every edge. (2) The
   marker law: ``b`` and the stable segment ``sigma_b`` between its ends bound
   a disk, and ``f(b) + f(sigma_b)`` bounds its image, so it holds the image of
   every marker (periodic point, hole) the lobe holds and of no other; two
   member lobes disagreeing on a marker raise :class:`MembersDisagree` (the
-  class is not one homotopy class, B6a). The
+  class is not one homotopy class). The
   word is the shortest walk whose curve, closed by ``sigma'`` along the
   stable manifold, does so. The rule applies to every class with a member
-  lobe, not only to ties (C13): a unique shortest walk can break it. A walk
+  lobe, not only to ties: a unique shortest walk can break it. A walk
   is looked for up to :data:`MAX_DETOUR` crossings past the shortest one
   (faces may then repeat); the detours found so far are two crossings long.
   A walk crossing ``sigma'``, or whose chords cross in a face, is rejected
   (``f(b)`` is simple and meets ``f(sigma_b)`` only at its ends; pulling it
   tight keeps it so); one the midpoint model cannot draw (an edge crossed
   twice) is kept but never preferred by order, so it can only make a tie.
-* Walls (D13, D14; WP9c). Images of disjoint unstable arcs are disjoint, so
+* Walls. Images of disjoint unstable arcs are disjoint, so
   ``f(b)`` cannot cross the image walk of an arc on another unstable branch:
   given the decided walks of such classes (``walls``, :func:`walk_chords`), a
   tie loses every walk with a chord crossing a wall in its face
   (:meth:`~tanglepack.topology.DualGraph.DualGraph.chords_cross`); it counts
   in :attr:`WalkSearch.rejected`. This is the rule for a class with no member
-  lobe (member-less, D11, or with its ends on two branches or two tangles),
+  lobe (member-less, or with its ends on two branches or two tangles),
   and it applies to member-lobe ties too. A walk standing for several face
   paths (``multiplicity > 1``) is never rejected, and its class makes no
   wall: which face the image runs through is unknown. When every walk crosses
@@ -109,7 +109,7 @@ Dev Notes:
 * When the ``max_walks`` cap cuts the enumeration short the search is
   ``"unresolved"`` with reason ``"truncated"`` (with a WARNING) and keeps the
   walks found so far for inspection: a truncated search decides nothing. A
-  constrained search (D13) that runs out before any judged walk holds the
+  constrained search that runs out before any judged walk holds the
   markers is truncated too, with no walk: ``"no_admissible_walk"`` would
   claim every walk up to the detour cap broke the rule. The cap counts
   judgements there, and the other walks of an itinerary already holding the
@@ -563,7 +563,7 @@ class Walk:
         return f"Walk({self.length} step(s), x{self.multiplicity}: {route})"
 
 
-#: The outcome of a shortest-walk search (A.8c): one decided walk, a tie, or
+#: The outcome of a shortest-walk search: one decided walk, a tie, or
 #: no answer. A zero-crossing walk is ``"resolved"`` like any other decided one;
 #: only a class whose word is empty is called trivial (``ClassDynamics.status``).
 WalkStatus = Literal["resolved", "ambiguous", "unresolved"]
@@ -579,7 +579,7 @@ WalkReason = Literal[
 ]
 
 #: How many crossings longer than the shortest walk the non-crossing rule may
-#: go looking for an admissible one (D13).
+#: go looking for an admissible one.
 MAX_DETOUR = 4
 
 
@@ -610,7 +610,7 @@ class WalkSearch:
             shortest) or ``"truncated"`` (the ``max_walks`` cap stopped the
             enumeration).
         constrained: True when the markers of a member lobe were imposed
-            (the non-crossing rule, D13).
+            (the non-crossing rule).
         rejected: How many itineraries, no longer than the one chosen, broke
             the markers or crossed the image of a disjoint arc (a wall).
     """
@@ -803,7 +803,7 @@ class MembersDisagree(ValueError):
 
 def lobe_image_markers(dual, entry: "BridgeClassEntry") -> Optional[dict["Marker", bool]]:
     """
-    The images of the markers a member's lobe holds and leaves out (D13).
+    The images of the markers a member's lobe holds and leaves out.
 
     A member bridge ``b`` the minimal trellis keeps, with both ends on one
     stable branch, closes with the stable segment ``sigma_b`` between them into
@@ -875,7 +875,7 @@ def _half_toward(node: "StableNode", other: "StableNode") -> tuple:
 
 def holds_markers(dual, walk: Walk, wanted: dict["Marker", bool]) -> Optional[bool]:
     """
-    Whether a walk, closed along the stable manifold, holds the wanted markers (D13).
+    Whether a walk, closed along the stable manifold, holds the wanted markers.
 
     The walk runs from the middle of its start edge through its faces to the
     middle of its goal edge; ``sigma'``, the stable edges between the two plus
@@ -1059,14 +1059,14 @@ def shortest_walks(
     With ``landings``, the walk leaves from and arrives at the nodes whose
     edges the landing SPANS meet, not every node of the iterated element: the
     hole bridges bounding a homotopy element ``X`` map onto the kept image
-    bridges at the ends of ``f(X)``, which ``f(b)`` cannot cross (D13). With
+    bridges at the ends of ``f(X)``, which ``f(b)`` cannot cross. With
     ``wanted``, the non-crossing rule: the word is the shortest walk whose
     closed curve holds exactly the wanted markers (:func:`holds_markers`),
     looked for up to :data:`MAX_DETOUR` crossings past the shortest walk
     (faces may then repeat). With ``walls``, a tie loses the walks whose
     chords cross a wall in its face (:meth:`~.DualGraph.DualGraph.chords_cross`):
     the walls stand for the images of arcs disjoint from this class's, and
-    images of disjoint arcs are disjoint (D13, D14). When every walk crosses
+    images of disjoint arcs are disjoint. When every walk crosses
     one, the tie stands.
 
     Args:

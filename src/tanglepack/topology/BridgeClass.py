@@ -28,7 +28,7 @@ Dev Notes:
   synthetic crossing with no manifold nodes around it — is classed like any
   other. Partial bridges have no :data:`~tanglepack.numerics.Bridge.BridgeId`
   and are skipped.
-* LOOPS FOLD FORWARD (user rule, 2026-09-15; forward since 2026-10-07, D2). A
+* LOOPS FOLD FORWARD (the author's rule). A
   bridge whose two ends land in the SAME element is not a class of its own: it
   is the forward image of a bridge that did connect two elements and has been
   pushed into one of them, and it will keep mapping into that element. Such a
@@ -36,29 +36,26 @@ Dev Notes:
   :func:`_image_chain` holds it (the map is a bijection, so the images of
   disjoint arcs are disjoint and a pair has at most one parent; asserted) —
   climbing through parents that are loops themselves until one connects two
-  elements. Lookups only, never the map. Walking PREIMAGES instead (the rule
-  until WP6) broke at every fold-born crossing, which has no ``-1`` link, and
-  left a standalone ``BridgeClass(x, x)`` per blast (BCG-2). A loop no image
+  elements. Lookups only, never the map. Walking PREIMAGES instead would break
+  at every fold-born crossing, which has no ``-1`` link. A loop no image
   chain reaches is an ORPHAN: logged once, recorded on
   :attr:`BridgeClassTable.orphans` and left unclassed, never lettered.
-* EVIDENCE vs ALPHABET (D2, 2026-10-07). :func:`bridge_classes` classes every
+* EVIDENCE vs ALPHABET. :func:`bridge_classes` classes every
   bridge of the trellis: that is the EVIDENCE table (the minimal trellis
   reads it). The ALPHABET the session letters, the words and the
   transition matrix use is its restriction to the classes with a member the
   minimal trellis keeps (``MinimalTrellis.alphabet``,
   :meth:`BridgeClassTable.restricted_to`); a blast child is image evidence
   only.
-* INERT = TRANSIENT IN THE WORD GRAPH (author, Q3 I-a, 2026-10-09). A class
+* INERT = TRANSIENT IN THE WORD GRAPH (design note §A.8). A class
   is inert iff no cycle is reachable from it over the class-level words: its
   word is empty or names only inert classes, and an unresolved class (no
   word) is active, as is every class whose word names one. The verdict is the
   dynamics' (``SymbolicDynamics.inert_classes``), so :attr:`BridgeClassEntry.inert`
   is ``None`` here until the dynamics sets it. The minimal trellis decides
-  before the words with the author's sufficient condition (2026-10-14): a
+  before the words with the author's sufficient condition: a
   bridge carrying a ZEROTH hole is inert, since its lobe holds one marker
-  whose image is none, so its word is empty. History: from 2026-09-16 until
-  B5 inertness was a fixed point over the members' REGISTERED images, active
-  for lack of evidence.
+  whose image is none, so its word is empty.
 * Partitions are passed in rather than read off the trellis because they do not
   live where the bridges do: a trellis holds a bridge under its UNSTABLE fixed
   point, while the partition owning that bridge's endpoints lives on the trellis
@@ -71,7 +68,7 @@ Dev Notes:
   built in ascending order of each class's ``min_unstable_cdist`` (the
   smallest unstable canonical distance of a member's first crossing, so the
   class holding a tangle's anchor bridge comes first in its group; author's
-  rules, 2026-09-21 and, for the grouping, 2026-09-30; unstable cdists of
+  rules; unstable cdists of
   different saddles are not comparable, so they are never interleaved),
   ties broken by :func:`class_sort_key`, and each class's members are sorted
   by :data:`~tanglepack.numerics.Bridge.BridgeId`, so two runs of the same
@@ -213,7 +210,7 @@ class BridgeClassEntry:
 
     @property
     def spanned(self) -> bool:
-        """False for a class a word names that no computed bridge spans yet (D11):
+        """False for a class a word names that no computed bridge spans yet:
         lettered and walked like any other, informational only."""
         return bool(self.members)
 
@@ -418,7 +415,7 @@ class BridgeClassTable:
 
 def zone_label(zone_key: "FixedPoint") -> str:
     """
-    A readable name for a resonance-zone key (its fixed point, C8).
+    A readable name for a resonance-zone key (its fixed point).
 
     Args:
         zone_key: The key, as stored on :attr:`BridgeClassEntry.zone_key`.
@@ -534,12 +531,12 @@ def bridge_classes(
     Class a trellis's bridges by the pair of partition elements they connect.
 
     The result is the EVIDENCE table: every bridge's class. The alphabet is its
-    restriction to the minimal trellis (``MinimalTrellis.alphabet``, D2).
+    restriction to the minimal trellis (``MinimalTrellis.alphabet``).
 
     Each end of a bridge id is read by the homotopy family's
     :meth:`~.PartitionFamily.PartitionFamily.owner_at_end`: the row at that end
     (:func:`~.StablePartition.row_of_end`) picks the side,
-    :meth:`~.Trellis.Trellis.stable_key_at` picks the stable branch (C7), and
+    :meth:`~.Trellis.Trellis.stable_key_at` picks the stable branch, and
     the partition result for that ``(branch, side)`` names the element that
     owns the endpoint. Two different elements give the bridge's
     :class:`BridgeClass` (oriented anchor outward) and its direction; two equal
@@ -698,7 +695,7 @@ def _image_chain(trellis: "Trellis", bridge_id: "BridgeId") -> Optional[list["Br
     ia, ib = (trellis.intersection(image) for image in images)
     own_key = trellis.unstable_key_of(bridge_id)
     key = own_key[0].advance_key(own_key, 1)
-    # A table link passes the map gate onto advance_key (WP2), so an image end
+    # A table link passes the map gate onto advance_key, so an image end
     # lies on the advanced branch (an anchor lies on every branch of its point).
     for image in (ia, ib):
         assert image.is_anchor or image.manifold_a_key == key, (

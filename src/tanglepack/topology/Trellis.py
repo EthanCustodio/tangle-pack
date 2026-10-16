@@ -25,21 +25,21 @@ decide that, so nothing has to be invalidated by hand. Everything a Trellis
 memoises on top of the snapshot (the endpoint-to-bridge index, the oriented
 bridge polylines) is a function of the snapshot alone and dies with it.
 
-The trellis of the pip (stage 3, D10 and D12, 2026-10-08). Choosing a strong
+The trellis of the pip (stage 3, design note §A.4). Choosing a strong
 pip q0 CUTS the snapshot to ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])``, both
 ends on the pip's orbit (:meth:`cut_at_pip_orbit`): stable branch ``j`` ends at
 ``f^j(q0)``, ``j < k``, and the unstable branch of ``f^i(q0)`` at that point for
 the ``k`` deepest registered ``i`` (``m`` the last). ``f^-1`` maps the unstable
 half into itself and ``f`` the stable half, so it is a genuine trellis, and a
 lambda-lemma copy deeper than the pip's own orbit is no crossing of it, so it
-cannot reshape the fundamental segment (BCG-5). The cut is the ONE place the
+cannot reshape the fundamental segment. The cut is the ONE place the
 crossing set N is decided: every later stage reads the branches and bridges
 cut here. A crossing past a cut is a point of X (every iterate of N), not of N:
 it leaves the branches, and the unstable arc across it joins its two bridges
 into one (``Bridge.joined``; the workbench never holds it). Un-choosing the pip
 restores the computed trellis.
 
-Several fixed points (WP9). A trellis holds a crossing only when BOTH its
+Several fixed points. A trellis holds a crossing only when BOTH its
 branches are selected, so a tangle's own trellis holds no heteroclinic crossing
 (its unstable arcs are joined across them, as across a crossing past a cut) and
 the selection's trellis holds them. Cut at every selected pip, the selection is
@@ -154,7 +154,7 @@ class Trellis:
             pip's stable branch (the strong pip of a single fixed point, every
             selected pip of a selection of several).
         resolved_ids: N, the registered crossings the polylines resolve, as the
-            registry decided when the snapshot was taken (B1). The branches hold
+            registry decided when the snapshot was taken. The branches hold
             only these; an unresolved detection is registered but on no branch.
     """
 
@@ -187,7 +187,7 @@ class Trellis:
             generation (int): The workbench generation this snapshot was taken
                 at; a cache compares it to decide staleness.
             resolved_ids (Optional[frozenset[int]]): N, the registered crossings
-                the polylines resolve (B1); None counts every registered one (a
+                the polylines resolve; None counts every registered one (a
                 hand-built trellis).
         """
         self.fixed_points = fixed_points
@@ -237,7 +237,7 @@ class Trellis:
         # A trellis has exactly one actual strong pip — a unique choice made from
         # the candidates (default: smallest unstable cdist; user-overridable via
         # set_strong_pip()). Classifying them all is O(N^2) over the registry, so
-        # it waits for the first read (F7, WP10): restoring a remembered pip
+        # it waits for the first read: restoring a remembered pip
         # tests that one crossing only.
         self._candidates: Optional[list[int]] = None
         self.strong_pip = None
@@ -260,7 +260,7 @@ class Trellis:
 
     def cut_at_pip_orbit(self, pips: Iterable[int]) -> None:
         """
-        Cut N to the crossings of ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])`` (D10, D12).
+        Cut N to the crossings of ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])``.
 
         For each pip: stable branch ``j`` is cut at ``c_s(f^j q0)``, ``j < k``
         (``k = k_value``), and the unstable branch of ``f^i(q0)`` at
@@ -276,9 +276,9 @@ class Trellis:
 
         Note:
             A cut whose orbit point the table does not hold is PLACED by
-            :meth:`image_cdist` (scaling) and flagged in one WARNING (PK-6); a
+            :meth:`image_cdist` (scaling) and flagged in one WARNING; a
             crossing is past a cut, placed or registered, by any amount (no
-            absolute slack, C15). The same cut twice is a no-op, and
+            absolute slack). The same cut twice is a no-op, and
             stage outputs (pseudoneighbors, holes, partitions) are never cleared
             here.
         """
@@ -435,11 +435,11 @@ class Trellis:
 
         # Bucket each intersection onto the branches it lies on: its unstable
         # side is manifold_a_key, its stable side manifold_b_key, and an anchor
-        # is one point on every branch attached to it (D4). A crossing is a
+        # is one point on every branch attached to it. A crossing is a
         # crossing of the selection only when BOTH its branches are selected: a
         # heteroclinic crossing belongs to the trellis of its two tangles, never
         # to either alone. Only crossings of N are on a branch: an unresolved
-        # detection is a point of no trellis (B1).
+        # detection is a point of no trellis.
         for ix_id, ix in registry:
             if ix_id not in resolved:
                 continue
@@ -493,7 +493,7 @@ class Trellis:
 
         A dict lookup on a per-trellis index built from :attr:`bridges`, so the
         callers that resolve one bridge per pseudoneighbor pair (there is one
-        per pair, per iterate, per backward step) no longer rescan the bridge
+        per pair, per iterate, per backward step) do not rescan the bridge
         list each time. The index is rebuilt when the bridge list changes
         length -- a Trellis is a snapshot, so that is the only way its bridges
         move without a rebuild of the whole object.
@@ -530,7 +530,7 @@ class Trellis:
         consecutive crossings of an unstable branch can sit on the images of two
         NON-adjacent bridges (the bridge between them was not iterated), or on the
         grown tip and an image: the arc between them was never computed, so it is
-        a gap, not an arc (INT-9).
+        a gap, not an arc.
 
         Args:
             lo_id: One crossing's registry id.
@@ -715,7 +715,7 @@ class Trellis:
                 return None
         return current
 
-    # ── the anchor on every branch of its point (D4) ───────────────────────
+    # ── the anchor on every branch of its point ────────────────────────────
 
     def unstable_key_of(self, pair: "tuple[int, int]") -> ManifoldKey:
         """
@@ -739,7 +739,7 @@ class Trellis:
         The stable branch an arc of ``unstable_key`` meets at one of its crossings.
 
         A crossing's own stable branch; at an anchor, ``s(o, b)`` for an arc of
-        ``u(o, b)`` (C7): the same orbit point and branch index. The rule is
+        ``u(o, b)``: the same orbit point and branch index. The rule is
         equivariant under the map (which advances both keys alike) and the pair
         ``(u(o, b), s(o, b))`` carries the anchor's own crossing sign
         (``cross(-u, -s) = cross(u, s)``), so :func:`row_of_end` reads the
@@ -923,7 +923,7 @@ class Trellis:
                 stable cdist, ``"unstable"`` reads ``manifold_a_key`` and the
                 unstable cdist.
             branch: The branch the crossing is read on, when it matters: an
-                ANCHOR lies on every branch of its periodic point (D4), so its
+                ANCHOR lies on every branch of its periodic point, so its
                 image is the next point's anchor on ``advance_key(branch, n)``
                 at cdist 0. Ignored for any other crossing.
 
@@ -1211,7 +1211,7 @@ class Trellis:
                 one WARNING per kind of disagreement (a hole bridge whose
                 geometric row is not its signs', a propagated hole measured on
                 the other side of its bridge): resolution flags, never errors
-                (D6; :func:`topology.diagnostics.geometry_flags`).
+                (:func:`topology.diagnostics.geometry_flags`).
             verbose: Report :meth:`describe_holes` when done —
                 logged at INFO (this module's logger is raised to INFO for the
                 call, so a higher application-level setting cannot swallow it),
@@ -1244,8 +1244,7 @@ class Trellis:
         self.holes.clear()
         # holes is cleared wholesale, so every pair's back-reference goes with
         # it: a pair outside this call's scope must not keep pointing at a hole
-        # the trellis no longer carries (propagate_reference_holes seeds its
-        # already-punched orbits and regions from pair.hole).
+        # the cleared trellis does not carry.
         for pair in self.pseudoneighbors:
             pair.hole = None
         holes = _punch(self, pairs)

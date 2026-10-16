@@ -1,10 +1,10 @@
 """
 Symbolic dynamics of a trellis, read off bridge classes and dual-graph walks.
 
-The word of a bridge class has two definitions (A.8c). The OBJECT: the image
+The word of a bridge class has two definitions (design note §A.8c). The OBJECT: the image
 ``f(b)`` of a member bridge ``b``, read as the classes it crosses and freely
 reduced (:func:`free_reduce`: ``c c^-1`` cancels), is a class invariant. The
-ALGORITHM (D3): the shortest walk of the dual graph between the landings of
+ALGORITHM: the shortest walk of the dual graph between the landings of
 the class's two elements, under the non-crossing rule, is that word; the
 registered image chains are only its cross-check (``diagnostics.verify_words``).
 A class is ``resolved``, ``trivial`` (its word is empty), ``ambiguous`` (a tie
@@ -26,7 +26,7 @@ forward or backward, i.e. one SYMBOL of the class's word. The words of all
 classes are the rewriting rules; their transition matrix is the symbolic
 dynamics.
 
-The refined level (alignment plan A.8d). Each token also carries the pair of
+The refined level. Each token also carries the pair of
 elements of the iterated partition ``P1`` it lands on, its OCCURRENCE; the
 occurrences of a class across all words are its refined symbols ``c_1, c_2,
 ...`` (:func:`refine`). **Theorem T**: every member of a class has the same
@@ -38,28 +38,28 @@ not an inheritance. The refined matrix ``M_1`` is then the IN-SPLITTING of the
 class matrix ``M``: siblings have equal rows and the children's columns sum to
 the parent's, a conjugacy with the same entropy. T and the in-splitting are
 laws on the law cases and every blast series (``members_share_the_P1_itinerary``,
-``refined_matrix_is_an_in_splitting``); the base-branch chords pair in stable
-order since B7b (``PartitionFamily``).
+``refined_matrix_is_an_in_splitting``); lobe chords pair in stable order on
+every branch (``PartitionFamily``).
 
 Dev Notes:
 
-* Directions are always shown, inert classes included (author's decision,
-  2026-09-21): k=10 reads ``a -> a u^-1 a^-1``, the walk crossing the inert
+* Directions are always shown, inert classes included (author's decision):
+  k=10 reads ``a -> a u^-1 a^-1``, the walk crossing the inert
   class ``u = {L_1, L_3}`` against its anchor-outward orientation. Letters are
-  ONE bijective numeral over two disjoint digit sets (:func:`letter`, SIMP-6,
-  WP6): active classes ``a..t, aa, ab, ...``, inert ones ``u..z, uu, uv, ...``,
+  ONE bijective numeral over two disjoint digit sets (:func:`letter`):
+  active classes ``a..t, aa, ab, ...``, inert ones ``u..z, uu, uv, ...``,
   so the two series never collide and nothing is skipped. Inert classes are
   lettered by THIS layer only; the session's ``BridgeAlphabet`` letters the
   active ones with the same :func:`letter` (topology does not depend on loom).
 * The ALPHABET is the table handed in -- normally ``MinimalTrellis.alphabet``,
-  the classes of the minimal trellis's bridges (D2), lettered here once judged --
-  closed under the word map (WP7, C9). Every pair of a walk is the class of one
+  the classes of the minimal trellis's bridges, lettered here once judged --
+  closed under the word map. Every pair of a walk is the class of one
   piece of ``f(B)``, and a word naming a class outside the alphabet adds it,
   walked in turn and recording the class whose word first named it
   (``named_by``). When some registered bridge spans the pair (the evidence
   table, ``minimal.classes``) the class is a copy of its evidence entry
   (members); when none
-  does it is a class all the same (D11, author 2026-10-08: "we do not need
+  does it is a class all the same (the author: "we do not need
   computed bridges to find words, we strictly use the dual graph unless it is
   a singleton"): a member-less entry,
   walked from its elements' landings and flagged "no computed bridge yet"
@@ -69,7 +69,7 @@ Dev Notes:
   bridges a blast happened to compute. Only a member-less class landing on a
   singleton, which cannot walk, stays unresolved ("grow or blast"). The
   minimal trellis keeps the FIRST images of the hole bridges, and the image of
-  an image bridge lies one layer further out (BCG-4), so this follows the
+  an image bridge lies one layer further out, so this follows the
   hole-bridge transport chain. Every other bridge is image evidence only.
 * Refinement occurrences come ONLY from the walked (or trellis) itineraries of
   all classes, never from registered member images. A class is split when
@@ -89,44 +89,44 @@ Dev Notes:
   of its first non-loop member that has one, read by
   :func:`~tanglepack.topology.DualWalk.trellis_itinerary`. No registered chain
   → unresolved ("grow or blast").
-* Registered member images are EVIDENCE, the walk is the answer (D3): the
+* Registered member images are EVIDENCE, the walk is the answer: the
   comparison lives in ``diagnostics.verify_words``, runs once every word is
   final and never changes one. Evidence never adds a symbol: a class outside
-  the closed table is named by its label (D2).
+  the closed table is named by its label.
 * A pair whose two elements sit on
   different sides of ONE stable branch is flagged on the symbol
   (``cross_side``) with a WARNING and not asserted. Across two branches there
-  is no side relation (D4: the left of an inversion point's branch 0.0 is the
+  is no side relation (the left of an inversion point's branch 0.0 is the
   right of 0.1), so such a pair is never flagged.
-* The non-crossing rule (D13, WP9b): the walk runs between the landing SPANS
+* The non-crossing rule: the walk runs between the landing SPANS
   and, for a class with a member lobe (a kept non-loop member with both ends
   on one stable branch), it is the shortest walk whose closed curve holds
   exactly the images of the markers the lobe holds
   (:func:`~tanglepack.topology.DualWalk.lobe_image_markers`). It applies to
-  EVERY such class, not only to ties (C13): a unique shortest walk can break
+  EVERY such class, not only to ties: a unique shortest walk can break
   it (the heteroclinic ``bh``). No walk up to the detour cap holding the
   markers leaves the class unresolved (``"no_admissible_walk"``). A walk is a
-  claim only when it is established (B6a): a search the budget cut short
+  claim only when it is established: a search the budget cut short
   (reason ``"truncated"``, even with candidates), a landing span overlapping
   no stable node (``"span_meets_no_node"``) and two member lobes holding
   different markers (:class:`~tanglepack.topology.DualWalk.MembersDisagree`,
   caught before walking) all leave the class unresolved, and an unresolved
   class is no wall.
-* Walls (D13's own words, "f(bridge) cannot cross the images of the unstable
-  arcs"; WP9c, C17). Every class's arcs lie on known unstable branches: its
+* Walls (the author's words: "f(bridge) cannot cross the images of the
+  unstable arcs"). Every class's arcs lie on known unstable branches: its
   members' (``Trellis.unstable_key_of``), or, for a class no computed bridge
-  spans yet (D11), one map step past the arcs of the class that named it.
+  spans yet, one map step past the arcs of the class that named it.
   Arcs on different unstable branches are disjoint, so are their images, so
   the decided walk (a ``resolved`` search) of a class walked EARLIER whose
   branches are disjoint from this class's is a wall: a tie loses the walks
   whose chords cross one (``shortest_walks(walls=)``). Every bridge is the
-  same (D14): a class joining two stable branches or two tangles has no member
+  same: a class joining two stable branches or two tangles has no member
   lobe, but it has arcs, so the walls apply to it like to any other; its
   ``tangle`` follows the table's rule with the arcs' branches for the
   members'. A tie no rule decides stays ambiguous, feeds the first candidate
   in the walk search's deterministic order into the refinement and the
   graph, and :attr:`SymbolicDynamics.is_reliable` is False.
-* INERT = TRANSIENT (author, Q3 I-a, 2026-10-09). Once the alphabet is
+* INERT = TRANSIENT (design note §A.8). Once the alphabet is
   closed, a class is inert iff no cycle is reachable from it in the graph of
   the class-level words: its word is empty or names only inert classes
   (:func:`inert_classes`). An unresolved class (no word) is active, and so is
@@ -134,17 +134,17 @@ Dev Notes:
   table order: active ones by the session's ``letter_for``, inert ones in the
   inert series. The minimal trellis decided before the words which hole
   bridges to map, by the author's sufficient condition (a zeroth-hole bridge
-  is inert, 2026-10-14; ``MinimalTrellis``).
-* Inert classes are NOT nodes of the transition graph or the matrix (author,
-  2026-09-23): they contribute nothing to the dynamics, and their symbols
+  is inert; ``MinimalTrellis``).
+* Inert classes are NOT nodes of the transition graph or the matrix (the
+  author's rule): they contribute nothing to the dynamics, and their symbols
   are still visible in the words. A token naming an inert class is dropped
   from the edges; an inert word names only inert classes by definition.
   Every token of an active word names a class of the closed table, so every
   edge target is a node.
 * A landing that straddles a cut (``contained`` False) still resolves to its
-  midpoint owner, so the walk exists (D3); but under a correct partition a
+  midpoint owner, so the walk exists; but under a correct partition a
   homotopy element's image lies in ONE iterated element, so a straddle is a
-  construction inconsistency and counts against ``is_reliable`` (INT-8).
+  construction inconsistency and counts against ``is_reliable``.
 """
 
 from __future__ import annotations
@@ -196,7 +196,7 @@ SymbolKind = Literal["active", "inert"]
 ItinerarySource = Literal["walk", "trellis"]
 
 #: Active classes are lettered over ``a..t``, inert ones over ``u..z``: one
-#: bijective numeral over two disjoint digit sets (SIMP-6, WP6).
+#: bijective numeral over two disjoint digit sets.
 _ACTIVE_DIGITS, _INERT_DIGITS = "abcdefghijklmnopqrst", "uvwxyz"
 
 
@@ -222,7 +222,7 @@ class Symbol:
             occurrence belongs to, ``None`` when the class is unrefined or the
             token has not been refined yet.
         cross_side: True when the pair's two elements sit on different sides
-            of ONE stable branch (D4) — flagged, never asserted.
+            of ONE stable branch — flagged, never asserted.
     """
 
     bridge_class: BridgeClass
@@ -284,10 +284,10 @@ class ClassDynamics:
             first candidate is the primary itinerary.
         unresolved_reason: Why the class has no itinerary (a failed landing,
             no walk, a walk not established -- a truncated search, a span
-            meeting no node, member lobes holding different markers (B6a) --
+            meeting no node, member lobes holding different markers --
             or a singleton landing with no registered member image), else
-            ``None``. A pair no computed bridge spans unresolves nothing
-            (D11): it is a class of its own, ``entry.spanned`` False.
+            ``None``. A pair no computed bridge spans unresolves nothing:
+            it is a class of its own, ``entry.spanned`` False.
         evidence: The registered member images, one record each
             (``diagnostics.verify_words``).
         verified: Word-level agreement of every piece of evidence that gives a
@@ -440,7 +440,7 @@ def _active_letters(
 
 def inert_classes(words: dict[BridgeClass, Optional[list[BridgeClass]]]) -> set[BridgeClass]:
     """
-    The transient classes of a word graph (Q3, I-a): no cycle is reachable from them.
+    The transient classes of a word graph: no cycle is reachable from them.
 
     Args:
         words: ``{class: the classes its word names}``, loops dropped; ``None``
@@ -544,7 +544,7 @@ def _signature(symbols: Iterable[Symbol]) -> tuple[tuple[BridgeClass, int], ...]
 
 def free_reduce(tokens: Sequence[tuple[BridgeClass, int]]) -> list[int]:
     """
-    The positions of a word surviving free reduction (A.8c).
+    The positions of a word surviving free reduction (design note §A.8c).
 
     A token next to its own inverse cancels, ``c c^-1`` as ``c^-1 c``; one
     stack pass reaches the fixed point. The class word (``ClassDynamics.symbols``),
@@ -798,10 +798,10 @@ class SymbolicDynamics:
     @property
     def is_reliable(self) -> bool:
         """True when no class is ambiguous, unresolved, contradicted by evidence or
-        landed across a cut (a straddling landing, INT-8).
+        landed across a cut (a straddling landing).
 
-        Unresolved (``itinerary is None``) covers every walk not established
-        (B6a): a search the ``max_walks`` budget cut short, a landing span
+        Unresolved (``itinerary is None``) covers every walk not established:
+        a search the ``max_walks`` budget cut short, a landing span
         meeting no stable node, and member lobes holding different markers.
         """
         return all(
@@ -824,8 +824,8 @@ class SymbolicDynamics:
         The transition graph's nodes in their deterministic order.
 
         Active symbols in letter order, a split class's children in index
-        order. Inert classes are not nodes (author,
-        2026-09-23): they contribute nothing to the dynamics, and their
+        order. Inert classes are not nodes (the
+        author's rule): they contribute nothing to the dynamics, and their
         symbols remain visible in the words.
 
         Args:
@@ -912,7 +912,7 @@ class SymbolicDynamics:
         The transition matrix over the symbols in :meth:`symbol_nodes` order.
 
         Over refined symbols it is ``M_1``, the in-splitting of the class
-        matrix ``M`` (A.8d): sibling rows are equal, and the children's
+        matrix ``M`` (design note §A.8d): sibling rows are equal, and the children's
         columns sum to the parent's column of ``M``.
 
         Args:
@@ -1061,7 +1061,7 @@ def _arc_branches(
     trellis: "Trellis", entry: BridgeClassEntry, namer_branches: frozenset["ManifoldKey"]
 ) -> frozenset["ManifoldKey"]:
     """The unstable branches a class's arcs lie on: its members', or, for a class no
-    computed bridge spans yet (D11), one map step past the arcs of the class that named it."""
+    computed bridge spans yet, one map step past the arcs of the class that named it."""
     if entry.members:
         return frozenset(trellis.unstable_key_of(member.bridge_id) for member in entry.members)
     return frozenset(key[0].advance_key(key, 1) for key in namer_branches)
@@ -1181,7 +1181,7 @@ def symbolic_dynamics(
     shortest dual-graph walk between the two landings is the itinerary. A pair
     of the itinerary whose class is not in the alphabet yet adds that class
     (the closure under the word map, see the module Dev Notes), flagged "no
-    computed bridge yet" when no registered bridge spans it (D11), and it is
+    computed bridge yet" when no registered bridge spans it, and it is
     walked in turn. Once the alphabet is closed the class-level words decide
     which classes are inert (:func:`inert_classes`), the classes are lettered,
     every itinerary is translated to a word and checked against the registered
@@ -1193,7 +1193,7 @@ def symbolic_dynamics(
             iterated homotopy partition (its ``partition.homotopy`` is the
             homotopy family; its ``minimal.classes`` is the evidence table: a
             word may only name a class it holds).
-        classes: The ALPHABET: normally ``MinimalTrellis.alphabet`` (D2). Its
+        classes: The ALPHABET: normally ``MinimalTrellis.alphabet``. Its
             entries' ``inert`` and, on the active ones, ``letter`` are set here.
         max_walks: The cap on shortest walks enumerated per class.
         letter_for: Letters an ACTIVE class that carries no letter yet
@@ -1218,7 +1218,7 @@ def symbolic_dynamics(
 
     def add(named: BridgeClass, named_by: BridgeClass) -> BridgeClassEntry:
         """A class a word names: a copy of its evidence entry, or a member-less
-        entry when no computed bridge spans it yet (D11)."""
+        entry when no computed bridge spans it yet."""
         if named in evidence_table:
             entry = replace(evidence_table[named], letter=None, inert=None)
         else:
@@ -1236,7 +1236,7 @@ def symbolic_dynamics(
 
     records: dict[BridgeClass, ClassDynamics] = {}
     words: dict[BridgeClass, Optional[list[BridgeClass]]] = {}
-    # D13 / D14: images of disjoint arcs are disjoint, so the decided walk of a class
+    # Images of disjoint arcs are disjoint, so the decided walk of a class
     # whose arcs lie on other unstable branches is a wall for every later class.
     branches: dict[BridgeClass, frozenset] = {}
     decided: list[tuple[frozenset, list]] = []
@@ -1254,7 +1254,7 @@ def symbolic_dynamics(
         walls = [wall for theirs, chords in decided if not theirs & mine for wall in chords]
         _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls)
         # A walk standing for several face paths names none of them, and an unresolved
-        # class (a truncated search, B6a) established none: no wall.
+        # class (a truncated search) established none: no wall.
         search = cd.search
         if search and search.status == "resolved" and search.walk.multiplicity == 1:
             decided.append((mine, walk_chords(search.walk)))

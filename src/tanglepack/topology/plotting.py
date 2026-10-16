@@ -1806,7 +1806,7 @@ def _class_cell(
 
 
 def _class_status(class_dynamics) -> str:
-    """The class's status (A.8c; trivial = empty word), ``unresolved: reason``, or ``trellis``."""
+    """The class's status (trivial = empty word), ``unresolved: reason``, or ``trellis``."""
     if class_dynamics.unresolved_reason:
         return f"unresolved: {class_dynamics.unresolved_reason}"
     if class_dynamics.source == "trellis":
@@ -2078,7 +2078,7 @@ class CartoonLayout:
             below it.
         ranks: ``{branch_key: [cdist, ...]}``, the distinct boundary canonical
             distances of a branch in ascending order (registry floats, compared
-            exactly: C15); the ordinal coordinate of a cdist is its index here.
+            exactly); the ordinal coordinate of a cdist is its index here.
         anchor: ``"right"`` (the default: the anchor at the right end of
             every line, elements running outward to the left, as on the
             chalkboard) or ``"left"``.

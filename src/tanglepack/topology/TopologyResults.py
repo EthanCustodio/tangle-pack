@@ -19,10 +19,10 @@ algorithms produce.
 Intersections are referenced by their integer registry ID rather than by object
 so that a result survives a registry rebuild and is cheap to serialise.
 
-A Hole is a marker beside its OWN bridge (D13): ``bounding_ids`` names that
+A Hole is a marker beside its OWN bridge: ``bounding_ids`` names that
 bridge's crossings and ``bridge_side`` the side it sits on, which is all the
 partition, the marker law and the plots read; its coordinate is only a drawing
-aid (settled, WP12).
+aid.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def side_after(side: Side, steps: int, preserving: bool) -> Side:
 
     An orientation-preserving map keeps a side of a bridge in its dynamical
     orientation; a reversing one flips it at every step. This is the ONE place
-    the rule lives (C3: det J < 0 is out of scope, the rule is kept).
+    the rule lives (det J < 0 is out of scope, the rule is kept).
 
     Args:
         side: The side at the start.
@@ -120,11 +120,11 @@ class Hole:
             canonical distance. Standing on the bridge looking along that
             direction, positive cross(tangent, displacement) = left. A direct
             hole reads it off its crossing signs; a propagated hole CARRIES it
-            from the hole it was propagated from (author, 2026-10-07): the map
+            from the hole it was propagated from (author's rule): the map
             carries a bridge's dynamical orientation to its image's, so the side
             is unchanged along the backward chain under an orientation-preserving
             map and alternates with the parity of the step under a reversing one.
-            The crossing signs turn it into the openings (D6). None only on a
+            The crossing signs turn it into the openings. None only on a
             hand-built hole. The side measured on the curves is a resolution
             flag computed on demand (:func:`topology.diagnostics.geometry_flags`).
         bounding_ids: Registry IDs of the two intersections defining the bridge
@@ -136,10 +136,10 @@ class Hole:
             branch_key)`` where ``which`` is ``"anchorward"``/``"outward"``
             (which side of that intersection along the stable manifold the
             hole abuts: ``"outward"`` iff ``(crossing_sign > 0) ==
-            (bridge_side == "left")``, D6), ``row`` is the
+            (bridge_side == "left")``), ``row`` is the
             left/right partition the opening acts on and ``branch_key`` the
             stable branch it opens: the intersection's own, or at the anchor
-            (one point on every branch, D4) the one the signs pick. A hole
+            (one point on every branch) the one the signs pick. A hole
             with no openings does not participate in the partition.
         iterate: Position of this hole along its reference orbit — 0 for the
             reference hole itself, negative for backward iterates, positive
@@ -236,8 +236,7 @@ class ElementRef:
 
     A ref names an element WITHIN one recompute: ``element_id`` is positional,
     so a new hole renumbers every element after it. Two recomputes compare
-    elements by :attr:`PartitionInterval.identity`, their bounding crossings
-    (C2, WP8).
+    elements by :attr:`PartitionInterval.identity`, their bounding crossings.
 
     Attributes:
         branch_key: Manifold key of the stable branch the element lies on.
@@ -353,7 +352,7 @@ class PartitionInterval:
     @property
     def identity(self) -> tuple:
         """
-        This element across recomputes: ``(branch_key, side, lo_id, hi_id)`` (C2).
+        This element across recomputes: ``(branch_key, side, lo_id, hi_id)``.
 
         Each stable branch is cut at the endpoints of every hole bridge, so
         ``lo_id`` and ``hi_id`` are hole-bridge endpoints (or None at the

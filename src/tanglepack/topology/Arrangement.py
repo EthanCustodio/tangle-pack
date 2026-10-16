@@ -77,7 +77,7 @@ by construction) and is skipped.
 
 The anchor
 ----------
-A periodic point is ONE node, the anchor, of every branch attached to it (D4).
+A periodic point is ONE node, the anchor, of every branch attached to it.
 It is stored under its home pair ``(u(o, 0), s(o, 0))``, whose arcs fill its
 ``u+`` / ``s+`` slots; branch 1 of either stability leaves it the opposite way
 and fills ``u-`` / ``s-``. The home sign then gives the rotation exactly
@@ -330,13 +330,13 @@ class Arrangement:
           logged, and the arc is built with ``bridge_id`` None so its geometry
           falls back to the parent branch rather than silently reading some other
           curve's points.
-        * **A pair on two curves is a gap, not an arc** (INT-9,
-          :meth:`~tanglepack.topology.Trellis.Trellis.is_computed_arc`). Two
+        * **A pair on two curves is a gap, not an arc**
+          (:meth:`~tanglepack.topology.Trellis.Trellis.is_computed_arc`). Two
           consecutive crossings on the images of two non-adjacent bridges, or on
           the grown tip and an image, have manifold between them that was never
           computed: no arc is drawn, and the two free slots get the usual
           dangling stubs ("not computed this far"), so the faces there are open.
-          Drawing it closed zero-area faces and broke Euler's formula (NUM-16).
+          Drawing it closed zero-area faces and would break Euler's formula.
 
         Raises:
             AssertionError: If a bridge's endpoints are not consecutive on any

@@ -10,8 +10,8 @@ the first forward images of those hole bridges. So the minimal trellis is
 * for each such bridge without a ZEROTH hole, the bridges tiling its first
   forward image, read from the iterate table alone.
 
-A bridge carrying a zeroth hole is kept but not mapped forward (author,
-2026-10-14): its image is homotopic to a stable segment, its class word empty. The stable manifold is kept
+A bridge carrying a zeroth hole is kept but not mapped forward (the
+author's rule): its image is homotopic to a stable segment, its class word empty. The stable manifold is kept
 whole; the crossings that survive as nodes are the kept bridges' endpoints, the
 anchors and the outermost crossing of each stable branch (the ends of the
 partitioned stretch).
@@ -32,10 +32,10 @@ Dev Notes:
   stable manifold, so its image crosses the computed part in the middle)
   contributes EVERY consecutive pair of the chain. A pair no ``Bridge`` object
   spans is manifold that was never computed (the grown manifold stops short of
-  it, or it is the image of a bridge no blast iterated, INT-9 / D9): it is
+  it, or it is the image of a bridge no blast iterated): it is
   skipped with a WARNING, the minimal trellis is evidence-based and grows as
   the trellis does.
-* ZEROTH HOLES ARE INERT (author, 2026-10-14). A zeroth hole is punched on a
+* ZEROTH HOLES ARE INERT (the author's rule). A zeroth hole is punched on a
   pseudoneighbor pair (``hole.pair is not None``). Its bridge ``b`` and the
   stable segment ``sigma`` between its ends hold no point of X, so the lobe
   ``b + sigma`` holds one marker, its own hole; holes propagate backward only,
@@ -47,8 +47,7 @@ Dev Notes:
   ``zeroth_hole_classes_have_empty_words``).
 * The class table is the EVIDENCE table (every bridge's class), never the
   alphabet: the alphabet is DEFINED by what this trellis keeps. The order is
-  evidence -> minimal trellis -> alphabet (:attr:`MinimalTrellis.alphabet`,
-  D2, WP6).
+  evidence -> minimal trellis -> alphabet (:attr:`MinimalTrellis.alphabet`).
 * Anchors are kept as nodes even when no kept bridge ends there: a periodic
   point is the crossing of its own two manifolds and the stable branch's
   partition starts at it. The outermost crossing is kept because the
@@ -117,7 +116,7 @@ class MinimalTrellis:
         classes: The evidence table (every bridge's class); :attr:`alphabet`
             is its restriction to the kept bridges.
         holes: The holes it was reduced by: the markers of the non-crossing
-            rule (D13, :attr:`~.DualGraph.DualGraph.markers`).
+            rule (:attr:`~.DualGraph.DualGraph.markers`).
     """
 
     trellis: Trellis
@@ -139,7 +138,7 @@ class MinimalTrellis:
 
     @property
     def alphabet(self) -> "BridgeClassTable":
-        """D2: the classes with a member this trellis keeps; every other bridge is
+        """The classes with a member this trellis keeps; every other bridge is
         image evidence only. The same entry objects as :attr:`classes`, in table order."""
         return self.classes.restricted_to(self.kept_bridge_ids)
 

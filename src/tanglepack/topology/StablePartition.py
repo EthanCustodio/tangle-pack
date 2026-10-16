@@ -8,9 +8,9 @@ stable branch into the partition intervals the region layer reads.
 Dev Notes — Stable Manifold Partition (Stable_Manifold_Partition_Algorithm.pdf)
 
 The PDF is less formal than the Pseudoneighbor one; the following semantics were
-fixed in conversation with the author (July 2026):
+fixed in conversation with the author:
 
-* Holes are combinatorial (B4b, 2026-10-13): a pseudoneighbor pair and its
+* Holes are combinatorial: a pseudoneighbor pair and its
   connecting unstable arc (a bridge) bound a closed region, and the hole IS
   ``(origin, iterate, bounding_ids, bridge_side, openings)`` -- the region's
   bridge, its side of it and the stable halves it opens. Nothing here places
@@ -20,26 +20,25 @@ fixed in conversation with the author (July 2026):
   negative backward (the plot label).
   ``near_intersection_id`` is fixed by convention to the toward-anchor member
   (smaller stable cdist) — the choice is arbitrary but must be consistent.
-* Partition elements (Phase 5): every interval is stamped with
+* Partition elements: every interval is stamped with
   ``(branch_key, side, element_id)`` and one lookup table is built beside it,
   ``element_of_intersection`` (crossing -> owning element, by id at a
   boundary and by EXACT cdist elsewhere, see "Exact ownership" below). A
   bridge end's element is read from it by the endpoint id the BridgeId
   carries (``PartitionFamily.owner_at_end`` on the end's row,
   ``owner_of_intersection`` on any side), never from the bridge list.
-* Side (author, 2026-07-16): a hole's side is left/right of its own BRIDGE,
+* Side (the author's rule): a hole's side is left/right of its own BRIDGE,
   i.e. of the unstable manifold, in the bridge's dynamical orientation —
   forward flow points AWAY from the fixed point, so the bridge is oriented by
   increasing unstable cdist; standing on it looking that way, positive
   cross(tangent, displacement) = left (``diagnostics._side_of``). It is
   decided ONCE and stored as ``Hole.bridge_side``: a direct hole reads it off
-  its crossing signs (2026-10-02), a propagated hole CARRIES it from the hole
-  it was propagated from, parity-flipped under an orientation-reversing map
-  (author, 2026-10-07). Holes know nothing of the
-  stable manifold's sides or of resonance zones. The stable partition keeps
-  its own left/right, the ROW, defined by the STABLE dynamical direction
+  its crossing signs, a propagated hole CARRIES it from the hole it was
+  propagated from, parity-flipped under an orientation-reversing map. Holes
+  know nothing of the stable manifold's sides or of resonance zones. The
+  stable partition keeps its own left/right, the ROW, defined by the STABLE dynamical direction
   (looking toward the anchor).
-* Signs decide (D6, 2026-10-08; chalkboard stage 6). At a crossing ``x``
+* Signs decide (chalkboard stage 6). At a crossing ``x``
   with ``sign = crossing_sign(x) = sign(cross(u+, s+))`` the outward stable
   ray ``s+`` lies on the left of the bridge's ``u+`` exactly when the sign
   is positive, so: ``row(first) = left iff sign > 0``, ``row(second) = left
@@ -51,15 +50,11 @@ fixed in conversation with the author (July 2026):
   ``topology/diagnostics.py`` (``geometry_flags``, one WARNING per kind per
   ``Trellis.punch_holes(diagnose=True)``): ``bridge_row_diagnosis`` reads
   each end's approach on the polyline, which on a 2-4 node bridge is the
-  vector to the far node (NUM-1, the E11 p3 / nested_inner 1e-5 cells from
-  blast 6), and the MEASURED side of a propagated hole reads the
-  backward-carried reference point at the nearest segment of the image
-  sub-arc, which escapes the lobe when the reference lobe is
-  under-resolved (NUM-2, k28 1e-5/1e-6 blasts 15-17; inversion x period 2 at
-  10 steps). Before WP4 the openings and the I2 assertion read the polyline
-  (a nearest vertex of the WHOLE bridge for the halves, INT-4), which opened
-  nothing, or the same half at both ends, at depth: the unreachable class of
-  the deep p3 runs (PK-1) was those openings.
+  vector to the far node (the coarse 1e-5 period-3 runs from blast 6), and
+  the MEASURED side of a propagated hole reads the backward-carried
+  reference point at the nearest segment of the image sub-arc, which escapes the lobe when the reference lobe is
+  under-resolved (k28 1e-5/1e-6 blasts 15-17; inversion x period 2 at
+  10 steps).
 * Hole generation (chalkboard stage 5): each reference bridge is mapped
   backward step by step; every backward image lies within some existing
   bridge, and a hole is punched in that containing bridge's region.
@@ -71,13 +66,13 @@ fixed in conversation with the author (July 2026):
   bridge's two crossing ids moved by :meth:`Trellis.image_cdist` (table
   first, else ``advance_key`` and beta-scaling; nothing else scales a cdist
   here), on the branch ``advance_key`` names, and the container is a bisect
-  over that branch's crossing order (:func:`_containing_bridge`; PERF-4).
+  over that branch's crossing order (:func:`_containing_bridge`).
   A SCALED span end (no table entry) is good to ``SCALING_RTOL`` only, so one
   that close to a crossing of the branch is one WARNING per branch: the
-  container could be its neighbour (NUM-5). A table end is exact; it is then
-  the container's own end crossing, and is not watched (B4b, 2026-10-13).
-  The hole sits on the WHOLE containing bridge, by design (INT-2, checked
-  2026-10-08 on every law case, the deep p3 runs and four deep E11 states:
+  container could be its neighbour. A table end is exact; it is then
+  the container's own end crossing, and is not watched.
+  The hole sits on the WHOLE containing bridge, by design (checked on
+  every law case, the deep p3 runs and four deep stress-campaign states:
   600+ lookups, every span a STRICT sub-arc of its container and at most one
   of its two ends a registered crossing; the other end is a crossing of the
   unstable branch with ``f^-1(W^s)``, beyond the trimmed stable manifold, so
@@ -87,20 +82,12 @@ fixed in conversation with the author (July 2026):
   the reference point carried back by the real inverse map places a
   propagated hole in figures and is the diagnostics' measured-side flag,
   never part of the algorithm.
-* Superseded: resonance-zone association (removed 2026-07-16). Holes used
-  to carry an ``interior`` flag (in_zone point-in-polygon test, else a
-  cdist-vs-strong-pip-cut fallback) and the partition split its intervals at
-  the zone cut for interior/exterior reporting. Both are gone: which region
-  a hole belongs to is a dynamical-direction question (its side of the
-  bridge), not a zone-membership one — the descriptive flag invited
-  zone-gated filtering, which the author had already rejected ("all holes on
-  manifolds should be treated equal"), and the deep backward sub-arcs hug
-  the zone's own boundary bridge, so the point-in-polygon test split
-  otherwise identical holes by the luck of a nudge direction. Resonance
-  zones remain in the loom layer for blasting only.
-* Partition intervals (semantics fixed with the author, July 2026 — this
-  SUPERSEDES the earlier "only the outermost beyond-cut hole" rule and the
-  piece-containment openness test): EVERY punched hole participates.
+* Which region a hole belongs to is a dynamical-direction question (its
+  side of the bridge), never a zone-membership one (the author: "all holes
+  on manifolds should be treated equal"). Resonance zones live in the loom
+  layer, for blasting only.
+* Partition intervals (semantics fixed with the author): EVERY punched
+  hole participates.
   Boundaries are the defining intersections of the holes' bridges
   (Hole.bounding_ids — the pair's own bridge for a direct hole, the
   containing bridge for a propagated one) plus the anchor and the branch's
@@ -121,61 +108,47 @@ fixed in conversation with the author (July 2026):
   is special — the fixed point and the strong pip pinch into singletons by
   exactly the same rule. Each point belongs to exactly one piece ("](" and
   ")[" occur, "][" cannot).
-* Invariants (2026-09, plan row 0.3). Two facts are physically exact and
+* Invariants. Two facts are physically exact and
   are asserted in ``Trellis.punch_holes``, once per orbit and once per hole
   bridge: (I1) all holes of one ``origin`` share ``bridge_side``, because a
   propagated hole is the backward image of the reference hole and an
   orientation-PRESERVING map (det J > 0, both Hénon fixtures have b = 1)
   carries the bridge's dynamical orientation to the image bridge's
   unchanged — under an orientation-REVERSING map the side alternates with
-  the parity of ``Hole.iterate`` (``side_after``, the one rule, C3)
+  the parity of ``Hole.iterate`` (``side_after``, the one rule)
   (``check_holes_share_bridge_side(..., orientation_preserving=False)``);
   propagated holes carry their side, so I1 guards the direct holes of one
   orbit (its references) and the carrying itself; and (I2) a bridge whose two crossings lie on the same
   stable branch has the same row at both ends, because its endpoints are
   consecutive crossings so the arc between them never crosses the stable
   manifold again — with rows read off the signs, I2 says the two signs
-  DIFFER (equal signs still assert, D6). Failures name every reading:
+  DIFFER (equal signs still assert). Failures name every reading:
   :class:`SideDiagnosis` per hole, :class:`RowDiagnosis` per bridge (crossing
   signs, combinatorial and geometric rows, approach angle, node count).
-* BACKWARD ONLY (author's rule, 2026-09-16). Once a hole lands on the stable
+* BACKWARD ONLY (author's rule). Once a hole lands on the stable
   manifold its forward iterates get NO hole, even when the trellis has
   registered the image crossings (a blast does exactly that) and a bridge
   spans them: the image region is still attached to the stable manifold, and
   only the (uncomputed) image of the bridge on the far side of it could
-  justify a boundary there. Before this rule ``punch_holes`` punched a direct
-  hole for EVERY recorded pair, and ``extend_pseudoneighbor_trajectories``
-  records forward pairs too, so the k=2.8 blasted tangle acquired a hole in
-  the blast-child bridge (the +1 image of a reference pair) that split the
-  partition and produced a fourth bridge class; k=10 escaped only because its
-  reference pair's forward images were never registered (the manifold was not
-  grown that far). PERIOD-k (author, 2026-10-09, reversing D5): the rule has
-  no exemption. EVERY forward iterate is dropped (``_is_forward_iterate``),
+  justify a boundary there. ``extend_pseudoneighbor_trajectories`` records
+  forward pairs, so this rule is what keeps them unpunched. PERIOD-k: the
+  rule has no exemption. EVERY forward iterate is dropped (``_is_forward_iterate``),
   the ``+1 .. +(k_value - 1)`` appearances on the other branches of the orbit
   included; those branches get their holes from the backward chain, which
-  walks the whole unstable branch cycle. Punching the ``+j`` appearances (D5,
-  2026-10-07) added holes the period-3 figures showed as forward iterates
-  and four inert classes at 0-5 blasts.
+  walks the whole unstable branch cycle.
 * Propagation start: every chain starts at its reference. No backward pair
   is ever recorded (a reference lies in the window ``S \\ f(S)``, so one of
   its preimages leaves T and the backward walk stops at once), which
-  ``punch_holes`` asserts; the direct punch of backward pairs, its two
-  de-duplications and the fallback that continued an orbit from its
-  most-backward directly punched pair (author, 2026-07-09) never ran on any
-  build and went in B4b (2026-10-13). A reference whose pair has no spanning
+  ``punch_holes`` asserts. A reference whose pair has no spanning
   Bridge object punches no hole and starts no chain (``punch_holes`` warns).
-* Exact ownership (2026-10-07, stress campaign E11). Every partition boundary
+* Exact ownership. Every partition boundary
   IS a registry float (asserted in :func:`_element_of_intersection`; the
   synthetic ``(None, 0.0)`` anchor aside), so a registered crossing is owned
   without any tolerance: a boundary crossing by the element closed at its id
   (the singleton if it has one, else the closed neighbour), any other by its
-  exact stable cdist. The registry's absolute ``cdist_tol`` (1e-6) is a
-  DEDUPLICATION tolerance, not an ownership one: deep blasts put real
-  crossings closer than it (68% of consecutive k=2.8 gaps by blast 14), and
-  a sliver ``(pip, outer]`` of width 1.1e-6 beyond the zone's pip had its
-  midpoint swallowed by the closed pip singleton, which tripped the
-  child-inside-parent assertion of the iterated partition at 9 blasts.
-  Since WP11 (C15) the topology reads no absolute cdist slack at all: an
+  exact stable cdist. An absolute cdist slack is no ownership tolerance: deep
+  blasts put real crossings 1e-6 apart (68% of consecutive k=2.8 gaps by
+  blast 14). The topology reads no absolute cdist slack at all: an
   anchor is told by identity (``Intersection.is_anchor``, synthetic at
   exactly 0.0), ownership and containment are exact, and the one slack left
   is the RELATIVE error of a scaled cdist (``SCALING_RTOL`` at a scaled
@@ -183,22 +156,21 @@ fixed in conversation with the author (July 2026):
   to 0 moved no output on any fixture. ``cdist_tol`` survives only as
   geometry -- clipping a polyline to its arc (``Arc._interior_polyline``,
   ``diagnostics._oriented_bridge_polyline``) -- never as identity or ownership.
-* The anchor (WP3, 2026-10-08). A periodic point is ONE crossing on every
-  branch attached to it (D4). Both stable branches leave it, so an anchor
+* The anchor. A periodic point is ONE crossing on every
+  branch attached to it. Both stable branches leave it, so an anchor
   opening faces the outward half of the branch the signs pick
   (:func:`_hole_openings`) and every opening record names the branch it
   opens; the anchor has no geometric row of its own. A stable branch with
   NO crossing past its anchor (an inversion saddle grown 4-5 steps) is ONE
-  element ``[anchor, end]`` to the end of the computed branch (C1), logged
+  element ``[anchor, end]`` to the end of the computed branch, logged
   at INFO on this module's logger; grow the unstable manifold to resolve it.
 
 Caveats: inversion (k_value == 2*period) follows the same cycle bookkeeping as
 StrongPip/Pseudoneighbor and is exercised by the inversion law cases (the k=4
 saddle at 0/1/2 blasts and the k=4.1 period-2 orbit). Unstable cdists are only
 comparable on one unstable branch, so every bridge carries its branch
-(``Bridge.manifold_key``, required at construction since plan row 2.3: an
-endpoint-derived branch once handed one branch's anchor to another's first
-bridge). A pseudoneighbor pair with no spanning Bridge object (after blasting
+(``Bridge.manifold_key``, required at construction: an endpoint-derived
+branch would hand one branch's anchor to another's first bridge). A pseudoneighbor pair with no spanning Bridge object (after blasting
 there is no bridge between a parent-manifold crossing and a blast-child
 crossing) punches no hole and therefore contributes nothing to the partition —
 an open gap in the punching layer, see punch_holes' warning; a backward image
@@ -271,7 +243,7 @@ def punch_holes(
 
     The hole is the pair's bridge, its side of that bridge in the bridge's
     dynamical orientation (``Hole.bridge_side``) and the openings, both read
-    off the crossing signs (D6); it carries its orbit identity
+    off the crossing signs; it carries its orbit identity
     (``origin``/``iterate``) and is attached to its pair (``pair.hole``).
     Where to draw it is :func:`plotting.hole_point`'s business.
 
@@ -306,10 +278,10 @@ def punch_holes(
     for pair in pairs:
         pair.hole = None
 
-    # Holes propagate BACKWARD only (author's rule, 2026-09-16): a forward
+    # Holes propagate BACKWARD only (author's rule): a forward
     # iterate of a punched hole is the image of a region still attached to the
     # stable manifold and gets no hole of its own, on every branch of a
-    # period-k orbit (author, 2026-10-09). See the module Dev Notes.
+    # period-k orbit. See the module Dev Notes.
     forward = [pair for pair in pairs if _is_forward_iterate(pair)]
     pairs = [pair for pair in pairs if not _is_forward_iterate(pair)]
     if forward:
@@ -334,10 +306,10 @@ def punch_holes(
 
         # A direct hole sits in the lobe between the bridge and the pair's own
         # stable segment, so its side is read off the crossing signs like
-        # `row_of_end` (2026-10-02): the bridge leaves `first` along u+, the
+        # `row_of_end`: the bridge leaves `first` along u+, the
         # segment runs from `first` along s+ when it heads outward, and s+ is
-        # on the left of u+ iff crossing_sign > 0. Measuring the nearest
-        # bridge vertex picked the wrong fold on thin lobes.
+        # on the left of u+ iff crossing_sign > 0. The nearest bridge
+        # vertex would pick the wrong fold on a thin lobe.
         first, second = sorted((near, far), key=lambda x: x.unstable_cdist)
         outward = 1 if second.stable_cdist > first.stable_cdist else -1
         bridge_side = "left" if first.crossing_sign * outward > 0 else "right"
@@ -381,7 +353,7 @@ def propagate_reference_holes(
     crossings move by :meth:`Trellis.image_cdist` onto the branch
     ``advance_key`` names, and the bridge whose consecutive crossings bracket
     that span (:func:`_containing_bridge`) gets a hole on the WHOLE bridge
-    (INT-2: the image sub-arc's far end is a crossing with ``f^-1(W^s)``, past
+    (the image sub-arc's far end is a crossing with ``f^-1(W^s)``, past
     the trimmed stable manifold, so the trellis has nothing to cut it at). The
     recursion stops when the backward orbit becomes periodic — for a period-k
     orbit one backward step moves the image to the PREVIOUS unstable branch
@@ -390,8 +362,7 @@ def propagate_reference_holes(
     (for k = 1 exactly the "image lands in the same bridge" rule). The
     recursion also stops when no containing bridge is found (the image left
     the computed trellis). It needs no step cap: every step either stops or
-    visits a new bridge, so it ends within the trellis's finite bridge count
-    (PK-9).
+    visits a new bridge, so it ends within the trellis's finite bridge count.
 
     Requires the reference holes to exist already (call :func:`punch_holes`
     first); a reference without a hole (no Bridge spans its pair, which
@@ -445,7 +416,7 @@ def propagate_reference_holes(
                 break
             if branch_key not in warned:
                 # A scaled end is good to SCALING_RTOL only: that close to a crossing
-                # the bisect may have picked the neighbour bridge (NUM-5).
+                # the bisect may have picked the neighbour bridge.
                 ids, cdists = orders[branch_key]
                 near = next((
                     (c, iid) for _, c, from_table in ends if not from_table
@@ -463,7 +434,7 @@ def propagate_reference_holes(
                 break  # the backward orbit has become periodic — terminate
             visited.add(containing.id)
 
-            # The side is CARRIED along the orbit (author, 2026-10-07): the
+            # The side is CARRIED along the orbit (author's rule): the
             # map carries the bridge's dynamical orientation to the image
             # bridge's, flipping it every step only when it reverses
             # orientation.
@@ -542,7 +513,7 @@ def row_of_end(
 
     The *row* is the side of the stable branch, in the stable dynamical
     orientation (looking toward the anchor), that the bridge approaches its
-    crossing from. It DECIDES the row (D6); :func:`bridge_row_diagnosis`
+    crossing from. It DECIDES the row; :func:`bridge_row_diagnosis`
     reads the same quantity off the polylines, as a resolution flag only.
 
     Four manifold rays leave a crossing ``p``, and
@@ -660,7 +631,7 @@ def check_holes_share_bridge_side(
 def _hole_openings(
     trellis: "Trellis", bridge: "Bridge", bridge_side: Side
 ) -> list[tuple[int, str, Side, "ManifoldKey"]]:
-    """The stable halves a hole on ``bridge_side`` of ``bridge`` opens, one per bound (D6).
+    """The stable halves a hole on ``bridge_side`` of ``bridge`` opens, one per bound.
 
     The bridge passes each bound along ``u+`` (increasing unstable cdist), and
     the outward stable ray ``s+`` lies on the left of ``u+`` exactly when
@@ -732,8 +703,8 @@ def _is_forward_iterate(pair: PseudoneighborPair) -> bool:
     """True for a forward-iterated pair: it gets no direct hole.
 
     Any ``iterate > 0`` is the image of a region still attached to the stable
-    manifold, on whichever branch of the orbit it lands (author, 2026-10-09,
-    reversing D5's ``+1 .. +(k_value - 1)`` exemption). References and
+    manifold, on whichever branch of the orbit it lands, the ``+1 .. +(k_value - 1)``
+    appearances of a period-k orbit included. References and
     backward iterates return False.
     """
     return pair.iterate is not None and pair.iterate > 0
@@ -858,7 +829,7 @@ def _build_intervals(
         boundaries[None] = 0.0
 
     if len(boundaries) == 1:
-        # C1: no crossing past the anchor yet -- one element to the end of the
+        # No crossing past the anchor yet -- one element to the end of the
         # computed branch.
         ((bid, cdist),) = boundaries.items()
         end = float(trellis.manifolds[branch.key].tail.get_cdist("stable"))
@@ -947,7 +918,7 @@ def span_contains(
         closed_hi: True if the upper end belongs to the span.
         cdist: The canonical distance to test.
         tol: The slack at the ends: 0.0 (exact) for a registry cdist, the
-            relative error of a scaled cdist at a scaled landing end (C15).
+            relative error of a scaled cdist at a scaled landing end.
 
     Returns:
         True if the span contains the point.
@@ -974,7 +945,7 @@ def owns_cdist(interval: PartitionInterval, cdist: float, tol: float) -> bool:
         interval: The partition element (interval) to test.
         cdist: Stable canonical distance of the point.
         tol: The slack at the ends, as in :func:`span_contains`: 0.0 (exact)
-            for a registry cdist (C15).
+            for a registry cdist.
 
     Returns:
         True if this element owns the point.

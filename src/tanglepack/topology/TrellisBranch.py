@@ -18,7 +18,7 @@ intersection_ids is always kept sorted by canonical distance ascending — i.e.
 from the anchoring periodic point outward. "Toward the anchor" therefore means
 walking toward index 0.
 
-Settled (WP2) — return_period: a branch maps onto itself under M^k_value
+Return period: a branch maps onto itself under M^k_value
 (k_value = q for a period-q orbit, 2q with inversion). The pseudoneighbor window
 and lap use ``return_period = k_value``, and a return scales a canonical distance
 by ``beta ** k_value`` (``FixedPoint.per_step_beta``); no branch reads an

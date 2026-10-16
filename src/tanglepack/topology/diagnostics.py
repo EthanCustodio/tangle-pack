@@ -2,24 +2,23 @@
 Geometric self-diagnostics of the hole and partition algorithm: flags, never decisions.
 
 The crossing signs decide every row and every opening, and a hole's side is
-decided once at its reference hole and carried along its orbit (D6,
-``StablePartition``). This module re-reads the same quantities off the
+decided once at its reference hole and carried along its orbit
+(``StablePartition``). This module re-reads the same quantities off the
 polylines, where a coarse polyline can disagree with them:
 
 * **Rows.** :func:`bridge_row_diagnosis` reads the side of the stable branch a
   bridge approaches each end from on its polyline. On a 2-4 node bridge the
-  "approach" is the vector to the far node (NUM-1), so a disagreement with the
+  "approach" is the vector to the far node, so a disagreement with the
   sign is an under-resolved bridge.
 * **Hole sides.** A propagated hole's side MEASURED on the curves: its orbit's
   reference hole carried back by the real inverse map and read on the image
-  sub-arc, which escapes the lobe when the reference lobe is under-resolved
-  (NUM-2).
+  sub-arc, which escapes the lobe when the reference lobe is under-resolved.
 
-* **Words.** A class's word is its dual-graph walk (D3); a member's registered
+* **Words.** A class's word is its dual-graph walk; a member's registered
   image chain, read with the same translation and reduction, only cross-checks
   it (:func:`verify_words`). A disagreement is diagnosed (:class:`EvidenceDiagnosis`):
   ``"stable end"`` evidence is incomplete and ``"order flip"`` evidence noise,
-  neither gives a verdict (C11, C21); ``"walk"`` counts against ``is_reliable``.
+  neither gives a verdict; ``"walk"`` counts against ``is_reliable``.
 
 :func:`geometry_flags` collects rows and sides and :func:`warn_geometry_flags` logs one
 WARNING per kind (``Trellis.punch_holes(diagnose=True)``). The two invariants
@@ -67,8 +66,7 @@ def _side_of(tangent: NDArray[np.float64], displacement: NDArray[np.float64]) ->
     """Side of the displacement relative to the tangent, standard orientation.
 
     Standing on the manifold facing along ``tangent`` (toward the anchor),
-    positive cross = left hand — the author's dynamical-direction convention
-    (2026-07-09), which supersedes the earlier flipped calibration.
+    positive cross = left hand — the author's dynamical-direction convention.
     """
     cross = float(tangent[0] * displacement[1] - tangent[1] * displacement[0])
     if cross > 0.0:
@@ -113,7 +111,7 @@ def _approach_displacement(
     The end node sits just past the crossing, so the vector runs to the second
     node clearly distinct from ``q`` (the first when there is only one). On a
     two-node polyline that is the FAR end, which is why this reading only
-    flags (NUM-1).
+    flags.
     """
     eps = 1e-9 * (1.0 + float(np.linalg.norm(poly[-1] - poly[0])))
     if np.linalg.norm(poly[0] - q) > np.linalg.norm(poly[-1] - q):
@@ -206,7 +204,7 @@ def _bridge_side_of(
         return None
     if span is not None:
         # The image sub-arc only: a far fold of the same bridge can sit nearer
-        # the point than the sub-arc it belongs to (2026-10-02).
+        # the point than the sub-arc it belongs to.
         nodes = bridge.get_point_array(return_nodes=True)
         cdists = sorted(node.cdist for node in nodes)
         lo = max(bisect_left(cdists, span[0]) - 1, 0)
@@ -230,7 +228,7 @@ class RowEnd:
         intersection_id: Registry id of the crossing.
         crossing_sign: Its ``crossing_sign``.
         combinatorial_row: :func:`row_of_end` (None at a zero sign), the row
-            that decides (D6).
+            that decides.
         geometric_row: The side of the stable branch, looking toward the
             anchor, the polyline approaches the crossing from (None at an
             anchor, which has no stable frame of its own, or when undecidable).
@@ -334,7 +332,7 @@ def bridge_row_diagnosis(
     The geometric row of an end is the side of the stable branch, looking
     toward the anchor (:func:`_anchorward_look`), of the arc's approach
     displacement there (:func:`_approach_displacement`). It is the
-    cross-check of :func:`row_of_end`, never the decision (D6).
+    cross-check of :func:`row_of_end`, never the decision.
 
     Args:
         trellis: The Trellis carrying the intersections, branches and manifolds.
@@ -397,7 +395,7 @@ def bridge_row_violation(
     approach both of them from the same side of that branch: the lobe lies
     entirely on one side of the stable manifold, because the endpoints are
     consecutive crossings and the arc between them therefore never crosses it
-    again. The rows are the crossing signs' (:func:`rows_of_bridge`, D6), so
+    again. The rows are the crossing signs' (:func:`rows_of_bridge`), so
     the invariant fails exactly when the two signs are EQUAL. Bridges whose
     crossings sit on different stable branches (heteroclinic, or a period > 1
     orbit) are exempt, and so is a partial piece. A polyline that reads other
@@ -450,8 +448,8 @@ def measured_sides(
     step at a time, and read at the nearest segment of the hole bridge's
     image sub-arc (the reference bridge's crossings moved by
     :meth:`Trellis.image_cdist`). The carried point escapes the lobe when the
-    reference lobe is under-resolved (NUM-2), so a side other than
-    ``bridge_side`` is a flag (D6), never an error.
+    reference lobe is under-resolved, so a side other than
+    ``bridge_side`` is a flag, never an error.
 
     Args:
         trellis: The Trellis the holes were punched on.
@@ -574,14 +572,14 @@ def side_diagnoses(
     along the whole backward chain. Under an orientation-REVERSING map the
     side alternates with the parity of :attr:`Hole.iterate`, which
     ``orientation_preserving=False`` encodes. Since propagated holes CARRY
-    their side (author, 2026-10-07) this guards the direct holes of one
+    their side (author's rule), this guards the direct holes of one
     orbit (its references, each read off its own crossing signs) and the
     carrying itself.
 
     The MEASURED reading is the geometric cross-check: a hole whose measured
     side (:func:`measured_sides`: the reference hole carried back by the real
     inverse map, read on the image sub-arc) contradicts its stored side is
-    under-resolved. It is a flag (:func:`geometry_flags`), never an error (D6).
+    under-resolved. It is a flag (:func:`geometry_flags`), never an error.
 
     Holes with no ``origin`` or no comparable side skip the orbit check, and
     propagated holes with no entry in ``measured`` skip the measured one; both
@@ -666,7 +664,7 @@ def geometry_flags(
     trellis: "Trellis", bridges: Iterable["Bridge"], holes: Iterable[Hole]
 ) -> tuple[list[RowDiagnosis], list[SideDiagnosis]]:
     """
-    The geometric readings that disagree with the sign rule (D6).
+    The geometric readings that disagree with the sign rule.
 
     The crossing signs decide rows and openings and the orbit carries hole
     sides; the polylines only cross-check them. A bridge whose polyline reads
@@ -707,7 +705,7 @@ def geometry_flags(
 def warn_geometry_flags(
     trellis: "Trellis", bridges: Iterable["Bridge"], holes: Iterable[Hole]
 ) -> None:
-    """One WARNING per kind of :func:`geometry_flags` (a resolution flag, D6)."""
+    """One WARNING per kind of :func:`geometry_flags` (a resolution flag)."""
     rows, sides = geometry_flags(trellis, bridges, holes)
     if rows:
         logger.warning(
@@ -732,7 +730,7 @@ def warn_geometry_flags(
 @dataclass(frozen=True)
 class EvidenceDiagnosis:
     """
-    Why a registered image disagrees with the walked word (INT-1).
+    Why a registered image disagrees with the walked word.
 
     Attributes:
         position: The first token where the two words differ.
@@ -748,7 +746,7 @@ class EvidenceDiagnosis:
             end and a bound of its own element have registered images in the
             reverse stable order: the map preserves the order along a branch,
             so the registered cdists contradict the dynamics there and the
-            evidence is noise (C21). ``"walk"`` otherwise: no numerical
+            evidence is noise. ``"walk"`` otherwise: no numerical
             explanation, the shortest walk is not the image's class.
         crossings: The equal-sign run behind ``"stable end"``, the
             ``(end, bound)`` behind ``"order flip"``, else ``()``.
@@ -778,7 +776,7 @@ class ImageEvidence:
             equals the class's primary word, False when it does not; ``None``
             when the class has no itinerary to compare with, or when the
             evidence is incomplete or noise (a ``"stable end"`` or
-            ``"order flip"`` diagnosis, C11 / C21).
+            ``"order flip"`` diagnosis).
         itinerary_agrees: True when the iterated refs agree exactly.
         diagnosis: Why the word disagrees, when it does.
     """
@@ -888,7 +886,7 @@ def _order_flip(
     trellis: "Trellis", homotopy: "PartitionFamily", cls: "BridgeClass", evidence: ImageEvidence
 ) -> Optional[tuple[int, int]]:
     """A member end and a bound of its own element whose registered images run in
-    the reverse stable order (C21): the map preserves the order along a branch, so
+    the reverse stable order: the map preserves the order along a branch, so
     the registered cdists there are noise. Lookup only."""
     ends = evidence.bridge_id if evidence.direction >= 0 else evidence.bridge_id[::-1]
     for end, ref in zip(ends, (cls.source, cls.target)):
@@ -916,7 +914,7 @@ def verify_words(
     letters: dict["BridgeClass", str],
 ) -> None:
     """
-    Check every class's word against the registered images of its members (D3).
+    Check every class's word against the registered images of its members.
 
     Runs once every word is final, never changes one, and fills each record's
     ``evidence``, ``verified`` and ``itinerary_verified``.

@@ -167,7 +167,7 @@ def is_strong_pip(
     best_id: Optional[int] = None
     for r_id, r in trellis.registry:
         if r_id == intersection_id or r_id not in trellis.resolved_ids:
-            continue  # an unresolved detection is no crossing and disqualifies nothing (B1)
+            continue  # an unresolved detection is no crossing and disqualifies nothing
         if r.is_anchor:
             continue  # the anchoring fixed point, not a transverse intersection
         # A strong pip is a property of one periodic point's own tangle, so only
