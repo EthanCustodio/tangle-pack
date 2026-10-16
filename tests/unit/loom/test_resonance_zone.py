@@ -112,7 +112,7 @@ def test_bridge_classification_uses_the_memoised_midpoint(k10_zone_session):
     session, _fp = k10_zone_session
     (zone,) = session.resonance_zones.values()
 
-    classified = session.classify_bridges()
+    classified = {b: session.classify_bridge(b) for b in session.workbench.bridges}
     assert classified, "the fixture must have bridges to classify"
     inside = [b for b, z in classified.items() if z is zone]
     assert inside, "some bridge must lie in the zone"

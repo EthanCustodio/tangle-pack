@@ -79,8 +79,8 @@ T3.classify_strong_pips()
 session.add_resonance_zones([T1.strong_pip, T3.strong_pip])
 
 
-# --- classify every bridge ------------------------------------------------------
-classification = session.classify_bridges()  # {bridge: ResonanceZone | None}
+# --- classify every bridge: {bridge: ResonanceZone | None} ---------------------
+classification = {b: session.classify_bridge(b) for b in session.workbench.bridges}
 
 
 # --- report ---------------------------------------------------------------------

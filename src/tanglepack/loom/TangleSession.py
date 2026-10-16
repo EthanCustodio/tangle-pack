@@ -1615,24 +1615,6 @@ class TangleSession:
             return None
         return min(containing, key=lambda rz: rz.area)
 
-    def classify_bridges(
-        self, bridges: Optional[Iterable] = None
-    ) -> dict:
-        """
-        Classify many bridges by resonance zone.
-
-        Args:
-            bridges: Bridges to classify. Defaults to every bridge on the workbench.
-
-        Returns:
-            A dict mapping each bridge to its innermost containing :class:`ResonanceZone`
-            (or ``None``); see :meth:`classify_bridge`.
-        """
-        bridges = (
-            list(self.workbench.bridges) if bridges is None else list(bridges)
-        )
-        return {bridge: self.classify_bridge(bridge) for bridge in bridges}
-
     # ── blasting ─────────────────────────────────────────────────────────────
 
     def blast_zone(
