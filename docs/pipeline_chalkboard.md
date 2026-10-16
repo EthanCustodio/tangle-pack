@@ -80,24 +80,26 @@ Inversion, period-k and several saddles are **no special case** below, except at
 
 ## Where the code diverged on 2026-10-07
 
+Closed in place on 2026-10-16 (B12b): the last column is the state at `HEAD`; the divergences the 2026-10-09 audit found are in the design note's H.
+
 From the audit; the details and evidence are in `open_issues.md`.
 
-| Stage | Divergence | Issue | WP |
-|---|---|---|---|
-| 1 | Four coincident anchors at an inversion point | INV-1 | fixed (WP3) |
-| 2 | Iterate table filled by a 5% cdist heuristic, never after a blast | INT-6, BCG-3 | fixed (WP2) |
-| 4 | Lap factor λ_u instead of β^k | INV-2 | fixed (WP2) |
-| 4 | Missing table links leave branches without holes | PK-3 | accepted (D9): warned (WP5), nothing invented |
-| 5-6 | Holes and rows read from polyline geometry, not signs | INT-3 | fixed (WP4) |
-| 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | fixed (WP6) |
-| 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | no longer states (WP7); a walk pair no computed bridge spans is a flagged class (D11, WP8b) |
-| 3, 8 | The partition and dual graph do not cut S at the pip orbit (unified window ≠ S \ f(S) when S runs past it) | PK-5 | fixed (WP8b, D10): the trellis is cut at the pip orbit |
-| 10 | Element identity is a positional index | BCG-7 | fixed (WP8): letters by bounding crossings |
-| 4 | Heteroclinic pairs rejected (A's arc tested against B's branch cycle); stages 4-6 per tangle | NEST-2 | fixed (WP9): the arc's own cycle, stages on the selection's trellis |
-| — | An outer blast iterated the bridges inside an inner zone | NEST-4 | fixed (WP9, C4): innermost zone |
-| 4 | Class-count decreases at depth: references lost to witnesses inside the cdist placement error bar (noise not ruled out; one clear lambda-lemma copy) | BCG-5 | fixed (WP8b, D12): every witness lay deeper than the pip's own orbit; N is cut there |
-| 8 | Equal shortest walks picked by order; the walk started on any edge of the iterated element | DEC-23 | WP9b: span ends + the marker law (D13); WP9c: walls (D13, D14) |
-| 8 | Chords of a lobe image on a foreign stable branch left unpaired ("abuts no hole") | PK-4 | fixed (WP10b, C19) |
-| 10 | A recompute after a blast dropped every crossing on its image curves | NUM-12 | fixed (WP10b) |
-| 8 | Registered evidence contradicts the walk at depth through cdist noise (an image order the map cannot produce) | INT-11 | fixed (WP12, C21: an order flip gives no verdict); kind 2 (no registered preimage to prove it) is the resolution floor, NUM-3/4, deferred |
-| 4, 10 | The inversion series loses classes at blast 6: a genuine reference switch whose `+1` pair is never spanned (the reference arc lies outside the zone) | BCG-8 | open: DEC-25 |
+| Stage | Divergence | Issue | WP | At `HEAD` (2026-10-16) |
+|---|---|---|---|---|
+| 1 | Four coincident anchors at an inversion point | INV-1 | fixed (WP3) | stands |
+| 2 | Iterate table filled by a 5% cdist heuristic, never after a blast | INT-6, BCG-3 | fixed (WP2) | stands; B8: contested links go to `unresolved_links` (not first-wins); B1: only N is linked |
+| 4 | Lap factor λ_u instead of β^k | INV-2 | fixed (WP2) | stands; B2 tests the stable interval the same way (the arc's own cycle, k, β) |
+| 4 | Missing table links leave branches without holes | PK-3 | accepted (D9): warned (WP5), nothing invented | moot since D15 (no forward holes; its WARNING is gone) |
+| 5-6 | Holes and rows read from polyline geometry, not signs | INT-3 | fixed (WP4) | stands; B4a: readings in `topology/diagnostics.py`; B4b: holes combinatorial |
+| 7 | Every bridge classed; loops folded backward | BCG-1, BCG-2 | fixed (WP6) | superseded by B5 (transience + zeroth-hole rule); B9b: `owner_at_end` |
+| 8 | Unreachable walks and virtual classes treated as states | PK-1, INT-9 | no longer states (WP7); a walk pair no computed bridge spans is a flagged class (D11, WP8b) | stands; B6a/B6b: three statuses, every `unresolved` carries one of six reasons |
+| 3, 8 | The partition and dual graph do not cut S at the pip orbit (unified window ≠ S \ f(S) when S runs past it) | PK-5 | fixed (WP8b, D10): the trellis is cut at the pip orbit | stands; B1: N is the resolved set; B3: `m` follows the `+1` chain |
+| 10 | Element identity is a positional index | BCG-7 | fixed (WP8): letters by bounding crossings | stands |
+| 4 | Heteroclinic pairs rejected (A's arc tested against B's branch cycle); stages 4-6 per tangle | NEST-2 | fixed (WP9): the arc's own cycle, stages on the selection's trellis | stands; B2 mirrors D7 in the stable interval |
+| — | An outer blast iterated the bridges inside an inner zone | NEST-4 | fixed (WP9, C4): innermost zone | stands |
+| 4 | Class-count decreases at depth: references lost to witnesses inside the cdist placement error bar (noise not ruled out; one clear lambda-lemma copy) | BCG-5 | fixed (WP8b, D12): every witness lay deeper than the pip's own orbit; N is cut there | stands; B1+B3; series law "`pip_depth` non-decreasing" |
+| 8 | Equal shortest walks picked by order; the walk started on any edge of the iterated element | DEC-23 | WP9b: span ends + the marker law (D13); WP9c: walls (D13, D14) | stands; an undecided tie is `ambiguous`, a capped search `unresolved` (B6a/B6b) |
+| 8 | Chords of a lobe image on a foreign stable branch left unpaired ("abuts no hole") | PK-4 | fixed (WP10b, C19) | extended by B7b: stable-order chords on the base branch too |
+| 10 | A recompute after a blast dropped every crossing on its image curves | NUM-12 | fixed (WP10b) | stands |
+| 8 | Registered evidence contradicts the walk at depth through cdist noise (an image order the map cannot produce) | INT-11 | fixed (WP12, C21: an order flip gives no verdict); kind 2 (no registered preimage to prove it) is the resolution floor, NUM-3/4, deferred | stands; B6b moved the evidence to `diagnostics.verify_words`; kind 2 = resolution floor NUM-3; NUM-4 decided by B1 |
+| 4, 10 | The inversion series loses classes at blast 6: a genuine reference switch whose `+1` pair is never spanned (the reference arc lies outside the zone) | BCG-8 | open: DEC-25 | **open** (DEC-25) |

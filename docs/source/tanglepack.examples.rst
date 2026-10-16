@@ -12,6 +12,14 @@ tanglepack.examples.henon module
    :undoc-members:
    :show-inheritance:
 
+tanglepack.examples.henon_cases module
+--------------------------------------
+
+.. automodule:: tanglepack.examples.henon_cases
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

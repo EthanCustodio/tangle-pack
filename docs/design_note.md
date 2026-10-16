@@ -11,6 +11,7 @@ How to read it:
 - **N** is the set of RESOLVED transversal crossings (A.2). **X** is N together with every iterate
   `M^n` of its points; a point of X may lie outside the trellis (past a cut). **T(q0)** is the
   trellis of the strong pip q0 (A.4). `M` and `f` both name one step of the map.
+- **plan Qn** is question n of `docs/alignment_plan_2026-10-09.md` section E.
 - An anchor in parentheses, "(D13)", is a decision or issue id. Its full statement and history live
   in `.refactor/decisions.md` (D1-D15, C1-C22 and every slice outcome) and `docs/open_issues.md`
   (the issue catalog, the D/C tables and the WP outcomes); the statement is folded in here so the id
@@ -40,7 +41,7 @@ polyline crossings, resolution ratios outside the definition of N) is reported, 
 the topology. The one place a resolution criterion enters a definition is N itself (A.2).
 
 **A class exists iff a computed bridge spans it or the word of an existing class names it** (the
-closure from the spanned classes; Q9 reads D11 and D14 together). A pair no computed bridge spans is a
+closure from the spanned classes; plan Q9 reads D11 and D14 together). A pair no computed bridge spans is a
 class all the same, flagged "no computed bridge yet" (A.8c).
 
 **Completeness is not a theorem.** The walk constraints (landing spans, the marker law, walls) are
@@ -98,7 +99,7 @@ unstable branch in unstable-cdist order, so registry ids are reproducible within
 processes (INT-7).
 
 Every detection is registered and reported, but N is the RESOLVED subset
-(`IntersectionRegistry.resolved_ids`, Q13 (a), B1). A detection is in N iff
+(`IntersectionRegistry.resolved_ids`, plan Q13 (a), B1). A detection is in N iff
 
 1. its `resolution_ratio` (separation from its brackets over the larger chord deviation) is at least
    `resolution_ratio_threshold` (default 3: ratio 1 is the derived bound where the displacement
@@ -186,7 +187,7 @@ every branch, and the unstable arc across it joins its two bridges into one (`Br
 bridge the workbench never holds; resolve bridges through `Trellis.bridge_between`).
 
 **`m`, the depth.** `m` is the registered `+1` chain of the CHOSEN pip, as far as it consists of
-crossings of N (N-a, Q2, B3); `BlastResult.pip_depth` reports it per fixed point. Two consequences:
+crossings of N (N-a, plan Q2, B3); `BlastResult.pip_depth` reports it per fixed point. Two consequences:
 
 - the trellis is cut at the deepest RESOLVED orbit point. An unresolved orbit point is never linked,
   so it FREEZES `T(q0)` at the previous blast's trellis under every further blast until refinement
@@ -217,7 +218,7 @@ fixed point.
 **Definition (the pseudoneighbor PDF).** Consecutive crossings `x, x'` on a stable branch of `T(q0)`
 are a pair iff neither the open stable interval `W^s(x, x')` nor the open unstable interval
 `W^u(x, x')` holds a point of X. Both intervals are tested by ONE function, `_interval_is_clear(...,
-stability, ...)` (Q1, B2): for each crossing `r` and each `n` that lands `M^n(r)` on the interval's
+stability, ...)` (plan Q1, B2): for each crossing `r` and each `n` that lands `M^n(r)` on the interval's
 branch (closed form over the branch cycle), the landing is the table's crossing when linked (exact,
 by id), else `r` read against the pair's registered images in `r`'s own frame, else placed by
 scaling with the 2-D collision guard for the pair's own orbit. A branch return is `k_value` map steps
@@ -356,7 +357,7 @@ session's `BridgeAlphabet` letters ACTIVE classes by that identity, so a class k
 its elements keep their bounds (BCG-7). One letter generator serves both series over disjoint digit
 sets: active `a..t, aa, ...`, inert `u..z, uu, ...`, no skipping (`letter`, SIMP-6).
 
-**Definition (inertness)** (Q3, I-a, B5). A class is INERT iff it is TRANSIENT in the graph of the
+**Definition (inertness)** (plan Q3, I-a, B5). A class is INERT iff it is TRANSIENT in the graph of the
 class-level words: no cycle is reachable from it, i.e. its word is empty or names only inert classes
 (`inert_classes`). An unresolved class (no word) is active, and so is every class whose word names
 one. `BridgeClassEntry.inert` is None until `symbolic_dynamics` sets it; only then are classes
@@ -374,11 +375,11 @@ rule (A.8b). Inert classes keep their symbols in the words and are no nodes of t
 carrying a ZEROTH (reference) hole (the author's rule, B5): the bridges tiling a mapped bridge's first
 forward image are kept too. The zeroth-hole rule, read from `holes`, decides which bridges to map;
 the class table only places them (`classes.entry_of`): a hole bridge in no class is kept with a
-WARNING but not mapped. A zeroth-hole bridge's lobe holds
-no point of X and one marker (its own hole), whose image is no marker, so its image is homotopic to a
-stable segment and its class word is empty; the law "zeroth_hole_classes_have_empty_words" checks
-it. The rule is SUFFICIENT, not the definition of inertness: the heteroclinic class `u` is inert with
-no hole at all, and transience over the words stays the verdict (A.8).
+WARNING but not mapped. A zeroth-hole bridge's lobe holds no point of X and one marker (its own hole),
+whose image is no marker, so its image is homotopic to a stable segment and its class word is empty;
+the law "zeroth_hole_classes_have_empty_words" checks it. The rule is SUFFICIENT, not the definition
+of inertness: the heteroclinic class `u` is inert with no hole at all, and transience over the words
+stays the verdict (A.8).
 
 The stable manifold is kept whole; the surviving nodes are the kept bridges' endpoints, the anchors
 and each stable branch's outermost crossing. Its arrangement is SPARSE: unstable arcs come from the
@@ -435,7 +436,7 @@ search is unresolved, never a decided walk. An unresolved class is no wall.
 registered image chain of its first non-loop member (`trellis_itinerary`); no registered chain is
 unresolved ("grow or blast").
 
-**Closure** (C9, D11, Q9). Every pair of a walk is the class of one piece of `f(B)`, so a word naming
+**Closure** (C9, D11, plan Q9). Every pair of a walk is the class of one piece of `f(B)`, so a word naming
 a class outside the alphabet adds it, walked in turn, with `named_by`. A pair no computed bridge spans
 is a class all the same (D11, the author's: "we do not need computed bridges to find words"): a
 member-less entry walked from its elements' landings and flagged "no computed bridge yet"
@@ -483,7 +484,7 @@ cut like any other (PK-4). Iterated elements record `parent_element_id` (exact c
 An image chain crossing a branch an ODD number of times has left the computed stable manifold there
 (a "stable end"): its footprint is INCOMPLETE, the outermost crossing stays unpaired, and the branch is
 recorded in `IteratedHomotopyPartition.incomplete_footprints`, data with one INFO, never a
-reliability failure (Q14, B7).
+reliability failure (plan Q14, B7).
 
 **Superseded.** C19's base-branch half (chords in CHAIN order on the base branch, the author's
 2026-09-23 rule) is SUPERSEDED by B7b; it misread one lobe, k32_series hole `(6, 7)`, which spirals
@@ -500,11 +501,12 @@ two members bound with the stable manifold holds no hole, so no `P1` cut separat
 Then the refined word of c_k is the class word with every token written as the child its
 occurrence names: the word of every member, not an inheritance. The refined matrix M_1 is the
 IN-SPLITTING of `M`: siblings have equal rows and the children's columns sum to the parent's, a
-conjugacy with the same entropy. Both are LAWS, not on every build: T ("members_share_the_P1_itinerary",
-in `LAW_CASES_ONLY`) runs on the law cases and after every blast of the series
-("series_members_share_the_P1_itinerary"), not on the deep builds; the in-splitting
-("refined_matrix_is_an_in_splitting") runs on the law cases and the deep builds, with no series test. Under the zeroth-hole rule `P1`, the minimal
-trellis and the refined classes are what they were under the evidence rule on every build.
+conjugacy with the same entropy. Both are LAWS, not on every build: T
+("members_share_the_P1_itinerary", in `LAW_CASES_ONLY`) runs on the law cases and after every blast of
+the series ("series_members_share_the_P1_itinerary"), not on the deep builds; the in-splitting
+("refined_matrix_is_an_in_splitting") runs on the law cases and the deep builds, with no series test.
+Under the zeroth-hole rule `P1`, the minimal trellis and the refined classes are what they were under
+the evidence rule on every build.
 
 **Implemented by.** `IteratedHomotopyPartition.from_minimal`, `IteratedHomotopyPartition._empty_stretches`,
 `IteratedHomotopyPartition.incomplete_footprints`, `Cut`, `refine`, `RefinedClass`,
@@ -516,13 +518,13 @@ trellis and the refined classes are what they were under the evidence rule on ev
 REDUCED word of `C`; over the refined symbols it is M_1, the in-splitting of `M` (A.8d), shown by
 default. Inert classes (transient, A.8) are not nodes; a token naming one is skipped, and an inert
 word names only inert classes by definition. No spectral radius is computed or shown (the author's
-rule, kept by Q6); it would be equal for `M` and M_1.
+rule, kept by plan Q6); it would be equal for `M` and M_1.
 
 **Implemented by.** `SymbolicDynamics.transition_graph`, `SymbolicDynamics.transition_matrix`.
 
 ## A.10 Stage 10 — recompute and blasting
 
-**Definition (D1, the author's rule, restated by Q8).** The topology is a pure function of
+**Definition (D1, the author's rule, restated by plan Q8).** The topology is a pure function of
 (registry, bridges, pips): any growth or blast means a full recompute (`TangleSession.topology`
 holds one `Topology` per generation, selection and pips; SIMP-8). Grow, blast and recompute commute:
 there is no collapse path (N is the registry's verdict on every path, A.2), and a blast's image curves
@@ -550,10 +552,12 @@ author's use is a later plan (D8).
 ## A.11 Session and API
 
 The session has three concerns: hold the workbench, cache one `Topology` per (generation, selection,
-pips), and remember pips and letters. There are no fan-outs over fixed points and no plot delegates
-on the session (B9a): `cartoon_zones` and `plot_resonance_zones` live in `loom/cartoon.py` (exported
-from tanglepack.loom), `cartoon_enclosures` in `topology/plotting.py`; per-fixed-point plots go
-through `session.trellis(fp).plot_*`. The cache key has no depth.
+pips), and remember pips and letters. There are no stage fan-outs (each stage takes ONE selection and
+computes it once; `classify_strong_pips(fixed_point=None)` still runs per fixed point, to keep each
+pip's memory) and no plot delegates on the session (B9a): `cartoon_zones` and `plot_resonance_zones`
+live in `loom/cartoon.py` (exported from tanglepack.loom), `cartoon_enclosures` in
+`topology/plotting.py`; per-fixed-point plots go through `session.trellis(fp).plot_*`. The cache key
+has no depth.
 
 **Pips.** The chosen strong pip of each fixed point is remembered as a crossing (cdists and keys),
 never as an id, and found again on every rebuilt trellis (API-1). `resonance_zone` adopts its pip
@@ -577,8 +581,8 @@ and tangle 0 (NEST-6). The inversion series loses classes at blast 6 by a genuin
 **The alignment slices** (plan `docs/alignment_plan_2026-10-09.md`, one per `/tangle_refactor` run;
 outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
 
-- B0 `oracle-laws` (`1029fcc`): oracle laws on the law cases; the k=10 full 2-shift pinned (Q11).
-- B1 `resolved-crossings` (`76d0710`): N is the resolved set (Q13 (a)); the blast-path parity vote
+- B0 `oracle-laws` (`1029fcc`): oracle laws on the law cases; the k=10 full 2-shift pinned (plan Q11).
+- B1 `resolved-crossings` (`76d0710`): N is the resolved set (plan Q13 (a)); the blast-path parity vote
   `Tangle._collapse_noise_crossings` deleted; the trellis cut at the deepest resolved orbit point.
 - B6a `walk-bounds-honest` (`8a1cdc3`): truncated searches, spans meeting no node and members
   disagreeing on markers are unresolved.
@@ -589,7 +593,7 @@ outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
 - B4b `holes-are-combinatorial` (`ba23a1f`): references only; the direct backward punch, its two
   dedups, the fallback, `epsilon` and `_step_into` deleted; the backward span keeps `image_cdist`'s
   table flag (`from_table`) so the one NUM-5 WARNING watches scaled ends only.
-- B2 `pseudoneighbor-both-intervals` (`9cd29d5`): both open intervals tested (Q1, S-a).
+- B2 `pseudoneighbor-both-intervals` (`9cd29d5`): both open intervals tested (plan Q1, S-a).
 - B3 `depth-of-n` (`7d3a294`): N-a, the `min_separation` exemption, `BlastResult.pip_depth`. N-b (an
   explicit depth parameter) was offered and NOT chosen.
 - B5 `inertness-is-transience` (`3fb310a`): transience plus the zeroth-hole rule; the evidence fixed
@@ -606,7 +610,7 @@ outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
 - B9b `one-element-at-end` (`94fca6b`): `Trellis.element_for`, `_elements_at_bridge`,
   `StablePartitionResult.elements_at_bridge` and `BridgeClass._element_at_end` deleted; one reader,
   `owner_at_end`.
-- B12a `one-design-note`: this note; campaign ids out of `src/`; `CLAUDE.md` rewritten to `HEAD`.
+- B12a `one-design-note` (`a550a5d`): this note; campaign ids out of `src/`; `CLAUDE.md` rewritten to `HEAD`.
 
 **The work packages** of the open-issues round (2026-10-07 .. 10-09; table at
 `docs/open_issues.md` "Work packages", outcomes after it):
@@ -637,7 +641,7 @@ outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
 - PK-3's WARNING (a missing `+j` appearance) -> superseded with D5: gone.
 - C19's base-branch chain-order chords (2026-09-23) -> superseded by B7b (stable order everywhere).
 - C9's second half (a pair no bridge spans is never a class) -> superseded by D11.
-- "Flags never discard" -> narrowed by Q13 (a): an unresolved detection is not in N.
+- "Flags never discard" -> narrowed by plan Q13 (a): an unresolved detection is not in N.
 - Inertness as a fixed point over registered evidence (2026-09-16) -> transience (B5).
 - Statuses "unique / trivial / truncated" of a walk search -> "resolved / ambiguous / unresolved".
 - The "known asymmetry" of the stable interval (2026-09-15) -> both intervals (B2).
@@ -692,7 +696,7 @@ From `stress/numerics/report/report.pdf` (experiments E1-E12; the E12 re-verific
   bridge is not mapped (outside the zeroth-hole theorem's hypothesis).
 - `inert_classes` is not exported from `tanglepack.topology`.
 - `scripts/henon_blast_period_3.py:95` is dead (its pinned pip is no candidate); reported, not fixed.
-- `topology/diagnostics.py` is at its 990-line cap.
+- `topology/diagnostics.py` is 988 lines, under its 990-line cap.
 - The `p1(u) x p3(s)` heteroclinic links fail the beta and area laws (NUM-20, A.3).
 
 ## I. Index: every id -> section

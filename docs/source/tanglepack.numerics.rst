@@ -180,14 +180,6 @@ tanglepack.numerics.gpu module
    :undoc-members:
    :show-inheritance:
 
-tanglepack.numerics.graphviz module
------------------------------------
-
-.. automodule:: tanglepack.numerics.graphviz
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Module contents
 ---------------
 

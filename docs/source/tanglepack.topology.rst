@@ -12,6 +12,54 @@ tanglepack.topology.Arrangement module
    :undoc-members:
    :show-inheritance:
 
+tanglepack.topology.BridgeClass module
+--------------------------------------
+
+.. automodule:: tanglepack.topology.BridgeClass
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+tanglepack.topology.DualGraph module
+------------------------------------
+
+.. automodule:: tanglepack.topology.DualGraph
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+tanglepack.topology.DualWalk module
+-----------------------------------
+
+.. automodule:: tanglepack.topology.DualWalk
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+tanglepack.topology.ElementNaming module
+----------------------------------------
+
+.. automodule:: tanglepack.topology.ElementNaming
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+tanglepack.topology.MinimalTrellis module
+-----------------------------------------
+
+.. automodule:: tanglepack.topology.MinimalTrellis
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+tanglepack.topology.PartitionFamily module
+------------------------------------------
+
+.. automodule:: tanglepack.topology.PartitionFamily
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 tanglepack.topology.Pseudoneighbor module
 -----------------------------------------
 
@@ -36,6 +84,14 @@ tanglepack.topology.StrongPip module
    :undoc-members:
    :show-inheritance:
 
+tanglepack.topology.SymbolicDynamics module
+-------------------------------------------
+
+.. automodule:: tanglepack.topology.SymbolicDynamics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 tanglepack.topology.TopologyResults module
 ------------------------------------------
 
@@ -56,6 +112,14 @@ tanglepack.topology.TrellisBranch module
 ----------------------------------------
 
 .. automodule:: tanglepack.topology.TrellisBranch
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+tanglepack.topology.diagnostics module
+--------------------------------------
+
+.. automodule:: tanglepack.topology.diagnostics
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1270,3 +1270,35 @@ the plan proceeds on unless the author objects.
 16. **Q16 — A second refinement level.** `P2 = P1 ∨ f(∂P1)` and children of children are another
     in-splitting: finer names, the same dynamics (conjugate). Default: **not built**; say so if you want
     the names.
+
+## Outcome (2026-10-16)
+
+Every slice was merged into `main` as a fast-forward, so each merge hash is the branch tip
+(`git log --oneline 1029fcc^..`). Each run is archived in `.refactor/runs/<date>-<slug>/`.
+
+| # | Slice | Slug | Merge | What changed |
+|---|---|---|---|---|
+| 1 | B0 | `oracle-laws` | `1029fcc` | Oracle laws on the law cases; the k=10 full 2-shift pinned (Q11) |
+| 2 | B1 | `resolved-crossings` | `76d0710` | N = the resolved crossings (Q13 (a)); parity vote deleted; trellis cut at the deepest resolved orbit point |
+| 3 | B6a | `walk-bounds-honest` | `8a1cdc3` | Truncated searches, spans meeting no node, members disagreeing on markers → unresolved |
+| 4 | B8 | `unresolved-sets` | `ae18859` | Contested / multi-match links → `unresolved_links`; `forget_strong_pip`; `resonance_zone` adopts only candidates |
+| 5 | B4a | `holes-algorithm-vs-diagnostics` | `f166573` | Geometric readings → `topology/diagnostics.py`; `Hole.measured_side` / `side_source` removed |
+| 6 | B4b | `holes-are-combinatorial` | `ba23a1f` | References only; direct backward punch, dedups, fallback, `epsilon` deleted |
+| 7 | B2 | `pseudoneighbor-both-intervals` | `9cd29d5` | Both open intervals tested (Q1, S-a) |
+| 8 | B3 | `depth-of-n` | `7d3a294` | N-a: `min_separation` exemption; `BlastResult.pip_depth` (N-b not chosen) |
+| 9 | B5 | `inertness-is-transience` | `3fb310a` | Inertness = transience + zeroth-hole rule; evidence fixed point deleted |
+| 10 | B7 | `refined-level-defined` | `a6a4f68` | Theorem T and the in-splitting stated and made laws; `incomplete_footprints` |
+| 11 | B7b | `base-chords-in-stable-order` | `63477e3` | Stable-order chords on the base branch too |
+| 12 | B6b | `word-finished` | `65edec4` | Three walk statuses, six reasons; `free_reduce`; evidence in `diagnostics.verify_words` |
+| 13 | B10 | `dead-api` | `517aa01` | Dead API deleted (`grow_x_times`, registry graph, `graphviz.py`, ...); `topology.__all__` = 48 |
+| 14 | B9a | `session-three-concerns` | `5f0db5f` | Fan-outs, plot delegates, `partition_element_for` off the session; cartoon code → `loom/cartoon.py` |
+| 15 | B9b | `one-element-at-end` | `94fca6b` | One reader of a bridge end, `owner_at_end`; four helpers deleted |
+| 16 | B12a | `one-design-note` | `a550a5d` | `docs/design_note.md`; campaign ids out of `src/`; CLAUDE.md rewritten to HEAD |
+| 17 | B12b | `laws-and-loose-ends` | (see commit 7) | 9 tautological laws deleted; `plot_resonance_zones` smoke test; `topology.__all__` = 51; rst lists + `conf.py`; chalkboard closed; recipe reasons; 3 figure folders; narration reworded |
+
+Not done:
+
+- **B11** `manifold-arrays`: deferred (plan Q7).
+- **`scripts/henon_blast_period_3.py:95`** (`T1.set_strong_pip(12)`): dead, the pinned pip is not a
+  candidate; reported, never fixed or deleted (standing rule).
+- **DEC-25** (the inversion series loses classes at blast 6): still open.
