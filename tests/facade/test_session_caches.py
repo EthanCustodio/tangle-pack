@@ -138,7 +138,9 @@ def _repartition_by_hand(case: Case) -> None:
     trellis.set_strong_pip(original)
 
     assert session.workbench.generation == generation
-    assert _own_partition(trellis) != partition
+    repartitioned = _own_partition(trellis)
+    assert repartitioned, "the trellis holds the alternate pip's partition, not a cleared one"
+    assert repartitioned != partition
     assert session.strong_pip(fp) == original
 
 
