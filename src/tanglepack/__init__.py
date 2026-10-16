@@ -59,7 +59,6 @@ from .loom import (
     TangleSession,
     ResonanceZone,
     define_resonance_zone,
-    trim_stable_at_intersection,
 )
 
 __all__ = [
@@ -105,5 +104,4 @@ __all__ = [
     "TangleSession",
     "ResonanceZone",
     "define_resonance_zone",
-    "trim_stable_at_intersection",
 ]

@@ -23,7 +23,6 @@ from .ResonanceZone import (
     BoundaryArc,
     ResonanceZone,
     define_resonance_zone,
-    trim_stable_at_intersection,
 )
 from .Blast import BlastResult, BlastStep, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
@@ -36,7 +35,6 @@ __all__ = [
     "ResonanceZone",
     "BoundaryArc",
     "define_resonance_zone",
-    "trim_stable_at_intersection",
     "blast_zone",
     "BlastResult",
     "BlastStep",

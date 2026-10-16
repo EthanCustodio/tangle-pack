@@ -63,7 +63,6 @@ from ..numerics.geometry import arc_polyline, point_in_polygon, signed_polygon_a
 from ..topology.TopologyResults import Arc
 
 if TYPE_CHECKING:
-    from ..numerics.BaseManifold import BaseManifold
     from ..numerics.IntersectionRegistry import IntersectionRegistry
     from ..numerics.BranchPoint import BranchPoint
     from ..numerics.FixedPoint import FixedPoint
@@ -468,31 +467,6 @@ def _anchor_id(
             manifold_b_key=stable,
         )
     )
-
-
-def trim_stable_at_intersection(
-    workbench: "TangleWorkbench", intersection_id: int
-) -> "BaseManifold":
-    """
-    Truncate the stable manifold carrying an intersection to just past it.
-
-    Cuts the stable branch of the intersection's ``manifold_b_key`` at its stable
-    canonical distance (:meth:`TangleWorkbench.trim_stable_at`, the one stable trim
-    :meth:`TangleWorkbench.trim_stable_manifolds` uses too).
-
-    The trim only moves the tail pointer; call ``workbench.compute_intersections(...)``
-    afterward (as :func:`define_resonance_zone` does) to rebuild crossings on the
-    shortened segment — ``Tangle._segments_of`` walks ``root → tail`` and respects it.
-
-    Args:
-        workbench: The workbench holding the manifold and registry.
-        intersection_id: Registry id of the chosen crossing (e.g. a strong pip).
-
-    Returns:
-        The trimmed stable BaseManifold.
-    """
-    ix = workbench.intersection_registry[intersection_id]
-    return workbench.trim_stable_at(ix.manifold_b_key, ix.stable_cdist)
 
 
 def define_resonance_zone(
