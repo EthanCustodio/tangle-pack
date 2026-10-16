@@ -17,23 +17,13 @@ from .TrellisBranch import TrellisBranch
 from .Arrangement import Arrangement
 from .TopologyResults import (
     Arc,
-    ElementRef,
     Hole,
     PartitionInterval,
     PseudoneighborPair,
     Region,
     StablePartitionResult,
     StrongPipResult,
-    canonical_corners,
     side_after,
-)
-from .StrongPip import (
-    is_strong_pip,
-    classify_strong_pips,
-)
-from .Pseudoneighbor import (
-    compute_pseudoneighbors,
-    extend_pseudoneighbor_trajectories,
 )
 from .plotting import (
     CartoonLayout,
@@ -60,88 +50,33 @@ from .BridgeClass import (
     BridgeClass,
     BridgeClassEntry,
     BridgeClassTable,
-    BridgeMember,
     bridge_classes,
-    class_sort_key,
-    anchor_outward_key,
-    element_sort_key,
-    oriented_class,
     zone_label,
 )
-from .DualGraph import (
-    DualGraph,
-    FaceNode,
-    Marker,
-    StableNode,
-)
+from .DualGraph import DualGraph
 from .MinimalTrellis import (
     MinimalTrellis,
-    image_chain,
     minimal_trellis,
 )
 from .PartitionFamily import (
-    Cut,
     HomotopyPartition,
     IteratedHomotopyPartition,
-    PartitionFamily,
-)
-from .ElementNaming import (
-    SIDE_LETTER,
-    ElementName,
-    ElementNaming,
 )
 from .DualWalk import (
-    ElementLanding,
     MembersDisagree,
     Walk,
     WalkReason,
-    WalkSearch,
-    WalkStatus,
-    WalkStep,
-    holds_markers,
-    land_element,
-    lobe_image_markers,
-    shortest_walks,
-    trellis_itinerary,
-    walk_chords,
 )
 from .SymbolicDynamics import (
     ClassDynamics,
-    RefinedClass,
-    Symbol,
     SymbolicDynamics,
     free_reduce,
     inert_letters,
     letter,
-    refine,
     symbolic_dynamics,
-    translate_itinerary,
 )
-from .StablePartition import (
-    bridge_for_pair,
-    check_bridge_rows_consistent,
-    check_holes_share_bridge_side,
-    owns_cdist,
-    partition_stable_manifold,
-    propagate_reference_holes,
-    punch_holes,
-    row_of_end,
-    rows_of_bridge,
-    span_contains,
-)
-from .diagnostics import (
-    EvidenceDiagnosis,
-    ImageEvidence,
-    RowDiagnosis,
-    RowEnd,
-    SideDiagnosis,
-    bridge_row_diagnosis,
-    bridge_row_violation,
-    bridge_side_violations,
-    geometry_flags,
-    registered_evidence,
-    side_diagnoses,
-)
+from .StablePartition import check_holes_share_bridge_side
+from .diagnostics import bridge_row_diagnosis
 
 __all__ = [
     "Trellis",
@@ -158,10 +93,13 @@ __all__ = [
     "BridgeClassTable",
     "DualGraph",
     "Walk",
+    "WalkReason",
+    "MembersDisagree",
     "ClassDynamics",
     "SymbolicDynamics",
     "inert_letters",
     "letter",
+    "free_reduce",
     "symbolic_dynamics",
     "Region",
     "Hole",
