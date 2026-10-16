@@ -57,6 +57,7 @@ from henon_minimal_dual_graph import (  # noqa: E402
 )
 
 from tanglepack import TangleSession  # noqa: E402
+from tanglepack.loom import cartoon_zones  # noqa: E402
 from tanglepack.topology import plotting  # noqa: E402
 from tanglepack.topology.SymbolicDynamics import SymbolicDynamics  # noqa: E402
 
@@ -222,10 +223,19 @@ def draw_partitions(ax, session, dynamics, title) -> None:
 
 def draw_cartoon(ax, session, dynamics, title, *, shape: str = "circle") -> None:
     """Panel 3: the dual graph as circular zones (or rows), thin black bridges, no walk."""
-    layout = session.plot_dual_graph_cartoon(
-        dynamics, ax=ax, shape=shape, show_walks=False, bridge_color=CARTOON_BRIDGE_COLOR,
+    dual = session.dual_graph()
+    zones = {}
+    if shape == "circle":
+        interior, parents, order = cartoon_zones(session.resonance_zones.values(), session.workbench)
+        zones = {"interior_side": interior, "parents": parents, "arc_order": order}
+        if parents:
+            zones["enclosures"] = plotting.cartoon_enclosures(
+                dual.trellis, dual.minimal.kept_bridge_ids, parents, session.fixed_points
+            )
+    layout = plotting.plot_dual_graph_cartoon(
+        dual, dynamics, ax=ax, shape=shape, show_walks=False, bridge_color=CARTOON_BRIDGE_COLOR,
         bridge_alpha=CARTOON_BRIDGE_ALPHA, bridge_linewidth=CARTOON_BRIDGE_LINEWIDTH,
-        label_fontsize=CARTOON_LABEL_FONTSIZE,
+        label_fontsize=CARTOON_LABEL_FONTSIZE, **zones,
     )
     handles = plotting.dual_graph_cartoon_legend_handles(
         bridge_color=CARTOON_BRIDGE_COLOR, bridge_alpha=CARTOON_BRIDGE_ALPHA,

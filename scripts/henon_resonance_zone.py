@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tanglepack import TangleSession
+from tanglepack.loom import plot_resonance_zones
 from tanglepack.examples import (
     HENON_P3,
     henon_map as _henon_map_factory,
@@ -89,7 +90,7 @@ for fp, rz in session.resonance_zones.items():
 
 # --- plot: shaded zones under the tangle ---------------------------------------
 plt.figure(figsize=(8, 8))
-session.plot_resonance_zones(alpha=0.3)
+plot_resonance_zones(session.resonance_zones.values(), alpha=0.3)
 
 for fp in (fp3, fp1):
     session.workbench.plot_tangle(fp, "stable", color="r", linewidth=0.8)

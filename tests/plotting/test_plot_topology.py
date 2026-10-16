@@ -20,6 +20,7 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 from cases import Case, build_k10, build_nested, build_period3  # noqa: E402
+from tanglepack.loom import cartoon_zones  # noqa: E402
 from tanglepack.topology import plotting  # noqa: E402
 from tanglepack.topology.DualWalk import Walk  # noqa: E402
 from tanglepack.topology.diagnostics import _side_of  # noqa: E402
@@ -363,6 +364,19 @@ def _assert_interior_inside(layout) -> int:
     return checked
 
 
+def _circle_cartoon(session, ax):
+    """The session's circle cartoon, its zone readings passed explicitly."""
+    dual = session.dual_graph()
+    interior, parents, order = cartoon_zones(session.resonance_zones.values(), session.workbench)
+    extra = {"enclosures": plotting.cartoon_enclosures(
+        dual.trellis, dual.minimal.kept_bridge_ids, parents, session.fixed_points
+    )} if parents else {}
+    return plotting.plot_dual_graph_cartoon(
+        dual, session.symbolic_dynamics(), ax=ax, shape="circle",
+        interior_side=interior, parents=parents, arc_order=order, **extra,
+    )
+
+
 def test_circle_interior_side_lies_inside_the_circle(k10_partitioned, fig_ax) -> None:
     """The zone-interior side (right by default, or the one asked for) is drawn inside."""
     session, _fp = k10_partitioned
@@ -388,7 +402,7 @@ def test_p3_circle_follows_the_zone_boundary(fig_ax) -> None:
     case = build_period3()
     session = case.session
     (fp,) = case.fixed_points
-    interior, parents, arc_order = session.cartoon_zones()
+    interior, parents, arc_order = cartoon_zones(session.resonance_zones.values(), session.workbench)
     assert parents == {}
     assert set(interior) == set(fp.branch_cycle("stable"))
     assert set(interior.values()) <= {"left", "right"}
@@ -397,7 +411,7 @@ def test_p3_circle_follows_the_zone_boundary(fig_ax) -> None:
     assert set(order.order) == set(fp.branch_cycle("stable"))
 
     _fig, ax = fig_ax
-    layout = session.plot_dual_graph_cartoon(ax=ax, shape="circle")
+    layout = _circle_cartoon(session, ax)
     anchors = {key: layout.arcs[key][1] % (2 * np.pi) for key in order.order}
     around = sorted(order.order, key=lambda key: anchors[key], reverse=order.clockwise)
     start = around.index(order.order[0])
@@ -409,17 +423,21 @@ def test_nested_inner_circle_sits_inside_the_outer_one(nested: Case, fig_ax) -> 
     """The nested tangle's circle lies inside its parent's keep-out disc; lobes enclosing it are known."""
     session = nested.session
     outer, inner = nested.fixed_points
-    _interior, parents, _arc_order = session.cartoon_zones()
+    _interior, parents, _arc_order = cartoon_zones(session.resonance_zones.values(), session.workbench)
     assert parents == {id(inner): id(outer)}
     minimal = session.minimal_trellis()
-    enclosures = session.cartoon_enclosures(minimal.trellis, minimal.kept_bridge_ids, parents)
+    enclosures = plotting.cartoon_enclosures(
+        minimal.trellis, minimal.kept_bridge_ids, parents, session.fixed_points
+    )
     assert enclosures, "the outer anchor lobes enclose the period-3 tangle"
     assert all(ids == frozenset({id(inner)}) for ids in enclosures.values())
     alone = session.dual_graph(outer)  # a sub-selection reads its own trellis's bridges
-    assert session.cartoon_enclosures(alone.trellis, alone.minimal.kept_bridge_ids, parents)
+    assert plotting.cartoon_enclosures(
+        alone.trellis, alone.minimal.kept_bridge_ids, parents, session.fixed_points
+    )
 
     _fig, ax = fig_ax
-    layout = session.plot_dual_graph_cartoon(ax=ax, shape="circle")
+    layout = _circle_cartoon(session, ax)
     assert layout.parents == {id(inner): id(outer)}
     ox, oy, o_radius = layout.circles[id(outer)]
     ix, iy, i_radius = layout.circles[id(inner)]

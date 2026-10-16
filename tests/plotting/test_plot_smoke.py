@@ -308,12 +308,13 @@ def test_session_plot_delegates_return_their_types(k10_partitioned) -> None:
         plt.close(fig)
 
 
-def test_session_cartoon_delegate_honours_its_toggles(k10_partitioned, fig_ax) -> None:
-    """With every toggle off, the session cartoon draws no bridge, walk or crossing."""
+def test_cartoon_honours_its_toggles(k10_partitioned, fig_ax) -> None:
+    """With every toggle off, the cartoon draws no bridge, walk or crossing."""
     session, fp = k10_partitioned
     _fig, ax = fig_ax
-    layout = session.plot_dual_graph_cartoon(
-        ax=ax, fixed_points=[fp], show_bridges=False, show_walks=False, show_unified=False,
+    layout = plotting.plot_dual_graph_cartoon(
+        session.dual_graph([fp]), session.symbolic_dynamics([fp]), ax=ax,
+        show_bridges=False, show_walks=False, show_unified=False,
     )
     assert isinstance(layout, plotting.CartoonLayout)
     assert layout.bridges_drawn == 0 and layout.walks_drawn == 0

@@ -133,7 +133,7 @@ for name, result in (("small", result_small), ("large", result_large)):
 # red/blue curves); `plot_all_bridges` draws every registered bridge, original and
 # iterated.
 plt.figure(figsize=(8, 8))
-session.plot_resonance_zones(alpha=0.3)
+tanglepack.loom.plot_resonance_zones(session.resonance_zones.values(), alpha=0.3)
 
 for fp in (fp3, fp1):
     session.workbench.plot_tangle(fp, "stable", color="r", linewidth=0.8)

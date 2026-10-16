@@ -2516,8 +2516,7 @@ def plot_dual_graph_cartoon(
         shape: ``"line"`` rows or ``"circle"`` zones.
         interior_side: Circle mode: ``{branch_key: side}`` of the side facing
             the zone's interior, drawn inside the circle
-            (:meth:`~tanglepack.loom.TangleSession.TangleSession.cartoon_zones`
-            computes it).
+            (:func:`tanglepack.loom.cartoon_zones` computes it).
         parents: Circle mode: ``{id(fixed_point): id(parent)}`` for nested
             circles.
         arc_order: Circle mode: ``{id(fixed_point): ZoneArcOrder}``, the
@@ -2893,7 +2892,7 @@ def dual_graph_zone_layout(
         parents: ``{id(fixed_point): id(parent fixed point)}``: which circle
             nests inside which.
         arc_order: ``{id(fixed_point): ZoneArcOrder}``, read off each zone
-            (:meth:`~tanglepack.loom.TangleSession.TangleSession.cartoon_zones`).
+            (:func:`tanglepack.loom.cartoon_zones`).
             Ignored for a fixed point whose order does not name exactly its
             partitioned branches.
 
@@ -2993,6 +2992,82 @@ def dual_graph_zone_layout(
                     node.is_unified for node in dual_graph.stable_nodes_of(ref)
                 )
     return layout
+
+
+def cartoon_enclosures(
+    trellis: "Trellis", bridge_ids: Iterable, parents: dict, fixed_points: Iterable
+) -> dict:
+    """
+    Which nested tangles each bridge's lobe encloses in the plane.
+
+    A bridge between two crossings of ONE stable branch, closed by the
+    stable segment between them, bounds a lobe; a fixed point nested in
+    that branch's zone (``parents``) is enclosed when the centroid of its
+    orbit lies inside the lobe. The circular cartoon routes such a
+    bridge's arc around the nested circle's far side, and every other
+    inward arc between the stable arc and the nested circle, so the
+    cartoon keeps the plane's topology.
+
+    Args:
+        trellis: The trellis the bridges belong to (the dual graph's: a
+            bridge of a pip-cut trellis may be a joined arc no other
+            snapshot holds).
+        bridge_ids: The bridges to test (the minimal trellis's).
+        parents: ``{id(fixed_point): id(parent fixed point)}`` from
+            :func:`tanglepack.loom.cartoon_zones`.
+        fixed_points: Every fixed point ``parents`` may name (a session's
+            ``fixed_points``): a nested child need not be in ``trellis``.
+
+    Returns:
+        ``{bridge_id: frozenset(id(nested fixed point), ...)}`` for the
+        bridges enclosing at least one nested fixed point.
+    """
+    from ..numerics.geometry import arc_polyline, point_in_polygon
+
+    registry = trellis.registry
+    tol = registry.cdist_tol
+    by_id = {id(fp): fp for fp in fixed_points}
+    children: dict = {}
+    for child, parent in parents.items():
+        if child in by_id:
+            children.setdefault(parent, []).append(by_id[child])
+    centroids = {
+        id(fp): np.mean(
+            [np.asarray(c, dtype=float) for c in fp.coordinates], axis=0
+        )
+        for group in children.values()
+        for fp in group
+    }
+    enclosures: dict = {}
+    for bridge_id in bridge_ids:
+        first, second = registry[bridge_id[0]], registry[bridge_id[1]]
+        key = first.manifold_b_key
+        if key is None or key != second.manifold_b_key:
+            continue
+        nested = children.get(id(key[0]))
+        if not nested or key not in trellis.manifolds:
+            continue
+        bridge = trellis.bridge_between(*bridge_id)
+        assert bridge is not None, f"bridge {bridge_id} is not a bridge of the trellis"
+        c_first, c_second = float(first.stable_cdist), float(second.stable_cdist)
+        stable = np.asarray(
+            arc_polyline(
+                trellis.manifolds[key], min(c_first, c_second), max(c_first, c_second),
+                stability="stable", tol=tol,
+            ),
+            dtype=float,
+        ).reshape(-1, 2)
+        if c_second > c_first:
+            stable = stable[::-1]  # back from the second crossing to the first
+        lobe = np.vstack([np.asarray(bridge.get_point_array(), dtype=float), stable])
+        if len(lobe) < 3:
+            continue
+        inside = frozenset(
+            id(fp) for fp in nested if point_in_polygon(centroids[id(fp)], lobe)
+        )
+        if inside:
+            enclosures[bridge_id] = inside
+    return enclosures
 
 
 def _normal_bezier(p, n_p, q, n_q, *, depth: Optional[float] = None, cap_p=None, cap_q=None):
