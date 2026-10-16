@@ -1273,8 +1273,9 @@ the plan proceeds on unless the author objects.
 
 ## Outcome (2026-10-16)
 
-Every slice was merged into `main` as a fast-forward, so each merge hash is the branch tip
-(`git log --oneline 1029fcc^..`). Each run is archived in `.refactor/runs/<date>-<slug>/`.
+Every slice was merged into `main` as a fast-forward (`git log --oneline 1029fcc^..`). Rows 1-16
+name the branch tip; row 17 names the last content commit, and the docs-only commit naming it
+follows (a commit cannot name its own hash). Each run is archived in `.refactor/runs/<date>-<slug>/`.
 
 | # | Slice | Slug | Merge | What changed |
 |---|---|---|---|---|
@@ -1294,7 +1295,7 @@ Every slice was merged into `main` as a fast-forward, so each merge hash is the 
 | 14 | B9a | `session-three-concerns` | `5f0db5f` | Fan-outs, plot delegates, `partition_element_for` off the session; cartoon code → `loom/cartoon.py` |
 | 15 | B9b | `one-element-at-end` | `94fca6b` | One reader of a bridge end, `owner_at_end`; four helpers deleted |
 | 16 | B12a | `one-design-note` | `a550a5d` | `docs/design_note.md`; campaign ids out of `src/`; CLAUDE.md rewritten to HEAD |
-| 17 | B12b | `laws-and-loose-ends` | `bd1e30c` | 9 tautological laws deleted; `plot_resonance_zones` smoke test; `topology.__all__` = 51; rst lists + `conf.py`; chalkboard closed; recipe reasons; 3 figure folders; narration reworded |
+| 17 | B12b | `laws-and-loose-ends` | `ad1d96a` | 9 tautological laws deleted; `plot_resonance_zones` smoke test; `topology.__all__` = 51; rst lists + `conf.py`; chalkboard closed; recipe reasons; 3 figure folders; narration reworded |
 
 Not done:
 

@@ -1,6 +1,6 @@
 # tanglepack design note
 
-*Verified against `HEAD` `bd1e30c` on 2026-10-16.*
+*Verified against `HEAD` `ad1d96a` on 2026-10-16.*
 
 The library's design, one section per pipeline stage, as the code at `HEAD` implements it. It is
 section A of `docs/alignment_plan_2026-10-09.md` rewritten after the slices B0-B9b closed: the
@@ -503,10 +503,11 @@ two members bound with the stable manifold holds no hole, so no `P1` cut separat
 Then the refined word of c_k is the class word with every token written as the child its
 occurrence names: the word of every member, not an inheritance. The refined matrix M_1 is the
 IN-SPLITTING of `M`: siblings have equal rows and the children's columns sum to the parent's, a
-conjugacy with the same entropy. Both are LAWS, not on every build: T
-("members_share_the_P1_itinerary", in `LAW_CASES_ONLY`) runs on the law cases and after every blast of
-the series ("series_members_share_the_P1_itinerary"), not on the deep builds; the in-splitting
-("refined_matrix_is_an_in_splitting") runs on the law cases and the deep builds, with no series test.
+conjugacy with the same entropy. Both are LAWS, not on every build:
+T ("members_share_the_P1_itinerary", in `LAW_CASES_ONLY`) runs on the law cases and after every
+blast of the series ("series_members_share_the_P1_itinerary"), not on the deep builds; the
+in-splitting ("refined_matrix_is_an_in_splitting") runs on the law cases and the deep builds, with
+no series test.
 Under the zeroth-hole rule `P1`, the minimal trellis and the refined classes are what they were under
 the evidence rule on every build.
 
@@ -613,7 +614,7 @@ outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
   `StablePartitionResult.elements_at_bridge` and `BridgeClass._element_at_end` deleted; one reader,
   `owner_at_end`.
 - B12a `one-design-note` (`a550a5d`): this note; campaign ids out of `src/`; `CLAUDE.md` rewritten to `HEAD`.
-- B12b `laws-and-loose-ends` (`bd1e30c`): nine tautological laws deleted; `plot_resonance_zones` smoke
+- B12b `laws-and-loose-ends` (`ad1d96a`): nine tautological laws deleted; `plot_resonance_zones` smoke
   test; `topology.__all__` = 51; rst lists and `conf.py`; chalkboard closed; recipe reasons; three
   figure folders; narration reworded.
 
@@ -724,7 +725,7 @@ PK-1 A.6 · PK-3 A.5 (superseded) · PK-4 A.8d · PK-6 A.4 · PK-9 A.6 · SIMP-6
 Plan questions (`docs/alignment_plan_2026-10-09.md` section E): Q1 A.5 · Q2 A.4 · Q3 A.8 · Q6 A.9 ·
 Q8 A.10 · Q9 A.0, A.8c · Q11 H · Q13 A.2 · Q14 A.8d · N-a A.4 · N-b H.
 
-Slices: B0-B12a H (B1 A.2, A.4 · B2 A.5 · B3 A.4 · B4a, B4b A.6 · B5 A.8, A.8b · B6a, B6b A.8c ·
+Slices: B0-B12b H (B1 A.2, A.4 · B2 A.5 · B3 A.4 · B4a, B4b A.6 · B5 A.8, A.8b · B6a, B6b A.8c ·
 B7, B7b A.8d · B8 A.3, A.11 · B9a A.11 · B9b A.7).
 
 Work packages: WP0-WP12, WP8b, WP9b, WP9c, WP10b H. Stress experiments: E1, E2, E3, E4, E7, E11,
