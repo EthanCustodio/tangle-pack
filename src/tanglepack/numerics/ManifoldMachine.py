@@ -28,10 +28,9 @@ Symptom: at the k=2.1 inner period-3 fp ``construct_fixed_point([[0,1],[-1,0],
 while and then the point count and runtime blow up in a single iteration (in one
 seen case to ~2e5 points; pushing one further hit millions and tens of GB).
 
-Diagnosis (instrumented, 2026-06): the blow-up is NOT a tight-fold refinement
-artifact (the earlier guess in this note). It is the arm ESCAPING to infinity. Two
-signals settle it, traced per growth iteration on both the stable [1,1] and the
-unstable [0,1] arm of that fp:
+Diagnosis (instrumented): the blow-up is NOT a tight-fold refinement artifact.
+It is the arm ESCAPING to infinity. Two signals settle it, traced per growth
+iteration on both the stable [1,1] and the unstable [0,1] arm of that fp:
   * The minimum segment length never shrinks -- it sits at the ~1.4e-6 seed
     spacing the whole time. A tight fold would drive it toward zero; there is no
     tight fold.

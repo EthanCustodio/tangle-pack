@@ -7,10 +7,10 @@ points of the resulting fixed point.
 
 Dev Notes:
 
-The branch count is no longer an input to construct_fixed_point (plan 2.8): it
-is derived from the eigenvalues by FixedPoint.num_branches (2 with inversion, 1
-without). Growing a NON-inversion saddle on both of its eigendirections is still
-supported, but it is a request made per manifold at initialization time
+The branch count is derived from the eigenvalues by FixedPoint.num_branches (2
+with inversion, 1 without), never passed to construct_fixed_point. Growing a
+NON-inversion saddle on both of its eigendirections is supported, but it is a
+request made per manifold at initialization time
 (ManifoldInitializer.construct_kevin_way / TangleWorkbench.initialize_manifold),
 not a property of the fixed point -- the two directions are two independent
 one-branch chains there, not the two halves of one chain.
@@ -93,9 +93,7 @@ class FixedPointSolver:
             :meth:`TangleWorkbench.orient_eigenvectors`, which re-signs the
             eigenvectors post hoc, per fixed point, against directions the caller
             names. ``orient`` exists only for the narrow case of a map where a
-            fixed sign rule is known ahead of time (it replaces a hardcoded
-            Hénon-specific flip that used to live in
-            :meth:`compute_eigenvectors`).
+            fixed sign rule is known ahead of time.
         """
 
         self.dynamical_map = system.map

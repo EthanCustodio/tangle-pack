@@ -480,9 +480,7 @@ class FixedPoint:
         Note:
             The ordering this induces on an inversion point is
             ``(0, 0), (1, 0), ..., (p-1, 0), (0, 1), ..., (p-1, 1)``: the piece
-            after ``(p-1, 0)`` is ``(0, 1)``. The pre-2026-09 initializer instead
-            walked ``for orbit_index: for branch_index:``, visiting ``(0, 1)``
-            before ``(1, 0)``, which is not the physical chain.
+            after ``(p-1, 0)`` is ``(0, 1)``.
         """
 
         fp, stability, orbit_index, branch_index = key
