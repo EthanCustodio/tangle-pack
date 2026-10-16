@@ -34,9 +34,8 @@ topological sense, and never appears in a genealogy answer. Two consequences to
 keep in mind:
 
 * repeated blasting of the same region can accumulate several Bridge objects over
-  the same partial arc (nothing identifies them as the same arc), which is why the
-  nested period-3 blast script registers 141 bridges where the pre-2.2 code
-  reported 140;
+  the same partial arc (nothing identifies them as the same arc), so a bridge
+  count can exceed the number of distinct arcs;
 * ``image_bridges`` can therefore lose a mid-arc leading/trailing piece of an
   image, so the derived frontier is the bridges of the image, not the whole image.
 

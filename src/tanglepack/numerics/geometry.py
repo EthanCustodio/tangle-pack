@@ -2,11 +2,10 @@
 
 Dev Notes:
 
-Four operations live here as pure functions on plain arrays (walking a manifold
-between two canonical distances, orienting a bridge polyline along its dynamical
-direction, the shoelace area, the even-odd point test), with one tolerance and one
-end-inclusion convention, so a Region, a resonance zone and a partition midpoint
-all measure the same way.
+Four operations live here, each defined once (walking a manifold between two
+canonical distances, orienting a bridge polyline along its dynamical direction, the
+shoelace area, the even-odd point test), so a Region, a resonance zone and a
+partition midpoint all measure the same way and share one end-inclusion convention.
 
 Two conventions are fixed here and relied on everywhere downstream:
 

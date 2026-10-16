@@ -45,7 +45,7 @@ Dev Notes:
   singleton landing with no registered chain); one blast resolves it through
   the trellis path; two blasts are the fewest at which every outer class
   walks, and the outer classes reproduce the k=2.8 two-blast words with real
-  (``unique``) walks.
+  walks (``source == "walk"``).
 * Construction order is OUTERMOST first: the period-1 saddle is
   constructed first, so it is ``A`` and tangle 0 of the session, matching
   ``TangleBuild.fixed_points``; the orbits are still grown period 3 first, each
