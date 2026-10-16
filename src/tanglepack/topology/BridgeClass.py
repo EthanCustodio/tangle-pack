@@ -94,11 +94,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator, Optional, Sequence, TYPE_CHECKING
 
-from .StablePartition import row_of_end
 from .TopologyResults import (
     ElementRef,
-    Endpoint,
-    endpoint_index,
     Side,
     StablePartitionResult,
 )
@@ -539,9 +536,11 @@ def bridge_classes(
     The result is the EVIDENCE table: every bridge's class. The alphabet is its
     restriction to the minimal trellis (``MinimalTrellis.alphabet``, D2).
 
-    For each bridge id, the row at each end (:func:`~.StablePartition.row_of_end`)
-    picks the side, the endpoint's ``manifold_b_key`` picks the stable branch,
-    and the partition result for that ``(branch, side)`` names the element that
+    Each end of a bridge id is read by the homotopy family's
+    :meth:`~.PartitionFamily.PartitionFamily.owner_at_end`: the row at that end
+    (:func:`~.StablePartition.row_of_end`) picks the side,
+    :meth:`~.Trellis.Trellis.stable_key_at` picks the stable branch (C7), and
+    the partition result for that ``(branch, side)`` names the element that
     owns the endpoint. Two different elements give the bridge's
     :class:`BridgeClass` (oriented anchor outward) and its direction; two equal
     elements make it a loop, which is folded FORWARD into the class of the first
@@ -569,18 +568,20 @@ def bridge_classes(
     Raises:
         ValueError: If two of ``partitions`` cover the same ``(branch, side)``;
             if no partition covers the ``(branch, side)`` a bridge end needs
-            (the message names the branch); if a crossing carries no stable
-            manifold key; or if a crossing has no ``crossing_sign``.
+            (the message names the branch); if a covering result does not own
+            a crossing; or if a crossing has no ``crossing_sign``.
 
     Note:
-        A crossing that lies on a partitioned branch but is absent from that
-        result's ``element_of_intersection`` is an AssertionError, not a
-        ValueError: a partition covers every crossing of its branch by
-        construction, so a miss is a broken invariant rather than a caller
-        error. So is an image pair held by two bridges' image chains (the map
-        is a bijection).
+        A crossing a covering result does not own breaks an invariant the
+        partition asserts when it is built, but here it is
+        :meth:`~.PartitionFamily.PartitionFamily.owner_of_intersection`'s
+        ValueError, as for every other caller. An image pair held by two
+        bridges' image chains is an AssertionError (the map is a bijection).
     """
-    by_branch_side = _index_partitions(partitions)
+    # PartitionFamily imports this module (``_image_chain``), so not at module level.
+    from .PartitionFamily import HomotopyPartition
+
+    family = HomotopyPartition.from_results(partitions, trellis=trellis)
     ids = [bridge.id for bridge in trellis.bridges if bridge.id is not None]
     fixed_points = trellis.fixed_points
     chains = {bid: _image_chain(trellis, bid) for bid in ids}
@@ -594,8 +595,8 @@ def bridge_classes(
 
     def ends(bridge_id: "BridgeId") -> tuple[ElementRef, ElementRef]:
         return (
-            _element_at_end(trellis, by_branch_side, bridge_id, "first"),
-            _element_at_end(trellis, by_branch_side, bridge_id, "second"),
+            family.owner_at_end(trellis, bridge_id, "first"),
+            family.owner_at_end(trellis, bridge_id, "second"),
         )
 
     grouped: dict[BridgeClass, list[BridgeMember]] = {}
@@ -758,34 +759,3 @@ def _index_partitions(
             )
         index[key] = result
     return index
-
-
-def _element_at_end(
-    trellis: "Trellis",
-    by_branch_side: dict[tuple["ManifoldKey", Side], StablePartitionResult],
-    bridge_id: "BridgeId",
-    endpoint: Endpoint,
-) -> ElementRef:
-    """The element a bridge sits against at one of its ends, on that end's row."""
-    row = row_of_end(trellis, bridge_id, endpoint)
-    intersection_id = bridge_id[endpoint_index(endpoint)]
-    branch_key = trellis.stable_key_at(intersection_id, trellis.unstable_key_of(bridge_id))
-    if branch_key is None:
-        raise ValueError(
-            f"crossing {intersection_id} of bridge {bridge_id} carries no "
-            "stable manifold key, so no partition can name its element"
-        )
-    result = by_branch_side.get((branch_key, row))
-    if result is None:
-        raise ValueError(
-            f"no {row!r} partition covers stable branch {branch_key[1:]}, which "
-            f"carries crossing {intersection_id} of bridge {bridge_id}; "
-            "partition that branch (or pass its trellis's stable_partitions)"
-        )
-    element_id = result.element_of_intersection.get(intersection_id)
-    assert element_id is not None, (
-        f"crossing {intersection_id} lies on partitioned branch "
-        f"{branch_key[1:]} side {row!r} but no element of that partition owns "
-        "it; a partition covers every crossing of its branch"
-    )
-    return result.ref(element_id)
