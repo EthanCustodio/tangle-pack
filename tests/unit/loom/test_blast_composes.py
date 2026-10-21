@@ -90,3 +90,26 @@ def test_drops_survive_a_recompute():
     assert _state(session, fp) == _state(*at_once[:2])
     assert last.skipped_dropped > 0
     assert _dropped(session) == _dropped(at_once[0])
+
+
+@pytest.mark.parametrize(
+    ("later", "readmitted"),
+    [(0.05, False), (0.02, False), (0.01, True), (None, True)],
+    ids=["larger", "equal", "smaller", "none"],
+)
+def test_a_drop_stands_until_a_smaller_separation(later, readmitted):
+    """A later call skips a drop unless it passes a smaller separation or None.
+
+    A re-admitted drop is in the call's initial frontier and gets iterated; a
+    standing one is counted in ``skipped_dropped`` and stays un-iterated.
+    """
+    session, fp, zone = _p3_session_zone()
+    for _ in range(4):
+        _blast(session, fp, zone, 1, 0.02)
+    dropped = [b for b in session.workbench.bridges if b.dropped_at is not None]
+    assert dropped and not any(b.iterated for b in dropped)
+    result = _blast(session, fp, zone, 1, later)
+    frontier = {id(b) for b in result.interior_bridges_by_iteration[0]}
+    assert all((id(b) in frontier) == readmitted for b in dropped)
+    assert all(b.iterated == readmitted for b in dropped)
+    assert result.skipped_dropped == (0 if readmitted else len(dropped))
