@@ -242,7 +242,12 @@ def blast_zone(
             orbit of a selected fixed point's chosen pip is exempt and logged
             at INFO, so the guard never decides the depth
             of ``T(q0)``: that is decided by whether ``f^{m+1}(q0)`` is detected
-            and resolved (design note §A.4). ``None`` (default) disables the guard.
+            and resolved (design note §A.4). A drop is remembered on the bridge
+            (``Bridge.dropped_at``) and the zone's later calls skip it, unless
+            they pass a smaller separation or None. The curve tested against is
+            every curve the workbench holds (dropped and exterior children
+            included), so ``n`` single-iteration blasts equal one
+            ``n``-iteration blast. ``None`` (default) disables the guard.
         diagnose: If True (default) finish with ONE
             :meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.report_resolution`
             pass over the blasted fixed points: deep blasting is where

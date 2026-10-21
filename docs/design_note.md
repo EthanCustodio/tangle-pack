@@ -542,6 +542,11 @@ an unresolved orbit point freezes `T(q0)` (B1). D1 does not bind the closed alph
 the smallest zone holding its midpoint, so an outer blast never iterates a bridge inside an inner
 zone and nested blasting is order independent. Any failure to map a bridge forward propagates
 (NUM-10). `max_points` is an opt-in budget checked between iterations, a clean resumable stop.
+A `min_separation` drop is remembered on the bridge (`Bridge.dropped_at`, carried by
+`rebuild_bridges` beside `iterated`), and the zone's later calls skip it unless they pass a smaller
+separation or None; the guard's reference is every curve the workbench holds, dropped and exterior
+children included. So `n` single-iteration blasts equal one `n`-iteration blast (blast-steps-compose,
+2026-10-21).
 
 **Zones.** A stable trim is a VIEW (C22): growth re-finds every branch's physical end and so
 un-trims a zone, the topology never depends on the trim (the trellis is cut at the pip orbit), and

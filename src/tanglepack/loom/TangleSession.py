@@ -805,8 +805,12 @@ class TangleSession:
             num_iterations: Maximum number of blast steps.
             fixed_point: Restrict to bridges from this fixed point (default: all).
             min_separation: Drop a child bridge whose interior comes within this
-                distance of an already-kept sibling, to avoid precision-driven merges
-                of near-coincident unstable curves (default: disabled).
+                distance of curve the workbench already holds or of an
+                already-kept sibling, to avoid precision-driven merges of
+                near-coincident unstable curves (default: disabled). A drop is
+                remembered on the bridge and later calls skip it unless they
+                pass a smaller separation or None, so single-iteration blasts
+                compose.
             diagnose: Finish with one resolution report on the workbench logger
                 (default; see :func:`~tanglepack.loom.Blast.blast_zone`).
             max_points: Opt-in point budget of the whole blast; it stops
