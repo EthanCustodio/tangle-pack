@@ -1877,7 +1877,7 @@ class TangleWorkbench:
 
         Per-bridge metadata is carried across BY ID: a recut bridge with the same
         :data:`~.Bridge.BridgeId` is the same bridge, so its ``iterated`` flag
-        survives -- but ONLY while those ids still name the same crossings. A
+        and its ``dropped_at`` (a blast's ``min_separation`` drop) survive -- but ONLY while those ids still name the same crossings. A
         :meth:`compute_intersections` without ``preserve_ids`` rebuilds the registry
         from zero, and an old pair then names an unrelated pair of crossings; that is
         tracked by the id epoch, and on a mismatch the carry is dropped (logged at
@@ -1901,9 +1901,12 @@ class TangleWorkbench:
         Returns:
             The freshly created bridges.
         """
-        carried: dict[BridgeId, bool] = {}
+        carried: dict[BridgeId, tuple[bool, Optional[float]]] = {}
         if self._bridge_id_epoch == self._registry_id_epoch:
-            carried = {bid: bridge.iterated for bid, bridge in self._bridges.items()}
+            carried = {
+                bid: (bridge.iterated, bridge.dropped_at)
+                for bid, bridge in self._bridges.items()
+            }
         elif self._bridges:
             logger.debug(
                 "rebuild_bridges: the intersection registry was renumbered since the "
@@ -1920,7 +1923,7 @@ class TangleWorkbench:
         rebuilt = self.create_bridges(fixed_point)
         for bid, bridge in self._bridges.items():
             if bid in carried:
-                bridge.iterated = carried[bid]
+                bridge.iterated, bridge.dropped_at = carried[bid]
         return rebuilt
 
     @property

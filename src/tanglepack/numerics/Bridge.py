@@ -118,6 +118,8 @@ class Bridge(BaseManifold):
         )
 
         self.iterated: bool = False
+        # The min_separation a blast dropped this bridge at (loom/Blast.py).
+        self.dropped_at: Optional[float] = None
         self.first_intersection: Optional[int] = first_intersection
         self.second_intersection: Optional[int] = second_intersection
 

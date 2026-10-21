@@ -175,6 +175,9 @@ class BlastResult:
         points_created: Points held by the bridges this blast added to the
             workbench (images that re-trace existing curve add none).
         too_close: Children dropped by ``min_separation``, over every step.
+        skipped_dropped: Interior bridges left out of the initial frontier
+            because an earlier call dropped them at a separation this call
+            does not undercut (``Bridge.dropped_at``).
         already_known: Children that resolved to a bridge already enqueued in
             this blast (kept as the one copy, not re-iterated), over every step.
         pip_depth: ``m`` per selected fixed point with a chosen pip, read after
@@ -194,6 +197,7 @@ class BlastResult:
     )
     points_created: int = 0
     too_close: int = 0
+    skipped_dropped: int = 0
     already_known: int = 0
     pip_depth: dict["FixedPoint", int] = field(default_factory=dict)
 
@@ -311,8 +315,11 @@ def blast_zone(
         return any(bridge.fixed_point is fp for fp in fixed_points)
 
     workbench = session.workbench
+    in_reach = [b for b in workbench.uniiterated_bridges if fp_ok(b) and in_zone(b)]
+    # A drop stands until a call passes a smaller separation or None.
     frontier = [
-        b for b in workbench.uniiterated_bridges if fp_ok(b) and in_zone(b)
+        b for b in in_reach
+        if b.dropped_at is None or min_separation is None or min_separation < b.dropped_at
     ]
 
     result = BlastResult(
@@ -320,16 +327,21 @@ def blast_zone(
         fixed_points=fixed_points,
         num_iterations_requested=num_iterations,
     )
+    result.skipped_dropped = len(in_reach) - len(frontier)
     result.interior_bridges_by_iteration.append(list(frontier))
-    logger.info("blast: %d interior bridges in the initial frontier", len(frontier))
+    logger.info(
+        "blast: %d interior bridges in the initial frontier, %d skipped as dropped",
+        len(frontier), result.skipped_dropped,
+    )
 
     # Cycle guard: bridges already enqueued in this blast. A blast FOLLOWS the
     # dynamics -- when an interior bridge maps onto another bridge (existing or new)
     # that bridge is the next frontier and must be iterated in turn, which is the
     # whole point. We only refuse to enqueue a bridge we have already enqueued in
     # THIS blast, so the forward orbit cannot loop forever. (The single-copy
-    # invariant lives in iterate_bridge, not here.)
-    seen: set["BridgeId | int"] = {_seen_key(b) for b in frontier}
+    # invariant lives in iterate_bridge, not here.) A skipped drop counts as
+    # enqueued, so a child re-tracing it is already known, as within one call.
+    seen: set["BridgeId | int"] = {_seen_key(b) for b in in_reach}
 
     # Accumulated point cloud of every bridge interior already in the tangle, used by
     # the proximity guard. A blasted bridge folds back through the same turnarounds at
@@ -453,6 +465,7 @@ def blast_zone(
                 )
                 if too_near_existing or too_near_sibling:
                     seen.add(_seen_key(child))
+                    child.dropped_at = min_separation
                     too_close.append(child)
                     continue
 
