@@ -15,6 +15,9 @@ import numpy as np
 import pytest
 from scipy.spatial import cKDTree
 
+from tanglepack.loom.Blast import RESOLUTION_SEPARATION
+from tanglepack.numerics import DEFAULT_AREA_CUTOFF
+
 MIN_SEPARATION = 0.02
 
 
@@ -116,3 +119,20 @@ def test_min_separation_none_is_unchanged_default(henon_p3_session):
     session, _fp3, fp1, zone = henon_p3_session
     result = session.blast_zone(zone, num_iterations=1, fixed_point=fp1)
     assert result.too_close == 0
+
+
+def test_resolution_separation_follows_the_area_cutoff(henon_p3_session):
+    """``"resolution"`` drops at ``RESOLUTION_SEPARATION`` scaled as ``area_cutoff ** (2/3)``.
+
+    The fixture's outer saddle is grown at ``1e-4``; with its pip forgotten a
+    six-iteration blast drops a child, which records the derived separation.
+    """
+    session, _fp3, fp1, zone = henon_p3_session
+    session.forget_strong_pip(fp1)
+    expected = RESOLUTION_SEPARATION * (session.area_cutoff / DEFAULT_AREA_CUTOFF) ** (2 / 3)
+    result = session.blast_zone(
+        zone, num_iterations=6, fixed_point=fp1, min_separation="resolution"
+    )
+    dropped = [c for s in result.steps for c in s.discarded_too_close]
+    assert dropped
+    assert all(c.dropped_at == pytest.approx(expected) for c in dropped)

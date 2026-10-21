@@ -546,7 +546,11 @@ A `min_separation` drop is remembered on the bridge (`Bridge.dropped_at`, carrie
 `rebuild_bridges` beside `iterated`), and the zone's later calls skip it unless they pass a smaller
 separation or None; the guard's reference is every curve the workbench holds, dropped and exterior
 children included. So `n` single-iteration blasts equal one `n`-iteration blast (blast-steps-compose,
-2026-10-21).
+2026-10-21). The separation follows the resolution (the author's rule, same run):
+`min_separation="resolution"` is `RESOLUTION_SEPARATION = 1e-5` at the default cutoff, scaled as the
+polylines' chord deviation, `area_cutoff ** (2/3)` (measured on k=2.5: the median deviation falls by
+`10^(2/3)` per decade). A finer cutoff then keeps curves that run closer; the recipes and law cases
+keep their explicit constants.
 
 **Zones.** A stable trim is a VIEW (C22): growth re-finds every branch's physical end and so
 un-trims a zone, the topology never depends on the trim (the trellis is cut at the pip orbit), and

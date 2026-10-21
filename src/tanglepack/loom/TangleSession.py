@@ -11,7 +11,7 @@ zones and blasting -- that need both halves at once.
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Optional, TYPE_CHECKING
+from typing import Iterable, Literal, Optional, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
@@ -780,7 +780,7 @@ class TangleSession:
         num_iterations: int,
         *,
         fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
-        min_separation: Optional[float] = None,
+        min_separation: "Optional[float | Literal['resolution']]" = None,
         diagnose: bool = True,
         max_points: Optional[int] = None,
         predict: bool = True,
@@ -810,7 +810,8 @@ class TangleSession:
                 near-coincident unstable curves (default: disabled). A drop is
                 remembered on the bridge and later calls skip it unless they
                 pass a smaller separation or None, so single-iteration blasts
-                compose.
+                compose. ``"resolution"`` derives it from the machine's
+                ``area_cutoff`` (see :func:`~tanglepack.loom.Blast.blast_zone`).
             diagnose: Finish with one resolution report on the workbench logger
                 (default; see :func:`~tanglepack.loom.Blast.blast_zone`).
             max_points: Opt-in point budget of the whole blast; it stops

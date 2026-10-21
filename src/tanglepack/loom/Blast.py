@@ -56,6 +56,7 @@ from typing import TYPE_CHECKING, Literal, Optional
 import numpy as np
 from scipy.spatial import cKDTree
 
+from ..numerics.ManifoldMachine import DEFAULT_AREA_CUTOFF
 from ..numerics.budget import PointBudgetExceeded
 from .ResonanceZone import ResonanceZone
 
@@ -66,6 +67,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+#: ``min_separation="resolution"`` at the default ``area_cutoff``: the recipes'
+#: separation. It scales as the polylines' chord deviation, ``area_cutoff ** (2/3)``
+#: (a segment of a curve with curvature ``k`` refined to area ``A`` is
+#: ``L ~ (12 A / k) ** (1/3)`` long and strays ``h = 1.5 A / L`` from its chord), so
+#: a finer cutoff resolves, and keeps, curves that run closer together. The author's
+#: rule, 2026-10-21: the guard follows the resolution.
+RESOLUTION_SEPARATION: float = 1e-5
 
 
 def _seen_key(bridge: "Bridge") -> "BridgeId | int":
@@ -216,7 +225,7 @@ def blast_zone(
     num_iterations: int,
     *,
     fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
-    min_separation: Optional[float] = None,
+    min_separation: "Optional[float | Literal['resolution']]" = None,
     diagnose: bool = True,
     max_points: Optional[int] = None,
     predict: bool = True,
@@ -242,7 +251,10 @@ def blast_zone(
             orbit of a selected fixed point's chosen pip is exempt and logged
             at INFO, so the guard never decides the depth
             of ``T(q0)``: that is decided by whether ``f^{m+1}(q0)`` is detected
-            and resolved (design note §A.4). A drop is remembered on the bridge
+            and resolved (design note §A.4). ``"resolution"`` ties it to the
+            machine's ``area_cutoff``: ``RESOLUTION_SEPARATION * (area_cutoff /
+            DEFAULT_AREA_CUTOFF) ** (2/3)``, read when the call starts. A drop
+            is remembered on the bridge
             (``Bridge.dropped_at``) and the zone's later calls skip it, unless
             they pass a smaller separation or None. The curve tested against is
             every curve the workbench holds (dropped and exterior children
@@ -320,6 +332,11 @@ def blast_zone(
         return any(bridge.fixed_point is fp for fp in fixed_points)
 
     workbench = session.workbench
+    if min_separation == "resolution":
+        min_separation = RESOLUTION_SEPARATION * (
+            workbench.area_cutoff / DEFAULT_AREA_CUTOFF
+        ) ** (2 / 3)
+        logger.info("blast: min_separation %.3g from the resolution", min_separation)
     in_reach = [b for b in workbench.uniiterated_bridges if fp_ok(b) and in_zone(b)]
     # A drop stands until a call passes a smaller separation or None.
     frontier = [
