@@ -1383,3 +1383,18 @@ Tests that read the names B4a moves, the two `Hole` fields, or the StablePartiti
   imports), `scratchpad/b12/stripped_ast.py` (docstring-stripped AST per src file), the 63-item probe
   `b10/probe/run.sh`. One that did not: `b12b/png/svgnorm.py` misses the salted SVG marker ids
   (6/18 equal; 18/18 with `te/svgnorm2.py`).
+
+## `blast-steps-compose` analyst (2026-10-21, `HEAD` `c1ca6d0`)
+
+- `too_close` per single-iteration call (base, ZONE_MIN_SEPARATION 1e-5 unless noted): every
+  LAW_CASE 0 (no law case drops a child); `k28_deep_blast_sliver` 0x8 then 24 (last blast);
+  k28_series 0x7, 2; p3_series / inversion_series 0; k32_series 0x7, 5, 36, 97; nested_outer_series
+  (1e-4) 0x6, 5, 22, 58, 119, 225. Drops before the last blast leak (re-iterated next call), so only
+  k32 steps 9-10 and nested_outer steps 8-11 carry leaked bridges at HEAD.
+- Running the suite against a scratch copy of `src`: `pytest -o pythonpath="<copy> tests"`
+  (pyproject's `pythonpath = ["src", "tests"]` overrides `PYTHONPATH`). 1208 passed, 43 skipped,
+  5 deselected, 1 xfailed (C3) at `c1ca6d0`, ~3.5 min.
+- Composition-test candidates (n x `blast_zone(...,1)` vs `blast_zone(...,n)`): `henon_p3_session`
+  fp1 sep 0.02 `forget_strong_pip` n=4 (0.4 s), inversion zone sep 0.02 n=4 (0.3 s): fail at HEAD,
+  pass with drops remembered. k28 zone sep 1e-5 n=11 (~22 s) also fails with memory alone (the
+  reference-cloud leak) and passes with either cloud rule.

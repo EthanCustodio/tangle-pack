@@ -1,6 +1,6 @@
 # loom — knowledge file
 
-Last updated 2026-10-15 (B9a `session-three-concerns` OUTCOME, branch `5f0db5f` off `517aa01`: the
+Last updated 2026-10-21 (blast-steps-compose OUTCOME audit, branch `a6d2ffe` off `c1ca6d0`: the Blast map, "How it works" and Smells blast bullets). Before that 2026-10-15 (B9a `session-three-concerns` OUTCOME, branch `5f0db5f` off `517aa01`: the
 TangleSession / cartoon map below and the "B9" section at the end). Before that 2026-10-14 (B5
 OUTCOME, B3 OUTCOME; `Blast.py` line numbers in the B3 bullets are that branch's). The dated sections
 below are each WP's notes, kept as the record.
@@ -40,13 +40,16 @@ below are each WP's notes, kept as the record.
   zoned, unlettered), `classes` :152 a plain property that runs `self.dynamics` first (the
   verdicts and letters come from `symbolic_dynamics`), so `session.bridge_classes()` costs the
   whole dynamics; no lettering loop here any more.
-- `loom/Blast.py` (522 lines on the B3 branch) — `blast_zone(session, zone, n, fixed_point=,
-  min_separation=, diagnose=, max_points=, predict=)` :215, `BlastResult` :156 (`stop_reason`,
-  `points_created`, `fixed_points`, `too_close`, `already_known`, `pip_depth` (B3) — all
-  documented since B3), `_pip_orbits(session, fixed_points)` :109 (`[q0, ..., f^m(q0)]` per fixed
-  point with a chosen pip: `registry.find(chosen)` then `iterate_table[x, 1]` link by link),
-  `in_zone` (innermost zone, C4), proximity guard (`_interior_points` :85,
-  `_min_interior_distance` :100), `_seen_key` :72.
+- `loom/Blast.py` (557 lines on `refactor/blast-steps-compose` @`a6d2ffe`; 516 at `c1ca6d0`) —
+  `blast_zone(session, zone, n, fixed_point=, min_separation=, diagnose=, max_points=, predict=)`,
+  `BlastStep` (`discarded_too_close` holds the dropped bridges), `BlastResult` (`stop_reason`,
+  `points_created`, `fixed_points`, `too_close` (a COUNT), `skipped_dropped` (NEW: in-reach bridges
+  left out because an earlier drop still stands), `already_known`, `pip_depth`), `_pip_orbits`,
+  `in_zone` (innermost zone, C4), proximity guard (`_interior_points`, `_min_interior_distance`),
+  `_seen_key`, `RESOLUTION_SEPARATION = 1e-5` (NEW, not re-exported). Drop memory lives on the
+  bridge: `Bridge.dropped_at: Optional[float]` (`numerics/Bridge.py:122`), carried with `iterated`
+  by `TangleWorkbench.rebuild_bridges` (one tuple dict, `:1904-1926`). Per-zone session state:
+  `_blast_stats` (last growth factor).
 - `loom/ResonanceZone.py` — `ResonanceZone` (cut crossings kept as `Intersection` objects, frozen
   polygon, `contains_point`, `restore` :328), `ring_cycles` :383 / `ring_order` :417 (full keys,
   C7), `define_resonance_zone` :498 (trim each stable branch at the pip orbit with
@@ -58,20 +61,29 @@ below are each WP's notes, kept as the record.
 
 ## How it works
 
-- Blast step: frontier = un-iterated bridges of the filter's fixed points whose innermost zone is
-  the blasted one (C4, rebuilt from `workbench.uniiterated_bridges` on EVERY call). Since B3 an
-  iteration first maps EVERY parent (`workbench.iterate_bridge`, which links `f^m -> f^{m+1}`),
-  then reads the pip orbits once (`_pip_orbits`, `Blast.py:420-426`), then sorts `produced`
-  (`:427-471`): already `seen` -> `already_known`; out of zone / wrong fixed point / iterated ->
-  discarded (BEFORE the exemption); an end on a selected pip's orbit -> kept regardless of
-  separation, one INFO when `min_separation` is set (`:440-447`, N-a); else within
-  `min_separation` of existing curve or a kept sibling -> `too_close`. The verdict feeds only
-  `frontier = kept` and the counters, so at `num_iterations=1` (every recipe, every series,
-  E12/E13) `min_separation` changes NOTHING in the workbench: a dropped child stays un-iterated
-  and in zone and the next call re-feeds it (verified B3). `result.pip_depth` is read after the
-  final `infer_iterates` (`:515-517`). Any
-  iterate failure propagates (NUM-10). The image curves stay computed
-  manifold (C20): every later recompute keeps the blast.
+- Blast step (branch `a6d2ffe`): `in_reach` = un-iterated bridges of the filter's fixed points whose
+  innermost zone is the blasted one (C4, rebuilt on every call); the frontier keeps one iff
+  `dropped_at is None or min_separation is None or min_separation < dropped_at` (a drop stands until
+  a call passes a strictly smaller separation or None); `seen` is built from `in_reach`, so a child
+  re-tracing a skipped drop is `already_known` (unobservable on the corpus, unguarded).
+  `min_separation="resolution"` resolves FIRST to `1e-5 * (area_cutoff / 1e-7) ** (2/3)` (the
+  chord deviation's scaling, measured: median h falls 10^(2/3) per decade on k=2.5 p1), read at the
+  call's start; `dropped_at` records the float. An iteration maps EVERY parent, reads the pip orbits
+  once, then sorts `produced`: seen -> `already_known`; out of zone / wrong fp / already iterated ->
+  `discarded_exterior` (misnomer for an iterated re-trace); an end on a selected pip's orbit -> kept
+  regardless (N-a); else within `min_separation` of the cloud or a kept sibling -> `too_close`,
+  `child.dropped_at = min_separation`. Cloud rule B: after each step `discarded + too_close` join
+  the cloud (kept already did), so the cloud is every curve the workbench holds, in one call or many.
+- Composition (verified on the branch by the test engineer's probes and by
+  `tests/unit/loom/test_blast_composes.py`): `n` single-iteration blasts == one `n`-iteration blast
+  (bridge ids, `iterated`, drops, `pip_depth`) on k28 n=9/11, k32 n=10/11, nested_outer n=11,
+  p3session n=4/5, inversion n=4. Rule B made one-call blasts with drops slightly stricter (k28
+  n=11: 557 -> 554 ids, k32 n=11: 697 -> 688). k=2.5 p1 1e-7: frontier = previous kept
+  (30/49/72/86/84 over blasts 8-12), points/call x1.47/x1.19/x0.97 (base x1.69), RSS 2.55 vs 8.37 GB.
+  Series moved (bridge/N counts only): k32_series 9-10, nested_outer_series 8-11; no law case.
+- Where a drop survives: `preserve_ids` recompute + `create_bridges` (same objects) and the C20 path
+  `+ rebuild_bridges` (carried); lost exactly when `iterated` is (renumbering recompute, growth
+  re-cut) -- pre-existing.
 - The session carries each fixed point's pip as an `Intersection` across generations (API-1);
   a rebuilt trellis finds it by `registry.find`, tests it alone, and is cut at its orbit (D10).
 - A zone's trim is a VIEW (C22, WP12): `grow_n_times` re-finds every branch's physical end, so
@@ -87,6 +99,19 @@ below are each WP's notes, kept as the record.
   zones never store ids.
 
 ## Smells
+- FIXED on `refactor/blast-steps-compose` (2026-10-21, not yet merged at writing): the two
+  cross-call leaks of the `min_separation` verdict and the `TangleSession.blast_zone` docstring
+  that said "sibling" only.
+- `Blast.py` guard is vertex-to-vertex (`cKDTree` on `_interior_points`): at a FIXED 1e-5 a finer
+  `area_cutoff` drops more and earlier (k=2.5 p3 first drop blast 15 at 1e-7, 9 at 1e-9);
+  `"resolution"` reverses that (first drop 15/16/20/none) but keeps a 3-10x larger frontier, so
+  points rise (p1 1e-8 2.06 M vs 1.19 M; 1e-9 5.26 M, 8.2 GB) and the TOTAL drops can rise (p1
+  1e-8 171 vs 149). Only opt-in: no recipe uses it (open author choice a/b/c, outcome 2026-10-21).
+- `TangleWorkbench.py:1880` 135-char docstring line; `test_blast_proximity_guard.py:8` 118 chars;
+  `test_blast_composes.py:14` imports private `_pip_orbits` (branch nits).
+- Depth stall at k=2.5 (findings 2026-10-21): an unresolved orbit image on a near-anchor stable
+  chord that never refines (p1 id 423 ratio 0.877, p3 id 107 ratio 2.10); `m` deepens with the
+  cutoff (p1 9/11/12 at 1e-7/8/9). Not fixed.
 
 - Fixed since the 2026-10-02 audit: the constant nested slug (API-7, WP11), `_repin` after every
   blast (API-1, WP8), the hand-rolled fixed-point normalisation and the in-loop cKDTree import in
@@ -407,3 +432,23 @@ below are each WP's notes, kept as the record.
   `p3`, `nested_p1_p3`, `inversion` and the other 7 folders are PIXEL-identical and differ only in
   the PNG `Software` chunk (committed with system `python3`'s matplotlib 3.10.9); k10 / k28 are
   byte-identical.
+
+## `blast-steps-compose` analyst (2026-10-21, `HEAD` `c1ca6d0`, read-only)
+
+- Leak re-derived on k=2.5 p1 1e-7 (`henon_k25_entropy.build_case`): iterated 18/30/51/86/144/241 vs
+  previous kept 18/30/49/73/90/95 at blasts 7-12; leaked = previous `too_close` exactly. p3 leaks too
+  from blast 15 (1e-7) / 10 (1e-8) / 9 (1e-9, 1e-10).
+- Law cases: no child is ever dropped (all `too_close` 0); `k28_deep_blast_sliver` drops 24 at its
+  last blast only. Series: k28 drops 2 at its last blast; k32 from blast 8, nested_outer from blast 7.
+  With drops remembered only N / bridge counts move (k32 steps 9-10, nested_outer 8-11); classes,
+  closed, active, inert, `pip_depth`, holes, letters unchanged. Suite 1208/43/5/1 (C3) on base and on
+  the memory, A and B scratch patches.
+- With memory, k=2.5 p1 reaches 20 blasts at 1.32 M points / 3.2 GB; the frontier then DECAYS
+  (86 at blast 11 -> 16 at 20) and `pip_depth` stays 9.
+- Depth stall (Q7): NOT cutoff-independent (p1 m = 9 / 11 / 12 at 1e-7 / 1e-8 / 1e-9; p3 17 / 20 /
+  27 / 30). 1e-7 p1 and p3 and 1e-8 p3 are mechanism (ii): `f^{m+1}(q0)` detected with matching keys
+  and cdist but ratio 0.88 / 2.10 / 1.81, on the short STRAIGHT near-anchor stable chords (vertices
+  0, 1.98e-6, 1.1e-5 on p1 `s(0,0)`, independent of `area_cutoff`), ratio ~ l_s sin / h_u. 1e-8 p1 is
+  (iv): the bridge ending at `f^11(q0)` is outside the zone and never iterated.
+- Composition-test candidates: `henon_p3_session` sep 0.02 `no_pip` n=4 (0.4 s) or inversion zone
+  sep 0.02 n=4 (0.3 s) catch leak (1) only; k28 zone sep 1e-5 n=11 (~22 s) also catches leak (2).

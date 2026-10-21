@@ -183,6 +183,13 @@ Only the crossing / iterate-table path is described; growth, refinement and budg
   fixed point is rebuilt (the survivors' ids would name other crossings). `create_bridges`
   stamps the epoch only from an empty set, which the stale path guarantees. Recutting a
   fixed point twice reproduces its ids and adds no partial piece.
+  `rebuild_bridges` (`TangleWorkbench.py:1866`) makes NEW Bridge objects and carries ONLY
+  `iterated` (`:1904-1923`); `create_bridges` on top of a held set returns the HELD object for a
+  known id (`_register_bridge` :1753), so any other attribute survives `create_bridges` but not
+  `rebuild_bridges` (verified 2026-10-21, blast-steps-compose probe_q1). On branch
+  `refactor/blast-steps-compose` (`a6d2ffe`) `Bridge.dropped_at` (the loom blast's `min_separation`
+  drop, `Bridge.py:122`) is carried beside `iterated` in one `(iterated, dropped_at)` dict under the
+  same id-epoch guard (`:1904-1926`), so it is lost exactly when `iterated` is.
 
 ## Open-issues round WP10 slice 1 (2026-10-08, branch `oi/wp10-numerics-leftovers`, base `3f27456`)
 
@@ -296,6 +303,11 @@ Only the crossing / iterate-table path is described; growth, refinement and budg
 - Suite cost of the per-step recompute in `cases.blast_series`: +38 s (162 -> 200 s).
 
 ## Smells (crossing set)
+- `Tangle._resolution_ratio` near an anchor: the stable polyline's head is straight chords at a
+  geometric spacing set by growth, not by `area_cutoff` (k=2.5 p1 `s(0,0)`: 0, 1.98e-6, 1.1e-5,
+  6.1e-5), never refined, so a deep crossing there scores ~ l_s |sin| / h_u (h_s = 0). This is what
+  leaves `f^{m+1}(q0)` unresolved on k=2.5 p1 / p3 at 1e-7 (ratios 0.88 / 2.10) and why a finer cutoff
+  (smaller h_u) buys depth (blast-steps-compose analyst, 2026-10-21; possibly over-strict when h_s = 0).
 
 - `Trellis.py:204`: a hand-built `Trellis` (tests, the `MinimalTrellis` sparse snapshot) defaults
   `resolved_ids` to the whole registry; harmless while no N reader runs on the sparse snapshot; the

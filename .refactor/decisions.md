@@ -789,3 +789,24 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   `src/tanglepack_gui/`, `src/tanglepack_webdash/` (only `__pycache__`); `conf.py:35` `_static`
   missing; no Sphinx build without `myst_parser` / `furo`; commit trailers mix Fable 5.1 / Opus
   5.5. No debrief verdict yet. Not merged: the merge is the author's.
+
+## 2026-10-21 — `blast-steps-compose`, outcome (not a slice of the closed alignment plan; plan approved round 1 with every default except Q6; review passed in round 1 of coding; branch `refactor/blast-steps-compose` @ `a6d2ffe`, base `c1ca6d0`, six commits)
+
+- **Said** (`artifacts/plan_ok_planner_human.json`, approved 2026-10-21): every default (Q1 drop
+  remembered on the bridge as `Bridge.dropped_at`, carried by `rebuild_bridges`; Q2 re-admitted
+  only at a strictly smaller separation or None; Q3 numbers may move as discovery; Q4 a
+  composition test; Q5 one `BlastResult.skipped_dropped` count, no second list; Q7 depth stall
+  diagnosed, not fixed; Q8 the k=2.5 rerun and legends after the merge; Q9 cloud rule B) EXCEPT
+  Q6: "Q6 I think we should tie them together. If things are getting smaller and smaller scale we
+  need to refine more to get good manifolds. I get what you're saying about it dropping more
+  children though too. I don't imagine it will be a big issue though. If it is, then find a
+  simple reasonable solution".
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `n` single-iteration
+  blasts equal one `n`-iteration blast (bridge ids, `iterated`, drops, `pip_depth`); no law-case
+  number moved; only `k32_series` 9-10 and `nested_outer_series` 8-11 bridge / N counts fell;
+  one-call blasts with drops slightly stricter (k28 n=11 557 -> 554). Q6 landed as an OPT-IN
+  `min_separation="resolution"` = `1e-5 * (area_cutoff / 1e-7) ** (2/3)`; default stays None and
+  no recipe uses it. The segment-distance fallback did not fire.
+- **Open for the author:** whether Q6's tie stays opt-in (a), replaces the 1e-5 constants in the
+  recipes (b), or becomes what every guard-wanting caller gets (c). Record the choice here when
+  made. Not merged: the merge is the author's.
