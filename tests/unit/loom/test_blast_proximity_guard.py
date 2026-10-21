@@ -4,8 +4,8 @@ Near the fixed point, successive bridge images pile up (homoclinic accumulation)
 until distinct unstable curves run within machine precision and merge into an
 artifact. ``min_separation`` stops the blast on the well-resolved side of that
 limit by dropping a child whose interior comes too close to curve already in
-the tangle (the bridges present when the blast started and every child kept
-so far). A child ending on the chosen pip's orbit is exempt (B3, N-a): the
+the tangle (the bridges present when the blast started, every child an
+earlier step produced and the siblings kept so far). A child ending on the chosen pip's orbit is exempt (B3, N-a): the
 guard never decides the depth of ``T(q0)``.
 """
 
@@ -107,7 +107,7 @@ def test_min_separation_drops_close_bridges(henon_p3_session, pip_chosen):
         for child in step.discarded_too_close:
             assert _distance(_interior(child), reference + accepted) < MIN_SEPARATION
             checked += 1
-        reference += accepted
+        reference += [_interior(c) for c in step.produced_children]
     assert checked > 0
 
 

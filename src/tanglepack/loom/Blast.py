@@ -490,6 +490,12 @@ def blast_zone(
         )
         result.too_close += len(too_close)
         result.already_known += len(already_known)
+        # Every child is curve the workbench now holds, dropped or exterior
+        # alike: the next step's cloud is the one a later call would build.
+        if min_separation is not None:
+            reference_points += [
+                p for c in discarded + too_close if len(p := _interior_points(c))
+            ]
 
         new_points = 0
         for child in produced:
