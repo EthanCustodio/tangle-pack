@@ -145,7 +145,7 @@ def stages(session, fp, config: dict, rec, baseline: float) -> None:
     gc.collect()
     with rec.stage("compute_intersections", sync=False):
         session.compute_intersections([fp], infer_iterates=False)
-    rec.metric("segments", len(wb.Tangle._seg_lookup))
+    rec.metric("indexed_segments", sum(int(rtree.get_size()) for rtree in wb.Tangle._rtrees.values()))
     rec.metric("crossings", len(wb.intersection_registry))
     rec.metric("rss_after_intersections_mb", rss_mb())
     rec.checkpoint()

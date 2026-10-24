@@ -41,7 +41,8 @@ Components of the census (bytes):
 * ``points_other`` -- any other ``Point`` alive (separators, stale lists);
 * ``branch_points`` -- the ``BranchPoint`` objects;
 * ``segment_index`` -- ``Tangle``'s Python side: ``_Segment`` objects, the
-  edge / owner / lookup dicts and sets, the crossing-pair sets;
+  edge / owner / lookup dicts and sets (the query-only edge set counted with
+  ``edge_to_sid``), the crossing-pair sets;
 * ``rtree`` -- the two rtrees' C memory (libspatialindex, invisible to
   tracemalloc): measured at the end by dropping them and reading RSS, and
   estimated per blast as entries x the calibrated bytes per entry;
@@ -129,7 +130,7 @@ INNER_STAGES = [
     ("tanglepack.numerics.Tangle", "Tangle.add_manifolds", "index"),
     ("tanglepack.numerics.Tangle", "Tangle.add_manifold", "index"),
     ("tanglepack.numerics.Tangle", "Tangle.resolve_crossings", "resolve"),
-    ("tanglepack.numerics.Tangle", "Tangle.populate_intersections_for_manifold", "resolve"),
+    ("tanglepack.numerics.Tangle", "Tangle.populate_intersections", "resolve"),
     ("tanglepack.numerics.Tangle", "Tangle.create_bridges", "cut"),
     ("tanglepack.numerics.IntersectionRegistry", "IntersectionRegistry.add", "register"),
     ("tanglepack.numerics.IntersectionRegistry", "IntersectionRegistry.resolved_ids", "resolved_ids"),
@@ -341,6 +342,8 @@ def _tangle_bytes(tangle: Any) -> dict:
     out["edge_to_sid"] = sys.getsizeof(edges) + sum(
         sys.getsizeof(k) + sum(sys.getsizeof(i) for i in k) for k in edges
     )
+    query_edges = tangle._query_edges
+    out["edge_to_sid"] += sys.getsizeof(query_edges) + sum(sys.getsizeof(k) for k in query_edges)
     owners = sys.getsizeof(tangle._manifold_segs) + sys.getsizeof(tangle._seg_manifolds)
     owners += sum(sys.getsizeof(s) for s in tangle._manifold_segs.values())
     owners += sum(sys.getsizeof(s) for s in tangle._seg_manifolds.values())
@@ -351,6 +354,7 @@ def _tangle_bytes(tangle: Any) -> dict:
         )
     out["rtree_entries"] = {s: int(idx.get_size()) for s, idx in tangle._rtrees.items()}
     out["n_segments"] = len(lookup)
+    out["n_query_edges"] = len(query_edges)
     return out
 
 
@@ -406,7 +410,7 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
     tangle = workbench.Tangle
     tangle_parts = _tangle_bytes(tangle)
     sizes["segment_index"] = sum(v for k, v in tangle_parts.items()
-                                 if k not in ("rtree_entries", "n_segments"))
+                                 if k not in ("rtree_entries", "n_segments", "n_query_edges"))
     rtree_entries = sum(tangle_parts["rtree_entries"].values())
     sizes["rtree"] = int(rtree_entries * RTREE_BYTES_PER_ENTRY)
 

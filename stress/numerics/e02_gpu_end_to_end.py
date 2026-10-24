@@ -132,7 +132,7 @@ def downstream(session, case: str, fp, rec) -> None:
             call()
         rec.checkpoint()
     rec.metric("points_stable", total_points(session, "stable"))
-    rec.metric("segments", len(wb.Tangle._seg_lookup))
+    rec.metric("indexed_segments", sum(int(rtree.get_size()) for rtree in wb.Tangle._rtrees.values()))
     rec.metric("crossings", len(wb.intersection_registry))
     rec.metric("bridges", len(wb.bridges))
 
