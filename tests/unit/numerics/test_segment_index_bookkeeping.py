@@ -8,7 +8,8 @@ Pins:
 2. The edge dedup still decides which edges of a new image curve are queried:
    none an earlier image curve queried, none of a separator spliced into a
    bridge cut from one, and a curve that lies wholly on a branch is dropped on
-   a fresh recompute. These held before N1 too; the identity probe's builds
+   a fresh recompute; and a branch added over a query-only curve (the
+   ``reset=False`` recompute) neither indexes nor queries the shared edges. These held before N1 too; the identity probe's builds
    never reach them.
 3. An indexed curve added twice records no ``None`` segment id: since N1
    ``_insert_segment`` returns None for an edge it only claims, and that
@@ -110,6 +111,27 @@ def test_an_image_over_an_earlier_image_queries_none_of_the_shared_edges():
     queried = tangle._rtrees["stable"].queried
     assert len(shared_bounds) == 2 and len(queried) == 2
     assert not shared_bounds & set(queried)
+
+
+def test_a_branch_over_a_query_only_curve_neither_indexes_nor_queries_its_edges():
+    # The reset=False recompute adds a branch to an index that already holds
+    # image curves; as before N1, an edge one of them queried is left alone.
+    fp = bare_fixed_point(label="A")
+    key = (fp, "unstable", 0, 0)
+    tangle = _stable_index(fp, [(0.5, -1.0), (0.5, 1.0)])
+    image = polyline_manifold([(x, 0.0) for x in range(4)], key)
+    tangle.add_manifold(image, index_segments=False)
+
+    nodes = _nodes(image)
+    node = Point(4.0, 0.0, 4.0)
+    nodes[-1].insert_point_forward(node)
+    branch = BaseManifold(nodes[0], "unstable", 1.0, fixed_point=fp, tail=node,
+                          branch_index=0, manifold_key=key)
+    tangle._rtrees["stable"].queried.clear()
+    tangle.add_manifold(branch)
+
+    assert len(tangle._rtrees["unstable"]) == 1
+    assert tangle._rtrees["stable"].queried == [_bounds(nodes[-1], node)]
 
 
 def test_a_separator_in_a_query_only_bridge_is_not_queried_again():
