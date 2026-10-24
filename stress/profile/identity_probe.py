@@ -11,13 +11,16 @@ Usage (from the repository root)::
     TANGLEPACK_REPO=../tangle-pack-<slug>      env/bin/python stress/profile/identity_probe.py dump --out DIR/branch
     env/bin/python stress/profile/identity_probe.py compare DIR/base DIR/branch   # exit 1 on any difference
 
-``dump`` builds every ``cases.LAW_CASES`` case and every step of every
-``cases.SERIES``, each case or series in a FRESH interpreter that imports
-``tanglepack`` and ``cases`` from ``$TANGLEPACK_REPO`` (default: this
-checkout). A series runs ``cases.blast_series``'s loop: one blast per step at
-the series' ``min_separation`` with ``diagnose=False``, the topology, then a
-plain recompute of the crossings and bridges. Per build or step it writes
-``<name>.npz`` (float arrays) and ``<name>.json`` (texts):
+``dump`` builds every ``cases.LAW_CASES`` case, every step of every
+``cases.SERIES`` and both stages of every :data:`SCENARIOS` entry, each case,
+series or scenario in a FRESH interpreter that imports ``tanglepack`` and
+``cases`` from ``$TANGLEPACK_REPO`` (default: this checkout). A series runs
+``cases.blast_series``'s loop: one blast per step at the series'
+``min_separation`` with ``diagnose=False``, the topology, then a plain
+recompute of the crossings and bridges. A scenario blasts the nested zones
+unfiltered in its order and is dumped after the blasts (``.blasted``) and after
+one recompute (``.recomputed``). Per build or step it writes ``<name>.npz``
+(float arrays) and ``<name>.json`` (texts):
 
 * ``curve:<key>`` -- ``(x, y, cdist)`` of every registered manifold (its whole
   list; the trimmed extent is a text), ``image:<i>`` of every blast image
@@ -33,10 +36,19 @@ differing, length change, max |dxy|, max |dcdist|), each differing text a
 unified diff; the last line reads ``identical: ...`` or ``differences in K items``.
 
 Dev Notes:
-    Every read of a library object goes through one reader below
-    (``curve_arrays``, ``curve_extent``, ``bracket_cdists``, ``image_curves``,
-    ``key_text``). A slice that changes an accessor edits only these, in its
-    own diff. Nothing from ``src/`` is imported at module level.
+    Every read of a curve's nodes, a crossing's brackets or the image curves
+    goes through one reader below (``curve_arrays``, ``curve_extent``,
+    ``bracket_cdists``, ``image_curves``, ``key_text``); registry fields,
+    ``bridge.id`` and topology ``describe()`` are read directly. A slice that
+    changes an accessor edits only these, in its own diff. Nothing from
+    ``src/`` is imported at module level.
+
+    The scenarios (N1, 2026-10-24) are the builds where the edge dedup of an
+    image curve against EARLIER image curves decides results; none of the law
+    cases or series reaches it. ``nested_unfiltered`` is
+    ``test_an_unfiltered_nested_blast_does_not_depend_on_order``'s outer-first
+    order, ``shared_straddle`` the setup of
+    ``test_blast_through_a_shared_straddle``.
 """
 
 from __future__ import annotations
@@ -55,6 +67,12 @@ from typing import Any
 import numpy as np
 
 REPO = Path(os.environ.get("TANGLEPACK_REPO", Path(__file__).resolve().parents[2])).resolve()
+
+# Unfiltered one-iteration blasts of the nested build's zones, in order.
+SCENARIOS = {
+    "nested_unfiltered": ("outer",) * 4 + ("inner",) * 2,
+    "shared_straddle": ("inner", "inner", "outer"),
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -184,8 +202,14 @@ def save(out: Path, name: str, session: Any) -> None:
     print(f"  {name}: {len(arrays)} arrays, {len(texts)} texts", flush=True)
 
 
+def recompute(workbench: Any) -> None:
+    """The plain recompute of the crossings and bridges a series runs after each step."""
+    workbench.compute_intersections(workbench.fixed_points, preserve_ids=True, diagnose=False)
+    workbench.rebuild_bridges()
+
+
 def run_worker(name: str, out: Path) -> None:
-    """Dump one law case, or every step of one series, in this interpreter."""
+    """Dump one law case, every step of one series, or one scenario, in this interpreter."""
     sys.dont_write_bytecode = True
     sys.path[:0] = [str(REPO / "src"), str(REPO / "tests")]
     logging.basicConfig(level=logging.ERROR)
@@ -196,6 +220,17 @@ def run_worker(name: str, out: Path) -> None:
     if name in cases.LAW_CASES:
         save(out, name, cases.BUILDERS[name]().session)
         return
+    if name in SCENARIOS:
+        case = cases.build_nested(outer_blasts=0, through="zones")
+        zones = sorted(case.zones, key=lambda zone: zone.area)
+        zone = {"inner": zones[0], "outer": zones[-1]}
+        for which in SCENARIOS[name]:
+            case.session.blast_zone(zone[which], num_iterations=1, fixed_point=None,
+                                    min_separation=1e-4, diagnose=False)
+        save(out, f"{name}.blasted", case.session)
+        recompute(case.session.workbench)
+        save(out, f"{name}.recomputed", case.session)
+        return
     series = cases.SERIES[name]
     case = series.build()
     session = case.session
@@ -205,19 +240,17 @@ def run_worker(name: str, out: Path) -> None:
             session.blast_zone(zone, num_iterations=1, fixed_point=[zone.fixed_point],
                                min_separation=series.min_separation, diagnose=False)
         save(out, f"{name}.b{blast:02d}", session)
-        workbench = session.workbench
-        workbench.compute_intersections(workbench.fixed_points, preserve_ids=True, diagnose=False)
-        workbench.rebuild_bridges()
+        recompute(session.workbench)
 
 
 def dump(out: Path) -> int:
-    """Run every law case and series in its own interpreter against ``REPO``."""
+    """Run every law case, series and scenario in its own interpreter against ``REPO``."""
     out.mkdir(parents=True, exist_ok=True)
     names = subprocess.check_output(
         [sys.executable, "-B", "-c",
          "import sys; sys.path[:0] = [sys.argv[1]]; import cases; "
          "print(' '.join(cases.LAW_CASES + tuple(cases.SERIES)))", str(REPO / "tests")],
-        env={**os.environ, "PYTHONPATH": str(REPO / "src")}, text=True).split()
+        env={**os.environ, "PYTHONPATH": str(REPO / "src")}, text=True).split() + list(SCENARIOS)
     env = {**os.environ, "TANGLEPACK_REPO": str(REPO), "MPLBACKEND": "Agg",
            "PYTHONDONTWRITEBYTECODE": "1"}
     start = time.perf_counter()
