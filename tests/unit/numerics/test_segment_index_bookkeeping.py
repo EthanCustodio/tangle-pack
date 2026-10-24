@@ -10,7 +10,10 @@ Pins:
    bridge cut from one, and a curve that lies wholly on a branch is dropped on
    a fresh recompute. These held before N1 too; the identity probe's builds
    never reach them.
-3. Inserting a point into a linked list must never overwrite the host
+3. An indexed curve added twice records no ``None`` segment id: since N1
+   ``_insert_segment`` returns None for an edge it only claims, and that
+   return must never reach ``_manifold_segs``.
+4. Inserting a point into a linked list must never overwrite the host
    point's ``stretch_param``. The inserted node inherits a missing value
    instead (a fresh crossing separator carries ``stretch_param=None``).
 """
@@ -150,6 +153,21 @@ def test_a_curve_lying_on_a_branch_is_dropped_on_a_fresh_recompute():
 
     workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
     assert workbench._image_curves == [standing]
+
+
+def test_add_manifold_twice_records_no_none_ids(henon_tangle_with_bridges):
+    workbench, _ = henon_tangle_with_bridges
+    tangle = workbench.Tangle
+
+    # Re-adding purges and re-indexes; the second add of a branch claims the
+    # edges its bridges still hold, where _insert_segment returns None.
+    for manifold in workbench.manifolds.values():
+        tangle.add_manifold(manifold)
+        tangle.add_manifold(manifold)
+
+    for manifold, seg_ids in tangle._manifold_segs.items():
+        assert None not in seg_ids, f"None segment id recorded for {manifold}"
+        assert seg_ids <= tangle._seg_lookup.keys()
 
 
 def test_insert_point_keeps_host_stretch_param():
