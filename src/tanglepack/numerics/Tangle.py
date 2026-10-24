@@ -78,6 +78,13 @@ _EPS_REL = 1e-12
 _DEVIATION_FLOOR_REL = 1e-8
 
 
+def _edge(p0: Point | BranchPoint, p1: Point | BranchPoint) -> int:
+    """One int per edge, whichever way it is walked: the same identity as the
+    frozenset of the two point ids, at a fraction of its size."""
+    a, b = sorted((id(p0), id(p1)))
+    return (a << 64) | b
+
+
 def _segment_index(stream: Optional[list] = None) -> index.Index:
     """A 2-D rtree, bulk (stream) loaded from ``(id, bounds, None)`` entries if any."""
     properties = index.Property()
@@ -129,20 +136,27 @@ class Tangle:
     """
     Spatial index of manifold segments that detects and resolves crossings.
 
-    Every adjacent pair of points on an indexed manifold is stored as a
-    _Segment in the rtree of its stability. Candidate crossings are found by
-    querying a segment's bounding box against the OTHER stability's rtree, so
-    only unstable x stable pairs are ever formed (CLAUDE.md's fundamental
+    Two kinds of curve meet the index. An INDEXED curve (a branch) has every
+    adjacent pair of points stored as a _Segment in the rtree of its
+    stability, with its owners. A QUERY-ONLY curve (a blast image curve, the
+    bridges cut from it, a partial piece) is only queried: each new edge is one
+    key in ``_query_edges``, and its _Segment is kept only while it has a
+    crossing pair to resolve. Candidate crossings are found by querying a
+    segment's bounding box against the OTHER stability's rtree, so only
+    unstable x stable pairs are ever formed (CLAUDE.md's fundamental
     invariant: two curves of one stability never cross). They are resolved to
     true intersection points and cut into bridges.
 
     Attributes:
         _rtrees: one spatial rtree per stability (``"unstable"``, ``"stable"``),
-            storing its segments by their bounding boxes.
-        _seg_lookup: Dictionary keyed by unique segment ids that stores
-            segments.
-        _manifold_segs: Dictionary keyed by manifolds which stores the set of
-            all segment ids for that manifold.
+            storing the indexed segments by their bounding boxes.
+        _seg_lookup: The _Segment of every sid still read: every indexed
+            segment, and every query-only segment that found a pair.
+        _manifold_segs: The sids each indexed curve (and each bridge cut from
+            one) owns.
+        _query_edges: The edge key (:func:`_edge`) of every edge a query-only
+            curve has queried, so an image laid over earlier curve is not
+            queried twice.
         _intersecting_segments: Set of frozenset pairs of segment ids that
             cross.
 
@@ -159,26 +173,26 @@ class Tangle:
 
     def __init__(self) -> None:
         """
-
-        Initializes the Tangle object with an R-tree for spatial indexing
-        of segments, a lookup dictionary for segments, and a mapping
-        of manifolds to their segments.
+        Initializes an empty index.
 
         Attributes:
-            _rtrees: one spatial rtree per stability, storing its segments by
-                their bounding boxes
-            _edge_to_sid: Maps an edge (the frozenset of its two point ids) to the
-                id of the segment already registered for it, so a manifold that
-                reuses another manifold's points (every bridge does) is given the
-                EXISTING segment rather than being silently dropped.
-            _seg_lookup: Dictionary keyed by unique segment ids that
-                stores segments
-            _manifold_segs Dictionary keyed by manifolds which stores
-                a set of all segments
-            _seg_manifolds: Reverse of _manifold_segs -- every manifold that
-                claims a given segment id. A segment stays indexed until its last
-                owner is removed.
-
+            _rtrees: one spatial rtree per stability, storing the indexed
+                segments by their bounding boxes.
+            _edge_to_sid: Maps an indexed edge (the frozenset of its two point
+                ids) to its segment id, so a bridge cut from an indexed branch
+                (which reuses the branch's points) claims the EXISTING segment
+                rather than being silently dropped.
+            _seg_lookup: Dictionary keyed by segment id: every indexed segment,
+                and every query-only segment whose query found a pair.
+            _manifold_segs: The segment ids each indexed curve owns, a bridge
+                cut from one included.
+            _seg_manifolds: Reverse of _manifold_segs -- every curve that claims
+                a given segment id. A segment stays indexed until its last owner
+                is removed.
+            _query_edges: One int key per edge a query-only curve has queried
+                (:func:`_edge`, the same identity as ``_edge_to_sid``'s keys).
+                It is never forgotten: a query-only curve holds no record, so
+                there is nothing to release.
             _intersecting_segments: set of frozensets containing pairs of
                 segment ids that intersect
             _processed_pairs: pairs already handed to _resolve_crossing_pair, so a
@@ -190,6 +204,7 @@ class Tangle:
         self._seg_lookup: dict[int, _Segment] = {}
         self._manifold_segs: defaultdict[BaseManifold, set[int]] = defaultdict(set)
         self._seg_manifolds: defaultdict[int, set[BaseManifold]] = defaultdict(set)
+        self._query_edges: set[int] = set()
 
         self._intersecting_segments: set[frozenset[int]] = set()
         self._processed_pairs: set[frozenset[int]] = set()
@@ -214,6 +229,7 @@ class Tangle:
         self._seg_lookup.clear()
         self._manifold_segs.clear()
         self._seg_manifolds.clear()
+        self._query_edges.clear()
         self._intersecting_segments.clear()
         self._processed_pairs.clear()
 
@@ -445,50 +461,72 @@ class Tangle:
         manifold: BaseManifold,
         index_segments: bool = True,
         detect_crossings: bool = True,
-    ) -> int:
+    ) -> set[int]:
         """
-        Registers every segment of a manifold and detects its crossings.
+        Registers a manifold's new edges and detects their crossings.
 
         Args:
             manifold (BaseManifold): The manifold to register.
-            index_segments (bool): If True (default) each segment is also
-                inserted into the rtree of its stability so later additions can
-                find it. Pass False for an iterated bridge: a bridge is unstable
-                manifold, so the only curves it can cross are stable ones, and
-                those are already in the index. Its crossings are found by
-                querying; skipping the inserts is what keeps repeated bridge
-                iteration fast.
+            index_segments (bool): If True (default) each segment is recorded
+                with its owner and inserted into the rtree of its stability so
+                later additions can find it. Pass False for a blast image curve:
+                it is unstable manifold, so the only curves it can cross are
+                stable ones, and those are already in the index. It is queried
+                only, and holds no record of its own (see the Note).
             detect_crossings (bool): If False, genuinely new segments are
-                registered without being queried against the rtree. Used when
-                cutting bridges out of an already-indexed manifold: every
-                crossing on that stretch of curve was already found on the
-                parent's segments, so querying again would only duplicate it.
+                recorded without being queried against the rtree. Used when
+                cutting bridges out of an indexed branch: every crossing on that
+                stretch of curve was already found on the parent's segments, so
+                querying again would only duplicate it.
 
         Returns:
-            The number of segments the manifold added: 0 when every edge of it was
-            already registered by another owner.
+            The ids of the segments the manifold added: empty when every edge of
+            it was already registered, by an indexed curve or by an earlier
+            query-only one.
 
         Note:
-            An edge that is already registered (a bridge reuses its parent
-            manifold's points) is mapped to the existing segment id and that id
-            is recorded under ``manifold`` as well, so one segment may have
-            several owners.
+            An indexed edge that is already registered (a bridge reuses its
+            parent's points) is mapped to the existing segment id and that id is
+            recorded under ``manifold`` as well, so one segment may have several
+            owners.
+
+            A query-only curve (``index_segments=False`` with crossings
+            detected) writes one key per new edge into ``_query_edges``, and a
+            _Segment into ``_seg_lookup`` only when its query found a pair: the
+            pair's resolution reads it. It owns nothing, so it has nothing to
+            release.
         """
-        # ---------- A. purge old entries (if any) ----------
+        if not index_segments and detect_crossings:
+            rtree = self._rtrees["stable" if manifold.stability == "unstable" else "unstable"]
+            new_sids = set()
+            for seg in self._segments_of(manifold):
+                edge = _edge(seg.p0, seg.p0_seg1)
+                if edge in self._query_edges or frozenset((id(seg.p0), id(seg.p0_seg1))) in self._edge_to_sid:
+                    continue
+                self._query_edges.add(edge)
+                seg.id, seg.in_rtree = next(Tangle._ids), False
+                new_sids.add(seg.id)
+                pairs = {
+                    frozenset((seg.id, cand_id))
+                    for cand_id in rtree.intersection(seg.bounds)
+                    if seg.intersects(self._seg_lookup[cand_id])
+                }
+                if pairs:
+                    self._seg_lookup[seg.id] = seg
+                    self._intersecting_segments |= pairs
+            return new_sids
+
         if manifold in self._manifold_segs:
             # copy, because _remove_segment mutates the same set
             for sid in list(self._manifold_segs[manifold]):
                 self._remove_segment(sid, manifold)
 
-        # _insert_segment records each id in _manifold_segs itself.
-        before = len(self._seg_lookup)
-        for segment in self._segments_of(manifold):
-            self._insert_segment(
-                segment,
-                index_in_rtree=index_segments,
-                detect_crossings=detect_crossings,
-            )
-        return len(self._seg_lookup) - before
+        new_sids = (
+            self._insert_segment(segment, index_in_rtree=index_segments,
+                                 detect_crossings=detect_crossings)
+            for segment in self._segments_of(manifold)
+        )
+        return {sid for sid in new_sids if sid is not None}
 
     def add_manifolds(self, manifolds: list[BaseManifold]) -> None:
         """
@@ -542,17 +580,15 @@ class Tangle:
                 if segment.intersects(self._seg_lookup[candidate_id]):
                     self._intersecting_segments.add(frozenset((segment.id, candidate_id)))
 
-    def populate_intersections_for_manifold(
-        self, manifold: BaseManifold
-    ) -> list[Intersection]:
+    def populate_intersections(self, new_sids: set[int]) -> list[Intersection]:
         """
-        Resolve only crossing pairs that involve a segment from `manifold`.
+        Resolve only the crossing pairs that involve one of ``new_sids``.
 
-        Use this after add_manifold() when incrementally adding an iterated bridge
-        rather than rebuilding the full tangle from scratch.
+        Use this after add_manifold() when incrementally adding a blast image
+        curve rather than rebuilding the full tangle from scratch.
 
         Args:
-            manifold: The newly added manifold to resolve intersections for.
+            new_sids: The segment ids that add_manifold() just returned.
 
         Returns:
             Every new detection, the unresolved ones included (which of them are
@@ -560,11 +596,10 @@ class Tangle:
             in unstable cdist order: the caller registers them in this order,
             never in that of a set of segment ids, so ids are reproducible.
         """
-        manifold_seg_ids = self._manifold_segs.get(manifold, set())
         resolved = (
             self._resolve_crossing_pair(pair)
             for pair in list(self._intersecting_segments)
-            if pair & manifold_seg_ids
+            if pair & new_sids
         )
         return sorted(
             (intersection for intersection in resolved if intersection is not None),
@@ -582,13 +617,13 @@ class Tangle:
         seg: _Segment,
         index_in_rtree: bool = True,
         detect_crossings: bool = True,
-    ) -> int:
+    ) -> Optional[int]:
         """
         Registers a segment, detects its crossings, and (optionally) inserts
         it into the rtree.
 
         An edge that is already registered is NOT duplicated: the existing
-        segment id is claimed by ``seg.manifold`` and returned. A bridge is cut
+        segment id is claimed by ``seg.manifold``. A bridge is cut
         out of a live manifold and so reuses that manifold's points; dropping
         those edges would leave ``_manifold_segs[bridge]`` empty and make every
         ``for_manifold=`` filter and segment lookup blind to it.
@@ -603,8 +638,8 @@ class Tangle:
                 crossings of this segment. See add_manifold.
 
         Returns:
-            The segment id -- freshly allocated, or the id already registered
-            for this edge.
+            The freshly allocated segment id, or None when the edge was already
+            registered (and so only claimed).
         """
         # edge key defined by the id of two points
         edge_key = frozenset((id(seg.p0), id(seg.p0_seg1)))
@@ -617,7 +652,7 @@ class Tangle:
                 "it, which have the same stability"
             )
             self._claim_segment(existing_sid, seg.manifold)
-            return existing_sid
+            return None
 
         # choose a new id there for a new segment
         sid = next(Tangle._ids) if seg.id is None else seg.id
@@ -908,7 +943,7 @@ class Tangle:
         # curve (the zig-zag), produced overlapping duplicate bridges, and -- because
         # each crossing got two distinct offset points that mapped to near-coincident
         # images -- tripped the unstable x unstable detector all along the tangle.
-        all_bridges: list[Bridge] = []
+        cut: list[tuple[BaseManifold, Bridge]] = []  # (parent, bridge)
         for manifold, manifold_group in manifold_crossings.items():
             manifold_group.sort(key=lambda entry: entry[0])
 
@@ -947,7 +982,7 @@ class Tangle:
                         cdist_b - cdist_a,
                         cdist_tol,
                     )
-                all_bridges.append(Bridge(
+                cut.append((manifold, Bridge(
                     root=brackets[k][0],
                     stability=manifold.stability,
                     stretch_param=manifold.stretch_param,
@@ -957,17 +992,23 @@ class Tangle:
                     manifold_key=manifold.manifold_key,
                     first_intersection=first.id,
                     second_intersection=second.id,
-                ))
+                )))
 
-        # --- 3. Register each bridge's segments under the bridge itself ---
+        # --- 3. Register each bridge's edges, by where it was cut ---
         # Done only after every cut, because _insert_crossing_separator may still
-        # splice a point into a span an earlier bridge already covers. The segments
+        # splice a point into a span an earlier bridge already covers. The edges
         # are the parent's own, so they are neither re-inserted into the rtree nor
-        # re-queried: every crossing on them was found on the parent already.
-        for bridge in all_bridges:
-            self.add_manifold(bridge, index_segments=False, detect_crossings=False)
+        # re-queried: every crossing on them was found on the parent already. A
+        # bridge cut from an indexed branch claims its segments; one cut from a
+        # query-only curve only records its edges, the separators' included, so a
+        # later image laid over them is not queried again.
+        for parent, bridge in cut:
+            if parent in self._manifold_segs:
+                self.add_manifold(bridge, index_segments=False, detect_crossings=False)
+            else:
+                self._query_edges.update(_edge(seg.p0, seg.p0_seg1) for seg in self._segments_of(bridge))
 
-        return all_bridges
+        return [bridge for _, bridge in cut]
 
     def _insert_crossing_separator(
         self,

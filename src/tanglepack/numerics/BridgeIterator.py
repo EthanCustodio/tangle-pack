@@ -356,12 +356,10 @@ class BridgeIterator:
         #    curve it can legitimately cross is stable and already in the rtree
         #    from compute_intersections -- querying finds all its crossings, and
         #    skipping the rtree inserts keeps repeated blasting fast.
-        workbench.Tangle.add_manifold(iterated, index_segments=False)
+        new_sids = workbench.Tangle.add_manifold(iterated, index_segments=False)
 
         # 3. resolve only new crossings involving the iterated bridge
-        new_intersections = workbench.Tangle.populate_intersections_for_manifold(
-            iterated
-        )
+        new_intersections = workbench.Tangle.populate_intersections(new_sids)
 
         registry = workbench._intersection_registry
         for ix in new_intersections:

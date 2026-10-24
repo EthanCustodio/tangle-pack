@@ -1343,8 +1343,8 @@ class TangleWorkbench:
         # A blast image is computed manifold too: re-indexed query-only,
         # as the blast indexed it. On a FRESH index a curve that adds no segment of
         # its own lies on a grown branch now (growth merged it in) and is dropped;
-        # an accumulating call cannot tell (the bridges cut out of the curve still
-        # own its edges), so it keeps every curve.
+        # an accumulating call cannot tell (the index still holds the curve's
+        # edges from the last pass), so it keeps every curve.
         kept = []
         for curve in self._image_curves:
             if (all(curve.fixed_point is not fp for fp in fixed_points)
