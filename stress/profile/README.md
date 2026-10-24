@@ -53,3 +53,43 @@ law cases jitter by 20-40%).
 
 A wrapped function that no longer exists fails the run (`AttributeError`). When a slice
 renames one, add the new name under the SAME label so the figures stay comparable.
+
+## Baseline
+
+The baseline of `a8bb8a0` is committed, unchanged from the analyst's run:
+
+- `figures/numerics_profile/a8bb8a0/` -- the five law cases (time and memory) and the 1e-7
+  scaling series (time; memory = 8 traced blasts);
+- `figures/numerics_profile/a8bb8a0_scale1e-9/` -- the largest scaling point (1e-9);
+- `figures/numerics_profile/a8bb8a0_scale_traced/` -- the 1e-7 series run to its plateau under
+  tracemalloc (json only).
+
+The last slice (N10) reruns the first command above on its branch and draws it beside the
+baseline:
+
+```bash
+env/bin/python stress/profile/profile_numerics.py --plot-only \
+    --out figures/numerics_profile/<branch-sha> --compare figures/numerics_profile/a8bb8a0
+```
+
+## Identity probe
+
+`identity_probe.py` checks D3 for every slice: the points, the registry and the topology of
+every `cases.LAW_CASES` build and of every step of every `cases.SERIES` (58 builds), base
+against branch. Each case runs in a fresh interpreter importing the checkout named by
+`TANGLEPACK_REPO`; nothing is written outside `--out`.
+
+```bash
+TANGLEPACK_REPO=../tangle-pack-<slug>-base env/bin/python stress/profile/identity_probe.py dump --out <scratch>/base
+TANGLEPACK_REPO=../tangle-pack-<slug>      env/bin/python stress/profile/identity_probe.py dump --out <scratch>/branch
+env/bin/python stress/profile/identity_probe.py compare <scratch>/base <scratch>/branch   # exit 1 on any difference
+```
+
+One dump takes about 60 s (126 MB; k32_series 26 s, nested_outer_series 17 s, k28_series 8 s,
+every other case about 1 s) and a compare about 1 s, measured on `a8bb8a0`. `compare` prints
+one line per differing array (rows differing, length change, max |dxy|, max |dcdist|), a
+unified diff per differing text, and last `identical: 58 builds, 5776 arrays, 638 texts` (at
+`a8bb8a0`) or `differences in K items`.
+
+A slice that changes an accessor the probe reads edits only its readers (`curve_arrays`,
+`curve_extent`, `bracket_cdists`, `image_curves`, `key_text`), in its own diff.
