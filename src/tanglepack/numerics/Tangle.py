@@ -33,12 +33,12 @@ in ``_query_edges`` for the index's life, so on a ``reset=False`` recompute it i
 never queried again: neither when its image curve is re-added (before N1 the
 purge re-queried the edges only that curve owned, and the registry collapsed the
 re-detections) nor when a later indexed branch contains it (the branch neither
-indexes, queries nor claims it, as before N1). Open, and older than N1: the
-accumulating ``reset=False`` pass misses real crossings a fresh pass finds
-(k28 two blasts, grown one step on each stability: 16 crossings against 30;
-nested, stable grown one step: 48 against 54), and an image curve laid over a
-newly grown stable span is not re-queried against it. A later slice should
-decide whether ``reset=False`` re-queries or is retired.
+indexes nor queries it, as before N1; the base also claimed it, for no effect).
+Open, and older than N1: the accumulating ``reset=False`` pass misses real
+crossings a fresh pass finds (k28 two blasts, grown one step on each stability:
+16 crossings against 30; nested, stable grown one step: 48 against 54), and an
+image curve laid over a newly grown stable span is not re-queried against it. A
+later slice should decide whether ``reset=False`` re-queries or is retired.
 
 Crossing resolution. Below a
 ``resolution_ratio`` of a few, a crossing of two near-tangent polylines is
@@ -663,8 +663,9 @@ class Tangle:
         # edge key defined by the id of two points
         edge_key = frozenset((id(seg.p0), id(seg.p0_seg1)))
         if _edge(seg.p0, seg.p0_seg1) in self._query_edges:
-            # a query-only curve already queried it: as before N1, neither
-            # indexed, queried nor claimed (the reset=False path, see Dev Notes)
+            # a query-only curve already queried it: as before N1, neither indexed
+            # nor queried (the base also claimed it, for no effect; the
+            # reset=False path, see Dev Notes)
             return None
         existing_sid = self._edge_to_sid.get(edge_key)
         if existing_sid is not None:
