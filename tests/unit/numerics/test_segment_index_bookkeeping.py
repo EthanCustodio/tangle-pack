@@ -9,8 +9,8 @@ Pins:
    none an earlier image curve queried, none of a separator spliced into a
    bridge cut from one, and a curve that lies wholly on a branch is dropped on
    a fresh recompute; and a branch added over a query-only curve (the
-   ``reset=False`` recompute) neither indexes nor queries the shared edges. These held before N1 too; the identity probe's builds
-   never reach them.
+   ``reset=False`` recompute) neither indexes nor queries the shared edges.
+   These held before N1 too; the identity probe's builds never reach them.
 3. An indexed curve added twice records no ``None`` segment id: since N1
    ``_insert_segment`` returns None for an edge it only claims, and that
    return must never reach ``_manifold_segs``.
