@@ -1,0 +1,2980 @@
+{
+ "case": "scale",
+ "mode": "time",
+ "git_sha": "a8bb8a0",
+ "rss_baseline": 122888192,
+ "traced_baseline": null,
+ "series": [
+  {
+   "blast": 0,
+   "blast_s": 0.0,
+   "step_s": 0.0,
+   "wall_s": 0.15008473399211653,
+   "rss": 136876032,
+   "peak_rss_so_far": 136724480,
+   "step_peak_rss": 136876032,
+   "pip_depth": null,
+   "points_created": 0,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 1421952,
+     "segment_index": 3202856,
+     "rtree": 287368,
+     "curve_objects": 1224,
+     "walk_memo": 65136,
+     "registry": 9505,
+     "topology": 127466,
+     "workbench_other": 10699
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 3703
+    },
+    "tangle_parts": {
+     "segments": 422600,
+     "seg_lookup": 147552,
+     "edge_to_sid": 1330832,
+     "owners": 1299264,
+     "pairs": 2608,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 4226
+    },
+    "memo_array_bytes": 41792,
+    "n_points": 8848,
+    "n_curve_points": 5145,
+    "n_image_points": 0,
+    "n_phantom": 3703,
+    "n_bridges": 3,
+    "n_image_curves": 0,
+    "n_crossings": 4,
+    "census_s": 0.049483205017168075
+   }
+  },
+  {
+   "blast": 1,
+   "blast_s": 0.022491003008326516,
+   "step_s": 0.02801499600172974,
+   "wall_s": 0.22819569299463183,
+   "rss": 139223040,
+   "peak_rss_so_far": 137658368,
+   "step_peak_rss": 139223040,
+   "pip_depth": {
+    "A": 2
+   },
+   "points_created": 1068,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 1565184,
+     "points_image": 436968,
+     "segment_index": 3908784,
+     "rtree": 287368,
+     "curve_objects": 1784,
+     "walk_memo": 91616,
+     "registry": 13153,
+     "topology": 132281,
+     "workbench_other": 11143
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 4076,
+     "points_image": 1071
+    },
+    "tangle_parts": {
+     "segments": 529600,
+     "seg_lookup": 147552,
+     "edge_to_sid": 1630432,
+     "owners": 1596480,
+     "pairs": 4720,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 5296
+    },
+    "memo_array_bytes": 58880,
+    "n_points": 10292,
+    "n_curve_points": 5145,
+    "n_image_points": 1071,
+    "n_phantom": 4076,
+    "n_bridges": 4,
+    "n_image_curves": 1,
+    "n_crossings": 6,
+    "census_s": 0.04819184300140478
+   }
+  },
+  {
+   "blast": 2,
+   "blast_s": 0.04366138900513761,
+   "step_s": 0.055565567017765716,
+   "wall_s": 0.3327513879921753,
+   "rss": 142286848,
+   "peak_rss_so_far": 142151680,
+   "step_peak_rss": 142286848,
+   "pip_depth": {
+    "A": 3
+   },
+   "points_created": 2286,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 2033280,
+     "points_image": 1370064,
+     "segment_index": 5946280,
+     "rtree": 287368,
+     "curve_objects": 2904,
+     "walk_memo": 149552,
+     "registry": 18425,
+     "topology": 203874,
+     "workbench_other": 11710
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 5295,
+     "points_image": 3358
+    },
+    "tangle_parts": {
+     "segments": 758200,
+     "seg_lookup": 295000,
+     "edge_to_sid": 2417960,
+     "owners": 2468224,
+     "pairs": 6896,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 7582
+    },
+    "memo_array_bytes": 95456,
+    "n_points": 13798,
+    "n_curve_points": 5145,
+    "n_image_points": 3358,
+    "n_phantom": 5295,
+    "n_bridges": 7,
+    "n_image_curves": 2,
+    "n_crossings": 10,
+    "census_s": 0.05019013598212041
+   }
+  },
+  {
+   "blast": 3,
+   "blast_s": 0.08156606100965291,
+   "step_s": 0.09483745999750681,
+   "wall_s": 0.47854315701988526,
+   "rss": 149336064,
+   "peak_rss_so_far": 152260608,
+   "step_peak_rss": 152260608,
+   "pip_depth": {
+    "A": 4
+   },
+   "points_created": 4267,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 2972928,
+     "points_image": 3109368,
+     "segment_index": 9835428,
+     "rtree": 287368,
+     "curve_objects": 5144,
+     "walk_memo": 257952,
+     "registry": 28353,
+     "topology": 214746,
+     "workbench_other": 13310
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 7742,
+     "points_image": 7621
+    },
+    "tangle_parts": {
+     "segments": 1184300,
+     "seg_lookup": 589920,
+     "edge_to_sid": 3905960,
+     "owners": 4144000,
+     "pairs": 11248,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 11843
+    },
+    "memo_array_bytes": 163728,
+    "n_points": 20508,
+    "n_curve_points": 5145,
+    "n_image_points": 7621,
+    "n_phantom": 7742,
+    "n_bridges": 13,
+    "n_image_curves": 4,
+    "n_crossings": 18,
+    "census_s": 0.06330250200699084
+   }
+  },
+  {
+   "blast": 4,
+   "blast_s": 0.1415764279954601,
+   "step_s": 0.15809637299389578,
+   "wall_s": 0.7007466909999494,
+   "rss": 164077568,
+   "peak_rss_so_far": 164069376,
+   "step_peak_rss": 164077568,
+   "pip_depth": {
+    "A": 5
+   },
+   "points_created": 7193,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 4682112,
+     "points_image": 6044928,
+     "segment_index": 14723816,
+     "rtree": 287368,
+     "curve_objects": 8504,
+     "walk_memo": 438960,
+     "registry": 46265,
+     "topology": 233646,
+     "workbench_other": 15382
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 12193,
+     "points_image": 14816
+    },
+    "tangle_parts": {
+     "segments": 1903400,
+     "seg_lookup": 589920,
+     "edge_to_sid": 5919440,
+     "owners": 6290208,
+     "pairs": 20848,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 19034
+    },
+    "memo_array_bytes": 278816,
+    "n_points": 32154,
+    "n_curve_points": 5145,
+    "n_image_points": 14816,
+    "n_phantom": 12193,
+    "n_bridges": 21,
+    "n_image_curves": 8,
+    "n_crossings": 30,
+    "census_s": 0.08628727099858224
+   }
+  },
+  {
+   "blast": 5,
+   "blast_s": 0.26934458399773575,
+   "step_s": 0.29123676699236967,
+   "wall_s": 1.079104914009804,
+   "rss": 180707328,
+   "peak_rss_so_far": 205860864,
+   "step_peak_rss": 205860864,
+   "pip_depth": {
+    "A": 6
+   },
+   "points_created": 11624,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 7154688,
+     "points_image": 10788336,
+     "segment_index": 24876872,
+     "rtree": 287368,
+     "curve_objects": 14104,
+     "walk_memo": 731152,
+     "registry": 73553,
+     "topology": 261538,
+     "workbench_other": 19622
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 18632,
+     "points_image": 26442
+    },
+    "tangle_parts": {
+     "segments": 3065400,
+     "seg_lookup": 1310808,
+     "edge_to_sid": 9893928,
+     "owners": 10575008,
+     "pairs": 31728,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 30654
+    },
+    "memo_array_bytes": 464800,
+    "n_points": 50219,
+    "n_curve_points": 5145,
+    "n_image_points": 26442,
+    "n_phantom": 18632,
+    "n_bridges": 35,
+    "n_image_curves": 14,
+    "n_crossings": 50,
+    "census_s": 0.11566952100838535
+   }
+  },
+  {
+   "blast": 6,
+   "blast_s": 0.4828316339990124,
+   "step_s": 0.5137046849995386,
+   "wall_s": 1.709372189012356,
+   "rss": 248377344,
+   "peak_rss_so_far": 326811648,
+   "step_peak_rss": 326811648,
+   "pip_depth": {
+    "A": 7
+   },
+   "points_created": 20932,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 11955072,
+     "points_image": 19335936,
+     "segment_index": 43297448,
+     "rtree": 287368,
+     "curve_objects": 24184,
+     "walk_memo": 1257776,
+     "registry": 128929,
+     "topology": 327082,
+     "workbench_other": 27830
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 31133,
+     "points_image": 47392
+    },
+    "tangle_parts": {
+     "segments": 5159400,
+     "seg_lookup": 2621536,
+     "edge_to_sid": 17067856,
+     "owners": 18385056,
+     "pairs": 63600,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 51594
+    },
+    "memo_array_bytes": 799712,
+    "n_points": 83670,
+    "n_curve_points": 5145,
+    "n_image_points": 47392,
+    "n_phantom": 31133,
+    "n_bridges": 61,
+    "n_image_curves": 24,
+    "n_crossings": 86,
+    "census_s": 0.19148692197632045
+   }
+  },
+  {
+   "blast": 7,
+   "blast_s": 0.8583448170102201,
+   "step_s": 0.9049859750084579,
+   "wall_s": 2.806876242015278,
+   "rss": 280293376,
+   "peak_rss_so_far": 421920768,
+   "step_peak_rss": 421920768,
+   "pip_depth": {
+    "A": 8
+   },
+   "points_created": 34767,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 19661568,
+     "points_image": 33525768,
+     "segment_index": 67402940,
+     "rtree": 287368,
+     "curve_objects": 40984,
+     "walk_memo": 2132992,
+     "registry": 208961,
+     "topology": 398506,
+     "workbench_other": 38110
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 51202,
+     "points_image": 82171
+    },
+    "tangle_parts": {
+     "segments": 8635500,
+     "seg_lookup": 2621536,
+     "edge_to_sid": 26800936,
+     "owners": 29248728,
+     "pairs": 96240,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 86355
+    },
+    "memo_array_bytes": 1355984,
+    "n_points": 138518,
+    "n_curve_points": 5145,
+    "n_image_points": 82171,
+    "n_phantom": 51202,
+    "n_bridges": 103,
+    "n_image_curves": 42,
+    "n_crossings": 146,
+    "census_s": 0.30831313200178556
+   }
+  },
+  {
+   "blast": 8,
+   "blast_s": 1.75402506699902,
+   "step_s": 1.8410646989941597,
+   "wall_s": 4.9573053770000115,
+   "rss": 387727360,
+   "peak_rss_so_far": 569888768,
+   "step_peak_rss": 569888768,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 59843,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 33219456,
+     "points_image": 57952728,
+     "segment_index": 116454524,
+     "rtree": 287368,
+     "curve_objects": 69544,
+     "walk_memo": 3219256,
+     "registry": 341969,
+     "topology": 948029,
+     "workbench_other": 60542
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 86509,
+     "points_image": 142041
+    },
+    "tangle_parts": {
+     "segments": 14619500,
+     "seg_lookup": 5242968,
+     "edge_to_sid": 46177568,
+     "owners": 50262760,
+     "pairs": 151728,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 146195
+    },
+    "memo_array_bytes": 1899824,
+    "n_points": 233695,
+    "n_curve_points": 5145,
+    "n_image_points": 142041,
+    "n_phantom": 86509,
+    "n_bridges": 175,
+    "n_image_curves": 72,
+    "n_crossings": 248,
+    "census_s": 0.48405339900637046
+   }
+  },
+  {
+   "blast": 9,
+   "blast_s": 3.400687724002637,
+   "step_s": 3.5088632449915167,
+   "wall_s": 8.951369306014385,
+   "rss": 535228416,
+   "peak_rss_so_far": 812118016,
+   "step_peak_rss": 812118016,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 94757,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 54145920,
+     "points_image": 96993840,
+     "segment_index": 198053476,
+     "rtree": 287368,
+     "curve_objects": 115744,
+     "walk_memo": 5239304,
+     "registry": 593325,
+     "topology": 975973,
+     "workbench_other": 91182
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 141005,
+     "points_image": 237730
+    },
+    "tangle_parts": {
+     "segments": 24183500,
+     "seg_lookup": 10485856,
+     "edge_to_sid": 78199656,
+     "owners": 84893280,
+     "pairs": 291184,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 241835
+    },
+    "memo_array_bytes": 3053504,
+    "n_points": 383880,
+    "n_curve_points": 5145,
+    "n_image_points": 237730,
+    "n_phantom": 141005,
+    "n_bridges": 291,
+    "n_image_curves": 121,
+    "n_crossings": 414,
+    "census_s": 0.8221887879772112
+   }
+  },
+  {
+   "blast": 10,
+   "blast_s": 5.994786030991236,
+   "step_s": 6.103769851994002,
+   "wall_s": 15.879648781003198,
+   "rss": 890675200,
+   "peak_rss_so_far": 1455509504,
+   "step_peak_rss": 1455509504,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 139502,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 84862848,
+     "points_image": 153933504,
+     "segment_index": 326134692,
+     "rtree": 287368,
+     "curve_objects": 182944,
+     "walk_memo": 7207480,
+     "registry": 912045,
+     "topology": 981157,
+     "workbench_other": 131494
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 220997,
+     "points_image": 377288
+    },
+    "tangle_parts": {
+     "segments": 38132100,
+     "seg_lookup": 20971608,
+     "edge_to_sid": 127741488,
+     "owners": 138867752,
+     "pairs": 421744,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 381321
+    },
+    "memo_array_bytes": 3769424,
+    "n_points": 603430,
+    "n_curve_points": 5145,
+    "n_image_points": 377288,
+    "n_phantom": 220997,
+    "n_bridges": 459,
+    "n_image_curves": 193,
+    "n_crossings": 654,
+    "census_s": 1.2308108069992159
+   }
+  },
+  {
+   "blast": 11,
+   "blast_s": 9.32995849501458,
+   "step_s": 9.443808335025096,
+   "wall_s": 26.555638937017648,
+   "rss": 1102868480,
+   "peak_rss_so_far": 2105245696,
+   "step_peak_rss": 2105245696,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 166095,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 121171200,
+     "points_image": 221723520,
+     "segment_index": 440892724,
+     "rtree": 287368,
+     "curve_objects": 262464,
+     "walk_memo": 9121128,
+     "registry": 1288757,
+     "topology": 987537,
+     "workbench_other": 186906
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 315550,
+     "points_image": 543440
+    },
+    "tangle_parts": {
+     "segments": 54738700,
+     "seg_lookup": 20971608,
+     "edge_to_sid": 174239968,
+     "owners": 190366208,
+     "pairs": 576240,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 547387
+    },
+    "memo_array_bytes": 4194912,
+    "n_points": 864135,
+    "n_curve_points": 5145,
+    "n_image_points": 543440,
+    "n_phantom": 315550,
+    "n_bridges": 657,
+    "n_image_curves": 279,
+    "n_crossings": 938,
+    "census_s": 1.7690469030058011
+   }
+  },
+  {
+   "blast": 12,
+   "blast_s": 12.141881254996406,
+   "step_s": 12.265450436010724,
+   "wall_s": 40.59182296300423,
+   "rss": 1352433664,
+   "peak_rss_so_far": 2742210560,
+   "step_peak_rss": 2742210560,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 161191,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 155132160,
+     "points_image": 287536776,
+     "segment_index": 615311848,
+     "rtree": 287368,
+     "curve_objects": 340304,
+     "walk_memo": 10484088,
+     "registry": 1675133,
+     "topology": 993621,
+     "workbench_other": 241410
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 403990,
+     "points_image": 704747
+    },
+    "tangle_parts": {
+     "segments": 70861000,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 240353936,
+     "owners": 261426304,
+     "pairs": 727472,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 708610
+    },
+    "memo_array_bytes": 4116448,
+    "n_points": 1113882,
+    "n_curve_points": 5145,
+    "n_image_points": 704747,
+    "n_phantom": 403990,
+    "n_bridges": 851,
+    "n_image_curves": 363,
+    "n_crossings": 1216,
+    "census_s": 2.4970793849788606
+   }
+  },
+  {
+   "blast": 13,
+   "blast_s": 15.576268436008831,
+   "step_s": 15.688166070001898,
+   "wall_s": 58.779099466017215,
+   "rss": 1605386240,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3304984576,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 161029,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 190087680,
+     "points_image": 353267208,
+     "segment_index": 727556996,
+     "rtree": 287368,
+     "curve_objects": 418144,
+     "walk_memo": 11926360,
+     "registry": 2158045,
+     "topology": 1097957,
+     "workbench_other": 314322
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 495020,
+     "points_image": 865851
+    },
+    "tangle_parts": {
+     "segments": 86963500,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 285440936,
+     "owners": 312134112,
+     "pairs": 1075312,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 869635
+    },
+    "memo_array_bytes": 4113856,
+    "n_points": 1366016,
+    "n_curve_points": 5145,
+    "n_image_points": 865851,
+    "n_phantom": 495020,
+    "n_bridges": 1050,
+    "n_image_curves": 442,
+    "n_crossings": 1494,
+    "census_s": 2.8794593589846045
+   }
+  },
+  {
+   "blast": 14,
+   "blast_s": 17.255778132996056,
+   "step_s": 17.369614458992146,
+   "wall_s": 79.03039854799863,
+   "rss": 1783717888,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3142864896,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 113825,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 214370688,
+     "points_image": 399725760,
+     "segment_index": 806631916,
+     "rtree": 287368,
+     "curve_objects": 473584,
+     "walk_memo": 12175200,
+     "registry": 2410621,
+     "topology": 1102213,
+     "workbench_other": 339790
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 558257,
+     "points_image": 979720
+    },
+    "tangle_parts": {
+     "segments": 98344100,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 317306616,
+     "owners": 347855040,
+     "pairs": 1183024,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 983441
+    },
+    "memo_array_bytes": 3358592,
+    "n_points": 1543122,
+    "n_curve_points": 5145,
+    "n_image_points": 979720,
+    "n_phantom": 558257,
+    "n_bridges": 1185,
+    "n_image_curves": 505,
+    "n_crossings": 1692,
+    "census_s": 3.133494002977386
+   }
+  },
+  {
+   "blast": 15,
+   "blast_s": 19.65226459200494,
+   "step_s": 19.774324496014742,
+   "wall_s": 101.94018867399427,
+   "rss": 2343206912,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3232858112,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 100044,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 235527936,
+     "points_image": 440557176,
+     "segment_index": 876113400,
+     "rtree": 287368,
+     "curve_objects": 521184,
+     "walk_memo": 12849992,
+     "registry": 2625925,
+     "topology": 1105893,
+     "workbench_other": 362046
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 613354,
+     "points_image": 1079797
+    },
+    "tangle_parts": {
+     "segments": 108346800,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 345314176,
+     "owners": 379233784,
+     "pairs": 1275504,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1083468
+    },
+    "memo_array_bytes": 3138096,
+    "n_points": 1698296,
+    "n_curve_points": 5145,
+    "n_image_points": 1079797,
+    "n_phantom": 613354,
+    "n_bridges": 1305,
+    "n_image_curves": 555,
+    "n_crossings": 1862,
+    "census_s": 3.7007385839824565
+   }
+  },
+  {
+   "blast": 16,
+   "blast_s": 18.899046219012234,
+   "step_s": 19.02630585699808,
+   "wall_s": 124.67008381601772,
+   "rss": 2373287936,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 2890145792,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 55230,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 247160448,
+     "points_image": 463103256,
+     "segment_index": 915373028,
+     "rtree": 287368,
+     "curve_objects": 545824,
+     "walk_memo": 12613208,
+     "registry": 2734829,
+     "topology": 1107765,
+     "workbench_other": 373094
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 643647,
+     "points_image": 1135057
+    },
+    "tangle_parts": {
+     "segments": 113869900,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 360778856,
+     "owners": 397457760,
+     "pairs": 1323376,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1138699
+    },
+    "memo_array_bytes": 2421072,
+    "n_points": 1783849,
+    "n_curve_points": 5145,
+    "n_image_points": 1135057,
+    "n_phantom": 643647,
+    "n_bridges": 1364,
+    "n_image_curves": 584,
+    "n_crossings": 1950,
+    "census_s": 3.8416622189979535
+   }
+  },
+  {
+   "blast": 17,
+   "blast_s": 21.05996874801349,
+   "step_s": 21.174507064017234,
+   "wall_s": 149.68884187599178,
+   "rss": 2440519680,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 2969804800,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 55616,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 258353664,
+     "points_image": 485791728,
+     "segment_index": 954012616,
+     "rtree": 287368,
+     "curve_objects": 572144,
+     "walk_memo": 13119120,
+     "registry": 2856469,
+     "topology": 1109829,
+     "workbench_other": 422810
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 672796,
+     "points_image": 1190666
+    },
+    "tangle_parts": {
+     "segments": 119428400,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 376342656,
+     "owners": 414923912,
+     "pairs": 1374512,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1194284
+    },
+    "memo_array_bytes": 2427248,
+    "n_points": 1868607,
+    "n_curve_points": 5145,
+    "n_image_points": 1190666,
+    "n_phantom": 672796,
+    "n_bridges": 1434,
+    "n_image_curves": 608,
+    "n_crossings": 2044,
+    "census_s": 3.8841254349972587
+   }
+  },
+  {
+   "blast": 18,
+   "blast_s": 25.021097092016134,
+   "step_s": 25.136838909005746,
+   "wall_s": 178.7121934920142,
+   "rss": 2501758976,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3133956096,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 50034,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 269280768,
+     "points_image": 506210496,
+     "segment_index": 988748944,
+     "rtree": 287368,
+     "curve_objects": 596224,
+     "walk_memo": 13477216,
+     "registry": 2958557,
+     "topology": 1111701,
+     "workbench_other": 433850
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 701252,
+     "points_image": 1240712
+    },
+    "tangle_parts": {
+     "segments": 124430600,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 390348816,
+     "owners": 430605096,
+     "pairs": 1421296,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1244306
+    },
+    "memo_array_bytes": 2337936,
+    "n_points": 1947109,
+    "n_curve_points": 5145,
+    "n_image_points": 1240712,
+    "n_phantom": 701252,
+    "n_bridges": 1496,
+    "n_image_curves": 632,
+    "n_crossings": 2130,
+    "census_s": 4.043790005991468
+   }
+  },
+  {
+   "blast": 19,
+   "blast_s": 24.407245398004306,
+   "step_s": 24.532417001988506,
+   "wall_s": 207.290778280003,
+   "rss": 2546266112,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 2897006592,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 36897,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 276604800,
+     "points_image": 521274264,
+     "segment_index": 1014584396,
+     "rtree": 287368,
+     "curve_objects": 611904,
+     "walk_memo": 13587424,
+     "registry": 3031405,
+     "topology": 1112869,
+     "workbench_other": 440682
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 720325,
+     "points_image": 1277633
+    },
+    "tangle_parts": {
+     "segments": 128120500,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 400680536,
+     "owners": 442388464,
+     "pairs": 1451760,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1281205
+    },
+    "memo_array_bytes": 2127744,
+    "n_points": 2003103,
+    "n_curve_points": 5145,
+    "n_image_points": 1277633,
+    "n_phantom": 720325,
+    "n_bridges": 1530,
+    "n_image_curves": 654,
+    "n_crossings": 2186,
+    "census_s": 4.378613622015109
+   }
+  },
+  {
+   "blast": 20,
+   "blast_s": 24.01485548799974,
+   "step_s": 24.13631280598929,
+   "wall_s": 235.80849782400765,
+   "rss": 2667536384,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3182706688,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 39115,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 284332800,
+     "points_image": 537233592,
+     "segment_index": 1041680380,
+     "rtree": 287368,
+     "curve_objects": 629824,
+     "walk_memo": 13976496,
+     "registry": 3105517,
+     "topology": 1114277,
+     "workbench_other": 449002
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 740450,
+     "points_image": 1316749
+    },
+    "tangle_parts": {
+     "segments": 132030500,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 411628536,
+     "owners": 454591632,
+     "pairs": 1486576,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1320305
+    },
+    "memo_array_bytes": 2163232,
+    "n_points": 2062344,
+    "n_curve_points": 5145,
+    "n_image_points": 1316749,
+    "n_phantom": 740450,
+    "n_bridges": 1578,
+    "n_image_curves": 670,
+    "n_crossings": 2250,
+    "census_s": 4.512012871011393
+   }
+  },
+  {
+   "blast": 21,
+   "blast_s": 24.91723654800444,
+   "step_s": 25.04333343100734,
+   "wall_s": 265.3666966500168,
+   "rss": 2688868352,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3024756736,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 17695,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 287842560,
+     "points_image": 544454784,
+     "segment_index": 1054243748,
+     "rtree": 287368,
+     "curve_objects": 637664,
+     "walk_memo": 13786240,
+     "registry": 3153765,
+     "topology": 1114885,
+     "workbench_other": 453234
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 749590,
+     "points_image": 1334448
+    },
+    "tangle_parts": {
+     "segments": 133799500,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 416581736,
+     "owners": 460417568,
+     "pairs": 1501808,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1337995
+    },
+    "memo_array_bytes": 1820512,
+    "n_points": 2089183,
+    "n_curve_points": 5145,
+    "n_image_points": 1334448,
+    "n_phantom": 749590,
+    "n_bridges": 1597,
+    "n_image_curves": 679,
+    "n_crossings": 2278,
+    "census_s": 4.466425427002832
+   }
+  },
+  {
+   "blast": 22,
+   "blast_s": 28.448674041981576,
+   "step_s": 28.576244053983828,
+   "wall_s": 298.41275679299724,
+   "rss": 2730688512,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3010318336,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 14697,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 290567424,
+     "points_image": 550455240,
+     "segment_index": 1064609396,
+     "rtree": 287368,
+     "curve_objects": 643264,
+     "walk_memo": 13867560,
+     "registry": 3252637,
+     "topology": 1115301,
+     "workbench_other": 455722
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 756686,
+     "points_image": 1349155
+    },
+    "tangle_parts": {
+     "segments": 135269500,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 420697736,
+     "owners": 465186336,
+     "pairs": 1512688,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1352695
+    },
+    "memo_array_bytes": 1772544,
+    "n_points": 2110986,
+    "n_curve_points": 5145,
+    "n_image_points": 1349155,
+    "n_phantom": 756686,
+    "n_bridges": 1610,
+    "n_image_curves": 686,
+    "n_crossings": 2298,
+    "census_s": 4.751019297982566
+   }
+  },
+  {
+   "blast": 23,
+   "blast_s": 24.54875698100659,
+   "step_s": 24.67250469600549,
+   "wall_s": 327.83916145801777,
+   "rss": 2783535104,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3083399168,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 7611,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 292013952,
+     "points_image": 553559712,
+     "segment_index": 1069741516,
+     "rtree": 287368,
+     "curve_objects": 646624,
+     "walk_memo": 13822080,
+     "registry": 3266533,
+     "topology": 1115573,
+     "workbench_other": 457282
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 760453,
+     "points_image": 1356764
+    },
+    "tangle_parts": {
+     "segments": 136030100,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 422827416,
+     "owners": 467421648,
+     "pairs": 1519216,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1360301
+    },
+    "memo_array_bytes": 1659168,
+    "n_points": 2122362,
+    "n_curve_points": 5145,
+    "n_image_points": 1356764,
+    "n_phantom": 760453,
+    "n_bridges": 1619,
+    "n_image_curves": 689,
+    "n_crossings": 2310,
+    "census_s": 4.605939892993774
+   }
+  },
+  {
+   "blast": 24,
+   "blast_s": 23.96394047801732,
+   "step_s": 24.083263842010638,
+   "wall_s": 356.53148976300145,
+   "rss": 2792415232,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3112275968,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 7468,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 293351424,
+     "points_image": 556609920,
+     "segment_index": 1075218236,
+     "rtree": 287368,
+     "curve_objects": 649424,
+     "walk_memo": 13883960,
+     "registry": 3279613,
+     "topology": 1115781,
+     "workbench_other": 458498
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 763936,
+     "points_image": 1364240
+    },
+    "tangle_parts": {
+     "segments": 136777300,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 424919576,
+     "owners": 470053568,
+     "pairs": 1524656,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1367773
+    },
+    "memo_array_bytes": 1656880,
+    "n_points": 2133321,
+    "n_curve_points": 5145,
+    "n_image_points": 1364240,
+    "n_phantom": 763936,
+    "n_bridges": 1625,
+    "n_image_curves": 693,
+    "n_crossings": 2320,
+    "census_s": 4.705963177984813
+   }
+  },
+  {
+   "blast": 25,
+   "blast_s": 26.591805839008885,
+   "step_s": 26.71016819201759,
+   "wall_s": 387.95121682199533,
+   "rss": 2777309184,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3060207616,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 9966,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 295226112,
+     "points_image": 560673600,
+     "segment_index": 1081990640,
+     "rtree": 287368,
+     "curve_objects": 653344,
+     "walk_memo": 14012472,
+     "registry": 3295325,
+     "topology": 1116085,
+     "workbench_other": 460346
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 768818,
+     "points_image": 1374200
+    },
+    "tangle_parts": {
+     "segments": 137773000,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 427707536,
+     "owners": 473034696,
+     "pairs": 1532272,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1377730
+    },
+    "memo_array_bytes": 1696848,
+    "n_points": 2148163,
+    "n_curve_points": 5145,
+    "n_image_points": 1374200,
+    "n_phantom": 768818,
+    "n_bridges": 1636,
+    "n_image_curves": 696,
+    "n_crossings": 2334,
+    "census_s": 4.867361137003172
+   }
+  },
+  {
+   "blast": 26,
+   "blast_s": 25.92861436799285,
+   "step_s": 26.051002539985348,
+   "wall_s": 418.87236121101887,
+   "rss": 2753048576,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3104923648,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 4743,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 296112000,
+     "points_image": 562610376,
+     "segment_index": 1085381200,
+     "rtree": 287368,
+     "curve_objects": 655584,
+     "walk_memo": 13968944,
+     "registry": 3305589,
+     "topology": 1116261,
+     "workbench_other": 461330
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 771125,
+     "points_image": 1378947
+    },
+    "tangle_parts": {
+     "segments": 138247400,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 429035856,
+     "owners": 474618184,
+     "pairs": 1536624,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1382474
+    },
+    "memo_array_bytes": 1613280,
+    "n_points": 2155217,
+    "n_curve_points": 5145,
+    "n_image_points": 1378947,
+    "n_phantom": 771125,
+    "n_bridges": 1641,
+    "n_image_curves": 699,
+    "n_crossings": 2342,
+    "census_s": 4.589446930011036
+   }
+  },
+  {
+   "blast": 27,
+   "blast_s": 24.701175405993126,
+   "step_s": 24.844426016003126,
+   "wall_s": 448.3091580150067,
+   "rss": 3042492416,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3138359296,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 5320,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 297057408,
+     "points_image": 564785832,
+     "segment_index": 1089151668,
+     "rtree": 287368,
+     "curve_objects": 657264,
+     "walk_memo": 14024440,
+     "registry": 3314037,
+     "topology": 1116373,
+     "workbench_other": 462026
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 773587,
+     "points_image": 1384279
+    },
+    "tangle_parts": {
+     "segments": 138780300,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 430527976,
+     "owners": 476360368,
+     "pairs": 1539888,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1387803
+    },
+    "memo_array_bytes": 1622512,
+    "n_points": 2163011,
+    "n_curve_points": 5145,
+    "n_image_points": 1384279,
+    "n_phantom": 773587,
+    "n_bridges": 1644,
+    "n_image_curves": 702,
+    "n_crossings": 2348,
+    "census_s": 4.669235307985218
+   }
+  },
+  {
+   "blast": 28,
+   "blast_s": 25.858819064014824,
+   "step_s": 25.973218733997783,
+   "wall_s": 478.9545445530093,
+   "rss": 3065982976,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3065982976,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 6298,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 298323072,
+     "points_image": 567353784,
+     "segment_index": 1093433588,
+     "rtree": 287368,
+     "curve_objects": 660064,
+     "walk_memo": 14097680,
+     "registry": 3325117,
+     "topology": 1116597,
+     "workbench_other": 463354
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 776883,
+     "points_image": 1390573
+    },
+    "tangle_parts": {
+     "segments": 139409500,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 432289736,
+     "owners": 478245888,
+     "pairs": 1545328,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1394095
+    },
+    "memo_array_bytes": 1638160,
+    "n_points": 2172601,
+    "n_curve_points": 5145,
+    "n_image_points": 1390573,
+    "n_phantom": 776883,
+    "n_bridges": 1652,
+    "n_image_curves": 704,
+    "n_crossings": 2358,
+    "census_s": 4.543206424015807
+   }
+  },
+  {
+   "blast": 29,
+   "blast_s": 26.49758164800005,
+   "step_s": 26.618411178991664,
+   "wall_s": 510.11897316901013,
+   "rss": 3099578368,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3099578368,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 1385,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 298486272,
+     "points_image": 567919680,
+     "segment_index": 1094523308,
+     "rtree": 287368,
+     "curve_objects": 660624,
+     "walk_memo": 14029424,
+     "registry": 3327933,
+     "topology": 1116645,
+     "workbench_other": 463586
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 777308,
+     "points_image": 1391960
+    },
+    "tangle_parts": {
+     "segments": 139548100,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 432677816,
+     "owners": 478807840,
+     "pairs": 1546416,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1395481
+    },
+    "memo_array_bytes": 1559552,
+    "n_points": 2174413,
+    "n_curve_points": 5145,
+    "n_image_points": 1391960,
+    "n_phantom": 777308,
+    "n_bridges": 1653,
+    "n_image_curves": 705,
+    "n_crossings": 2360,
+    "census_s": 4.654625221010065
+   }
+  },
+  {
+   "blast": 30,
+   "blast_s": 24.966260333982063,
+   "step_s": 25.102881253988016,
+   "wall_s": 539.8793206420087,
+   "rss": 3134517248,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3262373888,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 2373,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 298867968,
+     "points_image": 568890312,
+     "segment_index": 1096204260,
+     "rtree": 287368,
+     "curve_objects": 661184,
+     "walk_memo": 14066120,
+     "registry": 3330749,
+     "topology": 1116677,
+     "workbench_other": 463818
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 778302,
+     "points_image": 1394339
+    },
+    "tangle_parts": {
+     "segments": 139785900,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 433343656,
+     "owners": 479584064,
+     "pairs": 1547504,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1397859
+    },
+    "memo_array_bytes": 1575360,
+    "n_points": 2177786,
+    "n_curve_points": 5145,
+    "n_image_points": 1394339,
+    "n_phantom": 778302,
+    "n_bridges": 1654,
+    "n_image_curves": 706,
+    "n_crossings": 2362,
+    "census_s": 4.69035517500015
+   }
+  },
+  {
+   "blast": 31,
+   "blast_s": 1.148150524997618,
+   "step_s": 1.1483677649812307,
+   "wall_s": 545.7218368860194,
+   "rss": 3134660608,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3134660608,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 0,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 298867968,
+     "points_image": 568890312,
+     "segment_index": 1096204260,
+     "rtree": 287368,
+     "curve_objects": 661184,
+     "walk_memo": 35102032,
+     "registry": 3330749,
+     "topology": 1116677,
+     "workbench_other": 463818
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 778302,
+     "points_image": 1394339
+    },
+    "tangle_parts": {
+     "segments": 139785900,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 433343656,
+     "owners": 479584064,
+     "pairs": 1547504,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1397859
+    },
+    "memo_array_bytes": 22327728,
+    "n_points": 2177786,
+    "n_curve_points": 5145,
+    "n_image_points": 1394339,
+    "n_phantom": 778302,
+    "n_bridges": 1654,
+    "n_image_curves": 706,
+    "n_crossings": 2362,
+    "census_s": 4.787114960025065
+   }
+  },
+  {
+   "blast": 32,
+   "blast_s": 0.43379760801326483,
+   "step_s": 0.4340196250122972,
+   "wall_s": 550.9459147599991,
+   "rss": 3136462848,
+   "peak_rss_so_far": 3304984576,
+   "step_peak_rss": 3136462848,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 0,
+   "census": {
+    "bytes": {
+     "branch_points": 880,
+     "points_curve": 2099320,
+     "points_phantom": 298867968,
+     "points_image": 568890312,
+     "segment_index": 1096204260,
+     "rtree": 287368,
+     "curve_objects": 661184,
+     "walk_memo": 35102032,
+     "registry": 3330749,
+     "topology": 1116677,
+     "workbench_other": 463818
+    },
+    "counts": {
+     "branch_points": 1,
+     "points_curve": 5145,
+     "points_phantom": 778302,
+     "points_image": 1394339
+    },
+    "tangle_parts": {
+     "segments": 139785900,
+     "seg_lookup": 41943136,
+     "edge_to_sid": 433343656,
+     "owners": 479584064,
+     "pairs": 1547504,
+     "rtree_entries": {
+      "unstable": 4009,
+      "stable": 217
+     },
+     "n_segments": 1397859
+    },
+    "memo_array_bytes": 22327728,
+    "n_points": 2177786,
+    "n_curve_points": 5145,
+    "n_image_points": 1394339,
+    "n_phantom": 778302,
+    "n_bridges": 1654,
+    "n_image_curves": 706,
+    "n_crossings": 2362,
+    "census_s": 4.9043413939944
+   }
+  }
+ ],
+ "stopped": "plateau: no new points since blast 30",
+ "scale": {
+  "k": 2.5,
+  "area_cutoff": 1e-07,
+  "min_separation": 1e-05,
+  "stop_gb": 8.0,
+  "max_blasts": 40
+ },
+ "timer": {
+  "paths": [
+   {
+    "path": "blast/diagnose",
+    "self_s": 398.5857319907518,
+    "calls": 32
+   },
+   {
+    "path": "blast/iterate_bridge/index",
+    "self_s": 9.931449933559634,
+    "calls": 706
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/refine",
+    "self_s": 8.930967132939259,
+    "calls": 706
+   },
+   {
+    "path": "blast/walk",
+    "self_s": 6.787936041102512,
+    "calls": 15951
+   },
+   {
+    "path": "blast/infer_iterates",
+    "self_s": 6.563038146006875,
+    "calls": 32
+   },
+   {
+    "path": "blast/separation/walk",
+    "self_s": 5.128891258646036,
+    "calls": 11324
+   },
+   {
+    "path": "blast/separation",
+    "self_s": 5.090037236455828,
+    "calls": 36693
+   },
+   {
+    "path": "blast/diagnose/walk",
+    "self_s": 4.542885879258392,
+    "calls": 29982
+   },
+   {
+    "path": "blast/iterate_bridge/infer_iterates",
+    "self_s": 2.9967035449226387,
+    "calls": 706
+   },
+   {
+    "path": "blast",
+    "self_s": 2.2249697663646657,
+    "calls": 32
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/walk",
+    "self_s": 1.989563663257286,
+    "calls": 4236
+   },
+   {
+    "path": "blast/iterate_bridge/resolved_ids",
+    "self_s": 1.7573992753168568,
+    "calls": 706
+   },
+   {
+    "path": "blast/iterate_bridge/cut/index",
+    "self_s": 1.2520559124532156,
+    "calls": 1651
+   },
+   {
+    "path": "topology",
+    "self_s": 1.240631932130782,
+    "calls": 33
+   },
+   {
+    "path": "blast/iterate_bridge/iterate",
+    "self_s": 1.1799506875686347,
+    "calls": 706
+   },
+   {
+    "path": "topology/walk",
+    "self_s": 1.1008131897833664,
+    "calls": 3924
+   },
+   {
+    "path": "blast/iterate_bridge/resolve",
+    "self_s": 0.6272341737058014,
+    "calls": 706
+   },
+   {
+    "path": "blast/iterate_bridge/generation",
+    "self_s": 0.3420304640312679,
+    "calls": 707
+   },
+   {
+    "path": "topology/topology",
+    "self_s": 0.3090703221678268,
+    "calls": 33
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/refine/walk",
+    "self_s": 0.29744853475131094,
+    "calls": 706
+   },
+   {
+    "path": "topology/topology/walk",
+    "self_s": 0.163846259994898,
+    "calls": 1389
+   },
+   {
+    "path": "topology/topology/trellis_build",
+    "self_s": 0.07931321879732423,
+    "calls": 30
+   },
+   {
+    "path": "blast/iterate_bridge",
+    "self_s": 0.057300072454381734,
+    "calls": 707
+   },
+   {
+    "path": "intersections/index",
+    "self_s": 0.03718775900779292,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate/refine",
+    "self_s": 0.03250592909171246,
+    "calls": 10
+   },
+   {
+    "path": "zone/intersections/index",
+    "self_s": 0.03144596901256591,
+    "calls": 1
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/refine/map",
+    "self_s": 0.026744147995486856,
+    "calls": 1694
+   },
+   {
+    "path": "blast/iterate_bridge/cut",
+    "self_s": 0.02444551364169456,
+    "calls": 706
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/map",
+    "self_s": 0.021043736167484894,
+    "calls": 706
+   },
+   {
+    "path": "blast/iterate_bridge/infer_iterates/map",
+    "self_s": 0.021010755299357697,
+    "calls": 706
+   },
+   {
+    "path": "blast/iterate_bridge/register",
+    "self_s": 0.015659328579204157,
+    "calls": 2358
+   },
+   {
+    "path": "blast/iterate_bridge/register_bridge",
+    "self_s": 0.009231587842805311,
+    "calls": 1651
+   },
+   {
+    "path": "grow/grow/iterate/refine",
+    "self_s": 0.009027576103108004,
+    "calls": 9
+   },
+   {
+    "path": "grow/iterate/walk",
+    "self_s": 0.00561277597444132,
+    "calls": 60
+   },
+   {
+    "path": "intersections/diagnose",
+    "self_s": 0.0033277450129389763,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/diagnose",
+    "self_s": 0.0026018889620900154,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/cut/index",
+    "self_s": 0.001805935986340046,
+    "calls": 3
+   },
+   {
+    "path": "create_bridges/cut/index",
+    "self_s": 0.0017265870119445026,
+    "calls": 5
+   },
+   {
+    "path": "grow/grow/iterate/walk",
+    "self_s": 0.0016071601130533963,
+    "calls": 54
+   },
+   {
+    "path": "grow/iterate",
+    "self_s": 0.001487214001826942,
+    "calls": 10
+   },
+   {
+    "path": "grow/iterate/refine/walk",
+    "self_s": 0.0012851199135184288,
+    "calls": 10
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/image_chains",
+    "self_s": 0.001136415870860219,
+    "calls": 706
+   },
+   {
+    "path": "zone",
+    "self_s": 0.0010994209442287683,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/diagnose/walk",
+    "self_s": 0.0009717860084492713,
+    "calls": 7
+   },
+   {
+    "path": "grow/walk",
+    "self_s": 0.0009374729415867478,
+    "calls": 21
+   },
+   {
+    "path": "blast/iterate_bridge/infer_iterates/resolved_ids",
+    "self_s": 0.0008453071350231767,
+    "calls": 706
+   },
+   {
+    "path": "grow/grow/iterate",
+    "self_s": 0.000734595931135118,
+    "calls": 9
+   },
+   {
+    "path": "intersections/register/walk",
+    "self_s": 0.0007187229639384896,
+    "calls": 2
+   },
+   {
+    "path": "intersections/diagnose/walk",
+    "self_s": 0.0006992639973759651,
+    "calls": 2
+   },
+   {
+    "path": "intersections/resolve",
+    "self_s": 0.0006531719991471618,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections",
+    "self_s": 0.0006362480053212494,
+    "calls": 1
+   },
+   {
+    "path": "fixed_point",
+    "self_s": 0.0006097849982324988,
+    "calls": 2
+   },
+   {
+    "path": "zone/intersections/register/walk",
+    "self_s": 0.0006085649947635829,
+    "calls": 2
+   },
+   {
+    "path": "zone/create_bridges/cut/walk",
+    "self_s": 0.000596728001255542,
+    "calls": 1
+   },
+   {
+    "path": "zone/walk",
+    "self_s": 0.0005750940181314945,
+    "calls": 2
+   },
+   {
+    "path": "create_bridges/cut/walk",
+    "self_s": 0.0005283700011204928,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/resolve",
+    "self_s": 0.0004669339978136122,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/refine/walk",
+    "self_s": 0.00032554296194575727,
+    "calls": 9
+   },
+   {
+    "path": "grow/iterate/image_chains",
+    "self_s": 0.0003178770130034536,
+    "calls": 10
+   },
+   {
+    "path": "grow/grow/walk",
+    "self_s": 0.00030958300339989364,
+    "calls": 27
+   },
+   {
+    "path": "grow/iterate/merge",
+    "self_s": 0.00030026203603483737,
+    "calls": 10
+   },
+   {
+    "path": "grow",
+    "self_s": 0.0002566860639490187,
+    "calls": 2
+   },
+   {
+    "path": "pips",
+    "self_s": 0.00023676801356486976,
+    "calls": 1
+   },
+   {
+    "path": "trim",
+    "self_s": 0.00019621700630523264,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow",
+    "self_s": 0.0001755499397404492,
+    "calls": 9
+   },
+   {
+    "path": "grow/iterate/refine/map",
+    "self_s": 0.00016631800099276006,
+    "calls": 13
+   },
+   {
+    "path": "intersections",
+    "self_s": 0.00015353300841525197,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/map",
+    "self_s": 0.00013826295617036521,
+    "calls": 9
+   },
+   {
+    "path": "blast/diagnose/resolved_ids",
+    "self_s": 0.0001378410088364035,
+    "calls": 32
+   },
+   {
+    "path": "grow/iterate/map",
+    "self_s": 0.00012676900951191783,
+    "calls": 10
+   },
+   {
+    "path": "intersections/infer_iterates",
+    "self_s": 0.00012118101585656404,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/image_chains",
+    "self_s": 0.00010712296352721751,
+    "calls": 9
+   },
+   {
+    "path": "create_bridges",
+    "self_s": 8.877902291715145e-05,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/merge",
+    "self_s": 8.463003905490041e-05,
+    "calls": 9
+   },
+   {
+    "path": "grow/grow/iterate/refine/map",
+    "self_s": 8.229896775446832e-05,
+    "calls": 10
+   },
+   {
+    "path": "zone/intersections/infer_iterates",
+    "self_s": 7.618602830916643e-05,
+    "calls": 1
+   },
+   {
+    "path": "initialise",
+    "self_s": 7.53119820728898e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/register",
+    "self_s": 6.584098446182907e-05,
+    "calls": 5
+   },
+   {
+    "path": "blast/infer_iterates/resolved_ids",
+    "self_s": 6.539502646774054e-05,
+    "calls": 32
+   },
+   {
+    "path": "intersections/register",
+    "self_s": 6.092700641602278e-05,
+    "calls": 7
+   },
+   {
+    "path": "topology/topology/trellis_build/resolved_ids",
+    "self_s": 4.707110929302871e-05,
+    "calls": 30
+   },
+   {
+    "path": "create_bridges/cut",
+    "self_s": 4.6910980017855763e-05,
+    "calls": 1
+   },
+   {
+    "path": "pips/trellis_build",
+    "self_s": 4.505898687057197e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/cut",
+    "self_s": 3.993901191279292e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/trellis_build",
+    "self_s": 3.640900831669569e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges",
+    "self_s": 2.8890033718198538e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/register_bridge",
+    "self_s": 1.879199407994747e-05,
+    "calls": 3
+   },
+   {
+    "path": "intersections/register/register",
+    "self_s": 1.8618011381477118e-05,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/register_bridge",
+    "self_s": 1.7843995010480285e-05,
+    "calls": 5
+   },
+   {
+    "path": "intersections/infer_iterates/resolved_ids",
+    "self_s": 1.6128993593156338e-05,
+    "calls": 1
+   },
+   {
+    "path": "intersections/infer_iterates/map",
+    "self_s": 1.5211990103125572e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/infer_iterates/map",
+    "self_s": 1.4110992196947336e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/register/register",
+    "self_s": 1.3494020095095038e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/infer_iterates/resolved_ids",
+    "self_s": 1.2715987395495176e-05,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/generation",
+    "self_s": 9.392999345436692e-06,
+    "calls": 9
+   },
+   {
+    "path": "grow/generation",
+    "self_s": 3.4399854484945536e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/generation",
+    "self_s": 2.90299067273736e-06,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/generation",
+    "self_s": 2.5070039555430412e-06,
+    "calls": 1
+   },
+   {
+    "path": "initialise/generation",
+    "self_s": 1.6050180420279503e-06,
+    "calls": 2
+   },
+   {
+    "path": "trim/resolved_ids",
+    "self_s": 1.1989905033260584e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/generation",
+    "self_s": 1.1980009730905294e-06,
+    "calls": 1
+   },
+   {
+    "path": "pips/trellis_build/resolved_ids",
+    "self_s": 1.1520169209688902e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/resolved_ids",
+    "self_s": 1.1250085663050413e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/trellis_build/resolved_ids",
+    "self_s": 1.0060030035674572e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/generation",
+    "self_s": 9.489885997027159e-07,
+    "calls": 1
+   },
+   {
+    "path": "intersections/generation",
+    "self_s": 7.610069587826729e-07,
+    "calls": 1
+   },
+   {
+    "path": "intersections/diagnose/resolved_ids",
+    "self_s": 5.869951564818621e-07,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/resolved_ids",
+    "self_s": 5.479960236698389e-07,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/diagnose/resolved_ids",
+    "self_s": 5.13013219460845e-07,
+    "calls": 1
+   }
+  ],
+  "by_stage": {
+   "fixed_point": {
+    "(self)": 0.0006097849982324988
+   },
+   "initialise": {
+    "generation": 1.6050180420279503e-06,
+    "(self)": 7.53119820728898e-05
+   },
+   "grow": {
+    "walk": 0.010077654907945544,
+    "map": 0.0005136489344295114,
+    "image_chains": 0.0004249999765306711,
+    "merge": 0.0003848920750897378,
+    "refine": 0.041533505194820464,
+    "iterate": 0.00222180993296206,
+    "generation": 1.2832984793931246e-05,
+    "(self)": 0.0002566860639490187,
+    "grow": 0.0001755499397404492
+   },
+   "intersections": {
+    "generation": 7.610069587826729e-07,
+    "index": 0.03718775900779292,
+    "walk": 0.0014179869613144547,
+    "register": 7.95450177974999e-05,
+    "resolve": 0.0006531719991471618,
+    "resolved_ids": 1.67159887496382e-05,
+    "map": 1.5211990103125572e-05,
+    "infer_iterates": 0.00012118101585656404,
+    "diagnose": 0.0033277450129389763,
+    "(self)": 0.00015353300841525197
+   },
+   "trim": {
+    "resolved_ids": 1.1989905033260584e-06,
+    "(self)": 0.00019621700630523264
+   },
+   "create_bridges": {
+    "resolved_ids": 5.479960236698389e-07,
+    "walk": 0.0005283700011204928,
+    "index": 0.0017265870119445026,
+    "cut": 4.6910980017855763e-05,
+    "generation": 2.5070039555430412e-06,
+    "register_bridge": 1.7843995010480285e-05,
+    "(self)": 8.877902291715145e-05
+   },
+   "pips": {
+    "resolved_ids": 1.1520169209688902e-06,
+    "trellis_build": 4.505898687057197e-05,
+    "(self)": 0.00023676801356486976
+   },
+   "zone": {
+    "generation": 5.049980245530605e-06,
+    "index": 0.03325190499890596,
+    "walk": 0.002752173022599891,
+    "register": 7.93350045569241e-05,
+    "resolve": 0.0004669339978136122,
+    "resolved_ids": 1.536001218482852e-05,
+    "map": 1.4110992196947336e-05,
+    "infer_iterates": 7.618602830916643e-05,
+    "diagnose": 0.0026018889620900154,
+    "intersections": 0.0006362480053212494,
+    "cut": 3.993901191279292e-05,
+    "register_bridge": 1.879199407994747e-05,
+    "create_bridges": 2.8890033718198538e-05,
+    "trellis_build": 3.640900831669569e-05,
+    "(self)": 0.0010994209442287683
+   },
+   "topology": {
+    "walk": 1.2646594497782644,
+    "topology": 0.3090703221678268,
+    "(self)": 1.240631932130782,
+    "resolved_ids": 4.707110929302871e-05,
+    "trellis_build": 0.07931321879732423
+   },
+   "blast": {
+    "separation": 5.090037236455828,
+    "generation": 0.3420304640312679,
+    "iterate_bridge": 0.057300072454381734,
+    "walk": 18.746725377015537,
+    "map": 0.06879863946232945,
+    "image_chains": 0.001136415870860219,
+    "refine": 8.930967132939259,
+    "iterate": 1.1799506875686347,
+    "index": 11.18350584601285,
+    "resolve": 0.6272341737058014,
+    "register": 0.015659328579204157,
+    "resolved_ids": 1.7584478184871841,
+    "cut": 0.02444551364169456,
+    "infer_iterates": 9.559741690929513,
+    "register_bridge": 0.009231587842805311,
+    "diagnose": 398.5857319907518,
+    "(self)": 2.2249697663646657
+   }
+  },
+  "stage_total": {
+   "fixed_point": 0.0006097849982324988,
+   "initialise": 7.691700011491776e-05,
+   "grow": 0.05560158001026139,
+   "intersections": 0.042973611009074375,
+   "trim": 0.0001974159968085587,
+   "create_bridges": 0.002411546010989696,
+   "pips": 0.0002829790173564106,
+   "zone": 0.041122641996480525,
+   "topology": 2.8937219939834904,
+   "blast": 458.4059137421136
+  },
+  "top_events": [
+   {
+    "stage": "fixed_point",
+    "seconds": 0.0005981370049994439,
+    "peak_rss": 124751872,
+    "rss_after": 124751872
+   },
+   {
+    "stage": "fixed_point",
+    "seconds": 1.1647993233054876e-05,
+    "peak_rss": 124760064,
+    "rss_after": 124760064
+   },
+   {
+    "stage": "initialise",
+    "seconds": 7.691700011491776e-05,
+    "peak_rss": 124772352,
+    "rss_after": 124772352
+   },
+   {
+    "stage": "grow",
+    "seconds": 0.04294497601222247,
+    "peak_rss": 129728512,
+    "rss_after": 129728512
+   },
+   {
+    "stage": "grow",
+    "seconds": 0.012656603998038918,
+    "peak_rss": 129867776,
+    "rss_after": 129867776
+   },
+   {
+    "stage": "intersections",
+    "seconds": 0.042973611009074375,
+    "peak_rss": 136699904,
+    "rss_after": 136699904
+   },
+   {
+    "stage": "trim",
+    "seconds": 0.0001974159968085587,
+    "peak_rss": 136699904,
+    "rss_after": 136699904
+   },
+   {
+    "stage": "create_bridges",
+    "seconds": 0.002411546010989696,
+    "peak_rss": 136704000,
+    "rss_after": 136704000
+   },
+   {
+    "stage": "pips",
+    "seconds": 0.0002829790173564106,
+    "peak_rss": 136704000,
+    "rss_after": 136704000
+   },
+   {
+    "stage": "zone",
+    "seconds": 0.041122641996480525,
+    "peak_rss": 136732672,
+    "rss_after": 136732672
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.006209451996255666,
+    "peak_rss": 136876032,
+    "rss_after": 136876032
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.02241656099795364,
+    "peak_rss": 139202560,
+    "rss_after": 139202560
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.005476833990542218,
+    "peak_rss": 139223040,
+    "rss_after": 139223040
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.04359047400066629,
+    "peak_rss": 142241792,
+    "rss_after": 142241792
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.011841594008728862,
+    "peak_rss": 142286848,
+    "rss_after": 142286848
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.08146841201232746,
+    "peak_rss": 152256512,
+    "rss_after": 152256512
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.013228558003902435,
+    "peak_rss": 152260608,
+    "rss_after": 149336064
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.14148145602666773,
+    "peak_rss": 164065280,
+    "rss_after": 164065280
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.016467727022245526,
+    "peak_rss": 164077568,
+    "rss_after": 164077568
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.26927339201211,
+    "peak_rss": 205860864,
+    "rss_after": 194531328
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.021852803009096533,
+    "peak_rss": 194539520,
+    "rss_after": 180707328
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.48275014202226885,
+    "peak_rss": 326811648,
+    "rss_after": 248344576
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.030791033001150936,
+    "peak_rss": 248377344,
+    "rss_after": 248377344
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.8582576289772987,
+    "peak_rss": 421920768,
+    "rss_after": 280272896
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.04657709100865759,
+    "peak_rss": 280293376,
+    "rss_after": 280293376
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.753885807003826,
+    "peak_rss": 569888768,
+    "rss_after": 387280896
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.08695027299108915,
+    "peak_rss": 387727360,
+    "rss_after": 387727360
+   },
+   {
+    "stage": "blast",
+    "seconds": 3.4005798239959404,
+    "peak_rss": 812118016,
+    "rss_after": 638955520
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.10809464700287208,
+    "peak_rss": 638955520,
+    "rss_after": 535228416
+   },
+   {
+    "stage": "blast",
+    "seconds": 5.994631526991725,
+    "peak_rss": 1455509504,
+    "rss_after": 1058414592
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.10891556300339289,
+    "peak_rss": 1058414592,
+    "rss_after": 890675200
+   },
+   {
+    "stage": "blast",
+    "seconds": 9.329800233012065,
+    "peak_rss": 2105245696,
+    "rss_after": 1415622656
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.11376785900210962,
+    "peak_rss": 1415622656,
+    "rss_after": 1102868480
+   },
+   {
+    "stage": "blast",
+    "seconds": 12.141702016000636,
+    "peak_rss": 2742210560,
+    "rss_after": 1738104832
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12343099797726609,
+    "peak_rss": 1738104832,
+    "rss_after": 1352433664
+   },
+   {
+    "stage": "blast",
+    "seconds": 15.57608196901856,
+    "peak_rss": 3304984576,
+    "rss_after": 1605369856
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.11162224097643048,
+    "peak_rss": 1605386240,
+    "rss_after": 1605386240
+   },
+   {
+    "stage": "blast",
+    "seconds": 17.255448493990116,
+    "peak_rss": 3142864896,
+    "rss_after": 1783709696
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.11372849601320922,
+    "peak_rss": 1783717888,
+    "rss_after": 1783717888
+   },
+   {
+    "stage": "blast",
+    "seconds": 19.651961797993863,
+    "peak_rss": 3232858112,
+    "rss_after": 2343194624
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12196079699788243,
+    "peak_rss": 2343206912,
+    "rss_after": 2343206912
+   },
+   {
+    "stage": "blast",
+    "seconds": 18.898718359996565,
+    "peak_rss": 2890145792,
+    "rss_after": 2373263360
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12711268398561515,
+    "peak_rss": 2373287936,
+    "rss_after": 2373287936
+   },
+   {
+    "stage": "blast",
+    "seconds": 21.059562272013864,
+    "peak_rss": 2969804800,
+    "rss_after": 2440499200
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.11445283799548633,
+    "peak_rss": 2440519680,
+    "rss_after": 2440519680
+   },
+   {
+    "stage": "blast",
+    "seconds": 25.020645314012654,
+    "peak_rss": 3133956096,
+    "rss_after": 2501746688
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.1156663750007283,
+    "peak_rss": 2501758976,
+    "rss_after": 2501758976
+   },
+   {
+    "stage": "blast",
+    "seconds": 24.406854308006587,
+    "peak_rss": 2897006592,
+    "rss_after": 2546262016
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12510169498273171,
+    "peak_rss": 2546266112,
+    "rss_after": 2546266112
+   },
+   {
+    "stage": "blast",
+    "seconds": 24.01460779600893,
+    "peak_rss": 3182706688,
+    "rss_after": 2667524096
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12132282101083547,
+    "peak_rss": 2667536384,
+    "rss_after": 2667536384
+   },
+   {
+    "stage": "blast",
+    "seconds": 24.91702480200911,
+    "peak_rss": 3024756736,
+    "rss_after": 2688860160
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12584445701213554,
+    "peak_rss": 2688868352,
+    "rss_after": 2688868352
+   },
+   {
+    "stage": "blast",
+    "seconds": 28.448362326977076,
+    "peak_rss": 3010318336,
+    "rss_after": 2730668032
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12718000801396556,
+    "peak_rss": 2730688512,
+    "rss_after": 2730688512
+   },
+   {
+    "stage": "blast",
+    "seconds": 24.54855831101304,
+    "peak_rss": 3083399168,
+    "rss_after": 2783535104
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12340805598068982,
+    "peak_rss": 2783535104,
+    "rss_after": 2783535104
+   },
+   {
+    "stage": "blast",
+    "seconds": 23.963689986994723,
+    "peak_rss": 3112275968,
+    "rss_after": 2792411136
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.11890955999842845,
+    "peak_rss": 2792415232,
+    "rss_after": 2792415232
+   },
+   {
+    "stage": "blast",
+    "seconds": 26.591614250006387,
+    "peak_rss": 3060207616,
+    "rss_after": 2777292800
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.11779030301840976,
+    "peak_rss": 2777309184,
+    "rss_after": 2777309184
+   },
+   {
+    "stage": "blast",
+    "seconds": 25.928304660017602,
+    "peak_rss": 3104923648,
+    "rss_after": 2753032192
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12207281999872066,
+    "peak_rss": 2753048576,
+    "rss_after": 2753048576
+   },
+   {
+    "stage": "blast",
+    "seconds": 24.70094158197753,
+    "peak_rss": 3138359296,
+    "rss_after": 3042484224
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.14291360799688846,
+    "peak_rss": 3042492416,
+    "rss_after": 3042492416
+   },
+   {
+    "stage": "blast",
+    "seconds": 25.858641803002683,
+    "peak_rss": 3065966592,
+    "rss_after": 3065966592
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.11407572001917288,
+    "peak_rss": 3065982976,
+    "rss_after": 3065982976
+   },
+   {
+    "stage": "blast",
+    "seconds": 26.497358544002054,
+    "peak_rss": 3099578368,
+    "rss_after": 3099578368
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.12047250900650397,
+    "peak_rss": 3099578368,
+    "rss_after": 3099578368
+   },
+   {
+    "stage": "blast",
+    "seconds": 24.96601307502715,
+    "peak_rss": 3262373888,
+    "rss_after": 3134500864
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13615598398610018,
+    "peak_rss": 3134517248,
+    "rss_after": 3134517248
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.148032847995637,
+    "peak_rss": 3134660608,
+    "rss_after": 3134660608
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.0001623809803277254,
+    "peak_rss": 3134660608,
+    "rss_after": 3134660608
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.4336537689960096,
+    "peak_rss": 3136462848,
+    "rss_after": 3136462848
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.00016420899191871285,
+    "peak_rss": 3136462848,
+    "rss_after": 3136462848
+   }
+  ]
+ },
+ "wall_s": 562.0929927040124,
+ "peak_rss": 3304984576,
+ "rss_final": 3138527232,
+ "census": {
+  "bytes": {
+   "branch_points": 880,
+   "points_curve": 2099320,
+   "points_phantom": 298867968,
+   "points_image": 568890312,
+   "segment_index": 1096204260,
+   "rtree": 287368,
+   "curve_objects": 661184,
+   "walk_memo": 35102032,
+   "registry": 3330749,
+   "topology": 1116677,
+   "workbench_other": 463818
+  },
+  "counts": {
+   "branch_points": 1,
+   "points_curve": 5145,
+   "points_phantom": 778302,
+   "points_image": 1394339
+  },
+  "tangle_parts": {
+   "segments": 139785900,
+   "seg_lookup": 41943136,
+   "edge_to_sid": 433343656,
+   "owners": 479584064,
+   "pairs": 1547504,
+   "rtree_entries": {
+    "unstable": 4009,
+    "stable": 217
+   },
+   "n_segments": 1397859
+  },
+  "memo_array_bytes": 22327728,
+  "n_points": 2177786,
+  "n_curve_points": 5145,
+  "n_image_points": 1394339,
+  "n_phantom": 778302,
+  "n_bridges": 1654,
+  "n_image_curves": 706,
+  "n_crossings": 2362,
+  "census_s": 4.448823523998726,
+  "rtree_measured_bytes": 512000
+ }
+}

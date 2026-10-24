@@ -1,0 +1,669 @@
+{
+ "case": "k10",
+ "mode": "memory",
+ "git_sha": "a8bb8a0",
+ "rss_baseline": 122839040,
+ "traced_baseline": 0,
+ "series": [],
+ "stopped": null,
+ "wall_build_s": 0.11929874500492588,
+ "traced_final": 3455382,
+ "traced_peak": 3489438,
+ "top_files": [
+  {
+   "file": "src/tanglepack/numerics/Tangle.py",
+   "bytes": 1665266,
+   "count": 13282
+  },
+  {
+   "file": "src/tanglepack/numerics/BasePoint.py",
+   "bytes": 844769,
+   "count": 14433
+  },
+  {
+   "file": "src/tanglepack/numerics/ManifoldMachine.py",
+   "bytes": 463640,
+   "count": 14198
+  },
+  {
+   "file": "/tmp/claude-1000/-home-dezhu-Development-TanglePack-tangle-pack/7a98b0ff-df74-46bf-9769-0728d7d299d5/scratchpad/n0/profile/profile_numerics.py",
+   "bytes": 40808,
+   "count": 255
+  },
+  {
+   "file": "src/tanglepack/topology/Trellis.py",
+   "bytes": 36454,
+   "count": 126
+  },
+  {
+   "file": "env/lib/python3.10/site-packages/rtree/index.py",
+   "bytes": 32679,
+   "count": 245
+  },
+  {
+   "file": "src/tanglepack/numerics/TangleWorkbench.py",
+   "bytes": 31432,
+   "count": 116
+  },
+  {
+   "file": "src/tanglepack/topology/diagnostics.py",
+   "bytes": 27536,
+   "count": 70
+  },
+  {
+   "file": "src/tanglepack/numerics/diagnostics.py",
+   "bytes": 23477,
+   "count": 49
+  },
+  {
+   "file": "<frozen importlib._bootstrap_external>",
+   "bytes": 20598,
+   "count": 50
+  },
+  {
+   "file": "src/tanglepack/numerics/FixedPointSolver.py",
+   "bytes": 20392,
+   "count": 56
+  },
+  {
+   "file": "src/tanglepack/topology/StablePartition.py",
+   "bytes": 18792,
+   "count": 82
+  },
+  {
+   "file": "env/lib/python3.10/site-packages/numpy/_core/fromnumeric.py",
+   "bytes": 16922,
+   "count": 97
+  },
+  {
+   "file": "/usr/lib/python3.10/abc.py",
+   "bytes": 16598,
+   "count": 191
+  },
+  {
+   "file": "env/lib/python3.10/site-packages/scipy/_lib/_elementwise_iterative_method.py",
+   "bytes": 14232,
+   "count": 31
+  }
+ ],
+ "traced_import_noise": 21002,
+ "top_lines": [
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:514",
+   "bytes": 485240,
+   "count": 5199
+  },
+  {
+   "site": "src/tanglepack/numerics/BasePoint.py:58",
+   "bytes": 459280,
+   "count": 6379
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:578",
+   "bytes": 448080,
+   "count": 1734
+  },
+  {
+   "site": "src/tanglepack/numerics/BasePoint.py:254",
+   "bytes": 383952,
+   "count": 8042
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:577",
+   "bytes": 191168,
+   "count": 19
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:830",
+   "bytes": 140352,
+   "count": 4372
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:735",
+   "bytes": 125364,
+   "count": 1736
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:116",
+   "bytes": 106632,
+   "count": 1481
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:533",
+   "bytes": 96248,
+   "count": 1498
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:524",
+   "bytes": 73752,
+   "count": 1
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:523",
+   "bytes": 73752,
+   "count": 1
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:779",
+   "bytes": 69936,
+   "count": 2914
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:780",
+   "bytes": 69936,
+   "count": 1457
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:522",
+   "bytes": 41328,
+   "count": 1476
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:790",
+   "bytes": 39368,
+   "count": 703
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:789",
+   "bytes": 39200,
+   "count": 700
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:781",
+   "bytes": 34968,
+   "count": 1457
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:784",
+   "bytes": 22664,
+   "count": 1390
+  },
+  {
+   "site": "<frozen importlib._bootstrap_external>:672",
+   "bytes": 20109,
+   "count": 44
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:360",
+   "bytes": 19560,
+   "count": 543
+  },
+  {
+   "site": "/tmp/claude-1000/-home-dezhu-Development-TanglePack-tangle-pack/7a98b0ff-df74-46bf-9769-0728d7d299d5/scratchpad/n0/profile/profile_numerics.py:218",
+   "bytes": 18592,
+   "count": 53
+  },
+  {
+   "site": "/usr/lib/python3.10/abc.py:123",
+   "bytes": 16598,
+   "count": 191
+  },
+  {
+   "site": "env/lib/python3.10/site-packages/numpy/_core/fromnumeric.py:57",
+   "bytes": 13730,
+   "count": 85
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:359",
+   "bytes": 13536,
+   "count": 545
+  },
+  {
+   "site": "env/lib/python3.10/site-packages/rtree/index.py:937",
+   "bytes": 12822,
+   "count": 90
+  }
+ ],
+ "census": {
+  "bytes": {
+   "branch_points": 880,
+   "points_curve": 707224,
+   "points_phantom": 559488,
+   "segment_index": 1451360,
+   "rtree": 117844,
+   "curve_objects": 2344,
+   "walk_memo": 3680,
+   "registry": 14869,
+   "topology": 17516,
+   "workbench_other": 11643
+  },
+  "counts": {
+   "branch_points": 1,
+   "points_curve": 1733,
+   "points_phantom": 1457
+  },
+  "tangle_parts": {
+   "segments": 173296,
+   "seg_lookup": 73816,
+   "edge_to_sid": 559056,
+   "owners": 639392,
+   "pairs": 5800,
+   "rtree_entries": {
+    "unstable": 1502,
+    "stable": 231
+   },
+   "n_segments": 1733
+  },
+  "memo_array_bytes": 1440,
+  "n_points": 3190,
+  "n_curve_points": 1733,
+  "n_image_points": 0,
+  "n_phantom": 1457,
+  "n_bridges": 7,
+  "n_image_curves": 0,
+  "n_crossings": 8,
+  "census_s": 0.04506195199792273
+ },
+ "timer": {
+  "paths": [
+   {
+    "path": "intersections/index",
+    "self_s": 0.04091317701386288,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate/refine",
+    "self_s": 0.036944498046068475,
+    "calls": 9
+   },
+   {
+    "path": "fixed_point",
+    "self_s": 0.00993748102337122,
+    "calls": 2
+   },
+   {
+    "path": "grow/grow/iterate/refine",
+    "self_s": 0.007599573116749525,
+    "calls": 8
+   },
+   {
+    "path": "grow/iterate/walk",
+    "self_s": 0.003938622045097873,
+    "calls": 54
+   },
+   {
+    "path": "intersections/diagnose",
+    "self_s": 0.0034674190101213753,
+    "calls": 1
+   },
+   {
+    "path": "intersections/resolve",
+    "self_s": 0.0017529890174046159,
+    "calls": 1
+   },
+   {
+    "path": "topology",
+    "self_s": 0.00148702398291789,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate",
+    "self_s": 0.0014263889752328396,
+    "calls": 9
+   },
+   {
+    "path": "intersections/register/walk",
+    "self_s": 0.0010491750435903668,
+    "calls": 2
+   },
+   {
+    "path": "grow/grow/iterate/walk",
+    "self_s": 0.0009832689829636365,
+    "calls": 48
+   },
+   {
+    "path": "create_bridges/cut/index",
+    "self_s": 0.0009536520228721201,
+    "calls": 7
+   },
+   {
+    "path": "grow/grow/iterate",
+    "self_s": 0.0006712059257552028,
+    "calls": 8
+   },
+   {
+    "path": "grow/iterate/refine/walk",
+    "self_s": 0.00065068100229837,
+    "calls": 9
+   },
+   {
+    "path": "topology/walk",
+    "self_s": 0.000598295038798824,
+    "calls": 12
+   },
+   {
+    "path": "intersections/diagnose/walk",
+    "self_s": 0.0005408340075518936,
+    "calls": 2
+   },
+   {
+    "path": "grow/walk",
+    "self_s": 0.0004564459959510714,
+    "calls": 19
+   },
+   {
+    "path": "pips",
+    "self_s": 0.00043325399747118354,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/cut/walk",
+    "self_s": 0.00042085201130248606,
+    "calls": 1
+   },
+   {
+    "path": "grow",
+    "self_s": 0.0004051870491821319,
+    "calls": 2
+   },
+   {
+    "path": "intersections/infer_iterates",
+    "self_s": 0.0003182190121151507,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow",
+    "self_s": 0.0003108300734311342,
+    "calls": 8
+   },
+   {
+    "path": "grow/iterate/refine/map",
+    "self_s": 0.0002617649734020233,
+    "calls": 12
+   },
+   {
+    "path": "grow/iterate/map",
+    "self_s": 0.00024061097064986825,
+    "calls": 9
+   },
+   {
+    "path": "grow/grow/iterate/map",
+    "self_s": 0.00023759499890729785,
+    "calls": 8
+   },
+   {
+    "path": "intersections",
+    "self_s": 0.00023587586474604905,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate/image_chains",
+    "self_s": 0.00022052301210351288,
+    "calls": 9
+   },
+   {
+    "path": "intersections/register",
+    "self_s": 0.00021108202054165304,
+    "calls": 9
+   },
+   {
+    "path": "grow/grow/iterate/refine/walk",
+    "self_s": 0.00019760793657042086,
+    "calls": 8
+   },
+   {
+    "path": "initialise",
+    "self_s": 0.00017027102876454592,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges",
+    "self_s": 0.00016464394866488874,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/refine/map",
+    "self_s": 0.0001614339416846633,
+    "calls": 8
+   },
+   {
+    "path": "grow/grow/walk",
+    "self_s": 0.00012431899085640907,
+    "calls": 24
+   },
+   {
+    "path": "grow/iterate/merge",
+    "self_s": 0.00011706296936608851,
+    "calls": 9
+   },
+   {
+    "path": "grow/grow/iterate/image_chains",
+    "self_s": 0.00010997799108736217,
+    "calls": 8
+   },
+   {
+    "path": "pips/trellis_build",
+    "self_s": 9.648501873016357e-05,
+    "calls": 1
+   },
+   {
+    "path": "trim",
+    "self_s": 9.461099398322403e-05,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/cut",
+    "self_s": 8.970696944743395e-05,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/merge",
+    "self_s": 4.7707027988508344e-05,
+    "calls": 8
+   },
+   {
+    "path": "create_bridges/register_bridge",
+    "self_s": 4.350903327576816e-05,
+    "calls": 7
+   },
+   {
+    "path": "intersections/infer_iterates/resolved_ids",
+    "self_s": 3.902899334207177e-05,
+    "calls": 1
+   },
+   {
+    "path": "intersections/infer_iterates/map",
+    "self_s": 3.282501711510122e-05,
+    "calls": 1
+   },
+   {
+    "path": "intersections/register/register",
+    "self_s": 3.2760988688096404e-05,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/generation",
+    "self_s": 2.1437997929751873e-05,
+    "calls": 8
+   },
+   {
+    "path": "grow/generation",
+    "self_s": 6.260001100599766e-06,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/generation",
+    "self_s": 4.694011295214295e-06,
+    "calls": 1
+   },
+   {
+    "path": "initialise/generation",
+    "self_s": 4.429981345310807e-06,
+    "calls": 2
+   },
+   {
+    "path": "trim/resolved_ids",
+    "self_s": 2.1930027287453413e-06,
+    "calls": 1
+   },
+   {
+    "path": "pips/trellis_build/resolved_ids",
+    "self_s": 1.6289995983242989e-06,
+    "calls": 1
+   },
+   {
+    "path": "intersections/diagnose/resolved_ids",
+    "self_s": 1.6049889381974936e-06,
+    "calls": 1
+   },
+   {
+    "path": "intersections/generation",
+    "self_s": 1.4220131561160088e-06,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/resolved_ids",
+    "self_s": 1.0580115485936403e-06,
+    "calls": 1
+   }
+  ],
+  "by_stage": {
+   "fixed_point": {
+    "(self)": 0.00993748102337122
+   },
+   "initialise": {
+    "generation": 4.429981345310807e-06,
+    "(self)": 0.00017027102876454592
+   },
+   "grow": {
+    "walk": 0.0063509449537377805,
+    "map": 0.0009014048846438527,
+    "image_chains": 0.00033050100319087505,
+    "merge": 0.00016476999735459685,
+    "refine": 0.044544071162818,
+    "iterate": 0.0020975949009880424,
+    "generation": 2.769799903035164e-05,
+    "(self)": 0.0004051870491821319,
+    "grow": 0.0003108300734311342
+   },
+   "intersections": {
+    "generation": 1.4220131561160088e-06,
+    "index": 0.04091317701386288,
+    "walk": 0.0015900090511422604,
+    "register": 0.00024384300922974944,
+    "resolve": 0.0017529890174046159,
+    "resolved_ids": 4.0633982280269265e-05,
+    "map": 3.282501711510122e-05,
+    "infer_iterates": 0.0003182190121151507,
+    "diagnose": 0.0034674190101213753,
+    "(self)": 0.00023587586474604905
+   },
+   "trim": {
+    "resolved_ids": 2.1930027287453413e-06,
+    "(self)": 9.461099398322403e-05
+   },
+   "create_bridges": {
+    "resolved_ids": 1.0580115485936403e-06,
+    "walk": 0.00042085201130248606,
+    "index": 0.0009536520228721201,
+    "cut": 8.970696944743395e-05,
+    "generation": 4.694011295214295e-06,
+    "register_bridge": 4.350903327576816e-05,
+    "(self)": 0.00016464394866488874
+   },
+   "pips": {
+    "resolved_ids": 1.6289995983242989e-06,
+    "trellis_build": 9.648501873016357e-05,
+    "(self)": 0.00043325399747118354
+   },
+   "topology": {
+    "walk": 0.000598295038798824,
+    "(self)": 0.00148702398291789
+   }
+  },
+  "stage_total": {
+   "fixed_point": 0.00993748102337122,
+   "initialise": 0.00017470101010985672,
+   "grow": 0.055133002024376765,
+   "intersections": 0.048596412991173565,
+   "trim": 9.680399671196938e-05,
+   "create_bridges": 0.001678116008406505,
+   "pips": 0.0005313680157996714,
+   "topology": 0.002085319021716714
+  },
+  "top_events": [
+   {
+    "stage": "fixed_point",
+    "seconds": 0.009919803007505834,
+    "peak_rss": 125104128,
+    "rss_after": 125104128,
+    "traced_after": 161403,
+    "traced_peak": 195363
+   },
+   {
+    "stage": "fixed_point",
+    "seconds": 1.7678015865385532e-05,
+    "peak_rss": 125104128,
+    "rss_after": 125104128,
+    "traced_after": 164311,
+    "traced_peak": 198271
+   },
+   {
+    "stage": "initialise",
+    "seconds": 0.00017470101010985672,
+    "peak_rss": 125128704,
+    "rss_after": 125128704,
+    "traced_after": 179559,
+    "traced_peak": 213519
+   },
+   {
+    "stage": "grow",
+    "seconds": 0.04459479500656016,
+    "peak_rss": 130240512,
+    "rss_after": 130240512,
+    "traced_after": 1361657,
+    "traced_peak": 1943397
+   },
+   {
+    "stage": "grow",
+    "seconds": 0.010538207017816603,
+    "peak_rss": 130277376,
+    "rss_after": 130277376,
+    "traced_after": 1537393,
+    "traced_peak": 1615149
+   },
+   {
+    "stage": "intersections",
+    "seconds": 0.048596412991173565,
+    "peak_rss": 135151616,
+    "rss_after": 135151616,
+    "traced_after": 3237531,
+    "traced_peak": 3840633
+   },
+   {
+    "stage": "trim",
+    "seconds": 9.680399671196938e-05,
+    "peak_rss": 135151616,
+    "rss_after": 135151616,
+    "traced_after": 3238869,
+    "traced_peak": 3272829
+   },
+   {
+    "stage": "create_bridges",
+    "seconds": 0.001678116008406505,
+    "peak_rss": 135151616,
+    "rss_after": 135151616,
+    "traced_after": 3323612,
+    "traced_peak": 3357572
+   },
+   {
+    "stage": "pips",
+    "seconds": 0.0005313680157996714,
+    "peak_rss": 135168000,
+    "rss_after": 135168000,
+    "traced_after": 3375823,
+    "traced_peak": 3409783
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.002085319021716714,
+    "peak_rss": 135270400,
+    "rss_after": 135270400,
+    "traced_after": 3455478,
+    "traced_peak": 3489438
+   }
+  ]
+ },
+ "wall_s": 0.24381062199245207,
+ "peak_rss": 143507456
+}

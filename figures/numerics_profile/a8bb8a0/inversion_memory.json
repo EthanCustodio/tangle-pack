@@ -1,0 +1,797 @@
+{
+ "case": "inversion",
+ "mode": "memory",
+ "git_sha": "a8bb8a0",
+ "rss_baseline": 122957824,
+ "traced_baseline": 0,
+ "series": [],
+ "stopped": null,
+ "wall_build_s": 0.20061649099807255,
+ "traced_final": 3625883,
+ "traced_peak": 3658491,
+ "top_files": [
+  {
+   "file": "src/tanglepack/numerics/Tangle.py",
+   "bytes": 1582546,
+   "count": 13598
+  },
+  {
+   "file": "src/tanglepack/numerics/BasePoint.py",
+   "bytes": 994788,
+   "count": 17161
+  },
+  {
+   "file": "src/tanglepack/numerics/ManifoldMachine.py",
+   "bytes": 513284,
+   "count": 16103
+  },
+  {
+   "file": "env/lib/python3.10/site-packages/rtree/index.py",
+   "bytes": 54391,
+   "count": 440
+  },
+  {
+   "file": "/tmp/claude-1000/-home-dezhu-Development-TanglePack-tangle-pack/7a98b0ff-df74-46bf-9769-0728d7d299d5/scratchpad/n0/profile/profile_numerics.py",
+   "bytes": 53786,
+   "count": 387
+  },
+  {
+   "file": "src/tanglepack/topology/Trellis.py",
+   "bytes": 39046,
+   "count": 152
+  },
+  {
+   "file": "src/tanglepack/numerics/TangleWorkbench.py",
+   "bytes": 35768,
+   "count": 153
+  },
+  {
+   "file": "src/tanglepack/topology/diagnostics.py",
+   "bytes": 27400,
+   "count": 67
+  },
+  {
+   "file": "src/tanglepack/numerics/diagnostics.py",
+   "bytes": 24021,
+   "count": 53
+  },
+  {
+   "file": "src/tanglepack/topology/StablePartition.py",
+   "bytes": 22048,
+   "count": 125
+  },
+  {
+   "file": "<frozen importlib._bootstrap_external>",
+   "bytes": 20598,
+   "count": 50
+  },
+  {
+   "file": "src/tanglepack/numerics/FixedPointSolver.py",
+   "bytes": 19728,
+   "count": 56
+  },
+  {
+   "file": "/usr/lib/python3.10/abc.py",
+   "bytes": 16535,
+   "count": 190
+  },
+  {
+   "file": "src/tanglepack/numerics/IntersectionRegistry.py",
+   "bytes": 15517,
+   "count": 112
+  },
+  {
+   "file": "src/tanglepack/numerics/IterateInference.py",
+   "bytes": 13584,
+   "count": 77
+  }
+ ],
+ "traced_import_noise": 21002,
+ "top_lines": [
+  {
+   "site": "src/tanglepack/numerics/BasePoint.py:58",
+   "bytes": 539056,
+   "count": 7487
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:514",
+   "bytes": 470680,
+   "count": 5043
+  },
+  {
+   "site": "src/tanglepack/numerics/BasePoint.py:254",
+   "bytes": 454160,
+   "count": 9660
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:578",
+   "bytes": 436848,
+   "count": 1682
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:830",
+   "bytes": 136704,
+   "count": 4258
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:735",
+   "bytes": 122340,
+   "count": 1694
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:577",
+   "bytes": 112064,
+   "count": 33
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:116",
+   "bytes": 110736,
+   "count": 1538
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:533",
+   "bytes": 100600,
+   "count": 1566
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:524",
+   "bytes": 73752,
+   "count": 1
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:523",
+   "bytes": 73752,
+   "count": 1
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:779",
+   "bytes": 68112,
+   "count": 2838
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:780",
+   "bytes": 68112,
+   "count": 1419
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:360",
+   "bytes": 64800,
+   "count": 1800
+  },
+  {
+   "site": "src/tanglepack/numerics/Tangle.py:522",
+   "bytes": 47096,
+   "count": 1682
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:359",
+   "bytes": 43680,
+   "count": 1801
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:781",
+   "bytes": 34032,
+   "count": 1418
+  },
+  {
+   "site": "/tmp/claude-1000/-home-dezhu-Development-TanglePack-tangle-pack/7a98b0ff-df74-46bf-9769-0728d7d299d5/scratchpad/n0/profile/profile_numerics.py:218",
+   "bytes": 29120,
+   "count": 118
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:790",
+   "bytes": 24920,
+   "count": 445
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:789",
+   "bytes": 24696,
+   "count": 441
+  },
+  {
+   "site": "env/lib/python3.10/site-packages/rtree/index.py:830",
+   "bytes": 23400,
+   "count": 205
+  },
+  {
+   "site": "src/tanglepack/numerics/ManifoldMachine.py:784",
+   "bytes": 21432,
+   "count": 1313
+  },
+  {
+   "site": "<frozen importlib._bootstrap_external>:672",
+   "bytes": 20109,
+   "count": 44
+  },
+  {
+   "site": "/usr/lib/python3.10/abc.py:123",
+   "bytes": 16535,
+   "count": 190
+  },
+  {
+   "site": "env/lib/python3.10/site-packages/rtree/index.py:937",
+   "bytes": 13206,
+   "count": 93
+  }
+ ],
+ "census": {
+  "bytes": {
+   "points_curve": 948776,
+   "branch_points": 880,
+   "points_phantom": 544896,
+   "segment_index": 1345628,
+   "rtree": 114308,
+   "curve_objects": 4128,
+   "walk_memo": 4672,
+   "registry": 22933,
+   "topology": 33748,
+   "workbench_other": 13647
+  },
+  "counts": {
+   "points_curve": 2325,
+   "branch_points": 1,
+   "points_phantom": 1419
+  },
+  "tangle_parts": {
+   "segments": 168100,
+   "seg_lookup": 73816,
+   "edge_to_sid": 544496,
+   "owners": 549056,
+   "pairs": 10160,
+   "rtree_entries": {
+    "unstable": 1542,
+    "stable": 139
+   },
+   "n_segments": 1681
+  },
+  "memo_array_bytes": 1568,
+  "n_points": 3744,
+  "n_curve_points": 2325,
+  "n_image_points": 0,
+  "n_phantom": 1419,
+  "n_bridges": 12,
+  "n_image_curves": 0,
+  "n_crossings": 13,
+  "census_s": 0.04443071599234827
+ },
+ "timer": {
+  "paths": [
+   {
+    "path": "grow/iterate/refine",
+    "self_s": 0.05931691997102462,
+    "calls": 44
+   },
+   {
+    "path": "intersections/index",
+    "self_s": 0.04187267101951875,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/index",
+    "self_s": 0.036216018022969365,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate/walk",
+    "self_s": 0.01229109091218561,
+    "calls": 264
+   },
+   {
+    "path": "intersections/resolve",
+    "self_s": 0.006227019999641925,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate",
+    "self_s": 0.00593520121765323,
+    "calls": 44
+   },
+   {
+    "path": "intersections/diagnose",
+    "self_s": 0.004622989014023915,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/diagnose",
+    "self_s": 0.003866114013362676,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/resolve",
+    "self_s": 0.003609601000789553,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate/refine/walk",
+    "self_s": 0.0024417849781457335,
+    "calls": 44
+   },
+   {
+    "path": "topology",
+    "self_s": 0.002101472986396402,
+    "calls": 1
+   },
+   {
+    "path": "pips",
+    "self_s": 0.0016431299736723304,
+    "calls": 1
+   },
+   {
+    "path": "grow",
+    "self_s": 0.0012036329717375338,
+    "calls": 2
+   },
+   {
+    "path": "create_bridges/cut/index",
+    "self_s": 0.001132620993303135,
+    "calls": 25
+   },
+   {
+    "path": "zone",
+    "self_s": 0.0010845439683180302,
+    "calls": 1
+   },
+   {
+    "path": "fixed_point",
+    "self_s": 0.001066739991074428,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/cut/index",
+    "self_s": 0.0010654199868440628,
+    "calls": 12
+   },
+   {
+    "path": "zone/intersections",
+    "self_s": 0.00102696506655775,
+    "calls": 1
+   },
+   {
+    "path": "intersections/infer_iterates",
+    "self_s": 0.0009353240020573139,
+    "calls": 1
+   },
+   {
+    "path": "grow/walk",
+    "self_s": 0.0008886339201126248,
+    "calls": 70
+   },
+   {
+    "path": "grow/iterate/image_chains",
+    "self_s": 0.0008715389703866094,
+    "calls": 44
+   },
+   {
+    "path": "zone/intersections/diagnose/walk",
+    "self_s": 0.0008697809826117009,
+    "calls": 29
+   },
+   {
+    "path": "intersections/diagnose/walk",
+    "self_s": 0.0008073669741861522,
+    "calls": 4
+   },
+   {
+    "path": "grow/iterate/map",
+    "self_s": 0.0007881590281613171,
+    "calls": 44
+   },
+   {
+    "path": "grow/iterate/refine/map",
+    "self_s": 0.0006857099651824683,
+    "calls": 31
+   },
+   {
+    "path": "topology/walk",
+    "self_s": 0.000550583004951477,
+    "calls": 16
+   },
+   {
+    "path": "zone/create_bridges/cut/walk",
+    "self_s": 0.0005437609797809273,
+    "calls": 2
+   },
+   {
+    "path": "zone/intersections/infer_iterates",
+    "self_s": 0.0005395989865064621,
+    "calls": 1
+   },
+   {
+    "path": "zone/walk",
+    "self_s": 0.0005335540045052767,
+    "calls": 4
+   },
+   {
+    "path": "create_bridges/cut/walk",
+    "self_s": 0.0004713940143119544,
+    "calls": 2
+   },
+   {
+    "path": "grow/iterate/merge",
+    "self_s": 0.0003732180339284241,
+    "calls": 44
+   },
+   {
+    "path": "initialise/iterate/refine",
+    "self_s": 0.00036744403769262135,
+    "calls": 2
+   },
+   {
+    "path": "intersections",
+    "self_s": 0.00036472492502070963,
+    "calls": 1
+   },
+   {
+    "path": "initialise",
+    "self_s": 0.00024420800036750734,
+    "calls": 1
+   },
+   {
+    "path": "intersections/register/walk",
+    "self_s": 0.0002300950000062585,
+    "calls": 2
+   },
+   {
+    "path": "create_bridges/cut",
+    "self_s": 0.00021953199757263064,
+    "calls": 1
+   },
+   {
+    "path": "intersections/register",
+    "self_s": 0.0002151960215996951,
+    "calls": 30
+   },
+   {
+    "path": "create_bridges",
+    "self_s": 0.00021291302982717752,
+    "calls": 1
+   },
+   {
+    "path": "initialise/iterate/map",
+    "self_s": 0.00020419099018909037,
+    "calls": 2
+   },
+   {
+    "path": "initialise/iterate",
+    "self_s": 0.0002033980272244662,
+    "calls": 2
+   },
+   {
+    "path": "trim",
+    "self_s": 0.00017759596812538803,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/register/walk",
+    "self_s": 0.00017518800450488925,
+    "calls": 2
+   },
+   {
+    "path": "pips/trellis_build",
+    "self_s": 0.0001520979858469218,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/register",
+    "self_s": 0.00015064995386637747,
+    "calls": 17
+   },
+   {
+    "path": "zone/create_bridges/cut",
+    "self_s": 0.0001340860326308757,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/register_bridge",
+    "self_s": 0.00013322196900844574,
+    "calls": 25
+   },
+   {
+    "path": "initialise/iterate/walk",
+    "self_s": 0.00010695101809687912,
+    "calls": 12
+   },
+   {
+    "path": "intersections/infer_iterates/resolved_ids",
+    "self_s": 0.00010530499275773764,
+    "calls": 1
+   },
+   {
+    "path": "zone/trellis_build",
+    "self_s": 8.884500130079687e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/register_bridge",
+    "self_s": 7.432198617607355e-05,
+    "calls": 12
+   },
+   {
+    "path": "zone/create_bridges",
+    "self_s": 6.468701758421957e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/infer_iterates/resolved_ids",
+    "self_s": 5.3925003157928586e-05,
+    "calls": 1
+   },
+   {
+    "path": "intersections/infer_iterates/map",
+    "self_s": 2.850999590009451e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/infer_iterates/map",
+    "self_s": 2.792500890791416e-05,
+    "calls": 1
+   },
+   {
+    "path": "initialise/iterate/image_chains",
+    "self_s": 2.7097994461655617e-05,
+    "calls": 2
+   },
+   {
+    "path": "intersections/register/register",
+    "self_s": 2.5998015189543366e-05,
+    "calls": 1
+   },
+   {
+    "path": "initialise/iterate/refine/walk",
+    "self_s": 2.1702959202229977e-05,
+    "calls": 2
+   },
+   {
+    "path": "zone/intersections/register/register",
+    "self_s": 2.0729989046230912e-05,
+    "calls": 1
+   },
+   {
+    "path": "grow/generation",
+    "self_s": 1.6344012692570686e-05,
+    "calls": 2
+   },
+   {
+    "path": "initialise/iterate/merge",
+    "self_s": 1.2063974281772971e-05,
+    "calls": 2
+   },
+   {
+    "path": "initialise/generation",
+    "self_s": 5.081994459033012e-06,
+    "calls": 4
+   },
+   {
+    "path": "create_bridges/generation",
+    "self_s": 5.003006663173437e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/generation",
+    "self_s": 4.147994332015514e-06,
+    "calls": 1
+   },
+   {
+    "path": "trim/resolved_ids",
+    "self_s": 2.7320056688040495e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/resolved_ids",
+    "self_s": 2.409011358395219e-06,
+    "calls": 1
+   },
+   {
+    "path": "pips/trellis_build/resolved_ids",
+    "self_s": 2.3580214474350214e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/generation",
+    "self_s": 2.129992935806513e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/trellis_build/resolved_ids",
+    "self_s": 1.9430008251219988e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/generation",
+    "self_s": 1.868000254034996e-06,
+    "calls": 1
+   },
+   {
+    "path": "intersections/generation",
+    "self_s": 1.7870042938739061e-06,
+    "calls": 1
+   },
+   {
+    "path": "intersections/diagnose/resolved_ids",
+    "self_s": 1.5720142982900143e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/diagnose/resolved_ids",
+    "self_s": 1.401989720761776e-06,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/resolved_ids",
+    "self_s": 1.161010004580021e-06,
+    "calls": 1
+   }
+  ],
+  "by_stage": {
+   "fixed_point": {
+    "(self)": 0.001066739991074428
+   },
+   "initialise": {
+    "walk": 0.0001286539772991091,
+    "map": 0.00020419099018909037,
+    "image_chains": 2.7097994461655617e-05,
+    "merge": 1.2063974281772971e-05,
+    "refine": 0.00036744403769262135,
+    "iterate": 0.0002033980272244662,
+    "generation": 5.081994459033012e-06,
+    "(self)": 0.00024420800036750734
+   },
+   "grow": {
+    "walk": 0.015621509810443968,
+    "map": 0.0014738689933437854,
+    "image_chains": 0.0008715389703866094,
+    "merge": 0.0003732180339284241,
+    "refine": 0.05931691997102462,
+    "iterate": 0.00593520121765323,
+    "generation": 1.6344012692570686e-05,
+    "(self)": 0.0012036329717375338
+   },
+   "intersections": {
+    "generation": 1.7870042938739061e-06,
+    "index": 0.04187267101951875,
+    "walk": 0.0010374619741924107,
+    "register": 0.00024119403678923845,
+    "resolve": 0.006227019999641925,
+    "resolved_ids": 0.00010687700705602765,
+    "map": 2.850999590009451e-05,
+    "infer_iterates": 0.0009353240020573139,
+    "diagnose": 0.004622989014023915,
+    "(self)": 0.00036472492502070963
+   },
+   "trim": {
+    "resolved_ids": 2.7320056688040495e-06,
+    "(self)": 0.00017759596812538803
+   },
+   "create_bridges": {
+    "resolved_ids": 1.161010004580021e-06,
+    "walk": 0.0004713940143119544,
+    "index": 0.001132620993303135,
+    "cut": 0.00021953199757263064,
+    "generation": 5.003006663173437e-06,
+    "register_bridge": 0.00013322196900844574,
+    "(self)": 0.00021291302982717752
+   },
+   "pips": {
+    "resolved_ids": 2.3580214474350214e-06,
+    "trellis_build": 0.0001520979858469218,
+    "(self)": 0.0016431299736723304
+   },
+   "zone": {
+    "generation": 8.145987521857023e-06,
+    "index": 0.03728143800981343,
+    "walk": 0.002122283971402794,
+    "register": 0.00017137994291260839,
+    "resolve": 0.003609601000789553,
+    "resolved_ids": 5.967900506220758e-05,
+    "map": 2.792500890791416e-05,
+    "infer_iterates": 0.0005395989865064621,
+    "diagnose": 0.003866114013362676,
+    "intersections": 0.00102696506655775,
+    "cut": 0.0001340860326308757,
+    "register_bridge": 7.432198617607355e-05,
+    "create_bridges": 6.468701758421957e-05,
+    "trellis_build": 8.884500130079687e-05,
+    "(self)": 0.0010845439683180302
+   },
+   "topology": {
+    "walk": 0.000550583004951477,
+    "(self)": 0.002101472986396402
+   }
+  },
+  "stage_total": {
+   "fixed_point": 0.001066739991074428,
+   "initialise": 0.001192138995975256,
+   "grow": 0.08481223398121074,
+   "intersections": 0.05543855897849426,
+   "trim": 0.00018032797379419208,
+   "create_bridges": 0.0021758460206910968,
+   "pips": 0.0017975859809666872,
+   "zone": 0.050159614998847246,
+   "topology": 0.002652055991347879
+  },
+  "top_events": [
+   {
+    "stage": "fixed_point",
+    "seconds": 0.001066739991074428,
+    "peak_rss": 124887040,
+    "rss_after": 124887040,
+    "traced_after": 109944,
+    "traced_peak": 143904
+   },
+   {
+    "stage": "initialise",
+    "seconds": 0.001192138995975256,
+    "peak_rss": 125054976,
+    "rss_after": 125054976,
+    "traced_after": 164508,
+    "traced_peak": 198468
+   },
+   {
+    "stage": "grow",
+    "seconds": 0.05198628798825666,
+    "peak_rss": 129613824,
+    "rss_after": 129613824,
+    "traced_after": 1243175,
+    "traced_peak": 1605959
+   },
+   {
+    "stage": "grow",
+    "seconds": 0.032825945992954075,
+    "peak_rss": 130707456,
+    "rss_after": 130707456,
+    "traced_after": 1744549,
+    "traced_peak": 1878251
+   },
+   {
+    "stage": "intersections",
+    "seconds": 0.05543855897849426,
+    "peak_rss": 136642560,
+    "rss_after": 136642560,
+    "traced_after": 3752310,
+    "traced_peak": 4442147
+   },
+   {
+    "stage": "trim",
+    "seconds": 0.00018032797379419208,
+    "peak_rss": 136642560,
+    "rss_after": 136642560,
+    "traced_after": 3753729,
+    "traced_peak": 3787689
+   },
+   {
+    "stage": "create_bridges",
+    "seconds": 0.0021758460206910968,
+    "peak_rss": 136654848,
+    "rss_after": 136654848,
+    "traced_after": 3842876,
+    "traced_peak": 3876836
+   },
+   {
+    "stage": "pips",
+    "seconds": 0.0017975859809666872,
+    "peak_rss": 136679424,
+    "rss_after": 136679424,
+    "traced_after": 3903035,
+    "traced_peak": 3936995
+   },
+   {
+    "stage": "zone",
+    "seconds": 0.050159614998847246,
+    "peak_rss": 136912896,
+    "rss_after": 136912896,
+    "traced_after": 3590874,
+    "traced_peak": 4223463
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.002652055991347879,
+    "peak_rss": 137068544,
+    "rss_after": 137068544,
+    "traced_after": 3624531,
+    "traced_peak": 3658491
+   }
+  ]
+ },
+ "wall_s": 0.3378845480037853,
+ "peak_rss": 145866752
+}
