@@ -140,8 +140,8 @@ class Tangle:
     adjacent pair of points stored as a _Segment in the rtree of its
     stability, with its owners. A QUERY-ONLY curve (a blast image curve, the
     bridges cut from it, a partial piece) is only queried: each new edge is one
-    key in ``_query_edges``, and its _Segment is kept only while it has a
-    crossing pair to resolve. Candidate crossings are found by querying a
+    key in ``_query_edges``, and its _Segment is kept only when its query
+    found a crossing pair, which resolution reads. Candidate crossings are found by querying a
     segment's bounding box against the OTHER stability's rtree, so only
     unstable x stable pairs are ever formed (CLAUDE.md's fundamental
     invariant: two curves of one stability never cross). They are resolved to
@@ -155,7 +155,7 @@ class Tangle:
         _manifold_segs: The sids each indexed curve (and each bridge cut from
             one) owns.
         _query_edges: The edge key (:func:`_edge`) of every edge a query-only
-            curve has queried, so an image laid over earlier curve is not
+            curve has queried, so an image laid over an earlier one is not
             queried twice.
         _intersecting_segments: Set of frozenset pairs of segment ids that
             cross.
