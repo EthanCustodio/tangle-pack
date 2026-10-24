@@ -104,7 +104,7 @@ Committed under `figures/numerics_profile/`:
 | folder | what | figures to open first |
 |---|---|---|
 | `a8bb8a0/` | the five law cases (time + memory) and the 1e-7 k=2.5 series (time; memory = 8 traced blasts) | `scaling_points.png`, `stage_time.png`, `memory_components.png`, `stage_peak_rss.png` |
-| `a8bb8a0_scale1e-9/` | the largest scaling point (1e-9, time mode, census per blast) | `scaling_bytes_per_point.png` (the segment index is the orange band), `scaling_time_rss.png`, `memory_components.png`, `stage_time.png` |
+| `a8bb8a0_scale1e-9/` | the largest scaling point (1e-9, time mode, census per blast) | `scaling_bytes_per_point.png` (the segment index is the amber band), `scaling_time_rss.png`, `memory_components.png`, `stage_time.png` |
 | `a8bb8a0_scale_traced/` | the 1e-7 series to its plateau under tracemalloc (json only) | `scale_memory.json` |
 
 GB are GiB (2^30 bytes), MB MiB; all memory is over the interpreter baseline after imports. The law
@@ -383,7 +383,8 @@ measurement.
   the after-profile: the README's command, unchanged, drawn beside the baseline with `--compare
   figures/numerics_profile/a8bb8a0`.
 - **Files.** `numerics/TangleWorkbench.py` (or a `numerics/persist.py`), a round-trip test, the
-  after-profile folders under `figures/numerics_profile/`.
+  after-profile folders under `figures/numerics_profile/`, and `stress/profile/profile_figures.py`:
+  `figure_stage_peaks` takes no baseline, so `--compare` does not yet draw the stage peaks beside it.
 - **Rubric sketch.** Round trip gives equal `compute_intersections` and `topology()`; probe identical;
   the after-profile figures show baseline and branch on one axes.
 - **D3.** The round trip is exact.
@@ -695,7 +696,7 @@ listed), and the census and blast time at the 1e-7 plateau against the baseline 
 
 | # | Slice | Slug | Merge | Probe (D3) | Census at the 1e-7 plateau | Blast s (1e-7) | What changed |
 |---|---|---|---|---|---|---|---|
-| 1 | N1 | `slim-segment-index` | | | | | |
+| 1 | N1 | `slim-segment-index` | | identical: the 58 builds and the two new dedup scenarios (`nested_unfiltered`, `shared_straddle`, each after the blasts and after a recompute), 62 dumps, registry ids included; under option (d) the scenarios differ in 15 items | 990.6 MB (segment index 1045.4 -> 122.0: 1.39 M query edge keys 118.4, 6,584 records); peak RSS 3034.7 -> 2352.0 MB | 399.3 (index + cut 11.2 -> 9.3; diagnose 398.6 -> 346.1, N2's code untouched: believed less GC traversal) | A query-only curve (a blast image curve, its bridges, a partial piece) keeps one int edge key per queried edge (`Tangle._query_edges`) and a `_Segment` only when its query paired; it owns no segment. Same dedup keys, same sids. `populate_intersections_for_manifold(curve)` -> `populate_intersections(new_sids)`; `add_manifold` returns the new sids. Branch-cut bridges keep their claims. e02/e03 report `indexed_segments`. |
 | 2 | N2 | `same-stability-count-new-only` | | | | | |
 | 3 | N3 | `point-store` | | | | | |
 | 4 | N4 | `curves-on-order-arrays` | | | | | |
