@@ -28,6 +28,18 @@ bridge and the manifold it was cut out of legitimately share a key while being
 distinct polylines, so key-grouping would let one cut span two curves; the object
 is the only unambiguous grouping.
 
+Query-only edges (N1, 2026-10-24). An edge a query-only curve has queried stays
+in ``_query_edges`` for the index's life, so on a ``reset=False`` recompute it is
+never queried again: neither when its image curve is re-added (before N1 the
+purge re-queried the edges only that curve owned, and the registry collapsed the
+re-detections) nor when a later indexed branch contains it (the branch neither
+indexes, queries nor claims it, as before N1). Open, and older than N1: the
+accumulating ``reset=False`` pass misses real crossings a fresh pass finds
+(k28 two blasts, grown one step on each stability: 16 crossings against 30;
+nested, stable grown one step: 48 against 54), and an image curve laid over a
+newly grown stable span is not re-queried against it. A later slice should
+decide whether ``reset=False`` re-queries or is retired.
+
 Crossing resolution. Below a
 ``resolution_ratio`` of a few, a crossing of two near-tangent polylines is
 undecidable at the current ``area_cutoff``: the polylines may straddle where the
@@ -141,11 +153,13 @@ class Tangle:
     stability, with its owners. A QUERY-ONLY curve (a blast image curve, the
     bridges cut from it, a partial piece) is only queried: each new edge is one
     key in ``_query_edges``, and its _Segment is kept only when its query
-    found a crossing pair, which resolution reads. Candidate crossings are found by querying a
-    segment's bounding box against the OTHER stability's rtree, so only
-    unstable x stable pairs are ever formed (CLAUDE.md's fundamental
-    invariant: two curves of one stability never cross). They are resolved to
-    true intersection points and cut into bridges.
+    found a crossing pair, which resolution reads.
+
+    Candidate crossings are found by querying a segment's bounding box against
+    the OTHER stability's rtree, so only unstable x stable pairs are ever
+    formed (CLAUDE.md's fundamental invariant: two curves of one stability
+    never cross). They are resolved to true intersection points and cut into
+    bridges.
 
     Attributes:
         _rtrees: one spatial rtree per stability (``"unstable"``, ``"stable"``),
@@ -501,7 +515,12 @@ class Tangle:
             new_sids = set()
             for seg in self._segments_of(manifold):
                 edge = _edge(seg.p0, seg.p0_seg1)
-                if edge in self._query_edges or frozenset((id(seg.p0), id(seg.p0_seg1))) in self._edge_to_sid:
+                if edge in self._query_edges:
+                    continue
+                indexed_sid = self._edge_to_sid.get(frozenset((id(seg.p0), id(seg.p0_seg1))))
+                if indexed_sid is not None:
+                    assert self._seg_lookup[indexed_sid].manifold.stability == manifold.stability, (
+                        "an edge is shared only between a curve and a piece cut out of it")
                     continue
                 self._query_edges.add(edge)
                 seg.id, seg.in_rtree = next(Tangle._ids), False
@@ -643,6 +662,10 @@ class Tangle:
         """
         # edge key defined by the id of two points
         edge_key = frozenset((id(seg.p0), id(seg.p0_seg1)))
+        if _edge(seg.p0, seg.p0_seg1) in self._query_edges:
+            # a query-only curve already queried it: as before N1, neither
+            # indexed, queried nor claimed (the reset=False path, see Dev Notes)
+            return None
         existing_sid = self._edge_to_sid.get(edge_key)
         if existing_sid is not None:
             # already indexed -> do NOT duplicate, just add an owner
@@ -1006,7 +1029,8 @@ class Tangle:
             if parent in self._manifold_segs:
                 self.add_manifold(bridge, index_segments=False, detect_crossings=False)
             else:
-                self._query_edges.update(_edge(seg.p0, seg.p0_seg1) for seg in self._segments_of(bridge))
+                self._query_edges.update(
+                    _edge(seg.p0, seg.p0_seg1) for seg in self._segments_of(bridge))
 
         return [bridge for _, bridge in cut]
 
