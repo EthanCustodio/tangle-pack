@@ -23,8 +23,11 @@ from helpers import laws
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
 from helpers.polylines import polyline_manifold, polyline_workbench
-from tanglepack import BranchPoint
-from tanglepack.numerics.diagnostics import same_stability_crossings
+from tanglepack import Bridge, BranchPoint, Point
+from tanglepack.numerics.diagnostics import (
+    count_same_stability_crossings,
+    same_stability_crossings,
+)
 
 WORKBENCH = "tanglepack.numerics.TangleWorkbench"
 
@@ -143,6 +146,67 @@ def test_agrees_with_the_test_tier_oracle_on_random_polylines():
         for a, i, b, j in laws._transversal_hits(polylines, lo, hi)
     }
     assert expected and found == expected
+
+
+def _image_chain(fp, points, cuts):
+    """Partial image bridges along one linked chain through ``points``, cut at the
+    node windows ``cuts``; overlapping windows share edges, as a blast's do."""
+    nodes = [Point(x, y, float(k)) for k, (x, y) in enumerate(points)]
+    for node, following in zip(nodes, nodes[1:]):
+        node.insert_point_forward(following)
+    return [
+        Bridge(
+            root=nodes[lo], stability="unstable", stretch_param=1.0, fixed_point=fp,
+            tail=nodes[hi], branch_index=0, manifold_key=(fp, "unstable", 0, 0),
+        )
+        for lo, hi in cuts
+    ]
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 4, 5])
+def test_the_count_is_the_full_listing_of_the_new_curves_on_random_curves(seed: int):
+    """C5 on random curves: the count builds pairs for the new segments only (N2,
+    2026-10-24) and still finds exactly the full sweep's hits naming a new curve,
+    in the same orientation -- self-crossings of a new curve, new against new,
+    edges a new bridge shares with an old one and tied box minima (the odd seeds
+    round every vertex) included."""
+    rng = np.random.default_rng(seed)
+    grid = np.round if seed % 2 else (lambda points: points)
+    walk = lambda count: grid(np.cumsum(rng.normal(size=(count, 2)), axis=0))  # noqa: E731
+    fp = bare_fixed_point(label="A")
+    workbench = polyline_workbench(
+        fp,
+        {
+            (fp, "unstable", 0, 0): walk(30),
+            (fp, "unstable", 0, 1): walk(30),
+            (fp, "stable", 0, 0): [(0.5, -40.0), (0.5, 40.0)],
+        },
+    )
+    workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
+    cuts = [(0, 12), (11, 24), (23, 40), (39, 59)]
+    first = _image_chain(fp, walk(60), cuts)
+    kinked = np.vstack([walk(20), 3.0 * Z_KINK])  # its last bridge crosses itself
+    second = _image_chain(fp, kinked + 0.25, [(0, 10), (9, len(kinked) - 1)])
+    bridges = first + second
+    for bridge in bridges:
+        workbench._register_bridge(bridge)
+    new = [bridge for bridge in bridges if rng.random() < 0.5 or bridge is second[-1]]
+
+    names = {f"partial image bridge {id(bridge):#x}" for bridge in new}
+    involved = [
+        hit
+        for hit in same_stability_crossings(workbench, [fp])
+        if hit.stability == "unstable" and {hit.curve_a, hit.curve_b} & names
+    ]
+    inside = [hit for hit in involved if hit.in_tangle_region]
+    count = count_same_stability_crossings(workbench, new)
+    assert any(hit.curve_a == hit.curve_b for hit in involved)
+    assert count.in_region == len(inside)
+    assert count.outside == len(involved) - len(inside)
+    assert count.curve_pairs == tuple(sorted({f"{hit.curve_a} x {hit.curve_b}" for hit in inside}))
+    assert count.suggested_area_cutoff == (
+        min(hit.suggested_area_cutoff for hit in inside) if inside else None
+    )
 
 
 @pytest.mark.perf
