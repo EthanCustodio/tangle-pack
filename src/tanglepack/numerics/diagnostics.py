@@ -205,8 +205,10 @@ def count_same_stability_crossings(
 
     The field is every unstable curve of the bridges' fixed points, as in
     :func:`same_stability_crossings`; only the segment pairs with a segment of
-    one of ``bridges`` are tested, and nothing is materialised per hit, so a
-    deep blast pays for its own images only.
+    one of ``bridges`` are built and tested, and nothing is materialised per
+    hit. A blast still pays for the whole field once: the segment rows, the
+    edge dedup and the sweep's sort run over every unstable segment of those
+    fixed points; the pairs are built for the new segments only.
 
     Args:
         workbench: The workbench holding the curves.
@@ -406,9 +408,12 @@ def _candidate_pairs(
 
     The boxes are sorted along the axis on which fewer of them overlap, each is
     paired with the boxes that start before it ends, and the pairs that also
-    overlap on the other axis are kept. A tangle's segments are short next to
-    their spacing, so this yields a few candidates per segment; it runs in
-    blocks of ``_PAIR_BLOCK`` pairs so a dense fold cannot exhaust memory.
+    overlap on the other axis are kept. With ``new`` an old segment is paired
+    only with the new segments inside its forward range, so the pairs are built
+    for the new segments alone, in the orientation of the full sweep. A
+    tangle's segments are short next to their spacing, so this yields a few
+    candidates per segment; it runs in blocks of ``_PAIR_BLOCK`` pairs so a
+    dense fold cannot exhaust memory.
     (rtree's bulk ``intersection_v`` is not used: in 1.4.0 it loses its result
     buffer once the results outgrow twice the query count, which every polyline
     does -- each segment meets its two neighbours.)
@@ -422,19 +427,31 @@ def _candidate_pairs(
     axis, order, counts = min(sweeps, key=lambda sweep: sweep[2].sum())
     other = 1 - axis
 
-    totals = np.cumsum(counts)
+    # The partners of sorted position p are pool[start[p] : start[p] + count[p]]:
+    # its whole forward range, or for an old p only the new positions in it.
+    positions = np.arange(len(order))
+    if new is None:
+        pool, start, count = positions, positions + 1, counts
+    else:
+        is_new = new[order]
+        new_positions = np.flatnonzero(is_new)
+        lo = np.searchsorted(new_positions, positions + 1)
+        hi = np.searchsorted(new_positions, positions + 1 + counts)
+        pool = np.concatenate([positions, new_positions])
+        start = np.where(is_new, positions + 1, len(order) + lo)
+        count = np.where(is_new, counts, hi - lo)
+
+    totals = np.cumsum(count)
     cuts = np.searchsorted(totals, np.arange(_PAIR_BLOCK, totals[-1], _PAIR_BLOCK))
     firsts, seconds = [], []
-    for block in np.split(np.arange(len(order)), cuts):
-        block_counts = counts[block]
+    for block in np.split(positions, cuts):
+        block_counts = count[block]
         first = np.repeat(block, block_counts)
         offset = np.arange(block_counts.sum()) - np.repeat(
             np.cumsum(block_counts) - block_counts, block_counts
         )
-        i, j = order[first], order[first + offset + 1]
+        i, j = order[first], order[pool[np.repeat(start[block], block_counts) + offset]]
         overlap = (mins[i, other] <= maxs[j, other]) & (mins[j, other] <= maxs[i, other])
-        if new is not None:
-            overlap &= new[i] | new[j]
         firsts.append(i[overlap])
         seconds.append(j[overlap])
     return np.concatenate(firsts), np.concatenate(seconds)
