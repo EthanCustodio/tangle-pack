@@ -139,24 +139,18 @@ def test_collect_is_the_only_traversal(grown_unstable):
             call()
 
 
-def test_collect_rejects_a_broken_iterate_link(grown_unstable):
+def test_collect_rejects_a_broken_iterate_link(grown_unstable, monkeypatch):
     """A node that claims an iterate it does not have is an error, not a None row."""
     workbench, fp, manifold = grown_unstable
     node = next(n for n in _hand_walk(manifold) if _has_iterate(manifold, n))
+    iterate_of = BaseManifold._iterate_of
 
-    class _Liar:
-        def exists_next_iterate(self, num_iterates=1):
-            return True
+    def _lying(self, other, num_iterates):
+        return None if other is node else iterate_of(self, other, num_iterates)
 
-        def get_next_iterate(self, num_iterates=1):
-            return None
-
-    node.__class__ = type("LyingPoint", (_Liar, type(node)), {})
-    try:
-        with pytest.raises(ValueError):
-            manifold.get_iterated_point_array()
-    finally:
-        node.__class__ = type(node).__mro__[2]
+    monkeypatch.setattr(BaseManifold, "_iterate_of", _lying)
+    with pytest.raises(ValueError):
+        manifold.get_iterated_point_array()
 
 
 # --------------------------------------------------------------------------- #

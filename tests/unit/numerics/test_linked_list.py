@@ -2,8 +2,10 @@
 
 Both point kinds carry the iterate list (``next_iterate`` / ``prev_iterate``)
 inherited from ``BasePoint``; the iterate tests are parametrized over the two
-kinds. The geometric list differs: a ``Point`` has one ``forward`` /
-``backward`` neighbour, a ``BranchPoint`` one per branch.
+kinds, each linked to its own kind (a ``Point``'s iterate links are rows of its
+``PointStore``, and no library path links a ``Point`` to a ``BranchPoint``).
+The geometric list differs: a ``Point`` has one ``forward`` / ``backward``
+neighbour, a ``BranchPoint`` one per branch.
 """
 
 from __future__ import annotations
@@ -163,7 +165,7 @@ def test_branch_point_insert_point_backward_connected() -> None:
 @pytest.mark.parametrize("kind", sorted(POINT_KINDS))
 def test_insert_next_iterate(kind: str) -> None:
     """``insert_next_iterate`` links both directions and leaves the ends open."""
-    p1, p2 = POINT_KINDS[kind](), Point()
+    p1, p2 = POINT_KINDS[kind](), POINT_KINDS[kind]()
 
     p1.insert_next_iterate(p2)
 
@@ -176,7 +178,7 @@ def test_insert_next_iterate(kind: str) -> None:
 @pytest.mark.parametrize("kind", sorted(POINT_KINDS))
 def test_insert_prev_iterate(kind: str) -> None:
     """``insert_prev_iterate`` links both directions and leaves the ends open."""
-    p1, p2 = POINT_KINDS[kind](), Point()
+    p1, p2 = POINT_KINDS[kind](), POINT_KINDS[kind]()
 
     p1.insert_prev_iterate(p2)
 
@@ -190,17 +192,17 @@ def test_insert_prev_iterate(kind: str) -> None:
 def test_insert_next_iterate_twice_raises(kind: str) -> None:
     """A point has at most one forward iterate."""
     p = POINT_KINDS[kind]()
-    p.insert_next_iterate(Point())
+    p.insert_next_iterate(POINT_KINDS[kind]())
 
     with pytest.raises(ValueError):
-        p.insert_next_iterate(Point())
+        p.insert_next_iterate(POINT_KINDS[kind]())
 
 
 @pytest.mark.parametrize("kind", sorted(POINT_KINDS))
 def test_insert_prev_iterate_twice_raises(kind: str) -> None:
     """A point has at most one backward iterate."""
     p = POINT_KINDS[kind]()
-    p.insert_prev_iterate(Point())
+    p.insert_prev_iterate(POINT_KINDS[kind]())
 
     with pytest.raises(ValueError):
-        p.insert_prev_iterate(Point())
+        p.insert_prev_iterate(POINT_KINDS[kind]())
