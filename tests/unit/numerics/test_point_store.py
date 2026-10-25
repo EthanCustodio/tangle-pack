@@ -23,11 +23,8 @@ def _curve(points: list[Point]):
 
 
 def _walk(manifold) -> list[Point]:
-    nodes, prev, node = [], None, manifold.root
-    while node is not None:
-        nodes.append(node)
-        prev, node = node, manifold.walk_fwd(prev, node)
-    return nodes
+    """The curve's nodes from its root to the end of its chain."""
+    return list(manifold._walk_nodes(stop_at_final=False))
 
 
 def test_merge_tie_keeps_a_point_whose_only_link_is_a_phantom() -> None:
@@ -92,11 +89,11 @@ def test_link_setters_write_both_columns(store) -> None:
 
     point.insert_next_iterate(image)
 
-    assert (store._image[point.row], store._preimage[image.row]) == (image.row, point.row)
+    assert (store.image[point.row], store.preimage[image.row]) == (image.row, point.row)
     assert point.next_iterate is image and image.prev_iterate is point
     assert point.has_iterate_link() and image.has_iterate_link()
     image.prev_iterate = None
-    assert store._preimage[image.row] == -1 and not image.has_iterate_link()
+    assert store.preimage[image.row] == -1 and not image.has_iterate_link()
 
 
 def test_a_phantom_row_reads_as_a_point(store) -> None:
@@ -104,7 +101,7 @@ def test_a_phantom_row_reads_as_a_point(store) -> None:
     ``node()`` as a ``Point`` with no cdist, created once."""
     point = Point(1.0, 1.0, 1.0, store=store)
     (phantom,) = store.append([[0.5, 0.5]], None)
-    store._preimage[point.row] = phantom
+    store.link_phantoms([point.row], [phantom], "unstable")
 
     assert store.nodes[phantom] is None
     assert point.has_iterate_link()
@@ -123,6 +120,62 @@ def test_a_link_across_stores_raises(store) -> None:
         point.next_iterate = Point(1.0, 1.0, store=other)
     with pytest.raises(TypeError):
         point.prev_iterate = object()
+
+
+def test_the_columns_are_fresh_read_only_views_of_the_written_rows(store) -> None:
+    """``xy``, ``cdist``, ``image`` and ``preimage`` cover the rows written so
+    far, refuse writes, and a view taken before a resize keeps its rows."""
+    Point(1.0, 2.0, 3.0, store=store)
+    before = store.xy
+
+    store.append(np.ones((5, 2)), np.ones(5))
+
+    for column in (store.xy, store.cdist, store.image, store.preimage):
+        assert len(column) == len(store) == 6
+        with pytest.raises(ValueError):
+            column[0] = 0
+    assert store.xy is not store.xy and not np.shares_memory(before, store.xy)
+    np.testing.assert_array_equal(before[0], [1.0, 2.0])
+    assert np.isnan(store.cdist).sum() == 0 and (store.image == -1).all()
+
+
+def test_the_writers_set_links_and_cdists(store) -> None:
+    """``link`` writes both sides of each pair, ``link_phantoms`` one side (on the
+    preiterate side of the stability), ``set_cdist`` one row (None as NaN)."""
+    rows = store.append(np.zeros((4, 2)), np.arange(4.0))
+
+    store.link(rows[:2], rows[2:])
+    np.testing.assert_array_equal(store.image[rows], [2, 3, -1, -1])
+    np.testing.assert_array_equal(store.preimage[rows], [-1, -1, 0, 1])
+
+    (phantom,) = store.append([[9.0, 9.0]], None)
+    store.link_phantoms([rows[0]], [phantom], "stable")
+    assert store.image[rows[0]] == phantom and store.preimage[phantom] == -1
+
+    store.set_cdist(rows[1], None)
+    store.set_cdist(rows[2], 7.5)
+    assert np.isnan(store.cdist[rows[1]]) and store.cdist[rows[2]] == 7.5
+
+
+def test_a_chain_keeps_its_columns_through_insert_and_absorb(store) -> None:
+    """Every chain write keeps the chain and position columns exact; an absorbed
+    chain is retired and a row the merge left off is marked as such."""
+    from tanglepack.numerics.PointStore import LEFT_OFF
+
+    rows = store.append(np.zeros((6, 2)), np.arange(6.0))
+    first = store.new_chain(rows[[0, 2]], 1.0)
+    second = store.new_chain(rows[[3, 4]], 1.0)
+    first.insert([1], rows[[1]])
+    np.testing.assert_array_equal(first.ids, rows[:3])
+
+    first.absorb(second, np.concatenate((first.ids, rows[[3]])), start=3)
+
+    np.testing.assert_array_equal(first.ids, rows[:4])
+    assert len(second) == 0 and second.anchor is None
+    for position, row in enumerate(rows[:4]):
+        assert store.chain_of(row) is first and store.position_of(row) == position
+    assert store.chain_of(rows[4]) is None and store.position_of(rows[4]) == LEFT_OFF
+    assert store.chain_of(rows[5]) is None and store.position_of(rows[5]) == -1
 
 
 def test_get_point_cannot_write_into_the_store(store) -> None:
@@ -144,11 +197,11 @@ def test_a_blasted_build_leaves_phantoms_as_rows(k28_partitioned) -> None:
     session, _ = k28_partitioned
     store = session.workbench.point_store
     n = len(store)
-    no_cdist = np.isnan(store._cdist[:n])
+    no_cdist = np.isnan(store.cdist)
     has_point = np.array([node is not None for node in store.nodes])
-    own_link = (store._image[:n] >= 0) | (store._preimage[:n] >= 0)
+    own_link = (store.image >= 0) | (store.preimage >= 0)
     named = np.zeros(n, bool)
-    for column in (store._image[:n], store._preimage[:n]):
+    for column in (store.image, store.preimage):
         named[column[column >= 0]] = True
 
     phantoms = no_cdist & ~has_point

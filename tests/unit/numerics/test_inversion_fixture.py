@@ -81,16 +81,9 @@ def test_kevin_way_builds_both_branches_in_opposite_directions(
 # --------------------------------------------------------------------------- #
 # (c) one map step scales cdist by per_step_beta on BOTH branches
 # --------------------------------------------------------------------------- #
-def _walk(manifold, branch_index):
-    """Every node of one branch, root first."""
-    nodes = []
-    previous, current = manifold.root, manifold.walk_fwd(
-        None, manifold.root, branch_index=branch_index
-    )
-    while current is not None:
-        nodes.append(current)
-        previous, current = current, manifold.walk_fwd(previous, current)
-    return nodes
+def _walk(manifold):
+    """Every node of one branch past its root, to the end of its curve."""
+    return list(manifold._walk_nodes(stop_at_final=False))[1:]
 
 
 @pytest.mark.parametrize("branch_index", [0, 1])
@@ -110,7 +103,7 @@ def test_one_map_step_scales_cdist_by_per_step_beta(henon_inversion, branch_inde
 
     ratios = [
         node.next_iterate.cdist / node.cdist
-        for node in _walk(manifold, branch_index)
+        for node in _walk(manifold)
         if getattr(node, "next_iterate", None) is not None
         and node.cdist
         and node.next_iterate.cdist

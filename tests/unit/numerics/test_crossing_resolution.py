@@ -207,10 +207,10 @@ def test_a_multi_bridge_blast_warns_at_most_once_per_call(caplog):
 def _image_bridge(fp, points):
     """A partial image bridge through ``points`` on ``fp``'s unstable branch 0.0."""
     from tanglepack import Bridge, Point
+    from tanglepack.numerics import ManifoldMachine
 
     nodes = [Point(x, y, float(k)) for k, (x, y) in enumerate(points)]
-    for node, following in zip(nodes, nodes[1:]):
-        node.insert_point_forward(following)
+    ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
     return Bridge(
         root=nodes[0], stability="unstable", stretch_param=1.0, fixed_point=fp,
         tail=nodes[-1], branch_index=0, manifold_key=(fp, "unstable", 0, 0),

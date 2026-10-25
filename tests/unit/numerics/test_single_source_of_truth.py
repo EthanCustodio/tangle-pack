@@ -19,6 +19,7 @@ from helpers.logs import assert_logged
 from tanglepack.numerics.BaseManifold import BaseManifold
 from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Point import Point
+from tanglepack.numerics.ManifoldMachine import ManifoldMachine
 
 
 # --------------------------------------------------------------------------- #
@@ -98,7 +99,7 @@ def test_partial_bridge_reports_its_missing_endpoint(henon_tangle_with_bridges):
 def test_base_manifold_requires_a_manifold_key():
     point_a = Point(0.0, 0.0, 0.0)
     point_b = Point(1.0, 0.0, 1.0)
-    point_a.insert_point_forward(point_b)
+    ManifoldMachine._manifold_from_points([point_a, point_b], "unstable", 1.0, None)
 
     with pytest.raises(TypeError):
         BaseManifold(point_a, "unstable", 1.0, fixed_point=None, tail=point_b)

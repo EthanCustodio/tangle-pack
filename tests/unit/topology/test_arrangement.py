@@ -29,6 +29,7 @@ from helpers.laws import REGION_AREA_RTOL
 from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
+from tanglepack.numerics.ManifoldMachine import ManifoldMachine
 from tanglepack.numerics.Point import Point
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.TopologyResults import Arc, canonical_corners
@@ -79,8 +80,7 @@ def _hand_built_trellis():
     root = Point(0.0, -0.2, -0.5)
     mid = Point(3.0, 1.0, 2.5)
     tail = Point(0.0, 2.2, 5.5)
-    root.forward, mid.backward = mid, root
-    mid.forward, tail.backward = tail, mid
+    ManifoldMachine._manifold_from_points([root, mid, tail], "unstable", 1.0, fp)
     bridge = Bridge(
         root=root,
         stability="unstable",
@@ -423,8 +423,7 @@ def _nested_lobe_trellis() -> tuple[Trellis, dict[str, int]]:
         """A bridge through ``points`` between two named crossings."""
         u0 = spec[first][0] - 0.5
         nodes = [Point(x, y, u0 + i) for i, (x, y) in enumerate(points)]
-        for node, following in zip(nodes, nodes[1:]):
-            node.forward, following.backward = following, node
+        ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
         return Bridge(
             root=nodes[0],
             stability="unstable",

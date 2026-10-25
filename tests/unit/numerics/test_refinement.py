@@ -15,6 +15,8 @@ Dev Notes:
 
 from __future__ import annotations
 
+import numpy as np
+
 from tanglepack import ManifoldView
 
 
@@ -32,7 +34,8 @@ def _adjacent_pair_with_preiterates(manifold):
 
 def test_refined_cdist_lies_strictly_between_its_neighbours(grown_unstable):
     """The batched refinement kernel (``_refine_layer``, no public single-pair
-    route) places the new point's cdist strictly inside its neighbours'."""
+    route; a pair is its first point's chain position) places the new point
+    between the pair on the chain, its cdist strictly inside theirs."""
     workbench, fp, manifold = grown_unstable
     machine = workbench._man_machine
     viewer = ManifoldView(manifold, machine.system)
@@ -43,9 +46,15 @@ def test_refined_cdist_lies_strictly_between_its_neighbours(grown_unstable):
     lo, hi = sorted((float(p0.cdist), float(p1.cdist)))
     assert lo < hi
 
+    store = p0.store
+    chain = store.chain_of(p0.row)
+    position = store.position_of(p0.row)
+    assert chain.node_at(position + 1) is p1
+
     machine.area_cutoff = 0.0  # refine this pair whatever its curvature area
-    next_layer = machine._refine_layer([(p0, p1)], manifold, viewer, None, set())
-    (_, new_point), (after, _) = next_layer
-    assert after is new_point
+    next_layer = machine._refine_layer(chain, np.array([position]), manifold, viewer, None)
+    np.testing.assert_array_equal(next_layer, [position, position + 1])
+    new_point = chain.node_at(position + 1)
+    assert chain.node_at(position) is p0 and chain.node_at(position + 2) is p1
 
     assert lo < float(new_point.cdist) < hi

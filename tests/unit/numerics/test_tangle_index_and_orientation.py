@@ -32,18 +32,9 @@ from tanglepack.numerics.Tangle import Tangle, _Segment
 # 1.3 -- bridge segments survive the edge dedup
 # --------------------------------------------------------------------------- #
 def _bridge_node_pairs(bridge) -> list[frozenset[int]]:
-    """Walk a bridge root -> tail and return its consecutive node-id pairs."""
-    pairs: list[frozenset[int]] = []
-    prev_point, curr_point = None, bridge.root
-    while curr_point is not None:
-        if curr_point is bridge.tail:
-            break
-        next_point = bridge.walk_fwd(prev_point, curr_point)
-        if next_point is None:
-            break
-        pairs.append(frozenset((id(curr_point), id(next_point))))
-        prev_point, curr_point = curr_point, next_point
-    return pairs
+    """A bridge's consecutive node-id pairs, root -> tail."""
+    nodes = list(bridge._walk_nodes())
+    return [frozenset((id(a), id(b))) for a, b in zip(nodes, nodes[1:])]
 
 
 def test_bridges_are_registered_with_their_own_segments(henon_tangle_with_bridges):

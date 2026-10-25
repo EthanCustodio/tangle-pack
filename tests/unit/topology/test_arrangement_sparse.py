@@ -15,6 +15,7 @@ from __future__ import annotations
 from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Intersection import Intersection
+from tanglepack.numerics.ManifoldMachine import ManifoldMachine
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.numerics.Point import Point
 from tanglepack.topology.Arrangement import Arrangement
@@ -27,8 +28,7 @@ def _lobe(fp, u_key, first, second, y0, bulge):
     root = Point(0.0, y0 - 0.1, 5.0 * (y0 - 0.1))
     mid = Point(bulge, y0 + 0.5, 5.0 * (y0 + 0.5))
     tail = Point(0.0, y0 + 1.1, 5.0 * (y0 + 1.1))
-    root.forward, mid.backward = mid, root
-    mid.forward, tail.backward = tail, mid
+    ManifoldMachine._manifold_from_points([root, mid, tail], "unstable", 1.0, fp)
     return Bridge(
         root=root,
         stability="unstable",

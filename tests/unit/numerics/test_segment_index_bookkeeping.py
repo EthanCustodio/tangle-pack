@@ -14,9 +14,9 @@ Pins:
 3. An indexed curve added twice records no ``None`` segment id: since N1
    ``_insert_segment`` returns None for an edge it only claims, and that
    return must never reach ``_manifold_segs``.
-4. Inserting a point into a linked list must never overwrite the host
-   point's ``stretch_param``. The inserted node inherits a missing value
-   instead (a fresh crossing separator carries ``stretch_param=None``).
+
+Curves that share points are views of one curve between different ends, as
+the images a blast merged and the branch growth merged them into are.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ import numpy as np
 from cases import build_k10
 from helpers.fakes import bare_fixed_point
 from helpers.polylines import polyline_manifold, polyline_workbench
-from tanglepack import BaseManifold, Bridge, Point, define_resonance_zone
+from tanglepack import BaseManifold, Bridge, define_resonance_zone
 from tanglepack.numerics.Tangle import Tangle
 
 
@@ -87,26 +87,27 @@ def _stable_index(fp, stable: list) -> Tangle:
     return tangle
 
 
+def _view(nodes: list, root: int, tail: int, key: tuple) -> BaseManifold:
+    """The curve over ``nodes`` from index ``root`` to index ``tail``."""
+    return BaseManifold(nodes[root], "unstable", 1.0, fixed_point=key[0], tail=nodes[tail],
+                        branch_index=0, manifold_key=key)
+
+
 def test_an_image_over_an_earlier_image_queries_none_of_the_shared_edges():
     fp = bare_fixed_point(label="A")
     key = (fp, "unstable", 1, 0)
     tangle = _stable_index(fp, [(0.5, -1.0), (0.5, 1.0)])
-    earlier = polyline_manifold([(x, 0.0) for x in range(4)], key)
+    nodes = _nodes(polyline_manifold([(x, 0.0) for x in range(6)], key))
+    earlier = _view(nodes, 0, 3, key)
     tangle.add_manifold(earlier, index_segments=False)
 
     # A later image starts on the earlier curve's nodes and runs on past its tail,
     # as merge_manifolds leaves two images that share straddle nodes.
-    shared = _nodes(earlier)[1:]
-    tail = shared[-1]
-    for x in (4.0, 5.0):
-        node = Point(x, 0.0, x)
-        tail.insert_point_forward(node)
-        tail = node
-    later = BaseManifold(shared[0], "unstable", 1.0, fixed_point=fp, tail=tail,
-                         branch_index=0, manifold_key=key)
+    later = _view(nodes, 1, 5, key)
     tangle._rtrees["stable"].queried.clear()
     tangle.add_manifold(later, index_segments=False)
 
+    shared = nodes[1:4]
     shared_bounds = {_bounds(a, b) for a, b in zip(shared, shared[1:])}
     queried = tangle._rtrees["stable"].queried
     assert len(shared_bounds) == 2 and len(queried) == 2
@@ -119,19 +120,15 @@ def test_a_branch_over_a_query_only_curve_neither_indexes_nor_queries_its_edges(
     fp = bare_fixed_point(label="A")
     key = (fp, "unstable", 0, 0)
     tangle = _stable_index(fp, [(0.5, -1.0), (0.5, 1.0)])
-    image = polyline_manifold([(x, 0.0) for x in range(4)], key)
-    tangle.add_manifold(image, index_segments=False)
+    nodes = _nodes(polyline_manifold([(x, 0.0) for x in range(5)], key))
+    tangle.add_manifold(_view(nodes, 0, 3, key), index_segments=False)
 
-    nodes = _nodes(image)
-    node = Point(4.0, 0.0, 4.0)
-    nodes[-1].insert_point_forward(node)
-    branch = BaseManifold(nodes[0], "unstable", 1.0, fixed_point=fp, tail=node,
-                          branch_index=0, manifold_key=key)
+    branch = _view(nodes, 0, 4, key)
     tangle._rtrees["stable"].queried.clear()
     tangle.add_manifold(branch)
 
     assert len(tangle._rtrees["unstable"]) == 1
-    assert tangle._rtrees["stable"].queried == [_bounds(nodes[-1], node)]
+    assert tangle._rtrees["stable"].queried == [_bounds(nodes[3], nodes[4])]
 
 
 def test_a_separator_in_a_query_only_bridge_is_not_queried_again():
@@ -190,45 +187,3 @@ def test_add_manifold_twice_records_no_none_ids(henon_tangle_with_bridges):
     for manifold, seg_ids in tangle._manifold_segs.items():
         assert None not in seg_ids, f"None segment id recorded for {manifold}"
         assert seg_ids <= tangle._seg_lookup.keys()
-
-
-def test_insert_point_keeps_host_stretch_param():
-    host = Point(0.0, 0.0, cdist=0.0, stretch_param=2.5)
-    separator = Point(1.0, 0.0, cdist=1.0)  # no stretch_param, like a crossing separator
-
-    host.insert_point_forward(separator)
-
-    assert host.stretch_param == 2.5, "host stretch_param was overwritten"
-    assert separator.stretch_param == 2.5, "inserted node did not inherit"
-
-
-def test_insert_point_does_not_clobber_existing_node_param():
-    host = Point(0.0, 0.0, cdist=0.0, stretch_param=2.5)
-    node = Point(1.0, 0.0, cdist=1.0, stretch_param=3.5)
-
-    host.insert_point_backward(node)
-
-    assert host.stretch_param == 2.5
-    assert node.stretch_param == 3.5
-
-
-def test_insert_iterate_touches_no_stretch_param():
-    """Iterate-list inserts leave stretch_param alone on both sides.
-
-    Callers construct iterate points with their stretch already set (or fill
-    it explicitly afterwards), and the host may even be a BranchPoint, which
-    has no scalar stretch_param at all.
-    """
-    host = Point(0.0, 0.0, cdist=1.0, stretch_param=2.5)
-    image = Point(0.5, 0.5, cdist=2.0)
-
-    host.insert_next_iterate(image)
-
-    assert host.stretch_param == 2.5
-    assert image.stretch_param is None
-
-    preimage = Point(-0.5, -0.5, cdist=0.5)
-    host.insert_prev_iterate(preimage)
-
-    assert host.stretch_param == 2.5
-    assert preimage.stretch_param is None

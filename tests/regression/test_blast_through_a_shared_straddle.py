@@ -24,17 +24,15 @@ def _zones(case):
 
 
 def _image_is_one_curve(bridge) -> bool:
-    """Whether the walk from ``f(root)`` reaches ``f(tail)``, cdist non-decreasing."""
+    """Whether the curve from ``f(root)`` reaches ``f(tail)``, cdist non-decreasing."""
     first, last = bridge.root.next_iterate, bridge.tail.next_iterate
     branch = bridge.fixed_point.advance_key(bridge.manifold_key, 1)[3]
     walker = BaseManifold(
         first, "unstable", bridge.stretch_param, bridge.fixed_point, branch_index=branch, manifold_key=None
     )
-    cdists, previous, node = [], None, first
-    while node is not None and node is not last:
-        cdists.append(float(node.cdist))
-        previous, node = node, walker.walk_fwd(previous, node)
-    return node is last and cdists == sorted(cdists) and cdists[-1] <= last.cdist
+    *nodes, end = walker._walk_nodes(final_node=last)
+    cdists = [float(node.cdist) for node in nodes]
+    return end is last and cdists == sorted(cdists) and cdists[-1] <= last.cdist
 
 
 def test_an_unfiltered_outer_blast_iterates_every_annulus_bridge():

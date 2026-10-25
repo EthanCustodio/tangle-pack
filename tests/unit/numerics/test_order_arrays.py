@@ -200,6 +200,24 @@ def test_a_slot_holding_another_chain_refuses_a_second() -> None:
     assert p.forward_branches[0] is first
 
 
+@pytest.mark.parametrize("stability", ["unstable", "stable"])
+def test_each_node_follows_its_chain_from_the_anchor(initialized, stability):
+    """Read back along the chain, every node's predecessor is the node before it
+    on the curve, and the first point's is the root BranchPoint, the chain's
+    anchor."""
+    workbench, fp = initialized
+    manifold = workbench.manifolds[(fp, stability, 0, 0)]
+    nodes = manifold.get_point_array(return_nodes=True)
+    first = nodes[1]
+    store = first.store
+    chain = store.chain_of(first.row)
+
+    assert nodes[0] is fp.branch_points[0] is chain.anchor
+    for previous, node in zip(nodes, nodes[1:]):
+        assert chain.node_at(store.position_of(node.row) - 1) is previous
+    assert chain.node_at(len(chain)) is None
+
+
 # ------------------------------------------------ iterate list (both kinds)
 
 @pytest.mark.parametrize("kind", sorted(POINT_KINDS))

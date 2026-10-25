@@ -131,7 +131,7 @@ def test_kevin_way_period_three_orbit_chain(stability, chain):
     for (orbit_index, _branch_index), manifold in segments.items():
         assert manifold.root is fixed_point.branch_points[orbit_index]
         # every segment sits on the orbit point it is keyed to
-        first = manifold.walk_fwd(None, manifold.root, 0)
+        first = manifold.first_node(0)
         assert first is not None
         assert np.linalg.norm(
             np.asarray(first.get_point()).reshape(-1)

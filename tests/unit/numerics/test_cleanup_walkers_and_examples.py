@@ -3,9 +3,9 @@ shared Hénon example maps.
 
 The duplications were collapsed here and each one is pinned:
 
-* :meth:`BaseManifold._collect` is now the ONE traversal behind all five array
+* :meth:`BaseManifold._collect` is now the ONE read behind all five array
   getters. The getters are thin wrappers, so the test compares each of them
-  against an independent hand-rolled walk of the linked list -- if a wrapper
+  against the curve's nodes read by ``_walk_nodes`` -- if a wrapper
   ever passes the wrong ``kind`` / ``value`` / ``stop_at_final`` the comparison
   catches it.
 * :meth:`BaseManifold.first_node` is the ONE "step past the root BranchPoint"
@@ -36,18 +36,9 @@ from tanglepack.numerics import BaseManifold, BranchPoint, FixedPointSolver
 # one walker
 # --------------------------------------------------------------------------- #
 def _hand_walk(manifold, stop_at_final=True):
-    """Walk the linked list without touching BaseManifold's getters."""
-    nodes = []
-    prev = None
-    current = manifold.root
-    while current is not None:
-        nodes.append(current)
-        if stop_at_final and current is manifold.tail:
-            break
-        prev, current = current, manifold.walk_fwd(
-            prev, current, branch_index=manifold.branch_index
-        )
-    return nodes
+    """The curve's nodes from the one node walker, ``_walk_nodes``, which no
+    getter calls."""
+    return list(manifold._walk_nodes(stop_at_final=stop_at_final))
 
 
 def _has_iterate(manifold, node, n=1):
@@ -81,7 +72,7 @@ def test_every_getter_matches_an_independent_walk(grown_both, stability):
     )
     assert manifold.get_point_array(return_nodes=True) == nodes
 
-    # the cdist walk deliberately ignores the tail (documented on the getter)
+    # the cdist read deliberately ignores the tail (documented on the getter)
     assert np.array_equal(
         manifold.get_cdist_array(), np.vstack([n.cdist for n in all_nodes])
     )
@@ -140,9 +131,14 @@ def test_collect_is_the_only_traversal(grown_unstable):
 
 
 def test_collect_rejects_a_broken_iterate_link(grown_unstable, monkeypatch):
-    """A node that claims an iterate it does not have is an error, not a None row."""
+    """A node that claims an iterate it does not have is an error, not a None row.
+
+    The root BranchPoint is the one node read through ``_iterate_of`` (a point's
+    link is a store row, which cannot claim an iterate and name none).
+    """
     workbench, fp, manifold = grown_unstable
-    node = next(n for n in _hand_walk(manifold) if _has_iterate(manifold, n))
+    node = manifold.root
+    assert _has_iterate(manifold, node)
     iterate_of = BaseManifold._iterate_of
 
     def _lying(self, other, num_iterates):
@@ -157,7 +153,7 @@ def test_collect_rejects_a_broken_iterate_link(grown_unstable, monkeypatch):
 # one branch walker
 # --------------------------------------------------------------------------- #
 def test_first_node_steps_past_the_root_branch_point(initialized):
-    """A manifold anchored on a BranchPoint starts one walk_fwd step past it."""
+    """A manifold anchored on a BranchPoint starts at the point its slot names."""
     workbench, fp = initialized
     manifold = workbench.manifolds[(fp, "unstable", 0, 0)]
 
@@ -172,39 +168,8 @@ def test_first_node_steps_past_the_root_branch_point(initialized):
         branch_index=0,
         manifold_key=(fp, "unstable", 0, 0),
     )
-    assert view.first_node() is view.walk_fwd(None, root, 0)
     assert view.first_node() is root.forward_branches[0]
     assert view.first_node(1) is root.forward_branches[1]
-
-
-@pytest.mark.parametrize("stability", ["unstable", "stable"])
-def test_walk_back_inverts_walk_fwd_through_the_root(initialized, stability):
-    """``walk_back(walk_fwd(prev, node), node) is prev`` everywhere, the root too.
-
-    At an ordinary node this is the linked list read both ways; at the root
-    BranchPoint the walk enters on one slot and leaves on the matching slot, and
-    walking back must undo exactly that toggle.
-    """
-    workbench, fp = initialized
-    manifold = workbench.manifolds[(fp, stability, 0, 0)]
-    root = fp.branch_points[0]
-    slots = root.backward_branches if stability == "unstable" else root.forward_branches
-    entries = [node for node in slots if node is not None]  # unseeded slots are None
-    assert entries, "the seeded root must have an entry slot"
-
-    checked = 0
-    for prev in entries:
-        out = manifold.walk_fwd(prev, root)
-        assert manifold.walk_back(out, root) is prev
-        checked += 1
-
-    prev, cur = root, manifold.first_node()
-    while cur is not None and cur is not manifold.tail:
-        nxt = manifold.walk_fwd(prev, cur)
-        assert manifold.walk_back(nxt, cur) is prev
-        prev, cur = cur, nxt
-        checked += 1
-    assert checked > len(entries), "the walk must cover ordinary nodes too"
 
 
 def test_first_node_on_an_ordinary_root_is_the_root(initialized):

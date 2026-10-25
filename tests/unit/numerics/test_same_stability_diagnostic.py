@@ -24,6 +24,7 @@ from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
 from helpers.polylines import polyline_manifold, polyline_workbench
 from tanglepack import Bridge, BranchPoint, Point
+from tanglepack.numerics import ManifoldMachine
 from tanglepack.numerics.diagnostics import (
     count_same_stability_crossings,
     same_stability_crossings,
@@ -149,11 +150,10 @@ def test_agrees_with_the_test_tier_oracle_on_random_polylines():
 
 
 def _image_chain(fp, points, cuts):
-    """Partial image bridges along one linked chain through ``points``, cut at the
+    """Partial image bridges along one curve through ``points``, cut at the
     node windows ``cuts``; overlapping windows share edges, as a blast's do."""
     nodes = [Point(x, y, float(k)) for k, (x, y) in enumerate(points)]
-    for node, following in zip(nodes, nodes[1:]):
-        node.insert_point_forward(following)
+    ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
     return [
         Bridge(
             root=nodes[lo], stability="unstable", stretch_param=1.0, fixed_point=fp,
