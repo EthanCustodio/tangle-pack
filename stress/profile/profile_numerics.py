@@ -24,7 +24,9 @@ leaks into another's:
   self time per call path, so ``grow > iterate > refine > map`` splits growth
   into map, refine, merge and walks), RSS is sampled every 20 ms and its peak
   recorded per top-level stage, and the memory census runs at the end (and,
-  for the scaling case, after every blast). The census is structural: it
+  for the scaling case, after every blast; each scaling row also keeps the
+  blast's ``same_stability_count``, caught by wrapping ``report_resolution``,
+  so two runs compare the count blast by blast). The census is structural: it
   walks the objects the workbench and the session hold and sizes them with
   ``sys.getsizeof``.
 * ``memory`` -- the same build under ``tracemalloc``: per top-level stage the
@@ -64,6 +66,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import ctypes
+import dataclasses
 import functools
 import gc
 import importlib
@@ -252,6 +255,24 @@ def install(timer: StageTimer) -> None:
             setattr(owner, name, classmethod(timer.wrap(fn, label)))
         else:
             setattr(owner, name, timer.wrap(original, label))
+
+
+def record_counts() -> list:
+    """Wrap ``report_resolution`` (outside its timer) to collect every blast's
+    ``same_stability_count``; ``blast_zone`` returns no report."""
+    from tanglepack.numerics.TangleWorkbench import TangleWorkbench
+
+    counts = []
+    report_resolution = TangleWorkbench.report_resolution
+
+    def recording(self, *args, **kwargs):
+        report = report_resolution(self, *args, **kwargs)
+        if report.same_stability_count is not None:
+            counts.append(report.same_stability_count)
+        return report
+
+    TangleWorkbench.report_resolution = recording
+    return counts
 
 
 # --------------------------------------------------------------------------- #
@@ -570,6 +591,7 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
             record["scale"] = {"k": SCALE_K, "area_cutoff": args.scale_cutoff,
                                "min_separation": SCALE_MIN_SEPARATION,
                                "stop_gb": args.scale_stop_gb, "max_blasts": args.scale_max_blasts}
+            counts = record_counts()
             session, fp, zone = scale_build(args.scale_cutoff)
             timer.enter("topology")
             try:
@@ -607,7 +629,9 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
                     "pip_depth": ({str(k.label): v for k, v in result.pip_depth.items()}
                                   if result is not None else None),
                     "points_created": result.points_created if result is not None else 0,
+                    "same_stability_count": dataclasses.asdict(counts[-1]) if blast else None,
                 }
+                counts.clear()
                 if trace:
                     row["traced"], row["traced_peak"] = tracemalloc.get_traced_memory()
                 if not trace or blast == max_blasts:
