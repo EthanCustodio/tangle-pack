@@ -19,6 +19,10 @@ the life of its store, and the coordinates of a row never change once written.
 a ``Point`` (until N7 of the numerics arrays plan). No curve row is ever NaN:
 the NaN rows are phantoms and the initializer's fictitious tails, all off-curve.
 
+The public columns (``xy``, ``cdist``, ``image``, ``preimage``) are fresh
+read-only views per access, so no caller holds a buffer a resize replaces; a
+``Point``, read once per point on the hot paths, reads the private columns.
+
 Phantoms -- the coordinate-only preiterates refinement caches for its next
 layer (cdist NaN, on no curve, named by one point's preiterate link -- its
 preimage on an unstable curve, its image on a stable one -- and naming nothing
@@ -203,6 +207,7 @@ class PointStore:
         self._n = 0
         self.nodes: list[Optional[Point]] = []
         self.chains: list[Chain] = []
+        self._alias_xy()
 
     def __len__(self) -> int:
         """The number of rows written."""
@@ -380,6 +385,14 @@ class PointStore:
             new = np.empty((capacity,) + old.shape[1:], dtype=old.dtype)
             new[: self._n] = old[: self._n]
             setattr(self, name, new)
+        self._alias_xy()
+
+    def _alias_xy(self) -> None:
+        """A read-only alias of the whole coordinate column, rebuilt on every
+        resize: ``Point.get_point`` hands out row views of it (a fresh view of
+        the column per point read costs five times as much)."""
+        self._xy_read = self._xy.view()
+        self._xy_read.flags.writeable = False
 
 
 _LOOSE: Optional[PointStore] = None

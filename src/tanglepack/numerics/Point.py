@@ -11,7 +11,10 @@ store's life, so ``id()`` of a point and ``is`` between points stay meaningful.
 Dev Notes:
 
 The object itself is the adapter N7 of the numerics arrays plan deletes; until
-then every reader that wants nodes gets them from ``store.nodes``.
+then every reader that wants nodes gets them from ``store.nodes``. Being read
+once per point on the hot paths, it reads the store's private columns rather
+than its public views, and writes the cdist through ``set_cdist`` and one side
+of an iterate link directly (the BasePoint setters are one-sided).
 """
 
 from __future__ import annotations
@@ -86,19 +89,19 @@ class Point(BasePoint):
     @property
     def x(self) -> Optional[np.float64]:
         """The x-coordinate (None if the point was built without one)."""
-        value = self.store.xy[self.row, 0]
+        value = self.store._xy[self.row, 0]
         return None if value != value else value
 
     @property
     def y(self) -> Optional[np.float64]:
         """The y-coordinate (None if the point was built without one)."""
-        value = self.store.xy[self.row, 1]
+        value = self.store._xy[self.row, 1]
         return None if value != value else value
 
     @property
     def cdist(self) -> Optional[float]:
         """The canonical distance, None for a phantom."""
-        value = self.store.cdist[self.row]
+        value = self.store._cdist[self.row]
         return None if value != value else float(value)
 
     @cdist.setter
@@ -114,7 +117,7 @@ class Point(BasePoint):
             coordinates never change, so the view stays right after the store
             grows.
         """
-        return self.store.xy[self.row]
+        return self.store._xy_read[self.row]
 
     def has_iterate_link(self) -> bool:
         """
@@ -128,12 +131,12 @@ class Point(BasePoint):
             bool: True if either link column names a row.
         """
         store = self.store
-        return bool(store.image[self.row] >= 0 or store.preimage[self.row] >= 0)
+        return bool(store._image[self.row] >= 0 or store._preimage[self.row] >= 0)
 
     @property
     def next_iterate(self) -> Optional[Point]:
         """The image, or None."""
-        row = self.store.image[self.row]
+        row = self.store._image[self.row]
         return None if row < 0 else self.store.node(row)
 
     @next_iterate.setter
@@ -143,7 +146,7 @@ class Point(BasePoint):
     @property
     def prev_iterate(self) -> Optional[Point]:
         """The preimage, or None."""
-        row = self.store.preimage[self.row]
+        row = self.store._preimage[self.row]
         return None if row < 0 else self.store.node(row)
 
     @prev_iterate.setter
