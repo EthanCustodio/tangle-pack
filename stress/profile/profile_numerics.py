@@ -36,11 +36,19 @@ leaks into another's:
 Components of the census (bytes):
 
 * ``points_curve`` -- ``Point`` objects on a registered manifold (object,
-  ``__dict__``, the ``_coords`` array, the x / y / cdist scalars);
+  ``__dict__``, the ``_coords`` array, the x / y / cdist scalars; since the
+  point store, a slotted object and its row ``int``);
 * ``points_image`` -- ``Point`` objects reachable only from blast image curves;
 * ``points_phantom`` -- the coordinate-only preimages refinement caches
-  (``ManifoldMachine._cache_preiterate``: ``cdist`` None, on no curve);
-* ``points_other`` -- any other ``Point`` alive (separators, stale lists);
+  (``cdist`` None, on no curve) while they were objects; since the point store
+  they are rows with no object (``phantom_rows``), and this counts the objects
+  with no cdist left (the initializer's detached fictitious tails);
+* ``points_other`` -- any other ``Point`` alive (separators, stale lists,
+  merge-dropped duplicates);
+* ``point_store`` -- the workbench's ``PointStore``: its columns at capacity
+  and its row -> ``Point`` list (counts ``store_rows``, ``store_capacity``,
+  ``phantom_rows`` -- no object, no cdist -- and ``off_curve_rows`` -- an
+  object with a cdist on no walked curve); absent on a tree without it;
 * ``branch_points`` -- the ``BranchPoint`` objects;
 * ``segment_index`` -- ``Tangle``'s Python side: ``_Segment`` objects, the
   edge / owner / lookup dicts and sets (the query-only edge set counted with
@@ -291,7 +299,10 @@ def malloc_trim() -> None:
 
 
 def _point_bytes(p: Any) -> int:
-    """One point: object, ``__dict__``, ``_coords`` and its own scalars."""
+    """One point: object, ``__dict__``, ``_coords`` and its own scalars (a slotted
+    point over a store row: the object and its row ``int``)."""
+    if not hasattr(p, "__dict__"):
+        return sys.getsizeof(p) + sys.getsizeof(p.row)
     size = sys.getsizeof(p) + sys.getsizeof(p.__dict__)
     coords = p.__dict__.get("_coords")
     if coords is not None:
@@ -426,6 +437,18 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
             size = _point_bytes(obj)
         counts[kind] += 1
         sizes[kind] += size
+    store = getattr(workbench, "point_store", None)
+    if store is not None:
+        rows = len(store)
+        has_node = np.fromiter((n is not None for n in store.nodes), bool, rows)
+        on_a_curve = np.fromiter((id(n) in on_curve or id(n) in on_image for n in store.nodes),
+                                 bool, rows)
+        has_cdist = ~np.isnan(store._cdist[:rows])
+        counts["store_rows"] = rows
+        counts["store_capacity"] = len(store._cdist)
+        counts["phantom_rows"] = int((~has_node & ~has_cdist).sum())
+        counts["off_curve_rows"] = int((has_node & ~on_a_curve & has_cdist).sum())
+        sizes["point_store"] = store.nbytes + sys.getsizeof(store.nodes)
     del on_curve, on_image
 
     tangle = workbench.Tangle
@@ -459,7 +482,7 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
     sizes["walk_memo"] = memo_bytes
 
     def stop_numerics(o: Any) -> bool:
-        return (is_point(o) or (isinstance(o, BaseManifold) and id(o) in held_curves)
+        return (is_point(o) or o is store or (isinstance(o, BaseManifold) and id(o) in held_curves)
                 or o is workbench or o is tangle or isinstance(o, FixedPoint)
                 or type(o).__name__ in ("Index", "Property", "DynamicalSystem",
                                         "ManifoldMachine", "ManifoldInitializer",
@@ -478,17 +501,18 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
     sizes["topology"] = _deep_size(topo_roots, seen, stop_topology)
     seen.add(id(session.__dict__))
     sizes["workbench_other"] = _deep_size([workbench.__dict__], seen,
-                                          lambda o: is_point(o) or o is tangle)
+                                          lambda o: is_point(o) or o is tangle or o is store)
 
     result = {
         "bytes": dict(sizes),
         "counts": dict(counts),
         "tangle_parts": {k: v for k, v in tangle_parts.items()},
         "memo_array_bytes": memo_arrays,
-        "n_points": sum(counts[k] for k in counts if k.startswith("points_")),
+        "n_points": sum(counts[k] for k in counts if k.startswith("points_"))
+        + counts.get("phantom_rows", 0),
         "n_curve_points": counts["points_curve"],
         "n_image_points": counts["points_image"],
-        "n_phantom": counts["points_phantom"],
+        "n_phantom": counts["points_phantom"] + counts.get("phantom_rows", 0),
         "n_bridges": len(bridges),
         "n_image_curves": len(images),
         "n_crossings": len(registry),
