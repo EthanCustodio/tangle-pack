@@ -72,6 +72,19 @@ def test_rows_are_append_only_across_a_resize(store) -> None:
     np.testing.assert_array_equal(store.xy[rows], np.arange(20.0).reshape(10, 2))
 
 
+def test_a_view_taken_before_a_resize_still_reads_its_row(store) -> None:
+    """A row's coordinates never change, so a ``get_point()`` view of the
+    columns before they grew reads the same row after (Q9's read-only view)."""
+    point = Point(1.0, 2.0, store=store)
+    view = point.get_point()
+
+    store.append(np.ones((50, 2)), np.ones(50))
+
+    assert not np.shares_memory(view, store.xy)
+    np.testing.assert_array_equal(view, [1.0, 2.0])
+    np.testing.assert_array_equal(point.get_point(), [1.0, 2.0])
+
+
 def test_link_setters_write_both_columns(store) -> None:
     """``insert_next_iterate`` writes the image row of one point and the
     preimage row of the other; clearing a link writes -1."""
@@ -120,3 +133,25 @@ def test_get_point_cannot_write_into_the_store(store) -> None:
         point.get_point()[0] = 5.0
     assert point.x == 1.0
     assert not hasattr(point, "__dict__")
+
+
+def test_a_blasted_build_leaves_phantoms_as_rows(k28_partitioned) -> None:
+    """Growth, a blast and the topology never give a phantom a ``Point``: a row
+    with no cdist is either a phantom (no ``Point``, no link of its own, named
+    by a point's link) or an initializer's detached fictitious tail (a
+    ``Point`` that keeps its one link to the chain it was cut from)."""
+    pytest.importorskip("tanglepack.numerics.PointStore")
+    session, _ = k28_partitioned
+    store = session.workbench.point_store
+    n = len(store)
+    no_cdist = np.isnan(store._cdist[:n])
+    has_point = np.array([node is not None for node in store.nodes])
+    own_link = (store._image[:n] >= 0) | (store._preimage[:n] >= 0)
+    named = np.zeros(n, bool)
+    for column in (store._image[:n], store._preimage[:n]):
+        named[column[column >= 0]] = True
+
+    phantoms = no_cdist & ~has_point
+    assert phantoms.any()
+    assert not (phantoms & own_link).any() and named[phantoms].all()
+    assert own_link[no_cdist & has_point].all()
