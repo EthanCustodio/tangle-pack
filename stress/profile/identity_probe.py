@@ -20,8 +20,9 @@ series or scenario in a FRESH interpreter that imports ``tanglepack`` and
 bridges. A scenario blasts the nested zones unfiltered in its order and is
 dumped after the blasts (``.blasted``) and after one recompute
 (``.recomputed``). Every blast of the probe runs with ``diagnose=True``, which
-changes no other item (N2, 2026-10-24: checked on three series and a scenario). Per build or step it writes ``<name>.npz``
-(float arrays) and ``<name>.json`` (texts):
+changes no other item (N2, 2026-10-24: all 62 dumps of the base, compared). Per
+build or step it writes ``<name>.npz`` (float arrays) and ``<name>.json``
+(texts):
 
 * ``curve:<key>`` -- ``(x, y, cdist)`` of every registered manifold (its whole
   list; the trimmed extent is a text), ``image:<i>`` of every blast image
