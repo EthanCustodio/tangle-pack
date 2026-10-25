@@ -353,19 +353,27 @@ class ManifoldMachine:
             self._note_coords(iterated_points)
             distances = np.ravel(manifold.stretch_param * non_iterated_cdists)
 
-            xvals = iterated_points[:, 0]
-            yvals = iterated_points[:, 1]
-
+            # The images go into the store of the curve, in one append; each pair
+            # is linked both ways (the image on an unstable curve, the preimage on
+            # a stable one).
+            store = non_iterated_points[0].store
+            if any(point.store is not store for point in non_iterated_points):
+                raise TypeError("the points of one curve must share a store")
+            rows = store.append(iterated_points, distances)
+            sources = np.fromiter(
+                (point.row for point in non_iterated_points), np.int64, len(non_iterated_points)
+            )
+            if manifold.stability == "unstable":
+                forward, backward, name = store._image, store._preimage, "Iterate"
+            else:
+                forward, backward, name = store._preimage, store._image, "Pre-iterate"
+            if (forward[sources] >= 0).any():
+                raise ValueError(f"{name} 1 already exists")
+            forward[sources] = rows
+            backward[rows] = sources
             new_points = [
-                Point(x, y, float(cdist), stretch_param=manifold.stretch_param)
-                for x, y, cdist in zip(xvals, yvals, distances)
+                Point._over(store, row, manifold.stretch_param) for row in rows.tolist()
             ]
-
-            for i, point in enumerate(non_iterated_points):
-                if manifold.stability == "unstable":
-                    point.insert_next_iterate(new_points[i])
-                else:
-                    point.insert_prev_iterate(new_points[i])
 
             # The image of a piece lives on the branch one map step forward, which
             # only the caller can name (see iterate_bridge); the machine leaves the
@@ -558,14 +566,8 @@ class ManifoldMachine:
                         head_1.get_point(),
                         head_2.get_point(),
                     )
-                    head_1_has_iter = (
-                        head_1.next_iterate is not None
-                        or head_1.prev_iterate is not None
-                    )
-                    head_2_has_iter = (
-                        head_2.next_iterate is not None
-                        or head_2.prev_iterate is not None
-                    )
+                    head_1_has_iter = head_1.has_iterate_link()
+                    head_2_has_iter = head_2.has_iterate_link()
                     if head_1_has_iter or not head_2_has_iter:
                         # head_1 is the keeper (or neither has iterates — pick head_1)
                         next_head_1 = manifold_1.walk_fwd(None, head_1)
@@ -715,8 +717,8 @@ class ManifoldMachine:
             if np.hypot(b[0] - a[0], b[1] - a[1]) < 1e-8:
                 continue
 
-            pre0 = ManifoldMachine._get_preiterate(p0, stability, 1)
-            pre1 = ManifoldMachine._get_preiterate(p1, stability, 1)
+            pre0 = ManifoldMachine._get_preiterate(p0, stability)
+            pre1 = ManifoldMachine._get_preiterate(p1, stability)
             if pre0 is None or pre1 is None:
                 logger.debug(
                     "Skipping refinement for pair at cdist %.3g-%.3g: "
@@ -735,7 +737,7 @@ class ManifoldMachine:
             p1_xy.append(b)
             left_xy.append(left.get_point() if left is not None else nan_row)
             right_xy.append(right.get_point() if right is not None else nan_row)
-            pre_mid.append(0.5 * (pre0.get_point() + pre1.get_point()))
+            pre_mid.append(0.5 * (pre0 + pre1))
             c0_list.append(float(p0.cdist))
             c1_list.append(float(p1.cdist))
 
@@ -772,16 +774,18 @@ class ManifoldMachine:
         self._note_coords(new_coords)
         new_cdists = mid_cd[flagged]
 
+        # The new points, then their preimages: phantom rows (no cdist, no Point)
+        # the child pairs refine from next layer, named by a one-way link.
+        store = p1_nodes[0].store
+        rows = store.append(new_coords, new_cdists)
+        phantoms = store.append(pre_mid[flagged], None)
+        (store._preimage if stability == "unstable" else store._image)[rows] = phantoms
+
         next_layer: list[tuple] = []
-        for out_idx, pair_idx in enumerate(flagged):
+        for row, pair_idx in zip(rows.tolist(), flagged):
             p0 = p0_nodes[pair_idx]
             p1 = p1_nodes[pair_idx]
-            x, y = new_coords[out_idx]
-            new_point = Point(
-                x, y, float(new_cdists[out_idx]), stretch_param=manifold.stretch_param
-            )
-            # Cache the preiterate so the child pairs can be refined next layer.
-            self._cache_preiterate(new_point, pre_mid[pair_idx], stability)
+            new_point = Point._over(store, row, manifold.stretch_param)
 
             self._insert_point_geometrically(p0, new_point, manifold, branch_index)
             modified_points.update((p0, p1, new_point))
@@ -792,47 +796,22 @@ class ManifoldMachine:
         return next_layer
 
     @staticmethod
-    def _get_preiterate(
-        point: Point | BranchPoint,
-        stability: Stability,
-        num_iterates: int = 1,
-    ):
+    def _get_preiterate(point: Point | BranchPoint, stability: Stability) -> Optional[np.ndarray]:
         """
-        Helper function to get a point's preiterate based on stability
+        The coordinates of a point's preiterate (its preimage on an unstable
+        curve, its image on a stable one), or None if it has none.
 
         Parameters:
             point (Point or BranchPoint): point to get preiterate
             stability (str): stability of the manifold
         """
 
-        if stability == "unstable":
-            return point.get_prev_iterate(num_iterates)
-        else:
-            return point.get_next_iterate(num_iterates)
-
-    @staticmethod
-    def _cache_preiterate(
-        point: Point | BranchPoint,
-        preiterate_coords,
-        stability: Stability,
-    ):
-        """
-        Helper function to cache preiterate based on stability.
-        Only stores the coordinates to be accessed for refinement.
-
-        Parameters:
-            point (Point or BranchPoint): Current Points
-            preiterate_coords: Preiterate coordinates to cache
-            stability (str): stability of the manifold
-        """
-
-        # phoney cached preiterate point without cdist
-        cached_preiterate = Point(preiterate_coords[0], preiterate_coords[1])
-
-        if stability == "unstable":
-            point.prev_iterate = cached_preiterate
-        else:
-            point.next_iterate = cached_preiterate
+        if isinstance(point, BranchPoint):
+            pre = point.prev_iterate if stability == "unstable" else point.next_iterate
+            return None if pre is None else pre.get_point()
+        store = point.store
+        row = (store._preimage if stability == "unstable" else store._image)[point.row]
+        return None if row < 0 else store._xy[row]
 
     @staticmethod
     def _insert_point_geometrically(

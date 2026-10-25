@@ -36,7 +36,15 @@ class BasePoint:
         edist (float): Arc-length distance from the fixed point.
         next_iterate (BasePoint): The iterate of the point. Default None.
         prev_iterate (BasePoint): The pre-iterate of the point. Default None.
+
+    Note:
+        The class declares no slots of its own, so a ``Point`` (slotted, its
+        state in a :class:`~.PointStore.PointStore` row) carries no ``__dict__``
+        while a ``BranchPoint`` (not slotted) keeps the attributes this
+        ``__init__`` sets.
     """
+
+    __slots__ = ()
 
     def __init__(
         self,
@@ -218,6 +226,19 @@ class BasePoint:
             current_node = current_node.prev_iterate
 
         return current_node
+
+    def has_iterate_link(self) -> bool:
+        """
+        Whether the point has an image or a preimage.
+
+        The merge's tie rule reads it: of two points on one cdist the one with
+        an iterate link is the established point and is kept.
+
+        Returns:
+            bool: True if either iterate link is set.
+        """
+
+        return self.next_iterate is not None or self.prev_iterate is not None
 
     def exists_next_iterate(self, num_iterates: int = 1) -> bool:
         """

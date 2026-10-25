@@ -42,6 +42,7 @@ from .DynamicalSystem import DynamicalSystem, MapFunc, JacFunc
 from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import DEFAULT_AREA_CUTOFF, ManifoldMachine
+from .PointStore import PointStore
 from .budget import DEFAULT_MAX_POINTS_PER_STEP, GrowthStats
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
@@ -248,7 +249,12 @@ class TangleWorkbench:
         self._man_machine = ManifoldMachine(
             self.dynamical_system, area_cutoff, max_points_per_step
         )
-        self._man_maker = ManifoldInitializer(self.dynamical_system, self._man_machine)
+        # Every point the workbench grows is a row of ONE store: the initializer
+        # seeds into it and the machine appends to the store of the curve it grows.
+        self.point_store = PointStore()
+        self._man_maker = ManifoldInitializer(
+            self.dynamical_system, self._man_machine, store=self.point_store
+        )
         self.escape_radius = escape_radius
         self._growth_stats: dict[
             tuple[FixedPoint, Stability, Optional[int]], GrowthStats
@@ -768,8 +774,8 @@ class TangleWorkbench:
         root = fixed_point.branch_points[0]
         first_point = manifold.first_node(branch_index)
 
-        root_coord = root._coords
-        first_point_coords = first_point._coords
+        root_coord = root.get_point()
+        first_point_coords = first_point.get_point()
 
         initial_direction = np.asarray(first_point_coords) - np.asarray(root_coord)
 
@@ -785,8 +791,8 @@ class TangleWorkbench:
             first_point = self.manifolds.get((fixed_point, stability, 0, branch_index))
             first_point = first_point.walk_back(None, tail)
 
-            tail_coords = tail._coords
-            first_point_coords = first_point._coords
+            tail_coords = tail.get_point()
+            first_point_coords = first_point.get_point()
 
             final_direction = tail_coords - first_point_coords
 

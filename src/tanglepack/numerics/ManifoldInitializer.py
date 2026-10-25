@@ -47,6 +47,7 @@ from .ManifoldMachine import ManifoldMachine
 from .BaseManifold import BaseManifold
 from .Intersection import Stability
 from .Point import Point
+from .PointStore import PointStore
 import numpy as np
 
 import logging
@@ -75,10 +76,14 @@ class ManifoldInitializer:
         system (DynamicalSystem): All the functions related to the dynamical system.
         machine (ManifoldMachine): The machine that maps and refines the initial
             fundamental segments of a ``k_value > 1`` orbit.
+        store (PointStore): The store every seeded point is appended to.
     """
 
     def __init__(
-        self, system: DynamicalSystem, machine: Optional[ManifoldMachine] = None
+        self,
+        system: DynamicalSystem,
+        machine: Optional[ManifoldMachine] = None,
+        store: Optional[PointStore] = None,
     ) -> None:
         """
         Initializes the toolbox with the dynamical system and machine machinery
@@ -89,10 +94,13 @@ class ManifoldInitializer:
                 workbench passes its own, so the initial segments refine at ITS
                 ``area_cutoff`` and under its point budget; a fresh machine at the
                 library defaults when omitted.
+            store (Optional[PointStore]): The store the seeded points go into
+                (the workbench passes its own); a fresh one when omitted.
         """
 
         self.system = system
         self.machine = machine if machine is not None else ManifoldMachine(system)
+        self.store = store if store is not None else PointStore()
 
     def get_first_point(
         self,
@@ -175,7 +183,7 @@ class ManifoldInitializer:
             # geometrically yet
             for _ in range(num_iterations):
                 temp_back = self.system.map_inv(first_back)
-                temp_point = Point(temp_back[0], temp_back[1])
+                temp_point = Point(temp_back[0], temp_back[1], store=self.store)
                 curr_point.insert_prev_iterate(temp_point)
                 curr_point = curr_point.prev_iterate
                 first_back = temp_back
@@ -184,7 +192,7 @@ class ManifoldInitializer:
         else:  # stable branch
             for _ in range(num_iterations):
                 temp_back = self.system.map(first_back)
-                temp_point = Point(temp_back[0], temp_back[1])
+                temp_point = Point(temp_back[0], temp_back[1], store=self.store)
                 curr_point.insert_next_iterate(temp_point)
                 curr_point = curr_point.next_iterate
                 first_back = temp_back
@@ -226,7 +234,7 @@ class ManifoldInitializer:
             first_point[0],
             first_point[1],
             cdist=distance_first,
-            edist=distance_first,
+            store=self.store,
         )
 
         first_back = self.get_first_point_back(
@@ -247,8 +255,8 @@ class ManifoldInitializer:
             first_back[0],
             first_back[1],
             cdist=distance_prev,
-            edist=distance_prev,
             stretch_param=alpha,
+            store=self.store,
         )
 
         # The seed's (pre)iterate one full return back is first_back: the

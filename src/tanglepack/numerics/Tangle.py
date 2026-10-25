@@ -1068,7 +1068,7 @@ class Tangle:
         """
         mid_xy = 0.5 * (np.asarray(coords1) + np.asarray(coords2))
         cdist = self._cdist_between(p0, p1, manifold.stability, mid_xy)
-        separator = Point(float(mid_xy[0]), float(mid_xy[1]), cdist)
+        separator = Point(float(mid_xy[0]), float(mid_xy[1]), cdist, store=p1.store)
         if isinstance(after, BranchPoint):
             after.insert_point_forward(separator, manifold.branch_index)
         else:
