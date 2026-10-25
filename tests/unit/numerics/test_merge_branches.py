@@ -8,14 +8,16 @@ point has an iterate link, (b) only the new one has, (c) the two ROOTS tie,
 pins the order the linked-list merge produced before the order arrays (N4),
 and uses only ``Point(..., store=)``, the iterate setters,
 ``_manifold_from_points``, ``merge_manifolds`` and ``get_point_array``, so it
-runs on both sides of that change.
+runs on both sides of that change. The last test merges onto a run headed
+by a periodic point, the image of the bridge that leaves it, on a real tangle.
 """
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
-from tanglepack import BaseManifold, Point
+from tanglepack import BaseManifold, BranchPoint, Point
 from tanglepack.examples.henon import henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
 from tanglepack.numerics.PointStore import PointStore
@@ -103,3 +105,26 @@ def test_ties_within_one_curve_pair_one_to_one(machine, store) -> None:
     merged = _merged(machine, _curve(old), _curve(new))
 
     assert merged == [old[0], old[1], new[1], old[2], new[2]]
+
+
+def test_an_anchor_bridge_image_is_its_branch_from_the_periodic_point(small_tangle) -> None:
+    """The bridge leaving the periodic point maps onto the branch leaving it: its
+    existing images (headed by the periodic point) and its new ones merge into
+    the branch's own points, from the periodic point on (2026-10-25, N4: a path
+    the order arrays had to keep, which no law case reaches)."""
+    workbench, fp = small_tangle
+    workbench.create_bridges(fp)
+    (anchor_bridge,) = [bridge for bridge in workbench.bridges if isinstance(bridge.root, BranchPoint)]
+    assert len(anchor_bridge.get_non_iterated_point_array()), "the merge must take new images"
+
+    workbench.iterate_bridge(anchor_bridge)
+
+    image = workbench._image_curves[-1]
+    branch = workbench.manifolds[(fp, "unstable", 0, 0)]
+    nodes = image.get_point_array(return_nodes=True)
+    # The new images run on past the branch's tail, on the branch's own curve.
+    branch_nodes = list(branch._walk_nodes(stop_at_final=False))
+    assert nodes[0] is fp.branch_points[0]
+    assert nodes == branch_nodes[: len(nodes)]
+    assert len(nodes) > len(branch.get_point_array())
+    assert (np.diff(image.get_cdist_array(), axis=0) >= 0).all()

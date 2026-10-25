@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tanglepack import Point
+from tanglepack import BranchPoint, Point
 from tanglepack.examples.henon import henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
 
@@ -66,6 +66,7 @@ def test_rows_are_append_only_across_a_resize(store) -> None:
     assert len(store) == len(store.nodes) == 12
     assert (first.x, first.y, first.cdist) == (1.0, 2.0, 3.0)
     assert last.cdist is None
+    np.testing.assert_array_equal(last.get_point(), [7.0, 8.0])
     np.testing.assert_array_equal(store.xy[rows], np.arange(20.0).reshape(10, 2))
 
 
@@ -176,6 +177,23 @@ def test_a_chain_keeps_its_columns_through_insert_and_absorb(store) -> None:
         assert store.chain_of(row) is first and store.position_of(row) == position
     assert store.chain_of(rows[4]) is None and store.position_of(rows[4]) == LEFT_OFF
     assert store.chain_of(rows[5]) is None and store.position_of(rows[5]) == -1
+
+
+def test_an_absorbed_chain_hands_on_its_anchor_and_one_chain_holds_one(store) -> None:
+    """The periodic point a chain hangs off survives the chain being absorbed;
+    two chains each hanging off one cannot merge."""
+    rows = store.append(np.zeros((4, 2)), np.arange(4.0))
+    first, second = store.new_chain(rows[:2], 1.0), store.new_chain(rows[2:], 1.0)
+    periodic = BranchPoint(1)
+    second.anchor = periodic
+
+    first.absorb(second, rows)
+
+    assert first.anchor is periodic and second.anchor is None and len(second) == 0
+    other = store.new_chain(store.append(np.zeros((1, 2)), [9.0]), 1.0)
+    other.anchor = BranchPoint(1)
+    with pytest.raises(AssertionError, match="two anchors"):
+        first.absorb(other, np.concatenate((first.ids, other.ids)))
 
 
 def test_get_point_cannot_write_into_the_store(store) -> None:

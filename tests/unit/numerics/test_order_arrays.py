@@ -10,6 +10,8 @@ root to tail, and the iterate links of the points with a cdist are a partial
 bijection.
 
 The merge states no case reaches and one chain cannot hold, (f)-(h), raise.
+A point laid right after a periodic point (a crossing separator, a refined
+pair at the anchor) becomes position 0 of the chain hanging there and its slot.
 The iterate list both point kinds inherit is tested here too.
 """
 
@@ -20,11 +22,14 @@ from typing import Callable
 import numpy as np
 import pytest
 
+from helpers.fakes import bare_fixed_point
+from helpers.polylines import polyline_manifold
 from tanglepack import BaseManifold, BranchPoint, Point
 from tanglepack.examples.henon import henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
 from tanglepack.numerics.BasePoint import BasePoint
 from tanglepack.numerics.PointStore import PointStore
+from tanglepack.numerics.Tangle import Tangle
 
 NUM_BRANCHES = 2
 
@@ -137,6 +142,26 @@ def test_a_lower_new_root_before_a_mid_chain_run_raises(machine) -> None:
         machine.merge_manifolds(existing, _curve(store, [0.5, 3.0], 1.0))
 
 
+def test_a_new_run_that_runs_out_before_its_chain_ends_raises(machine) -> None:
+    """(f) for the other run: an earlier merge's output, a run whose chain goes on
+    past its tail, runs out first."""
+    store = PointStore()
+    earlier = _run(_curve(store, [1.0, 2.0, 3.0], 1.0), 0, 1)
+
+    with pytest.raises(AssertionError, match="past its tail"):
+        machine.merge_manifolds(_curve(store, [0.0, 5.0], 0.0), earlier)
+
+
+def test_a_mid_chain_new_run_placed_second_raises(machine) -> None:
+    """(g) for the other run: the existing root comes first while the new run
+    starts in the middle of its chain."""
+    store = PointStore()
+    later = _run(_curve(store, [0.5, 1.0, 3.0], 1.0), 1, 2)
+
+    with pytest.raises(AssertionError, match="beginning of its chain"):
+        machine.merge_manifolds(_curve(store, [0.0, 2.0], 0.0), later)
+
+
 def test_runs_that_both_end_on_a_tie_raise(machine) -> None:
     """(h) The last points of both runs share a cdist."""
     store = PointStore()
@@ -216,6 +241,88 @@ def test_each_node_follows_its_chain_from_the_anchor(initialized, stability):
     for previous, node in zip(nodes, nodes[1:]):
         assert chain.node_at(store.position_of(node.row) - 1) is previous
     assert chain.node_at(len(chain)) is None
+
+
+# ------------------------------------------------ a point right after the periodic point
+
+def _periodic_point() -> BranchPoint:
+    """A one-branch periodic point at the origin, its own iterate, cdist 0."""
+    point = BranchPoint(1, (0.0, 0.0), x=0.0, y=0.0)
+    point.cdist = 0.0
+    point.insert_next_iterate(point)
+    return point
+
+
+def _assert_first_on_its_chain(periodic: BranchPoint, first: Point, curve: BaseManifold) -> None:
+    """``first`` is position 0 of the chain hanging on ``periodic``, its slot
+    names it, and the curve reads it right after the periodic point."""
+    store = first.store
+    chain = store.chain_of(first.row)
+    assert periodic.forward_branches[0] is first and chain.anchor is periodic
+    assert store.position_of(first.row) == 0
+    np.testing.assert_array_equal(store._position[chain.ids], np.arange(len(chain)))
+    assert curve.get_point_array(return_nodes=True)[:2] == [periodic, first]
+
+
+def test_a_separator_after_the_periodic_point_becomes_the_first_point() -> None:
+    """A stable V crossing the segment that leaves the periodic point twice: the
+    cut lays a separator between the two crossings, at position 0 of the chain."""
+    fp = bare_fixed_point(label="A")
+    periodic = _periodic_point()
+    tangle = Tangle()
+    tangle.add_manifolds([polyline_manifold([(0.3, 1.0), (0.5, -1.0), (0.7, 1.0)], (fp, "stable", 0, 0))])
+    curve = polyline_manifold([(1.0, 0.0), (2.0, 0.0)], (fp, "unstable", 0, 0), root=periodic)
+    seed = periodic.forward_branches[0]
+    tangle.add_manifold(curve, index_segments=False)
+    crossings = tangle.resolve_crossings()
+    for i, crossing in enumerate(crossings):
+        crossing.id = i
+
+    (bridge,) = tangle.create_bridges(crossings, for_manifold=curve)
+
+    separator = periodic.forward_branches[0]
+    assert separator is not seed and separator.x == 0.5
+    assert bridge.get_point_array(return_nodes=True) == [periodic, separator, seed]
+    _assert_first_on_its_chain(periodic, separator, curve)
+
+
+def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> None:
+    """The pair (periodic point, first point), refinable when the first point has
+    a preimage: the new point goes to position 0 and the slot follows it. Its
+    left neighbour, the periodic point's, is no point (NaN); the base read the
+    stable branch's first point there and raised before it could insert."""
+    periodic = _periodic_point()
+    points = [Point(x, x * x, x) for x in (0.1, 0.2, 0.4, 0.8)]
+    for point in points:
+        point.insert_prev_iterate(Point(point.x / 2, point.y / 2, point.cdist / 2))
+    ManifoldMachine._manifold_from_points(points, "unstable", 2.0, None)
+    periodic.insert_point_forward(points[0], 0)
+    curve = BaseManifold(periodic, "unstable", 2.0, None, tail=points[-1], branch_index=0,
+                         manifold_key=None)
+    double = lambda p: 2 * np.asarray(p)  # noqa: E731 - the map of the preimages above
+    half = lambda p: 0.5 * np.asarray(p)  # noqa: E731
+    machine = ManifoldMachine(DynamicalSystem(double, half), area_cutoff=1e-5)
+
+    machine.refine_manifold(curve)
+
+    first = periodic.forward_branches[0]
+    assert first is not points[0] and 0.0 < first.cdist < points[0].cdist
+    _assert_first_on_its_chain(periodic, first, curve)
+    assert (np.diff(curve.get_cdist_array(), axis=0) >= 0).all()
+
+
+@pytest.mark.parametrize("root", ["point", "empty_slot"])
+def test_a_curve_of_one_node_reads_one_row(root: str) -> None:
+    """A lone point, or a periodic point whose slot is empty, reads as one row in
+    every getter; there is no iterate to read."""
+    head = Point(1.0, 2.0, 0.5) if root == "point" else BranchPoint(1, (0.0, 0.0), x=0.0, y=0.0)
+    curve = BaseManifold(head, "unstable", 1.0, None, tail=head, branch_index=0, manifold_key=None)
+
+    assert curve.get_point_array().shape == (1, 2)
+    assert curve.get_cdist_array().shape == (1, 1)
+    assert curve.get_non_iterated_point_array().shape == (1, 2)
+    assert curve.get_iterated_point_array().size == 0
+    assert curve.get_point_array(return_nodes=True) == list(curve._walk_nodes()) == [head]
 
 
 # ------------------------------------------------ iterate list (both kinds)
