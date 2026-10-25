@@ -46,9 +46,13 @@ Components of the census (bytes):
 * ``points_other`` -- any other ``Point`` alive (separators, stale lists,
   merge-dropped duplicates);
 * ``point_store`` -- the workbench's ``PointStore``: its columns at capacity
-  and its row -> ``Point`` list (counts ``store_rows``, ``store_capacity``,
-  ``phantom_rows`` -- no object, no cdist -- and ``off_curve_rows`` -- an
-  object with a cdist on no walked curve); absent on a tree without it;
+  (the chain and position columns too, since the order arrays) and its row ->
+  ``Point`` list (counts ``store_rows``, ``store_capacity``, ``phantom_rows``
+  -- no object, no cdist -- and ``off_curve_rows`` -- an object with a cdist
+  on no walked curve); absent on a tree without it;
+* ``curve_ids`` -- the store's ``Chain`` objects and their ``ids`` arrays, the
+  order of points along every curve (count ``chains``, the live ones); 0 on a
+  tree without them;
 * ``branch_points`` -- the ``BranchPoint`` objects;
 * ``segment_index`` -- ``Tangle``'s Python side: ``_Segment`` objects, the
   edge / owner / lookup dicts and sets (the query-only edge set counted with
@@ -315,14 +319,11 @@ def _point_bytes(p: Any) -> int:
 
 
 def _walk_ids(manifold: Any) -> list[int]:
-    """The ids of every node of a manifold's linked list, root to its PHYSICAL end.
+    """The ids of every node of a manifold, root to its PHYSICAL end (the end of
+    its linked list, or of its chain since the order arrays).
 
-    Walked here (``walk_fwd``) rather than through ``_collect``, which the timer wraps."""
-    ids, prev, node = [], None, manifold.root
-    while node is not None:
-        ids.append(id(node))
-        prev, node = node, manifold.walk_fwd(prev, node)
-    return ids
+    Read through ``_walk_nodes`` rather than ``_collect``, which the timer wraps."""
+    return [id(node) for node in manifold._walk_nodes(stop_at_final=False)]
 
 
 def _deep_size(roots: list, seen: set, stop: Callable[[Any], bool]) -> int:
@@ -449,6 +450,12 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
         counts["phantom_rows"] = int((~has_node & ~has_cdist).sum())
         counts["off_curve_rows"] = int((has_node & ~on_a_curve & has_cdist).sum())
         sizes["point_store"] = store.nbytes + sys.getsizeof(store.nodes)
+        chains = getattr(store, "chains", None)
+        if chains is not None:
+            counts["chains"] = sum(1 for chain in chains if len(chain.ids))
+            sizes["curve_ids"] = sys.getsizeof(chains) + sum(
+                sys.getsizeof(chain) + sys.getsizeof(chain.ids) for chain in chains
+            )
     del on_curve, on_image
 
     tangle = workbench.Tangle

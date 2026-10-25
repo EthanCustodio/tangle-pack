@@ -27,10 +27,10 @@ INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 MEMORY_GROUPS = [
     ("Point on manifolds", ["points_curve", "branch_points"]),
     ("Point on blast images", ["points_image", "points_other"]),
-    ("phantom preimages", ["points_phantom"]),
+    ("point store + phantoms", ["point_store", "points_phantom"]),
     ("segment index (py)", ["segment_index"]),
     ("rtree (C)", ["rtree"]),
-    ("curve objects + walk memo", ["curve_objects", "walk_memo"]),
+    ("curve objects + ids + memo", ["curve_objects", "curve_ids", "walk_memo"]),
     ("registry", ["registry"]),
     ("topology caches", ["topology"]),
 ]
