@@ -2,9 +2,9 @@
 Synthetic polylines for the numerics guards: hand-placed manifolds on a real
 workbench.
 
-Nothing here calls a map. :func:`polyline_manifold` links real ``Point``
-nodes into a real ``BaseManifold``; :func:`polyline_workbench` registers such
-curves on a real ``TangleWorkbench`` (identity maps), so
+Nothing here calls a map. :func:`polyline_manifold` builds a real
+``BaseManifold`` through real ``Point`` nodes; :func:`polyline_workbench`
+registers such curves on a real ``TangleWorkbench`` (identity maps), so
 ``compute_intersections``, the resolution ratio and the resolution report run
 unchanged on geometry chosen by the test.
 """
@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Mapping, Optional, Sequence
 
 from tanglepack import BaseManifold, BranchPoint, FixedPoint, Point, TangleWorkbench
+from tanglepack.numerics import ManifoldMachine
 
 
 def polyline_manifold(
@@ -25,9 +26,9 @@ def polyline_manifold(
     """
     A manifold through ``points``, cdist = the index, keyed by ``key``.
 
-    The walk leaves the fixed point along ``forward`` links on an unstable
-    manifold and along ``backward`` links on a stable one, so the nodes are
-    linked in the direction the key's stability walks.
+    The nodes are put on one curve in the order given, through the machine's
+    own constructor (``ManifoldMachine._manifold_from_points``), and hung on
+    ``root`` when there is one, as the initializer hangs a seed segment.
 
     Args:
         points: The polyline's vertices in order (after ``root``, if given).
@@ -42,16 +43,10 @@ def polyline_manifold(
     fixed_point, stability, _orbit, branch = key
     offset = 0 if root is None else 1
     nodes = [Point(x, y, float(i + offset)) for i, (x, y) in enumerate(points)]
-    for node, following in zip(nodes, nodes[1:]):
-        if stability == "unstable":
-            node.insert_point_forward(following)
-        else:
-            node.insert_point_backward(following)
+    ManifoldMachine._manifold_from_points(nodes, stability, 1.0, fixed_point)
     if root is not None:
-        if stability == "unstable":
-            root.insert_point_forward(nodes[0], branch)
-        else:
-            root.insert_point_backward(nodes[0], branch)
+        hang = root.insert_point_forward if stability == "unstable" else root.insert_point_backward
+        hang(nodes[0], branch)
     return BaseManifold(
         nodes[0] if root is None else root,
         stability,
