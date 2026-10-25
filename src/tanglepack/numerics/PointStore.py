@@ -9,16 +9,18 @@ small object over its row: it keeps only the geometric links ``forward`` /
 Rows are appended and never removed or reused, so a row id names one point for
 the life of its store, and the coordinates of a row never change once written.
 
-Phantoms -- the coordinate-only preimages refinement caches for its next layer
-(cdist NaN, on no curve, named by one point's preimage link and naming nothing
+Phantoms -- the coordinate-only preiterates refinement caches for its next
+layer (cdist NaN, on no curve, named by one point's preiterate link -- its
+preimage on an unstable curve, its image on a stable one -- and naming nothing
 themselves) -- are rows with no :class:`~.Point.Point` at all, until something
 reads one through the adapter (:meth:`PointStore.node`).
 
 Dev Notes:
 
-Append-only until N10 (numerics arrays plan, Q7): the only rows that die today
-are the initializer's detached fictitious tails, one per seeded chain, and the
-merge-dropped duplicate of each cdist tie. Compaction belongs to save/load.
+Append-only until N10 (numerics arrays plan, Q7): the only rows the base would
+have freed are the initializer's detached fictitious tails, one per seeded
+chain; merge-dropped duplicates are off-curve but named by their preimage's
+link. Compaction belongs to save/load.
 
 Who owns a store (Q5): the workbench (``TangleWorkbench.point_store``), which
 hands it to its initializer; the machine stays stateless and appends to the

@@ -774,8 +774,9 @@ class ManifoldMachine:
         self._note_coords(new_coords)
         new_cdists = mid_cd[flagged]
 
-        # The new points, then their preimages: phantom rows (no cdist, no Point)
-        # the child pairs refine from next layer, named by a one-way link.
+        # The new points, then their preiterates (preimages on an unstable curve,
+        # images on a stable one): phantom rows (no cdist, no Point) the child
+        # pairs refine from next layer, named by a one-way link.
         store = p1_nodes[0].store
         rows = store.append(new_coords, new_cdists)
         phantoms = store.append(pre_mid[flagged], None)
@@ -811,7 +812,7 @@ class ManifoldMachine:
             return None if pre is None else pre.get_point()
         store = point.store
         row = (store._preimage if stability == "unstable" else store._image)[point.row]
-        return None if row < 0 else store._xy[row]
+        return None if row < 0 else store.xy[row]
 
     @staticmethod
     def _insert_point_geometrically(

@@ -8,8 +8,9 @@ it inherits from :class:`~.BasePoint.BasePoint`.
 A point is a slotted object over one row of a
 :class:`~.PointStore.PointStore`: its coordinates, cdist and iterate links live
 in the store's columns, and only the geometric links and the stretch parameter
-live on the object. The store keeps one ``Point`` per row for the store's life,
-so ``id()`` of a point and ``is`` between points stay meaningful.
+live on the object. The store keeps one ``Point`` per row that has one (a
+phantom row gets one only when :meth:`PointStore.node` reads it) for the
+store's life, so ``id()`` of a point and ``is`` between points stay meaningful.
 
 Dev Notes:
 
@@ -131,7 +132,7 @@ class Point(BasePoint):
         """
         Whether the point has an image or a preimage row.
 
-        A phantom preimage counts, exactly as a phantom ``Point`` did before
+        A phantom preiterate counts, exactly as a phantom ``Point`` did before
         the store: the merge's tie rule (:meth:`BasePoint.has_iterate_link`)
         must read the same.
 
