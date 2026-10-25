@@ -774,10 +774,7 @@ class TangleWorkbench:
         root = fixed_point.branch_points[0]
         first_point = manifold.first_node(branch_index)
 
-        root_coord = root.get_point()
-        first_point_coords = first_point.get_point()
-
-        initial_direction = np.asarray(first_point_coords) - np.asarray(root_coord)
+        initial_direction = first_point.get_point() - root.get_point()
 
         if max_iterations is None:
             max_iterations = self._default_cap(fixed_point, stability, TURNAROUND_LOG_STRETCH)
@@ -791,10 +788,7 @@ class TangleWorkbench:
             first_point = self.manifolds.get((fixed_point, stability, 0, branch_index))
             first_point = first_point.walk_back(None, tail)
 
-            tail_coords = tail.get_point()
-            first_point_coords = first_point.get_point()
-
-            final_direction = tail_coords - first_point_coords
+            final_direction = tail.get_point() - first_point.get_point()
 
             dot_product = float(np.dot(initial_direction, final_direction))
 
