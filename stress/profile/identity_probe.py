@@ -16,10 +16,11 @@ Usage (from the repository root)::
 series or scenario in a FRESH interpreter that imports ``tanglepack`` and
 ``cases`` from ``$TANGLEPACK_REPO`` (default: this checkout). A series runs
 ``cases.blast_series``'s loop: one blast per step at the series'
-``min_separation`` with ``diagnose=False``, the topology, then a plain
-recompute of the crossings and bridges. A scenario blasts the nested zones
-unfiltered in its order and is dumped after the blasts (``.blasted``) and after
-one recompute (``.recomputed``). Per build or step it writes ``<name>.npz``
+``min_separation``, the topology, then a plain recompute of the crossings and
+bridges. A scenario blasts the nested zones unfiltered in its order and is
+dumped after the blasts (``.blasted``) and after one recompute
+(``.recomputed``). Every blast of the probe runs with ``diagnose=True``, which
+changes no other item (N2, 2026-10-24: checked on three series and a scenario). Per build or step it writes ``<name>.npz``
 (float arrays) and ``<name>.json`` (texts):
 
 * ``curve:<key>`` -- ``(x, y, cdist)`` of every registered manifold (its whole
@@ -29,7 +30,11 @@ one recompute (``.recomputed``). Per build or step it writes ``<name>.npz``
   resolution ratio, chord deviation and the cdists of its four bracket ends;
 * texts -- extents, the crossings' branch keys, N, the iterate table,
   ``unresolved_links``, the holes, ``pip_depth``, the class table, the
-  dynamics and the refined transition matrix.
+  dynamics and the refined transition matrix;
+* ``same_stability_counts`` -- one line per blast since the previous dump (a
+  law case: every blast of its build; a series step: its own blast; a
+  scenario: its blasts, in ``.blasted``): the ``SameStabilityCount`` its
+  resolution report carries, partial bridges named without their address.
 
 ``compare`` compares bytes. Each differing array gets one D3 line (rows
 differing, length change, max |dxy|, max |dcdist|), each differing text a
@@ -39,7 +44,9 @@ Dev Notes:
     Every read of a curve's nodes, a crossing's brackets or the image curves
     goes through one reader below (``curve_arrays``, ``curve_extent``,
     ``bracket_cdists``, ``image_curves``, ``key_text``); registry fields,
-    ``bridge.id`` and topology ``describe()`` are read directly. A slice that
+    ``bridge.id`` and topology ``describe()`` are read directly; a blast's
+    count is caught by wrapping ``TangleWorkbench.report_resolution``
+    (``record_counts``), since ``blast_zone`` returns no report. A slice that
     changes an accessor edits only these, in its own diff. Nothing from
     ``src/`` is imported at module level.
 
@@ -58,6 +65,7 @@ import difflib
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -112,6 +120,29 @@ def key_text(workbench: Any, key: Any) -> str:
         return "None"
     fp, stability, orbit, branch = key
     return f"fp{workbench.fixed_points.index(fp)}.{stability}.{orbit}.{branch}"
+
+
+def count_text(count: Any) -> str:
+    """A ``SameStabilityCount`` as one line; a partial bridge's name loses its address."""
+    pairs = [re.sub(r"partial image bridge 0x[0-9a-f]+", "partial image bridge", pair)
+             for pair in count.curve_pairs]
+    return (f"in_region={count.in_region} outside={count.outside} "
+            f"cutoff={count.suggested_area_cutoff!r} pairs={pairs}")
+
+
+def record_counts(workbench_class: Any) -> list:
+    """Wrap ``report_resolution`` to collect every blast's ``same_stability_count``."""
+    counts = []
+    report_resolution = workbench_class.report_resolution
+
+    def recording(self, *args, **kwargs):
+        report = report_resolution(self, *args, **kwargs)
+        if report.same_stability_count is not None:
+            counts.append(report.same_stability_count)
+        return report
+
+    workbench_class.report_resolution = recording
+    return counts
 
 
 def _float(value: Any) -> float:
@@ -193,10 +224,13 @@ def topology_texts(session: Any) -> dict:
         return {"topology_error": f"{type(exc).__name__}: {exc}"}
 
 
-def save(out: Path, name: str, session: Any) -> None:
-    """Write ``<name>.npz`` and ``<name>.json`` for the session's current state."""
+def save(out: Path, name: str, session: Any, counts: list) -> None:
+    """Write ``<name>.npz`` and ``<name>.json`` for the session's current state,
+    taking the blast counts recorded since the previous dump out of ``counts``."""
     arrays, texts = numerics_state(session.workbench)
     texts.update(topology_texts(session))
+    texts["same_stability_counts"] = "\n".join(map(count_text, counts))
+    counts.clear()
     np.savez(out / f"{name}.npz", **arrays)
     (out / f"{name}.json").write_text(json.dumps(texts, indent=1, sort_keys=True))
     print(f"  {name}: {len(arrays)} arrays, {len(texts)} texts", flush=True)
@@ -217,8 +251,9 @@ def run_worker(name: str, out: Path) -> None:
     import tanglepack
 
     assert Path(tanglepack.__file__).resolve().is_relative_to(REPO / "src"), tanglepack.__file__
+    counts = record_counts(tanglepack.TangleWorkbench)
     if name in cases.LAW_CASES:
-        save(out, name, cases.BUILDERS[name]().session)
+        save(out, name, cases.BUILDERS[name]().session, counts)
         return
     if name in SCENARIOS:
         case = cases.build_nested(outer_blasts=0, through="zones")
@@ -226,10 +261,10 @@ def run_worker(name: str, out: Path) -> None:
         zone = {"inner": zones[0], "outer": zones[-1]}
         for which in SCENARIOS[name]:
             case.session.blast_zone(zone[which], num_iterations=1, fixed_point=None,
-                                    min_separation=1e-4, diagnose=False)
-        save(out, f"{name}.blasted", case.session)
+                                    min_separation=1e-4, diagnose=True)
+        save(out, f"{name}.blasted", case.session, counts)
         recompute(case.session.workbench)
-        save(out, f"{name}.recomputed", case.session)
+        save(out, f"{name}.recomputed", case.session, counts)
         return
     series = cases.SERIES[name]
     case = series.build()
@@ -238,8 +273,8 @@ def run_worker(name: str, out: Path) -> None:
     for blast in range(series.blasts + 1):
         if blast:
             session.blast_zone(zone, num_iterations=1, fixed_point=[zone.fixed_point],
-                               min_separation=series.min_separation, diagnose=False)
-        save(out, f"{name}.b{blast:02d}", session)
+                               min_separation=series.min_separation, diagnose=True)
+        save(out, f"{name}.b{blast:02d}", session, counts)
         recompute(session.workbench)
 
 

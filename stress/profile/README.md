@@ -91,5 +91,13 @@ one line per differing array (rows differing, length change, max |dxy|, max |dcd
 unified diff per differing text, and last `identical: 58 builds, 5776 arrays, 638 texts` (at
 `a8bb8a0`) or `differences in K items`.
 
+Every blast of the probe runs with `diagnose=True`, and each dump carries one more text,
+`same_stability_counts` (N2, 2026-10-24): one line per blast since the previous dump -- the
+`SameStabilityCount` of the blast's resolution report (`in_region`, `outside`, the `repr` of
+`suggested_area_cutoff`, the curve pairs with a partial bridge's address dropped), caught by
+wrapping `TangleWorkbench.report_resolution` because `blast_zone` returns no report. So a slice
+that touches the same-stability count is checked blast by blast, base against branch, with no
+change to `compare`; `diagnose=True` leaves every other item as it was.
+
 A slice that changes an accessor the probe reads edits only its readers (`curve_arrays`,
 `curve_extent`, `bracket_cdists`, `image_curves`, `key_text`), in its own diff.
