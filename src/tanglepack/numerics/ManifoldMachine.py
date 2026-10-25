@@ -2,17 +2,19 @@
 Growing manifolds one iteration of the map at a time.
 
 :class:`ManifoldMachine` is the numerical engine of the library. It maps a
-manifold's points forward (backward, for a stable manifold) one step, splices
-the images into the geometric linked list in canonical-distance order, merges
-the new arc with what was already there, and refines the result wherever the
-curvature area between adjacent points exceeds ``area_cutoff``.
+manifold's points forward (backward, for a stable manifold) one step, puts the
+images on a chain of the point store (:class:`~.PointStore.Chain`), merges that
+chain with the run of the curve that was already there by canonical distance,
+and refines the result wherever the curvature area between adjacent points
+exceeds ``area_cutoff``. Every step works on chain positions: nothing walks a
+curve point by point.
 
 Invariants it maintains:
 
-* The geometric list is ordered by canonical distance. That order is
+* Every chain is ordered by canonical distance. That order is
   non-decreasing, not strictly increasing: at a high-stretch fold adjacent
   cdists can collapse to within a float ULP, and a tie is harmless because
-  points are spliced geometrically and never re-sorted by cdist.
+  points are inserted at a position and never re-sorted by cdist.
 * Every point it inserts keeps its iterate links, so a grown curve can always
   be walked back to the seed segment.
 * Refinement is breadth-first and batched: one map evaluation per layer, not
@@ -88,8 +90,10 @@ from typing import Iterator, Literal, Optional
 import logging
 
 import numpy as np
+from numpy.typing import NDArray
 
 from .Point import Point
+from .PointStore import LEFT_OFF, Chain
 from .FixedPoint import FixedPoint
 from .DynamicalSystem import DynamicalSystem
 from .BaseManifold import BaseManifold
@@ -119,8 +123,8 @@ class ManifoldMachine:
 
     * :meth:`iterate_manifold` -- map every point of a curve one step in its own
       dynamical direction (forward for an unstable manifold, backward for a
-      stable one), splice the images into the geometric linked list, and merge
-      the result with the part of the curve that already existed.
+      stable one), put the images on a chain, and merge it with the part of
+      the curve that already existed.
     * :meth:`refine_manifold` -- insert points wherever the curvature area
       between two neighbours exceeds :attr:`area_cutoff`, breadth-first and one
       batched map call per layer.
@@ -128,12 +132,12 @@ class ManifoldMachine:
 
     Invariants every method preserves:
 
-    * The geometric list stays ordered by canonical distance (non-decreasing --
-      see the module Dev Notes on ties at a high-stretch fold).
+    * Every chain stays ordered by canonical distance (non-decreasing -- see
+      the module docstring on ties at a high-stretch fold).
     * Inserted points keep their iterate links, so a grown curve can always be
       walked back to the seed segment.
-    * A refined point is spliced geometrically between its neighbours; the list
-      is never re-sorted.
+    * A refined point is inserted at its position between its neighbours; a
+      chain is never re-sorted.
 
     Attributes:
         system (DynamicalSystem): The map, its inverse and their batched forms.
@@ -243,8 +247,8 @@ class ManifoldMachine:
         in turn -- ``k_value`` steps, which closes the chain (``k_value`` is the
         period without inversion and twice the period with it).
 
-        Growth happens by side effect: :meth:`iterate_manifold` splices the images
-        into the next orbit point's linked list, so the manifold it returns is
+        Growth happens by side effect: :meth:`iterate_manifold` merges the images
+        into the next orbit point's chain, so the manifold it returns is
         never needed here -- the next step re-reads the spliced-in points through a
         fresh view.
 
@@ -324,16 +328,11 @@ class ManifoldMachine:
     def _manifold_from_points(
         points: list[Point], stability: Stability, stretch_param: float, fixed_point: FixedPoint
     ) -> BaseManifold:
-        """A key-less manifold through fresh points in cdist order, linked along the
-        geometric list (forward on an unstable branch, backward on a stable one)."""
-        manifold = BaseManifold(points[0], stability, stretch_param, fixed_point, manifold_key=None)
-        for point, following in zip(points, points[1:]):
-            if stability == "unstable":
-                point.insert_point_forward(following)
-            else:
-                point.insert_point_backward(following)
-        manifold.tail = points[-1]
-        return manifold
+        """A key-less manifold over a new chain of fresh points, in cdist order."""
+        points[0].store.new_chain([point.row for point in points], stretch_param)
+        return BaseManifold(
+            points[0], stability, stretch_param, fixed_point, tail=points[-1], manifold_key=None
+        )
 
     def _iterate_manifold(self, manifold: BaseManifold) -> BaseManifold:
         """The body of :meth:`iterate_manifold`, inside the caller's budget scope."""
@@ -353,27 +352,22 @@ class ManifoldMachine:
             self._note_coords(iterated_points)
             distances = np.ravel(manifold.stretch_param * non_iterated_cdists)
 
-            # The images go into the store of the curve, in one append; each pair
-            # is linked both ways (the image on an unstable curve, the preimage on
-            # a stable one).
+            # The images go into the store of the curve (a chain's rows share one
+            # store), in one append; each pair is linked both ways (the image on
+            # an unstable curve, the preimage on a stable one).
             store = non_iterated_points[0].store
-            if any(point.store is not store for point in non_iterated_points):
-                raise TypeError("the points of one curve must share a store")
             rows = store.append(iterated_points, distances)
             sources = np.fromiter(
                 (point.row for point in non_iterated_points), np.int64, len(non_iterated_points)
             )
-            if manifold.stability == "unstable":
-                forward, backward, name = store._image, store._preimage, "Iterate"
+            unstable = manifold.stability == "unstable"
+            if ((store.image if unstable else store.preimage)[sources] >= 0).any():
+                raise ValueError(f"{'Iterate' if unstable else 'Pre-iterate'} 1 already exists")
+            if unstable:
+                store.link(sources, rows)
             else:
-                forward, backward, name = store._preimage, store._image, "Pre-iterate"
-            if (forward[sources] >= 0).any():
-                raise ValueError(f"{name} 1 already exists")
-            forward[sources] = rows
-            backward[rows] = sources
-            new_points = [
-                Point._over(store, row, manifold.stretch_param) for row in rows.tolist()
-            ]
+                store.link(rows, sources)
+            new_points = [Point._over(store, row) for row in rows.tolist()]
 
             # The image of a piece lives on the branch one map step forward, which
             # only the caller can name (see iterate_bridge); the machine leaves the
@@ -392,11 +386,11 @@ class ManifoldMachine:
                 mapped_manifold = self.merge_manifolds(chain, mapped_manifold)
             self.refine_manifold(mapped_manifold)
 
-            # cdist is the manifold's ordering key, so the geometric list must be
+            # cdist is the manifold's ordering key, so the chain must be
             # cdist-sorted. It is only *non-decreasing*, not strictly increasing:
             # where a high-stretch fold has collapsed adjacent cdists to within a
             # float ULP the refiner bridges the gap with equal-cdist points (a tie
-            # is harmless -- such points are spliced geometrically, never re-sorted).
+            # is harmless -- such points are inserted at a position, never re-sorted).
             assert (np.diff(mapped_manifold.get_cdist_array(), axis=0) >= 0).all()
 
             return mapped_manifold
@@ -428,26 +422,33 @@ class ManifoldMachine:
 
     def _image_chains(self, manifold: BaseManifold, images: list[Point]) -> list[BaseManifold]:
         """
-        The existing images of a curve's points, as geometrically contiguous chains.
+        The existing images of a curve's points, as runs of their chains.
 
-        A bridge's images are usually one run of one curve, but a bridge whose
+        A bridge's images are usually one run of one chain, but a bridge whose
         straddle nodes it shares with a neighbour that was iterated first has its
-        images on TWO curves (the grown manifold's tip, then the start of the
-        neighbour's image). Walking the curve from the first image, the images it
-        reaches (to the end of that curve, or past the last image's cdist) form one
-        chain from the first to the last reached; the next chain starts at the
-        first image after it. An image the walk passes over without reaching (a
-        node a merge dropped as a duplicate cdist keeps its preimage's link) is
-        skipped, as one merged chain always skipped it.
+        images on TWO chains (the grown manifold's tip, then the start of the
+        neighbour's image). The run starting at an image takes every later image
+        on the same chain at or after its position whose cdist is within the last
+        image's (the extent a walk from it along its curve reached); the next run
+        starts at the first image after the last one taken. An image on no chain
+        inside a run (a node a merge dropped as a duplicate cdist keeps its
+        preimage's link) is skipped, as one merged chain always skipped it; one
+        that starts a run (an initializer's fictitious point) is a chain of one.
+        A periodic point (the image of an anchor bridge's root, always first)
+        starts a run at its slot on the curve's branch.
 
         Args:
-            manifold: The curve being iterated (its stability and branch walk the images).
+            manifold: The curve being iterated (its stability, stretch and branch
+                go to the runs).
             images: The existing images, in the curve's order.
 
         Returns:
-            One manifold per chain, in cdist order; empty when there are no images.
+            One manifold per run, in cdist order; empty when there are no images.
+
+        Raises:
+            AssertionError: A run would start at a point a merge left off its chain.
         """
-        def chain(first: Point, last: Point) -> BaseManifold:
+        def run(first: Point, last: Point) -> BaseManifold:
             return BaseManifold(
                 first,
                 manifold.stability,
@@ -460,18 +461,36 @@ class ManifoldMachine:
 
         if not len(images):
             return []
-        walker = chain(images[0], images[-1])
-        bound = images[-1].cdist
-        chains, i = [], 0
+        head = images[0] if isinstance(images[0], BranchPoint) else None
+        points = images if head is None else images[1:]
+        store = points[0].store
+        rows = np.fromiter((point.row for point in points), np.int64, len(points))
+        chains, positions, cdists = store._chain[rows], store._position[rows], store.cdist[rows]
+        if head is not None:
+            # The image of an anchor bridge's root is the next periodic point: its
+            # run starts at the slot of the bridge's branch, position -1 of the
+            # chain hanging there.
+            slots = head.forward_branches if manifold.stability == "unstable" else head.backward_branches
+            first = slots[manifold.branch_index]
+            rows = np.concatenate(([-1], rows))
+            chains = np.concatenate(([store._chain[first.row]], chains))
+            positions = np.concatenate(([-1], positions))
+            cdists = np.concatenate(([head.cdist], cdists))
+        bound = cdists[-1]
+        runs, i = [], 0
         while i < len(images):
-            reached, previous, node = set(), None, images[i]
-            while node is not None and node.cdist <= bound:
-                reached.add(id(node))
-                previous, node = node, walker.walk_fwd(previous, node)
-            last = max(j for j in range(i, len(images)) if id(images[j]) in reached)
-            chains.append(chain(images[i], images[last]))
+            if chains[i] < 0:
+                assert positions[i] != LEFT_OFF, "a run of images starts at a point a merge left off"
+                store.new_chain(rows[i : i + 1], manifold.stretch_param)
+                last = i
+            else:
+                reached = (
+                    (chains[i:] == chains[i]) & (positions[i:] >= positions[i]) & (cdists[i:] <= bound)
+                )
+                last = i + int(np.flatnonzero(reached)[-1])
+            runs.append(run(images[i], images[last]))
             i = last + 1
-        return chains
+        return runs
 
     def iterate_bridge(self, manifold: Bridge) -> BaseManifold:
         """
@@ -498,119 +517,113 @@ class ManifoldMachine:
         self, manifold_1: BaseManifold, manifold_2: BaseManifold
     ) -> BaseManifold:
         """
-        O(n) inplace method for merging two linked lists (manifold_1 and manifold_2)
-        Merges two manifolds based on their cdists.
-        Does not return a 3rd manifold, returns the whichever manifold has the smaller
-        starting cdist with the new tail set
+        Merges two runs of points by canonical distance into one chain, in place.
+
+        ``manifold_1`` is a run of existing points (from :meth:`_image_chains`),
+        ``manifold_2`` the new images (or an earlier merge's output). The merged
+        run starts at the lower root (``manifold_1``'s on a tie) and ends at the
+        tail of the run that outlasts the other. Where the two runs share no
+        cdist (the usual merge) the order is one ``searchsorted``; otherwise the
+        zipper below decides it point by point: tied ROOTS are both kept, the
+        existing first; a point on both runs is kept once; of two other points
+        on one cdist the existing one is kept unless only the new one has an
+        iterate link, and then the existing one leaves its chain.
 
         Parameters:
-            manifold_1: manifold to merge
-            manifold_2: manifold to merge
+            manifold_1: The existing run.
+            manifold_2: The run merged into it.
+
+        Returns:
+            Whichever manifold starts lower, its tail set to the merged run's end.
+
+        Raises:
+            AssertionError: The merged run cannot be one chain (no case reaches
+                these): the run placed second starts after the beginning of its
+                chain, the run that ran out first has points past its tail, or
+                both runs end on a tie.
         """
+        # A periodic point heads only an existing run (an anchor bridge's image);
+        # at cdist 0 it comes first, and the zipper starts after it.
+        root_1, chain_1, lo_1, hi_1 = manifold_1._span()
+        root_2, chain_2, lo_2, hi_2 = manifold_2._span()
+        assert root_2 is None, "a periodic point heads only the existing run"
+        store = chain_1.store
+        ids_1, ids_2 = chain_1.ids[lo_1:hi_1], chain_2.ids[lo_2:hi_2]
+        c1, c2 = store.cdist[ids_1], store.cdist[ids_2]
+        ranges = f"cdists [{c1[0]!r}, {c1[-1]!r}] and [{c2[0]!r}, {c2[-1]!r}]"
+        first_is_1 = root_1 is not None or c1[0] <= c2[0]
 
-        head_1 = manifold_1.root
-        head_2 = manifold_2.root
-
-        # NOTE If there are negative cdists this merge method will fail
-        # Choose which manifold to start with based on the lower cdist
-        if head_1.cdist <= head_2.cdist:
-            current_point = head_1
-            head_1 = manifold_1.walk_fwd(None, head_1)
-            output_manifold = manifold_1
+        below = np.minimum(np.searchsorted(c1, c2), len(c1) - 1)
+        if chain_1 is not chain_2 and not (c1[below] == c2).any():
+            merged = np.insert(ids_1, np.searchsorted(c1, c2, side="right"), ids_2)
+            rest_is_1 = c1[-1] > c2[-1]
         else:
-            current_point = head_2
-            head_2 = manifold_2.walk_fwd(None, head_2)
-            output_manifold = manifold_2
-
-        # set the termination point right after the manifold tail
-        over_one_1 = manifold_1.walk_fwd(None, manifold_1.tail)
-        over_one_2 = manifold_2.walk_fwd(None, manifold_2.tail)
-
-        while head_1 is not over_one_1 and head_2 is not over_one_2:
-
-            if head_1.cdist < head_2.cdist:
-                next_head = manifold_1.walk_fwd(None, head_1)
-                if manifold_1.walk_fwd(None, current_point) is not head_1:
-                    self._insert_point_geometrically(current_point, head_1, manifold_1)
-                current_point = head_1
-                head_1 = next_head
-
-            elif head_2.cdist < head_1.cdist:
-                next_head = manifold_2.walk_fwd(None, head_2)
-                if manifold_2.walk_fwd(None, current_point) is not head_2:
-                    self._insert_point_geometrically(current_point, head_2, manifold_2)
-                current_point = head_2
-                head_2 = next_head
-
-            else:  # they share a cdist
-                if head_1 is head_2:
-                    # The same physical node appears in both lists.
-                    if manifold_1.walk_fwd(None, current_point) is not head_1:
-                        self._insert_point_geometrically(
-                            current_point, head_1, manifold_1
-                        )
-                    head_1 = manifold_1.walk_fwd(None, head_1)
-                    head_2 = manifold_2.walk_fwd(None, head_2)
-                    current_point = manifold_1.walk_fwd(None, current_point)
+            nodes = store.nodes
+            if root_1 is not None:
+                order, i, j = [], 0, 0
+            else:
+                order = [ids_1[0] if first_is_1 else ids_2[0]]
+                i, j = (1, 0) if first_is_1 else (0, 1)
+            while i < len(ids_1) and j < len(ids_2):
+                if c1[i] < c2[j]:
+                    order.append(ids_1[i])
+                    i += 1
+                elif c2[j] < c1[i]:
+                    order.append(ids_2[j])
+                    j += 1
+                elif ids_1[i] == ids_2[j]:
+                    order.append(ids_1[i])
+                    i, j = i + 1, j + 1
                 else:
                     # Two different points collided onto the same cdist. cdist is
                     # the only ordering key, so once it saturates (one ULP at large
                     # magnitude exceeds the true separation near a fold) it can no
                     # longer order the pair -- keeping both and ordering by the tied
-                    # key scrambles them into a spike. The newly generated point has
-                    # no iterate links yet; keep the established (iterate-linked)
-                    # point and skip the duplicate.
+                    # key scrambles them into a spike. Keep the established
+                    # (iterate-linked) point and skip the duplicate.
+                    head_1, head_2 = nodes[ids_1[i]], nodes[ids_2[j]]
                     logger.debug(
                         "Duplicate cdist collision at cdist=%s; coords %s vs %s",
                         head_1.cdist,
                         head_1.get_point(),
                         head_2.get_point(),
                     )
-                    head_1_has_iter = head_1.has_iterate_link()
-                    head_2_has_iter = head_2.has_iterate_link()
-                    if head_1_has_iter or not head_2_has_iter:
-                        # head_1 is the keeper (or neither has iterates — pick head_1)
-                        next_head_1 = manifold_1.walk_fwd(None, head_1)
-                        if manifold_1.walk_fwd(None, current_point) is not head_1:
-                            self._insert_point_geometrically(
-                                current_point, head_1, manifold_1
-                            )
-                        current_point = head_1
-                        head_1 = next_head_1
-                        head_2 = manifold_2.walk_fwd(None, head_2)
-                    else:
-                        # head_2 is the keeper
-                        next_head_2 = manifold_2.walk_fwd(None, head_2)
-                        if manifold_2.walk_fwd(None, current_point) is not head_2:
-                            self._insert_point_geometrically(
-                                current_point, head_2, manifold_2
-                            )
-                        current_point = head_2
-                        head_2 = next_head_2
-                        head_1 = manifold_1.walk_fwd(None, head_1)
+                    keep_1 = head_1.has_iterate_link() or not head_2.has_iterate_link()
+                    order.append(ids_1[i] if keep_1 else ids_2[j])
+                    i, j = i + 1, j + 1
+            rest_is_1 = i < len(ids_1)
+            assert chain_1 is chain_2 or rest_is_1 or j < len(ids_2), f"both runs end on a tie: {ranges}"
+            merged = np.concatenate((order, ids_1[i:] if rest_is_1 else ids_2[j:])).astype(np.int64)
 
-        # One list ran out first: splice the exhausted list's last kept node onto
-        # the remaining head and take that manifold's tail as the merged tail, so
-        # the whole remainder (not just the next node) stays on the curve.
-        if head_1 is not over_one_1:
-            self._insert_point_geometrically(
-                current_point, head_1, manifold_1, only_forward=True
+        assert root_1 is None or merged[0] == ids_1[0], (
+            f"a new point before a periodic point's first point: {ranges}"
+        )
+        if chain_1 is chain_2:
+            lo = min(lo_1, lo_2)
+            assert np.array_equal(chain_1.ids[lo : lo + len(merged)], merged), (
+                f"two runs of one chain that do not join: {ranges}"
             )
-            output_manifold.tail = manifold_1.tail
         else:
-            self._insert_point_geometrically(
-                current_point, head_2, manifold_2, only_forward=True
+            first, start = (chain_1, lo_1) if first_is_1 else (chain_2, lo_2)
+            second, second_lo = (chain_2, lo_2) if first_is_1 else (chain_1, lo_1)
+            assert second_lo == 0 and second.anchor is None, (
+                f"the run placed second starts after the beginning of its chain: {ranges}"
             )
-            output_manifold.tail = manifold_2.tail
+            done, done_hi = (chain_2, hi_2) if rest_is_1 else (chain_1, hi_1)
+            assert done_hi == len(done), f"the run that ran out goes on past its tail: {ranges}"
+            rest, rest_hi = (chain_1, hi_1) if rest_is_1 else (chain_2, hi_2)
+            first.absorb(second, np.concatenate((first.ids[:start], merged, rest.ids[rest_hi:])), start)
 
-        return output_manifold
+        output = manifold_1 if first_is_1 else manifold_2
+        output.tail = manifold_1.tail if rest_is_1 else manifold_2.tail
+        return output
 
     def refine_manifold(
         self,
         manifold: BaseManifold,
         branch_index: Optional[int] = None,
         final_node: Optional[Point] = None,
-    ) -> set[Point]:
+    ) -> None:
         """
         Adds additional points in areas of the manifold with high curvature.
 
@@ -625,7 +638,8 @@ class ManifoldMachine:
 
         Parameters:
             manifold (BaseManifold): current manifold
-            branch_index: Optional if starting at a fixed point
+            branch_index: The branch a point inserted right after a BranchPoint
+                root hangs on; defaults to the manifold's.
             final_node: Unused; kept for backwards-compatible signature.
 
         Note:
@@ -633,7 +647,8 @@ class ManifoldMachine:
             so the traversal order does not matter: breadth-first reaches the
             same ``area < cutoff`` stopping condition as any other order.
         """
-        logger.debug("Refining manifold: %r", manifold.get_point_array())
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Refining manifold: %r", manifold.get_point_array())
 
         num_initial_points = (
             len(manifold.get_point_array())
@@ -642,23 +657,17 @@ class ManifoldMachine:
         )
 
         viewer = ManifoldView(manifold, self.system)
+        if branch_index is None:
+            branch_index = manifold.branch_index
 
-        # Layer 0: every consecutive geometric pair from root to tail.
-        layer: list[tuple] = []
-        previous_point = manifold.root
-        current_point = manifold.walk_fwd(None, previous_point)
-        while current_point is not None:
-            layer.append((previous_point, current_point))
-            if current_point is manifold.tail:
-                break
-            next_point = manifold.walk_fwd(previous_point, current_point)
-            previous_point, current_point = current_point, next_point
-
-        modified_points: set = set()
-        while layer:
-            layer = self._refine_layer(
-                layer, manifold, viewer, branch_index, modified_points
-            )
+        # Layer 0: every consecutive pair from root to tail, by the position of
+        # its first point (-1: the BranchPoint root, the chain's anchor).
+        head, chain, lo, hi = manifold._span()
+        if chain is None:
+            return
+        layer = np.arange(lo - (head is not None), hi - 1)
+        while len(layer):
+            layer = self._refine_layer(chain, layer, manifold, viewer, branch_index)
 
         if num_initial_points is not None:
             num_final_points = len(manifold.get_point_array())
@@ -668,87 +677,87 @@ class ManifoldMachine:
                 num_final_points,
             )
 
-        return modified_points
-
     def _refine_layer(
         self,
-        layer: list[tuple],
+        chain: Chain,
+        layer: NDArray[np.int64],
         manifold: BaseManifold,
         viewer: ManifoldView,
-        branch_index,
-        modified_points: set,
-    ) -> list[tuple]:
+        branch_index: Optional[int],
+    ) -> NDArray[np.int64]:
         """
         Refine one breadth-first layer of pairs and return the next layer.
 
         Computes curvature areas for the whole layer at once, inserts a new
         point into each pair that needs refining (mapping all midpoints forward
-        in a single batched call), and returns the child pairs of the refined
-        pairs as the next layer.
+        in a single batched call, inserting all of them with one chain insert),
+        and returns the child pairs of the refined pairs as the next layer.
+
+        A pair is its first point's position: the pair is that point and the
+        next one on the chain. Position -1 is the chain's anchor, which is also
+        the left neighbour of position 0; the right neighbour of the last
+        position is missing (NaN), and so is the left of the anchor.
 
         Args:
-            layer: list of ``(p0, p1)`` node pairs to consider.
+            chain: the chain the pairs lie on.
+            layer: ascending positions of the pairs' first points.
             manifold: the manifold being refined.
             viewer: view binding the manifold to the dynamical system.
-            branch_index: branch index for inserting after a BranchPoint.
-            modified_points: set accumulating every touched/created point.
+            branch_index: the anchor's branch, for a point inserted right after it.
 
         Returns:
-            The next layer of ``(p0, p1)`` pairs (empty when refinement is done).
+            The next layer, the positions of the child pairs (empty when
+            refinement is done).
         """
         stability = manifold.stability
-
-        # Gather node references and per-pair geometry, dropping pairs that are
-        # degenerate or missing the data needed to refine (dead endpoints,
-        # near-coincident points, and missing preiterates on bridge boundary
-        # points).
-        p0_nodes, p1_nodes = [], []
-        p0_xy, p1_xy, left_xy, right_xy = [], [], [], []
-        pre_mid, c0_list, c1_list = [], [], []
-
+        store, ids, anchor = chain.store, chain.ids, chain.anchor
+        xy, cdist = store.xy, store.cdist
+        preiterate = store.preimage if stability == "unstable" else store.image
         nan_row = np.array([np.nan, np.nan])
 
-        for p0, p1 in layer:
-            if p0 is None or p1 is None:
-                continue
+        def coords(positions: NDArray[np.int64]) -> NDArray[np.float64]:
+            """The points at chain positions: the anchor at -1, NaN off the chain."""
+            inside = (positions >= 0) & (positions < len(ids))
+            out = np.where(inside[:, None], xy[ids[np.clip(positions, 0, len(ids) - 1)]], nan_row)
+            if anchor is not None:
+                out[positions == -1] = anchor.get_point()
+            return out
 
-            a = p0.get_point()
-            b = p1.get_point()
-            if np.hypot(b[0] - a[0], b[1] - a[1]) < 1e-8:
-                continue
+        p0_xy, p1_xy = coords(layer), coords(layer + 1)
+        rows_0 = ids[np.maximum(layer, 0)]
+        rows_1 = ids[layer + 1]
+        pre_rows_0, pre_rows_1 = preiterate[rows_0], preiterate[rows_1]
+        pre0 = xy[np.maximum(pre_rows_0, 0)]
+        pre1 = xy[np.maximum(pre_rows_1, 0)]
+        c0, c1 = cdist[rows_0], cdist[rows_1]
+        at_anchor = layer == -1
+        if at_anchor.any():
+            anchor_pre = self._get_preiterate(anchor, stability)
+            pre_rows_0 = np.where(at_anchor, -1 if anchor_pre is None else 0, pre_rows_0)
+            if anchor_pre is not None:
+                pre0[at_anchor] = anchor_pre
+            c0 = np.where(at_anchor, float(anchor.cdist), c0)
 
-            pre0 = ManifoldMachine._get_preiterate(p0, stability)
-            pre1 = ManifoldMachine._get_preiterate(p1, stability)
-            if pre0 is None or pre1 is None:
+        # Pairs that are degenerate (near-coincident points) or missing the data
+        # needed to refine (a missing preiterate on a bridge boundary point) are
+        # dropped.
+        apart = np.hypot(p1_xy[:, 0] - p0_xy[:, 0], p1_xy[:, 1] - p0_xy[:, 1]) >= 1e-8
+        has_pre = (pre_rows_0 >= 0) & (pre_rows_1 >= 0)
+        if logger.isEnabledFor(logging.DEBUG):
+            for k in np.flatnonzero(apart & ~has_pre):
                 logger.debug(
                     "Skipping refinement for pair at cdist %.3g-%.3g: "
                     "preiterate missing on one or both points.",
-                    p0.cdist,
-                    p1.cdist,
+                    c0[k],
+                    c1[k],
                 )
-                continue
-
-            left = manifold.walk_back(p1, p0)
-            right = manifold.walk_fwd(p0, p1)
-
-            p0_nodes.append(p0)
-            p1_nodes.append(p1)
-            p0_xy.append(a)
-            p1_xy.append(b)
-            left_xy.append(left.get_point() if left is not None else nan_row)
-            right_xy.append(right.get_point() if right is not None else nan_row)
-            pre_mid.append(0.5 * (pre0 + pre1))
-            c0_list.append(float(p0.cdist))
-            c1_list.append(float(p1.cdist))
-
-        if not p0_nodes:
-            return []
+        keep = np.flatnonzero(apart & has_pre)
+        if not keep.size:
+            return np.empty(0, dtype=np.int64)
+        layer = layer[keep]
 
         areas = self._curvature_area_batch(
-            np.array(p0_xy),
-            np.array(p1_xy),
-            np.array(left_xy),
-            np.array(right_xy),
+            p0_xy[keep], p1_xy[keep], coords(layer - 1), coords(layer + 2)
         )
 
         # Refine every pair whose curvature area exceeds the cutoff. The new point
@@ -756,45 +765,40 @@ class ManifoldMachine:
         # curve has expanded so much that adjacent points are far apart in space
         # while their cdists have collapsed to within a float ULP, so that midpoint
         # may round exactly onto an endpoint. That tie is harmless here -- the point
-        # is spliced geometrically between its neighbours, not re-sorted by cdist --
-        # and bridging the gap is exactly what keeps the curve smooth instead of
+        # is inserted at its position between its neighbours, not re-sorted by cdist
+        # -- and bridging the gap is exactly what keeps the curve smooth instead of
         # leaving a coarse spike. The ``< 1e-8`` spacing guard above guarantees the
         # subdivision still terminates once the two points effectively coincide.
-        c0_arr = np.array(c0_list)
-        c1_arr = np.array(c1_list)
-        mid_cd = 0.5 * (c0_arr + c1_arr)
+        mid_cd = 0.5 * (c0[keep] + c1[keep])
+        pre_mid = 0.5 * (pre0[keep] + pre1[keep])
 
         flagged = np.flatnonzero(areas >= self.area_cutoff)
         if flagged.size == 0:
-            return []
+            return np.empty(0, dtype=np.int64)
 
         self._charge(flagged.size, "refine", manifold)
-        pre_mid = np.array(pre_mid)
         new_coords = viewer.map_fwd_batch(pre_mid[flagged])
         self._note_coords(new_coords)
-        new_cdists = mid_cd[flagged]
 
         # The new points, then their preiterates (preimages on an unstable curve,
         # images on a stable one): phantom rows (no cdist, no Point) the child
         # pairs refine from next layer, named by a one-way link.
-        store = p1_nodes[0].store
-        rows = store.append(new_coords, new_cdists)
+        rows = store.append(new_coords, mid_cd[flagged])
         phantoms = store.append(pre_mid[flagged], None)
-        (store._preimage if stability == "unstable" else store._image)[rows] = phantoms
+        store.link_phantoms(rows, phantoms, stability)
+        for row in rows.tolist():
+            Point._over(store, row)
 
-        next_layer: list[tuple] = []
-        for row, pair_idx in zip(rows.tolist(), flagged):
-            p0 = p0_nodes[pair_idx]
-            p1 = p1_nodes[pair_idx]
-            new_point = Point._over(store, row, manifold.stretch_param)
+        refined = layer[flagged]
+        chain.insert(refined + 1, rows)
+        if refined[0] == -1:  # the new first point of the chain: re-point the anchor's slot
+            slots = anchor.forward_branches if stability == "unstable" else anchor.backward_branches
+            slots[branch_index] = store.nodes[rows[0]]
 
-            self._insert_point_geometrically(p0, new_point, manifold, branch_index)
-            modified_points.update((p0, p1, new_point))
-
-            next_layer.append((p0, new_point))
-            next_layer.append((new_point, p1))
-
-        return next_layer
+        # After the insert the k-th refined pair's first point sits k places
+        # further on, and its new point right after it.
+        shifted = refined + np.arange(len(refined))
+        return np.column_stack((shifted, shifted + 1)).ravel()
 
     @staticmethod
     def _get_preiterate(point: Point | BranchPoint, stability: Stability) -> Optional[np.ndarray]:
@@ -811,60 +815,8 @@ class ManifoldMachine:
             pre = point.prev_iterate if stability == "unstable" else point.next_iterate
             return None if pre is None else pre.get_point()
         store = point.store
-        row = (store._preimage if stability == "unstable" else store._image)[point.row]
+        row = (store.preimage if stability == "unstable" else store.image)[point.row]
         return None if row < 0 else store.xy[row]
-
-    @staticmethod
-    def _insert_point_geometrically(
-        p0: Point | BranchPoint,
-        new_point: Point | BranchPoint,
-        manifold: BaseManifold,
-        branch_index: int = None,
-        only_forward: bool = False,
-    ):
-        """
-        Takes in a point (p0) on the manifold and inserts new_point after it.
-        In this case we are inserting away from the fixed point. On the
-        unstable manifold that is 'forward'. On the stable manifold that
-        is 'backward'.
-
-        Parameters:
-            p0 (Point): Anchor point we wil insert after
-            new_point (Point): Point to insert into the manifold
-            manifold (BaseManifold): Current manifold
-            branch_index (int): Optional parameter if inserting after fixed point
-
-        Note:
-            Use this method to smoothly handle insertion regardless of stability
-            and BranchPoints
-
-        REFACTOR:
-            branch_index may not be necessary if that information is already in manifold
-        """
-
-        if isinstance(p0, BranchPoint):
-            if manifold.stability == "unstable":
-                if p0.forward_branches[branch_index] is new_point:
-                    return
-                p0.insert_point_forward(
-                    new_point, branch_index=branch_index, only_forward=only_forward
-                )
-            else:
-                if p0.backward_branches[branch_index] is new_point:
-                    return
-                p0.insert_point_backward(
-                    new_point, branch_index=branch_index, only_forward=only_forward
-                )
-
-        else:
-            if manifold.stability == "unstable":
-                if p0.forward is new_point:
-                    return
-                p0.insert_point_forward(new_point, only_forward=only_forward)
-            else:
-                if p0.backward is new_point:
-                    return
-                p0.insert_point_backward(new_point, only_forward=only_forward)
 
     @staticmethod
     def _curvature_area_batch(

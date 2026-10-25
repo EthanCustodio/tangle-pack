@@ -113,56 +113,43 @@ class BranchPoint(BasePoint):
 
         return self.cdists[index]
 
-    def insert_point_forward(
-        self, node: Point, branch_index: int, only_forward: bool = False
-    ) -> None:
+    def insert_point_forward(self, node: Point, branch_index: int) -> None:
         """
-        Inserts a point (node) after this point node in the linked list
-        at the given branch index.
+        Hangs ``node``'s chain off this point at the given branch index: the
+        branch's slot names ``node`` and the chain names this point as its anchor.
 
         Args:
-            node (Point): Point to be inserted into the manifold.
+            node (Point): The first point of the branch, on a chain of its store.
             branch_index (int): The branch of the BranchPoint you wish to insert
                 the point into.
-            only_forward (bool): Flag which switches whether we cut off node
-                from its current manifold. Choosing True will not separate the new
-                point from the points that are already forwardly connected to it.
+
+        Raises:
+            ValueError: The slot already holds a point of another chain.
         """
-        if self.forward_branches[branch_index] is node:
-            pass
+        chain = node.store.chain_of(node.row)
+        held = self.forward_branches[branch_index]
+        if held is not None and held.store.chain_of(held.row) is not chain:
+            raise ValueError(f"branch {branch_index} already holds a point of another chain")
+        self.forward_branches[branch_index] = node
+        chain.anchor = self
 
-        else:
-            if self.forward_branches[branch_index] is not None:
-                if not only_forward:
-                    self.forward_branches[branch_index].backward = node
-                    node.forward = self.forward_branches[branch_index]
-
-            self.forward_branches[branch_index] = node
-            node.backward = self
-
-    def insert_point_backward(
-        self, node: Point, branch_index: int, only_forward: bool = False
-    ) -> None:
+    def insert_point_backward(self, node: Point, branch_index: int) -> None:
         """
-        Inserts this object before another point node in the linked list
-        at the given branch index.
+        Hangs ``node``'s chain off this point at the given backward branch
+        index: the slot names ``node`` and the chain names this point as its
+        anchor.
 
-        Paramters:
-            node (Point): point to be inserted before
+        Args:
+            node (Point): The first point of the branch, on a chain of its store.
             branch_index (int): The branch of the BranchPoint you wish to insert
                 the point into.
-            only_forward (bool): Flag which switches whether we cut off node
-                from its current manifold. Choosing True will not separate the new
-                point from the points that are already backwardly connected to it.
+
+        Raises:
+            ValueError: The slot already holds a point of another chain.
         """
-        if self.backward_branches[branch_index] is node:
-            pass
-
-        else:
-            if self.backward_branches[branch_index] is not None:
-                if not only_forward:
-                    self.backward_branches[branch_index].forward = node
-                    node.backward = self.backward_branches[branch_index]
-
-            self.backward_branches[branch_index] = node
-            node.forward = self
+        chain = node.store.chain_of(node.row)
+        held = self.backward_branches[branch_index]
+        if held is not None and held.store.chain_of(held.row) is not chain:
+            raise ValueError(f"branch {branch_index} already holds a point of another chain")
+        self.backward_branches[branch_index] = node
+        chain.anchor = self

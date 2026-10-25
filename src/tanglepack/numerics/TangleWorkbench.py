@@ -784,11 +784,8 @@ class TangleWorkbench:
                 fixed_point, stability, num_iterations=1, branch_index=branch_index
             )
 
-            tail = self.manifolds.get((fixed_point, stability, 0, branch_index)).tail
-            first_point = self.manifolds.get((fixed_point, stability, 0, branch_index))
-            first_point = first_point.walk_back(None, tail)
-
-            final_direction = tail.get_point() - first_point.get_point()
+            points = self.manifolds[(fixed_point, stability, 0, branch_index)].get_point_array()
+            final_direction = points[-1] - points[-2]
 
             dot_product = float(np.dot(initial_direction, final_direction))
 

@@ -407,22 +407,21 @@ class Tangle:
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         """The curve points just before and just after a segment, NaN for none.
 
-        A BranchPoint end (the periodic point) counts as having no neighbour:
-        the curve on its far side is another branch.
+        They are the chain's neighbours, read past the curve's own ends; the
+        chain's anchor is the point before its first. A BranchPoint end (the
+        periodic point) counts as having no neighbour: the curve on its far side
+        is another branch.
         """
+        def neighbour(node: Point | BranchPoint, step: int) -> Optional[Point | BranchPoint]:
+            if isinstance(node, BranchPoint):
+                return None
+            chain = node.store.chain_of(node.row)
+            return None if chain is None else chain.node_at(node.store.position_of(node.row) + step)
+
         missing = np.array([np.nan, np.nan])
-        before = (
-            None
-            if isinstance(seg.p0, BranchPoint)
-            else seg.manifold.walk_back(seg.p0_seg1, seg.p0)
-        )
-        after = (
-            None
-            if isinstance(seg.p0_seg1, BranchPoint)
-            else seg.manifold.walk_fwd(seg.p0, seg.p0_seg1)
-        )
         return tuple(
-            missing if node is None else node.get_point() for node in (before, after)
+            missing if node is None else node.get_point()
+            for node in (neighbour(seg.p0, -1), neighbour(seg.p0_seg1, 1))
         )
 
     def _find_true_intersection(
@@ -776,24 +775,11 @@ class Tangle:
         the whole manifold is indexed; for a trimmed manifold (``tail`` moved to an
         interior point, e.g. by ``trim_stable_manifolds`` or the loom resonance-zone
         trim) only the segments up to the trim are indexed. ``tail is None`` falls
-        back to walking to the physical end of the linked list.
+        back to the end of the root's chain.
         """
-        tail = manifold.tail
-        prev_point = None
-        curr_point = manifold.root
-
-        while curr_point is not None:
-
-            if curr_point is tail:
-                break
-
-            next_point = manifold.walk_fwd(prev_point, curr_point)
-            if next_point is None:
-                break
-
-            yield _Segment(None, manifold, curr_point, next_point)
-
-            prev_point, curr_point = curr_point, next_point
+        nodes = list(manifold._walk_nodes())
+        for p0, p1 in zip(nodes, nodes[1:]):
+            yield _Segment(None, manifold, p0, p1)
 
     @staticmethod
     def _orientation(
@@ -1068,11 +1054,14 @@ class Tangle:
         """
         mid_xy = 0.5 * (np.asarray(coords1) + np.asarray(coords2))
         cdist = self._cdist_between(p0, p1, manifold.stability, mid_xy)
-        separator = Point(float(mid_xy[0]), float(mid_xy[1]), cdist, store=p1.store)
+        store = p1.store
+        separator = Point(float(mid_xy[0]), float(mid_xy[1]), cdist, store=store)
+        chain = store.chain_of(p1.row)
         if isinstance(after, BranchPoint):
+            chain.insert([0], [separator.row])
             after.insert_point_forward(separator, manifold.branch_index)
         else:
-            after.insert_point_forward(separator)
+            chain.insert([store.position_of(after.row) + 1], [separator.row])
         return separator
 
     def _cdist_at_point(self, seg: _Segment, point: np.ndarray) -> float:

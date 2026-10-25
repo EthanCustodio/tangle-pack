@@ -246,42 +246,39 @@ class ManifoldInitializer:
 
         # distance_first / distance_prev is the growth over one full return to
         # this branch (k_value map steps); the fixed point converts it to the
-        # per-map-step factor the points carry as their stretch parameter.
+        # per-map-step factor the seed chain carries as its stretch parameter.
         alpha = fixed_point.per_step_factor(distance_first / distance_prev)
-
-        first_point.stretch_param = alpha
 
         first_back = Point(
             first_back[0],
             first_back[1],
             cdist=distance_prev,
-            stretch_param=alpha,
             store=self.store,
         )
 
         # The seed's (pre)iterate one full return back is first_back: the
         # unstable branch walks back along prev_iterate (the map's inverse), the
-        # stable one along next_iterate, and the geometric list grows forward on
-        # an unstable branch, backward on a stable one.
+        # stable one along next_iterate.
         unstable = stability == "unstable"
         if unstable:
             first_point.insert_prev_iterate(first_back, fixed_point.k_value)
         else:
             first_point.insert_next_iterate(first_back, fixed_point.k_value)
 
-        # fill the cdist and stretch param of the 'fictitious' points added
-        # when finding the (pre)iterate
+        # fill the cdist of the 'fictitious' points added when finding the
+        # (pre)iterate (they join a chain, and so get its stretch, only when a
+        # merge takes them)
         current_point = first_point
         for _ in range(fixed_point.k_value - 1):
             previous_point = current_point
             current_point = current_point.prev_iterate if unstable else current_point.next_iterate
             current_point.cdist = previous_point.cdist / alpha
-            current_point.stretch_param = alpha
 
+        # The seed chain, in curve order, hung on its slot of the orbit point.
+        self.store.new_chain([first_back.row, first_point.row], alpha)
         branch_point = fixed_point.branch_points[orbit_index]
-        insert = branch_point.insert_point_forward if unstable else branch_point.insert_point_backward
-        insert(first_point, branch_index)
-        insert(first_back, branch_index)
+        hang = branch_point.insert_point_forward if unstable else branch_point.insert_point_backward
+        hang(first_back, branch_index)
 
         return BaseManifold(
             fixed_point.branch_points[orbit_index],
@@ -410,9 +407,13 @@ class ManifoldInitializer:
                 segment.manifold_key = key
                 segment.branch_index = key[3]
                 initial_segments[key[2:]] = segment
-                self.machine._insert_point_geometrically(
-                    fixed_point.branch_points[key[2]], segment.root, segment, key[3]
+                branch_point = fixed_point.branch_points[key[2]]
+                hang = (
+                    branch_point.insert_point_forward
+                    if stability == "unstable"
+                    else branch_point.insert_point_backward
                 )
+                hang(segment.root, key[3])
 
         for (orbit_index, _branch), segment in initial_segments.items():
             segment.root = fixed_point.branch_points[orbit_index]

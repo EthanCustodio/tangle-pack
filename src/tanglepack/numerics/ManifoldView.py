@@ -36,8 +36,6 @@ class ManifoldView:
         self.stability = manifold.stability
         self.name = manifold.name
         self.stretch_param = manifold.stretch_param
-        self.walk_fwd = manifold.walk_fwd
-        self.walk_back = manifold.walk_back
         self.get_point_array = manifold.get_point_array
         self.get_cdist_array = manifold.get_cdist_array
 
