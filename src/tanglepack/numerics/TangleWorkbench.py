@@ -401,8 +401,8 @@ class TangleWorkbench:
           in the same breath (see :meth:`_bump_generation`);
         * :meth:`register_manifold`.
 
-        NOT tracked: mutations made behind the library's back -- points spliced
-        into a linked list by code driving :class:`ManifoldMachine` directly
+        NOT tracked: mutations made behind the library's back -- points inserted
+        into a chain by code driving :class:`ManifoldMachine` directly
         without calling ``bump_version``, an ``Intersection``'s fields edited in
         place, or a ``FixedPoint``'s eigendata replaced. Reads never advance it,
         including the lazy rebuilds of derived caches (the registry's rank

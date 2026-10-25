@@ -381,11 +381,11 @@ class BaseManifold:
         self, final_node: Optional[Point] = None, return_nodes: bool = False
     ) -> list[Point] | NDArray[np.float64]:
         """
-        Walks along the manifold in the stability direction and returns either
+        Reads the manifold in curve order, root first, and returns either
         a list of Point objects or an array of (x, y) coordinates.
 
         Parameters:
-            final_node (Optional[Point]): If specified, stop walking at this node.
+            final_node (Optional[Point]): If specified, stop reading at this node.
             return_nodes (bool): If True, return a list of Point objects;
                 else return an np.ndarray of [x, y]. Defaults to False.
 
@@ -421,7 +421,7 @@ class BaseManifold:
         self, final_node: Optional[Point] = None, return_nodes: bool = False
     ) -> list[Point] | NDArray[np.float64]:
         """
-        Walks along the manifold in the stability direction and returns either
+        Reads the manifold in curve order, root first, and returns either
         a list of Point objects or an array of their canonical distances.
 
         Note:
@@ -452,7 +452,7 @@ class BaseManifold:
 
         Args:
             num_iterates (int, optional): Number of iterates. Defaults to 1.
-            final_node (Optional[Point]): If specified, stop walking at this node.
+            final_node (Optional[Point]): If specified, stop reading at this node.
             return_nodes (bool, optional): If True, return a list of Point objects;
                 else return an np.ndarray of [x, y]. Defaults to False.
 
@@ -475,7 +475,7 @@ class BaseManifold:
 
         Args:
             num_iterates (int, optional): Number of iterates. Defaults to 1.
-            final_node (Optional[Point]): If specified, stop walking at this node.
+            final_node (Optional[Point]): If specified, stop reading at this node.
 
         Returns:
             np.ndarray of shape (N, 1)
@@ -494,12 +494,12 @@ class BaseManifold:
         return_nodes: bool = False,
     ) -> list[Point] | NDArray[np.float64]:
         """
-        Walks along the manifold in the stability direction and returns either
+        Reads the manifold in curve order, root first, and returns either
         a list of Point objects or an array of (x, y) coordinates corresponding to
         the num_iterates-step iterates of the points that have them.
 
         Parameters:
-            final_node (Optional[Point]): If specified, stop walking at this node.
+            final_node (Optional[Point]): If specified, stop reading at this node.
             return_nodes (bool): If True, return list of Point objects;
                 else return np.ndarray of [x, y]. Defaults to False.
 
