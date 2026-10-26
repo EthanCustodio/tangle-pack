@@ -6,7 +6,7 @@ Rules pinned here (WP3 of the 2026-10-07 stress-report plan):
   more points than ``max_points_per_step`` raises ``PointBudgetExceeded``
   before the overrunning map call (``points_created <= budget``, nothing
   evaluated or added past it), with the generation advanced, every bridge's
-  memoised walk dropped and the partly grown curve still ordered; ``None``
+  version bumped and the partly grown curve still ordered; ``None``
   disables the budget;
 * the count is per top-level call: consecutive steps or blasts that each fit
   never raise, however much they add up to;
@@ -152,7 +152,7 @@ def test_map_stage_refuses_before_evaluating() -> None:
 
 def test_overrun_drops_every_bridge_walk() -> None:
     """Refinement lays points inside already-cut bridges before it overruns,
-    so the overrun still invalidates every bridge's memoised point array."""
+    so the overrun still bumps every bridge's version."""
     case = build_k10(through="bridges")
     workbench, fp = case.workbench, case.fixed_point
     assert workbench.bridges, "the probe needs cut bridges"

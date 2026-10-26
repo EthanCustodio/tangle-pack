@@ -24,11 +24,11 @@ z → (unstable) → pip → (stable) → z; an inversion point has two such loo
 per branch pair, both through its one anchor, and the zone is their union (a
 figure eight at the periodic point).
 
-Why trim to ``segment.p0_seg1``: the stable manifold's canonical distance grows from
-0 at the periodic point outward; the segment carrying a pip has its near endpoint
-below the pip's stable cdist and its far endpoint (``p0_seg1``) above it, so setting
-``manifold.tail = p0_seg1`` keeps the curve up to just past the pip — the convention
-TangleWorkbench.trim_stable_manifolds uses, here generalized to chosen pips.
+Where the trim cuts: the stable manifold's canonical distance grows from 0 at the
+periodic point outward, and ``TangleWorkbench.trim_stable_at`` moves the tail to the
+first node past the root at or beyond the pip's stable cdist, the far end of the
+segment carrying the pip, so the curve keeps the pip's stable segment — the rule
+TangleWorkbench.trim_stable_manifolds uses at the outermost crossing, here at chosen pips.
 
 Registry-id caveat: a recompute rebuilds the registry, so an id held across one is
 only meaningful when the recompute preserved ids. The zone therefore stores no id

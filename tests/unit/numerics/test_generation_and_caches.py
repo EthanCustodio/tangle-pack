@@ -1,13 +1,14 @@
 """Phase 4: the generation counter and the caches it invalidates.
 
-Every derived view in the library (a Trellis snapshot, a memoised point array,
-the registry's rank maps) is only valid for one *generation* of the tangle. This
+Every derived view in the library (a Trellis snapshot, a bridge's cached
+polyline, the registry's rank maps) is only valid for one *generation* of the tangle. This
 module pins the three halves of that contract:
 
 * :attr:`IntersectionRegistry.generation` and
   :attr:`TangleWorkbench.generation` advance on every mutation path and stand
   still for pure reads.
-* the memoised point arrays agree with an un-memoised walk after growth.
+* every point array, read afresh, agrees with a node walk after growth and
+  after an iterate, and an iterate bumps every bridge's version.
 
 Registry insertion staying near-linear is a wall-clock test, opt-in under the
 ``perf`` marker in ``tests/unit/numerics/test_registry_perf.py``.
@@ -38,7 +39,7 @@ def _ix(u: float, s: float, key=("fp", "unstable", 0, 0), b_key=("fp", "stable",
 
 
 def _walked_points(manifold) -> np.ndarray:
-    """The point array computed by walking, bypassing any memo."""
+    """The point array computed node by node, off the walk."""
     return np.vstack([node.get_point() for node in manifold._walk_nodes()])
 
 
@@ -200,7 +201,7 @@ def test_workbench_generation_bumps_when_a_manifold_tail_moves(
 
 
 # --------------------------------------------------------------------------- #
-# memoised point arrays
+# point arrays and bridge versions
 # --------------------------------------------------------------------------- #
 def test_bridge_point_array_agrees_with_a_walk(henon_tangle_with_bridges):
     """Repeated reads of a bridge's point array agree with a fresh walk."""
@@ -241,7 +242,7 @@ def test_point_arrays_reflect_growth(henon_tangle_with_bridges):
 
 
 def test_node_walk_is_not_shared_between_callers(henon_tangle_with_bridges):
-    """``return_nodes=True`` hands out a private list, never the memo's own."""
+    """``return_nodes=True`` hands out a private list on every call."""
     workbench, _fp = henon_tangle_with_bridges
     bridge = workbench.bridges[0]
 
@@ -282,7 +283,7 @@ def test_branch_memo_is_invalidated_by_set_k_value(fixed_point):
 
 
 def test_bridge_point_arrays_survive_an_iterate(henon_tangle_with_bridges):
-    """Iterating drops every registered bridge's memo, not just the child's.
+    """Iterating bumps every registered bridge's version, not just the child's.
 
     The image of a bridge whose points already have iterates is merged and
     refined over curve other bridges are cut from, and the cut of the image
@@ -290,14 +291,14 @@ def test_bridge_point_arrays_survive_an_iterate(henon_tangle_with_bridges):
     points inside an already-cut arc. It does not happen on this fixture (every
     image here is fresh curve), which is exactly why the contract is pinned
     directly -- every registered bridge's version must move, and every
-    memoised array must still agree with a fresh walk.
+    point array must still agree with a node walk.
     """
     workbench, _fp = henon_tangle_with_bridges
     registry = workbench.intersection_registry
     watched = list(workbench.bridges)
     versions = {id(b): b.version for b in watched}
     for bridge in watched:
-        bridge.get_point_array()  # populate the memos
+        bridge.get_point_array()  # read every bridge before the iterate
 
     # The OUTERMOST bridge: its image runs past the grown extent, so it is
     # really mapped forward and cut. An inner bridge's image is already-cut
@@ -310,6 +311,6 @@ def test_bridge_point_arrays_survive_an_iterate(henon_tangle_with_bridges):
 
     for bridge in watched:
         assert bridge.version > versions[id(bridge)], (
-            f"bridge {bridge.id} kept its memo across an iterate"
+            f"bridge {bridge.id} kept its version across an iterate"
         )
         assert np.array_equal(bridge.get_point_array(), _walked_points(bridge))

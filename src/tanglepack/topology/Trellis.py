@@ -5,7 +5,7 @@ The topological snapshot of a computed tangle.
 built from a :class:`~..numerics.TangleWorkbench.TangleWorkbench` once the
 numerical phase is complete, it exposes the per-branch ordering of crossings
 and the algorithms (strong pip, pseudoneighbors, stable partition) that run on
-it, without reaching back into the linked-list manifold machinery.
+it, without reaching back into the point store and its chains.
 
 Dev Notes:
 
@@ -13,7 +13,7 @@ Trellis is the entry point for the topological half of the library. It is built
 from a TangleWorkbench once the numerical phase is complete (manifolds grown,
 intersections computed, bridges cut, iterate table inferred) and from then on
 exposes everything the topological algorithms need without reaching back into the
-linked-list manifold machinery.
+point store and its chains.
 
 Snapshot semantics: from_workbench() captures the *derived* topological
 structure (the per-branch ordering of intersections) at build time, but holds
