@@ -28,7 +28,7 @@ def _crossings(case: cases.Case) -> dict[int, tuple[np.ndarray, float]]:
     return {
         iid: (
             np.ravel(ix.coords).astype(float),
-            float(np.linalg.norm(np.subtract(*(node.get_point() for node in ix.unstable_segment)))),
+            float(np.linalg.norm(np.subtract(*ix.segment_ends("unstable")[0]))),
         )
         for iid, ix in case.session.workbench.intersection_registry
         if not ix.is_synthetic

@@ -576,8 +576,7 @@ def check_crossing_cdist_bracketed(case: "Case") -> int:
         if ix.seg_ids is None:
             continue  # a synthetic anchor
         assert ix.unstable_segment is not None, intersection_id
-        p0, p1 = ix.unstable_segment
-        lo, hi = sorted((float(p0.get_cdist("unstable")), float(p1.get_cdist("unstable"))))
+        lo, hi = sorted(float(c) for c in ix.segment_ends("unstable")[1])
         assert _within(float(ix.unstable_cdist), lo, hi, tol), (
             f"crossing {intersection_id} at unstable cdist {ix.unstable_cdist} "
             f"outside its segment [{lo}, {hi}]"
@@ -630,9 +629,9 @@ def _brackets(ix) -> tuple[tuple[float, float], tuple[float, float]]:
     The crossing was found between two adjacent nodes of each curve, so each of
     its canonical distances is known only to within those nodes' cdists.
     """
-    (p0, p1), (q0, q1) = ix.unstable_segment, ix.stable_segment
-    unstable = sorted((float(p0.get_cdist("unstable")), float(p1.get_cdist("unstable"))))
-    stable = sorted((float(q0.get_cdist("stable")), float(q1.get_cdist("stable"))))
+    unstable, stable = (
+        sorted(float(c) for c in ix.segment_ends(stability)[1]) for stability in ("unstable", "stable")
+    )
     return (unstable[0], unstable[1]), (stable[0], stable[1])
 
 
@@ -657,8 +656,8 @@ def _passes_map_gate(case: "Case", source, image) -> bool:
     def mapped(point) -> np.ndarray:
         return np.ravel(case.workbench.dynamical_system.map(np.asarray(point, dtype=float)))
 
-    p0, p1 = (node.get_point() for node in source.unstable_segment)
-    q0, q1 = (node.get_point() for node in image.unstable_segment)
+    p0, p1 = source.segment_ends("unstable")[0]
+    q0, q1 = image.segment_ends("unstable")[0]
     gate = np.linalg.norm(mapped(p1) - mapped(p0)) + np.linalg.norm(np.ravel(q1) - np.ravel(q0))
     return float(np.linalg.norm(mapped(source.coords) - np.ravel(image.coords))) <= gate
 

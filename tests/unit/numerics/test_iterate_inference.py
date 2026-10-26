@@ -28,8 +28,8 @@ def _detected_links(registry) -> set[tuple[int, int]]:
 
 def _gate(workbench, source, image) -> float:
     """The map gate of a link: the image of x's unstable segment plus y's own segment."""
-    p0, p1 = (node.get_point() for node in source.unstable_segment)
-    q0, q1 = (node.get_point() for node in image.unstable_segment)
+    p0, p1 = source.segment_ends("unstable")[0]
+    q0, q1 = image.segment_ends("unstable")[0]
     f0, f1 = workbench.dynamical_system.map_batch(np.vstack([p0, p1]))
     return float(np.linalg.norm(f1 - f0) + np.linalg.norm(np.ravel(q1) - np.ravel(q0)))
 
