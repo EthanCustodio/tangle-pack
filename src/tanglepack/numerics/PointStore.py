@@ -82,10 +82,9 @@ class Chain:
         stretch_param (float): The per-map-step cdist factor of every point on
             the chain (usually ``alpha``).
         anchor (Optional[BranchPoint]): The periodic point the chain hangs off.
-        version (int): Bumped by every change of ``ids``.
     """
 
-    __slots__ = ("store", "index", "ids", "stretch_param", "anchor", "version")
+    __slots__ = ("store", "index", "ids", "stretch_param", "anchor")
 
     def __init__(
         self, store: PointStore, index: int, ids: NDArray[np.int64], stretch_param: float
@@ -104,7 +103,6 @@ class Chain:
         self.ids = np.empty(0, dtype=np.int64)
         self.stretch_param = stretch_param
         self.anchor: Optional[BranchPoint] = None
-        self.version = 0
         self.insert(np.zeros(len(ids), dtype=np.int64), ids)
 
     def __len__(self) -> int:
@@ -167,7 +165,6 @@ class Chain:
         self.ids = np.asarray(ids, dtype=np.int64)
         self.anchor = self.anchor if self.anchor is not None else other.anchor
         other.ids, other.anchor = np.empty(0, dtype=np.int64), None
-        other.version += 1
         self._renumber(start)
         store._position[before[store._chain[before] == -1]] = LEFT_OFF
 
@@ -176,7 +173,6 @@ class Chain:
         tail = self.ids[start:]
         self.store._chain[tail] = self.index
         self.store._position[tail] = np.arange(start, len(self.ids))
-        self.version += 1
 
 
 class PointStore:

@@ -53,14 +53,12 @@ class Bridge(BaseManifold):
 
     Note:
         A bridge is a FIXED arc once cut -- its two endpoints are crossings that
-        do not move -- so its point walk is memoised (``_memoise_walks``). The
-        two operations that can still lay new points inside such an arc (growing
-        the parent manifold, re-cutting it against fresh crossings) bump every
-        registered bridge's version through the workbench; see the
+        do not move. The two operations that can still lay new points inside such
+        an arc (growing the parent manifold, re-cutting it against fresh
+        crossings) bump every registered bridge's version through the workbench,
+        which :meth:`Trellis.cached_bridge_polyline` keys on; see the
         :mod:`BaseManifold` Dev Notes.
     """
-
-    _memoise_walks: bool = True
 
     def __init__(
         self,

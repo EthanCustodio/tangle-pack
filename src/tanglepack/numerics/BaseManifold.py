@@ -25,18 +25,18 @@ onto a branch), and so does ``_walk_nodes(stop_at_final=False)``. Only
 removing an end from its chain breaks a view, which only the merge's keeper
 branch (b) does to the existing point, and no case reaches it.
 
-Versioning and the point-array memo: every manifold carries a
-``_version`` bumped by :meth:`bump_version` and by the ``root``/``tail``
-setters, and :attr:`TangleWorkbench.generation` sums those versions, so a
-retrim or a regrow invalidates every derived cache. The point-array memo built
-on that version is enabled ONLY on :class:`Bridge` (``_memoise_walks``): points
-are inserted into the chain, which the manifold does not observe (a chain's
-``version`` would; N6 moves the memo), so a growable manifold has no airtight
-invalidation and a stale array would be worse than no cache. A bridge is a
-fixed arc between two crossings and the workbench bumps every bridge's version
-on the two operations that can lay new points inside such an arc (growth and a
-re-cut). Code that drives ``ManifoldMachine`` directly, bypassing the
-workbench, must call ``bump_version()`` itself.
+Versioning: every manifold carries a ``_version`` bumped by
+:meth:`bump_version` and by the ``root``/``tail`` setters, and
+:attr:`TangleWorkbench.generation` sums those versions, so a retrim or a regrow
+invalidates every derived cache; :meth:`Trellis.cached_bridge_polyline` also
+keys a bridge's polyline on its version. Points are inserted into the chain,
+which the manifold does not observe, so the workbench bumps every bridge's
+version on the two operations that can lay new points inside such an arc
+(growth and a re-cut). Code that drives ``ManifoldMachine`` directly, bypassing
+the workbench, must call ``bump_version()`` itself. No read is memoised: every
+getter gathers its rows afresh (N6, 2026-10-26, removed the bridge memo: it
+held about 33 MiB at scale and never served an array a fresh read would not
+have).
 """
 
 from __future__ import annotations
@@ -76,13 +76,9 @@ class BaseManifold:
         _version (int): Monotone counter bumped by :meth:`bump_version` and by
             any reassignment of ``root`` / ``tail``. It is what
             :attr:`TangleWorkbench.generation` reads to notice that manifold
-            geometry moved, and what invalidates the point-array memo.
+            geometry moved, and what :meth:`Trellis.cached_bridge_polyline` keys
+            a bridge's polyline on.
     """
-
-    #: Whether :meth:`get_point_array` is served from a memo. False here (a
-    #: growable manifold gains points through its chain without the manifold
-    #: seeing it), True on :class:`Bridge`. See the module Dev Notes.
-    _memoise_walks: bool = False
 
     def __init__(
         self,
@@ -122,7 +118,6 @@ class BaseManifold:
         """
 
         self._version: int = 0
-        self._walk_cache: dict = {}
         self.root = root
         self.tail = tail
         self.stability = stability
@@ -143,7 +138,7 @@ class BaseManifold:
 
     def bump_version(self) -> None:
         """
-        Record that this manifold's geometry changed and drop its memoised walks.
+        Record that this manifold's geometry changed.
 
         Called by the ``root`` / ``tail`` setters and by
         :class:`TangleWorkbench` around anything that can insert points into an
@@ -151,7 +146,6 @@ class BaseManifold:
         directly must call it too.
         """
         self._version += 1
-        self._walk_cache.clear()
 
     @property
     def root(self) -> Optional[Point | BranchPoint]:
@@ -394,29 +388,22 @@ class BaseManifold:
             list[Point] or np.ndarray of shape (N, 2)
 
         Note:
-            On a class that memoises walks (:class:`Bridge`) the array is
-            cached against the manifold's version and handed back READ-ONLY --
-            it is shared with every other caller, so it must not be written to;
-            take a copy to modify it. The node list is copied per call, so it is
-            safe to mutate. See the module Dev Notes for the invalidation rules.
+            Every call gathers afresh: the array (or node list) is the caller's
+            own, safe to modify.
         """
-        if not self._memoise_walks:
-            return self._collect(
-                "all", final_node=final_node, return_nodes=return_nodes
-            )
+        return self._collect("all", final_node=final_node, return_nodes=return_nodes)
 
-        # The node itself is the key (Points hash by identity), so the memo
-        # holds it alive and no recycled id can alias two different walks.
-        cache_key = (final_node, bool(return_nodes))
-        cached = self._walk_cache.get(cache_key)
-        if cached is None:
-            cached = self._collect(
-                "all", final_node=final_node, return_nodes=return_nodes
-            )
-            if isinstance(cached, np.ndarray):
-                cached.flags.writeable = False
-            self._walk_cache[cache_key] = cached
-        return list(cached) if return_nodes else cached
+    @property
+    def points(self) -> NDArray[np.float64]:
+        """The ``(N, 2)`` coordinates from the root to the TAIL (the periodic point
+        first when the root is one), a fresh array per read."""
+        return self._collect("all")
+
+    @property
+    def cdists(self) -> NDArray[np.float64]:
+        """The ``(N,)`` canonical distances from the root to the TAIL, in step with
+        :attr:`points` (unlike :meth:`get_cdist_array`, which reads to the chain's end)."""
+        return self._collect("all", value="cdist").reshape(-1)
 
     def get_cdist_array(
         self, final_node: Optional[Point] = None, return_nodes: bool = False

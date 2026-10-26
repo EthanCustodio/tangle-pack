@@ -411,7 +411,7 @@ class BridgeIterator:
         bridge.iterated = True
         # Mapping forward can refine (and cut at) curve that already exists --
         # the image of a bridge whose points all have iterates is laid over
-        # grown manifold -- so every memoised walk is dropped, not just the
+        # grown manifold -- so every bridge's version is bumped, not just the
         # children's.
         workbench._bump_generation(invalidate_walks=True)
 

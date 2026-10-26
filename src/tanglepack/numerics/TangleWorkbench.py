@@ -434,10 +434,11 @@ class TangleWorkbench:
         """Record a mutation only this object can see (see :attr:`generation`).
 
         Args:
-            invalidate_walks: Also drop every registered bridge's memoised point
-                array. Pass True for the operations that can lay new points
-                INSIDE an already-cut arc -- growing a parent manifold, or
-                re-cutting one against fresh crossings.
+            invalidate_walks: Also bump every registered bridge's version, which
+                :meth:`Trellis.cached_bridge_polyline` keys on. Pass True for the
+                operations that can lay new points INSIDE an already-cut arc --
+                growing a parent manifold, or re-cutting one against fresh
+                crossings.
         """
         self._mutations += 1
         if invalidate_walks:
@@ -635,7 +636,7 @@ class TangleWorkbench:
 
         Note:
             Growth refines the existing curve as well as extending it, so it
-            bumps the generation and drops every memoised point array. It also
+            bumps the generation and every bridge's version. It also
             re-finds the physical end of every branch of the grown stability, so
             stable growth undoes a stable trim (a resonance zone's included):
             the trim is a view, and the topology is cut at the pip orbit anyway.
@@ -716,7 +717,7 @@ class TangleWorkbench:
                     manifold._find_tail()
 
             # Growth refines the existing curve as well as extending it, so points
-            # can land inside an already-cut bridge: drop the memoised walks.
+            # can land inside an already-cut bridge: bump every bridge's version.
             self._bump_generation(invalidate_walks=True)
 
     def plot_tangle(
@@ -1806,7 +1807,7 @@ class TangleWorkbench:
         if not self._bridges and not self._partial_bridges:
             self._bridge_id_epoch = self._registry_id_epoch
         # Cutting inserts a separator point at every crossing, which can land
-        # inside an arc an earlier cut already claimed: drop the memoised walks.
+        # inside an arc an earlier cut already claimed: bump every bridge's version.
         self._bump_generation(invalidate_walks=True)
         cut = [self._register_bridge(bridge) for bridge in bridges]
         # An image curve of an indexed fixed point crossed fewer than twice is one
