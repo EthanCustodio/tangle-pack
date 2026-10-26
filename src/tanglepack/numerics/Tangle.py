@@ -931,8 +931,9 @@ class Tangle:
                 "bridge is cut at it -- the cut is what sets the bridge endpoints"
             )
 
-            # The cut is between nodes until a Bridge is (N6/N7): the rows become
-            # nodes once, here. One Point per row, so node identity is row equality.
+            # The cut is between nodes until a Bridge is cut on rows (N6/N7): the
+            # rows become nodes once, here. One Point per row, so node identity is
+            # row equality.
             p0, p1 = (
                 intersection.store.node(end) if isinstance(end, int) else end
                 for end in intersection.unstable_segment

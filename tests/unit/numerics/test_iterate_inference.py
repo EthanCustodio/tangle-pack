@@ -154,8 +154,9 @@ def test_an_image_whose_stable_bracket_misses_the_carried_one_is_no_image(
     brackets = IterateInference._brackets
     unstable, (s_lo, s_hi) = brackets(source)
     y_lo, y_hi = brackets(image)[1]
-    # Beside y's bracket on the side away from y's own cdist, so the window
-    # (the carried bracket widened by the branch's widest) still reaches it.
+    # Just beside y's bracket, on the side away from y's own cdist. The window
+    # (the carried bracket widened by the branch's widest, about twice y's here)
+    # still holds y: dropping the stable comparisons links x again.
     gap = 1e-3 * (y_hi - y_lo)
     if image.stable_cdist > 0.5 * (y_lo + y_hi):
         carried = (y_lo - gap - (s_hi - s_lo) / stretch_s, y_lo - gap)
