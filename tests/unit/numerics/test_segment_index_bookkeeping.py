@@ -14,12 +14,20 @@ Pins:
 3. An indexed curve added twice records no ``None`` segment id: since N1
    ``_insert_segment`` returns None for an edge it only claims, and that
    return must never reach ``_manifold_segs``.
+4. The sid values decide float bits (N5b, 2026-10-26): a pair's two segments
+   are resolved in the order ``tuple(frozenset(pair))`` gives, so a query-only
+   add builds every pair with the NEW sid first, and the crossing's cdists are
+   Python floats. A query-only curve takes one sid per new edge, in curve
+   order, whether the edge pairs or not: a curve that crosses nothing still
+   returns its sids, so a fresh recompute keeps it.
 
 Curves that share points are views of one curve between different ends, as
 the images a blast merged and the branch growth merged them into are.
 """
 
 from __future__ import annotations
+
+from itertools import count
 
 import numpy as np
 
@@ -174,6 +182,52 @@ def test_a_curve_lying_on_a_branch_is_dropped_on_a_fresh_recompute():
     standing = image(own.root, own.tail)
     workbench._image_curves[:] = [merged, standing]
 
+    workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
+    assert workbench._image_curves == [standing]
+
+
+def test_a_crossing_pair_keeps_the_new_sid_first(monkeypatch):
+    fp = bare_fixed_point(label="A")
+    start = 10**6
+    monkeypatch.setattr(Tangle, "_ids", count(start))
+    tangle = Tangle()
+    tangle.add_manifolds([polyline_manifold([(0.5, -1.0), (0.5, 1.0)], (fp, "stable", 0, 0))])
+    (cand_sid,) = tangle._seg_lookup
+    # The new sid lands in the candidate's hash slot, where the frozenset's
+    # element order depends on which element went in first.
+    new_sid = cand_sid + 8
+    assert tuple(frozenset((new_sid, cand_sid))) != tuple(frozenset((cand_sid, new_sid)))
+    monkeypatch.setattr(Tangle, "_ids", count(new_sid))
+
+    image = polyline_manifold([(0.0, 0.0), (1.0, 0.0)], (fp, "unstable", 1, 0))
+    assert tangle.add_manifold(image, index_segments=False) == {new_sid}
+    (pair,) = tangle._intersecting_segments
+    assert tuple(pair) == (new_sid, cand_sid)
+
+    (crossing,) = tangle.resolve_crossings()
+    assert type(crossing.unstable_cdist) is float and type(crossing.stable_cdist) is float
+
+
+def test_a_curve_crossing_nothing_takes_one_sid_per_new_edge(monkeypatch):
+    fp = bare_fixed_point(label="A")
+    branch_key = (fp, "unstable", 0, 0)
+    workbench = polyline_workbench(fp, {
+        branch_key: [(x, 0.0) for x in np.arange(-3.0, 4.0)],
+        (fp, "stable", 0, 0): [(0.5, -2.0), (0.5, 2.0)],
+    })
+    workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
+    image = polyline_manifold([(x, 5.0) for x in range(5)], branch_key)
+
+    start = next(Tangle._ids)
+    monkeypatch.setattr(Tangle, "_ids", count(start))
+    sids = workbench.Tangle.add_manifold(image, index_segments=False)
+    assert sids == set(range(start, start + 4))
+    assert next(Tangle._ids) == start + 4
+    assert not any(pair & sids for pair in workbench.Tangle._intersecting_segments)
+
+    standing = Bridge(root=image.root, stability="unstable", stretch_param=1.0, fixed_point=fp,
+                      tail=image.tail, branch_index=0, manifold_key=branch_key)
+    workbench._image_curves[:] = [standing]
     workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
     assert workbench._image_curves == [standing]
 
