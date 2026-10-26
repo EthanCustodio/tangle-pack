@@ -353,8 +353,8 @@ class Tangle:
             manifold_b_key=Tangle._key_of(s_seg),
             unstable_manifold=u_seg.manifold,
             # The ORIGINAL endpoints' rows, captured now: a cut at this crossing
-            # brackets it with these two real nodes, read off the crossing, never
-            # off the index, so a separator spliced in later does not move them.
+            # brackets it with these two rows, read off the crossing, so a
+            # separator spliced in between them later does not move the bracket.
             unstable_segment=(u_seg.row0, u_seg.row1),
             stable_segment=(s_seg.row0, s_seg.row1),
             store=u_seg.store,
