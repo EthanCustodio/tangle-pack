@@ -772,10 +772,8 @@ class TangleWorkbench:
 
         manifold = self._require_manifold(fixed_point, stability, branch_index)
 
-        root = fixed_point.branch_points[0]
-        first_point = manifold.first_node(branch_index)
-
-        initial_direction = first_point.get_point() - root.get_point()
+        first_two = manifold.points[:2]
+        initial_direction = first_two[1] - first_two[0]
 
         if max_iterations is None:
             max_iterations = self._default_cap(fixed_point, stability, TURNAROUND_LOG_STRETCH)
@@ -1623,11 +1621,11 @@ class TangleWorkbench:
                 s_key = (fp, "stable", orbit_index, 0)
                 if u_key not in self.manifolds or s_key not in self.manifolds:
                     continue
-                u_nodes = self.manifolds[u_key].get_point_array(return_nodes=True)
-                s_nodes = self.manifolds[s_key].get_point_array(return_nodes=True)
-                if len(u_nodes) < 2 or len(s_nodes) < 2:
+                u_points = self.manifolds[u_key].points
+                s_points = self.manifolds[s_key].points
+                if len(u_points) < 2 or len(s_points) < 2:
                     continue
-                coords = u_nodes[0].get_point()
+                coords = u_points[0]
                 anchor = Intersection.synthetic(
                     coords=(float(coords[0]), float(coords[1])),
                     unstable_cdist=0.0,
@@ -1635,13 +1633,15 @@ class TangleWorkbench:
                     label="anchor",
                     manifold_a_key=u_key,
                     manifold_b_key=s_key,
-                    crossing_sign=self._anchor_crossing_sign(u_nodes, s_nodes),
+                    crossing_sign=self._anchor_crossing_sign(u_points, s_points),
                 )
                 anchor_ids.append(registry.add(anchor))
         return anchor_ids
 
     @staticmethod
-    def _anchor_crossing_sign(u_nodes: list, s_nodes: list) -> int:
+    def _anchor_crossing_sign(
+        u_points: np.ndarray, s_points: np.ndarray
+    ) -> int:
         """
         Handedness of an anchor, from the two oriented eigendirections.
 
@@ -1653,16 +1653,16 @@ class TangleWorkbench:
         the sign of a pair (``cross(-u, s) = -cross(u, s)``).
 
         Args:
-            u_nodes: The unstable branch's nodes, root first.
-            s_nodes: The stable branch's nodes, root first.
+            u_points: The unstable branch's ``(N, 2)`` points, root first.
+            s_points: The stable branch's ``(N, 2)`` points, root first.
 
         Returns:
             The sign of ``cross(unstable eigendirection, stable eigendirection)``:
             ``+1``, ``-1``, or ``0`` if the two are exactly parallel (impossible
             for a real saddle, whose eigenvectors are independent).
         """
-        u_dir = u_nodes[1].get_point() - u_nodes[0].get_point()
-        s_dir = s_nodes[1].get_point() - s_nodes[0].get_point()
+        u_dir = u_points[1] - u_points[0]
+        s_dir = s_points[1] - s_points[0]
         return int(np.sign(float(u_dir[0] * s_dir[1] - u_dir[1] * s_dir[0])))
 
     def plot_intersections(
@@ -2082,14 +2082,10 @@ class TangleWorkbench:
             ``cdist`` is left untrimmed, with a WARNING.
         """
         manifold = self.manifolds[key]
-        new_tail = next(
-            (
-                node
-                for node in manifold._walk_nodes(stop_at_final=False)
-                if node is not manifold.root and node.get_cdist("stable") >= cdist
-            ),
-            None,
-        )
+        head, store, rows = manifold._rows(stop_at_final=False)
+        candidates = rows if head is not None else rows[1:]  # the root is never the new tail
+        past = np.flatnonzero(store.cdist[candidates] >= cdist) if len(candidates) else ()
+        new_tail = store.nodes[int(candidates[past[0]])] if len(past) else None
         if new_tail is None:
             logger.warning(
                 "trim_stable_at: %s has no node at or past stable cdist %r; leaving it "

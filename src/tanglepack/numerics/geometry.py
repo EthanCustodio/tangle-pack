@@ -63,8 +63,9 @@ def arc_polyline(
         manifold: The curve to walk.
         lo_cdist: Lower canonical distance of the window.
         hi_cdist: Upper canonical distance of the window.
-        stability: Which canonical distance to read. Defaults to the manifold's
-            own stability, which is what every caller but a diagnostic wants.
+        stability: Not read: a point holds one cdist, and a periodic point's is
+            0.0 on both manifolds (``FixedPointSolver`` sets it). Kept for its
+            callers; N7 drops it with the node API.
         reverse: If True the polyline is returned in decreasing cdist order.
         tol: Slack added to both ends of the window, so a node sitting exactly on
             a boundary is not lost to rounding. Zero by default.
@@ -76,23 +77,17 @@ def arc_polyline(
         direction, so a bridge stored tail-first comes back the same way round as
         the parent it was cut from.
     """
-    which = stability if stability is not None else manifold.stability
-    nodes = manifold.get_point_array(return_nodes=True)
+    points, cdists = manifold.points, manifold.cdists
     lo, hi = (lo_cdist, hi_cdist) if lo_cdist <= hi_cdist else (hi_cdist, lo_cdist)
-    inside = [
-        (node.get_cdist(which), node.get_point())
-        for node in nodes
-        if lo - tol <= node.get_cdist(which) <= hi + tol
-    ]
-    if not inside:
+    inside = (lo - tol <= cdists) & (cdists <= hi + tol)
+    if not inside.any():
         return np.empty((0, 2), dtype=np.float64)
     # A walk runs root to tail, which is monotone in cdist but not necessarily
     # ASCENDING: a bridge cut off a manifold can be stored either way round. One
     # end comparison is enough to normalize it, and it keeps the guarantee in the
     # Returns section true for every manifold-like input.
-    if inside[0][0] > inside[-1][0]:
-        inside.reverse()
-    poly = np.asarray([point for _cdist, point in inside], dtype=np.float64)
+    kept = cdists[inside]
+    poly = points[inside] if kept[0] <= kept[-1] else points[inside][::-1]
     return poly[::-1] if reverse else poly
 
 
