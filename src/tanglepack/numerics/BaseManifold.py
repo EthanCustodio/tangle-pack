@@ -31,12 +31,12 @@ Versioning: every manifold carries a ``_version`` bumped by
 invalidates every derived cache; :meth:`Trellis.cached_bridge_polyline` also
 keys a bridge's polyline on its version. Points are inserted into the chain,
 which the manifold does not observe, so the workbench bumps every bridge's
-version on the two operations that can lay new points inside such an arc
-(growth and a re-cut). Code that drives ``ManifoldMachine`` directly, bypassing
-the workbench, must call ``bump_version()`` itself. No read is memoised: every
-getter gathers its rows afresh (N6, 2026-10-26, removed the bridge memo: it
-held about 33 MiB at scale and never served an array a fresh read would not
-have).
+version on the two operations that can lay new points inside an already-cut
+bridge (growth and a re-cut). Code that drives ``ManifoldMachine`` directly,
+bypassing the workbench, must call ``bump_version()`` itself. No read is
+memoised: every getter gathers its rows afresh (N6, 2026-10-26, removed the
+bridge memo: it held about 33 MiB at scale and never served an array a fresh
+read would not have).
 """
 
 from __future__ import annotations
