@@ -18,7 +18,7 @@ from cases import build_k28
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
 from helpers.polylines import polyline_manifold, polyline_workbench
-from tanglepack import Intersection, IntersectionRegistry
+from tanglepack import BranchPoint, Intersection, IntersectionRegistry, Point
 from tanglepack.numerics.Tangle import Tangle
 
 WORKBENCH = "tanglepack.numerics.TangleWorkbench"
@@ -103,6 +103,28 @@ def test_shallow_grazing_pair_scores_below_a_transversal_one_and_the_threshold()
 def test_straight_segments_give_a_finite_ratio():
     (ratio,) = _ratios(_line(), np.array([[0.1, -2.0], [0.1, -0.7], [0.1, 0.6], [0.1, 1.9]]))
     assert np.isfinite(ratio) and ratio > THRESHOLD
+
+
+def test_a_bracket_end_at_the_periodic_point_reads_its_point_and_zero():
+    """An unstable curve crossing the stable segment that leaves the periodic
+    point, away from it: the stable bracket ends at the BranchPoint, which has no
+    row and reads its own coordinates and cdist 0.0 -- never the store's last row."""
+    fp = bare_fixed_point(label="A")
+    periodic = BranchPoint(2, (0.0, 0.0), 0.0, 0.0)
+    stable = polyline_manifold([(0.0, 1.0), (0.0, 2.0)], (fp, "stable", 0, 0), root=periodic)
+    unstable = polyline_manifold(_line() + (0.0, 0.5), (fp, "unstable", 0, 0))
+    last = Point(7.0, 7.0, 7.0)  # the store's last row, which a -1 sentinel would read
+    tangle = Tangle()
+    tangle.add_manifolds([stable, unstable])
+
+    (crossing,) = tangle.resolve_crossings()
+
+    assert crossing.stable_segment[0] is periodic and isinstance(crossing.stable_segment[1], int)
+    assert crossing.store is last.store
+    coords, cdists = crossing.segment_ends("stable")
+    np.testing.assert_array_equal(coords, [[0.0, 0.0], [0.0, 1.0]])
+    np.testing.assert_array_equal(cdists, [0.0, 1.0])
+    assert crossing.brackets[1] == (0.0, 1.0)
 
 
 # --------------------------------------------------------------------------- #
