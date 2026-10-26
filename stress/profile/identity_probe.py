@@ -101,7 +101,16 @@ def curve_extent(curve: Any) -> int:
 
 
 def bracket_cdists(crossing: Any) -> list[float]:
-    """The cdists of the crossing's two unstable then two stable bracket ends (NaN if none)."""
+    """The cdists of the crossing's two unstable then two stable bracket ends (NaN if none).
+
+    Since N5a a bracket is store rows, read through ``segment_ends``; a tree
+    before it holds nodes, read as before, so one probe dumps both.
+    """
+    if hasattr(crossing, "segment_ends"):
+        if crossing.unstable_segment is None:
+            return [np.nan] * 4
+        return [float(c) for stability in ("unstable", "stable")
+                for c in crossing.segment_ends(stability)[1]]
     ends = []
     for segment, stability in ((crossing.unstable_segment, "unstable"),
                                (crossing.stable_segment, "stable")):

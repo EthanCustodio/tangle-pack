@@ -16,9 +16,11 @@ A detection is out of N (A.2, Q13 (a)) by
 The chord deviations are recomputed here, the way the library computes them
 (``chord_deviation_batch`` over ``Tangle._outer_neighbours``), by wrapping
 ``Tangle._resolution_ratio`` before anything is built. The probe never reads a
-deviation the library stored, so it stays an oracle; it runs unchanged on the
-base commit and on the branch. A cross-check finds the same pairs by arc length
-along the whole curve object, with no adjacency restriction.
+deviation the library stored, so it stays an oracle. Deviations are recorded
+under the crossing's four bracket ends (store rows, or the periodic point's
+``BranchPoint``), the key a registered crossing carries since N5a. A cross-check
+finds the same pairs by arc length along the whole curve object, with no
+adjacency restriction.
 
 Dev Notes:
     Not collected by pytest (no ``test_`` prefix). The printed numbers are
@@ -33,13 +35,19 @@ import time
 
 import numpy as np
 
+from tanglepack.numerics.BranchPoint import BranchPoint
 from tanglepack.numerics.Tangle import Tangle
 from tanglepack.numerics.geometry import chord_deviation_batch
 
 THRESHOLD = 3.0
 
-#: ``(node ids of the unstable and the stable segment) -> max(h_u, h_s)``.
-DEVIATION: dict[tuple[int, int, int, int], float] = {}
+#: ``(bracket ends of the unstable and the stable segment) -> max(h_u, h_s)``.
+DEVIATION: dict[tuple, float] = {}
+
+
+def end(node):
+    """A node as a bracket end: its store row, or the periodic point's BranchPoint."""
+    return node if isinstance(node, BranchPoint) else node.row
 
 _library_ratio = Tangle._resolution_ratio
 
@@ -51,7 +59,7 @@ def _recording_ratio(u_seg, s_seg, sin_theta):
     p1 = np.array([seg.p0_seg1.get_point() for seg in segments], dtype=float)
     left, right = zip(*(Tangle._outer_neighbours(seg) for seg in segments))
     h = chord_deviation_batch(p0, p1, np.array(left), np.array(right))
-    DEVIATION[id(u_seg.p0), id(u_seg.p0_seg1), id(s_seg.p0), id(s_seg.p0_seg1)] = float(h.max())
+    DEVIATION[end(u_seg.p0), end(u_seg.p0_seg1), end(s_seg.p0), end(s_seg.p0_seg1)] = float(h.max())
     return _library_ratio(u_seg, s_seg, sin_theta)
 
 
@@ -60,20 +68,19 @@ Tangle._resolution_ratio = staticmethod(_recording_ratio)
 
 def deviation(ix) -> float | None:
     """The probe's ``max(h_u, h_s)`` of one detection."""
-    (a, b), (c, d) = ix.unstable_segment, ix.stable_segment
-    return DEVIATION.get((id(a), id(b), id(c), id(d)))
+    return DEVIATION.get((*ix.unstable_segment, *ix.stable_segment))
 
 
 def separation(ix, jx) -> float | None:
     """Distance along the unstable polyline, through a shared node; None when not adjacent."""
     p, q = ix.unstable_segment, jx.unstable_segment
     a, b = np.asarray(ix.coords, float), np.asarray(jx.coords, float)
-    if {id(n) for n in p} == {id(n) for n in q}:
+    if set(p) == set(q):
         return float(np.hypot(*(a - b)))
-    shared = [n for n in p if any(n is m for m in q)]
+    shared = [n for n in p if n in q]
     if len(shared) != 1:
         return None
-    node = np.asarray(shared[0].get_point(), float)
+    node = np.asarray(ix.segment_ends("unstable")[0][p.index(shared[0])], float)
     return float(np.hypot(*(a - node)) + np.hypot(*(node - b)))
 
 
@@ -127,10 +134,10 @@ def _anycurve_extra(detections, out: set) -> list:
         nodes = list(curve._walk_nodes(stop_at_final=False))
         points = np.array([n.get_point() for n in nodes], float)
         arc = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(points, axis=0).T))])
-        index = {id(n): k for k, n in enumerate(nodes)}
+        index = {end(n): k for k, n in enumerate(nodes)}
         placed = []
         for i, ix in members:
-            ks = [index.get(id(n)) for n in ix.unstable_segment]
+            ks = [index.get(e) for e in ix.unstable_segment]
             if None in ks:
                 continue
             k = min(ks)

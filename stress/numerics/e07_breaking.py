@@ -351,7 +351,8 @@ def crossing_sines(session) -> list[float]:
         ab = b - a
         t = np.clip(np.einsum("ij,ij->i", point - a, ab) / np.einsum("ij,ij->i", ab, ab), 0, 1)
         nearest = int(np.argmin(np.linalg.norm(a + t[:, None] * ab - point, axis=1)))
-        u = ix.unstable_segment[1].get_point() - ix.unstable_segment[0].get_point()
+        p0, p1 = ix.segment_ends("unstable")[0]
+        u = p1 - p0
         s = ab[nearest]
         sines.append(abs(u[0] * s[1] - u[1] * s[0]) / (np.linalg.norm(u) * np.linalg.norm(s)))
     return sines
