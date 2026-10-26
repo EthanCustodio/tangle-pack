@@ -55,8 +55,10 @@ from .geometry import curvature_area_batch
 from .Intersection import Stability
 
 if TYPE_CHECKING:
+    from .BranchPoint import BranchPoint
     from .Bridge import Bridge
     from .FixedPoint import FixedPoint
+    from .PointStore import PointStore
     from .TangleWorkbench import TangleWorkbench
 
 logger = logging.getLogger(__name__)
@@ -226,7 +228,7 @@ def count_same_stability_crossings(
     owner_a, owner_b, *_rest, local_area, inside = _hits(
         curves,
         _tangle_box(workbench, fixed_points, pad),
-        new=np.array([id(bridge) in new for _name, _nodes, bridge in curves], dtype=bool),
+        new=np.array([id(bridge) in new for _name, _read, bridge in curves], dtype=bool),
     )
     pairs = np.unique(np.stack([owner_a[inside], owner_b[inside]], axis=1), axis=0)
     return SameStabilityCount(
@@ -258,29 +260,36 @@ def _tangle_box(
 
 def _curves(
     workbench: "TangleWorkbench", fixed_points: list["FixedPoint"], stability: Stability
-) -> list[tuple[str, list, Optional["Bridge"]]]:
-    """The named node lists of one stability's curves, each with its image bridge
-    (None for a manifold)."""
-    nodes_of = {
-        key: manifold.get_point_array(return_nodes=True)
+) -> list[tuple[str, tuple, Optional["Bridge"]]]:
+    """The named reads ``(periodic point or None, store, rows)`` of one stability's
+    curves, root to tail, each with its image bridge (None for a manifold)."""
+    reads = {
+        key: manifold._rows()
         for key, manifold in workbench.manifolds.items()
         if key[1] == stability
     }
     curves = [
-        (_manifold_name(key), nodes, None)
-        for key, nodes in nodes_of.items()
+        (_manifold_name(key), read, None)
+        for key, read in reads.items()
         if any(key[0] is fp for fp in fixed_points)
     ]
     if stability == "stable":
         return curves
-    manifold_nodes = {id(node) for nodes in nodes_of.values() for node in nodes}
+    # A bridge sharing a node with a manifold is cut from it: a row some manifold
+    # of its store holds, or the periodic point some manifold leaves from.
+    held: dict[PointStore, NDArray[np.bool_]] = {}
+    for _head, store, rows in reads.values():
+        if store is not None:
+            held.setdefault(store, np.zeros(len(store), dtype=bool))[rows] = True
+    heads = {head for head, _store, _rows in reads.values() if head is not None}
     for bridge in workbench.bridges:
         if not any(bridge.fixed_point is fp for fp in fixed_points):
             continue
-        nodes = bridge.get_point_array(return_nodes=True)
-        if not any(id(node) in manifold_nodes for node in nodes):
-            name = f"image bridge {bridge.id}" if bridge.id is not None else f"partial image bridge {id(bridge):#x}"
-            curves.append((name, nodes, bridge))
+        head, store, rows = read = bridge._rows()
+        if head in heads or (store in held and held[store][rows].any()):
+            continue
+        name = f"image bridge {bridge.id}" if bridge.id is not None else f"partial image bridge {id(bridge):#x}"
+        curves.append((name, read, bridge))
     return curves
 
 
@@ -291,7 +300,7 @@ def _manifold_name(key: tuple) -> str:
 
 
 def _crossings_among(
-    curves: list[tuple[str, list, Optional["Bridge"]]],
+    curves: list[tuple[str, tuple, Optional["Bridge"]]],
     stability: Stability,
     box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
 ) -> list[SameStabilityCrossing]:
@@ -314,7 +323,7 @@ def _crossings_among(
 
 
 def _hits(
-    curves: list[tuple[str, list, Optional["Bridge"]]],
+    curves: list[tuple[str, tuple, Optional["Bridge"]]],
     box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
     new: Optional[NDArray[np.bool_]] = None,
 ) -> tuple[NDArray, ...]:
@@ -326,7 +335,10 @@ def _hits(
     (never, for None). With ``new`` (one flag per curve) only the segment pairs
     with a segment of a new curve are tested.
     """
-    rows = [_segment_rows(k, nodes) for k, (_name, nodes, _bridge) in enumerate(curves)]
+    stores = list(dict.fromkeys(store for _name, (_head, store, rows), _bridge in curves if len(rows)))
+    offsets = dict(zip(stores, np.cumsum([0, *(len(store) for store in stores[:-1])]).tolist()))
+    periodic: dict[BranchPoint, int] = {}
+    rows = [_segment_rows(k, read, offsets, periodic) for k, (_name, read, _bridge) in enumerate(curves)]
     rows = [row for row in rows if row is not None]
     if not rows:
         none = np.empty(0, dtype=np.int64)
@@ -380,12 +392,24 @@ def _hits(
     return owner[i], owner[j], position[i], position[j], point, sin, local_area, in_region
 
 
-def _segment_rows(owner: int, nodes: list) -> Optional[tuple[NDArray, ...]]:
-    """Per-segment arrays of one curve: ends, outer neighbours, node ids, owner, index."""
-    if len(nodes) < 2:
+def _segment_rows(
+    owner: int,
+    read: tuple,
+    offsets: dict["PointStore", int],
+    periodic: dict["BranchPoint", int],
+) -> Optional[tuple[NDArray, ...]]:
+    """Per-segment arrays of one curve: ends, outer neighbours, node keys, owner, index.
+
+    A node's key is its row plus its store's offset; a periodic point, which has
+    no row, is -1, -2, ... in the order ``periodic`` first meets it (never a row).
+    """
+    head, store, rows = read
+    if len(rows) + (head is not None) < 2:
         return None
-    points = np.array([node.get_point() for node in nodes], dtype=float)
-    ids = np.array([id(node) for node in nodes], dtype=np.int64)
+    points, keys = store.xy[rows], rows + offsets[store]
+    if head is not None:
+        points = np.vstack((head.get_point(), points))
+        keys = np.concatenate(([-1 - periodic.setdefault(head, len(periodic))], keys))
     missing = np.full((1, 2), np.nan)
     count = len(points) - 1
     return (
@@ -393,8 +417,8 @@ def _segment_rows(owner: int, nodes: list) -> Optional[tuple[NDArray, ...]]:
         points[1:],
         np.vstack([missing, points[:-2]]),
         np.vstack([points[2:], missing]),
-        ids[:-1],
-        ids[1:],
+        keys[:-1],
+        keys[1:],
         np.full(count, owner),
         np.arange(count),
     )
