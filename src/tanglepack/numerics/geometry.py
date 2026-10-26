@@ -226,9 +226,8 @@ def polyline_midpoint(
 
     Returns:
         A fresh ``(2,)`` array holding the middle vertex, or ``None`` for an empty
-        polyline. It is a COPY: the input may be a polyline shared with other
-        callers (:meth:`Trellis.cached_bridge_polyline`), and a view into it would
-        let one caller corrupt it for the rest.
+        polyline. It is a COPY, never a view into ``points``, so the caller may
+        modify it without touching the input.
     """
     verts = np.asarray(points, dtype=np.float64)
     if verts.ndim != 2 or len(verts) == 0:

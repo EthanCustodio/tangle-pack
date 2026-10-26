@@ -1639,9 +1639,7 @@ class TangleWorkbench:
         return anchor_ids
 
     @staticmethod
-    def _anchor_crossing_sign(
-        u_points: np.ndarray, s_points: np.ndarray
-    ) -> int:
+    def _anchor_crossing_sign(u_points: np.ndarray, s_points: np.ndarray) -> int:
         """
         Handedness of an anchor, from the two oriented eigendirections.
 
