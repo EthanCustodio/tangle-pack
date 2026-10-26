@@ -216,7 +216,7 @@ measurement.
 | N2 | `same-stability-count-new-only` | `count_same_stability_crossings` builds candidate pairs only for pairs that contain a new segment, instead of sweeping every unstable curve and filtering afterwards. The counts are unchanged. | Up to **-444 s of 541 s** blast time at 1e-9 (est.: the cost is measured, the new cost is not). | Exact: the counts per blast are equal. |
 | N3 | `point-store` | One append-only `PointStore` per workbench (x, y, cdist, image, preimage). `Point` becomes a slotted object over its row and keeps its `forward`/`backward` links as an adapter. Phantom preimages become store rows on no curve (Q2). | Est. **-1.3 to -1.5 GB**: `Point` drops from 400 B to about 120 B, and a phantom from 376 B to 40 B. Walks may get slower until N4 (property reads); the profiler shows it. | Expected exact. Low risk; the trap is the tie rule. |
 | N4 | `curves-on-order-arrays` | Each curve holds an int `ids` array in curve order. Grow, merge and refine work on positions (`searchsorted`, `side="right"`, "existing wins", per Q3; refine by positional insert, never a sort). `_image_chains` uses a per-curve position index. May split at its own plan. | Time: refine plus walks are 53 s of 541 at 1e-9. Removes the forward/backward links. | Target exact. The 19 measured ties (k28, heteroclinic) must reproduce. |
-| N5 | `segments-and-brackets-on-ids` | Segments become `(ids[:-1], ids[1:])`. `Intersection.unstable_segment` / `stable_segment` become store id pairs, and every bracket reader follows. | Small: the bookkeeping left after N1. | Exact. The same floats are read. |
+| N5 | `segments-and-brackets-on-ids` | Segments become `(ids[:-1], ids[1:])`. `Intersection.unstable_segment` / `stable_segment` become store id pairs, and every bracket reader follows. Split at its plan (2026-10-25) into N5a `brackets-on-rows` and N5b `segments-and-edge-keys-on-rows`. | Small: the bookkeeping left after N1. | Exact. The same floats are read. |
 | N6 | `readers-on-views` | Every reader outside the engine moves to the D4 accessors. The walk memo goes. | -0.075 GB (walk memo), plus the node-to-array conversion in `_segment_rows`. | Exact. |
 | N7 | `delete-point` | `Point` and `BasePoint` are deleted and leave `__all__`; every test, helper, stress and script touchpoint moves (Q7). Will likely split by test tier at its plan. | The remaining slotted objects go: census about 0.2-0.25 GB (est.). | Exact. Collected-id diff listed. |
 | N8 | `branch-point-storage` | Alone, per D5. `BranchPoint` keeps its class and API and gets a store row plus a slot table. Retires roles 4 and 5 with evidence; deletes its dead fields and the stale docstring. | About 0 bytes. This slice is about correctness and clarity. | Exact. |
@@ -319,6 +319,21 @@ measurement.
   diff read line by line.
 - **D3.** Exact: the same floats are read.
 - **Effect.** Small: the bookkeeping left after N1.
+- **Split (2026-10-25, the N5 plan's Q7).** N5a `brackets-on-rows`: `Intersection` holds row
+  pairs (the periodic point's `BranchPoint` in place of a row) and its `store`, every bracket reader
+  moves to `segment_ends` / `brackets`, and the iterate search reads each bracket once and masks one
+  bisected slice; no segment, edge key, sid or detection changes. N5b
+  `segments-and-edge-keys-on-rows` (next): `_Segment` holds two rows (or the root `BranchPoint`)
+  plus `manifold`, `id`, `in_rtree`; edge keys become `((lo + 1) << 32) | (hi + 1)` ints (a
+  `BranchPoint` end as -1, never an index) for `_edge_to_sid` and `_query_edges`; the `Tangle`
+  records its store on first add and asserts it after; the query-only `add_manifold` runs on arrays
+  with one `rtree.intersection_v` per curve and keeps a `_Segment` only for an edge with a pair; the
+  cut's edge registration is vectorised. N5b must not change the sid counter or its order,
+  `frozenset((new_sid, cand_id))` in that element order, or the `_resolve_crossing_pair` operand
+  order (`tuple(frozenset(pair))` decides float bits). Its files: `Tangle.py`,
+  `tests/_tools/resolution_probe.py` (the `_resolution_ratio` wrapper),
+  `test_tangle_index_and_orientation.py`, `test_segment_index_bookkeeping.py`,
+  `test_same_stability_discard.py`, and `profile_numerics._tangle_bytes` if field names change.
 
 ### N6 — `readers-on-views`
 
@@ -674,7 +689,8 @@ Noticed by the analyst (findings 8), each handled by the slice whose file it liv
   no iterate links yet": the new image already holds `prev_iterate`): **N4**;
 - `Tangle.populate_intersections_for_manifold` (:545-572) scanning the whole
   `_intersecting_segments` set per bridge, `_processed_pairs` only growing (believed quadratic over a
-  long series; 0.2-0.6 s here): **N5**;
+  long series; 0.2-0.6 s here): **N5**; measured in N5: 0.23 s over 32 blasts, crossing pairs only,
+  not quadratic; left;
 - `BranchPoint`'s dead fields, stale docstring and through-walk (`BaseManifold._branch_forward` /
   `_branch_backward` returning the other stability's node): **N8**;
 - `grow_until_turnaround` reading `_coords` and rebinding `first_point` to a manifold
