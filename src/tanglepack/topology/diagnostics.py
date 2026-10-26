@@ -88,15 +88,14 @@ def _anchorward_look(
     manifold = trellis.manifolds.get(ix.manifold_b_key)
     if manifold is None:
         return None
-    nodes = manifold.get_point_array(return_nodes=True)
-    cdists = [node.cdist for node in nodes]
+    points, cdists = manifold.points, manifold.cdists
     here = np.asarray(ix.get_point(), dtype=np.float64)
     below = bisect_left(cdists, ix.stable_cdist) - 1
     above = bisect_right(cdists, ix.stable_cdist)
     if below >= 0:
-        look = np.asarray(nodes[below].get_point(), dtype=np.float64) - here
-    elif above < len(nodes):
-        look = here - np.asarray(nodes[above].get_point(), dtype=np.float64)
+        look = points[below] - here
+    elif above < len(points):
+        look = here - points[above]
     else:
         return None
     norm = float(np.linalg.norm(look))
@@ -205,8 +204,7 @@ def _bridge_side_of(
     if span is not None:
         # The image sub-arc only: a far fold of the same bridge can sit nearer
         # the point than the sub-arc it belongs to.
-        nodes = bridge.get_point_array(return_nodes=True)
-        cdists = sorted(node.cdist for node in nodes)
+        cdists = np.sort(bridge.cdists)
         lo = max(bisect_left(cdists, span[0]) - 1, 0)
         poly = poly[lo : bisect_right(cdists, span[1]) + 1]
     point = np.asarray(point, dtype=np.float64)

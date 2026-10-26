@@ -832,7 +832,7 @@ def _build_intervals(
         # No crossing past the anchor yet -- one element to the end of the
         # computed branch.
         ((bid, cdist),) = boundaries.items()
-        end = float(trellis.manifolds[branch.key].tail.get_cdist("stable"))
+        end = float(trellis.manifolds[branch.key].cdists[-1])
         logger.info(
             "branch %s has no crossing past its anchor; one element to its end "
             "(grow the unstable manifold)",

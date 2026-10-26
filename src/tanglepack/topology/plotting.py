@@ -426,11 +426,8 @@ def _stable_arc_midpoint(
     manifold = trellis.manifolds.get(key)
     if manifold is not None:
         lo, hi = sorted((near.stable_cdist, far.stable_cdist))
-        inside = [
-            node.get_point()
-            for node in manifold.get_point_array(return_nodes=True)
-            if lo <= node.cdist <= hi
-        ]
+        cdists = manifold.cdists
+        inside = manifold.points[(lo <= cdists) & (cdists <= hi)]
         if len(inside) >= 2:
             mid = len(inside) // 2
             prev_i, next_i = max(mid - 1, 0), min(mid + 1, len(inside) - 1)
@@ -440,7 +437,7 @@ def _stable_arc_midpoint(
                 inside[next_i], dtype=np.float64
             )
             return np.asarray(inside[mid], dtype=np.float64), tangent
-        if inside:
+        if len(inside):
             return (
                 np.asarray(inside[0], dtype=np.float64),
                 near.get_point() - far.get_point(),
@@ -480,29 +477,21 @@ def _image_arc_midpoint(
     chord length between the sub-arc's endpoints. Without a span the whole
     bridge is the arc.
     """
-    nodes = bridge.get_point_array(return_nodes=True)
-    if not nodes:
+    points = bridge.points
+    if not len(points):
         return None, None, 0.0
     if span is None:
-        lo_i, mid_i, hi_i = 0, len(nodes) // 2, len(nodes) - 1
+        lo_i, mid_i, hi_i = 0, len(points) // 2, len(points) - 1
     else:
-        cdists = [node.cdist for node in nodes]
+        cdists = bridge.cdists
         u_lo, u_hi = span
-        lo_i = min(range(len(nodes)), key=lambda i: abs(cdists[i] - u_lo))
-        hi_i = min(range(len(nodes)), key=lambda i: abs(cdists[i] - u_hi))
-        mid_i = min(
-            range(len(nodes)), key=lambda i: abs(cdists[i] - (u_lo + u_hi) / 2.0)
-        )
-    midpoint = nodes[mid_i].get_point()
-    prev_i, next_i = max(mid_i - 1, 0), min(mid_i + 1, len(nodes) - 1)
-    tangent = (
-        nodes[next_i].get_point() - nodes[prev_i].get_point()
-        if next_i > prev_i
-        else None
-    )
-    arc_chord = float(
-        np.linalg.norm(nodes[hi_i].get_point() - nodes[lo_i].get_point())
-    )
+        lo_i = int(np.argmin(np.abs(cdists - u_lo)))
+        hi_i = int(np.argmin(np.abs(cdists - u_hi)))
+        mid_i = int(np.argmin(np.abs(cdists - (u_lo + u_hi) / 2.0)))
+    midpoint = points[mid_i]
+    prev_i, next_i = max(mid_i - 1, 0), min(mid_i + 1, len(points) - 1)
+    tangent = points[next_i] - points[prev_i] if next_i > prev_i else None
+    arc_chord = float(np.linalg.norm(points[hi_i] - points[lo_i]))
     return midpoint, tangent, arc_chord
 
 
