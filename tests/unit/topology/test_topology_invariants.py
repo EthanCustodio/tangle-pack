@@ -236,6 +236,14 @@ class _StubManifold:
     def __init__(self, nodes) -> None:
         self._nodes = list(nodes)
 
+    @property
+    def points(self):
+        return np.array([n.get_point() for n in self._nodes])
+
+    @property
+    def cdists(self):
+        return np.array([n.cdist for n in self._nodes])
+
     def get_point_array(self, return_nodes: bool = False):
         if return_nodes:
             return self._nodes

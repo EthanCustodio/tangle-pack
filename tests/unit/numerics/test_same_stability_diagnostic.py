@@ -23,8 +23,9 @@ from helpers import laws
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
 from helpers.polylines import polyline_manifold, polyline_workbench
-from tanglepack import Bridge, BranchPoint, Point
+from tanglepack import BaseManifold, Bridge, BranchPoint, Point
 from tanglepack.numerics import ManifoldMachine
+from tanglepack.numerics.PointStore import PointStore
 from tanglepack.numerics.diagnostics import (
     count_same_stability_crossings,
     same_stability_crossings,
@@ -149,10 +150,10 @@ def test_agrees_with_the_test_tier_oracle_on_random_polylines():
     assert expected and found == expected
 
 
-def _image_chain(fp, points, cuts):
+def _image_chain(fp, points, cuts, store=None):
     """Partial image bridges along one curve through ``points``, cut at the
     node windows ``cuts``; overlapping windows share edges, as a blast's do."""
-    nodes = [Point(x, y, float(k)) for k, (x, y) in enumerate(points)]
+    nodes = [Point(x, y, float(k), store=store) for k, (x, y) in enumerate(points)]
     ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
     return [
         Bridge(
@@ -161,6 +162,48 @@ def _image_chain(fp, points, cuts):
         )
         for lo, hi in cuts
     ]
+
+
+def test_two_periodic_points_are_two_nodes():
+    """The first segments of curves leaving two different periodic points share
+    no node, so their crossing is listed and counted (N6, 2026-10-26: a periodic
+    point has no row, and each one is keyed apart)."""
+    fp = bare_fixed_point(label="A")
+    workbench = polyline_workbench(fp, {})
+    here, there = BranchPoint(2, (0.0, 0.0), 0.0, 0.0), BranchPoint(2, (0.0, 0.0), 0.0, 2.0)
+    key, image_key = (fp, "unstable", 0, 0), (fp, "unstable", 1, 0)
+    workbench.register_manifold(key, polyline_manifold([(2.0, 2.0), (3.0, 2.0)], key, root=here))
+    image = polyline_manifold([(2.0, 0.0), (3.0, 0.0)], image_key, root=there)
+    bridge = Bridge(root=there, stability="unstable", stretch_param=1.0, fixed_point=fp,
+                    tail=image.tail, branch_index=0, manifold_key=image_key)
+    workbench._register_bridge(bridge)
+
+    (hit,) = same_stability_crossings(workbench, region="all")
+    assert (hit.seg_a, hit.seg_b) == (0, 0) and np.allclose(hit.point, (1.0, 1.0))
+    count = count_same_stability_crossings(workbench, [bridge])
+    assert (count.in_region, count.outside) == (0, 1)
+
+
+def test_equal_rows_of_two_stores_are_two_nodes():
+    """Two curves held in two stores, crossing on segments with EQUAL rows in
+    their stores, share no node: the crossing is listed and counted (N6,
+    2026-10-26: a row is keyed with its store)."""
+    fp = bare_fixed_point(label="A")
+    key = (fp, "unstable", 0, 0)
+    store = PointStore()
+    nodes = [Point(x, y, float(k), store=store) for k, (x, y) in enumerate([(0.0, 0.0), (2.0, 2.0), (3.0, 2.0)])]
+    ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
+    workbench = polyline_workbench(fp, {})
+    workbench.register_manifold(key, BaseManifold(nodes[0], "unstable", 1.0, fixed_point=fp, tail=nodes[-1],
+                                                  branch_index=0, manifold_key=key))
+    (bridge,) = _image_chain(fp, [(0.0, 2.0), (2.0, 0.0), (3.0, 0.0)], [(0, 2)], store=PointStore())
+    workbench._register_bridge(bridge)
+    assert (nodes[0].row, nodes[1].row) == (bridge.root.row, bridge.root.row + 1) == (0, 1)
+
+    (hit,) = same_stability_crossings(workbench, region="all")
+    assert (hit.seg_a, hit.seg_b) == (0, 0) and np.allclose(hit.point, (1.0, 1.0))
+    count = count_same_stability_crossings(workbench, [bridge])
+    assert (count.in_region, count.outside) == (0, 1)
 
 
 @pytest.mark.parametrize("seed", [1, 2, 3, 4, 5])

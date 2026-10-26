@@ -20,6 +20,10 @@ Pins:
    Python floats. A query-only curve takes one sid per new edge, in curve
    order, whether the edge pairs or not: a curve that crosses nothing still
    returns its sids, so a fresh recompute keeps it.
+5. The edge leaving a periodic point is queried from the periodic point's
+   coordinates (N6, 2026-10-26): the point has no row, and its stand-in index
+   must never read a real row's coordinates. N8 rewrites this spelling of the
+   periodic point; the decoy row 0 gives the pin its teeth.
 
 Curves that share points are views of one curve between different ends, as
 the images a blast merged and the branch growth merged them into are.
@@ -34,7 +38,9 @@ import numpy as np
 from cases import build_k10
 from helpers.fakes import bare_fixed_point
 from helpers.polylines import polyline_manifold, polyline_workbench
-from tanglepack import BaseManifold, Bridge, define_resonance_zone
+from tanglepack import BaseManifold, Bridge, Point, define_resonance_zone
+from tanglepack.numerics import ManifoldMachine
+from tanglepack.numerics.PointStore import PointStore
 from tanglepack.numerics.Tangle import Tangle
 
 
@@ -230,6 +236,30 @@ def test_a_curve_crossing_nothing_takes_one_sid_per_new_edge(monkeypatch):
     workbench._image_curves[:] = [standing]
     workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
     assert workbench._image_curves == [standing]
+
+
+def test_a_query_only_curve_queries_the_edge_leaving_its_periodic_point():
+    fp = bare_fixed_point(label="A")
+    root = fp.branch_points[0]
+    root.set_x(0.0)
+    root.set_y(0.0)
+    store = PointStore()
+    store.append_one(5.0, 5.0, None)  # row 0, a decoy far from every curve
+
+    def curve(points, key, root=None) -> BaseManifold:
+        nodes = [Point(x, y, float(i + 1), store=store) for i, (x, y) in enumerate(points)]
+        ManifoldMachine._manifold_from_points(nodes, key[1], 1.0, fp)
+        if root is not None:
+            root.insert_point_forward(nodes[0], key[3])
+        return BaseManifold(nodes[0] if root is None else root, key[1], 1.0, fixed_point=fp,
+                            tail=nodes[-1], branch_index=key[3], manifold_key=key)
+
+    tangle = Tangle()
+    tangle.add_manifold(curve([(0.5, -1.0), (0.5, 1.0)], (fp, "stable", 0, 0)))
+    image = curve([(1.0, 0.0), (2.0, 0.0)], (fp, "unstable", 0, 0), root=root)
+    (crossing,) = tangle.populate_intersections(tangle.add_manifold(image, index_segments=False))
+    assert np.allclose(crossing.coords, (0.5, 0.0))
+    assert crossing.unstable_segment[0] is root
 
 
 def test_add_manifold_twice_records_no_none_ids(henon_tangle_with_bridges):

@@ -5,7 +5,7 @@ The duplications were collapsed here and each one is pinned:
 
 * :meth:`BaseManifold._collect` is now the ONE read behind all five array
   getters. The getters are thin wrappers, so the test compares each of them
-  against the curve's nodes read by ``_walk_nodes`` -- if a wrapper
+  against the curve's nodes read straight off its chain -- if a wrapper
   ever passes the wrong ``kind`` / ``value`` / ``stop_at_final`` the comparison
   catches it.
 * :meth:`BaseManifold.first_node` is the ONE "step past the root BranchPoint"
@@ -36,9 +36,17 @@ from tanglepack.numerics import BaseManifold, BranchPoint, FixedPointSolver
 # one walker
 # --------------------------------------------------------------------------- #
 def _hand_walk(manifold, stop_at_final=True):
-    """The curve's nodes from the one node walker, ``_walk_nodes``, which no
-    getter calls."""
-    return list(manifold._walk_nodes(stop_at_final=stop_at_final))
+    """The curve's nodes read straight off its chain: the rows from its first
+    node's position to its tail's (to the chain's end without the stop), the
+    periodic point first when the root is one."""
+    head = manifold.root if isinstance(manifold.root, BranchPoint) else None
+    first = manifold.root if head is None else manifold.first_node()
+    store = first.store
+    ids = store.chain_of(first.row).ids
+    lo = int(np.flatnonzero(ids == first.row)[0])
+    hi = int(np.flatnonzero(ids == manifold.tail.row)[0]) + 1 if stop_at_final else len(ids)
+    nodes = [store.nodes[row] for row in ids[lo:hi].tolist()]
+    return nodes if head is None else [head, *nodes]
 
 
 def _has_iterate(manifold, node, n=1):
