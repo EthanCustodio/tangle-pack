@@ -116,8 +116,8 @@ def test_an_image_claimed_three_times_in_one_pass_links_none(henon_tangle_with_b
 def test_a_multi_match_is_recorded_and_a_second_pass_changes_nothing(
     henon_tangle_with_bridges, monkeypatch
 ):
-    """B8: a source whose brackets meet several images is recorded with them,
-    unlinked; re-deciding the same entries leaves the generation alone."""
+    """B8: a source whose brackets meet several images is recorded with them, in
+    stable order, unlinked; re-deciding the same entries leaves the generation alone."""
     workbench, _fp = henon_tangle_with_bridges
     registry = workbench.intersection_registry
     # Brackets wide enough that every crossing on the advanced branches meets them.
@@ -134,8 +134,43 @@ def test_a_multi_match_is_recorded_and_a_second_pass_changes_nothing(
     assert set(registry.unresolved_links) == set(detected)
     for source, candidates in registry.unresolved_links.items():
         assert len(candidates) > 1 and set(candidates) <= set(detected)
+        stable_cdists = [registry[j].stable_cdist for j in candidates]
+        assert stable_cdists == sorted(stable_cdists)
         assert registry.iterate_table[source, 1] is None
     assert registry.generation == generation
+
+
+def test_an_image_whose_stable_bracket_misses_the_carried_one_is_no_image(
+    henon_tangle_with_bridges, monkeypatch
+):
+    """Both brackets must meet: a real link ``x -> y`` is not found once x's stable
+    bracket, carried one step, sits just beside y's, though the stable window still
+    holds y and the unstable brackets still meet."""
+    workbench, _fp = henon_tangle_with_bridges
+    registry = workbench.intersection_registry
+    x, y = min(_detected_links(registry))
+    source, image = registry[x], registry[y]
+    stretch_s = workbench.manifolds[source.manifold_b_key].stretch_param
+    brackets = IterateInference._brackets
+    unstable, (s_lo, s_hi) = brackets(source)
+    y_lo, y_hi = brackets(image)[1]
+    # Beside y's bracket on the side away from y's own cdist, so the window
+    # (the carried bracket widened by the branch's widest) still reaches it.
+    gap = 1e-3 * (y_hi - y_lo)
+    if image.stable_cdist > 0.5 * (y_lo + y_hi):
+        carried = (y_lo - gap - (s_hi - s_lo) / stretch_s, y_lo - gap)
+    else:
+        carried = (y_hi + gap, y_hi + gap + (s_hi - s_lo) / stretch_s)
+    beside = (unstable, (carried[0] * stretch_s, carried[1] * stretch_s))
+    monkeypatch.setattr(
+        IterateInference, "_brackets", lambda crossing: beside if crossing is source else brackets(crossing)
+    )
+    registry.iterate_table = IterateTable()
+
+    infer_iterates(workbench, [x])
+
+    assert registry.iterate_table[x, 1] is None and registry.iterate_table[y, -1] is None
+    assert x not in registry.unresolved_links
 
 
 def test_remove_iterate_forgets_the_link_and_its_twin(henon_tangle_with_bridges):
