@@ -50,7 +50,8 @@ def test_bridges_are_registered_with_their_own_segments(henon_tangle_with_bridge
         seg_ids = tangle._manifold_segs.get(bridge, set())
         assert seg_ids, "bridge was dropped by the edge dedup"
 
-        indexed = {_edge(tangle._seg_lookup[sid].row0, tangle._seg_lookup[sid].row1) for sid in seg_ids}
+        segments = [tangle._seg_lookup[sid] for sid in seg_ids]
+        indexed = {_edge(seg.row0, seg.row1) for seg in segments}
         expected = _bridge_edge_keys(bridge)
         assert len(seg_ids) == len(expected)
         assert indexed == set(expected)

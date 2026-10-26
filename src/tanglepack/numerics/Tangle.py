@@ -223,9 +223,9 @@ class Tangle:
             _rtrees: one spatial rtree per stability, storing the indexed
                 segments by their bounding boxes.
             _edge_to_sid: Maps an indexed edge (its :func:`_edge` key, built
-                from its two rows) to its segment id, so a bridge cut from an indexed branch
-                (which reuses the branch's points) claims the EXISTING segment
-                rather than being silently dropped.
+                from its two rows) to its segment id, so a bridge cut from an
+                indexed branch (which reuses the branch's rows) claims the
+                EXISTING segment rather than being silently dropped.
             _seg_lookup: Dictionary keyed by segment id: every indexed segment,
                 and every query-only segment whose query found a pair.
             _manifold_segs: The segment ids each indexed curve owns, a bridge
@@ -353,8 +353,8 @@ class Tangle:
             manifold_b_key=Tangle._key_of(s_seg),
             unstable_manifold=u_seg.manifold,
             # The ORIGINAL endpoints' rows, captured now: a cut at this crossing
-            # brackets it with these two real nodes, read off the crossing and
-            # never off the index, after a separator point may have been spliced in.
+            # brackets it with these two real nodes, read off the crossing, never
+            # off the index, so a separator spliced in later does not move them.
             unstable_segment=(u_seg.row0, u_seg.row1),
             stable_segment=(s_seg.row0, s_seg.row1),
             store=u_seg.store,
@@ -1179,7 +1179,7 @@ class Tangle:
     def _interpolate(
         a: NDArray[np.float64], b: NDArray[np.float64], ca: float, cb: float, point: np.ndarray
     ) -> float:
-        """The cdist interpolated at ``point`` between ends ``a`` (cdist ``ca``) and ``b`` (``cb``)."""
+        """The cdist at ``point``, interpolated between ends ``a`` (``ca``) and ``b`` (``cb``)."""
         ab = b - a
         denom = float(ab @ ab)
         t = 0.0 if denom == 0.0 else float((np.asarray(point) - a) @ ab) / denom
