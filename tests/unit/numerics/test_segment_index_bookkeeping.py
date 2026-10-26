@@ -73,6 +73,10 @@ class _RecordingIndex:
         self.queried.append(tuple(bounds))
         return self.rtree.intersection(bounds)
 
+    def intersection_v(self, mins, maxs):
+        self.queried.extend(tuple(box) for box in np.hstack((mins, maxs)).tolist())
+        return self.rtree.intersection_v(mins, maxs)
+
 
 def _bounds(p0, p1) -> tuple:
     (x0, y0), (x1, y1) = p0.get_point(), p1.get_point()

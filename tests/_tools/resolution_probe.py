@@ -55,11 +55,10 @@ _library_ratio = Tangle._resolution_ratio
 def _recording_ratio(u_seg, s_seg, sin_theta):
     """The library's ratio, with the probe's own ``max(h_u, h_s)`` recorded beside it."""
     segments = (u_seg, s_seg)
-    p0 = np.array([seg.p0.get_point() for seg in segments], dtype=float)
-    p1 = np.array([seg.p0_seg1.get_point() for seg in segments], dtype=float)
+    ends = np.array([seg.coords() for seg in segments])
     left, right = zip(*(Tangle._outer_neighbours(seg) for seg in segments))
-    h = chord_deviation_batch(p0, p1, np.array(left), np.array(right))
-    DEVIATION[end(u_seg.p0), end(u_seg.p0_seg1), end(s_seg.p0), end(s_seg.p0_seg1)] = float(h.max())
+    h = chord_deviation_batch(ends[:, 0], ends[:, 1], np.array(left), np.array(right))
+    DEVIATION[u_seg.row0, u_seg.row1, s_seg.row0, s_seg.row1] = float(h.max())
     return _library_ratio(u_seg, s_seg, sin_theta)
 
 

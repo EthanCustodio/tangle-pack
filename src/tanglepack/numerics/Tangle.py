@@ -59,7 +59,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from itertools import count
+from itertools import count, islice
 from typing import Iterable, Optional
 
 import numpy as np
@@ -67,10 +67,11 @@ from numpy.typing import NDArray
 from rtree import index
 from rtree.core import RTreeError
 
-from .Intersection import Intersection, ManifoldKey
+from .Intersection import Intersection, ManifoldKey, Stability
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 from .Point import Point
+from .PointStore import PointStore
 from .BranchPoint import BranchPoint
 from .Bridge import Bridge
 from .geometry import chord_deviation_batch
@@ -90,11 +91,29 @@ _EPS_REL = 1e-12
 _DEVIATION_FLOOR_REL = 1e-8
 
 
-def _edge(p0: Point | BranchPoint, p1: Point | BranchPoint) -> int:
-    """One int per edge, whichever way it is walked: the same identity as the
-    frozenset of the two point ids, at a fraction of its size."""
-    a, b = sorted((id(p0), id(p1)))
-    return (a << 64) | b
+def _edge(end0: int | BranchPoint, end1: int | BranchPoint) -> int:
+    """One int per edge, whichever way it is walked, from its two store rows; a
+    BranchPoint end is -1 through the +1 offset, never an index."""
+    a = -1 if isinstance(end0, BranchPoint) else end0
+    b = -1 if isinstance(end1, BranchPoint) else end1
+    lo, hi = (a, b) if a <= b else (b, a)
+    return ((lo + 1) << 32) | (hi + 1)
+
+
+def _edge_keys(r0: NDArray[np.int64], r1: NDArray[np.int64]) -> NDArray[np.int64]:
+    """:func:`_edge` of many edges at once (-1 = a BranchPoint end)."""
+    assert max(r0.max(initial=-1), r1.max(initial=-1)) < 2**31, "an edge key holds a row in 31 bits"
+    return ((np.minimum(r0, r1) + 1) << 32) | (np.maximum(r0, r1) + 1)
+
+
+def _curve_ends(
+    manifold: BaseManifold,
+) -> tuple[Optional[PointStore], NDArray[np.int64], NDArray[np.int64], Optional[BranchPoint]]:
+    """A curve's store, its edges' rows ``(r0, r1)`` in curve order (-1 = the
+    root BranchPoint), and that BranchPoint (None when the curve has none)."""
+    head, store, rows = manifold._rows()
+    ends = rows if head is None else np.concatenate((np.array([-1], dtype=np.int64), rows))
+    return store, ends[:-1], ends[1:], head
 
 
 def _segment_index(stream: Optional[list] = None) -> index.Index:
@@ -109,14 +128,16 @@ def _segment_index(stream: Optional[list] = None) -> index.Index:
 @dataclass(slots=True)
 class _Segment:
     """
-    Helper class to store basic information about
-    neighboring pairs of points.
+    One edge of a curve: two consecutive store rows, the first of them the
+    root's BranchPoint where the curve starts at the periodic point (which has
+    no row).
     """
 
     id: int
     manifold: BaseManifold
-    p0: Point | BranchPoint
-    p0_seg1: Point | BranchPoint
+    store: PointStore
+    row0: int | BranchPoint
+    row1: int
     # False for segments that were only queried against the rtree, never
     # inserted into it (iterated bridges) -- _remove_segment must not try to
     # delete those from the rtree.
@@ -124,24 +145,28 @@ class _Segment:
 
     @property
     def bounds(self) -> tuple[float, float, float, float]:
-        """
-        Returns the boundaries of the bounding box
-        made from self.p0 and self.p0_seg1
-        """
-
-        x0, y0 = self.p0.get_point()
-        x1, y1 = self.p0_seg1.get_point()
-
+        """The bounding box ``(minx, miny, maxx, maxy)`` of the rows ``row0`` and ``row1``."""
+        (x0, y0), (x1, y1) = self.coords()
         return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
 
-    def intersects(self, other: "_Segment") -> bool:
-        """Whether this segment and ``other`` cross (endpoints included)."""
-        p0 = tuple(self.p0.get_point())  # (x, y)
-        p0_seg1 = tuple(self.p0_seg1.get_point())
-        q0 = tuple(other.p0.get_point())
-        q1 = tuple(other.p0_seg1.get_point())
+    def coords(self, xy: Optional[NDArray[np.float64]] = None) -> NDArray[np.float64]:
+        """The ``(2, 2)`` coordinates of the two ends: read off the caller's view
+        of ``store.xy`` (a batch passes one for all its reads), or one taken here."""
+        xy = self.store.xy if xy is None else xy
+        return np.array([end.get_point() if isinstance(end, BranchPoint) else xy[end]
+                         for end in (self.row0, self.row1)], dtype=np.float64)
 
-        return Tangle._do_segments_intersect((p0, p0_seg1), (q0, q1))
+    def cdists(self, stability: Stability) -> list[float]:
+        """The two ends' cdists as Python floats (a BranchPoint reads its own)."""
+        cdist = self.store.cdist
+        return [end.get_cdist(stability) if isinstance(end, BranchPoint) else float(cdist[end])
+                for end in (self.row0, self.row1)]
+
+    def intersects(self, other: _Segment) -> bool:
+        """Whether this segment and ``other`` cross (endpoints included)."""
+        p0, p1 = map(tuple, self.coords())
+        q0, q1 = map(tuple, other.coords())
+        return Tangle._do_segments_intersect((p0, p1), (q0, q1))
 
 
 class Tangle:
@@ -149,7 +174,7 @@ class Tangle:
     Spatial index of manifold segments that detects and resolves crossings.
 
     Two kinds of curve meet the index. An INDEXED curve (a branch) has every
-    adjacent pair of points stored as a _Segment in the rtree of its
+    edge (two consecutive store rows) stored as a _Segment in the rtree of its
     stability, with its owners. A QUERY-ONLY curve (a blast image curve, the
     bridges cut from it, a partial piece) is only queried: each new edge is one
     key in ``_query_edges``, and its _Segment is kept only when its query
@@ -168,11 +193,16 @@ class Tangle:
             segment, and every query-only segment that found a pair.
         _manifold_segs: The sids each indexed curve (and each bridge cut from
             one) owns.
-        _query_edges: The edge key (:func:`_edge`) of every edge a query-only
-            curve has queried, so an image laid over an earlier one is not
-            queried twice.
+        _edge_to_sid: The sid of every indexed edge, by its edge key.
+        _query_edges: The edge key of every edge a query-only curve has
+            queried, so an image laid over an earlier one is not queried twice.
         _intersecting_segments: Set of frozenset pairs of segment ids that
             cross.
+        _store: The one PointStore whose rows every key and record name.
+
+    An edge key (:func:`_edge`) is one int built from the edge's two store rows,
+    the same whichever way the edge is walked; both key maps use it. Rows are
+    store-relative, so a Tangle indexes the curves of one store (asserted).
 
     Note:
         The Tangle owns INDEX state only. A resolved crossing lives in the
@@ -192,8 +222,8 @@ class Tangle:
         Attributes:
             _rtrees: one spatial rtree per stability, storing the indexed
                 segments by their bounding boxes.
-            _edge_to_sid: Maps an indexed edge (the frozenset of its two point
-                ids) to its segment id, so a bridge cut from an indexed branch
+            _edge_to_sid: Maps an indexed edge (its :func:`_edge` key, built
+                from its two rows) to its segment id, so a bridge cut from an indexed branch
                 (which reuses the branch's points) claims the EXISTING segment
                 rather than being silently dropped.
             _seg_lookup: Dictionary keyed by segment id: every indexed segment,
@@ -203,18 +233,20 @@ class Tangle:
             _seg_manifolds: Reverse of _manifold_segs -- every curve that claims
                 a given segment id. A segment stays indexed until its last owner
                 is removed.
-            _query_edges: One int key per edge a query-only curve has queried
-                (:func:`_edge`, the same identity as ``_edge_to_sid``'s keys).
+            _query_edges: One key per edge a query-only curve has queried
+                (:func:`_edge`, the same key as ``_edge_to_sid``'s).
                 It is never forgotten: a query-only curve holds no record, so
                 there is nothing to release.
             _intersecting_segments: set of frozensets containing pairs of
                 segment ids that intersect
             _processed_pairs: pairs already handed to _resolve_crossing_pair, so a
                 crossing is resolved (and registered) exactly once
+            _store: The PointStore of the first curve added, None until then.
         """
 
         self._rtrees = {"unstable": _segment_index(), "stable": _segment_index()}
-        self._edge_to_sid: dict[frozenset[int], int] = {}
+        self._edge_to_sid: dict[int, int] = {}
+        self._store: Optional[PointStore] = None
         self._seg_lookup: dict[int, _Segment] = {}
         self._manifold_segs: defaultdict[BaseManifold, set[int]] = defaultdict(set)
         self._seg_manifolds: defaultdict[int, set[BaseManifold]] = defaultdict(set)
@@ -246,6 +278,7 @@ class Tangle:
         self._query_edges.clear()
         self._intersecting_segments.clear()
         self._processed_pairs.clear()
+        self._store = None
 
     def resolve_crossings(self) -> list[Intersection]:
         """
@@ -308,11 +341,7 @@ class Tangle:
         )
 
         ratio, deviation = self._resolution_ratio(u_seg, s_seg, sin_theta)
-        nodes = (u_seg.p0, u_seg.p0_seg1, s_seg.p0, s_seg.p0_seg1)
-        stores = {node.store for node in nodes if not isinstance(node, BranchPoint)}
-        assert len(stores) == 1, f"the bracket ends of {seg_id_pair} span {len(stores)} stores"
-        (store,) = stores
-        ends = [node if isinstance(node, BranchPoint) else node.row for node in nodes]
+        assert u_seg.store is s_seg.store, f"the bracket ends of {seg_id_pair} span two stores"
         # cdist interpolated at the true crossing (not the segment midpoint)
         intersection = Intersection.from_segments(
             coords=tuple(point),
@@ -324,11 +353,11 @@ class Tangle:
             manifold_b_key=Tangle._key_of(s_seg),
             unstable_manifold=u_seg.manifold,
             # The ORIGINAL endpoints' rows, captured now: a cut at this crossing
-            # brackets it with these two real nodes, and they must not be re-read
-            # off the segment later, after a separator point has been spliced in.
-            unstable_segment=(ends[0], ends[1]),
-            stable_segment=(ends[2], ends[3]),
-            store=store,
+            # brackets it with these two real nodes, read off the crossing and
+            # never off the index, after a separator point may have been spliced in.
+            unstable_segment=(u_seg.row0, u_seg.row1),
+            stable_segment=(s_seg.row0, s_seg.row1),
+            store=u_seg.store,
             crossing_sign=self._crossing_sign(u_seg, s_seg),
             resolution_ratio=ratio,
             chord_deviation=deviation,
@@ -363,10 +392,11 @@ class Tangle:
             parallel) pair, which ``_find_true_intersection`` has already
             discarded by the time this is called.
         """
-        def direction(seg: _Segment, stability: str) -> NDArray[np.float64]:
-            a, b = seg.p0, seg.p0_seg1
-            vec = b.get_point() - a.get_point()
-            return -vec if b.get_cdist(stability) < a.get_cdist(stability) else vec
+        def direction(seg: _Segment, stability: Stability) -> NDArray[np.float64]:
+            a, b = seg.coords()
+            ca, cb = seg.cdists(stability)
+            vec = b - a
+            return -vec if cb < ca else vec
 
         u_dir = direction(u_seg, "unstable")
         s_dir = direction(s_seg, "stable")
@@ -400,8 +430,8 @@ class Tangle:
             deviation a neighbouring detection is measured against.
         """
         segments = (u_seg, s_seg)
-        p0 = np.array([seg.p0.get_point() for seg in segments], dtype=float)
-        p1 = np.array([seg.p0_seg1.get_point() for seg in segments], dtype=float)
+        ends = np.array([seg.coords() for seg in segments])
+        p0, p1 = ends[:, 0], ends[:, 1]
         left, right = zip(*(Tangle._outer_neighbours(seg) for seg in segments))
         deviation = float(chord_deviation_batch(p0, p1, np.array(left), np.array(right)).max())
         shorter = float(np.hypot(*(p1 - p0).T).min())
@@ -419,16 +449,18 @@ class Tangle:
         periodic point) counts as having no neighbour: the curve on its far side
         is another branch.
         """
-        def neighbour(node: Point | BranchPoint, step: int) -> Optional[Point | BranchPoint]:
-            if isinstance(node, BranchPoint):
+        store = seg.store
+
+        def neighbour(end: int | BranchPoint, step: int) -> Optional[Point | BranchPoint]:
+            if isinstance(end, BranchPoint):
                 return None
-            chain = node.store.chain_of(node.row)
-            return None if chain is None else chain.node_at(node.store.position_of(node.row) + step)
+            chain = store.chain_of(end)
+            return None if chain is None else chain.node_at(store.position_of(end) + step)
 
         missing = np.array([np.nan, np.nan])
         return tuple(
             missing if node is None else node.get_point()
-            for node in (neighbour(seg.p0, -1), neighbour(seg.p0_seg1, 1))
+            for node in (neighbour(seg.row0, -1), neighbour(seg.row1, 1))
         )
 
     def _find_true_intersection(
@@ -451,10 +483,8 @@ class Tangle:
             two directions are parallel to within ``_EPS_REL`` (the caller
             discards such a pair).
         """
-        p0_seg1, p1_seg1 = seg1.p0.get_point(), seg1.p0_seg1.get_point()
-        p0_seg2, p1_seg2 = seg2.p0.get_point(), seg2.p0_seg1.get_point()
-
-        a, b, c, d = map(np.asarray, (p0_seg1, p1_seg1, p0_seg2, p1_seg2))
+        a, b = seg1.coords()
+        c, d = seg2.coords()
         # 2x2 matrix
         M = np.vstack((b - a, c - d)).T  # [[Bx-Ax, Cx-Dx], [By-Ay, Cy-Dy]]
         rhs = c - a
@@ -517,29 +547,7 @@ class Tangle:
             release.
         """
         if not index_segments and detect_crossings:
-            rtree = self._rtrees["stable" if manifold.stability == "unstable" else "unstable"]
-            new_sids = set()
-            for seg in self._segments_of(manifold):
-                edge = _edge(seg.p0, seg.p0_seg1)
-                if edge in self._query_edges:
-                    continue
-                indexed_sid = self._edge_to_sid.get(frozenset((id(seg.p0), id(seg.p0_seg1))))
-                if indexed_sid is not None:
-                    assert self._seg_lookup[indexed_sid].manifold.stability == manifold.stability, (
-                        "an edge is shared only between a curve and a piece cut out of it")
-                    continue
-                self._query_edges.add(edge)
-                seg.id, seg.in_rtree = next(Tangle._ids), False
-                new_sids.add(seg.id)
-                pairs = {
-                    frozenset((seg.id, cand_id))
-                    for cand_id in rtree.intersection(seg.bounds)
-                    if seg.intersects(self._seg_lookup[cand_id])
-                }
-                if pairs:
-                    self._seg_lookup[seg.id] = seg
-                    self._intersecting_segments |= pairs
-            return new_sids
+            return self._query_curve(manifold)
 
         if manifold in self._manifold_segs:
             # copy, because _remove_segment mutates the same set
@@ -552,6 +560,66 @@ class Tangle:
             for segment in self._segments_of(manifold)
         )
         return {sid for sid in new_sids if sid is not None}
+
+    def _adopt_store(self, store: Optional[PointStore]) -> None:
+        """Record the store on first sight; every later curve must share it."""
+        if store is None:
+            return
+        if self._store is None:
+            self._store = store
+        assert store is self._store, "one Tangle indexes the rows of one store"
+
+    def _query_curve(self, manifold: BaseManifold) -> set[int]:
+        """
+        The query-only add, on the curve's rows: one ``intersection_v`` for all its new edges.
+
+        Each new edge takes, in curve order and whether it pairs or not, the sid
+        ``next(Tangle._ids)`` would have given it: a pair's operand order comes
+        from its two sid values, so they decide float bits, and a curve whose add
+        returns no sid is dropped on a fresh recompute. A _Segment is kept only
+        for an edge whose query found a pair.
+        """
+        store, r0, r1, head = _curve_ends(manifold)
+        if store is None:
+            return set()
+        self._adopt_store(store)
+        new = []
+        for k, edge in enumerate(_edge_keys(r0, r1).tolist()):
+            if edge in self._query_edges:
+                continue
+            indexed_sid = self._edge_to_sid.get(edge)
+            if indexed_sid is not None:
+                assert self._seg_lookup[indexed_sid].manifold.stability == manifold.stability, (
+                    "an edge is shared only between a curve and a piece cut out of it")
+                continue
+            self._query_edges.add(edge)
+            new.append(k)
+        if not new:
+            return set()
+
+        sids = list(islice(Tangle._ids, len(new)))
+        e0, e1 = r0[new], r1[new]
+        xy = store.xy
+        a, b = xy[np.maximum(e0, 0)], xy[e1]
+        if head is not None:
+            a[e0 < 0] = head.get_point()
+        rtree = self._rtrees["stable" if manifold.stability == "unstable" else "unstable"]
+        candidates, counts = rtree.intersection_v(np.minimum(a, b), np.maximum(a, b))
+        candidates, stops = candidates.tolist(), np.cumsum(counts).tolist()
+        for k in np.flatnonzero(counts).tolist():
+            edge = (tuple(a[k]), tuple(b[k]))
+            pairs = {
+                frozenset((sids[k], cand_id))
+                for cand_id in candidates[stops[k] - int(counts[k]):stops[k]]
+                if Tangle._do_segments_intersect(
+                    edge, tuple(map(tuple, self._seg_lookup[cand_id].coords(xy))))
+            }
+            if pairs:
+                row0 = head if e0[k] < 0 else int(e0[k])
+                self._seg_lookup[sids[k]] = _Segment(
+                    sids[k], manifold, store, row0, int(e1[k]), in_rtree=False)
+                self._intersecting_segments |= pairs
+        return set(sids)
 
     def add_manifolds(self, manifolds: list[BaseManifold]) -> None:
         """
@@ -574,7 +642,7 @@ class Tangle:
         new_segments = []
         for manifold in manifolds:
             for segment in self._segments_of(manifold):
-                edge_key = frozenset((id(segment.p0), id(segment.p0_seg1)))
+                edge_key = _edge(segment.row0, segment.row1)
                 existing_sid = self._edge_to_sid.get(edge_key)
                 if existing_sid is not None:
                     # Same edge reached from a second manifold: claim the segment
@@ -666,9 +734,8 @@ class Tangle:
             The freshly allocated segment id, or None when the edge was already
             registered (and so only claimed).
         """
-        # edge key defined by the id of two points
-        edge_key = frozenset((id(seg.p0), id(seg.p0_seg1)))
-        if _edge(seg.p0, seg.p0_seg1) in self._query_edges:
+        edge_key = _edge(seg.row0, seg.row1)
+        if edge_key in self._query_edges:
             # a query-only curve already queried it: as before N1, neither indexed
             # nor queried (the base also claimed it, for no effect; the
             # reset=False path, see Dev Notes)
@@ -770,7 +837,7 @@ class Tangle:
                     "rtree delete failed for segment %s", sid, exc_info=True
                 )
 
-        self._edge_to_sid.pop(frozenset((id(seg.p0), id(seg.p0_seg1))), None)
+        self._edge_to_sid.pop(_edge(seg.row0, seg.row1), None)
 
     def _segments_of(self, manifold: BaseManifold):
         """
@@ -784,9 +851,10 @@ class Tangle:
         trim) only the segments up to the trim are indexed. ``tail is None`` falls
         back to the end of the root's chain.
         """
-        nodes = list(manifold._walk_nodes())
-        for p0, p1 in zip(nodes, nodes[1:]):
-            yield _Segment(None, manifold, p0, p1)
+        store, r0, r1, head = _curve_ends(manifold)
+        self._adopt_store(store)
+        for row0, row1 in zip(r0.tolist(), r1.tolist()):
+            yield _Segment(None, manifold, store, head if row0 < 0 else row0, row1)
 
     @staticmethod
     def _orientation(
@@ -1029,8 +1097,9 @@ class Tangle:
             if parent in self._manifold_segs:
                 self.add_manifold(bridge, index_segments=False, detect_crossings=False)
             else:
-                self._query_edges.update(
-                    _edge(seg.p0, seg.p0_seg1) for seg in self._segments_of(bridge))
+                store, r0, r1, _ = _curve_ends(bridge)
+                self._adopt_store(store)
+                self._query_edges.update(_edge_keys(r0, r1).tolist())
 
         return [bridge for _, bridge in cut]
 
@@ -1085,33 +1154,34 @@ class Tangle:
         crossings that share one segment receive distinct cdists (a
         segment-midpoint value would give them one).
         """
-        return self._cdist_between(
-            seg.p0, seg.p0_seg1, seg.manifold.stability, point
-        )
+        a, b = seg.coords()
+        ca, cb = seg.cdists(seg.manifold.stability)
+        return Tangle._interpolate(a, b, ca, cb, point)
 
     @staticmethod
     def _cdist_between(
         p0: Point,
         p1: Point,
-        stability: str,
+        stability: Stability,
         point: np.ndarray,
     ) -> float:
         """
         Interpolate cdist at `point` between the two explicit endpoints p0, p1.
 
-        Endpoint-based variant of `_cdist_at_point`: takes the Point objects
-        directly rather than reading them off a `_Segment`. This lets
-        `create_bridges` evaluate cdists against the ORIGINAL segment endpoints
-        captured before any boundary points are spliced in, so it never reads a
-        mutated `seg.p0` / `seg.p0_seg1` (the source of the multi-crossing bridge
-        corruption).
+        Endpoint-based variant of `_cdist_at_point`: takes the nodes directly
+        rather than a `_Segment`, so `create_bridges` places a separator against
+        the ORIGINAL segment endpoints captured before any point is spliced in.
         """
-        a = p0.get_point()
-        b = p1.get_point()
+        return Tangle._interpolate(p0.get_point(), p1.get_point(), p0.get_cdist(stability),
+                                   p1.get_cdist(stability), point)
+
+    @staticmethod
+    def _interpolate(
+        a: NDArray[np.float64], b: NDArray[np.float64], ca: float, cb: float, point: np.ndarray
+    ) -> float:
+        """The cdist interpolated at ``point`` between ends ``a`` (cdist ``ca``) and ``b`` (``cb``)."""
         ab = b - a
         denom = float(ab @ ab)
         t = 0.0 if denom == 0.0 else float((np.asarray(point) - a) @ ab) / denom
         t = min(1.0, max(0.0, t))
-        ca = p0.get_cdist(stability)
-        cb = p1.get_cdist(stability)
         return (1 - t) * ca + t * cb

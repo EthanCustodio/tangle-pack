@@ -372,9 +372,7 @@ def _tangle_bytes(tangle: Any) -> dict:
     for sid, seg in lookup.items():
         out["segments"] += sys.getsizeof(seg) + sys.getsizeof(sid)
     edges = tangle._edge_to_sid
-    out["edge_to_sid"] = sys.getsizeof(edges) + sum(
-        sys.getsizeof(k) + sum(sys.getsizeof(i) for i in k) for k in edges
-    )
+    out["edge_to_sid"] = sys.getsizeof(edges) + sum(sys.getsizeof(k) for k in edges)
     query_edges = tangle._query_edges
     out["edge_to_sid"] += sys.getsizeof(query_edges) + sum(sys.getsizeof(k) for k in query_edges)
     owners = sys.getsizeof(tangle._manifold_segs) + sys.getsizeof(tangle._seg_manifolds)

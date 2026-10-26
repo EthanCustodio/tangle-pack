@@ -25,16 +25,17 @@ from __future__ import annotations
 import numpy as np
 
 from tanglepack.numerics.Point import Point
-from tanglepack.numerics.Tangle import Tangle, _Segment
+from tanglepack.numerics.BranchPoint import BranchPoint
+from tanglepack.numerics.Tangle import Tangle, _edge, _Segment
 
 
 # --------------------------------------------------------------------------- #
 # 1.3 -- bridge segments survive the edge dedup
 # --------------------------------------------------------------------------- #
-def _bridge_node_pairs(bridge) -> list[frozenset[int]]:
-    """A bridge's consecutive node-id pairs, root -> tail."""
-    nodes = list(bridge._walk_nodes())
-    return [frozenset((id(a), id(b))) for a, b in zip(nodes, nodes[1:])]
+def _bridge_edge_keys(bridge) -> list[int]:
+    """A bridge's edge keys, root -> tail, from its node walk."""
+    ends = [node if isinstance(node, BranchPoint) else node.row for node in bridge._walk_nodes()]
+    return [_edge(a, b) for a, b in zip(ends, ends[1:])]
 
 
 def test_bridges_are_registered_with_their_own_segments(henon_tangle_with_bridges):
@@ -49,13 +50,8 @@ def test_bridges_are_registered_with_their_own_segments(henon_tangle_with_bridge
         seg_ids = tangle._manifold_segs.get(bridge, set())
         assert seg_ids, "bridge was dropped by the edge dedup"
 
-        indexed = {
-            frozenset(
-                (id(tangle._seg_lookup[sid].p0), id(tangle._seg_lookup[sid].p0_seg1))
-            )
-            for sid in seg_ids
-        }
-        expected = _bridge_node_pairs(bridge)
+        indexed = {_edge(tangle._seg_lookup[sid].row0, tangle._seg_lookup[sid].row1) for sid in seg_ids}
+        expected = _bridge_edge_keys(bridge)
         assert len(seg_ids) == len(expected)
         assert indexed == set(expected)
 
@@ -107,7 +103,8 @@ def _shallow_pair(length: float, angle: float):
 
 def _as_segment(seg, stability: str, sid: int) -> _Segment:
     (x0, y0), (x1, y1) = seg
-    return _Segment(sid, _StubManifold(stability), Point(x0, y0, 0.0), Point(x1, y1, 1.0))
+    p, q = Point(x0, y0, 0.0), Point(x1, y1, 1.0)
+    return _Segment(sid, _StubManifold(stability), p.store, p.row, q.row)
 
 
 def test_shallow_crossing_on_fine_segments_is_detected():
