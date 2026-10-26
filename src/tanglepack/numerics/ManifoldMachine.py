@@ -522,8 +522,8 @@ class ManifoldMachine:
         ``manifold_1`` is a run of existing points (from :meth:`_image_chains`),
         ``manifold_2`` the new images (or an earlier merge's output). The merged
         run starts at the lower root (``manifold_1``'s on a tie) and ends at the
-        tail of the run that outlasts the other. Where the two runs share no
-        cdist (the usual merge) the order is one ``searchsorted``; otherwise the
+        tail of the run that outlasts the other. Where the two runs lie on
+        different chains and share no cdist (the usual merge) the order is one ``searchsorted``; otherwise the
         zipper below decides it point by point: tied ROOTS are both kept, the
         existing first; a point on both runs is kept once; of two other points
         on one cdist the existing one is kept unless only the new one has an

@@ -190,9 +190,10 @@ class BaseManifold:
         slice ``[lo, hi)`` of the chain from the root to ``final_node``.
 
         Args:
-            final_node (Optional[Point]): Last node (inclusive). Defaults to the
-                tail; a node not on the chain at or after the root (or None)
-                reads to the chain's end, as a walk that never meets it did.
+            final_node (Optional[Point]): Last node (inclusive). None (the
+                default) reads to the tail, or to the chain's end when the tail
+                is None; a node not on the chain at or after the root reads to
+                the chain's end, as a walk that never meets it did.
             stop_at_final (bool): If False, ignore final_node and read to the
                 chain's end.
 
@@ -245,8 +246,8 @@ class BaseManifold:
 
         Args:
             final_node (Optional[Point]): Last node to yield (inclusive).
-                Defaults to the manifold's tail; None reads to the end of
-                the root's chain.
+                Defaults to the manifold's tail (None, the default, reads to
+                the tail, or to the chain's end when the tail is None).
             stop_at_final (bool): If False, ignore final_node and read to the
                 end of the root's chain.
         """
