@@ -41,13 +41,15 @@ Dev Notes:
 
 from __future__ import annotations
 
+import bisect
 import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, Iterable, Optional
 
 import numpy as np
+from numpy.typing import NDArray
 
-from .Intersection import Intersection, ManifoldKey
+from .Intersection import Bracket, Intersection, ManifoldKey
 from .IntersectionRegistry import IntersectionRegistry
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
@@ -61,22 +63,21 @@ logger.addHandler(logging.NullHandler())
 #: rounding, and nodes tie to the ULP at folds.
 BRACKET_PAD = 1e-12
 
-Bracket = tuple[float, float]
-
 
 def _brackets(crossing: Intersection) -> tuple[Bracket, Bracket]:
     """The crossing's unstable and stable brackets, padded by :data:`BRACKET_PAD`."""
-    (p0, p1), (q0, q1) = crossing.unstable_segment, crossing.stable_segment
-    unstable = sorted((float(p0.get_cdist("unstable")), float(p1.get_cdist("unstable"))))
-    stable = sorted((float(q0.get_cdist("stable")), float(q1.get_cdist("stable"))))
     return tuple(
-        (lo - BRACKET_PAD * abs(lo), hi + BRACKET_PAD * abs(hi)) for lo, hi in (unstable, stable)
+        (lo - BRACKET_PAD * abs(lo), hi + BRACKET_PAD * abs(hi)) for lo, hi in crossing.brackets
     )
 
 
-def _meets(a: Bracket, b: Bracket) -> bool:
-    """Two closed intervals share a point."""
-    return a[0] <= b[1] and b[0] <= a[1]
+def _padded(brackets: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Rows ``(u_lo, u_hi, s_lo, s_hi)`` padded as :func:`_brackets` pads one crossing."""
+    lo, hi = brackets[:, 0::2], brackets[:, 1::2]
+    padded = np.empty_like(brackets)
+    padded[:, 0::2] = lo - BRACKET_PAD * np.abs(lo)
+    padded[:, 1::2] = hi + BRACKET_PAD * np.abs(hi)
+    return padded
 
 
 def infer_iterates(workbench: "TangleWorkbench", sources: Optional[Iterable[int]] = None) -> int:
@@ -210,10 +211,10 @@ def _widest_stable_brackets(registry: IntersectionRegistry) -> dict[ManifoldKey,
     candidates of a predicted stable bracket are those within this width of it.
     """
     widest: dict[ManifoldKey, float] = defaultdict(float)
-    for _, crossing in registry:
-        if not crossing.is_synthetic:
-            lo, hi = _brackets(crossing)[1]
-            widest[crossing.manifold_b_key] = max(widest[crossing.manifold_b_key], hi - lo)
+    for branch_key, (_cdists, _ids, brackets) in registry._stable_branch_buckets().items():
+        stable = _padded(brackets)[:, 2:]
+        # fmax skips the NaN rows of crossings without brackets; 0.0 when none has one.
+        widest[branch_key] = float(np.fmax.reduce(stable[:, 1] - stable[:, 0], initial=0.0))
     return widest
 
 
@@ -237,17 +238,22 @@ def _bracketed_image(
     (u_lo, u_hi), (s_lo, s_hi) = _brackets(source)
     unstable, stable = (u_lo * stretch_u, u_hi * stretch_u), (s_lo / stretch_s, s_hi / stretch_s)
 
-    candidates = registry.candidates_near_stable_cdist(
-        b_key, 0.5 * (stable[0] + stable[1]), 0.5 * (stable[1] - stable[0]) + widest[b_key]
+    # The candidates sit within the widest stable bracket of the predicted one.
+    cdists, ids, brackets = registry.stable_brackets(b_key)
+    centre, window = 0.5 * (stable[0] + stable[1]), 0.5 * (stable[1] - stable[0]) + widest[b_key]
+    lo = bisect.bisect_left(cdists, centre - window)
+    hi = bisect.bisect_right(cdists, centre + window)
+    near = _padded(brackets[lo:hi])  # NaN rows (no brackets) meet nothing
+    meets = (
+        (unstable[0] <= near[:, 1])
+        & (near[:, 0] <= unstable[1])
+        & (stable[0] <= near[:, 3])
+        & (near[:, 2] <= stable[1])
     )
     images = [
         j
-        for j, y in candidates
-        if j in resolved
-        and not y.is_synthetic
-        and y.manifold_a_key == a_key
-        and _meets(unstable, _brackets(y)[0])
-        and _meets(stable, _brackets(y)[1])
+        for j in ids[lo:hi][meets].tolist()
+        if j in resolved and registry[j].manifold_a_key == a_key
     ]
     if len(images) > 1:
         registry.unresolved_links[src_id] = tuple(images)
@@ -278,7 +284,7 @@ def _map_gated(
         [
             np.ravel(point)
             for x in sources
-            for point in (x.coords, *(node.get_point() for node in x.unstable_segment))
+            for point in (x.coords, *x.segment_ends("unstable")[0])
         ],
         dtype=float,
     )
@@ -287,7 +293,7 @@ def _map_gated(
     confirmed: dict[int, int] = {}
     for (i, j), (fx, fp0, fp1) in zip(matches.items(), images):
         y = registry[j]
-        q0, q1 = (np.ravel(node.get_point()) for node in y.unstable_segment)
+        q0, q1 = y.segment_ends("unstable")[0]
         gate = np.linalg.norm(fp1 - fp0) + np.linalg.norm(q1 - q0)
         miss = float(np.linalg.norm(fx - np.ravel(y.coords)))
         if miss <= gate:

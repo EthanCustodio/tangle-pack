@@ -9,15 +9,17 @@ there. This module is also the single home of the :data:`Stability` and
 
 from __future__ import annotations
 
-from typing import Optional, Literal, TYPE_CHECKING
+from functools import cached_property
+from typing import Optional, Literal, TYPE_CHECKING, Union
 
 import numpy as np
 from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from .BaseManifold import BaseManifold
+    from .BranchPoint import BranchPoint
     from .FixedPoint import FixedPoint
-    from .Point import Point
+    from .PointStore import PointStore
 
 #: The single spelling of a manifold's stability. Every ``stability`` parameter
 #: in :mod:`tanglepack.numerics` is annotated with this alias.
@@ -26,6 +28,14 @@ Stability = Literal["unstable", "stable"]
 # ManifoldKey = (fixed_point, stability, orbit_index, branch_index)
 # Identical to the key type used in TangleWorkbench.manifolds.
 ManifoldKey = tuple["FixedPoint", Stability, int, int]
+
+#: One end of a bracket: a store row, or the periodic point's BranchPoint, which
+#: has no row until N8 (D5). It reads its own point and cdist 0.0, and fails
+#: loudly as an index, where a -1 sentinel would silently read the last row.
+SegmentEnd = Union[int, "BranchPoint"]
+
+#: A ``(lo, hi)`` interval of canonical distance.
+Bracket = tuple[float, float]
 
 
 class Intersection:
@@ -46,17 +56,21 @@ class Intersection:
             an indexed manifold or an iterated bridge. ``Tangle.create_bridges``
             groups crossings by it, because a bridge and the manifold it was cut
             out of share a ``manifold_key`` but are distinct polylines.
-        unstable_segment: The two adjacent points of ``unstable_manifold`` that
-            bracket the crossing, captured at resolve time. These are the head
-            and tail candidates a cut at this crossing uses; capturing them here
-            keeps them stable even after a separator point is spliced into the
-            same segment. None for a synthetic crossing.
-        stable_segment: The two adjacent nodes of the stable manifold the
-            crossing was found between. With ``unstable_segment`` they are the
-            crossing's BRACKETS: each canonical distance is known only to within
-            its two nodes' cdists, and the map carries those brackets exactly,
-            which is how the iterate table is filled
+        unstable_segment: The store rows of the two adjacent nodes of
+            ``unstable_manifold`` that bracket the crossing, captured at resolve
+            time (a :data:`SegmentEnd`: the periodic point's ``BranchPoint`` in
+            place of a row). These are the head and tail candidates a cut at
+            this crossing uses; a separator spliced into the same segment later
+            adds a new row and moves neither of them. None for a synthetic
+            crossing.
+        stable_segment: The rows of the two adjacent nodes of the stable
+            manifold the crossing was found between. With ``unstable_segment``
+            they are the crossing's BRACKETS: each canonical distance is known
+            only to within its two nodes' cdists, and the map carries those
+            brackets exactly, which is how the iterate table is filled
             (:mod:`~.IterateInference`). None for a hand-built synthetic one.
+        store: The :class:`~.PointStore.PointStore` the bracket rows belong to
+            (rows are store-relative). None for a synthetic crossing.
         crossing_sign: Handedness of the crossing: ``+1`` when the stable
             direction is counter-clockwise from the unstable one, ``-1`` when it
             is clockwise, with both directions taken in INCREASING canonical
@@ -96,11 +110,12 @@ class Intersection:
         manifold_a_key: Optional[ManifoldKey] = None,
         manifold_b_key: Optional[ManifoldKey] = None,
         unstable_manifold: Optional["BaseManifold"] = None,
-        unstable_segment: Optional[tuple["Point", "Point"]] = None,
+        unstable_segment: Optional[tuple[SegmentEnd, SegmentEnd]] = None,
         crossing_sign: int = 0,
         resolution_ratio: Optional[float] = None,
-        stable_segment: Optional[tuple["Point", "Point"]] = None,
+        stable_segment: Optional[tuple[SegmentEnd, SegmentEnd]] = None,
         chord_deviation: Optional[float] = None,
+        store: Optional["PointStore"] = None,
     ) -> None:
         """
         Build one crossing. Every field is optional so that a synthetic
@@ -118,6 +133,7 @@ class Intersection:
         self.unstable_manifold = unstable_manifold
         self.unstable_segment = unstable_segment
         self.stable_segment = stable_segment
+        self.store = store
         self.crossing_sign = int(crossing_sign)
         self.resolution_ratio = resolution_ratio
         self.chord_deviation = chord_deviation
@@ -134,11 +150,12 @@ class Intersection:
         manifold_b_key: Optional[ManifoldKey] = None,
         label: Optional[str] = None,
         unstable_manifold: Optional["BaseManifold"] = None,
-        unstable_segment: Optional[tuple["Point", "Point"]] = None,
+        unstable_segment: Optional[tuple[SegmentEnd, SegmentEnd]] = None,
         crossing_sign: int = 0,
         resolution_ratio: Optional[float] = None,
-        stable_segment: Optional[tuple["Point", "Point"]] = None,
+        stable_segment: Optional[tuple[SegmentEnd, SegmentEnd]] = None,
         chord_deviation: Optional[float] = None,
+        store: Optional["PointStore"] = None,
     ) -> Intersection:
         """Create an Intersection backed by two R-tree segment IDs."""
         return cls(
@@ -155,7 +172,54 @@ class Intersection:
             resolution_ratio=resolution_ratio,
             stable_segment=stable_segment,
             chord_deviation=chord_deviation,
+            store=store,
         )
+
+    def segment_ends(self, stability: Stability) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """
+        The coordinates and canonical distances of one bracket's two ends.
+
+        Args:
+            stability: Which bracket: the unstable or the stable segment.
+
+        Returns:
+            The ``(2, 2)`` coordinates and the ``(2,)`` cdists of the two ends,
+            in captured order. A ``BranchPoint`` end reads its own point and
+            cdist 0.0.
+
+        Note:
+            Each store column is viewed once per call, never per end.
+        """
+        ends = self.unstable_segment if stability == "unstable" else self.stable_segment
+        xy, cdist = self.store.xy, self.store.cdist
+        coords = np.array(
+            [xy[end] if isinstance(end, int) else end.get_point() for end in ends],
+            dtype=np.float64,
+        )
+        cdists = np.array(
+            [cdist[end] if isinstance(end, int) else 0.0 for end in ends], dtype=np.float64
+        )
+        return coords, cdists
+
+    @cached_property
+    def brackets(self) -> Optional[tuple[Bracket, Bracket]]:
+        """
+        The sorted unstable and stable cdist brackets, unpadded.
+
+        Read once: a bracket's rows and their cdists are written before the
+        crossing is detected and never change after.
+
+        Returns:
+            ``((u_lo, u_hi), (s_lo, s_hi))``, or None for a crossing without
+            brackets (a synthetic one).
+        """
+        if self.unstable_segment is None:
+            return None
+        unstable, stable = (
+            sorted(float(c) for c in self.segment_ends(stability)[1])
+            for stability in ("unstable", "stable")
+        )
+        return (unstable[0], unstable[1]), (stable[0], stable[1])
 
     @property
     def fixed_points(self) -> tuple["FixedPoint", ...]:

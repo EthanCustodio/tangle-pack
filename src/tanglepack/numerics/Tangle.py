@@ -18,10 +18,10 @@ The Tangle holds no resolved crossings: every crossing lives in the workbench's
 IntersectionRegistry. Cutting a bridge needs the two real manifold nodes
 bracketing the crossing, and each Intersection carries them itself, as
 ``unstable_manifold`` (the curve it was detected on) and ``unstable_segment`` (the
-crossing's two bracketing points, captured at resolve time and never re-read off
-the mutable segment afterwards). So a registered crossing is self-sufficient: it
-pins its own geometry, and ``create_bridges`` takes the crossings to cut at as an
-argument rather than reaching back into the index.
+store rows of the crossing's two bracketing nodes, captured at resolve time and
+never re-read off the mutable segment afterwards). So a registered crossing is
+self-sufficient: it pins its own geometry, and ``create_bridges`` takes the
+crossings to cut at as an argument rather than reaching back into the index.
 
 ``create_bridges`` groups by the unstable manifold OBJECT, not by manifold_key: a
 bridge and the manifold it was cut out of legitimately share a key while being
@@ -178,8 +178,8 @@ class Tangle:
         The Tangle owns INDEX state only. A resolved crossing lives in the
         workbench's :class:`IntersectionRegistry` and nowhere else:
         :meth:`_resolve_crossing_pair` returns the :class:`Intersection` and the
-        caller registers it. Each crossing carries the unstable manifold and the
-        two bracketing points it was found on, which is everything
+        caller registers it. Each crossing carries the unstable manifold it was
+        found on and the rows of its two bracketing nodes, which is everything
         :meth:`create_bridges` needs to cut at it.
     """
 
@@ -307,6 +307,11 @@ class Tangle:
         )
 
         ratio, deviation = self._resolution_ratio(u_seg, s_seg, sin_theta)
+        nodes = (u_seg.p0, u_seg.p0_seg1, s_seg.p0, s_seg.p0_seg1)
+        stores = {node.store for node in nodes if not isinstance(node, BranchPoint)}
+        assert len(stores) == 1, f"the bracket ends of {seg_id_pair} span {len(stores)} stores"
+        (store,) = stores
+        ends = [node if isinstance(node, BranchPoint) else node.row for node in nodes]
         # cdist interpolated at the true crossing (not the segment midpoint)
         intersection = Intersection.from_segments(
             coords=tuple(point),
@@ -317,11 +322,12 @@ class Tangle:
             manifold_a_key=Tangle._key_of(u_seg),
             manifold_b_key=Tangle._key_of(s_seg),
             unstable_manifold=u_seg.manifold,
-            # The ORIGINAL endpoints, captured now: a cut at this crossing brackets
-            # it with these two real nodes, and they must not be re-read off the
-            # segment later, after a separator point has been spliced in.
-            unstable_segment=(u_seg.p0, u_seg.p0_seg1),
-            stable_segment=(s_seg.p0, s_seg.p0_seg1),
+            # The ORIGINAL endpoints' rows, captured now: a cut at this crossing
+            # brackets it with these two real nodes, and they must not be re-read
+            # off the segment later, after a separator point has been spliced in.
+            unstable_segment=(ends[0], ends[1]),
+            stable_segment=(ends[2], ends[3]),
+            store=store,
             crossing_sign=self._crossing_sign(u_seg, s_seg),
             resolution_ratio=ratio,
             chord_deviation=deviation,
@@ -858,7 +864,7 @@ class Tangle:
         crossings of its own (see the class docstring), so the caller passes the
         crossings of N -- or, when only one image is being cut, just those born
         on it. An unresolved detection is never passed: it lies inside a bridge. Each crossing carries the unstable manifold it was found on and the
-        two points bracketing it, which is everything a cut needs.
+        rows of the two nodes bracketing it, which is everything a cut needs.
 
         Crossings are grouped by their parent unstable manifold OBJECT and sorted by
         unstable canonical distance, so bridges never span two curves and a single
@@ -925,7 +931,12 @@ class Tangle:
                 "bridge is cut at it -- the cut is what sets the bridge endpoints"
             )
 
-            p0, p1 = intersection.unstable_segment
+            # The cut is between nodes until a Bridge is (N6/N7): the rows become
+            # nodes once, here. One Point per row, so node identity is row equality.
+            p0, p1 = (
+                intersection.store.node(end) if isinstance(end, int) else end
+                for end in intersection.unstable_segment
+            )
             manifold_crossings[manifold].append(
                 (float(intersection.unstable_cdist), intersection, p0, p1)
             )

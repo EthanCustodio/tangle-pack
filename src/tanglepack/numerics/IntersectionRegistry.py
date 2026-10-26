@@ -21,6 +21,7 @@ from collections import defaultdict
 from typing import Callable, Iterator, Optional, TYPE_CHECKING
 
 import numpy as np
+from numpy.typing import NDArray
 
 from .Intersection import Intersection, ManifoldKey, Stability
 from .IterateTable import IterateTable
@@ -40,6 +41,11 @@ logger.addHandler(logging.NullHandler())
 DEDUP_RTOL = 1e-9
 
 
+#: Per stable branch: the sorted stable cdists, the ids, their brackets.
+_StableBucket = tuple[list[float], NDArray[np.int64], NDArray[np.float64]]
+_EMPTY_BUCKET: _StableBucket = ([], np.empty(0, dtype=np.int64), np.empty((0, 4)))
+
+
 def _close(a: float, b: float) -> bool:
     """``a`` and ``b`` agree to :data:`DEDUP_RTOL`, relative to the larger."""
     return abs(a - b) <= DEDUP_RTOL * max(abs(a), abs(b))
@@ -49,17 +55,20 @@ def _polyline_gap(a: Intersection, b: Intersection) -> Optional[float]:
     """Distance from ``a`` to ``b`` along the unstable polyline, None unless adjacent.
 
     On one stored segment it is the straight distance; on two segments sharing a
-    node (node identity) it runs through that node. The segments are the ones
-    captured at detection, before any separator was spliced in.
+    node (row equality: a store keeps one point per row, and a ``BranchPoint``
+    end equals only itself) it runs through that node. The segments are the
+    ones captured at detection, before any separator was spliced in; a
+    separator adds a new row and moves none.
     """
-    shared = [node for node in a.unstable_segment if any(node is other for other in b.unstable_segment)]
+    assert a.store is b.store, (a.id, b.id)
+    shared = [end for end in a.unstable_segment if end in b.unstable_segment]
+    if not shared:
+        return None
     a_xy, b_xy = np.asarray(a.coords, dtype=float), np.asarray(b.coords, dtype=float)
     if len(shared) == 2:
         return float(np.hypot(*(a_xy - b_xy)))
-    if len(shared) == 1:
-        node = np.asarray(shared[0].get_point(), dtype=float)
-        return float(np.hypot(*(a_xy - node)) + np.hypot(*(node - b_xy)))
-    return None
+    node = a.segment_ends("unstable")[0][a.unstable_segment.index(shared[0])]
+    return float(np.hypot(*(a_xy - node)) + np.hypot(*(node - b_xy)))
 
 
 class IntersectionRegistry:
@@ -156,9 +165,7 @@ class IntersectionRegistry:
         # built at.
         self._rank_maps: Optional[tuple[dict[int, int], dict[int, int]]] = None
         self._rank_version: int = -1
-        self._stable_branch_index: Optional[
-            dict[Optional[ManifoldKey], tuple[list[float], list[int]]]
-        ] = None
+        self._stable_branch_index: Optional[dict[Optional[ManifoldKey], _StableBucket]] = None
         self._stable_branch_version: int = -1
         # Each detection's nearest neighbour and each run member's partner, and N
         # per threshold.
@@ -656,48 +663,52 @@ class IntersectionRegistry:
         )
         return min(matches, default=None)
 
-    def candidates_near_stable_cdist(
-        self, branch_key: Optional[ManifoldKey], cdist: float, window: float
-    ) -> list[tuple[int, Intersection]]:
+    def stable_brackets(self, branch_key: Optional[ManifoldKey]) -> _StableBucket:
         """
-        The crossings on one stable branch whose stable cdist is within a window.
+        The crossings of one stable branch, in stable-cdist order, with their brackets.
 
         The bucketed lookup behind the iterate search: the image of a crossing
         must sit on a KNOWN stable branch (the advanced key) at a KNOWN stable
         canonical distance (the source's, scaled by the per-step factor), so the
-        candidate set is a bisected slice of that branch's own sorted cdists
+        candidates are a bisected slice of that branch's own sorted cdists
         rather than the whole registry.
 
         Args:
-            branch_key: The stable branch (``manifold_b_key``) to search.
-            cdist: Centre of the stable-cdist window.
-            window: Half-width of the window (inclusive on both ends).
+            branch_key: The stable branch (``manifold_b_key``).
 
         Returns:
-            ``(id, Intersection)`` pairs in increasing stable cdist.
-        """
-        keys, ids = self._stable_branch_buckets().get(branch_key, ([], []))
-        lo = bisect.bisect_left(keys, cdist - window)
-        hi = bisect.bisect_right(keys, cdist + window)
-        return [(ids[pos], self._store[ids[pos]]) for pos in range(lo, hi)]
+            The stable cdists (a list: the bisect keys), the ids (int64) and
+            their unpadded brackets ``(u_lo, u_hi, s_lo, s_hi)`` per row (an
+            ``(m, 4)`` float array, NaN where a crossing has none). Empty for a
+            branch no crossing is on.
 
-    def _stable_branch_buckets(
-        self,
-    ) -> dict[Optional[ManifoldKey], tuple[list[float], list[int]]]:
-        """Per-stable-branch ``(sorted cdists, ids)``, rebuilt when the orders change."""
+        Note:
+            Rebuilt when the stored crossings change (an insert or a
+            renumbering), never by an iterate link; each crossing's brackets
+            are read once, into ``Intersection.brackets``.
+        """
+        return self._stable_branch_buckets().get(branch_key, _EMPTY_BUCKET)
+
+    def _stable_branch_buckets(self) -> dict[Optional[ManifoldKey], _StableBucket]:
+        """Per stable branch its :meth:`stable_brackets`, rebuilt when the orders change."""
         if (
             self._stable_branch_index is None
             or self._stable_branch_version != self._orders_version
         ):
-            buckets: dict[
-                Optional[ManifoldKey], tuple[list[float], list[int]]
-            ] = {}
+            members: dict[Optional[ManifoldKey], list[int]] = defaultdict(list)
             for iid in self._stable_order:  # already in ascending stable cdist
-                ix = self._store[iid]
-                keys, ids = buckets.setdefault(ix.manifold_b_key, ([], []))
-                keys.append(ix.stable_cdist)
-                ids.append(iid)
-            self._stable_branch_index = buckets
+                members[self._store[iid].manifold_b_key].append(iid)
+            nan = ((np.nan, np.nan), (np.nan, np.nan))
+            self._stable_branch_index = {
+                branch_key: (
+                    [self._store[iid].stable_cdist for iid in ids],
+                    np.array(ids, dtype=np.int64),
+                    np.array(
+                        [self._store[iid].brackets or nan for iid in ids], dtype=np.float64
+                    ).reshape(-1, 4),
+                )
+                for branch_key, ids in members.items()
+            }
             self._stable_branch_version = self._orders_version
         return self._stable_branch_index
 
