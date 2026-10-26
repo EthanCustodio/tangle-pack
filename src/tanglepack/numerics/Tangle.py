@@ -271,8 +271,9 @@ class Tangle:
 
         Handles all the shared bookkeeping: the true crossing point, the cdists
         interpolated at that point (not the segment midpoint), the two branch
-        keys, and the unstable manifold and bracketing points a later cut needs.
-        The result is returned, not stored -- the caller adds it to the registry.
+        keys, and the unstable manifold and the rows of the bracketing nodes a
+        later cut needs. The result is returned, not stored -- the caller adds it
+        to the registry.
 
         Returns:
             The new Intersection, or None when the pair was already processed,

@@ -238,7 +238,8 @@ def _bracketed_image(
     (u_lo, u_hi), (s_lo, s_hi) = _brackets(source)
     unstable, stable = (u_lo * stretch_u, u_hi * stretch_u), (s_lo / stretch_s, s_hi / stretch_s)
 
-    # The candidates sit within the widest stable bracket of the predicted one.
+    # A candidate's stable cdist lies within the predicted bracket widened by the
+    # branch's widest stable bracket.
     cdists, ids, brackets = registry.stable_brackets(b_key)
     centre, window = 0.5 * (stable[0] + stable[1]), 0.5 * (stable[1] - stable[0]) + widest[b_key]
     lo = bisect.bisect_left(cdists, centre - window)
