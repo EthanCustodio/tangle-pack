@@ -30,7 +30,7 @@ from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.numerics.ManifoldMachine import ManifoldMachine
-from tanglepack.numerics.Point import Point
+from helpers.polylines import TEST_STORE, store_rows
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.TopologyResults import Arc, canonical_corners
 from tanglepack.topology.Trellis import Trellis
@@ -77,16 +77,15 @@ def _hand_built_trellis():
     )
 
     # A real Bridge for (a, b): the lobe, bulging out to the right of the line.
-    root = Point(0.0, -0.2, -0.5)
-    mid = Point(3.0, 1.0, 2.5)
-    tail = Point(0.0, 2.2, 5.5)
-    ManifoldMachine._manifold_from_points([root, mid, tail], "unstable", 1.0, fp)
+    rows = store_rows([(0.0, -0.2), (3.0, 1.0), (0.0, 2.2)], [-0.5, 2.5, 5.5])
+    ManifoldMachine._manifold_from_rows(TEST_STORE, rows, "unstable", 1.0, fp)
     bridge = Bridge(
-        root=root,
+        root=int(rows[0]),
         stability="unstable",
         stretch_param=1.0,
         fixed_point=fp,
-        tail=tail,
+        tail=int(rows[-1]),
+        store=TEST_STORE,
         branch_index=0,
         manifold_key=u_key,
         first_intersection=a,
@@ -422,14 +421,15 @@ def _nested_lobe_trellis() -> tuple[Trellis, dict[str, int]]:
     def lobe(points: list[tuple[float, float]], first: str, second: str) -> Bridge:
         """A bridge through ``points`` between two named crossings."""
         u0 = spec[first][0] - 0.5
-        nodes = [Point(x, y, u0 + i) for i, (x, y) in enumerate(points)]
-        ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
+        rows = store_rows(points, [u0 + i for i in range(len(points))])
+        ManifoldMachine._manifold_from_rows(TEST_STORE, rows, "unstable", 1.0, fp)
         return Bridge(
-            root=nodes[0],
+            root=int(rows[0]),
             stability="unstable",
             stretch_param=1.0,
             fixed_point=fp,
-            tail=nodes[-1],
+            tail=int(rows[-1]),
+            store=TEST_STORE,
             branch_index=0,
             manifold_key=u_key,
             first_intersection=ids[first],

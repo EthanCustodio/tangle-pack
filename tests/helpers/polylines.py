@@ -3,7 +3,7 @@ Synthetic polylines for the numerics guards: hand-placed manifolds on a real
 workbench.
 
 Nothing here calls a map. :func:`polyline_manifold` builds a real
-``BaseManifold`` through real ``Point`` nodes; :func:`polyline_workbench`
+``BaseManifold`` over rows of the one test store (:data:`TEST_STORE`); :func:`polyline_workbench`
 registers such curves on a real ``TangleWorkbench`` (identity maps), so
 ``compute_intersections``, the resolution ratio and the resolution report run
 unchanged on geometry chosen by the test.
@@ -13,8 +13,24 @@ from __future__ import annotations
 
 from typing import Mapping, Optional, Sequence
 
-from tanglepack import BaseManifold, BranchPoint, FixedPoint, Point, TangleWorkbench
-from tanglepack.numerics import ManifoldMachine
+from tanglepack import BaseManifold, BranchPoint, FixedPoint, TangleWorkbench
+from tanglepack.numerics.PointStore import PointStore
+
+#: The one store of every hand-built test curve (a Tangle asserts one store).
+TEST_STORE = PointStore()
+
+
+def store_rows(
+    points: Sequence[Sequence[float]],
+    cdists: Optional[Sequence[float]] = None,
+    *,
+    store: Optional[PointStore] = None,
+):
+    """Append hand-placed points (cdist = the index unless given) to the test
+    store, on no chain yet: their rows, in order."""
+    store = TEST_STORE if store is None else store
+    cdists = range(len(points)) if cdists is None else cdists
+    return store.append(points, [float(c) for c in cdists])
 
 
 def polyline_manifold(
@@ -22,12 +38,12 @@ def polyline_manifold(
     key: tuple,
     *,
     root: Optional[BranchPoint] = None,
+    store: Optional[PointStore] = None,
 ) -> BaseManifold:
     """
     A manifold through ``points``, cdist = the index, keyed by ``key``.
 
-    The nodes are put on one curve in the order given, through the machine's
-    own constructor (``ManifoldMachine._manifold_from_points``), and hung on
+    The rows are put on one chain in the order given and hung on
     ``root`` when there is one, as the initializer hangs a seed segment.
 
     Args:
@@ -42,19 +58,21 @@ def polyline_manifold(
     """
     fixed_point, stability, _orbit, branch = key
     offset = 0 if root is None else 1
-    nodes = [Point(x, y, float(i + offset)) for i, (x, y) in enumerate(points)]
-    ManifoldMachine._manifold_from_points(nodes, stability, 1.0, fixed_point)
+    store = TEST_STORE if store is None else store
+    rows = store_rows(points, [i + offset for i in range(len(points))], store=store)
+    chain = store.new_chain(rows, 1.0)
     if root is not None:
         hang = root.insert_point_forward if stability == "unstable" else root.insert_point_backward
-        hang(nodes[0], branch)
+        hang(chain, branch)
     return BaseManifold(
-        nodes[0] if root is None else root,
+        int(rows[0]) if root is None else root,
         stability,
         1.0,
         fixed_point=fixed_point,
-        tail=nodes[-1],
+        tail=int(rows[-1]),
         branch_index=branch,
         manifold_key=key,
+        store=store,
     )
 
 

@@ -450,18 +450,18 @@ def test_crossings_sharing_a_segment_are_bracketed(crossings_on_the_segment):
     assert len(bridges) == crossings_on_the_segment - 1
 
     for bridge in bridges:
-        cdists = [float(node.cdist) for node in bridge.get_point_array(return_nodes=True)]
+        cdists = bridge.cdists.tolist()
         assert cdists == sorted(cdists), (bridge.id, cdists)
         for end in bridge.id:
             assert cdists[0] <= registry[end].unstable_cdist <= cdists[-1], (bridge.id, end, cdists)
     for below, above in zip(bridges, bridges[1:]):
-        above_ids = {id(node) for node in above.get_point_array(return_nodes=True)}
-        shared = [node for node in below.get_point_array(return_nodes=True) if id(node) in above_ids]
+        above_rows = set(above.ids.tolist())
+        shared = [row for row in below.ids.tolist() if row in above_rows]
         assert len(shared) == 2, (below.id, above.id)
-        assert shared[0].cdist <= registry[below.id[1]].unstable_cdist <= shared[1].cdist
+        store = below.store
+        assert store.cdist[shared[0]] <= registry[below.id[1]].unstable_cdist <= store.cdist[shared[1]]
 
-    nodes = workbench.manifolds[unstable_key].get_point_array(return_nodes=True)
-    cdists = [float(node.cdist) for node in nodes]
+    cdists = workbench.manifolds[unstable_key].cdists.tolist()
     assert cdists == sorted(cdists)
 
 
@@ -482,10 +482,11 @@ def test_a_bridge_off_its_branch_is_refused():
     first, second = sorted(
         (ix.unstable_cdist, iid) for iid, ix in workbench.intersection_registry if not ix.is_anchor
     )
-    nodes = workbench.manifolds[unstable_key].get_point_array(return_nodes=True)
+    branch = workbench.manifolds[unstable_key]
+    nodes = branch.ids.tolist()
     short = Bridge(
         root=nodes[0], stability="unstable", stretch_param=1.0, fixed_point=fp, tail=nodes[1],
-        branch_index=0, manifold_key=unstable_key,
+        branch_index=0, manifold_key=unstable_key, store=branch.store,
         first_intersection=first[1], second_intersection=second[1],
     )
     with pytest.raises(AssertionError):
@@ -509,10 +510,11 @@ def test_a_reversed_bridge_id_is_refused():
     (_, lower), (_, upper) = sorted(
         (ix.unstable_cdist, iid) for iid, ix in workbench.intersection_registry if not ix.is_anchor
     )
-    nodes = workbench.manifolds[unstable_key].get_point_array(return_nodes=True)
+    branch = workbench.manifolds[unstable_key]
+    nodes = branch.ids.tolist()
     reversed_ends = Bridge(
         root=nodes[0], stability="unstable", stretch_param=1.0, fixed_point=fp, tail=nodes[-1],
-        branch_index=0, manifold_key=unstable_key,
+        branch_index=0, manifold_key=unstable_key, store=branch.store,
         first_intersection=upper, second_intersection=lower,
     )
     with pytest.raises(AssertionError):

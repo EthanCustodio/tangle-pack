@@ -44,7 +44,7 @@ def test_low_stretch_growth_keeps_cdist_injective(initialized):
     workbench, fp = initialized
     for stability in ("unstable", "stable"):
         manifold = _manifold(workbench, fp, stability)
-        assert len(manifold.get_point_array(return_nodes=True)) >= 3, (
+        assert len(manifold.get_point_array()) >= 3, (
             "fundamental segment is degenerate"
         )
         assert_no_cdist_collision(manifold)
@@ -54,8 +54,7 @@ def test_low_stretch_growth_keeps_cdist_injective(initialized):
 
     for stability in ("unstable", "stable"):
         manifold = _manifold(workbench, fp, stability)
-        nodes = manifold.get_point_array(return_nodes=True)
-        assert len(nodes) > 3, "growth added no points"
+        assert len(manifold.get_point_array()) > 3, "growth added no points"
         assert_no_cdist_collision(manifold)
 
 

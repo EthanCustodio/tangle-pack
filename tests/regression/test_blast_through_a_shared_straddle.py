@@ -14,7 +14,8 @@ image of its root to the image of its tail with non-decreasing cdist.
 from __future__ import annotations
 
 from cases import build_nested
-from tanglepack import BaseManifold
+from helpers.invariants import node_cdist
+from tanglepack import BaseManifold, BranchPoint
 
 
 def _zones(case):
@@ -25,14 +26,19 @@ def _zones(case):
 
 def _image_is_one_curve(bridge) -> bool:
     """Whether the curve from ``f(root)`` reaches ``f(tail)``, cdist non-decreasing."""
-    first, last = bridge.root.next_iterate, bridge.tail.next_iterate
+    store, root, rows = bridge.store, bridge.root, bridge.ids
+    first = root.next_iterate if isinstance(root, BranchPoint) else int(store.image[rows[0]])
+    last = int(store.image[rows[-1]])
     branch = bridge.fixed_point.advance_key(bridge.manifold_key, 1)[3]
     walker = BaseManifold(
-        first, "unstable", bridge.stretch_param, bridge.fixed_point, branch_index=branch, manifold_key=None
+        first, "unstable", bridge.stretch_param, bridge.fixed_point, branch_index=branch,
+        manifold_key=None, store=store,
     )
-    *nodes, end = walker._walk_nodes(final_node=last)
-    cdists = [float(node.cdist) for node in nodes]
-    return end is last and cdists == sorted(cdists) and cdists[-1] <= last.cdist
+    head, _store, rows = walker._rows(final_node=last)
+    *nodes, end = ([] if head is None else [head]) + rows.tolist()
+    cdists = [node_cdist(node, "unstable") if isinstance(node, BranchPoint) else float(store.cdist[node])
+              for node in nodes]
+    return end == last and cdists == sorted(cdists) and cdists[-1] <= store.cdist[last]
 
 
 def test_an_unfiltered_outer_blast_iterates_every_annulus_bridge():

@@ -3,7 +3,7 @@
 Two Phase 1 fixes are pinned here.
 
 1.3 -- A bridge is cut from an already-indexed unstable manifold and therefore
-reuses that manifold's ``Point`` objects. The edge-dedup table used to drop
+reuses that manifold's rows. The edge-dedup table used to drop
 those segments outright (``_insert_segment`` returned ``None``), so
 ``Tangle._manifold_segs[bridge]`` came back empty and every ``for_manifold=``
 filter, trim and ``_segments_of``-based lookup saw the bridge as segment-less.
@@ -24,8 +24,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tanglepack.numerics.Point import Point
-from tanglepack.numerics.BranchPoint import BranchPoint
+from helpers.polylines import TEST_STORE
 from tanglepack.numerics.Tangle import Tangle, _edge, _Segment
 
 
@@ -33,8 +32,9 @@ from tanglepack.numerics.Tangle import Tangle, _edge, _Segment
 # 1.3 -- bridge segments survive the edge dedup
 # --------------------------------------------------------------------------- #
 def _bridge_edge_keys(bridge) -> list[int]:
-    """A bridge's edge keys, root -> tail, from its node walk."""
-    ends = [node if isinstance(node, BranchPoint) else node.row for node in bridge._walk_nodes()]
+    """A bridge's edge keys, root -> tail, from its rows (after its periodic point)."""
+    head, _store, rows = bridge._rows()
+    ends = ([] if head is None else [head]) + rows.tolist()
     return [_edge(a, b) for a, b in zip(ends, ends[1:])]
 
 
@@ -104,8 +104,8 @@ def _shallow_pair(length: float, angle: float):
 
 def _as_segment(seg, stability: str, sid: int) -> _Segment:
     (x0, y0), (x1, y1) = seg
-    p, q = Point(x0, y0, 0.0), Point(x1, y1, 1.0)
-    return _Segment(sid, _StubManifold(stability), p.store, p.row, q.row)
+    p, q = TEST_STORE.append_one(x0, y0, 0.0), TEST_STORE.append_one(x1, y1, 1.0)
+    return _Segment(sid, _StubManifold(stability), TEST_STORE, p, q)
 
 
 def test_shallow_crossing_on_fine_segments_is_detected():

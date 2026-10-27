@@ -56,6 +56,7 @@ from helpers.invariants import (
     assert_no_geometric_spikes,
     assert_one_to_one,
 )
+from tanglepack.numerics.BranchPoint import BranchPoint
 from tanglepack.numerics.geometry import arc_polyline, oriented_bridge_polyline, point_in_polygon
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.BridgeClass import (
@@ -183,23 +184,18 @@ def _identified_bridges(case: "Case") -> list:
 
 def _stable_nodes(manifold) -> tuple[np.ndarray, np.ndarray]:
     """``(points, cdists)`` of a stable manifold, root (anchor) first."""
-    nodes = manifold.get_point_array(return_nodes=True)
-    points = np.array([np.asarray(n.get_point(), dtype=float).ravel() for n in nodes])
-    cdists = np.array(
-        [np.nan if n.get_cdist("stable") is None else float(n.get_cdist("stable")) for n in nodes]
-    )
+    points = np.asarray(manifold.points, dtype=float).reshape(-1, 2)
+    cdists = np.array([np.nan if c is None else float(c) for c in manifold.cdists])
     return points, cdists
 
 
 def _local_direction(manifold, stability: str, cdist: float) -> np.ndarray:
     """The curve direction at ``cdist``, taken in increasing canonical distance."""
-    nodes = manifold.get_point_array(return_nodes=True)
-    cdists = [n.get_cdist(stability) for n in nodes]
+    points = np.asarray(manifold.points, dtype=float).reshape(-1, 2)
+    cdists = list(manifold.cdists)
     index = int(np.searchsorted(cdists, cdist))
-    index = min(max(index, 1), len(nodes) - 1)
-    return np.asarray(nodes[index].get_point(), dtype=float).ravel() - np.asarray(
-        nodes[index - 1].get_point(), dtype=float
-    ).ravel()
+    index = min(max(index, 1), len(points) - 1)
+    return points[index] - points[index - 1]
 
 
 def _anchorward_look(case: "Case", intersection_id: int) -> Optional[np.ndarray]:
@@ -512,16 +508,14 @@ def _unstable_image_curves(case: "Case") -> list:
     A bridge cut from a manifold shares its nodes with it; an iterated image
     bridge has nodes of its own.
     """
-    manifold_nodes = {
-        id(node)
-        for key, manifold in case.workbench.manifolds.items()
-        if key[1] == "unstable"
-        for node in manifold.get_point_array(return_nodes=True)
-    }
+    unstable = [m for key, m in case.workbench.manifolds.items() if key[1] == "unstable"]
+    manifold_rows = set(np.concatenate([m.ids for m in unstable]).tolist()) if unstable else set()
+    heads = {id(m.root) for m in unstable if isinstance(m.root, BranchPoint)}
     return [
         bridge
         for bridge in case.workbench.bridges
-        if not any(id(node) in manifold_nodes for node in bridge.get_point_array(return_nodes=True))
+        if not (manifold_rows.intersection(bridge.ids.tolist())
+                or (isinstance(bridge.root, BranchPoint) and id(bridge.root) in heads))
     ]
 
 
@@ -977,8 +971,10 @@ def check_bridge_endpoints_on_own_branch(case: "Case") -> int:
     count = 0
     for bridge in _identified_bridges(case):
         first, second = (registry[i] for i in bridge.id)
-        root_u = float(bridge.root.get_cdist("unstable"))
-        tail_u = float(bridge.tail.get_cdist("unstable"))
+        root_u, tail_u = (
+            float(end.get_cdist("unstable") if isinstance(end, BranchPoint) else end.cdist)
+            for end in (bridge.root, bridge.tail)
+        )
         lo, hi = sorted((root_u, tail_u))
         for end in (first, second):
             if _is_anchor(end):
@@ -1314,8 +1310,8 @@ def check_anchor_opening_faces_its_hole(case: "Case") -> int:
             if not _is_anchor(case.registry[intersection_id]):
                 continue
             assert which == "outward", hole.bounding_ids
-            first_node = np.asarray(case.workbench.manifolds[key].get_point_array()[1], dtype=float)
-            assert _point_side_of_bridge(case, bridge, first_node) == hole.bridge_side, (
+            first_point = np.asarray(case.workbench.manifolds[key].get_point_array()[1], dtype=float)
+            assert _point_side_of_bridge(case, bridge, first_point) == hole.bridge_side, (
                 hole.bounding_ids,
                 key[1:],
             )
@@ -1621,9 +1617,8 @@ def check_propagated_hole_inside_container(case: "Case") -> int:
         if hole.iterate is None or hole.iterate >= 0:
             continue
         container = trellis.bridge_between(*hole.bounding_ids)
-        nodes = container.get_point_array(return_nodes=True)
-        points = np.array([np.asarray(p.get_point(), dtype=float).ravel() for p in nodes])
-        cdists = np.array([float(p.get_cdist("unstable")) for p in nodes])
+        points = np.asarray(container.points, dtype=float).reshape(-1, 2)
+        cdists = np.asarray(container.cdists, dtype=float)
         lo, hi = sorted(float(registry[i].unstable_cdist) for i in hole.bounding_ids)
         for end in hole.origin:
             if _table_image(registry, end, hole.iterate) in hole.bounding_ids:
@@ -2892,7 +2887,7 @@ def _lobe_image(trellis, workbench, chain: list, base_key) -> np.ndarray:
 
     first, last = chain[0][0], chain[-1][1]
     lo, hi = sorted(trellis.intersection(c).stable_cdist for c in (first, last))
-    base = arc_polyline(workbench.manifolds[base_key], lo, hi, stability="stable")
+    base = arc_polyline(workbench.manifolds[base_key], lo, hi)
     if trellis.intersection(last).stable_cdist > trellis.intersection(first).stable_cdist:
         base = base[::-1]
     return np.vstack([*(arc(a, b) for a, b in chain), base])
@@ -2962,14 +2957,14 @@ def base_chord_misreadings(session: "TangleSession") -> tuple[int, tuple[str, ..
         ends = [
             ("anchor", 0.0, np.array([manifold.root.x, manifold.root.y], float)),
             *((c, at(c).stable_cdist, np.ravel(at(c).coords).astype(float)) for c in on_branch),
-            ("tail", manifold.tail.get_cdist("stable"), np.array([manifold.tail.x, manifold.tail.y], float)),
+            ("tail", manifold.tail.cdist, np.array([manifold.tail.x, manifold.tail.y], float)),
         ]
         base = frozenset((crossings[0], crossings[-1]))
         gaps = {}  # (lo, hi) -> inside, anchor outward
         for (lo, lo_cdist, lo_point), (hi, hi_cdist, hi_point) in zip(ends, ends[1:]):
             if hi_cdist <= lo_cdist:
                 continue  # the anchor is a chain crossing: no gap before it
-            nodes = arc_polyline(manifold, lo_cdist, hi_cdist, stability="stable")
+            nodes = arc_polyline(manifold, lo_cdist, hi_cdist)
             gap = np.vstack([lo_point, nodes.reshape(-1, 2), hi_point])
             gaps[lo, hi] = frozenset((lo, hi)) == base or point_in_polygon(
                 _arclength_midpoint(gap), ring, tol=0.0

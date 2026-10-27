@@ -17,8 +17,8 @@ import pytest
 from cases import build_k28
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
-from helpers.polylines import polyline_manifold, polyline_workbench
-from tanglepack import BranchPoint, Intersection, IntersectionRegistry, Point
+from helpers.polylines import TEST_STORE, store_rows, polyline_manifold, polyline_workbench
+from tanglepack import BranchPoint, Intersection, IntersectionRegistry
 from tanglepack.numerics.Tangle import Tangle
 
 WORKBENCH = "tanglepack.numerics.TangleWorkbench"
@@ -113,14 +113,14 @@ def test_a_bracket_end_at_the_periodic_point_reads_its_point_and_zero():
     periodic = BranchPoint(2, (0.0, 0.0), 0.0, 0.0)
     stable = polyline_manifold([(0.0, 1.0), (0.0, 2.0)], (fp, "stable", 0, 0), root=periodic)
     unstable = polyline_manifold(_line() + (0.0, 0.5), (fp, "unstable", 0, 0))
-    last = Point(7.0, 7.0, 7.0)  # the store's last row, which a -1 sentinel would read
+    TEST_STORE.append_one(7.0, 7.0, 7.0)  # the store's last row, which a -1 sentinel would read
     tangle = Tangle()
     tangle.add_manifolds([stable, unstable])
 
     (crossing,) = tangle.resolve_crossings()
 
     assert crossing.stable_segment[0] is periodic and isinstance(crossing.stable_segment[1], int)
-    assert crossing.store is last.store
+    assert crossing.store is TEST_STORE
     coords, cdists = crossing.segment_ends("stable")
     np.testing.assert_array_equal(coords, [[0.0, 0.0], [0.0, 1.0]])
     np.testing.assert_array_equal(cdists, [0.0, 1.0])
@@ -228,14 +228,15 @@ def test_a_multi_bridge_blast_warns_at_most_once_per_call(caplog):
 
 def _image_bridge(fp, points):
     """A partial image bridge through ``points`` on ``fp``'s unstable branch 0.0."""
-    from tanglepack import Bridge, Point
+    from tanglepack import Bridge
     from tanglepack.numerics import ManifoldMachine
 
-    nodes = [Point(x, y, float(k)) for k, (x, y) in enumerate(points)]
-    ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
+    rows = store_rows(points)
+    ManifoldMachine._manifold_from_rows(TEST_STORE, rows, "unstable", 1.0, fp)
     return Bridge(
-        root=nodes[0], stability="unstable", stretch_param=1.0, fixed_point=fp,
-        tail=nodes[-1], branch_index=0, manifold_key=(fp, "unstable", 0, 0),
+        root=int(rows[0]), stability="unstable", stretch_param=1.0, fixed_point=fp,
+        tail=int(rows[-1]), branch_index=0, manifold_key=(fp, "unstable", 0, 0),
+        store=TEST_STORE,
     )
 
 

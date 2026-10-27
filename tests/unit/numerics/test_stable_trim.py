@@ -8,14 +8,20 @@ from cases import build_k10
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
 from helpers.polylines import polyline_workbench
+from tanglepack import BranchPoint
 
 
-def _first_node_at_or_past(manifold, cdist):
-    return next(
-        node
-        for node in manifold._walk_nodes(stop_at_final=False)
-        if node is not manifold.root and node.get_cdist("stable") >= cdist
-    )
+def _chain_rows(manifold) -> list[int]:
+    """The rows from the root to the end of its chain (a periodic-point root has none)."""
+    return manifold._rows(stop_at_final=False)[2].tolist()
+
+
+def _first_row_at_or_past(manifold, cdist):
+    """The first row past the root whose cdist is at or beyond ``cdist``."""
+    store, rows = manifold.store, _chain_rows(manifold)
+    if not isinstance(manifold.root, BranchPoint):
+        rows = rows[1:]
+    return next(row for row in rows if store.cdist[row] >= cdist)
 
 
 def _stable_branches(workbench, fp):
@@ -26,14 +32,15 @@ def test_the_trim_keeps_the_first_node_at_or_past_the_cdist(small_tangle):
     workbench, fp = small_tangle
     key = _stable_branches(workbench, fp)[0]
     manifold = workbench.manifolds[key]
-    nodes = list(manifold._walk_nodes(stop_at_final=False))
-    lo, hi = nodes[len(nodes) // 3].get_cdist("stable"), nodes[len(nodes) // 3 + 1].get_cdist("stable")
+    nodes = [manifold.root, *_chain_rows(manifold)]
+    cdist_of = lambda node: node.get_cdist("stable") if node is manifold.root else manifold.store.cdist[node]  # noqa: E731
+    lo, hi = cdist_of(nodes[len(nodes) // 3]), cdist_of(nodes[len(nodes) // 3 + 1])
     cdist = 0.5 * (lo + hi)  # strictly between two nodes
-    expected = _first_node_at_or_past(manifold, cdist)
+    expected = _first_row_at_or_past(manifold, cdist)
 
     assert workbench.trim_stable_at(key, cdist) is manifold
-    assert manifold.tail is expected
-    assert expected.get_cdist("stable") >= cdist > lo
+    assert manifold.ids[-1] == expected
+    assert manifold.store.cdist[expected] >= cdist > lo
 
 
 def test_a_cdist_on_a_node_keeps_that_node(small_tangle):
@@ -41,11 +48,11 @@ def test_a_cdist_on_a_node_keeps_that_node(small_tangle):
     workbench, fp = small_tangle
     key = _stable_branches(workbench, fp)[0]
     manifold = workbench.manifolds[key]
-    nodes = list(manifold._walk_nodes(stop_at_final=False))
+    nodes = [manifold.root, *_chain_rows(manifold)]
     node = nodes[len(nodes) // 3]
 
-    workbench.trim_stable_at(key, node.get_cdist("stable"))
-    assert manifold.tail is node
+    workbench.trim_stable_at(key, manifold.store.cdist[node])
+    assert manifold.ids[-1] == node
 
 
 def test_the_root_is_never_the_new_tail():
@@ -59,7 +66,7 @@ def test_the_root_is_never_the_new_tail():
 
     for cdist in (0.0, -1.0):  # the root's cdist is 0.0
         workbench.trim_stable_at(key, cdist)
-        assert manifold.tail is not manifold.root
+        assert len(manifold.ids) > 1
         assert manifold._rows()[2].tolist() == rows[:2].tolist()
 
 
@@ -67,12 +74,12 @@ def test_a_cdist_past_the_end_leaves_the_branch_untrimmed(small_tangle, caplog):
     workbench, fp = small_tangle
     key = _stable_branches(workbench, fp)[0]
     manifold = workbench.manifolds[key]
-    tail = manifold.tail
-    end = max(node.get_cdist("stable") for node in manifold._walk_nodes(stop_at_final=False))
+    tail = manifold.ids[-1]
+    end = max(manifold.store.cdist[_chain_rows(manifold)])
 
     with caplog.at_level(logging.WARNING, logger="tanglepack.numerics.TangleWorkbench"):
         workbench.trim_stable_at(key, 2.0 * end)
-    assert manifold.tail is tail
+    assert manifold.ids[-1] == tail
     assert_logged(caplog, logging.WARNING, "tanglepack.numerics.TangleWorkbench", count=1)
 
 
@@ -92,5 +99,5 @@ def test_trimming_the_manifolds_is_the_trim_at_the_outermost_crossing():
     trimmed.workbench.trim_stable_manifolds(trimmed.fixed_point)
     for key in keys:
         other = (trimmed.fixed_point, *key[1:])
-        expected = workbench.manifolds[key].tail.get_cdist("stable")
-        assert trimmed.workbench.manifolds[other].tail.get_cdist("stable") == expected
+        expected = workbench.manifolds[key].tail.cdist
+        assert trimmed.workbench.manifolds[other].tail.cdist == expected

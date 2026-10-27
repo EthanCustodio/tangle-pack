@@ -117,7 +117,7 @@ class _StubBridge:
     def partial(self) -> bool:
         return self.first_intersection is None or self.second_intersection is None
 
-    def get_point_array(self, return_nodes: bool = False):
+    def get_point_array(self):
         return self._points
 
 
@@ -526,9 +526,7 @@ class _StubManifold:
     def cdists(self):
         return np.array([n.cdist for n in self._nodes])
 
-    def get_point_array(self, return_nodes: bool = False):
-        if return_nodes:
-            return self._nodes
+    def get_point_array(self):
         return np.array([n.get_point() for n in self._nodes])
 
 
@@ -714,8 +712,8 @@ class _NodeBridge(_StubBridge):
     def cdists(self):
         return np.array([n.cdist for n in self._nodes])
 
-    def get_point_array(self, return_nodes: bool = False):
-        return self._nodes if return_nodes else self._points
+    def get_point_array(self):
+        return self._points
 
 
 def test_side_at_nearest_segment_reads_two_nodes(stable_line):

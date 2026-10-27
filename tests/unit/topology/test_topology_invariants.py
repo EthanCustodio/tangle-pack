@@ -244,9 +244,7 @@ class _StubManifold:
     def cdists(self):
         return np.array([n.cdist for n in self._nodes])
 
-    def get_point_array(self, return_nodes: bool = False):
-        if return_nodes:
-            return self._nodes
+    def get_point_array(self):
         return np.array([n.get_point() for n in self._nodes])
 
 
@@ -263,7 +261,7 @@ class _StubBridge:
         self.id = tuple(sorted((first, second)))
         self._points = np.asarray(points, dtype=np.float64)
 
-    def get_point_array(self, return_nodes: bool = False):
+    def get_point_array(self):
         return self._points
 
 

@@ -39,8 +39,9 @@ def _ix(u: float, s: float, key=("fp", "unstable", 0, 0), b_key=("fp", "stable",
 
 
 def _walked_points(manifold) -> np.ndarray:
-    """The point array computed node by node, off the walk."""
-    return np.vstack([node.get_point() for node in manifold._walk_nodes()])
+    """The point array computed row by row, off the curve's rows."""
+    head, store, rows = manifold._rows()
+    return np.vstack(([] if head is None else [head.get_point()]) + [store.xy[row] for row in rows.tolist()])
 
 
 # --------------------------------------------------------------------------- #

@@ -80,9 +80,9 @@ def test_foreign_chords_are_inside_the_lobe_image(case: cases.Case) -> None:
             )
             manifold = workbench.manifolds[key]
             bounds = [0.0, *(trellis.intersection(c).stable_cdist for c in on),
-                      float(manifold.tail.get_cdist("stable"))]
+                      float(manifold.tail.cdist)]
             for i, (lo, hi) in enumerate(zip(bounds, bounds[1:])):
-                stretch = arc_polyline(manifold, lo, hi, stability="stable")
+                stretch = arc_polyline(manifold, lo, hi)
                 if not len(stretch):
                     continue
                 inside = point_in_polygon(stretch[len(stretch) // 2], ring, tol=0.0)

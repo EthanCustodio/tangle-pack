@@ -38,14 +38,20 @@ import numpy as np
 from cases import build_k10
 from helpers.fakes import bare_fixed_point
 from helpers.polylines import polyline_manifold, polyline_workbench
-from tanglepack import BaseManifold, Bridge, Point, define_resonance_zone
+from tanglepack import BaseManifold, Bridge, BranchPoint, define_resonance_zone
 from tanglepack.numerics import ManifoldMachine
 from tanglepack.numerics.PointStore import PointStore
 from tanglepack.numerics.Tangle import Tangle
 
 
-def _nodes(curve) -> list:
-    return list(curve.get_point_array(return_nodes=True))
+def _rows(curve) -> list[int]:
+    return curve.ids.tolist()
+
+
+def _root_in(curve, rows: set, heads: set) -> bool:
+    """Whether the curve's root is one of ``rows`` or one of the periodic points ``heads``."""
+    root = curve.root
+    return id(root) in heads if isinstance(root, BranchPoint) else int(curve.ids[0]) in rows
 
 
 def _query_only_records_are_paired(workbench) -> None:
@@ -53,11 +59,12 @@ def _query_only_records_are_paired(workbench) -> None:
     query-only record left is half of a crossing pair."""
     tangle = workbench.Tangle
     curves = workbench._image_curves
-    image_nodes = {id(node) for curve in curves for node in _nodes(curve)}
+    image_rows = {row for curve in curves for row in _rows(curve)}
+    image_heads = {id(curve.root) for curve in curves if isinstance(curve.root, BranchPoint)}
     owners = list(tangle._manifold_segs)
     assert not [curve for curve in curves if curve in owners]
-    assert not [owner for owner in owners if id(owner.root) in image_nodes]
-    assert any(id(bridge.root) in image_nodes for bridge in workbench.bridges if bridge.id is not None)
+    assert not [owner for owner in owners if _root_in(owner, image_rows, image_heads)]
+    assert any(_root_in(bridge, image_rows, image_heads) for bridge in workbench.bridges if bridge.id is not None)
 
     paired = set().union(*tangle._intersecting_segments)
     query_only = [sid for sid, seg in tangle._seg_lookup.items() if any(seg.manifold is c for c in curves)]
@@ -93,7 +100,7 @@ class _RecordingIndex:
 
 
 def _bounds(p0, p1) -> tuple:
-    (x0, y0), (x1, y1) = p0.get_point(), p1.get_point()
+    (x0, y0), (x1, y1) = p0, p1
     return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
 
 
@@ -105,27 +112,29 @@ def _stable_index(fp, stable: list) -> Tangle:
     return tangle
 
 
-def _view(nodes: list, root: int, tail: int, key: tuple) -> BaseManifold:
-    """The curve over ``nodes`` from index ``root`` to index ``tail``."""
-    return BaseManifold(nodes[root], "unstable", 1.0, fixed_point=key[0], tail=nodes[tail],
-                        branch_index=0, manifold_key=key)
+def _view(curve: BaseManifold, root: int, tail: int, key: tuple) -> BaseManifold:
+    """The curve over ``curve``'s rows from index ``root`` to index ``tail``."""
+    rows = curve.ids
+    return BaseManifold(int(rows[root]), "unstable", 1.0, fixed_point=key[0], tail=int(rows[tail]),
+                        branch_index=0, manifold_key=key, store=curve.store)
 
 
 def test_an_image_over_an_earlier_image_queries_none_of_the_shared_edges():
     fp = bare_fixed_point(label="A")
     key = (fp, "unstable", 1, 0)
     tangle = _stable_index(fp, [(0.5, -1.0), (0.5, 1.0)])
-    nodes = _nodes(polyline_manifold([(x, 0.0) for x in range(6)], key))
-    earlier = _view(nodes, 0, 3, key)
+    whole = polyline_manifold([(x, 0.0) for x in range(6)], key)
+    xy = whole.store.xy[whole.ids]
+    earlier = _view(whole, 0, 3, key)
     tangle.add_manifold(earlier, index_segments=False)
 
     # A later image starts on the earlier curve's nodes and runs on past its tail,
     # as merge_manifolds leaves two images that share straddle nodes.
-    later = _view(nodes, 1, 5, key)
+    later = _view(whole, 1, 5, key)
     tangle._rtrees["stable"].queried.clear()
     tangle.add_manifold(later, index_segments=False)
 
-    shared = nodes[1:4]
+    shared = xy[1:4]
     shared_bounds = {_bounds(a, b) for a, b in zip(shared, shared[1:])}
     queried = tangle._rtrees["stable"].queried
     assert len(shared_bounds) == 2 and len(queried) == 2
@@ -138,15 +147,16 @@ def test_a_branch_over_a_query_only_curve_neither_indexes_nor_queries_its_edges(
     fp = bare_fixed_point(label="A")
     key = (fp, "unstable", 0, 0)
     tangle = _stable_index(fp, [(0.5, -1.0), (0.5, 1.0)])
-    nodes = _nodes(polyline_manifold([(x, 0.0) for x in range(5)], key))
-    tangle.add_manifold(_view(nodes, 0, 3, key), index_segments=False)
+    whole = polyline_manifold([(x, 0.0) for x in range(5)], key)
+    xy = whole.store.xy[whole.ids]
+    tangle.add_manifold(_view(whole, 0, 3, key), index_segments=False)
 
-    branch = _view(nodes, 0, 4, key)
+    branch = _view(whole, 0, 4, key)
     tangle._rtrees["stable"].queried.clear()
     tangle.add_manifold(branch)
 
     assert len(tangle._rtrees["unstable"]) == 1
-    assert tangle._rtrees["stable"].queried == [_bounds(nodes[3], nodes[4])]
+    assert tangle._rtrees["stable"].queried == [_bounds(xy[3], xy[4])]
 
 
 def test_a_separator_in_a_query_only_bridge_is_not_queried_again():
@@ -160,10 +170,10 @@ def test_a_separator_in_a_query_only_bridge_is_not_queried_again():
     for i, crossing in enumerate(crossings):
         crossing.id = i
     (bridge,) = tangle.create_bridges(crossings, for_manifold=image)
-    assert len(_nodes(bridge)) == 3, "the two crossings share a segment: one separator"
+    assert len(_rows(bridge)) == 3, "the two crossings share a segment: one separator"
 
     over = Bridge(root=bridge.root, stability="unstable", stretch_param=1.0, fixed_point=fp,
-                  tail=bridge.tail, branch_index=0, manifold_key=key)
+                  tail=bridge.tail, branch_index=0, manifold_key=key, store=bridge.store)
     tangle._rtrees["stable"].queried.clear()
     assert not tangle.add_manifold(over, index_segments=False)
     assert not tangle._rtrees["stable"].queried
@@ -176,14 +186,15 @@ def test_a_curve_lying_on_a_branch_is_dropped_on_a_fresh_recompute():
         branch_key: [(x, 0.0) for x in np.arange(-3.0, 4.0)],
         (fp, "stable", 0, 0): [(0.5, -2.0), (0.5, 2.0)],
     })
-    nodes = _nodes(workbench.manifolds[branch_key])
+    rows = _rows(workbench.manifolds[branch_key])
+    store = workbench.manifolds[branch_key].store
 
     def image(root, tail) -> Bridge:
         return Bridge(root=root, stability="unstable", stretch_param=1.0, fixed_point=fp,
-                      tail=tail, branch_index=0, manifold_key=branch_key)
+                      tail=tail, branch_index=0, manifold_key=branch_key, store=store)
 
     # Growth merged this image into the branch: every edge of it is a branch edge.
-    merged = image(nodes[2], nodes[5])
+    merged = image(rows[2], rows[5])
     own = polyline_manifold([(0.0, 1.0), (1.0, 1.5), (2.0, 1.0)], branch_key)
     standing = image(own.root, own.tail)
     workbench._image_curves[:] = [merged, standing]
@@ -232,7 +243,7 @@ def test_a_curve_crossing_nothing_takes_one_sid_per_new_edge(monkeypatch):
     assert not any(pair & sids for pair in workbench.Tangle._intersecting_segments)
 
     standing = Bridge(root=image.root, stability="unstable", stretch_param=1.0, fixed_point=fp,
-                      tail=image.tail, branch_index=0, manifold_key=branch_key)
+                      tail=image.tail, branch_index=0, manifold_key=branch_key, store=image.store)
     workbench._image_curves[:] = [standing]
     workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
     assert workbench._image_curves == [standing]
@@ -247,12 +258,12 @@ def test_a_query_only_curve_queries_the_edge_leaving_its_periodic_point():
     store.append_one(5.0, 5.0, None)  # row 0, a decoy far from every curve
 
     def curve(points, key, root=None) -> BaseManifold:
-        nodes = [Point(x, y, float(i + 1), store=store) for i, (x, y) in enumerate(points)]
-        ManifoldMachine._manifold_from_points(nodes, key[1], 1.0, fp)
+        rows = store.append(points, [float(i + 1) for i in range(len(points))])
+        ManifoldMachine._manifold_from_rows(store, rows, key[1], 1.0, fp)
         if root is not None:
-            root.insert_point_forward(nodes[0], key[3])
-        return BaseManifold(nodes[0] if root is None else root, key[1], 1.0, fixed_point=fp,
-                            tail=nodes[-1], branch_index=key[3], manifold_key=key)
+            root.insert_point_forward(store.chain_of(rows[0]), key[3])
+        return BaseManifold(int(rows[0]) if root is None else root, key[1], 1.0, fixed_point=fp,
+                            tail=int(rows[-1]), branch_index=key[3], manifold_key=key, store=store)
 
     tangle = Tangle()
     tangle.add_manifold(curve([(0.5, -1.0), (0.5, 1.0)], (fp, "stable", 0, 0)))

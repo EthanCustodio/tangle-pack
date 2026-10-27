@@ -17,7 +17,7 @@ from tanglepack.numerics.Bridge import Bridge
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.ManifoldMachine import ManifoldMachine
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
-from tanglepack.numerics.Point import Point
+from helpers.polylines import TEST_STORE, store_rows
 from tanglepack.topology.Arrangement import Arrangement
 from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.TrellisBranch import TrellisBranch
@@ -25,16 +25,16 @@ from tanglepack.topology.TrellisBranch import TrellisBranch
 
 def _lobe(fp, u_key, first, second, y0, bulge):
     """A three-point bridge leaving the line at y0 and returning at y0 + 1."""
-    root = Point(0.0, y0 - 0.1, 5.0 * (y0 - 0.1))
-    mid = Point(bulge, y0 + 0.5, 5.0 * (y0 + 0.5))
-    tail = Point(0.0, y0 + 1.1, 5.0 * (y0 + 1.1))
-    ManifoldMachine._manifold_from_points([root, mid, tail], "unstable", 1.0, fp)
+    ys = (y0 - 0.1, y0 + 0.5, y0 + 1.1)
+    rows = store_rows([(0.0, ys[0]), (bulge, ys[1]), (0.0, ys[2])], [5.0 * y for y in ys])
+    ManifoldMachine._manifold_from_rows(TEST_STORE, rows, "unstable", 1.0, fp)
     return Bridge(
-        root=root,
+        root=int(rows[0]),
         stability="unstable",
         stretch_param=1.0,
         fixed_point=fp,
-        tail=tail,
+        tail=int(rows[-1]),
+        store=TEST_STORE,
         branch_index=0,
         manifold_key=u_key,
         first_intersection=first,

@@ -64,4 +64,4 @@ def test_grow_until_arclength_returns_when_long_enough(initialized):
     workbench.grow_until_arclength(fp, "unstable", length=1.0, max_iterations=10)
 
     tail = workbench.manifolds[(fp, "unstable", 0, 0)].tail
-    assert tail.get_cdist("unstable") >= 1.0
+    assert tail.cdist >= 1.0

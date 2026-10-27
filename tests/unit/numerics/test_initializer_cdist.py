@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from helpers.invariants import assert_iterate_relation
-from tanglepack import FixedPoint, Point, TangleSession, TangleWorkbench
+from tanglepack import FixedPoint, TangleSession, TangleWorkbench
 from tanglepack.examples import (
     HENON_P3,
     henon_jacobian,
@@ -25,25 +25,23 @@ from tanglepack.examples import (
 from tanglepack.topology.Trellis import SCALING_RTOL
 
 
-def _real_points(manifold):
-    """Manifold's actual ``Point`` nodes (skips the root/intersection BranchPoints)."""
-    return [
-        n
-        for n in manifold.get_point_array(return_nodes=True)
-        if isinstance(n, Point) and n.cdist is not None
-    ]
+def _real_rows(manifold):
+    """The manifold's rows that carry a cdist (the periodic point has no row)."""
+    rows = manifold.ids
+    return rows[~np.isnan(manifold.store.cdist[rows])]
 
 
 @pytest.mark.parametrize("stability", ["unstable", "stable"])
 def test_first_point_cdist_is_euclidean_distance(initialized, stability):
     workbench, fp = initialized
     manifold = workbench.manifolds[(fp, stability, 0, 0)]
-    first = _real_points(manifold)[0]
+    first = _real_rows(manifold)[0]
+    first_cdist = float(manifold.store.cdist[first])
 
     fp_coord = np.asarray(fp.coordinates[0], dtype=float).ravel()[:2]
-    euclid = float(np.linalg.norm(first.get_point() - fp_coord))
-    assert np.isclose(first.cdist, euclid, rtol=1e-9), (
-        f"first point cdist {first.cdist!r} != euclidean distance {euclid!r}"
+    euclid = float(np.linalg.norm(manifold.store.xy[first] - fp_coord))
+    assert np.isclose(first_cdist, euclid, rtol=1e-9), (
+        f"first point cdist {first_cdist!r} != euclidean distance {euclid!r}"
     )
 
 
@@ -92,19 +90,20 @@ def test_alpha_is_the_per_step_factor(request, case, stability):
         fixture = "initialized" if case == "k10" else "henon_inversion_initialized"
         workbench, fp = request.getfixturevalue(fixture)
     manifold = workbench.manifolds[(fp, stability, 0, 0)]
-    outer = manifold.tail
+    store = manifold.store
+    outer = int(manifold.ids[-1])
 
-    alpha = outer.stretch_param
+    alpha = store.chain_of(outer).stretch_param
     assert alpha is not None and alpha > 1.0
 
     # step k_value iterate links toward the fixed point to the other real point
-    back_attr = "prev_iterate" if stability == "unstable" else "next_iterate"
+    back = store.preimage if stability == "unstable" else store.image
     inner = outer
     for _ in range(fp.k_value):
-        inner = getattr(inner, back_attr)
-        assert isinstance(inner, Point) and inner.cdist is not None
-        assert inner.stretch_param == pytest.approx(alpha)
-    assert outer.cdist / inner.cdist == pytest.approx(alpha ** fp.k_value, rel=1e-9)
+        inner = int(back[inner])
+        assert inner >= 0 and not np.isnan(store.cdist[inner])
+        assert store.chain_of(inner).stretch_param == pytest.approx(alpha)
+    assert store.cdist[outer] / store.cdist[inner] == pytest.approx(alpha ** fp.k_value, rel=1e-9)
 
     eigen_factor = fp.per_step_beta(stability)
     if stability == "stable":

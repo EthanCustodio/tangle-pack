@@ -22,8 +22,8 @@ from cases import build_k10_inversion
 from helpers import laws
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
-from helpers.polylines import polyline_manifold, polyline_workbench
-from tanglepack import BaseManifold, Bridge, BranchPoint, Point
+from helpers.polylines import TEST_STORE, store_rows, polyline_manifold, polyline_workbench
+from tanglepack import BaseManifold, Bridge, BranchPoint
 from tanglepack.numerics import ManifoldMachine
 from tanglepack.numerics.PointStore import PointStore
 from tanglepack.numerics.diagnostics import (
@@ -153,12 +153,13 @@ def test_agrees_with_the_test_tier_oracle_on_random_polylines():
 def _image_chain(fp, points, cuts, store=None):
     """Partial image bridges along one curve through ``points``, cut at the
     node windows ``cuts``; overlapping windows share edges, as a blast's do."""
-    nodes = [Point(x, y, float(k), store=store) for k, (x, y) in enumerate(points)]
-    ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
+    store = TEST_STORE if store is None else store
+    rows = store_rows(points, store=store)
+    ManifoldMachine._manifold_from_rows(store, rows, "unstable", 1.0, fp)
     return [
         Bridge(
-            root=nodes[lo], stability="unstable", stretch_param=1.0, fixed_point=fp,
-            tail=nodes[hi], branch_index=0, manifold_key=(fp, "unstable", 0, 0),
+            root=int(rows[lo]), stability="unstable", stretch_param=1.0, fixed_point=fp,
+            tail=int(rows[hi]), branch_index=0, manifold_key=(fp, "unstable", 0, 0), store=store,
         )
         for lo, hi in cuts
     ]
@@ -191,14 +192,14 @@ def test_equal_rows_of_two_stores_are_two_nodes():
     fp = bare_fixed_point(label="A")
     key = (fp, "unstable", 0, 0)
     store = PointStore()
-    nodes = [Point(x, y, float(k), store=store) for k, (x, y) in enumerate([(0.0, 0.0), (2.0, 2.0), (3.0, 2.0)])]
-    ManifoldMachine._manifold_from_points(nodes, "unstable", 1.0, fp)
+    rows = store_rows([(0.0, 0.0), (2.0, 2.0), (3.0, 2.0)], store=store)
+    ManifoldMachine._manifold_from_rows(store, rows, "unstable", 1.0, fp)
     workbench = polyline_workbench(fp, {})
-    workbench.register_manifold(key, BaseManifold(nodes[0], "unstable", 1.0, fixed_point=fp, tail=nodes[-1],
-                                                  branch_index=0, manifold_key=key))
+    workbench.register_manifold(key, BaseManifold(int(rows[0]), "unstable", 1.0, fixed_point=fp, tail=int(rows[-1]),
+                                                  branch_index=0, manifold_key=key, store=store))
     (bridge,) = _image_chain(fp, [(0.0, 2.0), (2.0, 0.0), (3.0, 0.0)], [(0, 2)], store=PointStore())
     workbench._register_bridge(bridge)
-    assert (nodes[0].row, nodes[1].row) == (bridge.root.row, bridge.root.row + 1) == (0, 1)
+    assert (rows[0], rows[1]) == (bridge.ids[0], bridge.ids[0] + 1) == (0, 1)
 
     (hit,) = same_stability_crossings(workbench, region="all")
     assert (hit.seg_a, hit.seg_b) == (0, 0) and np.allclose(hit.point, (1.0, 1.0))

@@ -22,10 +22,8 @@ from tanglepack.numerics.geometry import arc_polyline, signed_polygon_area
 def _loop_area(workbench, cut, tol: float) -> float:
     """The area of one cut's loop: unstable arc to the pip, stable arc back."""
     pip = np.asarray(cut.coords, dtype=float)
-    out = arc_polyline(workbench.manifolds[cut.manifold_a_key], 0.0, cut.unstable_cdist,
-                       stability="unstable", tol=tol)
-    back = arc_polyline(workbench.manifolds[cut.manifold_b_key], 0.0, cut.stable_cdist,
-                        stability="stable", tol=tol)
+    out = arc_polyline(workbench.manifolds[cut.manifold_a_key], 0.0, cut.unstable_cdist, tol=tol)
+    back = arc_polyline(workbench.manifolds[cut.manifold_b_key], 0.0, cut.stable_cdist, tol=tol)
     return abs(signed_polygon_area(np.vstack([*out, pip, *back[::-1]])))
 
 

@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from tanglepack import ManifoldInitializer, Point
+from tanglepack import ManifoldInitializer
 from tanglepack import DynamicalSystem
 from tanglepack import FixedPointSolver
 from tanglepack.examples import (
@@ -107,37 +107,24 @@ def test_kevin_way_period_three_orbit_chain(stability, chain):
     segments = man_maker.construct_kevin_way(fixed_point, stability)
 
     assert set(segments) == {(0, 0), (1, 0), (2, 0)}
-    owner = {
-        id(node): key
-        for key, manifold in segments.items()
-        for node in manifold.get_point_array(return_nodes=True)
-    }
-    growth_link = "next_iterate" if stability == "unstable" else "prev_iterate"
-    node = min(
-        (
-            n
-            for n in segments[(0, 0)].get_point_array(return_nodes=True)
-            if isinstance(n, Point) and n.cdist is not None
-        ),
-        key=lambda n: n.cdist,
-    )
+    owner, store, row = _row_owner(segments), segments[(0, 0)].store, _innermost_row(segments[(0, 0)])
+    growth = store.image if stability == "unstable" else store.preimage
     visited, cdists = [], []
-    while node is not None and id(node) in owner and len(visited) < len(chain):
-        visited.append(owner[id(node)][0])
-        cdists.append(node.cdist)
-        node = getattr(node, growth_link)
+    while row >= 0 and row in owner and len(visited) < len(chain):
+        visited.append(owner[row][0])
+        cdists.append(float(store.cdist[row]))
+        row = int(growth[row])
     assert visited == chain
     assert cdists == sorted(cdists) and len(set(cdists)) == len(cdists)
     for (orbit_index, _branch_index), manifold in segments.items():
         assert manifold.root is fixed_point.branch_points[orbit_index]
         # every segment sits on the orbit point it is keyed to
-        first = manifold.first_node(0)
-        assert first is not None
+        assert len(manifold.ids)
+        first = manifold.store.xy[manifold.ids[0]]
         assert np.linalg.norm(
-            np.asarray(first.get_point()).reshape(-1)
-            - np.asarray(fixed_point.coordinates[orbit_index]).reshape(-1)
+            first - np.asarray(fixed_point.coordinates[orbit_index]).reshape(-1)
         ) < np.linalg.norm(
-            np.asarray(first.get_point()).reshape(-1)
+            first
             - np.asarray(
                 fixed_point.coordinates[(orbit_index + 1) % fixed_point.period]
             ).reshape(-1)
@@ -159,26 +146,27 @@ def _k41_inversion_fixed_point():
     return ManifoldInitializer(system), fixed_point
 
 
+def _row_owner(segments):
+    """Each segment row -> the segment's key."""
+    return {row: key for key, manifold in segments.items() for row in manifold.ids.tolist()}
+
+
+def _innermost_row(segment):
+    """The segment's real (cdist-bearing) row of smallest cdist."""
+    rows = segment.ids
+    cdists = segment.store.cdist[rows]
+    real = ~np.isnan(cdists)
+    return int(rows[real][np.argmin(cdists[real])])
+
+
 def _chain_order(segments, fixed_point, stability):
     """The keys the growth-direction iterate links visit from orbit point 0's seed."""
-    owner = {
-        id(node): key
-        for key, manifold in segments.items()
-        for node in manifold.get_point_array(return_nodes=True)
-    }
-    growth_link = "next_iterate" if stability == "unstable" else "prev_iterate"
-    node = min(
-        (
-            n
-            for n in segments[(0, 0)].get_point_array(return_nodes=True)
-            if isinstance(n, Point) and n.cdist is not None
-        ),
-        key=lambda n: n.cdist,
-    )
+    owner, store, row = _row_owner(segments), segments[(0, 0)].store, _innermost_row(segments[(0, 0)])
+    growth = store.image if stability == "unstable" else store.preimage
     visited = []
-    while node is not None and id(node) in owner and len(visited) < len(segments):
-        visited.append(owner[id(node)])
-        node = getattr(node, growth_link)
+    while row >= 0 and row in owner and len(visited) < len(segments):
+        visited.append(owner[row])
+        row = int(growth[row])
     return visited
 
 

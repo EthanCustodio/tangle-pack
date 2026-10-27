@@ -144,8 +144,8 @@ def test_restore_keeps_bridges_within_restored_manifolds(k10_session):
         manifold = workbench.manifolds[
             (bridge.fixed_point, "unstable", 0, bridge.branch_index or 0)
         ]
-        tail_cdist = manifold.tail.get_cdist("unstable")
-        assert bridge.tail.get_cdist("unstable") <= tail_cdist + 1e-9
+        tail_cdist = manifold.tail.cdist
+        assert bridge.tail.cdist <= tail_cdist + 1e-9
 
 
 def test_restore_without_recompute_leaves_bridges_stale(k10_session):
@@ -170,15 +170,15 @@ def test_restore_after_stable_growth_never_shortens():
     case = cases.build_k28(blasts=2, through="zones")
     workbench, fp, zone = case.session.workbench, case.fixed_points[0], case.zones[0]
     workbench.grow_n_times(fp, "stable", num_iterations=1)
-    grown = {key: workbench.manifolds[key].tail.get_cdist("stable") for key in zone.previous_tails}
+    grown = {key: workbench.manifolds[key].tail.cdist for key in zone.previous_tails}
     assert any(
-        grown[key] > tail.get_cdist("stable") for key, tail in zone.previous_tails.items()
+        grown[key] > tail.cdist for key, tail in zone.previous_tails.items()
     ), "precondition: the growth must run past a pre-zone tail"
 
     zone.restore(workbench)
 
     for key, before in grown.items():
         manifold = workbench.manifolds[key]
-        end = list(manifold._walk_nodes(stop_at_final=False))[-1]
-        assert manifold.tail.get_cdist("stable") >= before
-        assert manifold.tail is end
+        _head, _store, rows = manifold._rows(stop_at_final=False)
+        assert manifold.tail.cdist >= before
+        assert manifold.ids[-1] == rows[-1]

@@ -49,9 +49,9 @@ if TYPE_CHECKING:
     from tanglepack import IntersectionRegistry
 
 
-def walk_nodes(manifold: BaseManifold) -> list:
-    """Return the manifold's nodes in geometric order (root -> tail), once each."""
-    return manifold.get_point_array(return_nodes=True)
+def curve_rows(manifold: BaseManifold):
+    """The periodic-point head (or None), the store and the rows root -> tail."""
+    return manifold._rows()
 
 
 def node_cdist(node, stability: str) -> Optional[float]:
@@ -71,11 +71,10 @@ def node_cdist(node, stability: str) -> Optional[float]:
 
 def manifold_cdists(manifold: BaseManifold, stability: str) -> list[float]:
     """Ordered list of defined cdists along the manifold (skips ``None`` nodes)."""
-    out = []
-    for node in walk_nodes(manifold):
-        c = node_cdist(node, stability)
-        if c is not None:
-            out.append(c)
+    head, store, rows = curve_rows(manifold)
+    out = [] if head is None or node_cdist(head, stability) is None else [node_cdist(head, stability)]
+    if len(rows):
+        out += [float(c) for c in store.cdist[rows] if c == c]
     return out
 
 
@@ -158,8 +157,7 @@ def find_geometric_spikes(
     Returns:
         A list of ``(segment_index, segment_length)`` for each flagged segment.
     """
-    nodes = walk_nodes(manifold)
-    pts = [np.asarray(n.get_point(), dtype=float) for n in nodes]
+    pts = list(np.asarray(manifold.points, dtype=float).reshape(-1, 2))
     if len(pts) < 2 * edge_skip + 2:
         return []
 
@@ -194,7 +192,7 @@ def assert_no_geometric_spikes(
     )
     if spikes:
         worst = max(spikes, key=lambda s: s[1])
-        pts = [np.asarray(n.get_point(), dtype=float) for n in walk_nodes(manifold)]
+        pts = list(np.asarray(manifold.points, dtype=float).reshape(-1, 2))
         seglen = [float(np.linalg.norm(b - a)) for a, b in zip(pts, pts[1:])]
         median_seg = float(np.median([s for s in seglen if s > 0]))
         raise AssertionError(
@@ -229,9 +227,7 @@ def find_reversals(
         A list of ``(joint_index, cosine)`` for each flagged joint (the joint at
         node ``joint_index + 1``).
     """
-    pts = np.asarray(
-        [n.get_point() for n in walk_nodes(manifold)], dtype=float
-    ).reshape(-1, 2)
+    pts = np.asarray(manifold.points, dtype=float).reshape(-1, 2)
     if len(pts) < 3:
         return []
     seg = np.diff(pts, axis=0)
@@ -274,24 +270,22 @@ def assert_iterate_relation(
         AssertionError: On the first node whose iterate cdist does not match.
     """
     stability = manifold.stability
-    grow_attr = "next_iterate" if stability == "unstable" else "prev_iterate"
-
-    for node in walk_nodes(manifold):
-        c = node_cdist(node, stability)
-        if c is None:
+    _head, store, rows = curve_rows(manifold)  # a periodic point has no stretch: skipped
+    if not len(rows):
+        return
+    grow = (store.image if stability == "unstable" else store.preimage)[rows]
+    for row, iterate in zip(rows.tolist(), grow.tolist()):
+        c = float(store.cdist[row])
+        chain = store.chain_of(row)
+        stretch = None if chain is None else chain.stretch_param
+        if c != c or stretch is None or iterate < 0:
             continue
-        stretch = getattr(node, "stretch_param", None)
-        if stretch is None:
-            continue
-        iterate = getattr(node, grow_attr, None)
-        if iterate is None:
-            continue
-        c_iter = node_cdist(iterate, stability)
-        if c_iter is None:
+        c_iter = float(store.cdist[iterate])
+        if c_iter != c_iter:
             continue
         expected = float(stretch) * c
         assert np.isclose(c_iter, expected, rtol=rtol, atol=atol), (
-            f"iterate law violated ({stability}): {grow_attr}.cdist={c_iter!r} "
+            f"iterate law violated ({stability}): image cdist={c_iter!r} "
             f"but stretch_param*cdist={expected!r} "
             f"(stretch={stretch!r}, cdist={c!r}, rtol={rtol})"
         )
@@ -306,25 +300,25 @@ def assert_one_to_one(manifold: BaseManifold) -> None:
       real (cdist-bearing) iterates only.
     """
     stability = manifold.stability
-    grow_attr = "next_iterate" if stability == "unstable" else "prev_iterate"
-    back_attr = "prev_iterate" if stability == "unstable" else "next_iterate"
-
-    nodes = walk_nodes(manifold)
-    ids = [id(n) for n in nodes]
-    assert len(ids) == len(set(ids)), (
-        f"geometric list is not acyclic: {len(ids) - len(set(ids))} repeated "
-        f"node(s) (stability={stability!r})"
+    head, store, rows = curve_rows(manifold)
+    if head is not None and node_cdist(head, stability) is not None:
+        grow_attr, back_attr = ("next_iterate", "prev_iterate") if stability == "unstable" else ("prev_iterate", "next_iterate")
+        iterate = getattr(head, grow_attr, None)
+        if iterate is not None and node_cdist(iterate, stability) is not None:
+            assert getattr(iterate, back_attr, None) is head, "the periodic orbit's back-link is broken"
+    assert len(rows) == len(set(rows.tolist())), (
+        f"geometric list is not acyclic: {len(rows) - len(set(rows.tolist()))} repeated "
+        f"row(s) (stability={stability!r})"
     )
-
-    for node in nodes:
-        if node_cdist(node, stability) is None:
+    if not len(rows):
+        return
+    grow, back = (store.image, store.preimage) if stability == "unstable" else (store.preimage, store.image)
+    for row in rows.tolist():
+        iterate = int(grow[row])
+        if store.cdist[row] != store.cdist[row] or iterate < 0 or store.cdist[iterate] != store.cdist[iterate]:
             continue
-        iterate = getattr(node, grow_attr, None)
-        if iterate is None or node_cdist(iterate, stability) is None:
-            continue
-        assert getattr(iterate, back_attr, None) is node, (
-            f"iterate back-link broken ({stability}): node's {grow_attr} does not "
-            f"point back via {back_attr}"
+        assert int(back[iterate]) == row, (
+            f"iterate back-link broken ({stability}): a row's image does not point back"
         )
 
 

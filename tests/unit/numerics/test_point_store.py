@@ -1,10 +1,8 @@
 """The point store: every manifold point a row of arrays, phantoms rows only.
 
 ``test_merge_tie_keeps_a_point_whose_only_link_is_a_phantom`` pins the merge's
-tie rule and uses only ``Point(x, y)`` and ``insert_prev_iterate``, so it runs
-on the code before the store as well (no data tie depends on the phantom: in
-every tie of the corpus the kept point also holds a real link). The other tests
-are of the store itself.
+tie rule (no data tie depends on the phantom: in every tie of the corpus the
+kept point also holds a real link). The other tests are of the store itself.
 """
 
 from __future__ import annotations
@@ -15,36 +13,39 @@ import pytest
 from tanglepack import BranchPoint, Point
 from tanglepack.examples.henon import henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
+from tanglepack.numerics.PointStore import PointStore
 
 
-def _curve(points: list[Point]):
-    """An unstable key-less curve through ``points``, linked forward."""
-    return ManifoldMachine._manifold_from_points(points, "unstable", 1.0, None)
+def _curve(store: PointStore, rows: list[int]):
+    """An unstable key-less curve through ``rows``."""
+    return ManifoldMachine._manifold_from_rows(store, rows, "unstable", 1.0, None)
 
 
-def _walk(manifold) -> list[Point]:
-    """The curve's nodes from its root to the end of its chain."""
-    return list(manifold._walk_nodes(stop_at_final=False))
+def _walk(manifold) -> list[int]:
+    """The curve's rows from its root to the end of its chain."""
+    store, root = manifold.store, int(manifold.ids[0])
+    return store.chain_of(root).ids[store.position_of(root):].tolist()
 
 
 def test_merge_tie_keeps_a_point_whose_only_link_is_a_phantom() -> None:
     """Of two points on one cdist the one with an iterate link is kept, even
     when that link is a coordinate-only phantom (cdist None) and the other
     point's link is a real one."""
-    head_1 = Point(1.0, 1.0, 1.0)
-    head_2 = Point(1.0, 1.1, 1.0)
-    head_1.insert_prev_iterate(Point(0.5, 0.5))
-    head_2.insert_prev_iterate(Point(0.5, 0.6, 0.4))
-    assert head_1.prev_iterate.cdist is None
-    manifold_1 = _curve([Point(0.0, 0.0, 0.0), head_1, Point(2.0, 2.0, 2.0)])
-    manifold_2 = _curve([Point(0.5, 0.5, 0.5), head_2, Point(3.0, 3.0, 3.0)])
+    store = PointStore()
+    head_1 = store.append_one(1.0, 1.0, 1.0)
+    head_2 = store.append_one(1.0, 1.1, 1.0)
+    store.link([store.append_one(0.5, 0.5, None)], [head_1])
+    store.link([store.append_one(0.5, 0.6, 0.4)], [head_2])
+    assert np.isnan(store.cdist[store.preimage[head_1]])
+    manifold_1 = _curve(store, [store.append_one(0.0, 0.0, 0.0), head_1, store.append_one(2.0, 2.0, 2.0)])
+    manifold_2 = _curve(store, [store.append_one(0.5, 0.5, 0.5), head_2, store.append_one(3.0, 3.0, 3.0)])
     machine = ManifoldMachine(DynamicalSystem(henon_map(10), henon_map_inverse(10)))
 
     merged = _walk(machine.merge_manifolds(manifold_1, manifold_2))
 
-    assert any(node is head_1 for node in merged)
-    assert not any(node is head_2 for node in merged)
-    assert [node.cdist for node in merged] == [0.0, 0.5, 1.0, 2.0, 3.0]
+    assert head_1 in merged
+    assert head_2 not in merged
+    assert store.cdist[merged].tolist() == [0.0, 0.5, 1.0, 2.0, 3.0]
 
 
 # ------------------------------------------------------------- the store
@@ -57,30 +58,30 @@ def store():
 
 def test_rows_are_append_only_across_a_resize(store) -> None:
     """Rows keep their ids and values when the columns grow; none is reused."""
-    first = Point(1.0, 2.0, 3.0, store=store)
+    first = store.append_one(1.0, 2.0, 3.0)
     rows = store.append(np.arange(20.0).reshape(10, 2), np.arange(10.0))
-    last = Point(7.0, 8.0, store=store)
+    last = store.append_one(7.0, 8.0, None)
 
-    assert (first.row, last.row) == (0, 11)
+    assert (first, last) == (0, 11)
     np.testing.assert_array_equal(rows, np.arange(1, 11))
-    assert len(store) == len(store.nodes) == 12
-    assert (first.x, first.y, first.cdist) == (1.0, 2.0, 3.0)
-    assert last.cdist is None
-    np.testing.assert_array_equal(last.get_point(), [7.0, 8.0])
+    assert len(store) == 12
+    assert (*store.xy[first], store.cdist[first]) == (1.0, 2.0, 3.0)
+    assert np.isnan(store.cdist[last])
+    np.testing.assert_array_equal(store.xy[last], [7.0, 8.0])
     np.testing.assert_array_equal(store.xy[rows], np.arange(20.0).reshape(10, 2))
 
 
 def test_a_view_taken_before_a_resize_still_reads_its_row(store) -> None:
-    """A row's coordinates never change, so a ``get_point()`` view of the
-    columns before they grew reads the same row after (Q9's read-only view)."""
-    point = Point(1.0, 2.0, store=store)
-    view = point.get_point()
+    """A row's coordinates never change, so a view of the columns before they
+    grew reads the same row after (Q9's read-only view)."""
+    row = store.append_one(1.0, 2.0, None)
+    view = store.xy[row]
 
     store.append(np.ones((50, 2)), np.ones(50))
 
     assert not np.shares_memory(view, store.xy)
     np.testing.assert_array_equal(view, [1.0, 2.0])
-    np.testing.assert_array_equal(point.get_point(), [1.0, 2.0])
+    np.testing.assert_array_equal(store.xy[row], [1.0, 2.0])
 
 
 def test_link_setters_write_both_columns(store) -> None:
@@ -126,7 +127,7 @@ def test_a_link_across_stores_raises(store) -> None:
 def test_the_columns_are_fresh_read_only_views_of_the_written_rows(store) -> None:
     """``xy``, ``cdist``, ``image`` and ``preimage`` cover the rows written so
     far, refuse writes, and a view taken before a resize keeps its rows."""
-    Point(1.0, 2.0, 3.0, store=store)
+    store.append_one(1.0, 2.0, 3.0)
     before = store.xy
 
     store.append(np.ones((5, 2)), np.ones(5))

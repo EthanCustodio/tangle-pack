@@ -21,12 +21,12 @@ from tanglepack import ManifoldView
 
 
 def _adjacent_pair_with_preiterates(manifold):
-    """Find an adjacent (p0, p1) where both carry a real pre-iterate and cdist."""
-    nodes = manifold.get_point_array(return_nodes=True)
-    for p0, p1 in zip(nodes, nodes[1:]):
-        if getattr(p0, "cdist", None) is None or getattr(p1, "cdist", None) is None:
+    """Find adjacent rows (p0, p1) that both carry a pre-iterate and a cdist."""
+    store, rows = manifold.store, manifold.ids.tolist()
+    for p0, p1 in zip(rows, rows[1:]):
+        if np.isnan(store.cdist[p0]) or np.isnan(store.cdist[p1]):
             continue
-        if p0.prev_iterate is None or p1.prev_iterate is None:
+        if store.preimage[p0] < 0 or store.preimage[p1] < 0:
             continue
         return p0, p1
     return None
@@ -43,18 +43,18 @@ def test_refined_cdist_lies_strictly_between_its_neighbours(grown_unstable):
     pair = _adjacent_pair_with_preiterates(manifold)
     assert pair is not None, "no suitable adjacent pair found"
     p0, p1 = pair
-    lo, hi = sorted((float(p0.cdist), float(p1.cdist)))
+    store = manifold.store
+    lo, hi = sorted((float(store.cdist[p0]), float(store.cdist[p1])))
     assert lo < hi
 
-    store = p0.store
-    chain = store.chain_of(p0.row)
-    position = store.position_of(p0.row)
-    assert chain.node_at(position + 1) is p1
+    chain = store.chain_of(p0)
+    position = store.position_of(p0)
+    assert chain.ids[position + 1] == p1
 
     machine.area_cutoff = 0.0  # refine this pair whatever its curvature area
     next_layer = machine._refine_layer(chain, np.array([position]), manifold, viewer, None)
     np.testing.assert_array_equal(next_layer, [position, position + 1])
-    new_point = chain.node_at(position + 1)
-    assert chain.node_at(position) is p0 and chain.node_at(position + 2) is p1
+    new_point = chain.ids[position + 1]
+    assert chain.ids[position] == p0 and chain.ids[position + 2] == p1
 
-    assert lo < float(new_point.cdist) < hi
+    assert lo < float(store.cdist[new_point]) < hi

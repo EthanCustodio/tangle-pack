@@ -5,12 +5,12 @@ The duplications were collapsed here and each one is pinned:
 
 * :meth:`BaseManifold._collect` is now the ONE read behind all five array
   getters. The getters are thin wrappers, so the test compares each of them
-  against the curve's nodes read straight off its chain -- if a wrapper
+  against the curve's rows read straight off its chain -- if a wrapper
   ever passes the wrong ``kind`` / ``value`` / ``stop_at_final`` the comparison
   catches it.
-* :meth:`BaseManifold.first_node` is the ONE "step past the root BranchPoint"
-  helper that ``ManifoldMachine._branch_view`` and
-  ``ManifoldInitializer.construct_kevin_way`` had each open-coded.
+* A curve rooted at a BranchPoint reads on from position 0 of the chain its
+  slot holds (``BaseManifold.ids``; the slot is read in one place,
+  ``_slot_chain``).
 * ``tanglepack.examples.henon`` is the one Hénon definition.
 """
 
@@ -36,17 +36,29 @@ from tanglepack.numerics import BaseManifold, BranchPoint, FixedPointSolver
 # one walker
 # --------------------------------------------------------------------------- #
 def _hand_walk(manifold, stop_at_final=True):
-    """The curve's nodes read straight off its chain: the rows from its first
-    node's position to its tail's (to the chain's end without the stop), the
-    periodic point first when the root is one."""
-    head = manifold.root if isinstance(manifold.root, BranchPoint) else None
-    first = manifold.root if head is None else manifold.first_node()
-    store = first.store
-    ids = store.chain_of(first.row).ids
-    lo = int(np.flatnonzero(ids == first.row)[0])
-    hi = int(np.flatnonzero(ids == manifold.tail.row)[0]) + 1 if stop_at_final else len(ids)
-    nodes = [store.node(row) for row in ids[lo:hi].tolist()]
-    return nodes if head is None else [head, *nodes]
+    """The curve read straight off its chain: the periodic point (or None) and
+    the rows from its first row's position to its tail's (to the chain's end
+    without the stop)."""
+    root = manifold._root
+    head = root if isinstance(root, BranchPoint) else None
+    if head is None:
+        store = manifold.store
+        chain, lo = store.chain_of(root), store.position_of(root)
+    else:
+        slots = head.forward_branches if manifold.stability == "unstable" else head.backward_branches
+        chain, lo = slots[manifold.branch_index], 0
+        store = chain.store
+    ids = chain.ids
+    hi = int(np.flatnonzero(ids == manifold._tail)[0]) + 1 if stop_at_final else len(ids)
+    return head, store, ids[lo:hi]
+
+
+def _xy(head, store, rows):
+    return np.vstack(([] if head is None else [head.get_point()]) + [store.xy[r] for r in rows.tolist()])
+
+
+def _cd(head, store, rows):
+    return np.vstack(([] if head is None else [[head.cdist]]) + [[store.cdist[r]] for r in rows.tolist()])
 
 
 def _has_iterate(manifold, node, n=1):
@@ -71,48 +83,38 @@ def test_every_getter_matches_an_independent_walk(grown_both, stability):
     workbench, fp = grown_both
     manifold = workbench.manifolds[(fp, stability, 0, 0)]
 
-    nodes = _hand_walk(manifold)
-    all_nodes = _hand_walk(manifold, stop_at_final=False)
-    assert len(nodes) > 10, "fixture too small to be a real walk"
+    head, store, rows = _hand_walk(manifold)
+    _all_head, _store, all_rows = _hand_walk(manifold, stop_at_final=False)
+    assert len(rows) > 10, "fixture too small to be a real walk"
 
-    assert np.array_equal(
-        manifold.get_point_array(), np.vstack([n.get_point() for n in nodes])
-    )
-    assert manifold.get_point_array(return_nodes=True) == nodes
+    assert np.array_equal(manifold.get_point_array(), _xy(head, store, rows))
+    np.testing.assert_array_equal(manifold.ids, rows)
 
     # the cdist read deliberately ignores the tail (documented on the getter)
-    assert np.array_equal(
-        manifold.get_cdist_array(), np.vstack([n.cdist for n in all_nodes])
-    )
-    assert manifold.get_cdist_array(return_nodes=True) == all_nodes
+    assert np.array_equal(manifold.get_cdist_array(), _cd(head, store, all_rows))
 
-    expected_non_iterated = [n for n in nodes if not _has_iterate(manifold, n)]
-    assert manifold.get_non_iterated_point_array(return_nodes=True) == (
-        expected_non_iterated
-    )
+    link = store.image if manifold.stability == "unstable" else store.preimage
+    images = link[rows]
+    keep_head = head is not None and not _has_iterate(manifold, head)
+    expected_non_iterated = (head if keep_head else None, rows[images < 0])
+    assert np.array_equal(manifold.get_non_iterated_point_array(), _xy(head if keep_head else None, store, rows[images < 0]))
+    expected = _cd(*expected_non_iterated[:1], store, expected_non_iterated[1])
     assert np.array_equal(
-        manifold.get_non_iterated_cdist_array(),
-        (
-            np.vstack([n.cdist for n in expected_non_iterated])
-            if expected_non_iterated
-            else np.array([])
-        ),
+        manifold.get_non_iterated_cdist_array(), expected if len(expected) else np.array([])
     )
 
-    expected_iterates = [
-        _iterate_of(manifold, n) for n in nodes if _has_iterate(manifold, n)
-    ]
-    assert manifold.get_iterated_point_array(return_nodes=True) == expected_iterates
+    image_head = _iterate_of(manifold, head) if head is not None and _has_iterate(manifold, head) else None
+    assert np.array_equal(manifold.get_iterated_point_array(), _xy(image_head, store, images[images >= 0]))
 
 
 def test_final_node_truncates_the_point_walk(grown_unstable):
     """``final_node`` stops the walk; it is the same walker, bounded earlier."""
     workbench, fp, manifold = grown_unstable
-    nodes = _hand_walk(manifold)
-    stop = nodes[len(nodes) // 2]
+    head, store, rows = _hand_walk(manifold)
+    stop = int(rows[len(rows) // 2])
 
-    assert manifold.get_point_array(final_node=stop, return_nodes=True) == (
-        nodes[: nodes.index(stop) + 1]
+    assert np.array_equal(
+        manifold.get_point_array(final_node=stop), _xy(head, store, rows[: len(rows) // 2 + 1])
     )
 
 
@@ -176,10 +178,10 @@ def test_first_node_steps_past_the_root_branch_point(initialized):
         branch_index=0,
         manifold_key=(fp, "unstable", 0, 0),
     )
-    assert view.first_node() is view.first_node(0) is not None
+    assert len(view.ids) and view.ids[0] == root.forward_branches[0].ids[0]
     for branch, chain in enumerate(root.forward_branches):
-        first = None if chain is None else chain.store.node(int(chain.ids[0]))
-        assert view.first_node(branch) is first
+        view.branch_index = branch
+        assert view.ids.tolist() == ([] if chain is None else chain.ids.tolist())
 
 
 def test_first_node_on_an_ordinary_root_is_the_root(initialized):
@@ -187,7 +189,7 @@ def test_first_node_on_an_ordinary_root_is_the_root(initialized):
     workbench, fp = initialized
     manifold = workbench.manifolds[(fp, "unstable", 0, 0)]
 
-    ordinary = manifold.first_node()
+    ordinary = int(manifold.ids[0])
     view = BaseManifold(
         ordinary,
         "unstable",
@@ -195,8 +197,9 @@ def test_first_node_on_an_ordinary_root_is_the_root(initialized):
         fixed_point=fp,
         branch_index=0,
         manifold_key=(fp, "unstable", 0, 0),
+        store=manifold.store,
     )
-    assert view.first_node() is ordinary
+    assert view.ids[0] == ordinary
 
 
 def test_first_node_needs_a_branch_index(initialized):
@@ -212,7 +215,7 @@ def test_first_node_needs_a_branch_index(initialized):
     )
     view.branch_index = None
     with pytest.raises(ValueError):
-        view.first_node()
+        view.ids
 
 
 # --------------------------------------------------------------------------- #

@@ -65,9 +65,9 @@ def assert_chains_hold(workbench) -> None:
     ]
     for curve in curves:
         _head, chain, lo, hi = curve._span()
-        tail = curve.tail
-        assert chain is not None and store.chain_of(tail.row) is chain
-        assert lo <= store.position_of(tail.row) == hi - 1
+        tail = curve._tail
+        assert chain is not None and store.chain_of(tail) is chain
+        assert lo <= store.position_of(tail) == hi - 1
 
 
 @pytest.fixture
@@ -131,15 +131,16 @@ def machine() -> ManifoldMachine:
 
 
 def _curve(store: PointStore, cdists: list[float], y: float) -> BaseManifold:
-    """An unstable key-less curve through one new point per cdist."""
-    points = [Point(c, y, c, store=store) for c in cdists]
-    return ManifoldMachine._manifold_from_points(points, "unstable", 1.0, None)
+    """An unstable key-less curve through one new row per cdist."""
+    rows = store.append([(c, y) for c in cdists], cdists)
+    return ManifoldMachine._manifold_from_rows(store, rows, "unstable", 1.0, None)
 
 
 def _run(curve: BaseManifold, first: int, last: int) -> BaseManifold:
     """The run of ``curve``'s points from index ``first`` to ``last``."""
-    nodes = curve.get_point_array(return_nodes=True)
-    return BaseManifold(nodes[first], "unstable", 1.0, None, tail=nodes[last], manifold_key=None)
+    rows = curve.ids
+    return BaseManifold(int(rows[first]), "unstable", 1.0, None, tail=int(rows[last]),
+                        manifold_key=None, store=curve.store)
 
 
 def test_a_run_that_runs_out_before_its_chain_ends_raises(machine) -> None:
@@ -220,7 +221,8 @@ def test_a_branch_point_hangs_a_chain_on_a_slot(direction: str) -> None:
     empty."""
     p = BranchPoint(NUM_BRANCHES)
     stability = "unstable" if direction == "forward" else "stable"
-    curve = ManifoldMachine._manifold_from_points([Point(), Point()], stability, 2.5, None)
+    store = PointStore()
+    curve = ManifoldMachine._manifold_from_rows(store, store.append([(0.0, 0.0)] * 2, None), stability, 2.5, None)
     chain = curve.store.chain_of(curve.ids[0])
 
     getattr(p, f"insert_point_{direction}")(chain, 1)
@@ -228,14 +230,16 @@ def test_a_branch_point_hangs_a_chain_on_a_slot(direction: str) -> None:
     slots = p.forward_branches if direction == "forward" else p.backward_branches
     others = p.backward_branches if direction == "forward" else p.forward_branches
     assert list(slots) == [None, chain] and list(others) == [None] * NUM_BRANCHES
-    assert chain.anchor is p and chain.node_at(-1) is p and chain.stretch_param == 2.5
+    assert chain.anchor is p and chain.xy_at(-1) is p.get_point() and chain.stretch_param == 2.5
 
 
 def test_a_slot_holding_another_chain_refuses_a_second() -> None:
     """A branch is one chain: hanging another chain on its slot raises."""
     p = BranchPoint(NUM_BRANCHES)
+    store = PointStore()
     first, other = (
-        ManifoldMachine._manifold_from_points([Point()], "unstable", 1.0, None) for _ in range(2)
+        ManifoldMachine._manifold_from_rows(store, store.append([(0.0, 0.0)], None), "unstable", 1.0, None)
+        for _ in range(2)
     )
     first_chain = first.store.chain_of(first.ids[0])
     p.insert_point_forward(first_chain, 0)
@@ -247,20 +251,20 @@ def test_a_slot_holding_another_chain_refuses_a_second() -> None:
 
 @pytest.mark.parametrize("stability", ["unstable", "stable"])
 def test_each_node_follows_its_chain_from_the_anchor(initialized, stability):
-    """Read back along the chain, every node's predecessor is the node before it
-    on the curve, and the first point's is the root BranchPoint, the chain's
+    """Read back along the chain, every row's predecessor is the row before it
+    on the curve, and the first row's is the root BranchPoint, the chain's
     anchor."""
     workbench, fp = initialized
     manifold = workbench.manifolds[(fp, stability, 0, 0)]
-    nodes = manifold.get_point_array(return_nodes=True)
-    first = nodes[1]
-    store = first.store
-    chain = store.chain_of(first.row)
+    rows = manifold.ids
+    store = manifold.store
+    chain = store.chain_of(rows[0])
 
-    assert nodes[0] is fp.branch_points[0] is chain.anchor
-    for previous, node in zip(nodes, nodes[1:]):
-        assert chain.node_at(store.position_of(node.row) - 1) is previous
-    assert chain.node_at(len(chain)) is None
+    assert manifold.root is fp.branch_points[0] is chain.anchor
+    np.testing.assert_array_equal(store._position[rows], np.arange(len(rows)))
+    np.testing.assert_array_equal(chain.ids[: len(rows)], rows)
+    assert chain.xy_at(-1) is chain.anchor.get_point()
+    assert chain.xy_at(len(chain)) is None
 
 
 # ------------------------------------------------ a point right after the periodic point
@@ -316,13 +320,14 @@ def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> N
     left neighbour, the periodic point's, is no point (NaN); the base read the
     stable branch's first point there and raised before it could insert."""
     periodic = _periodic_point()
-    points = [Point(x, x * x, x) for x in (0.1, 0.2, 0.4, 0.8)]
-    for point in points:
-        point.insert_prev_iterate(Point(point.x / 2, point.y / 2, point.cdist / 2))
-    ManifoldMachine._manifold_from_points(points, "unstable", 2.0, None)
-    periodic.insert_point_forward(points[0], 0)
-    curve = BaseManifold(periodic, "unstable", 2.0, None, tail=points[-1], branch_index=0,
-                         manifold_key=None)
+    store = PointStore()
+    xs = np.array([0.1, 0.2, 0.4, 0.8])
+    rows = store.append(np.column_stack((xs, xs * xs)), xs)
+    store.link(store.append(np.column_stack((xs / 2, xs * xs / 2)), xs / 2), rows)
+    ManifoldMachine._manifold_from_rows(store, rows, "unstable", 2.0, None)
+    periodic.insert_point_forward(store.chain_of(rows[0]), 0)
+    curve = BaseManifold(periodic, "unstable", 2.0, None, tail=int(rows[-1]), branch_index=0,
+                         manifold_key=None, store=store)
     double = lambda p: 2 * np.asarray(p)  # noqa: E731 - the map of the preimages above
     half = lambda p: 0.5 * np.asarray(p)  # noqa: E731
     machine = ManifoldMachine(DynamicalSystem(double, half), area_cutoff=1e-5)
@@ -332,8 +337,8 @@ def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> N
     machine.refine_manifold(curve)
 
     first = int(chain.ids[0])
-    assert periodic.forward_branches[0] is chain and first != points[0].row
-    assert 0.0 < chain.store.cdist[first] < points[0].cdist
+    assert periodic.forward_branches[0] is chain and first != rows[0]
+    assert 0.0 < chain.store.cdist[first] < xs[0]
     _assert_first_on_its_chain(periodic, first, curve)
     assert (np.diff(curve.get_cdist_array(), axis=0) >= 0).all()
 
@@ -342,14 +347,16 @@ def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> N
 def test_a_curve_of_one_node_reads_one_row(root: str) -> None:
     """A lone point, or a periodic point whose slot is empty, reads as one row in
     every getter; there is no iterate to read."""
-    head = Point(1.0, 2.0, 0.5) if root == "point" else BranchPoint(1, (0.0, 0.0), x=0.0, y=0.0)
-    curve = BaseManifold(head, "unstable", 1.0, None, tail=head, branch_index=0, manifold_key=None)
+    store = PointStore()
+    head = store.append_one(1.0, 2.0, 0.5) if root == "point" else BranchPoint(1, (0.0, 0.0), x=0.0, y=0.0)
+    curve = BaseManifold(head, "unstable", 1.0, None, tail=head, branch_index=0, manifold_key=None,
+                         store=store)
 
     assert curve.get_point_array().shape == (1, 2)
     assert curve.get_cdist_array().shape == (1, 1)
     assert curve.get_non_iterated_point_array().shape == (1, 2)
     assert curve.get_iterated_point_array().size == 0
-    assert curve.get_point_array(return_nodes=True) == list(curve._walk_nodes()) == [head]
+    assert curve.ids.tolist() == ([head] if root == "point" else [])
 
 
 # ------------------------------------------------ iterate list (both kinds)

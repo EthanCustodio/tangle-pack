@@ -13,12 +13,14 @@ single-copy and no-overlap laws on every law case, blasted ones included, run in
 
 from __future__ import annotations
 
+from helpers.invariants import node_cdist
+
 
 
 def _fixed_point_bridge(workbench, fp):
     """The fp's bridge anchored at the fixed point (smallest unstable cdist root)."""
     bridges = [b for b in workbench.bridges if b.fixed_point is fp]
-    return min(bridges, key=lambda b: b.root.get_cdist("unstable"))
+    return min(bridges, key=lambda b: node_cdist(b.root, "unstable"))
 
 
 def test_iterating_fixed_point_bridge_returns_existing_copies(henon_p3_session):

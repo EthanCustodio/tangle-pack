@@ -82,8 +82,8 @@ def test_kevin_way_builds_both_branches_in_opposite_directions(
 # (c) one map step scales cdist by per_step_beta on BOTH branches
 # --------------------------------------------------------------------------- #
 def _walk(manifold):
-    """Every node of one branch past its root, to the end of its curve."""
-    return list(manifold._walk_nodes(stop_at_final=False))[1:]
+    """Every row of one branch past its root, to the end of its curve."""
+    return manifold._rows(stop_at_final=False)[2]
 
 
 @pytest.mark.parametrize("branch_index", [0, 1])
@@ -101,13 +101,13 @@ def test_one_map_step_scales_cdist_by_per_step_beta(henon_inversion, branch_inde
     manifold = workbench.manifolds[(fp, "unstable", 0, branch_index)]
     beta = fp.per_step_beta("unstable")
 
-    ratios = [
-        node.next_iterate.cdist / node.cdist
-        for node in _walk(manifold)
-        if getattr(node, "next_iterate", None) is not None
-        and node.cdist
-        and node.next_iterate.cdist
-    ]
+    store, rows = manifold.store, _walk(manifold)
+    images = store.image[rows]
+    linked = images >= 0
+    rows, images = rows[linked], images[linked]
+    cdist, image_cdist = store.cdist[rows], store.cdist[images]
+    real = ~np.isnan(cdist) & (cdist != 0) & ~np.isnan(image_cdist) & (image_cdist != 0)
+    ratios = (image_cdist[real] / cdist[real]).tolist()
 
     assert len(ratios) > 10, "no iterate pairs to measure on this branch"
 

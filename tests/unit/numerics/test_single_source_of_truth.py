@@ -18,7 +18,7 @@ from helpers.logs import assert_logged
 
 from tanglepack.numerics.BaseManifold import BaseManifold
 from tanglepack.numerics.Bridge import Bridge
-from tanglepack.numerics.Point import Point
+from helpers.polylines import TEST_STORE, store_rows
 from tanglepack.numerics.ManifoldMachine import ManifoldMachine
 
 
@@ -56,19 +56,19 @@ def test_trim_stable_manifolds_reads_the_registry(grown_both):
     workbench.compute_intersections([fp], infer_iterates=False)
     manifold = workbench.manifolds[(fp, "stable", 0, 0)]
     points_before = len(manifold.get_point_array())
-    tail_cdist_before = manifold.tail.get_cdist("stable")
+    tail_cdist_before = manifold.tail.cdist
 
     outermost = max(ix.stable_cdist for _iid, ix in workbench.intersection_registry)
     workbench.trim_stable_manifolds(fp)
 
     tail = manifold.tail
-    assert tail.get_cdist("stable") >= outermost
-    assert tail.get_cdist("stable") < tail_cdist_before
+    assert tail.cdist >= outermost
+    assert tail.cdist < tail_cdist_before
     assert len(manifold.get_point_array()) < points_before
     # the FIRST such node: the node before it (root to tail) is short of it
-    nodes = manifold.get_point_array(return_nodes=True)
-    assert nodes[-1] is tail
-    assert nodes[-2].get_cdist("stable") < outermost
+    rows = manifold.ids
+    assert manifold.store.cdist[rows[-1]] == tail.cdist
+    assert manifold.store.cdist[rows[-2]] < outermost
 
 
 # --------------------------------------------------------------------------- #
@@ -97,12 +97,11 @@ def test_partial_bridge_reports_its_missing_endpoint(henon_tangle_with_bridges):
 # 2.3 / 2.6 -- manifold keys are required and propagated
 # --------------------------------------------------------------------------- #
 def test_base_manifold_requires_a_manifold_key():
-    point_a = Point(0.0, 0.0, 0.0)
-    point_b = Point(1.0, 0.0, 1.0)
-    ManifoldMachine._manifold_from_points([point_a, point_b], "unstable", 1.0, None)
+    point_a, point_b = (int(row) for row in store_rows([(0.0, 0.0), (1.0, 0.0)]))
+    ManifoldMachine._manifold_from_rows(TEST_STORE, [point_a, point_b], "unstable", 1.0, None)
 
     with pytest.raises(TypeError):
-        BaseManifold(point_a, "unstable", 1.0, fixed_point=None, tail=point_b)
+        BaseManifold(point_a, "unstable", 1.0, fixed_point=None, tail=point_b, store=TEST_STORE)
 
     with pytest.raises(TypeError):
         Bridge(
@@ -111,6 +110,7 @@ def test_base_manifold_requires_a_manifold_key():
             stretch_param=1.0,
             fixed_point=None,
             tail=point_b,
+            store=TEST_STORE,
         )
 
 

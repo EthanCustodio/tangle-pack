@@ -10,6 +10,8 @@ containment are known exactly rather than against a tangle.
 from __future__ import annotations
 
 import numpy as np
+
+from helpers.invariants import node_cdist
 import pytest
 
 from tanglepack.numerics.geometry import (
@@ -157,22 +159,20 @@ def test_interior_point_of_a_degenerate_polygon_is_none():
 # --------------------------------------------------------------------------- #
 def test_arc_polyline_clips_to_the_cdist_window(grown_unstable):
     _workbench, _fp, manifold = grown_unstable
-    nodes = manifold.get_point_array(return_nodes=True)
-    cdists = np.array([n.get_cdist("unstable") for n in nodes])
+    points, cdists = manifold.points, manifold.cdists
     lo, hi = float(cdists[2]), float(cdists[8])
 
     arc = arc_polyline(manifold, lo, hi)
 
     assert arc.shape[1] == 2
     assert len(arc) == 7
-    assert np.allclose(arc[0], nodes[2].get_point())
-    assert np.allclose(arc[-1], nodes[8].get_point())
+    assert np.allclose(arc[0], points[2])
+    assert np.allclose(arc[-1], points[8])
 
 
 def test_arc_polyline_reverse_flips_the_order(grown_unstable):
     _workbench, _fp, manifold = grown_unstable
-    nodes = manifold.get_point_array(return_nodes=True)
-    cdists = [n.get_cdist("unstable") for n in nodes]
+    cdists = manifold.cdists
     lo, hi = float(cdists[2]), float(cdists[8])
 
     forward = arc_polyline(manifold, lo, hi)
@@ -214,10 +214,10 @@ def test_oriented_bridge_polyline_runs_in_the_dynamical_direction(
         checked += 1
         assert np.linalg.norm(poly[0] - lo.coords) < np.linalg.norm(poly[-1] - lo.coords)
         assert np.linalg.norm(poly[-1] - hi.coords) < np.linalg.norm(poly[0] - hi.coords)
-        ends = bridge.get_point_array(return_nodes=True)
-        end_cdists = [ends[0].get_cdist("unstable"), ends[-1].get_cdist("unstable")]
+        ends = (bridge.root, bridge.tail)
+        end_cdists = [node_cdist(end, "unstable") for end in ends]
         low_end = ends[0] if end_cdists[0] < end_cdists[1] else ends[-1]
-        assert np.allclose(poly[0], low_end.get_point())
+        assert np.allclose(poly[0], (low_end.x, low_end.y))
     assert checked > 0
 
 
