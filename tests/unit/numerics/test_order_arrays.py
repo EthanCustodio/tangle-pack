@@ -274,12 +274,14 @@ def _periodic_point() -> BranchPoint:
 
 
 def _assert_first_on_its_chain(periodic: BranchPoint, first: int, curve: BaseManifold) -> None:
-    """Row ``first`` is position 0 of the chain ``periodic``'s slot holds, and
-    the curve reads it right after the periodic point."""
+    """Row ``first`` is position 0 of the chain ``periodic``'s slot holds, its
+    left neighbour (position -1, which the resolution ratio's chord deviation
+    reads) is the periodic point, and the curve reads it right after it."""
     chain = periodic.forward_branches[0]
     store = chain.store
     assert chain.anchor is periodic and store.chain_of(first) is chain
     assert store.position_of(first) == 0
+    np.testing.assert_array_equal(chain.xy_at(-1), periodic.get_point())
     np.testing.assert_array_equal(store._position[chain.ids], np.arange(len(chain)))
     assert curve.root is periodic and curve.ids[0] == first
 
