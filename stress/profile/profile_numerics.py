@@ -37,19 +37,24 @@ Components of the census (bytes):
 
 * ``points_curve`` -- ``Point`` objects on a registered manifold (object,
   ``__dict__``, the ``_coords`` array, the x / y / cdist scalars; since the
-  point store, a slotted object and its row ``int``);
-* ``points_image`` -- ``Point`` objects reachable only from blast image curves;
+  point store, a slotted object and its row ``int``); a point is told by its
+  row (since N7a the engine makes no ``Point``: these are the ends read
+  through the adapter);
+* ``points_image`` -- ``Point`` objects whose row lies only on blast image curves;
 * ``points_phantom`` -- the coordinate-only preimages refinement caches
   (``cdist`` None, on no curve) while they were objects; since the point store
   they are rows with no object (``phantom_rows``), and this counts the objects
-  with no cdist left (the initializer's detached fictitious tails);
+  with no cdist left (before N7a, the initializer's detached fictitious tails);
 * ``points_other`` -- any other ``Point`` alive (separators, stale lists,
   merge-dropped duplicates);
 * ``point_store`` -- the workbench's ``PointStore``: its columns at capacity
   (the chain and position columns too, since the order arrays) and its row ->
-  ``Point`` list (counts ``store_rows``, ``store_capacity``, ``phantom_rows``
-  -- no object, no cdist -- and ``off_curve_rows`` -- an object with a cdist
-  on no walked curve); absent on a tree without it;
+  ``Point`` list. Its counts are of rows, so they read alike on every tree
+  with a store: ``store_rows``, ``store_capacity``, ``curve_rows`` (on a
+  walked manifold), ``image_rows`` (only on blast image curves),
+  ``no_cdist_rows``, ``phantom_rows`` (no cdist, no link of their own) and
+  ``off_curve_rows`` (a cdist, on no walked curve); ``n_points`` and the
+  other ``n_*`` totals are these rows;
 * ``curve_ids`` -- the store's ``Chain`` objects and their ``ids`` arrays, the
   order of points along every curve (count ``chains``, the live ones); 0 on a
   tree without them;
@@ -61,7 +66,9 @@ Components of the census (bytes):
   tracemalloc): measured at the end by dropping them and reading RSS, and
   estimated per blast as entries x the calibrated bytes per entry;
 * ``curve_objects`` -- manifold / bridge objects and their attributes;
-* ``walk_memo`` -- the memoised walks of bridges (``_walk_cache``);
+* ``walk_memo`` -- left the census at N7a (N6 removed the bridges' walk
+  memo); its key stays in ``profile_figures.MEMORY_GROUPS``, so an older
+  record's memo bytes still stack;
 * ``registry`` -- the intersection registry (crossings, orders, iterate table);
 * ``topology`` -- the session's trellis and topology caches, alphabet, zones;
 * ``workbench_other`` -- everything else the workbench holds.
@@ -319,11 +326,14 @@ def _point_bytes(p: Any) -> int:
 
 
 def _walk_ids(manifold: Any) -> list[int]:
-    """The ids of every node of a manifold, root to its PHYSICAL end (the end of
-    its linked list, or of its chain since the order arrays).
+    """The store rows of a manifold, root to its PHYSICAL end (the end of its
+    chain), the periodic point (no row) left out.
 
-    Read through ``_walk_nodes`` rather than ``_collect``, which the timer wraps."""
-    return [id(node) for node in manifold._walk_nodes(stop_at_final=False)]
+    Read through ``_rows`` (since the order arrays) rather than ``_collect``,
+    which the timer wraps, or ``_walk_nodes``, which would make a ``Point``
+    per row on a tree whose engine makes none (N7a)."""
+    _head, _store, rows = manifold._rows(stop_at_final=False)
+    return rows.tolist()
 
 
 def _deep_size(roots: list, seen: set, stop: Callable[[Any], bool]) -> int:
@@ -424,10 +434,9 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
                 if isinstance(v, (list, tuple, np.ndarray))
             )
         else:
-            oid = id(obj)
-            if oid in on_curve:
+            if obj.row in on_curve:
                 kind = "points_curve"
-            elif oid in on_image:
+            elif obj.row in on_image:
                 kind = "points_image"
             elif obj.cdist is None:
                 kind = "points_phantom"
@@ -439,14 +448,17 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
     store = getattr(workbench, "point_store", None)
     if store is not None:
         rows = len(store)
-        has_node = np.fromiter((n is not None for n in store.nodes), bool, rows)
-        on_a_curve = np.fromiter((id(n) in on_curve or id(n) in on_image for n in store.nodes),
-                                 bool, rows)
+        on_a_curve = np.zeros(rows, bool)
+        on_a_curve[list(on_curve | on_image)] = True
         has_cdist = ~np.isnan(store._cdist[:rows])
+        own_link = (store._image[:rows] >= 0) | (store._preimage[:rows] >= 0)
         counts["store_rows"] = rows
         counts["store_capacity"] = len(store._cdist)
-        counts["phantom_rows"] = int((~has_node & ~has_cdist).sum())
-        counts["off_curve_rows"] = int((has_node & ~on_a_curve & has_cdist).sum())
+        counts["curve_rows"] = len(on_curve)
+        counts["image_rows"] = len(on_image - on_curve)
+        counts["no_cdist_rows"] = int((~has_cdist).sum())
+        counts["phantom_rows"] = int((~has_cdist & ~own_link).sum())
+        counts["off_curve_rows"] = int((has_cdist & ~on_a_curve).sum())
         sizes["point_store"] = store.nbytes + sys.getsizeof(store.nodes)
         chains = getattr(store, "chains", None)
         if chains is not None:
@@ -468,23 +480,12 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
 
     held_curves = {id(c) for c in curves + bridges + images}
     seen: set[int] = set()
-    # curve objects (the manifold / bridge objects, their dicts, but not the memo)
+    # curve objects (the manifold / bridge objects and their dicts)
     curve_bytes = 0
-    memo_bytes = 0
-    memo_arrays = 0
     for c in {id(c): c for c in curves + bridges + images}.values():
         curve_bytes += sys.getsizeof(c) + sys.getsizeof(c.__dict__)
         seen.update((id(c), id(c.__dict__)))
-        cache = c.__dict__.get("_walk_cache", {})
-        seen.add(id(cache))
-        memo_bytes += sys.getsizeof(cache)
-        for key, value in cache.items():
-            memo_bytes += sys.getsizeof(value) + sys.getsizeof(key)
-            if isinstance(value, np.ndarray):
-                memo_arrays += value.nbytes
-            seen.add(id(value))
     sizes["curve_objects"] = curve_bytes
-    sizes["walk_memo"] = memo_bytes
 
     def stop_numerics(o: Any) -> bool:
         return (is_point(o) or o is store or (isinstance(o, BaseManifold) and id(o) in held_curves)
@@ -512,12 +513,10 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
         "bytes": dict(sizes),
         "counts": dict(counts),
         "tangle_parts": {k: v for k, v in tangle_parts.items()},
-        "memo_array_bytes": memo_arrays,
-        "n_points": sum(counts[k] for k in counts if k.startswith("points_"))
-        + counts.get("phantom_rows", 0),
-        "n_curve_points": counts["points_curve"],
-        "n_image_points": counts["points_image"],
-        "n_phantom": counts["points_phantom"] + counts.get("phantom_rows", 0),
+        "n_points": counts["store_rows"],
+        "n_curve_points": counts["curve_rows"],
+        "n_image_points": counts["image_rows"],
+        "n_phantom": counts["no_cdist_rows"],
         "n_bridges": len(bridges),
         "n_image_curves": len(images),
         "n_crossings": len(registry),

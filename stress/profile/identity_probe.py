@@ -88,7 +88,17 @@ SCENARIOS = {
 # Readers: the only places that touch a library object's shape
 # --------------------------------------------------------------------------- #
 def curve_arrays(curve: Any, whole: bool) -> np.ndarray:
-    """``(x, y, cdist)`` per node, root first: the whole list, or root to tail."""
+    """``(x, y, cdist)`` per point, root first: to the chain's end, or root to tail.
+
+    Since N7a a curve is rows (``ids``) and a periodic-point head, read off the
+    store (``_rows``: no public getter reads to the chain's end); a tree before
+    it holds nodes, read as before, so one probe dumps both."""
+    if hasattr(curve, "ids"):
+        head, store, rows = curve._rows(stop_at_final=not whole)
+        out = [] if head is None else [(*head.get_point(), head.get_cdist(curve.stability))]
+        if len(rows):
+            out += [(*xy, c) for xy, c in zip(store.xy[rows].tolist(), store.cdist[rows].tolist())]
+        return np.array(out, dtype=np.float64).reshape(-1, 3)
     nodes = (curve.get_cdist_array(return_nodes=True) if whole
              else curve.get_point_array(return_nodes=True))
     rows = [(*node.get_point(), node.get_cdist(curve.stability)) for node in nodes]
@@ -96,7 +106,10 @@ def curve_arrays(curve: Any, whole: bool) -> np.ndarray:
 
 
 def curve_extent(curve: Any) -> int:
-    """How many nodes lie from the root to the (possibly trimmed) tail."""
+    """How many points lie from the root to the (possibly trimmed) tail."""
+    if hasattr(curve, "ids"):
+        head, _store, rows = curve._rows()
+        return len(rows) + (head is not None)
     return len(curve.get_point_array(return_nodes=True))
 
 
