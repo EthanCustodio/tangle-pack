@@ -31,8 +31,6 @@ from typing import Optional, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
-from .Intersection import Stability
-
 if TYPE_CHECKING:
     from .BaseManifold import BaseManifold
     from .Bridge import Bridge
