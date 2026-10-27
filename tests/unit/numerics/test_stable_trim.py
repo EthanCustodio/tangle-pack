@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 
 from cases import build_k10
+from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
+from helpers.polylines import polyline_workbench
 
 
 def _first_node_at_or_past(manifold, cdist):
@@ -44,6 +46,21 @@ def test_a_cdist_on_a_node_keeps_that_node(small_tangle):
 
     workbench.trim_stable_at(key, node.get_cdist("stable"))
     assert manifold.tail is node
+
+
+def test_the_root_is_never_the_new_tail():
+    """A branch rooted at a row, trimmed at or below the root's cdist, keeps the
+    next row: the trim never shrinks a curve to its root alone."""
+    fp = bare_fixed_point()
+    key = (fp, "stable", 0, 0)
+    workbench = polyline_workbench(fp, {key: [(0.0, 0.0), (0.0, 1.0), (0.0, 2.0)]})
+    manifold = workbench.manifolds[key]
+    _head, _store, rows = manifold._rows()
+
+    for cdist in (0.0, -1.0):  # the root's cdist is 0.0
+        workbench.trim_stable_at(key, cdist)
+        assert manifold.tail is not manifold.root
+        assert manifold._rows()[2].tolist() == rows[:2].tolist()
 
 
 def test_a_cdist_past_the_end_leaves_the_branch_untrimmed(small_tangle, caplog):
