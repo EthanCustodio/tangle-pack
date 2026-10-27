@@ -3,8 +3,8 @@ Branch points: the nodes where several manifold branches meet.
 
 A :class:`BranchPoint` is a fixed point or a crossing, so it can carry up to
 two incoming and two outgoing branches of each stability, where a row of the
-:class:`~.PointStore.PointStore` lies on one chain and links one image and one
-preimage.
+:class:`~.PointStore.PointStore` lies on at most one chain and links at most one
+image and one preimage.
 
 Dev Notes:
 
@@ -174,7 +174,7 @@ class BranchPoint:
 
     def set_x(self, x: float) -> None:
         """
-        Sets the x-coordinate of the point. Also resets the interal _coords.
+        Sets the x-coordinate of the point. Also resets the internal _coords.
 
         Args:
             x (float): The x-coordinate of the point.
@@ -202,11 +202,11 @@ class BranchPoint:
         Args:
             node (BranchPoint): Iterate of the current point to insert into
                 the linked list.
-            num_iterations (int): Number of iterates forward to insert the point.
+            num_iterates (int): Number of iterates forward to insert the point.
 
         Raises:
-            ValueError: Intermediate iterates does not exist.
-            ValueError: The desired iterate does not exist.
+            ValueError: An intermediate iterate does not exist.
+            ValueError: The iterate 'num_iterates' forward already exists.
         """
 
         current_node = self
@@ -232,11 +232,11 @@ class BranchPoint:
         Args:
             node (BranchPoint): Iterate of the current point to insert into
                 the linked list.
-            num_iterations (int): Number of iterates backward to insert the point.
+            num_iterates (int): Number of iterates backward to insert the point.
 
         Raises:
-            ValueError: Intermediate iterates does not exist.
-            ValueError: The desired iterate does not exist.
+            ValueError: An intermediate pre-iterate does not exist.
+            ValueError: The pre-iterate 'num_iterates' backward already exists.
         """
 
         current_node = self
@@ -280,7 +280,7 @@ class BranchPoint:
         """
         Gets the pre-iterate 'num_iterates' backwards.
 
-        Arge:
+        Args:
             num_iterates (int): Number of backward iterates.
 
         Return:
@@ -302,8 +302,8 @@ class BranchPoint:
         """
         Whether the point has an image or a preimage.
 
-        The merge's tie rule reads it: of two points on one cdist the one with
-        an iterate link is the established point and is kept.
+        No library path reads it: the merge's tie rule reads the store's link
+        columns (N7a).
 
         Returns:
             bool: True if either iterate link is set.
@@ -329,7 +329,7 @@ class BranchPoint:
         Checks if the pre-iterate 'num_iterates' backwards exists.
 
         Args:
-            num_iterations (int): Number of iterates backwards to check.
+            num_iterates (int): Number of iterates backwards to check.
         """
 
         if self.get_prev_iterate(num_iterates) is None:
