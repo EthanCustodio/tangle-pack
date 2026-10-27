@@ -84,6 +84,18 @@ def test_a_view_taken_before_a_resize_still_reads_its_row(store) -> None:
     np.testing.assert_array_equal(store.xy[row], [1.0, 2.0])
 
 
+def test_an_end_is_a_value_of_its_row(store) -> None:
+    """``end(row)`` is a record of the row's columns built per read: two reads
+    are equal and are not one object, so ends are compared by value (by ``id``
+    when the cdist may be NaN), never by identity."""
+    row = store.append_one(1.0, 2.0, 3.0)
+
+    first, second = store.end(row), store.end(row)
+
+    assert first == second and first is not second
+    assert (first.id, first.x, first.y, first.cdist) == (row, *store.xy[row], store.cdist[row])
+
+
 def test_the_columns_are_fresh_read_only_views_of_the_written_rows(store) -> None:
     """``xy``, ``cdist``, ``image`` and ``preimage`` cover the rows written so
     far, refuse writes, and a view taken before a resize keeps its rows."""

@@ -12,8 +12,10 @@ from __future__ import annotations
 import numpy as np
 
 from helpers.invariants import node_cdist
+from helpers.polylines import TEST_STORE, store_rows
 import pytest
 
+from tanglepack.numerics import ManifoldMachine
 from tanglepack.numerics.geometry import (
     arc_polyline,
     oriented_bridge_polyline,
@@ -179,6 +181,17 @@ def test_arc_polyline_reverse_flips_the_order(grown_unstable):
     backward = arc_polyline(manifold, lo, hi, reverse=True)
 
     assert np.allclose(forward, backward[::-1])
+
+
+def test_arc_polyline_ascends_on_a_curve_stored_tail_first():
+    """A curve whose cdist DEcreases root to tail (a bridge can be stored either
+    way round) comes back in increasing cdist, and decreasing with ``reverse``."""
+    rows = store_rows([(0.0, 3.0), (0.0, 2.0), (0.0, 1.0)], [3.0, 2.0, 1.0])
+    curve = ManifoldMachine._manifold_from_rows(TEST_STORE, rows, "stable", 1.0, None)
+    ascending = [[0.0, 1.0], [0.0, 2.0], [0.0, 3.0]]
+
+    np.testing.assert_array_equal(arc_polyline(curve, 0.0, 4.0), ascending)
+    np.testing.assert_array_equal(arc_polyline(curve, 0.0, 4.0, reverse=True), ascending[::-1])
 
 
 def test_arc_polyline_on_an_empty_window_is_empty(grown_unstable):

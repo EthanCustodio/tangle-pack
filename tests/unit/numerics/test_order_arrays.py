@@ -348,7 +348,43 @@ def test_a_curve_of_one_node_reads_one_row(root: str) -> None:
     assert curve.ids.tolist() == ([head] if root == "point" else [])
 
 
-# ------------------------------------------------ iterate list (both kinds)
+# ------------------------------------------------ how a curve takes its ends
+
+def test_a_periodic_point_root_takes_a_row_tail_without_store() -> None:
+    """A curve rooted at a periodic point adopts its slot chain's store, so a
+    row tail needs no ``store=``; the slot is read through ``branch_index``,
+    which is set before the ends."""
+    periodic = _periodic_point()
+    store = PointStore()
+    rows = store.append([(0.1, 0.0), (0.2, 0.0), (0.3, 0.0)], [0.1, 0.2, 0.3])
+    periodic.insert_point_forward(store.new_chain(rows, 2.0), 0)
+
+    curve = BaseManifold(periodic, "unstable", 2.0, None, tail=int(rows[1]), branch_index=0,
+                         manifold_key=None)
+
+    assert curve.store is store
+    assert curve.ids.tolist() == rows[:2].tolist()
+
+
+def test_a_non_integer_end_raises() -> None:
+    """An end is a row (an integer), an ``End`` or the periodic point: a float
+    is no row and is not truncated to one."""
+    store = PointStore()
+    rows = store.append([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)], [0.0, 1.0, 2.0])
+    store.new_chain(rows, 1.0)
+
+    with pytest.raises(TypeError):
+        BaseManifold(int(rows[0]), "unstable", 1.0, None, tail=2.7, manifold_key=None, store=store)
+
+
+def test_a_row_end_without_a_store_raises() -> None:
+    """A row means nothing without its store: a row root with no ``store=`` (and
+    no periodic point to adopt one from) raises."""
+    with pytest.raises(ValueError):
+        BaseManifold(0, "unstable", 1.0, None, tail=1, manifold_key=None)
+
+
+# ------------------------------------------------ the periodic point's iterate list
 
 @pytest.mark.parametrize("kind", sorted(POINT_KINDS))
 def test_insert_next_iterate(kind: str) -> None:
