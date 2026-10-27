@@ -10,7 +10,7 @@ is :mod:`~.FixedPointSolver`'s job, not this module's.
 Dev Notes:
 
 Shapes: an orbit point and an eigenvector are ``(2,)`` arrays, as
-in ``BasePoint``, and an eigenvalue is a float, so no reader ravels.
+``BranchPoint.get_point()`` returns, and an eigenvalue is a float, so no reader ravels.
 
 Eigenvectors under inversion: one vector per orbit
 point is enough. It orients branch 0; branch 1 of an inversion point is the

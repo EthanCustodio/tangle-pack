@@ -21,7 +21,7 @@ The fundamental invariants (see CLAUDE.md):
                     to stay injective.
 2. Iterate law    - ``c_iterate = stretch_param * c`` along the iterate chain, in
                     the growth direction (``assert_iterate_relation``).
-3. One-to-one     - the geometric and iterate linked lists are acyclic and
+3. One-to-one     - the curve's rows and their iterate links are acyclic and
                     mutually consistent (``assert_one_to_one``).
 4. Area preserved - along one iterate chain of crossings in the registry,
                     ``unstable_cdist * stable_cdist`` is invariant
@@ -29,12 +29,12 @@ The fundamental invariants (see CLAUDE.md):
                     equal products never imply shared chain membership.
 
 Note:
-    A ``Point`` stores a single scalar ``cdist``; a ``BranchPoint`` stores a
-    ``(unstable, stable)`` tuple and resolves it via ``get_cdist(stability)``. The
-    root fixed point is a ``BranchPoint`` whose ``cdists`` is ``None`` (it is the
-    fixed point, distance zero / undefined) and is skipped by these checks. The
-    refiner also caches *phoney* pre-iterates (a ``Point`` with ``cdist is None``)
-    on the non-growth side; those are skipped too.
+    A row (and a curve end read from it) has a single scalar ``cdist``; a
+    ``BranchPoint`` stores a ``(unstable, stable)`` tuple and resolves it via
+    ``get_cdist(stability)``. The root fixed point is a ``BranchPoint`` whose
+    ``cdists`` is ``None`` (it is the fixed point, distance zero / undefined) and
+    is skipped by these checks. The refiner also caches *phoney* pre-iterates
+    (rows with a NaN cdist) on the non-growth side; those are skipped too.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def node_cdist(node, stability: str) -> Optional[float]:
     """Resolve a node's cdist for ``stability``, or ``None`` if undefined.
 
     Returns ``None`` for the root fixed point (a ``BranchPoint`` with no cdists)
-    and for phoney cached pre-iterates (a ``Point`` with ``cdist is None``).
+    and for a node whose ``cdist`` is ``None``.
     """
     if isinstance(node, BranchPoint):
         if node.cdists is None:
@@ -139,7 +139,7 @@ def find_geometric_spikes(
 
     A manifold is a smooth simple curve sampled densely enough that refinement
     keeps every step short. The high-stretch bug instead leaves two geometrically
-    distant points adjacent in the linked list (their cdists collapsed to within a
+    distant points adjacent on the curve (their cdists collapsed to within a
     float ULP and could no longer order them), so the polyline darts across a long
     segment to a misplaced point and back -- the visible "spike". This flags every
     segment whose length exceeds ``length_ratio`` times the median segment length.
@@ -292,12 +292,13 @@ def assert_iterate_relation(
 
 
 def assert_one_to_one(manifold: BaseManifold) -> None:
-    """Assert the geometric and iterate linked lists are acyclic and consistent.
+    """Assert the curve's rows and their iterate links are acyclic and consistent.
 
-    - The geometric walk visits each node at most once (acyclic).
-    - Each node's growth iterate links back to it (``next_iterate.prev_iterate``
-      is the node for unstable; ``prev_iterate.next_iterate`` for stable), for
-      real (cdist-bearing) iterates only.
+    - The curve holds each row at most once (acyclic).
+    - Each row's growth iterate links back to it (the image's preimage is the
+      row for unstable; the preimage's image for stable), for real
+      (cdist-bearing) rows and iterates only; the periodic point's own
+      ``next_iterate`` / ``prev_iterate`` link is checked the same way.
     """
     stability = manifold.stability
     head, store, rows = curve_rows(manifold)

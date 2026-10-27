@@ -2,8 +2,9 @@
 The point store: every manifold point of a workbench as one row of arrays.
 
 A row holds a point's coordinates, its canonical distance and its two iterate
-links (the row of its image and of its preimage). A :class:`~.Point.Point` is a
-small object over its row and holds nothing of its own.
+links (the row of its image and of its preimage). A point is its row: no
+object stands for it (N7b); a curve's end reads as an :class:`End`, a value
+built from the row's columns.
 
 The order of points ALONG a curve is a :class:`Chain`: the rows of one
 physical curve, in curve order (away from its periodic point). A row lies on
@@ -15,20 +16,17 @@ chain between its root and its tail (:class:`~.BaseManifold.BaseManifold`).
 Rows are appended and never removed or reused, so a row id names one point for
 the life of its store, and the coordinates of a row never change once written.
 
-"No value" is NaN in every float array and -1 in every row column, and None on
-a ``Point`` (until N7 of the numerics arrays plan). No curve row is ever NaN:
-the NaN rows are phantoms and the initializer's fictitious tails, all off-curve.
+"No value" is NaN in every float array and -1 in every row column. No curve
+row is ever NaN: the NaN rows are phantoms and the initializer's fictitious
+tails, all off-curve.
 
 The public columns (``xy``, ``cdist``, ``image``, ``preimage``) are fresh
-read-only views per access, so no caller holds a buffer a resize replaces; a
-``Point`` reads the private columns.
+read-only views per access, so no caller holds a buffer a resize replaces.
 
-The engine makes no :class:`~.Point.Point` (N7a): it appends and links rows,
-and a row gets its ``Point`` only when something reads it through the adapter
-(:meth:`PointStore.node`), as a curve's ``root`` / ``tail`` does. Phantoms are
-the coordinate-only preiterates refinement caches for its next layer (cdist
-NaN, on no curve, named by one point's preiterate link -- its preimage on an
-unstable curve, its image on a stable one -- and naming nothing themselves).
+The engine appends and links rows (N7a). Phantoms are the coordinate-only
+preiterates refinement caches for its next layer (cdist NaN, on no curve,
+named by one point's preiterate link -- its preimage on an unstable curve, its
+image on a stable one -- and naming nothing themselves).
 
 Dev Notes:
 
@@ -39,9 +37,8 @@ link. Compaction belongs to save/load.
 
 Who owns a store (Q5): the workbench (``TangleWorkbench.point_store``), which
 hands it to its initializer; the machine stays stateless and appends to the
-store of the curve it grows. A point built without a store goes into the one
-process-wide :func:`loose_store`, which is never freed: it is for points built
-by hand (tests, notebooks), not for library paths.
+store of the curve it grows. A curve built by hand (tests, notebooks) names
+its store (``store=``).
 
 A chain never holds a ``BranchPoint`` (D5: its storage is N8's): a chain that
 hangs off one names it as its ``anchor``, the left neighbour of position 0,
@@ -71,6 +68,7 @@ class End(NamedTuple):
     x: float
     y: float
     cdist: float
+
 
 #: Capacity grows by this factor when an append does not fit.
 _GROWTH = 1.5
@@ -194,8 +192,6 @@ class PointStore:
     the chain and position of every row on a curve.
 
     Attributes:
-        nodes (list[Optional[Point]]): Row -> its ``Point``; None for a row no
-            reader has asked :meth:`node` for (every row the engine appends).
         chains (list[Chain]): Every chain of the store, by index (retired ones
             included).
     """
@@ -383,7 +379,7 @@ class PointStore:
 
     def _alias_xy(self) -> None:
         """A read-only alias of the whole coordinate column, rebuilt on every
-        resize: ``Point.get_point`` hands out row views of it (a fresh view of
-        the column per point read costs five times as much)."""
+        resize: :meth:`Chain.xy_at` and the refiner hand out row views of it (a
+        fresh view of the column per point read costs five times as much)."""
         self._xy_read = self._xy.view()
         self._xy_read.flags.writeable = False

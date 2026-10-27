@@ -79,10 +79,10 @@ counts the points it creates and raises `PointBudgetExceeded` before the map cal
 `max_points_per_step` (a resource guard, never an invariant; S). The default `area_cutoff` is 1e-7
 (S).
 
-The data model (one `PointStore`, chains of its rows, curves as views of a chain, and `BranchPoint` a
-node object until N8) is a representation choice, not part of the definition. `BasePoint.edist` and
-the stretch slots are dead and are kept until the array representation (B11, a later optional slice)
-replaces them.
+The data model (one `PointStore`, chains of its rows, curves as views of a chain whose row ends read
+as `End` records, and `BranchPoint` a node object until N8) is a representation choice, not part of
+the definition. `BranchPoint.edist` and the stretch slots are dead and are kept until the array
+representation (B11, a later optional slice) replaces them.
 
 **Implemented by.** `ManifoldInitializer.construct_kevin_way`, `ManifoldMachine.iterate_manifold`,
 `ManifoldMachine._image_chains`, `TangleWorkbench.grow_n_times`, `TangleWorkbench.grow_until_bounded`,

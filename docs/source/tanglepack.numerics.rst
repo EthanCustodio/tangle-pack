@@ -12,14 +12,6 @@ tanglepack.numerics.BaseManifold module
    :undoc-members:
    :show-inheritance:
 
-tanglepack.numerics.BasePoint module
-------------------------------------
-
-.. automodule:: tanglepack.numerics.BasePoint
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 tanglepack.numerics.BranchPoint module
 --------------------------------------
 
@@ -124,10 +116,10 @@ tanglepack.numerics.ManifoldView module
    :undoc-members:
    :show-inheritance:
 
-tanglepack.numerics.Point module
---------------------------------
+tanglepack.numerics.PointStore module
+-------------------------------------
 
-.. automodule:: tanglepack.numerics.Point
+.. automodule:: tanglepack.numerics.PointStore
    :members:
    :undoc-members:
    :show-inheritance:

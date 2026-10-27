@@ -109,6 +109,9 @@ def test_boundary_intersection_id_resolves_on_demand(k10_zone_session):
 # the blast/classification path still uses the same test point
 # --------------------------------------------------------------------------- #
 def test_bridge_classification_uses_the_memoised_midpoint(k10_zone_session):
+    """A bridge is classified by the midpoint of its points, read afresh on
+    every call (the name dates from the walk memo, gone since N6): a bridge
+    classified into the zone has its midpoint inside it."""
     session, _fp = k10_zone_session
     (zone,) = session.resonance_zones.values()
 

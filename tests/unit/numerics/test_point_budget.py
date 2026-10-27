@@ -152,7 +152,9 @@ def test_map_stage_refuses_before_evaluating() -> None:
 
 def test_overrun_drops_every_bridge_walk() -> None:
     """Refinement lays points inside already-cut bridges before it overruns,
-    so the overrun still bumps every bridge's version."""
+    so the overrun still bumps every bridge's version (what a cached bridge
+    polyline is keyed on; the name dates from the bridges' walk memo, gone
+    since N6)."""
     case = build_k10(through="bridges")
     workbench, fp = case.workbench, case.fixed_point
     assert workbench.bridges, "the probe needs cut bridges"

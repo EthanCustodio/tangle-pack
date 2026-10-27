@@ -740,9 +740,9 @@ class TangleSession:
 
         Returns the geometric middle node so a bridge that forms a zone's own unstable
         boundary arc lands exactly on that zone's boundary (and, with boundary-inclusive
-        containment, is attributed to it). ``None`` for an empty bridge. The walk
-        behind it is memoised on the bridge, so classifying every bridge of a tangle
-        costs one walk each, not one per zone.
+        containment, is attributed to it). ``None`` for an empty bridge. Each call
+        gathers the bridge's points afresh (no read is memoised since N6), and
+        :meth:`classify_bridge` makes one call per bridge, not one per zone.
         """
         return polyline_midpoint(bridge.get_point_array())
 

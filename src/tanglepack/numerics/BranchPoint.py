@@ -2,8 +2,9 @@
 Branch points: the nodes where several manifold branches meet.
 
 A :class:`BranchPoint` is a fixed point or a crossing, so it can carry up to
-two incoming and two outgoing branches of each stability instead of the single
-``forward`` / ``backward`` pair a plain :class:`~.Point.Point` has.
+two incoming and two outgoing branches of each stability, where a row of the
+:class:`~.PointStore.PointStore` lies on one chain and links one image and one
+preimage.
 
 Dev Notes:
 
@@ -30,11 +31,11 @@ class BranchPoint:
     Contains methods for two doubly linked lists.
 
     This class implements a doubly linked list to track geometrical point ordering.
-    This class differs from Point in that there are up to two incoming and outgoing
+    Unlike a row of the point store, it has up to two incoming and outgoing
     branches of both a stable and unstable manifold. Both intersection points and
     fixed points are represented by BranchPoints.
         EX: forward_branches, backward_branches
-    The BasePoint class implements a linked list to track the iterates of the point.
+    Its iterates are a linked list of BranchPoints.
     There is only one branch of this linked list.
         EX: next_iterate, prev_iterate
 
@@ -129,9 +130,7 @@ class BranchPoint:
         slot holds the chain and the chain names this point as its anchor.
 
         Args:
-            chain (Chain or Point): The branch's chain. A ``Point`` stands for
-                the chain it lies on (the N7a adapter for hand-built curves,
-                which N7b removes).
+            chain (Chain): The branch's chain.
             branch_index (int): The branch of the BranchPoint you wish to insert
                 the chain into.
 
@@ -150,9 +149,7 @@ class BranchPoint:
         slot holds the chain and the chain names this point as its anchor.
 
         Args:
-            chain (Chain or Point): The branch's chain. A ``Point`` stands for
-                the chain it lies on (the N7a adapter for hand-built curves,
-                which N7b removes).
+            chain (Chain): The branch's chain.
             branch_index (int): The branch of the BranchPoint you wish to insert
                 the chain into.
 

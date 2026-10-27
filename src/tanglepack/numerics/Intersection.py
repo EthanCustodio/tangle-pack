@@ -307,5 +307,5 @@ class Intersection:
         return self.seg_ids is None
 
     def get_point(self) -> NDArray[np.float64]:
-        """Return coords as a (2,) array, consistent with Point.get_point()."""
+        """Return coords as a (2,) array, consistent with BranchPoint.get_point()."""
         return np.array(self.coords, dtype=np.float64)

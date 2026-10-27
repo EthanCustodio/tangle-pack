@@ -103,7 +103,8 @@ def test_polyline_midpoint_of_an_empty_polyline_is_none():
 
 
 def test_polyline_midpoint_returns_a_copy_not_a_view():
-    """The input is routinely a memoised, shared, read-only point array."""
+    """The input is routinely a shared, read-only point array (a trellis's
+    cached bridge polyline)."""
     pts = np.array([[0.0, 0.0], [1.0, 0.0], [5.0, 0.0]])
     pts.flags.writeable = False
     mid = polyline_midpoint(pts)

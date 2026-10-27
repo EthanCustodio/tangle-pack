@@ -83,7 +83,7 @@ def saddle_session(
 
 
 def manifold_sizes(session_or_workbench: Any) -> dict[str, int]:
-    """Point count per registered manifold, keyed ``"<stability>/<orbit>.<branch>"``."""
+    """Number of points per registered manifold, keyed ``"<stability>/<orbit>.<branch>"``."""
     wb = getattr(session_or_workbench, "workbench", session_or_workbench)
     sizes: dict[str, int] = {}
     for (fp, stability, orbit, branch), manifold in wb.manifolds.items():

@@ -302,7 +302,7 @@ def figure_scaling(runs: dict, base: dict, out: Path) -> list[Path]:
                     linewidth=2, label=f"{name} ({label})")
     ax.set_yscale("log")
     ax.set_xlabel("blast", fontsize=8, color=MUTED)
-    ax.set_ylabel("Point objects", fontsize=8, color=MUTED)
+    ax.set_ylabel("points (store rows)", fontsize=8, color=MUTED)
     ax.legend(frameon=False, fontsize=7)
     ax.set_title("points per blast", fontsize=9, loc="left", color=INK)
     _style(ax)

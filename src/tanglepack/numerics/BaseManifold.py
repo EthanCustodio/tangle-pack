@@ -13,22 +13,20 @@ It exposes the array / plot helpers every other layer reads a curve through.
 
 Dev Notes:
 
-Include return type hints including hints like Union[np.ndarray, list[Point]]
-
 The five array getters are one gather: :meth:`BaseManifold._collect` takes the
 row filter (all / iterated / non-iterated), what to read off each row (point
 or cdist), and whether to stop at the tail; every public getter is a thin
 wrapper over it. A ``BranchPoint`` root is the one node read one at a time
 (``_has_iterate`` / ``_iterate_of``): it is no row (D5; its storage is N8's).
 
-Ends are rows inside (N7a); ``root`` / ``tail`` read a row as its store's
-``Point``, N3's adapter, made on first read and the same object on every read.
-The node adapters (``_walk_nodes``, ``first_node``, ``return_nodes=True``)
-have no library caller; N7b deletes them with ``Point``.
+Ends are rows inside (N7a); ``root`` / ``tail`` read a row as an
+:class:`~.PointStore.End` record (N7b): a value built from the store's columns
+on every read, with no links, so two reads are equal and are not one object.
+Compare ends by row (``End.id``), never by identity.
 
 A curve reads past its own ends where its chain goes on: ``get_cdist_array``
 runs to the chain's end (past a trimmed tail, into blast images growth merged
-onto a branch), and so does ``_walk_nodes(stop_at_final=False)``. Only
+onto a branch), and so does ``_rows(stop_at_final=False)``. Only
 removing an end from its chain breaks a view, which only the merge's keeper
 branch (b) does to the existing point, and no case reaches it.
 
@@ -67,9 +65,9 @@ class BaseManifold:
     extracting information from it and plotting.
 
     Attributes:
-        root (Point or BranchPoint): First point in the manifold, stored as a
-            row of ``store`` (or the periodic point) and read as its ``Point``.
-        tail (Point or BranchPoint): Final point in the manifold, stored and
+        root (End or BranchPoint): First point in the manifold, stored as a
+            row of ``store`` (or the periodic point) and read as its ``End``.
+        tail (End or BranchPoint): Final point in the manifold, stored and
             read as ``root``. If not specified the tail is the last point of
             the root's chain.
         store (PointStore): The store of the curve's rows.
@@ -107,14 +105,14 @@ class BaseManifold:
         Initializes the manifold.
 
         Args:
-            root (Point, BranchPoint or int): First point in the manifold: the
-                periodic point, a row of ``store`` or a ``Point`` (kept as its row).
+            root (End, BranchPoint or int): First point in the manifold: the
+                periodic point, a row of ``store`` or an ``End`` (kept as its row).
             stability (Stability): Stability of the manifold.
             stretch_param (float): Amount by which two points on the manifold separate by
             upon a single iteration of the map. Usually denoted 'alpha'.
             fixed_point (FixedPoint): Fixed point that the manifold originates from.
             name (str, optional): Name of the manifold. Defaults to "unnamed".
-            tail (Optional[Point, BranchPoint or int], optional): Final point in
+            tail (Optional[End, BranchPoint or int], optional): Final point in
                 the manifold, as ``root``. If not specified the tail is the last
                 point of the root's chain.
             branch_index (Optional[int], optional): If the manifold is attached to a
@@ -129,8 +127,12 @@ class BaseManifold:
                 (``ManifoldMachine.iterate_manifold``); the caller must set it before
                 the object is indexed or registered.
             store (Optional[PointStore]): The store of the curve's rows.
-                Required for a row root; a ``Point`` end brings its own, and a
-                periodic-point root takes its slot chain's.
+                Required for a row root (an ``End`` names its row, not its
+                store); a periodic-point root takes its slot chain's.
+
+        Raises:
+            TypeError: An end is not an ``End``, an integer row or a BranchPoint.
+            ValueError: A row end on a curve with no store.
         """
 
         self._version: int = 0
@@ -179,9 +181,9 @@ class BaseManifold:
 
     @property
     def root(self) -> Optional[End | BranchPoint]:
-        """First point in the manifold: the periodic point, or the root row as its
-        store's ``Point`` (N3's adapter, made on first read and the same object on
-        every read; N7b makes ends records). Reassigning it bumps the version."""
+        """First point in the manifold: the periodic point, or the root row as an
+        :class:`~.PointStore.End` (a fresh value per read). Reassigning it bumps
+        the version."""
         return self._end(self._root)
 
     @root.setter
@@ -211,8 +213,10 @@ class BaseManifold:
         return np.array(self._rows()[2], dtype=np.int64)
 
     def _stored(self, end: Optional[End | BranchPoint | int]) -> int | BranchPoint | None:
-        """An end as the curve stores it: an ``End`` becomes its row, an int stays
-        a row of :attr:`store`; a BranchPoint or None is kept as given."""
+        """An end as the curve stores it: an ``End`` becomes its row, an integer
+        stays a row of :attr:`store`; a BranchPoint or None is kept as given.
+        Anything else raises ``TypeError``, and a row on a curve with no store
+        (none given, none adopted from a periodic root's slot) ``ValueError``."""
         if end is None or isinstance(end, BranchPoint):
             return end
         if isinstance(end, End):
@@ -245,7 +249,7 @@ class BaseManifold:
 
         Args:
             final_node (Optional[End | int]): Last node (inclusive), a row or
-                its ``Point``. None (the default) reads to the tail, or to the
+                its ``End``. None (the default) reads to the tail, or to the
                 chain's end when the tail is None; a node not on the chain at or
                 after the root reads to the chain's end, as a walk that never
                 meets it did.
@@ -345,21 +349,16 @@ class BaseManifold:
                 keep. ``"iterated"`` keeps only nodes that already have a
                 ``num_iterates``-step image (and yields that IMAGE, not the node);
                 ``"non_iterated"`` keeps only the nodes that do not.
-            value (Literal["point", "cdist"]): What to read off each kept node
-                when ``return_nodes`` is False. Ignored when it is True.
+            value (Literal["point", "cdist"]): What to read off each kept node.
             num_iterates (int): Step count for the ``kind`` filter.
             final_node (Optional[End | int]): Last node to read to (inclusive);
                 defaults to the manifold's tail.
-            return_nodes (bool): Return the nodes themselves instead of an
-                array (the adapter N7b deletes: each row read as its store's
-                ``Point``; no library path asks for it).
             stop_at_final (bool): False reads to the end of the root's chain,
                 ignoring ``final_node`` and the tail.
 
         Returns:
-            list[Point] or np.ndarray: The nodes, or an ``(N, 2)`` coordinate
-            array / ``(N, 1)`` cdist array. An empty read gives ``[]`` or an
-            empty array.
+            np.ndarray: An ``(N, 2)`` coordinate array or an ``(N, 1)`` cdist
+            array. An empty read gives an empty array.
 
         Raises:
             ValueError: The BranchPoint root claims a ``num_iterates`` iterate
@@ -424,20 +423,18 @@ class BaseManifold:
         self, final_node: Optional[End | int] = None
     ) -> NDArray[np.float64]:
         """
-        Reads the manifold in curve order, root first, and returns either
-        a list of Point objects or an array of (x, y) coordinates.
+        Reads the manifold in curve order, root first, as an array of (x, y)
+        coordinates.
 
         Parameters:
             final_node (Optional[End | int]): If specified, stop reading at this node.
-            return_nodes (bool): If True, return a list of Point objects;
-                else return an np.ndarray of [x, y]. Defaults to False.
 
         Returns:
-            list[Point] or np.ndarray of shape (N, 2)
+            np.ndarray of shape (N, 2)
 
         Note:
-            Every call gathers afresh: the array (or node list) is the caller's
-            own, safe to modify.
+            Every call gathers afresh: the array is the caller's own, safe to
+            modify.
         """
         return self._collect("all", final_node=final_node)
 
@@ -457,8 +454,8 @@ class BaseManifold:
         self, final_node: Optional[End | int] = None
     ) -> NDArray[np.float64]:
         """
-        Reads the manifold in curve order, root first, and returns either
-        a list of Point objects or an array of their canonical distances.
+        Reads the manifold in curve order, root first, as an array of its
+        canonical distances.
 
         Note:
             This read has always covered the whole curve to the end of its
@@ -467,7 +464,7 @@ class BaseManifold:
             returned array).
 
         Returns:
-            list[Point] or np.ndarray of shape (N, 1)
+            np.ndarray of shape (N, 1)
         """
         return self._collect(
             "all",
@@ -487,11 +484,9 @@ class BaseManifold:
         Args:
             num_iterates (int, optional): Number of iterates. Defaults to 1.
             final_node (Optional[End | int]): If specified, stop reading at this node.
-            return_nodes (bool, optional): If True, return a list of Point objects;
-                else return an np.ndarray of [x, y]. Defaults to False.
 
         Returns:
-            list[Point] or np.ndarray of shape (N, 2)
+            np.ndarray of shape (N, 2)
         """
         return self._collect(
             "non_iterated",
@@ -526,17 +521,15 @@ class BaseManifold:
         final_node: Optional[End | int] = None,
     ) -> NDArray[np.float64]:
         """
-        Reads the manifold in curve order, root first, and returns either
-        a list of Point objects or an array of (x, y) coordinates corresponding to
-        the num_iterates-step iterates of the points that have them.
+        Reads the manifold in curve order, root first, as an array of the (x, y)
+        coordinates of the num_iterates-step iterates of the points that have them.
 
         Parameters:
+            num_iterates (int, optional): Number of iterates. Defaults to 1.
             final_node (Optional[End | int]): If specified, stop reading at this node.
-            return_nodes (bool): If True, return list of Point objects;
-                else return np.ndarray of [x, y]. Defaults to False.
 
         Returns:
-            list[Point] or np.ndarray of shape (N, 2)
+            np.ndarray of shape (N, 2)
 
         Raises:
             ValueError: A point claims to have an iterate that is actually None.

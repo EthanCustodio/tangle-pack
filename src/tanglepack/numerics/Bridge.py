@@ -87,13 +87,13 @@ class Bridge(BaseManifold):
             not get the tail via walk.
 
         Args:
-            root (Point, BranchPoint or int): The root of the bridge: a row of
-                ``store`` (or its ``Point``), or the periodic point of an anchor
+            root (End, BranchPoint or int): The root of the bridge: a row of
+                ``store`` (or its ``End``), or the periodic point of an anchor
                 bridge.
             stability (Stability): Stability of the parent curve.
             stretch_param (float): The parent's stretch parameter.
             fixed_point (FixedPoint): The fixed point the parent emanates from.
-            tail (Point or int): The tail of the bridge, a row (or its ``Point``).
+            tail (End or int): The tail of the bridge, a row (or its ``End``).
             name (str, optional): Name of the bridge. Defaults to 'unnamed'.
             branch_index (Optional[int]): Branch of an inversion fixed point.
             manifold_key (Optional[ManifoldKey]): Keyword-only and REQUIRED -- the
@@ -199,17 +199,17 @@ class Bridge(BaseManifold):
     def _check_input_types(self, root: End | BranchPoint | int, tail: End | int) -> None:
         """
         Checks that the tail used to construct the bridge is a point of the
-        curve (a row or its ``Point``) rather than a BranchPoint.
+        curve (a row or its ``End``) rather than a BranchPoint.
 
         Args:
-            root (Point, BranchPoint or int): Root of the bridge. Adjacent to the
+            root (End, BranchPoint or int): Root of the bridge. Adjacent to the
                 first intersection point.
-            tail (Point or int): Tail of the bridge. Adjacent to the second
+            tail (End or int): Tail of the bridge. Adjacent to the second
                 intersection point.
 
         Raises:
             ValueError: A tail must be specified to construct a bridge.
-            TypeError: Tail must be a Point.
+            TypeError: The tail is a BranchPoint, not a row of the curve.
         """
 
         if tail is None:

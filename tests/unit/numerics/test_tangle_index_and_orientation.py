@@ -3,8 +3,8 @@
 Two Phase 1 fixes are pinned here.
 
 1.3 -- A bridge is cut from an already-indexed unstable manifold and therefore
-reuses that manifold's rows. The edge-dedup table used to drop
-those segments outright (``_insert_segment`` returned ``None``), so
+reuses that manifold's rows. The edge-dedup table used to drop those segments
+outright (``_insert_segment`` returned ``None``), so
 ``Tangle._manifold_segs[bridge]`` came back empty and every ``for_manifold=``
 filter, trim and ``_segments_of``-based lookup saw the bridge as segment-less.
 The dedup must instead map the edge to the segment id that already exists and
