@@ -207,22 +207,21 @@ def test_get_point_cannot_write_into_the_store(store) -> None:
 
 
 def test_a_blasted_build_leaves_phantoms_as_rows(k28_partitioned) -> None:
-    """Growth, a blast and the topology never give a phantom a ``Point``: a row
-    with no cdist is either a phantom (no ``Point``, no link of its own, named
-    by a point's link) or an initializer's detached fictitious tail (a
-    ``Point`` that keeps its one link to the chain it was cut from)."""
+    """Growth, a blast and the topology leave every row with no cdist either a
+    phantom (no link of its own, named by a point's link) or an initializer's
+    detached fictitious tail (it keeps its one link to the chain it was cut
+    from, which names nothing back); no phantom is given a ``Point``."""
     pytest.importorskip("tanglepack.numerics.PointStore")
     session, _ = k28_partitioned
     store = session.workbench.point_store
     n = len(store)
     no_cdist = np.isnan(store.cdist)
-    has_point = np.array([node is not None for node in store.nodes])
     own_link = (store.image >= 0) | (store.preimage >= 0)
     named = np.zeros(n, bool)
     for column in (store.image, store.preimage):
         named[column[column >= 0]] = True
 
-    phantoms = no_cdist & ~has_point
-    assert phantoms.any()
-    assert not (phantoms & own_link).any() and named[phantoms].all()
-    assert own_link[no_cdist & has_point].all()
+    phantoms, tails = no_cdist & ~own_link, no_cdist & own_link
+    assert phantoms.any() and named[phantoms].all()
+    assert tails.any() and not named[tails].any()
+    assert all(store.nodes[row] is None for row in np.flatnonzero(phantoms).tolist())

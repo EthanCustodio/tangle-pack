@@ -45,7 +45,7 @@ def _hand_walk(manifold, stop_at_final=True):
     ids = store.chain_of(first.row).ids
     lo = int(np.flatnonzero(ids == first.row)[0])
     hi = int(np.flatnonzero(ids == manifold.tail.row)[0]) + 1 if stop_at_final else len(ids)
-    nodes = [store.nodes[row] for row in ids[lo:hi].tolist()]
+    nodes = [store.node(row) for row in ids[lo:hi].tolist()]
     return nodes if head is None else [head, *nodes]
 
 
@@ -161,7 +161,8 @@ def test_collect_rejects_a_broken_iterate_link(grown_unstable, monkeypatch):
 # one branch walker
 # --------------------------------------------------------------------------- #
 def test_first_node_steps_past_the_root_branch_point(initialized):
-    """A manifold anchored on a BranchPoint starts at the point its slot names."""
+    """A manifold anchored on a BranchPoint starts at position 0 of the chain
+    its slot holds."""
     workbench, fp = initialized
     manifold = workbench.manifolds[(fp, "unstable", 0, 0)]
 
@@ -176,8 +177,10 @@ def test_first_node_steps_past_the_root_branch_point(initialized):
         branch_index=0,
         manifold_key=(fp, "unstable", 0, 0),
     )
-    assert view.first_node() is root.forward_branches[0]
-    assert view.first_node(1) is root.forward_branches[1]
+    assert view.first_node() is view.first_node(0) is not None
+    for branch, chain in enumerate(root.forward_branches):
+        first = None if chain is None else chain.store.node(int(chain.ids[0]))
+        assert view.first_node(branch) is first
 
 
 def test_first_node_on_an_ordinary_root_is_the_root(initialized):

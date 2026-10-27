@@ -105,8 +105,9 @@ def test_bridge_endpoints_are_bracketing_manifold_nodes(henon_tangle_with_bridge
             if node_index == 0 or node_index == len(nodes) - 1:
                 continue  # no two-sided neighbourhood to interpolate across
             chord_cdist = Tangle._cdist_between(
-                nodes[node_index - 1],
-                nodes[node_index + 1],
+                node.store,
+                nodes[node_index - 1].row,
+                nodes[node_index + 1].row,
                 "unstable",
                 np.asarray(node.get_point()),
             )

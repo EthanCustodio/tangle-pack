@@ -11,7 +11,7 @@ bijection.
 
 The merge states no case reaches and one chain cannot hold, (f)-(h), raise.
 A point laid right after a periodic point (a crossing separator, a refined
-pair at the anchor) becomes position 0 of the chain hanging there and its slot.
+pair at the anchor) becomes position 0 of the chain its slot holds.
 The iterate list both point kinds inherit is tested here too.
 """
 
@@ -83,6 +83,24 @@ def test_a_grown_tangle_holds_the_invariants(small_tangle) -> None:
     """Growth, refinement and the crossing cut keep the chains exact."""
     workbench, _fp = small_tangle
     assert_chains_hold(workbench)
+
+
+def test_ids_are_the_rows_from_root_to_tail(blasted) -> None:
+    """``ids`` is a fresh array of the rows a curve reads from its root to its
+    tail: cdist never decreases along it, no row is in it twice, and a
+    periodic-point root, which has no row, is not in it."""
+    workbench, _fp = blasted
+    store = workbench.point_store
+    curves = [*workbench.manifolds.values(), *workbench.bridges, *workbench._image_curves]
+    assert any(isinstance(curve.root, BranchPoint) for curve in curves)
+    for curve in curves:
+        ids = curve.ids
+        head, _store, rows = curve._rows()
+        np.testing.assert_array_equal(ids, rows)
+        assert ids.dtype == np.int64 and not np.shares_memory(ids, rows)
+        assert len(np.unique(ids)) == len(ids)
+        assert (np.diff(store.cdist[ids]) >= 0).all()
+        assert len(ids) == len(curve.points) - (head is not None)
 
 
 def test_a_blast_holds_the_invariants(blasted) -> None:
@@ -197,32 +215,34 @@ def test_branch_point_creation() -> None:
 
 @pytest.mark.parametrize("direction", ["forward", "backward"])
 def test_a_branch_point_hangs_a_chain_on_a_slot(direction: str) -> None:
-    """``insert_point_*`` fills one slot and makes the branch point the chain's
-    anchor, the left neighbour of its first position; the other slots stay empty."""
+    """``insert_point_*`` puts the chain in one slot and makes the branch point
+    its anchor, the left neighbour of its first position; the other slots stay
+    empty."""
     p = BranchPoint(NUM_BRANCHES)
     stability = "unstable" if direction == "forward" else "stable"
     curve = ManifoldMachine._manifold_from_points([Point(), Point()], stability, 2.5, None)
-    first = curve.root
+    chain = curve.store.chain_of(curve.ids[0])
 
-    getattr(p, f"insert_point_{direction}")(first, 1)
+    getattr(p, f"insert_point_{direction}")(chain, 1)
 
     slots = p.forward_branches if direction == "forward" else p.backward_branches
     others = p.backward_branches if direction == "forward" else p.forward_branches
-    chain = first.store.chain_of(first.row)
-    assert list(slots) == [None, first] and list(others) == [None] * NUM_BRANCHES
-    assert chain.anchor is p and chain.node_at(-1) is p and first.stretch_param == 2.5
+    assert list(slots) == [None, chain] and list(others) == [None] * NUM_BRANCHES
+    assert chain.anchor is p and chain.node_at(-1) is p and chain.stretch_param == 2.5
 
 
 def test_a_slot_holding_another_chain_refuses_a_second() -> None:
-    """A branch is one chain: hanging another chain's point on its slot raises."""
+    """A branch is one chain: hanging another chain on its slot raises."""
     p = BranchPoint(NUM_BRANCHES)
-    first = ManifoldMachine._manifold_from_points([Point()], "unstable", 1.0, None).root
-    other = ManifoldMachine._manifold_from_points([Point()], "unstable", 1.0, None).root
-    p.insert_point_forward(first, 0)
+    first, other = (
+        ManifoldMachine._manifold_from_points([Point()], "unstable", 1.0, None) for _ in range(2)
+    )
+    first_chain = first.store.chain_of(first.ids[0])
+    p.insert_point_forward(first_chain, 0)
 
     with pytest.raises(ValueError):
-        p.insert_point_forward(other, 0)
-    assert p.forward_branches[0] is first
+        p.insert_point_forward(other.store.chain_of(other.ids[0]), 0)
+    assert p.forward_branches[0] is first_chain
 
 
 @pytest.mark.parametrize("stability", ["unstable", "stable"])
@@ -253,15 +273,15 @@ def _periodic_point() -> BranchPoint:
     return point
 
 
-def _assert_first_on_its_chain(periodic: BranchPoint, first: Point, curve: BaseManifold) -> None:
-    """``first`` is position 0 of the chain hanging on ``periodic``, its slot
-    names it, and the curve reads it right after the periodic point."""
-    store = first.store
-    chain = store.chain_of(first.row)
-    assert periodic.forward_branches[0] is first and chain.anchor is periodic
-    assert store.position_of(first.row) == 0
+def _assert_first_on_its_chain(periodic: BranchPoint, first: int, curve: BaseManifold) -> None:
+    """Row ``first`` is position 0 of the chain ``periodic``'s slot holds, and
+    the curve reads it right after the periodic point."""
+    chain = periodic.forward_branches[0]
+    store = chain.store
+    assert chain.anchor is periodic and store.chain_of(first) is chain
+    assert store.position_of(first) == 0
     np.testing.assert_array_equal(store._position[chain.ids], np.arange(len(chain)))
-    assert curve.get_point_array(return_nodes=True)[:2] == [periodic, first]
+    assert curve.root is periodic and curve.ids[0] == first
 
 
 def test_a_separator_after_the_periodic_point_becomes_the_first_point() -> None:
@@ -272,7 +292,8 @@ def test_a_separator_after_the_periodic_point_becomes_the_first_point() -> None:
     tangle = Tangle()
     tangle.add_manifolds([polyline_manifold([(0.3, 1.0), (0.5, -1.0), (0.7, 1.0)], (fp, "stable", 0, 0))])
     curve = polyline_manifold([(1.0, 0.0), (2.0, 0.0)], (fp, "unstable", 0, 0), root=periodic)
-    seed = periodic.forward_branches[0]
+    chain = periodic.forward_branches[0]
+    seed = int(chain.ids[0])
     tangle.add_manifold(curve, index_segments=False)
     crossings = tangle.resolve_crossings()
     for i, crossing in enumerate(crossings):
@@ -280,15 +301,16 @@ def test_a_separator_after_the_periodic_point_becomes_the_first_point() -> None:
 
     (bridge,) = tangle.create_bridges(crossings, for_manifold=curve)
 
-    separator = periodic.forward_branches[0]
-    assert separator is not seed and separator.x == 0.5
-    assert bridge.get_point_array(return_nodes=True) == [periodic, separator, seed]
+    separator = int(chain.ids[0])
+    assert periodic.forward_branches[0] is chain
+    assert separator != seed and chain.store.xy[separator, 0] == 0.5 and chain.ids[1] == seed
+    assert bridge.root is periodic and bridge.ids.tolist() == [separator, seed]
     _assert_first_on_its_chain(periodic, separator, curve)
 
 
 def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> None:
     """The pair (periodic point, first point), refinable when the first point has
-    a preimage: the new point goes to position 0 and the slot follows it. Its
+    a preimage: the new point goes to position 0 and the slot keeps its chain. Its
     left neighbour, the periodic point's, is no point (NaN); the base read the
     stable branch's first point there and raised before it could insert."""
     periodic = _periodic_point()
@@ -303,10 +325,13 @@ def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> N
     half = lambda p: 0.5 * np.asarray(p)  # noqa: E731
     machine = ManifoldMachine(DynamicalSystem(double, half), area_cutoff=1e-5)
 
+    chain = periodic.forward_branches[0]
+
     machine.refine_manifold(curve)
 
-    first = periodic.forward_branches[0]
-    assert first is not points[0] and 0.0 < first.cdist < points[0].cdist
+    first = int(chain.ids[0])
+    assert periodic.forward_branches[0] is chain and first != points[0].row
+    assert 0.0 < chain.store.cdist[first] < points[0].cdist
     _assert_first_on_its_chain(periodic, first, curve)
     assert (np.diff(curve.get_cdist_array(), axis=0) >= 0).all()
 
