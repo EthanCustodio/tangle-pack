@@ -12,8 +12,10 @@ from typing import Optional, Sequence
 
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
+from .BranchPoint import BranchPoint
 from .Intersection import ManifoldKey, Stability
 from .Point import Point
+from .PointStore import PointStore
 
 #: Topological identity of a bridge: the registry ids of the two crossings it
 #: connects, ordered by increasing unstable canonical distance (i.e. in the
@@ -62,17 +64,18 @@ class Bridge(BaseManifold):
 
     def __init__(
         self,
-        root: Point,
+        root: Point | BranchPoint | int,
         stability: Stability,
         stretch_param: float,
         fixed_point: FixedPoint,
-        tail: Point,
+        tail: Point | int,
         name: str = "unnamed",
         branch_index: Optional[int] = None,
         *,
         manifold_key: Optional[ManifoldKey],
         first_intersection: Optional[int] = None,
         second_intersection: Optional[int] = None,
+        store: Optional[PointStore] = None,
     ) -> None:
         """
 
@@ -85,11 +88,13 @@ class Bridge(BaseManifold):
             not get the tail via walk.
 
         Args:
-            root (Point): The root of the bridge.
+            root (Point, BranchPoint or int): The root of the bridge: a row of
+                ``store`` (or its ``Point``), or the periodic point of an anchor
+                bridge.
             stability (Stability): Stability of the parent curve.
             stretch_param (float): The parent's stretch parameter.
             fixed_point (FixedPoint): The fixed point the parent emanates from.
-            tail (Point): The tail of the bridge.
+            tail (Point or int): The tail of the bridge, a row (or its ``Point``).
             name (str, optional): Name of the bridge. Defaults to 'unnamed'.
             branch_index (Optional[int]): Branch of an inversion fixed point.
             manifold_key (Optional[ManifoldKey]): Keyword-only and REQUIRED -- the
@@ -98,6 +103,8 @@ class Bridge(BaseManifold):
                 bridge's low-cdist end. ``None`` only for a partial piece.
             second_intersection (Optional[int]): Registry id of the crossing at the
                 bridge's high-cdist end. ``None`` only for a partial piece.
+            store (Optional[PointStore]): The store of the bridge's rows
+                (see :class:`~.BaseManifold.BaseManifold`).
 
         Raises:
             ValueError: A tail must be specified to construct a bridge.
@@ -113,6 +120,7 @@ class Bridge(BaseManifold):
             tail,
             branch_index,
             manifold_key=manifold_key,
+            store=store,
         )
 
         self.iterated: bool = False
@@ -146,11 +154,12 @@ class Bridge(BaseManifold):
             for a, b in zip(pieces, pieces[1:])
         ), "joined bridges must be consecutive pieces of one curve"
         return cls(
-            first.root,
+            first._root,
             first.stability,
             first.stretch_param,
             first.fixed_point,
-            last.tail,
+            last._tail,
+            store=first.store,
             branch_index=first.branch_index,
             manifold_key=first.manifold_key,
             first_intersection=first.first_intersection,
@@ -183,14 +192,16 @@ class Bridge(BaseManifold):
         """
         return self.first_intersection is None or self.second_intersection is None
 
-    def _check_input_types(self, root: Point, tail: Point) -> None:
+    def _check_input_types(self, root: Point | BranchPoint | int, tail: Point | int) -> None:
         """
-        Checks that the tail used to construct the bridge is a Point object
-        rather than a BranchPoint.
+        Checks that the tail used to construct the bridge is a point of the
+        curve (a row or its ``Point``) rather than a BranchPoint.
 
         Args:
-            root (Point): Root of the bridge. Adjacent to the first intersection point.
-            tail (Point): Tail of the bridge. Adjacent to the second intersection point.
+            root (Point, BranchPoint or int): Root of the bridge. Adjacent to the
+                first intersection point.
+            tail (Point or int): Tail of the bridge. Adjacent to the second
+                intersection point.
 
         Raises:
             ValueError: A tail must be specified to construct a bridge.
@@ -200,6 +211,6 @@ class Bridge(BaseManifold):
         if tail is None:
             raise ValueError("A tail must be specified to construct a bridge.")
 
-        if not isinstance(tail, Point):
+        if isinstance(tail, BranchPoint):
             raise TypeError(f"Tail must be a Point, not {type(tail).__name__}")
 

@@ -341,11 +341,12 @@ class BridgeIterator:
         image_key = bridge.fixed_point.advance_key(bridge.manifold_key, 1)
         if not isinstance(iterated, Bridge):
             iterated = Bridge(
-                root=iterated.root,
+                root=iterated._root,
+                store=iterated.store,
                 stability=iterated.stability,
                 stretch_param=iterated.stretch_param,
                 fixed_point=iterated.fixed_point,
-                tail=iterated.tail,
+                tail=iterated._tail,
                 branch_index=iterated.branch_index,
                 manifold_key=image_key,
             )

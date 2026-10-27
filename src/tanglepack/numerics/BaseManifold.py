@@ -1,11 +1,13 @@
 """
 A manifold curve as a view of a chain: walking, collecting and plotting one curve.
 
-:class:`BaseManifold` owns a ``root`` and a ``tail`` and reads the points
-between them off the :class:`~.PointStore.Chain` they lie on: the chain is
-found from the root's row (from the first point of the root's slot when the
-root is a :class:`~.BranchPoint.BranchPoint`) on EVERY read and never cached,
-so a view stays right through every insert, append and absorb of its chain.
+:class:`BaseManifold` stores its ``root`` and ``tail`` as rows of its
+``store`` (the root may be the periodic point's
+:class:`~.BranchPoint.BranchPoint`) and reads the rows between them off the
+:class:`~.PointStore.Chain` they lie on: the chain is found from the root's
+row (from the root's slot, which holds the chain, when the root is a
+``BranchPoint``) on EVERY read and never cached, so a view stays right through
+every insert, append and absorb of its chain.
 It exposes the array / plot helpers every other layer reads a curve through.
 :class:`~.Bridge.Bridge` is the subclass for a truncated arc.
 
@@ -18,6 +20,11 @@ row filter (all / iterated / non-iterated), what to read off each row (point
 or cdist), and whether to stop at the tail; every public getter is a thin
 wrapper over it. A ``BranchPoint`` root is the one node read one at a time
 (``_has_iterate`` / ``_iterate_of``): it is no row (D5; its storage is N8's).
+
+Ends are rows inside (N7a); ``root`` / ``tail`` read a row as its store's
+``Point``, N3's adapter, made on first read and the same object on every read.
+The node adapters (``_walk_nodes``, ``first_node``, ``return_nodes=True``)
+have no library caller; N7b deletes them with ``Point``.
 
 A curve reads past its own ends where its chain goes on: ``get_cdist_array``
 runs to the chain's end (past a trimmed tail, into blast images growth merged
@@ -61,9 +68,13 @@ class BaseManifold:
     extracting information from it and plotting.
 
     Attributes:
-        root (Point or BranchPoint): First point in the manifold.
-        tail (Point or BranchPoint): Final point in the manifold. If not specified the
-            tail is the last point of the root's chain.
+        root (Point or BranchPoint): First point in the manifold, stored as a
+            row of ``store`` (or the periodic point) and read as its ``Point``.
+        tail (Point or BranchPoint): Final point in the manifold, stored and
+            read as ``root``. If not specified the tail is the last point of
+            the root's chain.
+        store (PointStore): The store of the curve's rows.
+        ids (np.ndarray): The rows from the root to the tail.
         stability (Stability): Stability of the manifold.
         stretch_param (float): Amount by which two points on the manifold separate by
             upon a single iteration of the map. Usually denoted 'alpha'.
@@ -82,28 +93,31 @@ class BaseManifold:
 
     def __init__(
         self,
-        root: Point | BranchPoint,
+        root: Point | BranchPoint | int,
         stability: Stability,
         stretch_param: float,
         fixed_point: FixedPoint,
         name: str = "unnamed",
-        tail: Optional[Point | BranchPoint] = None,
+        tail: Optional[Point | BranchPoint | int] = None,
         branch_index: Optional[int] = None,
         *,
         manifold_key: Optional[ManifoldKey],
+        store: Optional[PointStore] = None,
     ) -> None:
         """
         Initializes the manifold.
 
         Args:
-            root (Point or BranchPoint): First point in the manifold.
+            root (Point, BranchPoint or int): First point in the manifold: the
+                periodic point, a row of ``store`` or a ``Point`` (kept as its row).
             stability (Stability): Stability of the manifold.
             stretch_param (float): Amount by which two points on the manifold separate by
             upon a single iteration of the map. Usually denoted 'alpha'.
             fixed_point (FixedPoint): Fixed point that the manifold originates from.
             name (str, optional): Name of the manifold. Defaults to "unnamed".
-            tail (Optional[Point or BranchPoint], optional): Final point in the manifold.
-                If not specified the tail is the last point of the root's chain.
+            tail (Optional[Point, BranchPoint or int], optional): Final point in
+                the manifold, as ``root``. If not specified the tail is the last
+                point of the root's chain.
             branch_index (Optional[int], optional): If the manifold is attached to a
                 fixed point with inversion this attribute specifies which branch the
                 manifold eminates from. Defaults to None.
@@ -115,9 +129,15 @@ class BaseManifold:
                 transient forward image whose branch the caller has yet to advance
                 (``ManifoldMachine.iterate_manifold``); the caller must set it before
                 the object is indexed or registered.
+            store (Optional[PointStore]): The store of the curve's rows.
+                Required for a row root; a ``Point`` end brings its own, and a
+                periodic-point root takes its slot chain's.
         """
 
         self._version: int = 0
+        self._store = store
+        self._root: int | BranchPoint | None = None
+        self._tail: int | BranchPoint | None = None
         self.root = root
         self.tail = tail
         self.stability = stability
@@ -126,7 +146,7 @@ class BaseManifold:
         self.name = name
         self.branch_index = branch_index
         self.manifold_key = manifold_key
-        if self.tail is None:
+        if self._tail is None:
             self._find_tail()
 
     # ── versioning ──────────────────────────────────────────────────────────
@@ -148,46 +168,88 @@ class BaseManifold:
         self._version += 1
 
     @property
+    def store(self) -> Optional[PointStore]:
+        """The store of the curve's rows: the one given, else (for a
+        periodic-point root) its slot chain's, adopted on first read; None for
+        a periodic point whose slot is empty."""
+        if self._store is None and isinstance(self._root, BranchPoint):
+            chain = self._slot_chain()
+            if chain is not None:
+                self._store = chain.store
+        return self._store
+
+    @property
     def root(self) -> Optional[Point | BranchPoint]:
-        """First point in the manifold. Reassigning it bumps the version."""
-        return self._root
+        """First point in the manifold: the periodic point, or the root row as its
+        store's ``Point`` (N3's adapter, made on first read and the same object on
+        every read; N7b makes ends records). Reassigning it bumps the version."""
+        return self._end(self._root)
 
     @root.setter
-    def root(self, point: Optional[Point | BranchPoint]) -> None:
-        self._root = point
+    def root(self, end: Optional[Point | BranchPoint | int]) -> None:
+        self._root = self._stored(end)
         self.bump_version()
 
     @property
     def tail(self) -> Optional[Point | BranchPoint]:
-        """Final point in the manifold. Reassigning it bumps the version."""
-        return self._tail
+        """Final point in the manifold, read as :attr:`root` is. Reassigning it
+        bumps the version."""
+        return self._end(self._tail)
 
     @tail.setter
-    def tail(self, point: Optional[Point | BranchPoint]) -> None:
-        # Deliberately unconditional -- do NOT short-circuit on `point is
+    def tail(self, end: Optional[Point | BranchPoint | int]) -> None:
+        # Deliberately unconditional -- do NOT short-circuit on `end ==
         # self._tail`. `_find_tail()` is what every growth pass ends with, and a
-        # pass that only REFINED the curve re-assigns the same tail object; that
+        # pass that only REFINED the curve re-assigns the same tail row; that
         # assignment is the only signal the manifold gets that its points moved.
-        self._tail = point
+        self._tail = self._stored(end)
         self.bump_version()
+
+    @property
+    def ids(self) -> NDArray[np.int64]:
+        """The rows from the root to the tail, in curve order, as a fresh array
+        (a periodic-point root has no row and is not in it)."""
+        return np.array(self._rows()[2], dtype=np.int64)
+
+    def _stored(self, end: Optional[Point | BranchPoint | int]) -> int | BranchPoint | None:
+        """An end as the curve stores it: a ``Point`` becomes its row (its store
+        adopted), an int stays a row of :attr:`store`; a BranchPoint or None is
+        kept as given."""
+        if end is None or isinstance(end, BranchPoint):
+            return end
+        if isinstance(end, Point):
+            row, store = end.row, end.store
+            if self._store is None:
+                self._store = store
+        else:
+            row, store = int(end), self.store
+        assert store is not None and store is self._store, "an end is a row of the curve's store"
+        return row
+
+    def _end(self, end: int | BranchPoint | None) -> Optional[Point | BranchPoint]:
+        """A stored end as the API reads it (the row's ``Point``, the adapter)."""
+        return end if end is None or isinstance(end, BranchPoint) else self._store.node(end)
 
     def _find_tail(self) -> None:
         """Set the tail to the last point of the root's chain."""
         _head, chain, _lo, _hi = self._span(stop_at_final=False)
-        self.tail = self.root if chain is None else chain.store.nodes[chain.ids[-1]]
+        self.tail = self._root if chain is None else int(chain.ids[-1])
 
     def _span(
-        self, final_node: Optional[Point] = None, stop_at_final: bool = True
+        self, final_node: Optional[Point | int] = None, stop_at_final: bool = True
     ) -> tuple[Optional[BranchPoint], Optional[Chain], int, int]:
         """
         Where the curve lies: its BranchPoint root (if any), its chain and the
         slice ``[lo, hi)`` of the chain from the root to ``final_node``.
 
+        A BranchPoint root starts at position 0 of the chain in its slot.
+
         Args:
-            final_node (Optional[Point]): Last node (inclusive). None (the
-                default) reads to the tail, or to the chain's end when the tail
-                is None; a node not on the chain at or after the root reads to
-                the chain's end, as a walk that never meets it did.
+            final_node (Optional[Point | int]): Last node (inclusive), a row or
+                its ``Point``. None (the default) reads to the tail, or to the
+                chain's end when the tail is None; a node not on the chain at or
+                after the root reads to the chain's end, as a walk that never
+                meets it did.
             stop_at_final (bool): If False, ignore final_node and read to the
                 chain's end.
 
@@ -199,44 +261,49 @@ class BaseManifold:
         Raises:
             ValueError: The root is a BranchPoint and :attr:`branch_index` is None.
         """
-        root = self.root
+        root = self._root
         head = root if isinstance(root, BranchPoint) else None
-        first = self.first_node() if head is not None else root
-        if first is None:
-            return head, None, 0, 0
-        store = first.store
-        chain = store.chain_of(first.row)
+        if head is not None:
+            chain, lo = self._slot_chain(), 0
+        elif root is None:
+            return None, None, 0, 0
+        else:
+            chain, lo = self._store.chain_of(root), self._store.position_of(root)
         if chain is None:
             return head, None, 0, 0
-        lo = store.position_of(first.row)
         hi = len(chain)
         if stop_at_final:
-            final = self.tail if final_node is None else final_node
+            final = self._tail if final_node is None else final_node
+            if isinstance(final, Point):
+                final = final.row
             if head is not None and final is head:
                 hi = lo
-            elif isinstance(final, Point) and store.chain_of(final.row) is chain:
-                position = store.position_of(final.row)
+            elif isinstance(final, (int, np.integer)) and chain.store.chain_of(final) is chain:
+                position = chain.store.position_of(final)
                 hi = position + 1 if position >= lo else hi
         return head, chain, lo, hi
 
     def _rows(
-        self, final_node: Optional[Point] = None, stop_at_final: bool = True
+        self, final_node: Optional[Point | int] = None, stop_at_final: bool = True
     ) -> tuple[Optional[BranchPoint], Optional[PointStore], NDArray[np.int64]]:
         """The BranchPoint root (if any), the store and the rows of the curve after
         the root, in curve order (a lone point off every chain is its own row)."""
         head, chain, lo, hi = self._span(final_node, stop_at_final)
         if chain is not None:
             return head, chain.store, chain.ids[lo:hi]
-        root = self.root
+        root = self._root
         if root is None or head is not None:
             return head, None, np.empty(0, dtype=np.int64)
-        return None, root.store, np.array([root.row], dtype=np.int64)
+        return None, self._store, np.array([root], dtype=np.int64)
 
     def _walk_nodes(
         self, final_node: Optional[Point] = None, stop_at_final: bool = True
     ) -> Iterator[Point]:
         """
         Yield every node from the root along the stability direction.
+
+        An adapter N7b deletes (no library path calls it): each row is read
+        as its store's ``Point``; read :attr:`ids` instead.
 
         Args:
             final_node (Optional[Point]): Last node to yield (inclusive).
@@ -246,7 +313,7 @@ class BaseManifold:
                 end of the root's chain.
         """
         head, store, rows = self._rows(final_node, stop_at_final)
-        nodes = [] if store is None else [store.nodes[row] for row in rows.tolist()]
+        nodes = [] if store is None else [store.node(row) for row in rows.tolist()]
         return iter(nodes if head is None else [head, *nodes])
 
     def first_node(
@@ -258,11 +325,10 @@ class BaseManifold:
 
         A manifold rooted at a fixed point (or at a crossing) starts on a
         :class:`BranchPoint`, which carries up to two outgoing branches per
-        stability; the point the curve actually begins at is the one its slot
-        names, on the branch this manifold belongs to. This is the single
-        implementation of that step -- ``ManifoldMachine._branch_view``,
-        ``ManifoldInitializer.construct_kevin_way`` and the growth drivers all go
-        through it.
+        stability; the point the curve actually begins at is position 0 of the
+        chain its slot holds, on the branch this manifold belongs to. An
+        adapter N7b deletes (no library path calls it): the engine reads the
+        slot's chain (:meth:`_slot_chain`).
 
         Args:
             branch_index (Optional[int]): Which branch of the root BranchPoint to
@@ -270,8 +336,9 @@ class BaseManifold:
 
         Returns:
             Optional[Point | BranchPoint]: The root itself when it is an ordinary
-            point, otherwise the first point on the requested branch. ``None`` if
-            the manifold has no root, or the branch was never initialized.
+            point, otherwise the first point on the requested branch, as its
+            store's ``Point``. ``None`` if the manifold has no root, or the
+            branch was never initialized.
 
         Raises:
             ValueError: The root is a BranchPoint and neither ``branch_index``
@@ -339,7 +406,9 @@ class BaseManifold:
             num_iterates (int): Step count for the ``kind`` filter.
             final_node (Optional[Point]): Last node to read to (inclusive);
                 defaults to the manifold's tail.
-            return_nodes (bool): Return the nodes themselves instead of an array.
+            return_nodes (bool): Return the nodes themselves instead of an
+                array (the adapter N7b deletes: each row read as its store's
+                ``Point``; no library path asks for it).
             stop_at_final (bool): False reads to the end of the root's chain,
                 ignoring ``final_node`` and the tail.
 
@@ -352,20 +421,9 @@ class BaseManifold:
             ValueError: The BranchPoint root claims a ``num_iterates`` iterate
                 that is None.
         """
-        head, store, rows = self._rows(final_node, stop_at_final)
-        if kind != "all":
-            if head is not None and self._has_iterate(head, num_iterates) != (kind == "iterated"):
-                head = None
-            if len(rows):
-                iterates = self._iterate_rows(store, rows, num_iterates)
-                rows = iterates[iterates >= 0] if kind == "iterated" else rows[iterates < 0]
-            if head is not None and kind == "iterated":
-                head = self._iterate_of(head, num_iterates)
-                if head is None:
-                    raise ValueError("Iterate computed incorrectly, NoneType added")
-
+        head, store, rows = self._select(kind, num_iterates, final_node, stop_at_final)
         if return_nodes:
-            nodes = [] if store is None else [store.nodes[row] for row in rows.tolist()]
+            nodes = [] if store is None else [store.node(row) for row in rows.tolist()]
             return nodes if head is None else [head, *nodes]
         if head is None and not len(rows):
             return np.array([])
@@ -378,6 +436,38 @@ class BaseManifold:
         if head is not None:
             points = np.vstack((head.get_point(), points))
         return points
+
+    def _select(
+        self,
+        kind: Literal["all", "iterated", "non_iterated"],
+        num_iterates: int = 1,
+        final_node: Optional[Point | int] = None,
+        stop_at_final: bool = True,
+    ) -> tuple[Optional[BranchPoint], Optional[PointStore], NDArray[np.int64]]:
+        """
+        The head, store and rows :meth:`_collect` gathers, in curve order.
+
+        For ``"iterated"`` they are the ``num_iterates``-step images of the rows
+        that have one, and the BranchPoint head's image; for ``"non_iterated"``
+        the rows with none, and the head when it has none.
+
+        Raises:
+            ValueError: The BranchPoint root claims a ``num_iterates`` iterate
+                that is None.
+        """
+        head, store, rows = self._rows(final_node, stop_at_final)
+        if kind == "all":
+            return head, store, rows
+        if head is not None and self._has_iterate(head, num_iterates) != (kind == "iterated"):
+            head = None
+        if len(rows):
+            iterates = self._iterate_rows(store, rows, num_iterates)
+            rows = iterates[iterates >= 0] if kind == "iterated" else rows[iterates < 0]
+        if head is not None and kind == "iterated":
+            head = self._iterate_of(head, num_iterates)
+            if head is None:
+                raise ValueError("Iterate computed incorrectly, NoneType added")
+        return head, store, rows
 
     def _iterate_rows(
         self, store: PointStore, rows: NDArray[np.int64], num_iterates: int
