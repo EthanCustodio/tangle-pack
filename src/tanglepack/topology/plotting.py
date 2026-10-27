@@ -3042,7 +3042,7 @@ def cartoon_enclosures(
         stable = np.asarray(
             arc_polyline(
                 trellis.manifolds[key], min(c_first, c_second), max(c_first, c_second),
-                stability="stable", tol=tol,
+                tol=tol,
             ),
             dtype=float,
         ).reshape(-1, 2)

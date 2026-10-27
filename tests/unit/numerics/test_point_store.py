@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tanglepack import BranchPoint, Point
+from tanglepack import BranchPoint
 from tanglepack.examples.henon import henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
 from tanglepack.numerics.PointStore import PointStore
@@ -82,46 +82,6 @@ def test_a_view_taken_before_a_resize_still_reads_its_row(store) -> None:
     assert not np.shares_memory(view, store.xy)
     np.testing.assert_array_equal(view, [1.0, 2.0])
     np.testing.assert_array_equal(store.xy[row], [1.0, 2.0])
-
-
-def test_link_setters_write_both_columns(store) -> None:
-    """``insert_next_iterate`` writes the image row of one point and the
-    preimage row of the other; clearing a link writes -1."""
-    point, image = Point(0.0, 0.0, 1.0, store=store), Point(1.0, 1.0, 2.0, store=store)
-
-    point.insert_next_iterate(image)
-
-    assert (store.image[point.row], store.preimage[image.row]) == (image.row, point.row)
-    assert point.next_iterate is image and image.prev_iterate is point
-    assert point.has_iterate_link() and image.has_iterate_link()
-    image.prev_iterate = None
-    assert store.preimage[image.row] == -1 and not image.has_iterate_link()
-
-
-def test_a_phantom_row_reads_as_a_point(store) -> None:
-    """A row with no ``Point`` (a phantom) counts as a link and reads through
-    ``node()`` as a ``Point`` with no cdist, created once."""
-    point = Point(1.0, 1.0, 1.0, store=store)
-    (phantom,) = store.append([[0.5, 0.5]], None)
-    store.link_phantoms([point.row], [phantom], "unstable")
-
-    assert store.nodes[phantom] is None
-    assert point.has_iterate_link()
-    preimage = point.prev_iterate
-    assert isinstance(preimage, Point) and preimage.cdist is None
-    assert preimage.row == phantom and store.node(phantom) is preimage
-    np.testing.assert_array_equal(preimage.get_point(), [0.5, 0.5])
-
-
-def test_a_link_across_stores_raises(store) -> None:
-    """An iterate link names a ``Point`` of the same store."""
-    other = type(store)()
-    point = Point(0.0, 0.0, store=store)
-
-    with pytest.raises(TypeError):
-        point.next_iterate = Point(1.0, 1.0, store=other)
-    with pytest.raises(TypeError):
-        point.prev_iterate = object()
 
 
 def test_the_columns_are_fresh_read_only_views_of_the_written_rows(store) -> None:
@@ -197,21 +157,11 @@ def test_an_absorbed_chain_hands_on_its_anchor_and_one_chain_holds_one(store) ->
         first.absorb(other, np.concatenate((first.ids, other.ids)))
 
 
-def test_get_point_cannot_write_into_the_store(store) -> None:
-    """``get_point()`` is a read-only view of the row."""
-    point = Point(1.0, 2.0, store=store)
-
-    with pytest.raises(ValueError):
-        point.get_point()[0] = 5.0
-    assert point.x == 1.0
-    assert not hasattr(point, "__dict__")
-
-
 def test_a_blasted_build_leaves_phantoms_as_rows(k28_partitioned) -> None:
     """Growth, a blast and the topology leave every row with no cdist either a
     phantom (no link of its own, named by a point's link) or an initializer's
     detached fictitious tail (it keeps its one link to the chain it was cut
-    from, which names nothing back); no phantom is given a ``Point``."""
+    from, which names nothing back)."""
     pytest.importorskip("tanglepack.numerics.PointStore")
     session, _ = k28_partitioned
     store = session.workbench.point_store
@@ -225,4 +175,3 @@ def test_a_blasted_build_leaves_phantoms_as_rows(k28_partitioned) -> None:
     phantoms, tails = no_cdist & ~own_link, no_cdist & own_link
     assert phantoms.any() and named[phantoms].all()
     assert tails.any() and not named[tails].any()
-    assert all(store.nodes[row] is None for row in np.flatnonzero(phantoms).tolist())

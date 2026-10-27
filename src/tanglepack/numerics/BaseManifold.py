@@ -48,7 +48,7 @@ read would not have).
 
 from __future__ import annotations
 
-from typing import Iterator, Literal, Optional
+from typing import Literal, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -56,8 +56,7 @@ import matplotlib.pyplot as plt
 
 from .FixedPoint import FixedPoint
 from .BranchPoint import BranchPoint
-from .Point import Point
-from .PointStore import Chain, PointStore
+from .PointStore import Chain, End, PointStore
 from .Intersection import ManifoldKey, Stability
 
 
@@ -93,12 +92,12 @@ class BaseManifold:
 
     def __init__(
         self,
-        root: Point | BranchPoint | int,
+        root: End | BranchPoint | int,
         stability: Stability,
         stretch_param: float,
         fixed_point: FixedPoint,
         name: str = "unnamed",
-        tail: Optional[Point | BranchPoint | int] = None,
+        tail: Optional[End | BranchPoint | int] = None,
         branch_index: Optional[int] = None,
         *,
         manifold_key: Optional[ManifoldKey],
@@ -179,25 +178,25 @@ class BaseManifold:
         return self._store
 
     @property
-    def root(self) -> Optional[Point | BranchPoint]:
+    def root(self) -> Optional[End | BranchPoint]:
         """First point in the manifold: the periodic point, or the root row as its
         store's ``Point`` (N3's adapter, made on first read and the same object on
         every read; N7b makes ends records). Reassigning it bumps the version."""
         return self._end(self._root)
 
     @root.setter
-    def root(self, end: Optional[Point | BranchPoint | int]) -> None:
+    def root(self, end: Optional[End | BranchPoint | int]) -> None:
         self._root = self._stored(end)
         self.bump_version()
 
     @property
-    def tail(self) -> Optional[Point | BranchPoint]:
+    def tail(self) -> Optional[End | BranchPoint]:
         """Final point in the manifold, read as :attr:`root` is. Reassigning it
         bumps the version."""
         return self._end(self._tail)
 
     @tail.setter
-    def tail(self, end: Optional[Point | BranchPoint | int]) -> None:
+    def tail(self, end: Optional[End | BranchPoint | int]) -> None:
         # Deliberately unconditional -- do NOT short-circuit on `end ==
         # self._tail`. `_find_tail()` is what every growth pass ends with, and a
         # pass that only REFINED the curve re-assigns the same tail row; that
@@ -211,24 +210,24 @@ class BaseManifold:
         (a periodic-point root has no row and is not in it)."""
         return np.array(self._rows()[2], dtype=np.int64)
 
-    def _stored(self, end: Optional[Point | BranchPoint | int]) -> int | BranchPoint | None:
-        """An end as the curve stores it: a ``Point`` becomes its row (its store
-        adopted), an int stays a row of :attr:`store`; a BranchPoint or None is
-        kept as given."""
+    def _stored(self, end: Optional[End | BranchPoint | int]) -> int | BranchPoint | None:
+        """An end as the curve stores it: an ``End`` becomes its row, an int stays
+        a row of :attr:`store`; a BranchPoint or None is kept as given."""
         if end is None or isinstance(end, BranchPoint):
             return end
-        if isinstance(end, Point):
-            row, store = end.row, end.store
-            if self._store is None:
-                self._store = store
+        if isinstance(end, End):
+            row = end.id
+        elif isinstance(end, (int, np.integer)) and not isinstance(end, bool):
+            row = int(end)
         else:
-            row, store = int(end), self.store
-        assert store is not None and store is self._store, "an end is a row of the curve's store"
+            raise TypeError(f"an end is an End, a row (int) or a BranchPoint, not {type(end).__name__}")
+        if self.store is None:
+            raise ValueError("a row end needs the curve's store (store=)")
         return row
 
-    def _end(self, end: int | BranchPoint | None) -> Optional[Point | BranchPoint]:
-        """A stored end as the API reads it (the row's ``Point``, the adapter)."""
-        return end if end is None or isinstance(end, BranchPoint) else self._store.node(end)
+    def _end(self, end: int | BranchPoint | None) -> Optional[End | BranchPoint]:
+        """A stored end as the API reads it (the row's ``End`` record)."""
+        return end if end is None or isinstance(end, BranchPoint) else self._store.end(end)
 
     def _find_tail(self) -> None:
         """Set the tail to the last point of the root's chain."""
@@ -236,7 +235,7 @@ class BaseManifold:
         self.tail = self._root if chain is None else int(chain.ids[-1])
 
     def _span(
-        self, final_node: Optional[Point | int] = None, stop_at_final: bool = True
+        self, final_node: Optional[End | int] = None, stop_at_final: bool = True
     ) -> tuple[Optional[BranchPoint], Optional[Chain], int, int]:
         """
         Where the curve lies: its BranchPoint root (if any), its chain and the
@@ -245,7 +244,7 @@ class BaseManifold:
         A BranchPoint root starts at position 0 of the chain in its slot.
 
         Args:
-            final_node (Optional[Point | int]): Last node (inclusive), a row or
+            final_node (Optional[End | int]): Last node (inclusive), a row or
                 its ``Point``. None (the default) reads to the tail, or to the
                 chain's end when the tail is None; a node not on the chain at or
                 after the root reads to the chain's end, as a walk that never
@@ -274,8 +273,8 @@ class BaseManifold:
         hi = len(chain)
         if stop_at_final:
             final = self._tail if final_node is None else final_node
-            if isinstance(final, Point):
-                final = final.row
+            if isinstance(final, End):
+                final = final.id
             if head is not None and final is head:
                 hi = lo
             elif isinstance(final, (int, np.integer)) and chain.store.chain_of(final) is chain:
@@ -284,7 +283,7 @@ class BaseManifold:
         return head, chain, lo, hi
 
     def _rows(
-        self, final_node: Optional[Point | int] = None, stop_at_final: bool = True
+        self, final_node: Optional[End | int] = None, stop_at_final: bool = True
     ) -> tuple[Optional[BranchPoint], Optional[PointStore], NDArray[np.int64]]:
         """The BranchPoint root (if any), the store and the rows of the curve after
         the root, in curve order (a lone point off every chain is its own row)."""
@@ -295,60 +294,6 @@ class BaseManifold:
         if root is None or head is not None:
             return head, None, np.empty(0, dtype=np.int64)
         return None, self._store, np.array([root], dtype=np.int64)
-
-    def _walk_nodes(
-        self, final_node: Optional[Point] = None, stop_at_final: bool = True
-    ) -> Iterator[Point]:
-        """
-        Yield every node from the root along the stability direction.
-
-        An adapter N7b deletes (no library path calls it): each row is read
-        as its store's ``Point``; read :attr:`ids` instead.
-
-        Args:
-            final_node (Optional[Point]): Last node to yield (inclusive).
-                Defaults to the manifold's tail (None, the default, reads to
-                the tail, or to the chain's end when the tail is None).
-            stop_at_final (bool): If False, ignore final_node and read to the
-                end of the root's chain.
-        """
-        head, store, rows = self._rows(final_node, stop_at_final)
-        nodes = [] if store is None else [store.node(row) for row in rows.tolist()]
-        return iter(nodes if head is None else [head, *nodes])
-
-    def first_node(
-        self, branch_index: Optional[int] = None
-    ) -> Optional[Point | BranchPoint]:
-        """
-        Return the first ordinary point of this manifold, stepping past the root
-        :class:`BranchPoint` when the manifold is anchored to one.
-
-        A manifold rooted at a fixed point (or at a crossing) starts on a
-        :class:`BranchPoint`, which carries up to two outgoing branches per
-        stability; the point the curve actually begins at is position 0 of the
-        chain its slot holds, on the branch this manifold belongs to. An
-        adapter N7b deletes (no library path calls it): the engine reads the
-        slot's chain (:meth:`_slot_chain`).
-
-        Args:
-            branch_index (Optional[int]): Which branch of the root BranchPoint to
-                leave on. Defaults to :attr:`branch_index`.
-
-        Returns:
-            Optional[Point | BranchPoint]: The root itself when it is an ordinary
-            point, otherwise the first point on the requested branch, as its
-            store's ``Point``. ``None`` if the manifold has no root, or the
-            branch was never initialized.
-
-        Raises:
-            ValueError: The root is a BranchPoint and neither ``branch_index``
-                nor :attr:`branch_index` says which branch to leave on.
-        """
-        root = self.root
-        if not isinstance(root, BranchPoint):
-            return root
-        chain = self._slot_chain(branch_index)
-        return None if chain is None else chain.store.node(chain.ids[0])
 
     def _slot_chain(self, branch_index: Optional[int] = None) -> Optional[Chain]:
         """
@@ -371,13 +316,13 @@ class BaseManifold:
         slots = root.forward_branches if self.stability == "unstable" else root.backward_branches
         return slots[branch_index]
 
-    def _has_iterate(self, node: Point, num_iterates: int) -> bool:
+    def _has_iterate(self, node: BranchPoint, num_iterates: int) -> bool:
         """Whether ``node`` has its ``num_iterates``-step image along this stability."""
         if self.stability == "unstable":
             return node.exists_next_iterate(num_iterates)
         return node.exists_prev_iterate(num_iterates)
 
-    def _iterate_of(self, node: Point, num_iterates: int) -> Point:
+    def _iterate_of(self, node: BranchPoint, num_iterates: int) -> BranchPoint:
         """The ``num_iterates``-step image of ``node`` along this stability."""
         if self.stability == "unstable":
             return node.get_next_iterate(num_iterates)
@@ -389,10 +334,9 @@ class BaseManifold:
         *,
         value: Literal["point", "cdist"] = "point",
         num_iterates: int = 1,
-        final_node: Optional[Point] = None,
-        return_nodes: bool = False,
+        final_node: Optional[End | int] = None,
         stop_at_final: bool = True,
-    ) -> list[Point] | NDArray[np.float64]:
+    ) -> NDArray[np.float64]:
         """
         The single gather behind every array getter on this class.
 
@@ -404,7 +348,7 @@ class BaseManifold:
             value (Literal["point", "cdist"]): What to read off each kept node
                 when ``return_nodes`` is False. Ignored when it is True.
             num_iterates (int): Step count for the ``kind`` filter.
-            final_node (Optional[Point]): Last node to read to (inclusive);
+            final_node (Optional[End | int]): Last node to read to (inclusive);
                 defaults to the manifold's tail.
             return_nodes (bool): Return the nodes themselves instead of an
                 array (the adapter N7b deletes: each row read as its store's
@@ -422,9 +366,6 @@ class BaseManifold:
                 that is None.
         """
         head, store, rows = self._select(kind, num_iterates, final_node, stop_at_final)
-        if return_nodes:
-            nodes = [] if store is None else [store.node(row) for row in rows.tolist()]
-            return nodes if head is None else [head, *nodes]
         if head is None and not len(rows):
             return np.array([])
         if value == "cdist":
@@ -441,7 +382,7 @@ class BaseManifold:
         self,
         kind: Literal["all", "iterated", "non_iterated"],
         num_iterates: int = 1,
-        final_node: Optional[Point | int] = None,
+        final_node: Optional[End | int] = None,
         stop_at_final: bool = True,
     ) -> tuple[Optional[BranchPoint], Optional[PointStore], NDArray[np.int64]]:
         """
@@ -480,14 +421,14 @@ class BaseManifold:
         return rows
 
     def get_point_array(
-        self, final_node: Optional[Point] = None, return_nodes: bool = False
-    ) -> list[Point] | NDArray[np.float64]:
+        self, final_node: Optional[End | int] = None
+    ) -> NDArray[np.float64]:
         """
         Reads the manifold in curve order, root first, and returns either
         a list of Point objects or an array of (x, y) coordinates.
 
         Parameters:
-            final_node (Optional[Point]): If specified, stop reading at this node.
+            final_node (Optional[End | int]): If specified, stop reading at this node.
             return_nodes (bool): If True, return a list of Point objects;
                 else return an np.ndarray of [x, y]. Defaults to False.
 
@@ -498,7 +439,7 @@ class BaseManifold:
             Every call gathers afresh: the array (or node list) is the caller's
             own, safe to modify.
         """
-        return self._collect("all", final_node=final_node, return_nodes=return_nodes)
+        return self._collect("all", final_node=final_node)
 
     @property
     def points(self) -> NDArray[np.float64]:
@@ -513,8 +454,8 @@ class BaseManifold:
         return self._collect("all", value="cdist").reshape(-1)
 
     def get_cdist_array(
-        self, final_node: Optional[Point] = None, return_nodes: bool = False
-    ) -> list[Point] | NDArray[np.float64]:
+        self, final_node: Optional[End | int] = None
+    ) -> NDArray[np.float64]:
         """
         Reads the manifold in curve order, root first, and returns either
         a list of Point objects or an array of their canonical distances.
@@ -532,22 +473,20 @@ class BaseManifold:
             "all",
             value="cdist",
             final_node=final_node,
-            return_nodes=return_nodes,
             stop_at_final=False,
         )
 
     def get_non_iterated_point_array(
         self,
         num_iterates: int = 1,
-        final_node: Optional[Point] = None,
-        return_nodes: bool = False,
-    ) -> list[Point] | NDArray[np.float64]:
+        final_node: Optional[End | int] = None,
+    ) -> NDArray[np.float64]:
         """
         Returns the points that do not have a num_iterates-step iterate yet.
 
         Args:
             num_iterates (int, optional): Number of iterates. Defaults to 1.
-            final_node (Optional[Point]): If specified, stop reading at this node.
+            final_node (Optional[End | int]): If specified, stop reading at this node.
             return_nodes (bool, optional): If True, return a list of Point objects;
                 else return an np.ndarray of [x, y]. Defaults to False.
 
@@ -558,11 +497,10 @@ class BaseManifold:
             "non_iterated",
             num_iterates=num_iterates,
             final_node=final_node,
-            return_nodes=return_nodes,
         )
 
     def get_non_iterated_cdist_array(
-        self, num_iterates: int = 1, final_node: Optional[Point] = None
+        self, num_iterates: int = 1, final_node: Optional[End | int] = None
     ) -> NDArray[np.float64]:
         """
         Returns the canonical distances of the points that do not have a
@@ -570,7 +508,7 @@ class BaseManifold:
 
         Args:
             num_iterates (int, optional): Number of iterates. Defaults to 1.
-            final_node (Optional[Point]): If specified, stop reading at this node.
+            final_node (Optional[End | int]): If specified, stop reading at this node.
 
         Returns:
             np.ndarray of shape (N, 1)
@@ -585,16 +523,15 @@ class BaseManifold:
     def get_iterated_point_array(
         self,
         num_iterates: int = 1,
-        final_node: Optional[Point] = None,
-        return_nodes: bool = False,
-    ) -> list[Point] | NDArray[np.float64]:
+        final_node: Optional[End | int] = None,
+    ) -> NDArray[np.float64]:
         """
         Reads the manifold in curve order, root first, and returns either
         a list of Point objects or an array of (x, y) coordinates corresponding to
         the num_iterates-step iterates of the points that have them.
 
         Parameters:
-            final_node (Optional[Point]): If specified, stop reading at this node.
+            final_node (Optional[End | int]): If specified, stop reading at this node.
             return_nodes (bool): If True, return list of Point objects;
                 else return np.ndarray of [x, y]. Defaults to False.
 
@@ -608,7 +545,6 @@ class BaseManifold:
             "iterated",
             num_iterates=num_iterates,
             final_node=final_node,
-            return_nodes=return_nodes,
         )
 
     def plot(

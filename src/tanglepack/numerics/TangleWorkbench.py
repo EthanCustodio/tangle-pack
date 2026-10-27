@@ -48,6 +48,7 @@ from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
 from .BaseManifold import BaseManifold
 from .Bridge import Bridge, BridgeId
+from .BranchPoint import BranchPoint
 from .Intersection import Intersection, ManifoldKey, Stability
 from .IntersectionRegistry import DEDUP_RTOL, IntersectionRegistry
 from .IterateInference import infer_iterates
@@ -1752,7 +1753,10 @@ class TangleWorkbench:
                 self.Tangle.release_manifold(bridge)
             return existing
 
-        lo, hi = sorted(float(point.get_cdist("unstable")) for point in (bridge.root, bridge.tail))
+        lo, hi = sorted(
+            float(end.get_cdist("unstable") if isinstance(end, BranchPoint) else end.cdist)
+            for end in (bridge.root, bridge.tail)
+        )
         slack = DEDUP_RTOL * max(abs(hi), 1.0)
         fixed_point, _, orbit_index, _ = bridge.manifold_key
         first, second = (self._intersection_registry[end] for end in bid)

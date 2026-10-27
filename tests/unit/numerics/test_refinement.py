@@ -52,7 +52,7 @@ def test_refined_cdist_lies_strictly_between_its_neighbours(grown_unstable):
     assert chain.ids[position + 1] == p1
 
     machine.area_cutoff = 0.0  # refine this pair whatever its curvature area
-    next_layer = machine._refine_layer(chain, np.array([position]), manifold, viewer, None)
+    next_layer = machine._refine_layer(chain, np.array([position]), manifold, viewer)
     np.testing.assert_array_equal(next_layer, [position, position + 1])
     new_point = chain.ids[position + 1]
     assert chain.ids[position] == p0 and chain.ids[position + 2] == p1

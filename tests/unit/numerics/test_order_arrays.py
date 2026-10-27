@@ -12,7 +12,7 @@ bijection.
 The merge states no case reaches and one chain cannot hold, (f)-(h), raise.
 A point laid right after a periodic point (a crossing separator, a refined
 pair at the anchor) becomes position 0 of the chain its slot holds.
-The iterate list both point kinds inherit is tested here too.
+The periodic point's iterate list is tested here too.
 """
 
 from __future__ import annotations
@@ -24,18 +24,17 @@ import pytest
 
 from helpers.fakes import bare_fixed_point
 from helpers.polylines import polyline_manifold
-from tanglepack import BaseManifold, BranchPoint, Point
+from tanglepack import BaseManifold, BranchPoint
 from tanglepack.examples.henon import henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
-from tanglepack.numerics.BasePoint import BasePoint
 from tanglepack.numerics.PointStore import PointStore
 from tanglepack.numerics.Tangle import Tangle
 
 NUM_BRANCHES = 2
 
-#: Factories for the two point kinds the iterate list is shared by.
-POINT_KINDS: dict[str, Callable[[], BasePoint]] = {
-    "point": lambda: Point(),
+#: The point kind the iterate list belongs to (the periodic point; a row's
+#: links are store columns).
+POINT_KINDS: dict[str, Callable[[], BranchPoint]] = {
     "branch_point": lambda: BranchPoint(NUM_BRANCHES),
 }
 
@@ -190,16 +189,6 @@ def test_runs_that_both_end_on_a_tie_raise(machine) -> None:
 
 
 # ------------------------------------------------------------- points and branch points
-
-def test_point_creation() -> None:
-    """A fresh ``Point`` holds its coordinates and lies on no chain."""
-    p = Point(1.0, 2.0)
-
-    assert p.x == 1.0
-    assert p.y == 2.0
-    assert p.store.chain_of(p.row) is None and p.stretch_param is None
-    np.testing.assert_array_equal(p.get_point(), np.array([1.0, 2.0]))
-
 
 def test_branch_point_creation() -> None:
     """A fresh ``BranchPoint`` has one empty slot per branch in each direction."""

@@ -14,8 +14,7 @@ from __future__ import annotations
 
 from .DynamicalSystem import DynamicalSystem
 
-from .BasePoint import BasePoint
-from .Point import Point
+from .PointStore import End
 from .BranchPoint import BranchPoint
 
 from .FixedPointSolver import FixedPointSolver
@@ -43,8 +42,7 @@ from .gpu import enable_gpu, disable_gpu
 
 __all__ = [
     "DynamicalSystem",
-    "BasePoint",
-    "Point",
+    "End",
     "BranchPoint",
     "FixedPointSolver",
     "FixedPoint",

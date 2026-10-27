@@ -242,18 +242,6 @@ def test_point_arrays_reflect_growth(henon_tangle_with_bridges):
     assert grew, "growth should have refined at least one already-cut bridge"
 
 
-def test_node_walk_is_not_shared_between_callers(henon_tangle_with_bridges):
-    """``return_nodes=True`` hands out a private list on every call."""
-    workbench, _fp = henon_tangle_with_bridges
-    bridge = workbench.bridges[0]
-
-    nodes = bridge.get_point_array(return_nodes=True)
-    length = len(nodes)
-    nodes.append(nodes[0])
-
-    assert len(bridge.get_point_array(return_nodes=True)) == length
-
-
 # --------------------------------------------------------------------------- #
 # per-fixed-point branch memo
 # --------------------------------------------------------------------------- #

@@ -572,7 +572,6 @@ class Arc:
                 manifold,
                 lo.stable_cdist,
                 hi.stable_cdist,
-                stability="stable",
                 tol=-tol,
             )
         # A bridge's root and tail sit just PAST its crossings, so whichever curve
@@ -598,7 +597,6 @@ class Arc:
             curve,
             lo.unstable_cdist,
             hi.unstable_cdist,
-            stability="unstable",
             tol=-tol,
         )
 

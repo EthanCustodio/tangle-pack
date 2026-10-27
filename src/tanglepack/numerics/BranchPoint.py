@@ -18,15 +18,13 @@ from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 
-from .Point import Point
-from .BasePoint import BasePoint
 from .Intersection import Stability
 
 if TYPE_CHECKING:
     from .PointStore import Chain
 
 
-class BranchPoint(BasePoint):
+class BranchPoint:
     """
     Basic functionality for an intersection point in a manifold.
     Contains methods for two doubly linked lists.
@@ -85,7 +83,16 @@ class BranchPoint(BasePoint):
                     index 1 stores stable canonical distance.
         """
 
-        super().__init__(x=x, y=y)
+        self.x = x
+        self.y = y
+
+        self.cdist = None
+        self.edist = None
+
+        self.next_iterate = None
+        self.prev_iterate = None
+
+        self._set_coords()
 
         self.num_branches = num_branches
 
@@ -116,7 +123,7 @@ class BranchPoint(BasePoint):
 
         return self.cdists[index]
 
-    def insert_point_forward(self, chain: Chain | Point, branch_index: int) -> None:
+    def insert_point_forward(self, chain: Chain, branch_index: int) -> None:
         """
         Hangs a chain off this point at the given branch index: the branch's
         slot holds the chain and the chain names this point as its anchor.
@@ -131,15 +138,13 @@ class BranchPoint(BasePoint):
         Raises:
             ValueError: The slot already holds another chain.
         """
-        if isinstance(chain, Point):
-            chain = chain.store.chain_of(chain.row)
         held = self.forward_branches[branch_index]
         if held is not None and held is not chain:
             raise ValueError(f"branch {branch_index} already holds another chain")
         self.forward_branches[branch_index] = chain
         chain.anchor = self
 
-    def insert_point_backward(self, chain: Chain | Point, branch_index: int) -> None:
+    def insert_point_backward(self, chain: Chain, branch_index: int) -> None:
         """
         Hangs a chain off this point at the given backward branch index: the
         slot holds the chain and the chain names this point as its anchor.
@@ -154,10 +159,191 @@ class BranchPoint(BasePoint):
         Raises:
             ValueError: The slot already holds another chain.
         """
-        if isinstance(chain, Point):
-            chain = chain.store.chain_of(chain.row)
         held = self.backward_branches[branch_index]
         if held is not None and held is not chain:
             raise ValueError(f"branch {branch_index} already holds another chain")
         self.backward_branches[branch_index] = chain
         chain.anchor = self
+
+    def get_point(self) -> np.ndarray:
+        """
+        Get the coordinates of the point.
+
+        Returns:
+            np.ndarray: Array of shape (2, ) containing the coordinates of the point.
+        """
+
+        return self._coords
+
+    def set_x(self, x: float) -> None:
+        """
+        Sets the x-coordinate of the point. Also resets the interal _coords.
+
+        Args:
+            x (float): The x-coordinate of the point.
+        """
+
+        self.x = x
+        self._set_coords()
+
+    def set_y(self, y: float) -> None:
+        """
+        Sets the y-coordinate of the point. Also resets the internal _coords.
+
+        Args:
+            y (float): The y-coordinate of the point.
+        """
+
+        self.y = y
+        self._set_coords()
+
+    def insert_next_iterate(self, node: BranchPoint, num_iterates: int = 1) -> None:
+        """
+        Inserts 'node' after this object 'num_iterates' forward
+        in the iterate linked list.
+
+        Args:
+            node (BranchPoint): Iterate of the current point to insert into
+                the linked list.
+            num_iterations (int): Number of iterates forward to insert the point.
+
+        Raises:
+            ValueError: Intermediate iterates does not exist.
+            ValueError: The desired iterate does not exist.
+        """
+
+        current_node = self
+
+        for _ in range(num_iterates - 1):
+
+            if current_node.next_iterate is None:
+                raise ValueError("Intermediate iterates do not exist")
+
+            current_node = current_node.next_iterate
+
+        if current_node.next_iterate is not None:
+            raise ValueError(f"Iterate {num_iterates} already exists")
+
+        current_node.next_iterate = node
+        node.prev_iterate = current_node
+
+    def insert_prev_iterate(self, node: BranchPoint, num_iterates: int = 1) -> None:
+        """
+        Inserts node before this object 'num_iterates' backwards
+        in the iterate linked list.
+
+        Args:
+            node (BranchPoint): Iterate of the current point to insert into
+                the linked list.
+            num_iterations (int): Number of iterates backward to insert the point.
+
+        Raises:
+            ValueError: Intermediate iterates does not exist.
+            ValueError: The desired iterate does not exist.
+        """
+
+        current_node = self
+
+        for i in range(num_iterates - 1):
+
+            if current_node.prev_iterate is None:
+                raise ValueError("Intermediate iterates do not exist")
+
+            current_node = current_node.prev_iterate
+
+        if current_node.prev_iterate is not None:
+            raise ValueError(f"Pre-iterate {num_iterates} already exists")
+
+        current_node.prev_iterate = node
+        node.next_iterate = current_node
+
+    def get_next_iterate(self, num_iterates: int = 1) -> BranchPoint:
+        """
+        Gets the iterate 'num_iterates' forward.
+
+        Args:
+            num_iterates (int): Number of forward iterates.
+
+        Return:
+            BranchPoint: The iterate 'num_iterates' forward.
+        """
+
+        current_node = self
+
+        for _ in range(num_iterates):
+
+            if current_node is None:
+                return None
+
+            current_node = current_node.next_iterate
+
+        return current_node
+
+    def get_prev_iterate(self, num_iterates: int = 1) -> BranchPoint:
+        """
+        Gets the pre-iterate 'num_iterates' backwards.
+
+        Arge:
+            num_iterates (int): Number of backward iterates.
+
+        Return:
+            BranchPoint: The iterate 'num_iterates' backward.
+        """
+
+        current_node = self
+
+        for _ in range(num_iterates):
+
+            if current_node is None:
+                return None
+
+            current_node = current_node.prev_iterate
+
+        return current_node
+
+    def has_iterate_link(self) -> bool:
+        """
+        Whether the point has an image or a preimage.
+
+        The merge's tie rule reads it: of two points on one cdist the one with
+        an iterate link is the established point and is kept.
+
+        Returns:
+            bool: True if either iterate link is set.
+        """
+
+        return self.next_iterate is not None or self.prev_iterate is not None
+
+    def exists_next_iterate(self, num_iterates: int = 1) -> bool:
+        """
+        Checks if the iterate 'num_iterates' forward exists.
+
+        Args:
+            num_iterates (int): Number of iterates forward to check.
+        """
+
+        if self.get_next_iterate(num_iterates) is None:
+            return False
+        else:
+            return True
+
+    def exists_prev_iterate(self, num_iterates: int = 1) -> bool:
+        """
+        Checks if the pre-iterate 'num_iterates' backwards exists.
+
+        Args:
+            num_iterations (int): Number of iterates backwards to check.
+        """
+
+        if self.get_prev_iterate(num_iterates) is None:
+            return False
+        else:
+            return True
+
+    # ---------- internal helpers ----------
+    def _set_coords(self) -> None:
+        """
+        Sets the coordinate array based on the x and y value of the point.
+        """
+
+        self._coords = np.array([self.x, self.y])

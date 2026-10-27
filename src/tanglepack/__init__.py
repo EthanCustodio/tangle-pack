@@ -19,8 +19,6 @@ from . import numerics, topology, loom
 
 from .numerics import (
     DynamicalSystem,
-    BasePoint,
-    Point,
     BranchPoint,
     FixedPointSolver,
     FixedPoint,
@@ -68,8 +66,6 @@ __all__ = [
     "loom",
     # numerics
     "DynamicalSystem",
-    "BasePoint",
-    "Point",
     "BranchPoint",
     "FixedPointSolver",
     "FixedPoint",

@@ -84,7 +84,7 @@ def cartoon_zones(
             points = np.asarray(
                 arc_polyline(
                     workbench.manifolds[key], 0.0, cut.stable_cdist,
-                    stability="stable", tol=tol,
+                    tol=tol,
                 ),
                 dtype=float,
             )

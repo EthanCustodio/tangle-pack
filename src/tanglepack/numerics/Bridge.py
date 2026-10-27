@@ -14,8 +14,7 @@ from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 from .BranchPoint import BranchPoint
 from .Intersection import ManifoldKey, Stability
-from .Point import Point
-from .PointStore import PointStore
+from .PointStore import End, PointStore
 
 #: Topological identity of a bridge: the registry ids of the two crossings it
 #: connects, ordered by increasing unstable canonical distance (i.e. in the
@@ -64,11 +63,11 @@ class Bridge(BaseManifold):
 
     def __init__(
         self,
-        root: Point | BranchPoint | int,
+        root: End | BranchPoint | int,
         stability: Stability,
         stretch_param: float,
         fixed_point: FixedPoint,
-        tail: Point | int,
+        tail: End | int,
         name: str = "unnamed",
         branch_index: Optional[int] = None,
         *,
@@ -167,6 +166,11 @@ class Bridge(BaseManifold):
         )
 
     @property
+    def head(self) -> Optional[End | BranchPoint]:
+        """The bridge's first end, a read-only alias of :attr:`root`."""
+        return self.root
+
+    @property
     def id(self) -> Optional[BridgeId]:
         """
         This bridge's :data:`BridgeId`, or ``None`` when it is :attr:`partial`.
@@ -192,7 +196,7 @@ class Bridge(BaseManifold):
         """
         return self.first_intersection is None or self.second_intersection is None
 
-    def _check_input_types(self, root: Point | BranchPoint | int, tail: Point | int) -> None:
+    def _check_input_types(self, root: End | BranchPoint | int, tail: End | int) -> None:
         """
         Checks that the tail used to construct the bridge is a point of the
         curve (a row or its ``Point``) rather than a BranchPoint.
@@ -212,5 +216,5 @@ class Bridge(BaseManifold):
             raise ValueError("A tail must be specified to construct a bridge.")
 
         if isinstance(tail, BranchPoint):
-            raise TypeError(f"Tail must be a Point, not {type(tail).__name__}")
+            raise TypeError(f"Tail must be a row of the curve, not {type(tail).__name__}")
 

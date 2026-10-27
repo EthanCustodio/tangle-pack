@@ -58,15 +58,15 @@ from typing import Iterable, Literal, Optional, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
+from ..numerics.BranchPoint import BranchPoint
 from ..numerics.Intersection import Intersection, ManifoldKey
 from ..numerics.geometry import arc_polyline, point_in_polygon, signed_polygon_area
 from ..topology.TopologyResults import Arc
 
 if TYPE_CHECKING:
     from ..numerics.IntersectionRegistry import IntersectionRegistry
-    from ..numerics.BranchPoint import BranchPoint
     from ..numerics.FixedPoint import FixedPoint
-    from ..numerics.Point import Point
+    from ..numerics.PointStore import End
     from ..numerics.TangleWorkbench import TangleWorkbench
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,11 @@ logger.addHandler(logging.NullHandler())
 #: runs from a periodic point all the way OUT to its pip, which may span several
 #: consecutive arcs of the arrangement rather than exactly one.
 BoundaryArc = Arc
+
+
+def _stable_cdist(end: "End | BranchPoint") -> float:
+    """A stable tail's cdist: the periodic point's stable field, else the row's."""
+    return end.get_cdist("stable") if isinstance(end, BranchPoint) else end.cdist
 
 
 @dataclass
@@ -111,7 +116,7 @@ class ResonanceZone:
     boundary_intersection: Intersection
     cut_intersections: list[Intersection] = field(default_factory=list)
     intersection_ids: list[int] = field(default_factory=list)
-    previous_tails: dict[ManifoldKey, "Point | BranchPoint"] = field(
+    previous_tails: dict[ManifoldKey, "End | BranchPoint"] = field(
         default_factory=dict
     )
     boundary_arcs: list[Arc] = field(default_factory=list)
@@ -204,7 +209,7 @@ class ResonanceZone:
                 The arc's vertices, root first.
             """
             manifold = workbench.manifolds[key]
-            pts = list(arc_polyline(manifold, 0.0, cutoff, stability=stability, tol=tol))
+            pts = list(arc_polyline(manifold, 0.0, cutoff, tol=tol))
             pts.append(np.asarray(pip, dtype=float))
             anchor_id = _anchor_id(registry, key)
             if anchor_id is None or pip_id is None:
@@ -361,7 +366,7 @@ class ResonanceZone:
             manifold = workbench.manifolds[key]
             # Stable growth since the trim re-found the physical end: the trim
             # is already undone there, and restoring would cut the grown branch back.
-            if tail.get_cdist("stable") > manifold.tail.get_cdist("stable"):
+            if _stable_cdist(tail) > _stable_cdist(manifold.tail):
                 manifold.tail = tail
             else:
                 logger.info(
@@ -513,7 +518,7 @@ def define_resonance_zone(
     cut_ids = registry.iterate_orbit(intersection_id, max_len=max_len)
     cut_intersections = [registry[c] for c in cut_ids]
 
-    previous_tails: dict[ManifoldKey, "Point | BranchPoint"] = {}
+    previous_tails: dict[ManifoldKey, "End | BranchPoint"] = {}
     for ix in cut_intersections:
         bkey = ix.manifold_b_key
         if bkey is None or bkey in previous_tails:

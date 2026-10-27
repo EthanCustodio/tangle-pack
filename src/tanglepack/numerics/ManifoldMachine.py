@@ -92,7 +92,6 @@ import logging
 import numpy as np
 from numpy.typing import NDArray
 
-from .Point import Point
 from .PointStore import LEFT_OFF, Chain, PointStore
 from .FixedPoint import FixedPoint
 from .DynamicalSystem import DynamicalSystem
@@ -336,16 +335,6 @@ class ManifoldMachine:
         return BaseManifold(
             int(rows[0]), stability, stretch_param, fixed_point, tail=int(rows[-1]),
             manifold_key=None, store=store,
-        )
-
-    @staticmethod
-    def _manifold_from_points(
-        points: list[Point], stability: Stability, stretch_param: float, fixed_point: FixedPoint
-    ) -> BaseManifold:
-        """:meth:`_manifold_from_rows` over hand-built points (an adapter for the
-        tests, which N7b deletes)."""
-        return ManifoldMachine._manifold_from_rows(
-            points[0].store, [point.row for point in points], stability, stretch_param, fixed_point
         )
 
     def _iterate_manifold(self, manifold: BaseManifold) -> BaseManifold:
@@ -634,12 +623,7 @@ class ManifoldMachine:
         output.tail = manifold_1._tail if rest_is_1 else manifold_2._tail
         return output
 
-    def refine_manifold(
-        self,
-        manifold: BaseManifold,
-        branch_index: Optional[int] = None,
-        final_node: Optional[Point] = None,
-    ) -> None:
+    def refine_manifold(self, manifold: BaseManifold) -> None:
         """
         Adds additional points in areas of the manifold with high curvature.
 
@@ -654,9 +638,6 @@ class ManifoldMachine:
 
         Parameters:
             manifold (BaseManifold): current manifold
-            branch_index: Unused since a slot holds its chain (N7a): a point
-                inserted right after a BranchPoint root needs no slot update.
-            final_node: Unused; kept for backwards-compatible signature.
 
         Note:
             The per-pair decision depends only on local geometry and preiterates,
@@ -673,8 +654,6 @@ class ManifoldMachine:
         )
 
         viewer = ManifoldView(manifold, self.system)
-        if branch_index is None:
-            branch_index = manifold.branch_index
 
         # Layer 0: every consecutive pair from root to tail, by the position of
         # its first point (-1: the BranchPoint root, the chain's anchor).
@@ -683,7 +662,7 @@ class ManifoldMachine:
             return
         layer = np.arange(lo - (head is not None), hi - 1)
         while len(layer):
-            layer = self._refine_layer(chain, layer, manifold, viewer, branch_index)
+            layer = self._refine_layer(chain, layer, manifold, viewer)
 
         if num_initial_points is not None:
             num_final_points = len(manifold.get_point_array())
@@ -699,7 +678,6 @@ class ManifoldMachine:
         layer: NDArray[np.int64],
         manifold: BaseManifold,
         viewer: ManifoldView,
-        branch_index: Optional[int],
     ) -> NDArray[np.int64]:
         """
         Refine one breadth-first layer of pairs and return the next layer.
@@ -719,8 +697,6 @@ class ManifoldMachine:
             layer: ascending positions of the pairs' first points.
             manifold: the manifold being refined.
             viewer: view binding the manifold to the dynamical system.
-            branch_index: Unused since a slot holds its chain (N7a): a point
-                inserted right after the anchor needs no slot update.
 
         Returns:
             The next layer, the positions of the child pairs (empty when

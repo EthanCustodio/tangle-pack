@@ -51,16 +51,26 @@ A chain a merge absorbs is retired (no rows, no anchor) and keeps its index.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, NamedTuple, Optional
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 if TYPE_CHECKING:
-    from .BasePoint import BasePoint
     from .BranchPoint import BranchPoint
     from .Intersection import Stability
-    from .Point import Point
+
+
+class End(NamedTuple):
+    """A curve end as a VALUE: its store row, coordinates and cdist, no links.
+
+    Compare two ends by ``id``: a row with no cdist reads NaN, and NaN != NaN.
+    """
+
+    id: int
+    x: float
+    y: float
+    cdist: float
 
 #: Capacity grows by this factor when an append does not fit.
 _GROWTH = 1.5
@@ -110,26 +120,6 @@ class Chain:
     def __len__(self) -> int:
         """The number of rows on the chain."""
         return len(self.ids)
-
-    def node_at(self, position: int) -> Optional[BasePoint]:
-        """
-        The point at a position: the anchor at -1, None off either end.
-
-        An adapter (N7b deletes it with ``Point``): the engine reads
-        :meth:`xy_at` and makes no ``Point``.
-
-        Args:
-            position (int): A position on the chain.
-
-        Returns:
-            Optional[BasePoint]: The row's ``Point`` (made on first read), the
-            anchor for -1, or None.
-        """
-        if position == -1:
-            return self.anchor
-        if 0 <= position < len(self.ids):
-            return self.store.node(self.ids[position])
-        return None
 
     def xy_at(self, position: int) -> Optional[NDArray[np.float64]]:
         """
@@ -224,7 +214,6 @@ class PointStore:
         self._chain = np.empty(capacity, dtype=np.int32)  # -1 = on no chain
         self._position = np.empty(capacity, dtype=np.int32)  # -1, or LEFT_OFF
         self._n = 0
-        self.nodes: list[Optional[Point]] = []
         self.chains: list[Chain] = []
         self._alias_xy()
 
@@ -282,7 +271,6 @@ class PointStore:
         for column in (self._image, self._preimage, self._chain, self._position):
             column[lo:hi] = -1
         self._n = hi
-        self.nodes.extend([None] * (hi - lo))
         return np.arange(lo, hi)
 
     def append_one(
@@ -306,7 +294,6 @@ class PointStore:
         for column in (self._image, self._preimage, self._chain, self._position):
             column[row] = -1
         self._n = row + 1
-        self.nodes.append(None)
         return row
 
     def link(self, preimages: ArrayLike, images: ArrayLike) -> None:
@@ -368,26 +355,10 @@ class PointStore:
         """The row's position on its chain (negative off every chain)."""
         return int(self._position[row])
 
-    def node(self, row: int) -> Point:
-        """
-        The ``Point`` of a row, made on its first read and kept in :attr:`nodes`,
-        so two reads of one row are one object.
-
-        The adapter N7b deletes: the engine makes no ``Point`` (N7a), so every
-        row it appends has none until something reads it here.
-
-        Args:
-            row (int): A row id of this store.
-
-        Returns:
-            Point: The row's point.
-        """
-        point = self.nodes[row]
-        if point is None:
-            from .Point import Point  # Point imports this module
-
-            point = Point._over(self, int(row))
-        return point
+    def end(self, row: int) -> End:
+        """The :class:`End` record of a row (a fresh value per read)."""
+        x, y = self._xy[row]
+        return End(int(row), float(x), float(y), float(self._cdist[row]))
 
     @property
     def nbytes(self) -> int:
@@ -416,14 +387,3 @@ class PointStore:
         the column per point read costs five times as much)."""
         self._xy_read = self._xy.view()
         self._xy_read.flags.writeable = False
-
-
-_LOOSE: Optional[PointStore] = None
-
-
-def loose_store() -> PointStore:
-    """The one process-wide store of points built without a store (never freed)."""
-    global _LOOSE
-    if _LOOSE is None:
-        _LOOSE = PointStore()
-    return _LOOSE

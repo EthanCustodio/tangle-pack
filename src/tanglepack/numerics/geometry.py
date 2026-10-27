@@ -46,7 +46,6 @@ def arc_polyline(
     lo_cdist: float,
     hi_cdist: float,
     *,
-    stability: Optional[Stability] = None,
     reverse: bool = False,
     tol: float = 0.0,
 ) -> NDArray[np.float64]:
@@ -63,9 +62,6 @@ def arc_polyline(
         manifold: The curve to walk.
         lo_cdist: Lower canonical distance of the window.
         hi_cdist: Upper canonical distance of the window.
-        stability: Not read: a point holds one cdist, and a periodic point's is
-            0.0 on both manifolds (``FixedPointSolver`` sets it). Kept for its
-            callers; N7 drops it with the node API.
         reverse: If True the polyline is returned in decreasing cdist order.
         tol: Slack added to both ends of the window, so a node sitting exactly on
             a boundary is not lost to rounding. Zero by default.
