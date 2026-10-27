@@ -51,7 +51,7 @@ A chain a merge absorbs is retired (no rows, no anchor) and keeps its index.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -319,17 +319,6 @@ class PointStore:
         """
         self._image[preimages] = images
         self._preimage[images] = preimages
-
-    def unlink(self, row: int, column: Literal["image", "preimage"]) -> None:
-        """
-        Clears one row's image or preimage link, one way: the row it named keeps
-        its link back (the initializer's detached fictitious tail).
-
-        Args:
-            row (int): The row that forgets its link.
-            column (Literal["image", "preimage"]): Which link it forgets.
-        """
-        (self._image if column == "image" else self._preimage)[row] = -1
 
     def link_phantoms(self, rows: ArrayLike, phantoms: ArrayLike, stability: Stability) -> None:
         """

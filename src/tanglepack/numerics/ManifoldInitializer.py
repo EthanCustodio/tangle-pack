@@ -174,7 +174,7 @@ class ManifoldInitializer:
         # can be linked in at the proper iterate of the cycle: rows on no
         # curve, given cdists (all but the last) when the segment is made.
         first_back = store.xy[first_point]
-        current = previous = first_point
+        current = first_point
         for _ in range(fixed_point.k_value):
             first_back = step_back(first_back)
             previous, current = current, store.append_one(first_back[0], first_back[1], None)
@@ -182,8 +182,6 @@ class ManifoldInitializer:
                 store.link(current, previous)
             else:
                 store.link(previous, current)
-        # The last one is detached: it keeps its link back, its neighbour forgets it.
-        store.unlink(previous, "preimage" if unstable else "image")
 
         return first_back
 
@@ -245,6 +243,9 @@ class ManifoldInitializer:
         for _ in range(fixed_point.k_value - 1):
             current, cdist = int(back[current]), cdist / alpha
             store.set_cdist(current, cdist)
+        # This link replaces the one the last fictitious row's neighbour held
+        # to it, so that row is detached: it keeps its own link, and nothing
+        # names it.
         if unstable:
             store.link(first_back, current)
         else:

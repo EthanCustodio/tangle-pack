@@ -164,7 +164,6 @@ def test_first_node_steps_past_the_root_branch_point(initialized):
     """A manifold anchored on a BranchPoint starts at position 0 of the chain
     its slot holds."""
     workbench, fp = initialized
-    manifold = workbench.manifolds[(fp, "unstable", 0, 0)]
 
     root = fp.branch_points[0]
     assert isinstance(root, BranchPoint)
