@@ -11,6 +11,10 @@ strong-pip classification never sees the cut.
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
 
 from cases import build_k10
 from helpers.fakes import bare_fixed_point, synthetic_trellis
@@ -89,3 +93,15 @@ def test_classification_never_sees_the_cut():
         trellis.set_strong_pip(candidate)
         assert trellis.classify_strong_pips(choose_default=False) == fresh
         assert trellis.strong_pip is None
+
+
+def test_a_cached_bridge_polyline_is_read_only():
+    """The memo shares one array between callers, so nobody can write to it."""
+    trellis, *_ = _window()
+    bridge = SimpleNamespace(version=0)
+    polyline = trellis.cached_bridge_polyline(bridge, lambda: np.zeros((3, 2)))
+
+    assert trellis.cached_bridge_polyline(bridge, lambda: None) is polyline
+    assert not polyline.flags.writeable
+    with pytest.raises(ValueError):
+        polyline[0, 0] = 1.0

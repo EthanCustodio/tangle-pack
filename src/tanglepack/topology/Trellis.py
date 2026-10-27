@@ -575,8 +575,8 @@ class Trellis:
         The geometry callers (hole placement, row reading, side tests) ask for
         the same bridge's oriented polyline many times per partition; building
         it walks the bridge and orients it. The memo is keyed by the bridge's
-        own mutation counter (:attr:`BaseManifold.version`), so it follows the
-        same invalidation as the point array underneath it.
+        own mutation counter (:attr:`BaseManifold.version`), which every
+        reassignment of its ends and every growth or re-cut bumps.
 
         Args:
             bridge: The bridge whose polyline is wanted.
@@ -586,6 +586,7 @@ class Trellis:
 
         Returns:
             Whatever ``build`` returned, from the memo when it is still valid.
+            A cached array is shared by every caller, so it is made read-only.
 
         Note:
             An object with no ``version`` (a hand-built stand-in in a test) is
@@ -601,6 +602,8 @@ class Trellis:
         if entry is not None and entry[0] is bridge and entry[1] == version:
             return entry[2]
         value = build()
+        if value is not None:
+            value.flags.writeable = False
         self._bridge_polylines[key] = (bridge, version, value)
         return value
 
