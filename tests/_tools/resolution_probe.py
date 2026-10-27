@@ -35,7 +35,6 @@ import time
 
 import numpy as np
 
-from tanglepack.numerics.BranchPoint import BranchPoint
 from tanglepack.numerics.Tangle import Tangle
 from tanglepack.numerics.geometry import chord_deviation_batch
 
@@ -44,10 +43,6 @@ THRESHOLD = 3.0
 #: ``(bracket ends of the unstable and the stable segment) -> max(h_u, h_s)``.
 DEVIATION: dict[tuple, float] = {}
 
-
-def end(node):
-    """A node as a bracket end: its store row, or the periodic point's BranchPoint."""
-    return node if isinstance(node, BranchPoint) else node.row
 
 _library_ratio = Tangle._resolution_ratio
 
@@ -130,10 +125,13 @@ def _anycurve_extra(detections, out: set) -> list:
         if len(members) < 2:
             continue
         curve = members[0][1].unstable_manifold
-        nodes = list(curve._walk_nodes(stop_at_final=False))
-        points = np.array([n.get_point() for n in nodes], float)
+        # The curve's nodes as bracket ends: its rows, after the periodic point's
+        # BranchPoint when it is rooted at one.
+        head, store, rows = curve._rows(stop_at_final=False)
+        heads = [] if head is None else [head]
+        points = np.vstack([n.get_point() for n in heads] + [store.xy[rows]])
         arc = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(points, axis=0).T))])
-        index = {end(n): k for k, n in enumerate(nodes)}
+        index = {n: k for k, n in enumerate(heads + rows.tolist())}
         placed = []
         for i, ix in members:
             ks = [index.get(e) for e in ix.unstable_segment]

@@ -71,7 +71,7 @@ def draw_hole(ax, punch: dict, reference_side: str) -> None:
     """One hole: whole bridge, image sub-arc, carried point and both readings."""
     trellis, bridge, carried, span = punch["trellis"], punch["bridge"], punch["carried"], punch["span"]
     poly = sp._oriented_bridge_polyline(trellis, bridge)
-    cdists = sorted(node.cdist for node in bridge.get_point_array(return_nodes=True))
+    cdists = sorted(bridge.cdists)
     lo = max(sp.bisect_left(cdists, span[0]) - 1, 0)
     hi = sp.bisect_right(cdists, span[1]) + 1
     sub = poly[lo:hi]

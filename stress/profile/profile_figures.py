@@ -25,12 +25,12 @@ INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 
 #: Census components folded into eight groups, in stacking order.
 MEMORY_GROUPS = [
-    ("Point on manifolds", ["points_curve", "branch_points"]),
-    ("Point on blast images", ["points_image", "points_other"]),
-    ("point store + phantoms", ["point_store", "points_phantom"]),
+    ("periodic points + curve point objects", ["points_curve", "branch_points"]),
+    ("other point objects", ["points_image", "points_other"]),
+    ("point store rows + phantoms", ["point_store", "points_phantom"]),
     ("segment index (py)", ["segment_index"]),
     ("rtree (C)", ["rtree"]),
-    ("curve objects + ids + memo", ["curve_objects", "curve_ids", "walk_memo"]),
+    ("curve objects + ids", ["curve_objects", "curve_ids", "walk_memo"]),
     ("registry", ["registry"]),
     ("topology caches", ["topology"]),
 ]

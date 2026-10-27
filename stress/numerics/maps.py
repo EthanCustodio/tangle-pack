@@ -151,6 +151,17 @@ def distance_to_polyline(
     return d[rows, best], beyond
 
 
+def _nodes(manifold: Any, stability: str) -> tuple[np.ndarray, np.ndarray]:
+    """``(cdist, points)`` of a manifold's nodes root to tail: its store rows,
+    after the periodic point (read on its ``stability`` field) when it is rooted
+    at one."""
+    head, store, rows = manifold._rows()
+    heads = [] if head is None else [head]
+    cdist = np.array([h.get_cdist(stability) for h in heads] + list(store.cdist[rows]), dtype=float)
+    points = np.vstack([h.get_point() for h in heads] + [store.xy[rows]]).astype(float)
+    return cdist, points
+
+
 def invariance_error(
     manifold: Any,
     step: Any,
@@ -191,9 +202,7 @@ def invariance_error(
     """
     from scipy.spatial import cKDTree
 
-    nodes = manifold.get_point_array(return_nodes=True)
-    poly = np.asarray([n.get_point() for n in nodes], dtype=float).reshape(-1, 2)
-    cdist = np.array([n.get_cdist(stability) for n in nodes], dtype=float)
+    cdist, poly = _nodes(manifold, stability)
     image_poly = poly if target is None or target is manifold else (
         np.asarray(target.get_point_array(), dtype=float).reshape(-1, 2)
     )
@@ -242,9 +251,7 @@ def curve_arrays(session_or_workbench: Any) -> dict[Any, tuple[np.ndarray, np.nd
     wb = getattr(session_or_workbench, "workbench", session_or_workbench)
     curves = {}
     for key, manifold in wb.manifolds.items():
-        nodes = manifold.get_point_array(return_nodes=True)
-        cdist = np.array([n.get_cdist(key[1]) for n in nodes], dtype=float)
-        pts = np.asarray([n.get_point() for n in nodes], dtype=float).reshape(-1, 2)
+        cdist, pts = _nodes(manifold, key[1])
         order = np.argsort(cdist, kind="stable")
         curves[key] = (cdist[order], pts[order])
     return curves
