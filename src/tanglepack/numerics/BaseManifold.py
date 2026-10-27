@@ -280,10 +280,27 @@ class BaseManifold:
         root = self.root
         if not isinstance(root, BranchPoint):
             return root
+        chain = self._slot_chain(branch_index)
+        return None if chain is None else chain.store.node(chain.ids[0])
+
+    def _slot_chain(self, branch_index: Optional[int] = None) -> Optional[Chain]:
+        """
+        The chain hanging in the root BranchPoint's slot for this curve's
+        stability and branch (None for an empty slot).
+
+        Args:
+            branch_index (Optional[int]): The slot's branch. Defaults to
+                :attr:`branch_index`.
+
+        Raises:
+            ValueError: Neither ``branch_index`` nor :attr:`branch_index` says
+                which branch to leave on.
+        """
         if branch_index is None:
             branch_index = self.branch_index
         if branch_index is None:
             raise ValueError("Must supply branch_index when starting walk from root BranchPoint")
+        root = self._root
         slots = root.forward_branches if self.stability == "unstable" else root.backward_branches
         return slots[branch_index]
 

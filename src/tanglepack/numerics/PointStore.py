@@ -21,13 +21,14 @@ the NaN rows are phantoms and the initializer's fictitious tails, all off-curve.
 
 The public columns (``xy``, ``cdist``, ``image``, ``preimage``) are fresh
 read-only views per access, so no caller holds a buffer a resize replaces; a
-``Point``, read once per point on the hot paths, reads the private columns.
+``Point`` reads the private columns.
 
-Phantoms -- the coordinate-only preiterates refinement caches for its next
-layer (cdist NaN, on no curve, named by one point's preiterate link -- its
-preimage on an unstable curve, its image on a stable one -- and naming nothing
-themselves) -- are rows with no :class:`~.Point.Point` at all, until something
-reads one through the adapter (:meth:`PointStore.node`).
+The engine makes no :class:`~.Point.Point` (N7a): it appends and links rows,
+and a row gets its ``Point`` only when something reads it through the adapter
+(:meth:`PointStore.node`), as a curve's ``root`` / ``tail`` does. Phantoms are
+the coordinate-only preiterates refinement caches for its next layer (cdist
+NaN, on no curve, named by one point's preiterate link -- its preimage on an
+unstable curve, its image on a stable one -- and naming nothing themselves).
 
 Dev Notes:
 
@@ -43,13 +44,14 @@ process-wide :func:`loose_store`, which is never freed: it is for points built
 by hand (tests, notebooks), not for library paths.
 
 A chain never holds a ``BranchPoint`` (D5: its storage is N8's): a chain that
-hangs off one names it as its ``anchor``, the left neighbour of position 0.
+hangs off one names it as its ``anchor``, the left neighbour of position 0,
+and the ``BranchPoint``'s slot for that branch holds the chain.
 A chain a merge absorbs is retired (no rows, no anchor) and keeps its index.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -113,16 +115,37 @@ class Chain:
         """
         The point at a position: the anchor at -1, None off either end.
 
+        An adapter (N7b deletes it with ``Point``): the engine reads
+        :meth:`xy_at` and makes no ``Point``.
+
         Args:
             position (int): A position on the chain.
 
         Returns:
-            Optional[BasePoint]: The ``Point`` there, the anchor for -1, or None.
+            Optional[BasePoint]: The row's ``Point`` (made on first read), the
+            anchor for -1, or None.
         """
         if position == -1:
             return self.anchor
         if 0 <= position < len(self.ids):
-            return self.store.nodes[self.ids[position]]
+            return self.store.node(self.ids[position])
+        return None
+
+    def xy_at(self, position: int) -> Optional[NDArray[np.float64]]:
+        """
+        The coordinates at a position: the anchor's at -1, None off either end.
+
+        Args:
+            position (int): A position on the chain.
+
+        Returns:
+            Optional[np.ndarray]: A read-only ``(2,)`` view of the row's
+            coordinates, the anchor's point for -1, or None.
+        """
+        if position == -1:
+            return None if self.anchor is None else self.anchor.get_point()
+        if 0 <= position < len(self.ids):
+            return self.store._xy_read[self.ids[position]]
         return None
 
     def insert(self, positions: ArrayLike, rows: ArrayLike) -> None:
@@ -181,8 +204,8 @@ class PointStore:
     the chain and position of every row on a curve.
 
     Attributes:
-        nodes (list[Optional[Point]]): Row -> its ``Point``; None for a phantom
-            no reader has asked for.
+        nodes (list[Optional[Point]]): Row -> its ``Point``; None for a row no
+            reader has asked :meth:`node` for (every row the engine appends).
         chains (list[Chain]): Every chain of the store, by index (retired ones
             included).
     """
@@ -297,6 +320,17 @@ class PointStore:
         self._image[preimages] = images
         self._preimage[images] = preimages
 
+    def unlink(self, row: int, column: Literal["image", "preimage"]) -> None:
+        """
+        Clears one row's image or preimage link, one way: the row it named keeps
+        its link back (the initializer's detached fictitious tail).
+
+        Args:
+            row (int): The row that forgets its link.
+            column (Literal["image", "preimage"]): Which link it forgets.
+        """
+        (self._image if column == "image" else self._preimage)[row] = -1
+
     def link_phantoms(self, rows: ArrayLike, phantoms: ArrayLike, stability: Stability) -> None:
         """
         Names each row's phantom preiterate, one way (a phantom names nothing).
@@ -347,7 +381,11 @@ class PointStore:
 
     def node(self, row: int) -> Point:
         """
-        The ``Point`` of a row, created (once) for a phantom read through the adapter.
+        The ``Point`` of a row, made on its first read and kept in :attr:`nodes`,
+        so two reads of one row are one object.
+
+        The adapter N7b deletes: the engine makes no ``Point`` (N7a), so every
+        row it appends has none until something reads it here.
 
         Args:
             row (int): A row id of this store.

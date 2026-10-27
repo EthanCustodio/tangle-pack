@@ -473,7 +473,7 @@ class ManifoldMachine:
             slots = head.forward_branches if manifold.stability == "unstable" else head.backward_branches
             first = slots[manifold.branch_index]
             rows = np.concatenate(([-1], rows))
-            chains = np.concatenate(([store._chain[first.row]], chains))
+            chains = np.concatenate(([first.index], chains))
             positions = np.concatenate(([-1], positions))
             cdists = np.concatenate(([head.cdist], cdists))
         bound = cdists[-1]
@@ -789,11 +789,9 @@ class ManifoldMachine:
         for row in rows.tolist():
             Point._over(store, row)
 
+        # A new first point (position 0) needs no slot update: the slot holds the chain.
         refined = layer[flagged]
         chain.insert(refined + 1, rows)
-        if refined[0] == -1:  # the new first point of the chain: re-point the anchor's slot
-            slots = anchor.forward_branches if stability == "unstable" else anchor.backward_branches
-            slots[branch_index] = store.nodes[rows[0]]
 
         # After the insert the k-th refined pair's first point sits k places
         # further on, and its new point right after it.

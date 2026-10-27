@@ -31,8 +31,6 @@ class ManifoldView:
         self.system = system
 
         # cheap aliases so the numeric code looks neat
-        self.root = manifold.root
-        self.tail = manifold.tail
         self.stability = manifold.stability
         self.name = manifold.name
         self.stretch_param = manifold.stretch_param

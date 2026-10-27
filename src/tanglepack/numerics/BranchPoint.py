@@ -14,13 +14,16 @@ be consistent.
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 
 from .Point import Point
 from .BasePoint import BasePoint
 from .Intersection import Stability
+
+if TYPE_CHECKING:
+    from .PointStore import Chain
 
 
 class BranchPoint(BasePoint):
@@ -45,17 +48,17 @@ class BranchPoint(BasePoint):
         edists (List[float]): Arclength distance from the fixed point for both the
             stable and unstable manifolds. Index 0 in unstable, index 1 is stable.
 
-        forward_branches (List[Point]): List of the outgoing branches from the
-            BranchPoint. In the case of a fixed point the forward branches will
-            strictly be the unstable manifolds. In the case of an intersection
-            there will be one unstable and one stable.
+        forward_branches (List[Optional[Chain]]): The chains of the outgoing
+            branches from the BranchPoint. In the case of a fixed point the
+            forward branches will strictly be the unstable manifolds. In the
+            case of an intersection there will be one unstable and one stable.
         forward_stretch_params (List[float]): Geometric stretch associated with
             the outgoing manifolds.
 
-        backward_branches (List[Point]): List of the incoming branches from the
-            BranchPoint. In the case of a fixed point the backward branches will
-            strictly be the stable manifolds. In the case of an intersection
-            there will be one unstable and one stable.
+        backward_branches (List[Optional[Chain]]): The chains of the incoming
+            branches from the BranchPoint. In the case of a fixed point the
+            backward branches will strictly be the stable manifolds. In the
+            case of an intersection there will be one unstable and one stable.
         backward_stretch_params (List[float]): Geometric stretch associated with
             the incoming manifolds.
     """
@@ -113,43 +116,48 @@ class BranchPoint(BasePoint):
 
         return self.cdists[index]
 
-    def insert_point_forward(self, node: Point, branch_index: int) -> None:
+    def insert_point_forward(self, chain: Chain | Point, branch_index: int) -> None:
         """
-        Hangs ``node``'s chain off this point at the given branch index: the
-        branch's slot names ``node`` and the chain names this point as its anchor.
+        Hangs a chain off this point at the given branch index: the branch's
+        slot holds the chain and the chain names this point as its anchor.
 
         Args:
-            node (Point): The first point of the branch, on a chain of its store.
+            chain (Chain or Point): The branch's chain. A ``Point`` stands for
+                the chain it lies on (the N7a adapter for hand-built curves,
+                which N7b removes).
             branch_index (int): The branch of the BranchPoint you wish to insert
-                the point into.
+                the chain into.
 
         Raises:
-            ValueError: The slot already holds a point of another chain.
+            ValueError: The slot already holds another chain.
         """
-        chain = node.store.chain_of(node.row)
+        if isinstance(chain, Point):
+            chain = chain.store.chain_of(chain.row)
         held = self.forward_branches[branch_index]
-        if held is not None and held.store.chain_of(held.row) is not chain:
-            raise ValueError(f"branch {branch_index} already holds a point of another chain")
-        self.forward_branches[branch_index] = node
+        if held is not None and held is not chain:
+            raise ValueError(f"branch {branch_index} already holds another chain")
+        self.forward_branches[branch_index] = chain
         chain.anchor = self
 
-    def insert_point_backward(self, node: Point, branch_index: int) -> None:
+    def insert_point_backward(self, chain: Chain | Point, branch_index: int) -> None:
         """
-        Hangs ``node``'s chain off this point at the given backward branch
-        index: the slot names ``node`` and the chain names this point as its
-        anchor.
+        Hangs a chain off this point at the given backward branch index: the
+        slot holds the chain and the chain names this point as its anchor.
 
         Args:
-            node (Point): The first point of the branch, on a chain of its store.
+            chain (Chain or Point): The branch's chain. A ``Point`` stands for
+                the chain it lies on (the N7a adapter for hand-built curves,
+                which N7b removes).
             branch_index (int): The branch of the BranchPoint you wish to insert
-                the point into.
+                the chain into.
 
         Raises:
-            ValueError: The slot already holds a point of another chain.
+            ValueError: The slot already holds another chain.
         """
-        chain = node.store.chain_of(node.row)
+        if isinstance(chain, Point):
+            chain = chain.store.chain_of(chain.row)
         held = self.backward_branches[branch_index]
-        if held is not None and held.store.chain_of(held.row) is not chain:
-            raise ValueError(f"branch {branch_index} already holds a point of another chain")
-        self.backward_branches[branch_index] = node
+        if held is not None and held is not chain:
+            raise ValueError(f"branch {branch_index} already holds another chain")
+        self.backward_branches[branch_index] = chain
         chain.anchor = self
