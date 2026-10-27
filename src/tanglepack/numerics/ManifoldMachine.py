@@ -93,7 +93,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .Point import Point
-from .PointStore import LEFT_OFF, Chain
+from .PointStore import LEFT_OFF, Chain, PointStore
 from .FixedPoint import FixedPoint
 from .DynamicalSystem import DynamicalSystem
 from .BaseManifold import BaseManifold
@@ -226,9 +226,8 @@ class ManifoldMachine:
             branch_index=key[3],
             manifold_key=key,
         )
-
-        view.root = view.first_node()
-
+        chain = view._slot_chain()
+        view.root = None if chain is None else int(chain.ids[0])
         return view
 
     def new_grow_manifold(
@@ -288,11 +287,11 @@ class ManifoldMachine:
                 key = fixed_point.advance_key((fixed_point, stability, 0, b), -step)
 
                 view = self._branch_view(fixed_point, key, stretch_param=1)
-                if view.root is None:
+                if view._root is None:
                     continue  # branch not initialized
 
                 # the whole chain shares the stretch parameter of its first piece
-                stretch_param = view.root.stretch_param
+                stretch_param = view._span()[1].stretch_param
                 view.stretch_param = stretch_param
 
                 for _ in range(fixed_point.k_value):
@@ -301,7 +300,7 @@ class ManifoldMachine:
 
                     key = fixed_point.advance_key(key, step)
                     view = self._branch_view(fixed_point, key, stretch_param)
-                    assert view.root is not None, (
+                    assert view._root is not None, (
                         f"manifold piece {key[2], key[3]} of a chain that started "
                         f"at branch {b} is not initialized"
                     )
@@ -325,13 +324,28 @@ class ManifoldMachine:
             return self._iterate_manifold(manifold)
 
     @staticmethod
+    def _manifold_from_rows(
+        store: PointStore,
+        rows: NDArray[np.int64],
+        stability: Stability,
+        stretch_param: float,
+        fixed_point: FixedPoint,
+    ) -> BaseManifold:
+        """A key-less manifold over a new chain of fresh rows, in cdist order."""
+        store.new_chain(rows, stretch_param)
+        return BaseManifold(
+            int(rows[0]), stability, stretch_param, fixed_point, tail=int(rows[-1]),
+            manifold_key=None, store=store,
+        )
+
+    @staticmethod
     def _manifold_from_points(
         points: list[Point], stability: Stability, stretch_param: float, fixed_point: FixedPoint
     ) -> BaseManifold:
-        """A key-less manifold over a new chain of fresh points, in cdist order."""
-        points[0].store.new_chain([point.row for point in points], stretch_param)
-        return BaseManifold(
-            points[0], stability, stretch_param, fixed_point, tail=points[-1], manifold_key=None
+        """:meth:`_manifold_from_rows` over hand-built points (an adapter for the
+        tests, which N7b deletes)."""
+        return ManifoldMachine._manifold_from_rows(
+            points[0].store, [point.row for point in points], stability, stretch_param, fixed_point
         )
 
     def _iterate_manifold(self, manifold: BaseManifold) -> BaseManifold:
@@ -340,9 +354,8 @@ class ManifoldMachine:
 
         non_iterated_coords = manifold.get_non_iterated_point_array()
         non_iterated_cdists = manifold.get_non_iterated_cdist_array()
-        non_iterated_points = manifold.get_non_iterated_point_array(return_nodes=True)
-
-        old_points = manifold.get_iterated_point_array(return_nodes=True)
+        _head, store, sources = manifold._select("non_iterated")
+        image_head, image_store, image_rows = manifold._select("iterated")
 
         if len(non_iterated_coords):
 
@@ -355,11 +368,7 @@ class ManifoldMachine:
             # The images go into the store of the curve (a chain's rows share one
             # store), in one append; each pair is linked both ways (the image on
             # an unstable curve, the preimage on a stable one).
-            store = non_iterated_points[0].store
             rows = store.append(iterated_points, distances)
-            sources = np.fromiter(
-                (point.row for point in non_iterated_points), np.int64, len(non_iterated_points)
-            )
             unstable = manifold.stability == "unstable"
             if ((store.image if unstable else store.preimage)[sources] >= 0).any():
                 raise ValueError(f"{'Iterate' if unstable else 'Pre-iterate'} 1 already exists")
@@ -367,18 +376,17 @@ class ManifoldMachine:
                 store.link(sources, rows)
             else:
                 store.link(rows, sources)
-            new_points = [Point._over(store, row) for row in rows.tolist()]
 
             # The image of a piece lives on the branch one map step forward, which
             # only the caller can name (see iterate_bridge); the machine leaves the
             # key unset rather than copying the un-advanced one.
-            new_iterated_points = self._manifold_from_points(
-                new_points, manifold.stability, manifold.stretch_param, manifold.fixed_point
+            new_iterated_points = self._manifold_from_rows(
+                store, rows, manifold.stability, manifold.stretch_param, manifold.fixed_point
             )
 
         # The images that already exist may lie on several curves: merge
         # each contiguous chain of them in turn.
-        chains = self._image_chains(manifold, old_points)
+        chains = self._image_chains(manifold, image_head, image_store, image_rows)
 
         if len(non_iterated_coords):
             mapped_manifold = new_iterated_points
@@ -408,11 +416,12 @@ class ManifoldMachine:
             self.refine_manifold(image)
 
         piece = dict(
-            root=image.root,
+            root=image._root,
+            store=image.store,
             stability=manifold.stability,
             stretch_param=manifold.stretch_param,
             fixed_point=manifold.fixed_point,
-            tail=image.tail,
+            tail=image._tail,
             branch_index=manifold.branch_index,
             manifold_key=None,
         )
@@ -420,7 +429,13 @@ class ManifoldMachine:
             return Bridge(name=manifold.name, **piece)
         return BaseManifold(**piece)
 
-    def _image_chains(self, manifold: BaseManifold, images: list[Point]) -> list[BaseManifold]:
+    def _image_chains(
+        self,
+        manifold: BaseManifold,
+        head: Optional[BranchPoint],
+        store: Optional[PointStore],
+        rows: NDArray[np.int64],
+    ) -> list[BaseManifold]:
         """
         The existing images of a curve's points, as runs of their chains.
 
@@ -440,7 +455,9 @@ class ManifoldMachine:
         Args:
             manifold: The curve being iterated (its stability, stretch and branch
                 go to the runs).
-            images: The existing images, in the curve's order.
+            head: The periodic point heading the images, or None.
+            store: The store of the images' rows.
+            rows: The images' rows after the head, in the curve's order.
 
         Returns:
             One manifold per run, in cdist order; empty when there are no images.
@@ -448,7 +465,7 @@ class ManifoldMachine:
         Raises:
             AssertionError: A run would start at a point a merge left off its chain.
         """
-        def run(first: Point, last: Point) -> BaseManifold:
+        def run(first: int | BranchPoint, last: int) -> BaseManifold:
             return BaseManifold(
                 first,
                 manifold.stability,
@@ -457,23 +474,21 @@ class ManifoldMachine:
                 tail=last,
                 branch_index=manifold.branch_index,
                 manifold_key=None,
+                store=store,
             )
 
-        if not len(images):
+        if head is None and not len(rows):
             return []
-        head = images[0] if isinstance(images[0], BranchPoint) else None
-        points = images if head is None else images[1:]
-        store = points[0].store
-        rows = np.fromiter((point.row for point in points), np.int64, len(points))
+        images = ([] if head is None else [head]) + rows.tolist()
         chains, positions, cdists = store._chain[rows], store._position[rows], store.cdist[rows]
         if head is not None:
             # The image of an anchor bridge's root is the next periodic point: its
             # run starts at the slot of the bridge's branch, position -1 of the
             # chain hanging there.
             slots = head.forward_branches if manifold.stability == "unstable" else head.backward_branches
-            first = slots[manifold.branch_index]
+            slot_chain = slots[manifold.branch_index]
             rows = np.concatenate(([-1], rows))
-            chains = np.concatenate(([first.index], chains))
+            chains = np.concatenate(([slot_chain.index], chains))
             positions = np.concatenate(([-1], positions))
             cdists = np.concatenate(([head.cdist], cdists))
         bound = cdists[-1]
@@ -558,7 +573,6 @@ class ManifoldMachine:
             merged = np.insert(ids_1, np.searchsorted(c1, c2, side="right"), ids_2)
             rest_is_1 = c1[-1] > c2[-1]
         else:
-            nodes = store.nodes
             if root_1 is not None:
                 order, i, j = [], 0, 0
             else:
@@ -581,14 +595,16 @@ class ManifoldMachine:
                     # longer order the pair -- keeping both and ordering by the tied
                     # key scrambles them into a spike. Keep the established
                     # (iterate-linked) point and skip the duplicate.
-                    head_1, head_2 = nodes[ids_1[i]], nodes[ids_2[j]]
+                    pair = [ids_1[i], ids_2[j]]
                     logger.debug(
                         "Duplicate cdist collision at cdist=%s; coords %s vs %s",
-                        head_1.cdist,
-                        head_1.get_point(),
-                        head_2.get_point(),
+                        float(c1[i]),
+                        store._xy_read[pair[0]],
+                        store._xy_read[pair[1]],
                     )
-                    keep_1 = head_1.has_iterate_link() or not head_2.has_iterate_link()
+                    # An image or a preimage row, a phantom's included.
+                    linked = (store._image[pair] >= 0) | (store._preimage[pair] >= 0)
+                    keep_1 = linked[0] or not linked[1]
                     order.append(ids_1[i] if keep_1 else ids_2[j])
                     i, j = i + 1, j + 1
             rest_is_1 = i < len(ids_1)
@@ -615,7 +631,7 @@ class ManifoldMachine:
             first.absorb(second, np.concatenate((first.ids[:start], merged, rest.ids[rest_hi:])), start)
 
         output = manifold_1 if first_is_1 else manifold_2
-        output.tail = manifold_1.tail if rest_is_1 else manifold_2.tail
+        output.tail = manifold_1._tail if rest_is_1 else manifold_2._tail
         return output
 
     def refine_manifold(
@@ -638,8 +654,8 @@ class ManifoldMachine:
 
         Parameters:
             manifold (BaseManifold): current manifold
-            branch_index: The branch a point inserted right after a BranchPoint
-                root hangs on; defaults to the manifold's.
+            branch_index: Unused since a slot holds its chain (N7a): a point
+                inserted right after a BranchPoint root needs no slot update.
             final_node: Unused; kept for backwards-compatible signature.
 
         Note:
@@ -703,7 +719,8 @@ class ManifoldMachine:
             layer: ascending positions of the pairs' first points.
             manifold: the manifold being refined.
             viewer: view binding the manifold to the dynamical system.
-            branch_index: the anchor's branch, for a point inserted right after it.
+            branch_index: Unused since a slot holds its chain (N7a): a point
+                inserted right after the anchor needs no slot update.
 
         Returns:
             The next layer, the positions of the child pairs (empty when
@@ -781,15 +798,13 @@ class ManifoldMachine:
         self._note_coords(new_coords)
 
         # The new points, then their preiterates (preimages on an unstable curve,
-        # images on a stable one): phantom rows (no cdist, no Point) the child
-        # pairs refine from next layer, named by a one-way link.
+        # images on a stable one): phantom rows (no cdist) the child pairs refine
+        # from next layer, named by a one-way link. A new first point (position 0)
+        # needs no slot update: the slot holds the chain.
         rows = store.append(new_coords, mid_cd[flagged])
         phantoms = store.append(pre_mid[flagged], None)
         store.link_phantoms(rows, phantoms, stability)
-        for row in rows.tolist():
-            Point._over(store, row)
 
-        # A new first point (position 0) needs no slot update: the slot holds the chain.
         refined = layer[flagged]
         chain.insert(refined + 1, rows)
 
@@ -799,22 +814,18 @@ class ManifoldMachine:
         return np.column_stack((shifted, shifted + 1)).ravel()
 
     @staticmethod
-    def _get_preiterate(point: Point | BranchPoint, stability: Stability) -> Optional[np.ndarray]:
+    def _get_preiterate(point: BranchPoint, stability: Stability) -> Optional[np.ndarray]:
         """
-        The coordinates of a point's preiterate (its preimage on an unstable
-        curve, its image on a stable one), or None if it has none.
+        The coordinates of a periodic point's preiterate (its preimage on an
+        unstable curve, its image on a stable one), or None if it has none.
 
         Parameters:
-            point (Point or BranchPoint): point to get preiterate
+            point (BranchPoint): The chain's anchor (a row's preiterate is read
+                off the store's link columns).
             stability (str): stability of the manifold
         """
-
-        if isinstance(point, BranchPoint):
-            pre = point.prev_iterate if stability == "unstable" else point.next_iterate
-            return None if pre is None else pre.get_point()
-        store = point.store
-        row = (store.preimage if stability == "unstable" else store.image)[point.row]
-        return None if row < 0 else store.xy[row]
+        pre = point.prev_iterate if stability == "unstable" else point.next_iterate
+        return None if pre is None else pre.get_point()
 
     @staticmethod
     def _curvature_area_batch(

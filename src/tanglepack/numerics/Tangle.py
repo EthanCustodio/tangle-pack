@@ -70,7 +70,6 @@ from rtree.core import RTreeError
 from .Intersection import Intersection, ManifoldKey, Stability
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
-from .Point import Point
 from .PointStore import PointStore
 from .BranchPoint import BranchPoint
 from .Bridge import Bridge
@@ -451,16 +450,16 @@ class Tangle:
         """
         store = seg.store
 
-        def neighbour(end: int | BranchPoint, step: int) -> Optional[Point | BranchPoint]:
+        def neighbour(end: int | BranchPoint, step: int) -> Optional[NDArray[np.float64]]:
             if isinstance(end, BranchPoint):
                 return None
             chain = store.chain_of(end)
-            return None if chain is None else chain.node_at(store.position_of(end) + step)
+            return None if chain is None else chain.xy_at(store.position_of(end) + step)
 
         missing = np.array([np.nan, np.nan])
         return tuple(
-            missing if node is None else node.get_point()
-            for node in (neighbour(seg.row0, -1), neighbour(seg.row1, 1))
+            missing if xy is None else xy
+            for xy in (neighbour(seg.row0, -1), neighbour(seg.row1, 1))
         )
 
     def _find_true_intersection(
@@ -978,10 +977,11 @@ class Tangle:
         """
         crossings = list(crossings)
         # --- 1. Collect crossings grouped by their parent unstable manifold ---
-        # entry: (unstable cdist, Intersection, orig_p0, orig_p1)
+        # entry: (unstable cdist, Intersection, orig_p0, orig_p1), the bracket
+        # ends rows (or the root BranchPoint)
         manifold_crossings: dict[
             BaseManifold,
-            list[tuple[float, Intersection, Point, Point]],
+            list[tuple[float, Intersection, int | BranchPoint, int | BranchPoint]],
         ] = defaultdict(list)
 
         for intersection in crossings:
@@ -1000,13 +1000,7 @@ class Tangle:
                 "bridge is cut at it -- the cut is what sets the bridge endpoints"
             )
 
-            # The cut is between nodes until a Bridge is cut on rows (N6/N7): the
-            # rows become nodes once, here. One Point per row, so node identity is
-            # row equality.
-            p0, p1 = (
-                intersection.store.node(end) if isinstance(end, int) else end
-                for end in intersection.unstable_segment
-            )
+            p0, p1 = intersection.unstable_segment
             manifold_crossings[manifold].append(
                 (float(intersection.unstable_cdist), intersection, p0, p1)
             )
@@ -1019,9 +1013,9 @@ class Tangle:
         for manifold, group in manifold_crossings.items():
             fp, _, orbit_index, _ = manifold.manifold_key
             anchor = anchors.get((fp, orbit_index))
-            if anchor is not None and manifold.root is fp.branch_points[orbit_index]:
-                nodes = manifold.get_point_array(return_nodes=True)
-                group.append((0.0, anchor, nodes[0], nodes[1]))
+            if anchor is not None and manifold._root is fp.branch_points[orbit_index]:
+                head, _store, rows = manifold._rows()
+                group.append((0.0, anchor, head, int(rows[0])))
 
         # --- 2. Build bridges as two points picked from the single manifold ---
         # A bridge is defined by a head and a tail point taken from its parent
@@ -1042,10 +1036,10 @@ class Tangle:
             # of crossings on one segment has no node between them, so each one after
             # the first gets a separator spliced right after the previous crossing's
             # lower bracket: (p0, S1), (S1, S2), ..., (Sn, p1), cdist increasing.
-            brackets: list[tuple[Point, Point]] = []
+            brackets: list[tuple[int | BranchPoint, int]] = []
             for k, (_cdist, crossing, p0, p1) in enumerate(manifold_group):
                 previous = manifold_group[k - 1] if k else None
-                if previous is not None and previous[2] is p0 and previous[3] is p1:
+                if previous is not None and previous[2] == p0 and previous[3] == p1:
                     below = brackets[-1][0]
                     separator = self._insert_crossing_separator(
                         below, p0, p1, previous[1].coords, crossing.coords, manifold
@@ -1075,6 +1069,7 @@ class Tangle:
                     )
                 cut.append((manifold, Bridge(
                     root=brackets[k][0],
+                    store=manifold.store,
                     stability=manifold.stability,
                     stretch_param=manifold.stretch_param,
                     fixed_point=manifold.fixed_point,
@@ -1105,13 +1100,13 @@ class Tangle:
 
     def _insert_crossing_separator(
         self,
-        after: Point,
-        p0: Point,
-        p1: Point,
+        after: int | BranchPoint,
+        p0: int | BranchPoint,
+        p1: int,
         coords1: tuple[float, float],
         coords2: tuple[float, float],
         manifold: BaseManifold,
-    ) -> Point:
+    ) -> int:
         """
         Splice one real point between two crossings that share the ORIGINAL
         segment ``[p0, p1]``, right after ``after``, and return it.
@@ -1123,27 +1118,26 @@ class Tangle:
         restoring one-crossing-per-segment locally.
 
         Args:
-            after: The node the separator follows: ``p0`` for the first separator
-                on the segment, the previous separator for each later one.
-            p0: Lower-cdist endpoint of the shared segment.
-            p1: Higher-cdist endpoint of the shared segment.
+            after: The row the separator follows (the periodic point at the
+                chain's start): ``p0`` for the first separator on the segment,
+                the previous separator for each later one.
+            p0: Lower-cdist endpoint of the shared segment, a row or the
+                periodic point.
+            p1: Higher-cdist endpoint of the shared segment, a row.
             coords1: Coordinates of the lower crossing on the segment.
             coords2: Coordinates of the higher crossing on the segment.
             manifold: The manifold the segment belongs to.
 
         Returns:
-            The freshly inserted separator point.
+            The row of the freshly inserted separator point. After the periodic
+            point it becomes position 0 of the chain its slot holds.
         """
         mid_xy = 0.5 * (np.asarray(coords1) + np.asarray(coords2))
-        cdist = self._cdist_between(p0, p1, manifold.stability, mid_xy)
-        store = p1.store
-        separator = Point(float(mid_xy[0]), float(mid_xy[1]), cdist, store=store)
-        chain = store.chain_of(p1.row)
-        if isinstance(after, BranchPoint):
-            chain.insert([0], [separator.row])
-            after.insert_point_forward(separator, manifold.branch_index)
-        else:
-            chain.insert([store.position_of(after.row) + 1], [separator.row])
+        store = manifold.store
+        cdist = self._cdist_between(store, p0, p1, manifold.stability, mid_xy)
+        separator = store.append_one(float(mid_xy[0]), float(mid_xy[1]), cdist)
+        position = 0 if isinstance(after, BranchPoint) else store.position_of(after) + 1
+        store.chain_of(p1).insert([position], [separator])
         return separator
 
     def _cdist_at_point(self, seg: _Segment, point: np.ndarray) -> float:
@@ -1160,20 +1154,26 @@ class Tangle:
 
     @staticmethod
     def _cdist_between(
-        p0: Point,
-        p1: Point,
+        store: PointStore,
+        p0: int | BranchPoint,
+        p1: int | BranchPoint,
         stability: Stability,
         point: np.ndarray,
     ) -> float:
         """
         Interpolate cdist at `point` between the two explicit endpoints p0, p1.
 
-        Endpoint-based variant of `_cdist_at_point`: takes the nodes directly
+        Endpoint-based variant of `_cdist_at_point`: takes the ends directly
+        (rows of ``store``, or the periodic point, read through ``get_cdist``)
         rather than a `_Segment`, so `create_bridges` places a separator against
         the ORIGINAL segment endpoints captured before any point is spliced in.
         """
-        return Tangle._interpolate(p0.get_point(), p1.get_point(), p0.get_cdist(stability),
-                                   p1.get_cdist(stability), point)
+        (a, ca), (b, cb) = (
+            (p.get_point(), p.get_cdist(stability)) if isinstance(p, BranchPoint)
+            else (store.xy[p], float(store.cdist[p]))
+            for p in (p0, p1)
+        )
+        return Tangle._interpolate(a, b, ca, cb, point)
 
     @staticmethod
     def _interpolate(

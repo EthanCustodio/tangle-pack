@@ -2083,7 +2083,7 @@ class TangleWorkbench:
         head, store, rows = manifold._rows(stop_at_final=False)
         candidates = rows if head is not None else rows[1:]  # the root is never the new tail
         past = np.flatnonzero(store.cdist[candidates] >= cdist) if len(candidates) else ()
-        new_tail = store.nodes[int(candidates[past[0]])] if len(past) else None
+        new_tail = int(candidates[past[0]]) if len(past) else None
         if new_tail is None:
             logger.warning(
                 "trim_stable_at: %s has no node at or past stable cdist %r; leaving it "
