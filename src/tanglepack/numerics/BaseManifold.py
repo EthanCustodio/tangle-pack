@@ -138,14 +138,14 @@ class BaseManifold:
         self._store = store
         self._root: int | BranchPoint | None = None
         self._tail: int | BranchPoint | None = None
-        self.root = root
-        self.tail = tail
         self.stability = stability
         self.stretch_param = stretch_param
         self.fixed_point = fixed_point
         self.name = name
         self.branch_index = branch_index
         self.manifold_key = manifold_key
+        self.root = root
+        self.tail = tail
         if self._tail is None:
             self._find_tail()
 
