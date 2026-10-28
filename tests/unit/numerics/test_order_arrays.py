@@ -232,6 +232,36 @@ def test_a_slot_holding_another_chain_refuses_a_second() -> None:
     assert p.forward_branches[0] is first_chain
 
 
+def test_a_periodic_point_reads_its_orbit() -> None:
+    """A periodic point is a view of its fixed point: its image and preimage are
+    the next and previous orbit points (under inversion too: the branch flips,
+    the point does not), its coordinates are the orbit point's and its cdist
+    is 0.0 on both manifolds."""
+    for period, inversion in ((3, False), (2, True)):
+        orbit = [(float(o), 10.0 + o) for o in range(period)]
+        fp = bare_fixed_point(period, inversion=inversion, coordinates=orbit)
+        assert fp.num_branches == (2 if inversion else 1)
+
+        for o, bp in enumerate(fp.branch_points):
+            assert bp.next_iterate is fp.branch_points[(o + 1) % period]
+            assert bp.prev_iterate is fp.branch_points[(o - 1) % period]
+            assert (bp.x, bp.y) == orbit[o]
+            np.testing.assert_array_equal(bp.get_point(), fp.coordinates[o])
+            assert bp.get_cdist("unstable") == bp.get_cdist("stable") == 0.0
+
+
+def test_a_periodic_point_cannot_be_written_through() -> None:
+    """The point's coordinates are the fixed point's: ``get_point()`` is a
+    read-only view, and a cdist is read on a named manifold only."""
+    p = periodic_point(1.0, 2.0)
+
+    with pytest.raises(ValueError):
+        p.get_point()[0] = 5.0
+    with pytest.raises(ValueError):
+        p.get_cdist("neither")
+    assert (p.x, p.y) == (1.0, 2.0)
+
+
 @pytest.mark.parametrize("stability", ["unstable", "stable"])
 def test_each_node_follows_its_chain_from_the_anchor(initialized, stability):
     """Read back along the chain, every row's predecessor is the row before it
@@ -366,6 +396,18 @@ def test_a_non_integer_end_raises() -> None:
 
     with pytest.raises(TypeError):
         BaseManifold(int(rows[0]), "unstable", 1.0, None, tail=2.7, manifold_key=None, store=store)
+
+
+def test_a_row_outside_the_store_raises() -> None:
+    """A row end is a row of the curve's store: one past its last row, or the
+    -1 sentinel, raises rather than reading spare capacity."""
+    store = PointStore()
+    rows = store.append([(0.0, 0.0), (1.0, 0.0)], [0.0, 1.0])
+    store.new_chain(rows, 1.0)
+
+    for row in (len(store), -1):
+        with pytest.raises(IndexError):
+            BaseManifold(int(rows[0]), "unstable", 1.0, None, tail=row, manifold_key=None, store=store)
 
 
 def test_a_row_end_without_a_store_raises() -> None:
