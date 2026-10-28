@@ -172,6 +172,14 @@ tanglepack.numerics.gpu module
    :undoc-members:
    :show-inheritance:
 
+tanglepack.numerics.namespace module
+------------------------------------
+
+.. automodule:: tanglepack.numerics.namespace
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

@@ -5,7 +5,8 @@ This module sits *beside* the numerics code: enabling it changes nothing in
 :class:`~tanglepack.numerics.DynamicalSystem`'s ``map``/``map_inv`` callables so
 that, when they are handed a batch of points, the batch is evaluated on the GPU
 via `CuPy <https://cupy.dev>`_ and the result is copied back to host memory. The
-linked-list / refinement / intersection logic stays on the CPU.
+point store, refinement's bookkeeping, the R-tree and crossing resolution stay on
+the CPU.
 
 Only the *vectorized* map call is accelerated: every per-layer refinement sweep
 and every manifold iteration maps a whole ``(2, N)`` batch in a single call (see
@@ -14,24 +15,54 @@ device. Per-point evaluations (a single ``(2,)`` point, as used by the
 initializer and the fixed-point solver) stay on the CPU to avoid paying the
 host<->device transfer for two numbers.
 
+What runs where
+---------------
+* **Device-capable.** The user's map, by NEP-18 under :func:`enable_gpu` (the
+  only place the library moves data between host and device), and
+  :func:`~tanglepack.numerics.geometry.curvature_area_batch` /
+  :func:`~tanglepack.numerics.geometry.chord_deviation_batch`, which compute in
+  their inputs' namespace (``numerics/namespace.py``'s ``array_namespace``):
+  CuPy in, CuPy out, a mix raises ``TypeError``. No library caller hands them
+  device arrays.
+* **Host-only**, each for its own reason:
+
+  - the merge (``ManifoldMachine.merge_manifolds``): it writes chains and the
+    store;
+  - refinement's layer loop (``ManifoldMachine._refine_layer``): it reads the
+    store and appends to it between kernel calls, so on a device every layer
+    would upload its four ``(M, 2)`` arrays and download its flags;
+  - the segment build (``Tangle._query_curve``): libspatialindex runs only on
+    the CPU;
+  - crossing resolution (``Tangle._find_true_intersection``): a 2x2 LAPACK
+    solve per candidate pair, not a batched kernel;
+  - the point store and the intersection registry.
+
+* **A device result is parity to tolerance, never bit-identical.** CuPy's
+  ``pow`` and ``hypot`` differ from numpy's in the last bit, so the curvature
+  kernel on the device differs by up to 2.8e-7 (relative) on real refinement
+  inputs (k=2.8 after two blasts) and moves no chord across ``area_cutoff``.
+
 Measured result
 ---------------
-GPU acceleration is opt-in and, as measured by the numerics stress campaign
-(``stress/numerics/report/report.pdf``), gives
-**no gain**:
+GPU acceleration is opt-in and gives **no gain** (re-measured 2026-10-27, two
+runs):
 
-* end to end the GPU runs at 0.96-1.00x the CPU speed (median of three repeats:
-  k=2.8 0.999x, period 3 0.975x, k=10 0.958x);
-* the map is at most 0.84% of unstable-growth CPU time (cProfile), so Amdahl's
-  law caps any map accelerator at 1.008x; refinement and the linked list
-  (Python ``Point`` objects, pointer walks) take the rest;
-* the device path is transfer-dominated (88% of GPU time at ``N = 10^7``), and
-  through ``map_batch`` it only breaks even somewhere between ~6e5 and ~4e6
-  points per batch, so ``min_batch_points`` has nothing to tune.
+* end to end the GPU runs at 0.98-1.00x the CPU speed (growth, intersections
+  and bridges, median of three interleaved repeats, equal point counts: k=2.8
+  at 11 steps 0.990x and 1.000x, period 3 0.981x and 0.977x, k=10 0.983x and
+  0.983x);
+* the map is 0.56-0.60% of k=2.8 unstable-growth time (cProfile) and 0.06% of
+  the 1e-7 scale series (``stress/profile/profile_numerics.py --cases scale``);
+* the map, refinement, merge, segment build and crossing resolution together are
+  3.5% of that series, so even infinitely fast they would cap it at 1.037x; the
+  time is in the blast's same-stability count (``diagnose``, 78%);
+* the break-even batch is out of reach: k=2.8 at 12 steps already raises
+  ``PointBudgetExceeded`` (2,000,000 points) at the escape.
 
-It could pay only once refinement and the linked list themselves live on the
-device as arrays, so that a growth step does not round-trip through host
-memory batch by batch. Leave it off.
+The numerics stress campaign (``stress/numerics/report/report.pdf``, 2026-10-07)
+measured 0.96-1.00x end to end, the map at most 0.84% of growth, the device path
+88% transfer at ``N = 10^7`` and break-even between ~6e5 and ~4e6 points per
+batch, so ``min_batch_points`` has nothing to tune. Leave it off.
 
 Map requirements
 ----------------
