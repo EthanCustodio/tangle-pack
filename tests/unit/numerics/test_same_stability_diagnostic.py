@@ -74,6 +74,27 @@ def test_a_bridge_cut_from_a_manifold_is_that_manifold():
     assert same_stability_crossings(workbench, region="all") == []
 
 
+def test_a_bridge_off_every_manifold_leaving_a_manifold_s_periodic_point_is_that_manifold():
+    """A bridge leaving the periodic point a manifold leaves from, on the other
+    slot, is cut from that manifold even when its rows lie on no manifold: their
+    crossing is neither listed nor counted (N6's mC / mH, pinned in N8)."""
+    fp = bare_fixed_point(label="A")
+    workbench = polyline_workbench(fp, {})
+    periodic = BranchPoint(2, (0.0, 0.0), 0.0, 0.0)
+    key = (fp, "unstable", 0, 0)
+    workbench.register_manifold(key, polyline_manifold([(1.0, 0.0), (2.0, 0.0)], key, root=periodic))
+    rows = store_rows([(1.5, 1.0), (1.5, -1.0)], [1.0, 2.0])
+    periodic.insert_point_forward(TEST_STORE.new_chain(rows, 1.0), 1)
+    bridge = Bridge(root=periodic, stability="unstable", stretch_param=1.0, fixed_point=fp,
+                    tail=int(rows[-1]), branch_index=1, manifold_key=(fp, "unstable", 0, 1),
+                    store=TEST_STORE)
+    workbench._register_bridge(bridge)
+
+    assert same_stability_crossings(workbench, region="all") == []
+    count = count_same_stability_crossings(workbench, [bridge])
+    assert (count.in_region, count.outside) == (0, 0)
+
+
 def test_two_curves_of_one_stability_cross_for_both_stabilities_never_across():
     fp = bare_fixed_point(label="A")
     rising = np.array([[-1.0, -1.0], [0.1, 0.1], [1.0, 1.0]])
