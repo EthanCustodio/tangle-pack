@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Mapping, Optional, Sequence
 
+import numpy as np
+
 from tanglepack import BaseManifold, BranchPoint, FixedPoint, TangleWorkbench
 from tanglepack.numerics.PointStore import PointStore
 
@@ -62,8 +64,7 @@ def polyline_manifold(
     rows = store_rows(points, [i + offset for i in range(len(points))], store=store)
     chain = store.new_chain(rows, 1.0)
     if root is not None:
-        hang = root.insert_point_forward if stability == "unstable" else root.insert_point_backward
-        hang(chain, branch)
+        root.attach(chain, stability, branch)
     return BaseManifold(
         int(rows[0]) if root is None else root,
         stability,
@@ -101,3 +102,11 @@ def polyline_workbench(
     for key, points in curves.items():
         workbench.register_manifold(key, polyline_manifold(points, key))
     return workbench
+
+
+def periodic_point(x: float = 0.0, y: float = 0.0) -> BranchPoint:
+    """The orbit point of a hand-built period-1 fixed point at ``(x, y)``: its
+    own image, cdist 0.0, every slot empty."""
+    fixed_point = FixedPoint(1)
+    fixed_point.coordinates = [np.array([x, y], dtype=np.float64)]
+    return fixed_point.branch_points[0]

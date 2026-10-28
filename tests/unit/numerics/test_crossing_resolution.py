@@ -17,8 +17,8 @@ import pytest
 from cases import build_k28
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
-from helpers.polylines import TEST_STORE, store_rows, polyline_manifold, polyline_workbench
-from tanglepack import BranchPoint, Intersection, IntersectionRegistry
+from helpers.polylines import TEST_STORE, periodic_point, store_rows, polyline_manifold, polyline_workbench
+from tanglepack import Intersection, IntersectionRegistry
 from tanglepack.numerics.Tangle import Tangle
 
 WORKBENCH = "tanglepack.numerics.TangleWorkbench"
@@ -110,7 +110,7 @@ def test_a_bracket_end_at_the_periodic_point_reads_its_point_and_zero():
     point, away from it: the stable bracket ends at the BranchPoint, which has no
     row and reads its own coordinates and cdist 0.0 -- never the store's last row."""
     fp = bare_fixed_point(label="A")
-    periodic = BranchPoint(2, (0.0, 0.0), 0.0, 0.0)
+    periodic = periodic_point()
     stable = polyline_manifold([(0.0, 1.0), (0.0, 2.0)], (fp, "stable", 0, 0), root=periodic)
     unstable = polyline_manifold(_line() + (0.0, 0.5), (fp, "unstable", 0, 0))
     TEST_STORE.append_one(7.0, 7.0, 7.0)  # the store's last row, which a -1 sentinel would read

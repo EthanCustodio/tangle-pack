@@ -253,9 +253,7 @@ class ManifoldInitializer:
 
         # The seed chain, in curve order, hung on its slot of the orbit point.
         chain = store.new_chain([first_back, first_point], alpha)
-        branch_point = fixed_point.branch_points[orbit_index]
-        hang = branch_point.insert_point_forward if unstable else branch_point.insert_point_backward
-        hang(chain, branch_index)
+        fixed_point.branch_points[orbit_index].attach(chain, stability, branch_index)
 
         return BaseManifold(
             fixed_point.branch_points[orbit_index],
@@ -385,13 +383,7 @@ class ManifoldInitializer:
                 segment.manifold_key = key
                 segment.branch_index = key[3]
                 initial_segments[key[2:]] = segment
-                branch_point = fixed_point.branch_points[key[2]]
-                hang = (
-                    branch_point.insert_point_forward
-                    if stability == "unstable"
-                    else branch_point.insert_point_backward
-                )
-                hang(segment._span()[1], key[3])
+                fixed_point.branch_points[key[2]].attach(segment._span()[1], stability, key[3])
 
         for (orbit_index, _branch), segment in initial_segments.items():
             segment.root = fixed_point.branch_points[orbit_index]

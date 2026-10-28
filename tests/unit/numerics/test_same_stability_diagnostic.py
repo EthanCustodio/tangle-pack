@@ -22,8 +22,8 @@ from cases import build_k10_inversion
 from helpers import laws
 from helpers.fakes import bare_fixed_point
 from helpers.logs import assert_logged
-from helpers.polylines import TEST_STORE, store_rows, polyline_manifold, polyline_workbench
-from tanglepack import BaseManifold, Bridge, BranchPoint
+from helpers.polylines import TEST_STORE, periodic_point, store_rows, polyline_manifold, polyline_workbench
+from tanglepack import BaseManifold, Bridge
 from tanglepack.numerics import ManifoldMachine
 from tanglepack.numerics.PointStore import PointStore
 from tanglepack.numerics.diagnostics import (
@@ -54,7 +54,7 @@ def test_neighbouring_segments_and_a_shared_root_are_not_crossings():
     # A hairpin: every segment meets the next at a sharp turn, none crosses.
     hairpin = np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 0.01], [2.0, 0.02], [0.0, 0.03]])
     workbench = polyline_workbench(fp, {(fp, "stable", 0, 0): hairpin})
-    root = BranchPoint(2, (0.0, 0.0), 5.0, 5.0)
+    root = periodic_point(5.0, 5.0)
     for branch, direction in ((0, 1.0), (1, -1.0)):
         key = (fp, "unstable", 0, branch)
         points = [(5.0 + direction * step, 5.0 + 0.1 * step) for step in (1, 2, 3)]
@@ -80,11 +80,11 @@ def test_a_bridge_off_every_manifold_leaving_a_manifold_s_periodic_point_is_that
     crossing is neither listed nor counted (N6's mC / mH, pinned in N8)."""
     fp = bare_fixed_point(label="A")
     workbench = polyline_workbench(fp, {})
-    periodic = BranchPoint(2, (0.0, 0.0), 0.0, 0.0)
+    periodic = periodic_point()
     key = (fp, "unstable", 0, 0)
     workbench.register_manifold(key, polyline_manifold([(1.0, 0.0), (2.0, 0.0)], key, root=periodic))
     rows = store_rows([(1.5, 1.0), (1.5, -1.0)], [1.0, 2.0])
-    periodic.insert_point_forward(TEST_STORE.new_chain(rows, 1.0), 1)
+    periodic.attach(TEST_STORE.new_chain(rows, 1.0), "unstable", 1)
     bridge = Bridge(root=periodic, stability="unstable", stretch_param=1.0, fixed_point=fp,
                     tail=int(rows[-1]), branch_index=1, manifold_key=(fp, "unstable", 0, 1),
                     store=TEST_STORE)
@@ -192,7 +192,7 @@ def test_two_periodic_points_are_two_nodes():
     point has no row, and each one is keyed apart)."""
     fp = bare_fixed_point(label="A")
     workbench = polyline_workbench(fp, {})
-    here, there = BranchPoint(2, (0.0, 0.0), 0.0, 0.0), BranchPoint(2, (0.0, 0.0), 0.0, 2.0)
+    here, there = periodic_point(0.0, 0.0), periodic_point(0.0, 2.0)
     key, image_key = (fp, "unstable", 0, 0), (fp, "unstable", 1, 0)
     workbench.register_manifold(key, polyline_manifold([(2.0, 2.0), (3.0, 2.0)], key, root=here))
     image = polyline_manifold([(2.0, 0.0), (3.0, 0.0)], image_key, root=there)

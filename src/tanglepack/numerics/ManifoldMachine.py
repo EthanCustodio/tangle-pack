@@ -474,12 +474,11 @@ class ManifoldMachine:
             # The image of an anchor bridge's root is the next periodic point: its
             # run starts at the slot of the bridge's branch, position -1 of the
             # chain hanging there.
-            slots = head.forward_branches if manifold.stability == "unstable" else head.backward_branches
-            slot_chain = slots[manifold.branch_index]
+            slot_chain = head.chain(manifold.stability, manifold.branch_index)
             rows = np.concatenate(([-1], rows))
             chains = np.concatenate(([slot_chain.index], chains))
             positions = np.concatenate(([-1], positions))
-            cdists = np.concatenate(([head.cdist], cdists))
+            cdists = np.concatenate(([head.get_cdist(manifold.stability)], cdists))
         bound = cdists[-1]
         runs, i = [], 0
         while i < len(images):
@@ -725,11 +724,10 @@ class ManifoldMachine:
         c0, c1 = cdist[rows_0], cdist[rows_1]
         at_anchor = layer == -1
         if at_anchor.any():
-            anchor_pre = self._get_preiterate(anchor, stability)
-            pre_rows_0 = np.where(at_anchor, -1 if anchor_pre is None else 0, pre_rows_0)
-            if anchor_pre is not None:
-                pre0[at_anchor] = anchor_pre
-            c0 = np.where(at_anchor, float(anchor.cdist), c0)
+            # The anchor always has its preiterate, an orbit point (0 marks it as present).
+            pre_rows_0 = np.where(at_anchor, 0, pre_rows_0)
+            pre0[at_anchor] = self._get_preiterate(anchor, stability)
+            c0 = np.where(at_anchor, anchor.get_cdist(stability), c0)
 
         # Pairs that are degenerate (near-coincident points) or missing the data
         # needed to refine (a missing preiterate on a bridge boundary point) are
@@ -790,18 +788,17 @@ class ManifoldMachine:
         return np.column_stack((shifted, shifted + 1)).ravel()
 
     @staticmethod
-    def _get_preiterate(point: BranchPoint, stability: Stability) -> Optional[np.ndarray]:
+    def _get_preiterate(point: BranchPoint, stability: Stability) -> NDArray[np.float64]:
         """
-        The coordinates of a periodic point's preiterate (its preimage on an
-        unstable curve, its image on a stable one), or None if it has none.
+        The coordinates of a periodic point's preiterate: its preimage on an
+        unstable curve, its image on a stable one, both orbit points.
 
         Parameters:
             point (BranchPoint): The chain's anchor (a row's preiterate is read
                 off the store's link columns).
             stability (str): stability of the manifold
         """
-        pre = point.prev_iterate if stability == "unstable" else point.next_iterate
-        return None if pre is None else pre.get_point()
+        return point.iterate(-1 if stability == "unstable" else 1).get_point()
 
     @staticmethod
     def _curvature_area_batch(

@@ -12,18 +12,16 @@ bijection.
 The merge states no case reaches and one chain cannot hold, (f)-(h), raise.
 A point laid right after a periodic point (a crossing separator, a refined
 pair at the anchor) becomes position 0 of the chain its slot holds.
-The periodic point's iterate list is tested here too.
+The periodic point, a view of its fixed point's orbit, is tested here too.
 """
 
 from __future__ import annotations
-
-from typing import Callable
 
 import numpy as np
 import pytest
 
 from helpers.fakes import bare_fixed_point
-from helpers.polylines import polyline_manifold
+from helpers.polylines import periodic_point, polyline_manifold
 from tanglepack import BaseManifold, BranchPoint
 from tanglepack.examples.henon import henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
@@ -31,12 +29,6 @@ from tanglepack.numerics.PointStore import PointStore
 from tanglepack.numerics.Tangle import Tangle
 
 NUM_BRANCHES = 2
-
-#: The point kind the iterate list belongs to (the periodic point; a row's
-#: links are store columns).
-POINT_KINDS: dict[str, Callable[[], BranchPoint]] = {
-    "branch_point": lambda: BranchPoint(NUM_BRANCHES),
-}
 
 
 def assert_chains_hold(workbench) -> None:
@@ -191,13 +183,14 @@ def test_runs_that_both_end_on_a_tie_raise(machine) -> None:
 # ------------------------------------------------------------- points and branch points
 
 def test_branch_point_creation() -> None:
-    """A fresh ``BranchPoint`` has one empty slot per branch in each direction."""
-    p = BranchPoint(NUM_BRANCHES, x=1.0, y=2.0)
+    """The periodic point of a hand-built period-1 fixed point is its own image,
+    reads cdist 0.0 and has one empty slot per branch in each direction."""
+    p = periodic_point(1.0, 2.0)
 
     assert p.x == 1.0
     assert p.y == 2.0
-    assert p.next_iterate is None
-    assert p.prev_iterate is None
+    assert p.next_iterate is p and p.prev_iterate is p
+    assert p.get_cdist("unstable") == p.get_cdist("stable") == 0.0
     assert len(p.forward_branches) == NUM_BRANCHES
     assert len(p.backward_branches) == NUM_BRANCHES
     np.testing.assert_array_equal(p.get_point(), np.array([1.0, 2.0]))
@@ -205,36 +198,37 @@ def test_branch_point_creation() -> None:
 
 @pytest.mark.parametrize("direction", ["forward", "backward"])
 def test_a_branch_point_hangs_a_chain_on_a_slot(direction: str) -> None:
-    """``insert_point_*`` puts the chain in one slot and makes the branch point
+    """``attach`` puts the chain in one slot and makes the branch point
     its anchor, the left neighbour of its first position; the other slots stay
     empty."""
-    p = BranchPoint(NUM_BRANCHES)
+    p = periodic_point()
     stability = "unstable" if direction == "forward" else "stable"
     store = PointStore()
     curve = ManifoldMachine._manifold_from_rows(store, store.append([(0.0, 0.0)] * 2, None), stability, 2.5, None)
     chain = curve.store.chain_of(curve.ids[0])
 
-    getattr(p, f"insert_point_{direction}")(chain, 1)
+    p.attach(chain, stability, 1)
 
     slots = p.forward_branches if direction == "forward" else p.backward_branches
     others = p.backward_branches if direction == "forward" else p.forward_branches
     assert list(slots) == [None, chain] and list(others) == [None] * NUM_BRANCHES
-    assert chain.anchor is p and chain.xy_at(-1) is p.get_point() and chain.stretch_param == 2.5
+    assert chain.anchor is p and chain.stretch_param == 2.5
+    np.testing.assert_array_equal(chain.xy_at(-1), p.get_point())
 
 
 def test_a_slot_holding_another_chain_refuses_a_second() -> None:
     """A branch is one chain: hanging another chain on its slot raises."""
-    p = BranchPoint(NUM_BRANCHES)
+    p = periodic_point()
     store = PointStore()
     first, other = (
         ManifoldMachine._manifold_from_rows(store, store.append([(0.0, 0.0)], None), "unstable", 1.0, None)
         for _ in range(2)
     )
     first_chain = first.store.chain_of(first.ids[0])
-    p.insert_point_forward(first_chain, 0)
+    p.attach(first_chain, "unstable", 0)
 
     with pytest.raises(ValueError):
-        p.insert_point_forward(other.store.chain_of(other.ids[0]), 0)
+        p.attach(other.store.chain_of(other.ids[0]), "unstable", 0)
     assert p.forward_branches[0] is first_chain
 
 
@@ -252,19 +246,11 @@ def test_each_node_follows_its_chain_from_the_anchor(initialized, stability):
     assert manifold.root is fp.branch_points[0] is chain.anchor
     np.testing.assert_array_equal(store._position[rows], np.arange(len(rows)))
     np.testing.assert_array_equal(chain.ids[: len(rows)], rows)
-    assert chain.xy_at(-1) is chain.anchor.get_point()
+    np.testing.assert_array_equal(chain.xy_at(-1), chain.anchor.get_point())
     assert chain.xy_at(len(chain)) is None
 
 
 # ------------------------------------------------ a point right after the periodic point
-
-def _periodic_point() -> BranchPoint:
-    """A one-branch periodic point at the origin, its own iterate, cdist 0."""
-    point = BranchPoint(1, (0.0, 0.0), x=0.0, y=0.0)
-    point.cdist = 0.0
-    point.insert_next_iterate(point)
-    return point
-
 
 def _assert_first_on_its_chain(periodic: BranchPoint, first: int, curve: BaseManifold) -> None:
     """Row ``first`` is position 0 of the chain ``periodic``'s slot holds, its
@@ -283,7 +269,7 @@ def test_a_separator_after_the_periodic_point_becomes_the_first_point() -> None:
     """A stable V crossing the segment that leaves the periodic point twice: the
     cut lays a separator between the two crossings, at position 0 of the chain."""
     fp = bare_fixed_point(label="A")
-    periodic = _periodic_point()
+    periodic = periodic_point()
     tangle = Tangle()
     tangle.add_manifolds([polyline_manifold([(0.3, 1.0), (0.5, -1.0), (0.7, 1.0)], (fp, "stable", 0, 0))])
     curve = polyline_manifold([(1.0, 0.0), (2.0, 0.0)], (fp, "unstable", 0, 0), root=periodic)
@@ -308,13 +294,13 @@ def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> N
     a preimage: the new point goes to position 0 and the slot keeps its chain. Its
     left neighbour, the periodic point's, is no point (NaN); the base read the
     stable branch's first point there and raised before it could insert."""
-    periodic = _periodic_point()
+    periodic = periodic_point()
     store = PointStore()
     xs = np.array([0.1, 0.2, 0.4, 0.8])
     rows = store.append(np.column_stack((xs, xs * xs)), xs)
     store.link(store.append(np.column_stack((xs / 2, xs * xs / 2)), xs / 2), rows)
     ManifoldMachine._manifold_from_rows(store, rows, "unstable", 2.0, None)
-    periodic.insert_point_forward(store.chain_of(rows[0]), 0)
+    periodic.attach(store.chain_of(rows[0]), "unstable", 0)
     curve = BaseManifold(periodic, "unstable", 2.0, None, tail=int(rows[-1]), branch_index=0,
                          manifold_key=None, store=store)
     double = lambda p: 2 * np.asarray(p)  # noqa: E731 - the map of the preimages above
@@ -335,16 +321,21 @@ def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> N
 @pytest.mark.parametrize("root", ["point", "empty_slot"])
 def test_a_curve_of_one_node_reads_one_row(root: str) -> None:
     """A lone point, or a periodic point whose slot is empty, reads as one row in
-    every getter; there is no iterate to read."""
+    every getter. The lone point has no image; the periodic point always has
+    one, the next orbit point."""
     store = PointStore()
-    head = store.append_one(1.0, 2.0, 0.5) if root == "point" else BranchPoint(1, (0.0, 0.0), x=0.0, y=0.0)
+    head = store.append_one(1.0, 2.0, 0.5) if root == "point" else periodic_point()
     curve = BaseManifold(head, "unstable", 1.0, None, tail=head, branch_index=0, manifold_key=None,
                          store=store)
 
     assert curve.get_point_array().shape == (1, 2)
     assert curve.get_cdist_array().shape == (1, 1)
-    assert curve.get_non_iterated_point_array().shape == (1, 2)
-    assert curve.get_iterated_point_array().size == 0
+    if root == "point":
+        assert curve.get_non_iterated_point_array().shape == (1, 2)
+        assert curve.get_iterated_point_array().size == 0
+    else:  # the periodic point always has its image: the next orbit point
+        assert curve.get_non_iterated_point_array().size == 0
+        assert curve.get_iterated_point_array().shape == (1, 2)
     assert curve.ids.tolist() == ([head] if root == "point" else [])
 
 
@@ -354,10 +345,10 @@ def test_a_periodic_point_root_takes_a_row_tail_without_store() -> None:
     """A curve rooted at a periodic point adopts its slot chain's store, so a
     row tail needs no ``store=``; the slot is read through ``branch_index``,
     which is set before the ends."""
-    periodic = _periodic_point()
+    periodic = periodic_point()
     store = PointStore()
     rows = store.append([(0.1, 0.0), (0.2, 0.0), (0.3, 0.0)], [0.1, 0.2, 0.3])
-    periodic.insert_point_forward(store.new_chain(rows, 2.0), 0)
+    periodic.attach(store.new_chain(rows, 2.0), "unstable", 0)
 
     curve = BaseManifold(periodic, "unstable", 2.0, None, tail=int(rows[1]), branch_index=0,
                          manifold_key=None)
@@ -382,51 +373,3 @@ def test_a_row_end_without_a_store_raises() -> None:
     no periodic point to adopt one from) raises."""
     with pytest.raises(ValueError):
         BaseManifold(0, "unstable", 1.0, None, tail=1, manifold_key=None)
-
-
-# ------------------------------------------------ the periodic point's iterate list
-
-@pytest.mark.parametrize("kind", sorted(POINT_KINDS))
-def test_insert_next_iterate(kind: str) -> None:
-    """``insert_next_iterate`` links both directions and leaves the ends open."""
-    p1, p2 = POINT_KINDS[kind](), POINT_KINDS[kind]()
-
-    p1.insert_next_iterate(p2)
-
-    assert p1.next_iterate is p2
-    assert p2.prev_iterate is p1
-    assert p1.prev_iterate is None
-    assert p2.next_iterate is None
-
-
-@pytest.mark.parametrize("kind", sorted(POINT_KINDS))
-def test_insert_prev_iterate(kind: str) -> None:
-    """``insert_prev_iterate`` links both directions and leaves the ends open."""
-    p1, p2 = POINT_KINDS[kind](), POINT_KINDS[kind]()
-
-    p1.insert_prev_iterate(p2)
-
-    assert p1.prev_iterate is p2
-    assert p2.next_iterate is p1
-    assert p1.next_iterate is None
-    assert p2.prev_iterate is None
-
-
-@pytest.mark.parametrize("kind", sorted(POINT_KINDS))
-def test_insert_next_iterate_twice_raises(kind: str) -> None:
-    """A point has at most one forward iterate."""
-    p = POINT_KINDS[kind]()
-    p.insert_next_iterate(POINT_KINDS[kind]())
-
-    with pytest.raises(ValueError):
-        p.insert_next_iterate(POINT_KINDS[kind]())
-
-
-@pytest.mark.parametrize("kind", sorted(POINT_KINDS))
-def test_insert_prev_iterate_twice_raises(kind: str) -> None:
-    """A point has at most one backward iterate."""
-    p = POINT_KINDS[kind]()
-    p.insert_prev_iterate(POINT_KINDS[kind]())
-
-    with pytest.raises(ValueError):
-        p.insert_prev_iterate(POINT_KINDS[kind]())

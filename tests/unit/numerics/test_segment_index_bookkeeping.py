@@ -252,8 +252,6 @@ def test_a_curve_crossing_nothing_takes_one_sid_per_new_edge(monkeypatch):
 def test_a_query_only_curve_queries_the_edge_leaving_its_periodic_point():
     fp = bare_fixed_point(label="A")
     root = fp.branch_points[0]
-    root.set_x(0.0)
-    root.set_y(0.0)
     store = PointStore()
     store.append_one(5.0, 5.0, None)  # row 0, a decoy far from every curve
 
@@ -261,7 +259,7 @@ def test_a_query_only_curve_queries_the_edge_leaving_its_periodic_point():
         rows = store.append(points, [float(i + 1) for i in range(len(points))])
         ManifoldMachine._manifold_from_rows(store, rows, key[1], 1.0, fp)
         if root is not None:
-            root.insert_point_forward(store.chain_of(rows[0]), key[3])
+            root.attach(store.chain_of(rows[0]), key[1], key[3])
         return BaseManifold(int(rows[0]) if root is None else root, key[1], 1.0, fixed_point=fp,
                             tail=int(rows[-1]), branch_index=key[3], manifold_key=key, store=store)
 

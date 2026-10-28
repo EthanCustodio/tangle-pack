@@ -57,12 +57,10 @@ def curve_rows(manifold: BaseManifold):
 def node_cdist(node, stability: str) -> Optional[float]:
     """Resolve a node's cdist for ``stability``, or ``None`` if undefined.
 
-    Returns ``None`` for the root fixed point (a ``BranchPoint`` with no cdists)
-    and for a node whose ``cdist`` is ``None``.
+    A periodic point (a ``BranchPoint``) reads 0.0; a node whose ``cdist`` is
+    ``None`` reads ``None``.
     """
     if isinstance(node, BranchPoint):
-        if node.cdists is None:
-            return None
         value = node.get_cdist(stability)
     else:
         value = node.cdist

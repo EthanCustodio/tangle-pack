@@ -45,8 +45,7 @@ def _hand_walk(manifold, stop_at_final=True):
         store = manifold.store
         chain, lo = store.chain_of(root), store.position_of(root)
     else:
-        slots = head.forward_branches if manifold.stability == "unstable" else head.backward_branches
-        chain, lo = slots[manifold.branch_index], 0
+        chain, lo = head.chain(manifold.stability, manifold.branch_index), 0
         store = chain.store
     ids = chain.ids
     hi = int(np.flatnonzero(ids == manifold._tail)[0]) + 1 if stop_at_final else len(ids)
@@ -57,24 +56,12 @@ def _xy(head, store, rows):
     return np.vstack(([] if head is None else [head.get_point()]) + [store.xy[r] for r in rows.tolist()])
 
 
-def _cd(head, store, rows):
-    return np.vstack(([] if head is None else [[head.cdist]]) + [[store.cdist[r]] for r in rows.tolist()])
-
-
-def _has_iterate(manifold, node, n=1):
-    return (
-        node.exists_next_iterate(n)
-        if manifold.stability == "unstable"
-        else node.exists_prev_iterate(n)
-    )
+def _cd(head, store, rows, stability):
+    return np.vstack(([] if head is None else [[head.get_cdist(stability)]]) + [[store.cdist[r]] for r in rows.tolist()])
 
 
 def _iterate_of(manifold, node, n=1):
-    return (
-        node.get_next_iterate(n)
-        if manifold.stability == "unstable"
-        else node.get_prev_iterate(n)
-    )
+    return node.iterate(n if manifold.stability == "unstable" else -n)
 
 
 @pytest.mark.parametrize("stability", ["unstable", "stable"])
@@ -91,19 +78,20 @@ def test_every_getter_matches_an_independent_walk(grown_both, stability):
     np.testing.assert_array_equal(manifold.ids, rows)
 
     # the cdist read deliberately ignores the tail (documented on the getter)
-    assert np.array_equal(manifold.get_cdist_array(), _cd(head, store, all_rows))
+    assert np.array_equal(manifold.get_cdist_array(), _cd(head, store, all_rows, stability))
 
     link = store.image if manifold.stability == "unstable" else store.preimage
     images = link[rows]
-    keep_head = head is not None and not _has_iterate(manifold, head)
-    expected_non_iterated = (head if keep_head else None, rows[images < 0])
-    assert np.array_equal(manifold.get_non_iterated_point_array(), _xy(head if keep_head else None, store, rows[images < 0]))
-    expected = _cd(*expected_non_iterated[:1], store, expected_non_iterated[1])
+    # A periodic point always has its image, the next orbit point, so the
+    # non-iterated read never holds the head.
+    non_iterated = rows[images < 0]
+    assert np.array_equal(manifold.get_non_iterated_point_array(), _xy(None, store, non_iterated))
+    expected = _cd(None, store, non_iterated, stability)
     assert np.array_equal(
         manifold.get_non_iterated_cdist_array(), expected if len(expected) else np.array([])
     )
 
-    image_head = _iterate_of(manifold, head) if head is not None and _has_iterate(manifold, head) else None
+    image_head = None if head is None else _iterate_of(manifold, head)
     assert np.array_equal(manifold.get_iterated_point_array(), _xy(image_head, store, images[images >= 0]))
 
 
@@ -138,25 +126,6 @@ def test_collect_is_the_only_traversal(grown_unstable):
     ):
         with pytest.raises(_CollectReached):
             call()
-
-
-def test_collect_rejects_a_broken_iterate_link(grown_unstable, monkeypatch):
-    """A node that claims an iterate it does not have is an error, not a None row.
-
-    The root BranchPoint is the one node read through ``_iterate_of`` (a point's
-    link is a store row, which cannot claim an iterate and name none).
-    """
-    workbench, fp, manifold = grown_unstable
-    node = manifold.root
-    assert _has_iterate(manifold, node)
-    iterate_of = BaseManifold._iterate_of
-
-    def _lying(self, other, num_iterates):
-        return None if other is node else iterate_of(self, other, num_iterates)
-
-    monkeypatch.setattr(BaseManifold, "_iterate_of", _lying)
-    with pytest.raises(ValueError):
-        manifold.get_iterated_point_array()
 
 
 # --------------------------------------------------------------------------- #

@@ -161,12 +161,6 @@ class FixedPointSolver:
 
         for i in range(period):
 
-            p_x, p_y = point.coordinates[i]
-            point.branch_points[i].set_x(p_x)
-            point.branch_points[i].set_y(p_y)
-
-            point.branch_points[i].cdist = 0.0
-
             point.unstable_eigenvectors[i] = eigenvectors[i][0]
             point.stable_eigenvectors[i] = eigenvectors[i][1]
 
@@ -175,9 +169,6 @@ class FixedPointSolver:
 
             point.jacobians[i] = jacobians[i]
             point.partial_jacobians[i] = partial_jacobians[i]
-
-            point.branch_points[i].next_iterate = point.branch_points[(i + 1) % period]
-            point.branch_points[i].prev_iterate = point.branch_points[(i - 1) % period]
 
         point.set_k_value()
 

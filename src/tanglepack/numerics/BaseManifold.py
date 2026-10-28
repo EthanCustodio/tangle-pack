@@ -215,8 +215,9 @@ class BaseManifold:
     def _stored(self, end: Optional[End | BranchPoint | int]) -> int | BranchPoint | None:
         """An end as the curve stores it: an ``End`` becomes its row, an integer
         stays a row of :attr:`store`; a BranchPoint or None is kept as given.
-        Anything else raises ``TypeError``, and a row on a curve with no store
-        (none given, none adopted from a periodic root's slot) ``ValueError``."""
+        Anything else raises ``TypeError``, a row on a curve with no store
+        (none given, none adopted from a periodic root's slot) ``ValueError``,
+        and a row outside the store ``IndexError``."""
         if end is None or isinstance(end, BranchPoint):
             return end
         if isinstance(end, End):
@@ -227,6 +228,8 @@ class BaseManifold:
             raise TypeError(f"an end is an End, a row (int) or a BranchPoint, not {type(end).__name__}")
         if self.store is None:
             raise ValueError("a row end needs the curve's store (store=)")
+        if not 0 <= row < len(self.store):
+            raise IndexError(f"row {row} is not a row of the curve's store ({len(self.store)} rows)")
         return row
 
     def _end(self, end: int | BranchPoint | None) -> Optional[End | BranchPoint]:
@@ -316,21 +319,11 @@ class BaseManifold:
             branch_index = self.branch_index
         if branch_index is None:
             raise ValueError("Must supply branch_index when starting walk from root BranchPoint")
-        root = self._root
-        slots = root.forward_branches if self.stability == "unstable" else root.backward_branches
-        return slots[branch_index]
-
-    def _has_iterate(self, node: BranchPoint, num_iterates: int) -> bool:
-        """Whether ``node`` has its ``num_iterates``-step image along this stability."""
-        if self.stability == "unstable":
-            return node.exists_next_iterate(num_iterates)
-        return node.exists_prev_iterate(num_iterates)
+        return self._root.chain(self.stability, branch_index)
 
     def _iterate_of(self, node: BranchPoint, num_iterates: int) -> BranchPoint:
         """The ``num_iterates``-step image of ``node`` along this stability."""
-        if self.stability == "unstable":
-            return node.get_next_iterate(num_iterates)
-        return node.get_prev_iterate(num_iterates)
+        return node.iterate(num_iterates if self.stability == "unstable" else -num_iterates)
 
     def _collect(
         self,
@@ -359,10 +352,6 @@ class BaseManifold:
         Returns:
             np.ndarray: An ``(N, 2)`` coordinate array or an ``(N, 1)`` cdist
             array. An empty read gives an empty array.
-
-        Raises:
-            ValueError: The BranchPoint root claims a ``num_iterates`` iterate
-                that is None.
         """
         head, store, rows = self._select(kind, num_iterates, final_node, stop_at_final)
         if head is None and not len(rows):
@@ -370,7 +359,7 @@ class BaseManifold:
         if value == "cdist":
             cdists = store.cdist[rows] if len(rows) else np.empty(0)
             if head is not None:
-                cdists = np.concatenate((np.array([head.cdist]), cdists))
+                cdists = np.concatenate((np.array([head.get_cdist(self.stability)]), cdists))
             return cdists.reshape(-1, 1)
         points = store.xy[rows] if len(rows) else np.empty((0, 2))
         if head is not None:
@@ -389,24 +378,17 @@ class BaseManifold:
 
         For ``"iterated"`` they are the ``num_iterates``-step images of the rows
         that have one, and the BranchPoint head's image; for ``"non_iterated"``
-        the rows with none, and the head when it has none.
-
-        Raises:
-            ValueError: The BranchPoint root claims a ``num_iterates`` iterate
-                that is None.
+        the rows with none, and never the head: a periodic point always has its
+        image, an orbit point.
         """
         head, store, rows = self._rows(final_node, stop_at_final)
         if kind == "all":
             return head, store, rows
-        if head is not None and self._has_iterate(head, num_iterates) != (kind == "iterated"):
-            head = None
+        if head is not None:
+            head = self._iterate_of(head, num_iterates) if kind == "iterated" else None
         if len(rows):
             iterates = self._iterate_rows(store, rows, num_iterates)
             rows = iterates[iterates >= 0] if kind == "iterated" else rows[iterates < 0]
-        if head is not None and kind == "iterated":
-            head = self._iterate_of(head, num_iterates)
-            if head is None:
-                raise ValueError("Iterate computed incorrectly, NoneType added")
         return head, store, rows
 
     def _iterate_rows(

@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tanglepack import BranchPoint
+from helpers.polylines import periodic_point
 from tanglepack.examples.henon import henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
 from tanglepack.numerics.PointStore import PointStore
@@ -157,14 +157,14 @@ def test_an_absorbed_chain_hands_on_its_anchor_and_one_chain_holds_one(store) ->
     two chains each hanging off one cannot merge."""
     rows = store.append(np.zeros((4, 2)), np.arange(4.0))
     first, second = store.new_chain(rows[:2], 1.0), store.new_chain(rows[2:], 1.0)
-    periodic = BranchPoint(1)
+    periodic = periodic_point()
     second.anchor = periodic
 
     first.absorb(second, rows)
 
     assert first.anchor is periodic and second.anchor is None and len(second) == 0
     other = store.new_chain(store.append(np.zeros((1, 2)), [9.0]), 1.0)
-    other.anchor = BranchPoint(1)
+    other.anchor = periodic_point(1.0, 0.0)
     with pytest.raises(AssertionError, match="two anchors"):
         first.absorb(other, np.concatenate((first.ids, other.ids)))
 

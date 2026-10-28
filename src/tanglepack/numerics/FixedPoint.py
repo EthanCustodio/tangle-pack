@@ -26,18 +26,22 @@ orientation along the orbit and give the map's orientation
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import numpy as np
 from .BranchPoint import BranchPoint
 from .Intersection import Stability
 
+if TYPE_CHECKING:
+    from .PointStore import Chain
+
 ManifoldKey = Tuple["FixedPoint", Stability, int, int]
 
-# A planar saddle has exactly two eigendirections per manifold, so a BranchPoint
-# always carries two branch slots. This is the number of DIRECTIONS available,
-# not the number of pieces the dynamical chain visits (FixedPoint.num_branches).
-_EIGENDIRECTIONS = 2
+# A planar saddle has exactly two eigendirections per manifold: the two slots
+# of each stability at every orbit point. This is the number of DIRECTIONS
+# available, not the number of pieces the dynamical chain visits
+# (FixedPoint.num_branches).
+_EIGENDIRECTIONS = BranchPoint.num_branches
 
 # Relative slack on |lambda_u * lambda_s| == 1 before a map is treated as
 # something other than area preserving (see FixedPoint.per_step_beta).
@@ -123,9 +127,9 @@ class FixedPoint:
 
         self.period = period
 
-        self.branch_points = [
-            BranchPoint(_EIGENDIRECTIONS, (0.0, 0.0)) for _ in range(period)
-        ]
+        self.branch_points = [BranchPoint(self, o) for o in range(period)]
+        # The slot table: (stability, orbit index, branch) -> the chain hanging there.
+        self._slots: dict[tuple[Stability, int, int], Chain] = {}
         self.coordinates = [np.zeros(2) for _ in range(period)]
 
         self.unstable_eigenvectors = [np.zeros(2) for _ in range(period)]
@@ -514,3 +518,39 @@ class FixedPoint:
             return (fp, stability, position % self.period, position // self.period)
 
         return (fp, stability, (orbit_index + n) % self.period, branch_index)
+
+    def slot_chain(self, stability: Stability, orbit_index: int, branch: int) -> Optional[Chain]:
+        """
+        The chain hanging on one slot of one orbit point.
+
+        Args:
+            stability: The slot's manifold.
+            orbit_index: The orbit point.
+            branch: The eigendirection, 0 or 1.
+
+        Returns:
+            The chain, or None for an empty slot.
+        """
+        return self._slots.get((stability, orbit_index, branch))
+
+    def attach_chain(self, chain: Chain, stability: Stability, orbit_index: int, branch: int) -> None:
+        """
+        Hang a chain on one slot of one orbit point (:meth:`BranchPoint.attach`
+        also makes the point the chain's anchor).
+
+        Args:
+            chain: The branch's chain.
+            stability: The slot's manifold.
+            orbit_index: The orbit point.
+            branch: The eigendirection, 0 or 1.
+
+        Raises:
+            IndexError: ``branch`` is not 0 or 1.
+            ValueError: The slot already holds another chain.
+        """
+        if not 0 <= branch < _EIGENDIRECTIONS:
+            raise IndexError(f"branch {branch} is no eigendirection slot")
+        held = self._slots.get((stability, orbit_index, branch))
+        if held is not None and held is not chain:
+            raise ValueError(f"branch {branch} already holds another chain")
+        self._slots[(stability, orbit_index, branch)] = chain
