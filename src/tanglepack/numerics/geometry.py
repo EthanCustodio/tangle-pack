@@ -31,6 +31,8 @@ from typing import Optional, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
+from .namespace import array_namespace
+
 if TYPE_CHECKING:
     from .BaseManifold import BaseManifold
     from .Bridge import Bridge
@@ -319,15 +321,25 @@ def curvature_area_batch(
         ``(M,)`` array of curvature areas. Degenerate rows (zero-length
         chord, coincident x-values after rotation) yield ``0`` so they are
         never flagged for refinement.
+
+    Raises:
+        TypeError: Host and CuPy arrays are mixed.
+
+    Note:
+        Computes in its inputs' namespace (:func:`.namespace.array_namespace`)
+        and returns an array of it: CuPy in, CuPy out, and it never transfers.
+        Every library caller passes host arrays, so the library computes it in
+        numpy.
     """
-    p0 = np.asarray(p0, dtype=float)
-    p1 = np.asarray(p1, dtype=float)
-    left = np.asarray(left, dtype=float)
-    right = np.asarray(right, dtype=float)
+    xp = array_namespace(p0, p1, left, right)
+    p0 = xp.asarray(p0, dtype=float)
+    p1 = xp.asarray(p1, dtype=float)
+    left = xp.asarray(left, dtype=float)
+    right = xp.asarray(right, dtype=float)
 
     chord = p1 - p0
-    length = np.hypot(chord[:, 0], chord[:, 1])
-    safe_len = np.where(length == 0.0, 1.0, length)
+    length = xp.hypot(chord[:, 0], chord[:, 1])
+    safe_len = xp.where(length == 0.0, 1.0, length)
     ux = chord[:, 0] / safe_len
     uy = chord[:, 1] / safe_len
 
@@ -360,18 +372,18 @@ def curvature_area_batch(
             aa = a / 3.0
             bb = 0.5 * (b - m)
             cc = c - d
-            area = np.abs(
+            area = xp.abs(
                 aa * (x1**3 - x0**3)
                 + bb * (x1**2 - x0**2)
                 + cc * (x1 - x0)
             )
-        return np.where(np.isfinite(area), area, 0.0)
+        return xp.where(xp.isfinite(area), area, 0.0)
 
     left_area = side_area(left)
     right_area = side_area(right)
 
-    area = np.maximum(left_area, right_area)
-    area = np.where(length == 0.0, 0.0, area)
+    area = xp.maximum(left_area, right_area)
+    area = xp.where(length == 0.0, 0.0, area)
     return area
 
 
@@ -399,8 +411,16 @@ def chord_deviation_batch(
 
     Returns:
         ``(M,)`` deviations; ``0`` for a zero-length chord.
+
+    Raises:
+        TypeError: Host and CuPy arrays are mixed.
+
+    Note:
+        Computes in its inputs' namespace, as :func:`curvature_area_batch`
+        does, and never transfers; every library caller passes host arrays.
     """
+    xp = array_namespace(p0, p1, left, right)
     area = curvature_area_batch(p0, p1, left, right)
-    length = np.hypot(*(np.asarray(p1, dtype=float) - np.asarray(p0, dtype=float)).T)
+    length = xp.hypot(*(xp.asarray(p1, dtype=float) - xp.asarray(p0, dtype=float)).T)
     with np.errstate(divide="ignore", invalid="ignore"):
-        return np.where(length > 0.0, 1.5 * area / length, 0.0)
+        return xp.where(length > 0.0, 1.5 * area / length, 0.0)
