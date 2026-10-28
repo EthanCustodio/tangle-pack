@@ -103,6 +103,16 @@ def test_a_loaded_index_keeps_each_crossing_pair_in_its_operand_order(saved_work
             tuple(pair) for pair in getattr(workbench.Tangle, pairs)}
 
 
+def test_a_loaded_fixed_point_keeps_its_array_containers(saved_workbench):
+    # The solver leaves ``coordinates`` a (period, 2) ndarray; the other fields are lists.
+    workbench, loaded, _ = saved_workbench
+    for original, copy in zip(workbench.fixed_points, loaded.fixed_points):
+        for name in ("coordinates", "unstable_eigenvectors", "stable_eigenvectors", "jacobians"):
+            before, after = getattr(original, name), getattr(copy, name)
+            assert type(after) is type(before), name
+            assert np.shape(after) == np.shape(before), name
+
+
 def test_every_slot_holds_its_branch_chain(saved_workbench):
     _, loaded, _ = saved_workbench
     store = loaded.point_store

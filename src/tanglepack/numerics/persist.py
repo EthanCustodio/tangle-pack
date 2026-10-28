@@ -8,20 +8,23 @@ saved one: its re-save is byte-equal, and the growth, recomputes and blasts that
 follow give the bits the original's would (N10a, 2026-10-27; measured on the law
 cases, the blast series and the scale series).
 
-What is saved is the workbench's whole state, in its insertion orders:
+What is saved is the workbench's whole state: lists and dicts in their insertion
+orders, sets sorted (a set's iteration order is its hash table's, not state):
 
 * the :class:`~.PointStore.PointStore` (written rows, capacity) and every chain,
   retired ones included;
-* the fixed points with their eigendata and slot tables;
+* the fixed points with their eigendata and slot tables, each array field in
+  the container it was set as (the solver leaves ``coordinates`` a
+  ``(period, 2)`` ndarray, the other fields are lists of rows);
 * every curve once, by object identity (a crossing's ``unstable_manifold`` is
   compared with ``is`` downstream);
 * every :class:`~.Intersection.Intersection` once, the registry's first, in one
   table, with the registry's orders, iterate table and counters;
 * the segment index EXACTLY: every record's segment id, the edge maps, the
-  crossing pairs in their iteration order and the next id to draw. A pair's
-  operand order follows its two ids and decides float bits, so an index rebuilt
-  from scratch would not continue the same (the N10a analyst's ablation: 51 of
-  59 resumed series steps moved in the last bits);
+  crossing pairs, each in its operand order (the sets themselves sorted), and
+  the next id to draw. A pair's operand order follows its two ids and decides
+  float bits, so an index rebuilt from scratch would not continue the same (the
+  N10a analyst's ablation: 51 of 59 resumed series steps moved in the last bits);
 * the bookkeeping later calls read: growth stats, reported findings, epochs,
   the generation, the machine's settings.
 
@@ -325,6 +328,8 @@ def _save_fixed_points(encoder: Encoder, meta: dict, arrays: dict) -> None:
             "period": fixed_point.period,
             "k_value": fixed_point.k_value,
             "label": fixed_point.label,
+            "ndarray_fields": [name for name in _FIXED_POINT_ARRAYS
+                               if isinstance(getattr(fixed_point, name), np.ndarray)],
             "scalar_types": types,
             "unsolved_partial_jacobians": [m is None for m in fixed_point.partial_jacobians],
             "slots": [
@@ -358,7 +363,7 @@ def _save_registry(workbench: TangleWorkbench, encoder: Encoder, meta: dict, arr
 
 
 def _save_index(workbench: TangleWorkbench, encoder: Encoder, meta: dict, arrays: dict) -> None:
-    """The segment index, exactly: records, edge maps, pairs in their iteration order, owners."""
+    """The segment index, exactly: records, edge maps, pairs (each in its operand order, sorted), owners."""
     tangle = workbench.Tangle
     arrays["index_segments"] = _rows([
         (segment.id, encoder.curve(segment.manifold), *encoder.end(segment.row0), segment.row1,
@@ -539,7 +544,9 @@ def _load_fixed_points(meta: dict, arrays: dict) -> list[FixedPoint]:
         period = saved["period"]
         fixed_point = FixedPoint(period)
         for name in _FIXED_POINT_ARRAYS:
-            setattr(fixed_point, name, [row.copy() for row in arrays[f"fixed_point{i}_{name}"]])
+            saved_array = arrays[f"fixed_point{i}_{name}"]
+            setattr(fixed_point, name, saved_array.copy() if name in saved["ndarray_fields"]
+                    else [row.copy() for row in saved_array])
         partial_jacobians = arrays[f"fixed_point{i}_partial_jacobians"]
         fixed_point.partial_jacobians = [
             None if unsolved else row.copy()
