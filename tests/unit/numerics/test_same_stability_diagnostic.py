@@ -12,6 +12,7 @@ independent oracle; here the two are only compared on synthetic polylines.
 
 from __future__ import annotations
 
+import itertools
 import logging
 import time
 
@@ -272,6 +273,90 @@ def test_the_count_is_the_full_listing_of_the_new_curves_on_random_curves(seed: 
     assert count.suggested_area_cutoff == (
         min(hit.suggested_area_cutoff for hit in inside) if inside else None
     )
+
+
+def _sweep_oracle(curves, box):
+    """The sweep's hits by plain loops, in its order. ``curves`` are ``(name,
+    nodes, points)`` in listing order; returns ``(name_a, seg_a, name_b, seg_b,
+    in_box)`` with the earlier segment along the sweep axis first."""
+    segments, seen = [], set()
+    for name, nodes, points in curves:
+        for seg, (ends, a, b) in enumerate(zip(zip(nodes, nodes[1:]), points, points[1:])):
+            if frozenset(ends) not in seen:  # one edge reached from two curves is one segment
+                seen.add(frozenset(ends))
+                segments.append((name, seg, set(ends), np.asarray(a, float), np.asarray(b, float)))
+    lo = [np.minimum(a, b) for *_, a, b in segments]
+    hi = [np.maximum(a, b) for *_, a, b in segments]
+    overlap = lambda s, t, k: lo[s][k] <= hi[t][k] and lo[t][k] <= hi[s][k]  # noqa: E731
+    pairs = list(itertools.combinations(range(len(segments)), 2))
+    axis = min((0, 1), key=lambda k: sum(overlap(s, t, k) for s, t in pairs))  # fewer overlaps, 0 on a tie
+    sweep = sorted(range(len(segments)), key=lambda s: lo[s][axis])
+    hits = []
+    for s, t in itertools.combinations(sweep, 2):
+        (name_s, seg_s, ends_s, a, b), (name_t, seg_t, ends_t, c, d) = segments[s], segments[t]
+        if not (overlap(s, t, 0) and overlap(s, t, 1)) or ends_s & ends_t:
+            continue
+        d1, d2, r = b - a, d - c, c - a
+        den = d1[0] * d2[1] - d1[1] * d2[0]
+        if abs(den) <= 1e-12 * np.hypot(*d1) * np.hypot(*d2):  # the module's parallel threshold
+            continue
+        along_s, along_t = (r[0] * d2[1] - r[1] * d2[0]) / den, (r[0] * d1[1] - r[1] * d1[0]) / den
+        if 1e-9 < along_s < 1 - 1e-9 and 1e-9 < along_t < 1 - 1e-9:  # interior, as the module's margin
+            point = a + along_s * d1
+            hits.append((name_s, seg_s, name_t, seg_t, bool(np.all((box[0] <= point) & (point <= box[1])))))
+    return hits
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 4])
+def test_the_listing_and_the_count_are_the_sweep_s_in_its_order_and_orientation(seed: int):
+    """The full listing is the sweep's hits in sweep order, each pair oriented
+    earlier-along-the-sweep first (not curve order), and the count names its pairs
+    in that orientation (D1, 2026-10-28: pinned before the strip sweep replaced
+    the global one). Shared periodic root, overlapping image bridges, a stable
+    field and tied box minima (odd seeds round every vertex) included."""
+    rng = np.random.default_rng(seed)
+    grid = np.round if seed % 2 else (lambda points: points)
+    walk = lambda count: grid(np.cumsum(rng.normal(size=(count, 2)), axis=0))  # noqa: E731
+    fp = bare_fixed_point(label="A", coordinates=[(0.0, 0.0)])
+    root = fp.branch_points[0]
+    workbench = polyline_workbench(fp, {})
+    curves = {"unstable": [], "stable": []}
+    for key, points, start in [
+        ((fp, "unstable", 0, 0), walk(30), root),
+        ((fp, "unstable", 0, 1), walk(30), root),
+        ((fp, "unstable", 1, 0), walk(30), None),
+        ((fp, "stable", 0, 0), walk(30), None),
+        ((fp, "stable", 0, 1), [(0.5, -40.0), (0.5, 40.0)], None),
+    ]:
+        manifold = polyline_manifold(points, key, root=start)
+        workbench.register_manifold(key, manifold)
+        head = [root] if start else []
+        nodes, xy = head + list(manifold.ids), [p.get_point() for p in head] + list(points)
+        curves[key[1]].append((f"A {key[1]} {key[2]}.{key[3]}", nodes, xy))
+    workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
+    chain = walk(50)
+    bridges = _image_chain(fp, chain, [(0, 14), (13, 30), (29, 49)])
+    for bridge in bridges:
+        workbench._register_bridge(bridge)
+        rows = list(bridge.ids)
+        start = rows[0] - bridges[0].ids[0]
+        curves["unstable"].append((f"partial image bridge {id(bridge):#x}", rows, chain[start : start + len(rows)]))
+    everywhere = (np.full(2, -np.inf), np.full(2, np.inf))
+
+    listed = [(h.curve_a, h.seg_a, h.curve_b, h.seg_b) for h in same_stability_crossings(workbench, region="all")]
+    expected = [hit[:4] for stability in ("unstable", "stable") for hit in _sweep_oracle(curves[stability], everywhere)]
+    curve_order = {name: k for k, (name, *_) in enumerate(curves["unstable"] + curves["stable"])}
+    assert any(curve_order[a] > curve_order[b] for a, _, b, _ in expected) and listed == expected
+
+    crossings = np.array([ix.coords for _id, ix in workbench.intersection_registry])
+    lo, hi = crossings.min(axis=0), crossings.max(axis=0)
+    box = (lo - 0.1 * (hi - lo).max(), hi + 0.1 * (hi - lo).max())
+    new = [bridges[0], bridges[1 + seed % 2]]
+    names = {f"partial image bridge {id(bridge):#x}" for bridge in new}
+    involved = [hit for hit in _sweep_oracle(curves["unstable"], box) if {hit[0], hit[2]} & names]
+    count = count_same_stability_crossings(workbench, new)
+    assert (count.in_region, count.outside) == (sum(h[4] for h in involved), sum(not h[4] for h in involved))
+    assert count.curve_pairs == tuple(sorted({f"{a} x {b}" for a, _, b, _, inside in involved if inside}))
 
 
 @pytest.mark.perf
