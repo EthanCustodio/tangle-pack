@@ -1396,3 +1396,27 @@ B12 findings artifact, `artifacts/findings_analyst_planner.t1.md`):
   `plotting`, ...) are unaffected by a trim. BUT `MembersDisagree` (author-approved export, B6b Q5),
   `WalkReason` and `free_reduce` (B6b exports) are importable today only through those unused
   import lines: a trim to `__all__` un-exports them.
+
+## N6 `readers-on-views` outcome audit (2026-10-26, numerics campaign, branch @ `e25adf1`)
+
+- Six topology reader lines moved off nodes (no map call added): `StablePartition.py:835` reads
+  `manifold.cdists[-1]`; `diagnostics._anchorward_look` bisects `manifold.cdists` and indexes
+  `manifold.points`; `_bridge_side_of` sorts `bridge.cdists`; `plotting._stable_arc_midpoint` masks
+  `points` by `cdists` (`if len(inside):`), `_image_arc_midpoint` uses `np.argmin` (same first-minimum
+  rule). `Trellis.py:8,16` prose now says "the point store and its chains".
+- Smell: `Trellis.cached_bridge_polyline` (`Trellis.py:571-604`) now caches a WRITABLE shared array (the
+  bridge memo used to hand read-only arrays); `diagnostics._oriented_bridge_polyline`'s Note "must not be
+  written to" is unenforced. Its docstring :578-579 ("the same invalidation as the point array
+  underneath it") is stale: there is no point-array memo.
+
+
+## N7 `delete-point` analyst note (2026-10-26, main `d279815`)
+
+- Topology has NO code touchpoint for deleting `Point` / `BasePoint` (grep of `src/tanglepack/topology`:
+  every `get_point()` is `Intersection.get_point()`; the six curve readers read `points` / `cdists` since N6).
+- `Trellis.cached_bridge_polyline` (`Trellis.py:595-605`) shares a WRITABLE array since N6; one line
+  (`value.flags.writeable = False` when not None) before the cache store restores the base's read-only
+  guard: verified in the N7 prototype, the whole suite's failure set unchanged (no caller writes; readers
+  `topology/diagnostics.py:149,201,343` only slice). Stale prose: `Trellis.py:578-579` ("the same
+  invalidation as the point array underneath it").
+

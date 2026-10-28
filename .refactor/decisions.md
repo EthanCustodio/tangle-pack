@@ -810,3 +810,421 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
 - **Open for the author:** whether Q6's tie stays opt-in (a), replaces the 1e-5 constants in the
   recipes (b), or becomes what every guard-wanting caller gets (c). Record the choice here when
   made. Not merged: the merge is the author's.
+
+## 2026-10-23 — N0 `numerics-arrays-skeleton`, outcome (FIRST run of the new numerics-arrays campaign, not a slice of the closed alignment plan; plan approved round 2 of planning with every default; review passed in round 1 of coding; branch `refactor/numerics-arrays-skeleton` @ `41056f8`, base `a8bb8a0`, five commits)
+
+- **Said** (request, 2026-10-23): D1 skeleton then split, one slice per run; D2 a tracked profiler
+  run before and (unchanged) after; D3 byte-identical where it can be, every law always, a measured
+  and explained difference allowed, moved topology listed and judged; D4 index-based public API but
+  human readable (`bridge.head` / `bridge.tail`, `manifold.root` / `tail`, `len`, `.points`,
+  `.cdists`); D5 `BranchPoint` stays a class with its API, touched only in its own slice, last or
+  near last; D6 arrays throughout, an array namespace, serialisable state, no scheduler, GPU opt-in.
+  Plan gate (`artifacts/plan_ok_planner_human.json`): "Approved as written; all Q1-Q9 defaults
+  accepted (Q8: same-stability count joins the campaign as N2; Q6 order N1..N10)."
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): committed on the branch
+  `stress/profile/{profile_numerics.py, profile_figures.py, identity_probe.py, README.md}`, the
+  baseline `figures/numerics_profile/a8bb8a0{,_scale1e-9,_scale_traced}/` and
+  `docs/numerics_arrays_plan_2026-10-23.md` (N1 slim-segment-index, N2 same-stability count, N3
+  point store, N4 order arrays, N5 brackets on ids, N6 readers on views, N7 delete Point, N8
+  BranchPoint alone, N9 array namespace, N10 save/load + after-profile). No `src/` or `tests/` change.
+  The 45 GB peak that motivated the campaign is NOT on `HEAD` (blast-steps-compose fixed it): the
+  k = 2.5 series plateaus at 2.9 GB (1e-7) / 6.5 GB (1e-9); the segment index's Python bookkeeping is
+  57 % of held memory, `Point` objects 41 %, rtrees ~0; 82-87 % of blast time is the same-stability
+  count, not linked-list work.
+- **Carried forward (reviewer's non-grading notes):** the `identity_probe.py` Dev Note over-claims
+  ("every read of a library object goes through one reader"; registry fields and topology
+  `describe()` are read directly): reword at merge or in N1's diff. N10 must own giving
+  `profile_figures.figure_stage_peaks` (and the by-component census panel) a baseline series: add
+  `stress/profile/profile_figures.py` to N10's Files (doc fix at merge or in N10's plan).
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-24 — N1 `slim-segment-index`, outcome (slice 1 of the numerics-arrays campaign; plan approved round 1 of planning with every default; review REVISE in round 1 of coding, PASS in round 2; branch `refactor/slim-segment-index` @ `8ded634`, base `41056f8`, eleven commits)
+
+- **Said** (plan gate, `artifacts/plan_ok_planner_human.json`): "Approved as written; all defaults
+  accepted (Q1 (a) slim id()-keyed edge set; Q2 nothing beyond the curve; Q3 (i) same count; Q4 keep
+  only paired records; Q5 branch-cut bridges keep claims; Q6 two scenarios in identity_probe.py; Q7
+  rename to indexed_segments)." D1-D6 / Q1-Q9 of the campaign plan bound the run unchanged.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): a query-only curve keeps one
+  int edge key (`Tangle._query_edges`) and a `_Segment` only when its query paired; census at the 1e-7
+  plateau 1914.0 -> 990.6 MiB, segment-index band 1045.4 -> 122.0 MiB; blast time flat against the
+  same-day base (399.05 -> 399.57 s); probe identical on 62 dumps; suite 1221 passed, C3 alone. Round
+  1's indexed path re-indexed query-only edges on `reset=False` (16 vs 22 crossings on k28); fixed by
+  one guard in `_insert_segment` (the base's extra claim dropped, no observable effect). Accepted
+  behaviour changes: later sids shift when a separator splices into a query-only bridge (sid values
+  decide nothing); `_query_edges` never forgets on `reset=False` (Q1's risk); last-bit differences
+  after a `reset=False` pass; `add_manifold` returns `set[int]`; `populate_intersections(new_sids)`.
+- **Carried forward to the merge:** two reviewer wording slips (the Outcome row's peak RSS is
+  absolute, the doc's convention is over-baseline; "nor claims ... as before N1" at `Tangle.py:36`,
+  `:666-667` and in the row is false about the base). **To later slices:** the stress report still
+  reads e03's old `segments` key; the pre-N1 `reset=False` under-detection (re-query or retire).
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-24 — N2 `same-stability-count-new-only`, outcome (slice 2 of the numerics-arrays campaign; plan approved round 1 of planning with every default; review PASS in round 1 of coding with recommendations R1-R4; branch `refactor/same-stability-count-new-only` @ `6bd37cf`, base `0b1db28`, six commits)
+
+- **Said** (plan gate, `artifacts/plan_ok_planner_human.json`): "Approved as written; all defaults
+  accepted (Q1 (a)+(b): count item in identity_probe.py always on with diagnose=True, and the count
+  in each profile_numerics.py scale row; Q2 new by curves, unchanged; Q3 orientation kept, no box
+  pre-filter; Q4 randomised property test; Q5 keep _PAIR_BLOCK chunking; Q6 reword the cost
+  docstring)." D1-D6 / Q1-Q9 of the campaign plan bound the run unchanged.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `_candidate_pairs` with `new`
+  pairs an old segment only with the new positions in its forward range (`pool`/`start`/`count`); the
+  pairs equal the base's filtered pairs element for element (auditor 3,750 calls, TE 4,896, reviewer
+  1,200); probe identical on 62 dumps incl. the new `same_stability_counts`; count fields equal on all
+  32 scale blasts. Sequential same-day profile: `diagnose` 360.3 -> 53.7 s, blast 415.8 -> 109.2 s,
+  peak RSS over baseline 2396.2 -> 2374.0 MiB, census 990.6 MiB unchanged. No library behaviour
+  change. The probe now runs every blast with `diagnose=True` (inherited by N3-N10).
+- **Carried forward to the merge (text only):** the Outcome row quotes the CONCURRENT profiler pair
+  (2248.6 -> 2427.2 MiB, a rise that does not reproduce) and a false "-488 to +404 MiB" range (measured
+  -727 to +404) and a misleading "traced peak 1552.0 -> 1544.8" (run-to-run; ~1.55 GB on both): swap
+  in the sequential pair (reviewer R1). **To later slices:** run profiler pairs sequentially; peak RSS
+  is set by the count's unblocked narrow phase (12.65 M candidates at blast 13, ~1.55 GB traced), not
+  by held state, so census drops (N3) will not show in peak RSS; blocking the narrow phase is a
+  candidate small slice outside the plan. N3 request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-24 — N3 `point-store`, outcome (slice 3 of the numerics-arrays campaign; plan approved round 1 of planning with every default; review PASS in round 1 of coding with notes (a)-(e); branch `refactor/point-store` @ `5ce5685`, base `138b34c`, seven commits)
+
+- **Said** (plan gate, `artifacts/plan_ok_planner_human.json`): "Approved as written; all defaults
+  accepted (Q1 one persistent Point per real row, id() sites untouched; Q2 BasePoint.__slots__ = ()
+  and rewrite the walker test; Q3 no BranchPoint row, four [branch_point] tests rewritten
+  BranchPoint<->BranchPoint; Q4 drop edist entirely; Q5 the workbench owns point_store, machine
+  appends to the curve store, loose_store for hand-built points; Q6 merge-dropped duplicates and
+  fictitious chain are ordinary rows; Q7 append-only until N10, census changes now; Q8 phantom-only
+  tie unit test; Q9 get_point returns a read-only view)." D1-D6 / Q1-Q9 of the campaign plan bound the
+  run unchanged.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): one append-only `PointStore`
+  per workbench (`numerics/PointStore.py`: xy, cdist NaN-none, image / preimage int64 -1-none, x1.5
+  growth, `nodes` row -> Point); `Point` slotted over its row (100 B object + row int, was 408 B);
+  phantoms are rows with no Point (778,302 at the 1e-7 plateau, 285.0 MiB of objects gone);
+  `_cache_preiterate` deleted; the tie rule reads `has_iterate_link()` on both heads. Census at the 1e-7
+  plateau 990.6 -> 398.5 MiB (all point bytes 829.6 -> 237.4 MiB, ~151 B per real point all-in); peak
+  RSS over baseline 2338.8 -> 1883.6 MiB (sequential pair; TE's pair 2483.2 -> 1891.4); blast +2.8 %
+  (TE +3.4 %), `walk` +1.0 s, `infer_iterates` +2.1 s. Probe identical on 62 dumps (auditor re-dumped
+  HEAD); ties record-equal (17 / 2 / 2, keeper head_1); suite 1234 passed / 43 skipped / C3 alone
+  (auditor rerun). Accepted behaviour changes are attribute-level only: no `edist`, no `__dict__` /
+  `_coords`, read-only x / y and view, `TypeError` on a cross-store or non-Point link, `loose_store()`,
+  the fictitious tail kept (+2 rows), the "already exists" check before any link write, and (not in
+  the plan's section 5) a stored NaN coordinate or cdist reads as None.
+- **Carried forward to the merge (text and one-liners):** "preimage" for "preiterate" in three places
+  (`PointStore.py:13`, `ManifoldMachine.py:777`, `Point.py:134`; on a stable curve the phantom is an
+  image, 187 of 1457 on k10); `Point.py:11` "one Point per row" is false for phantom rows;
+  `_get_preiterate` returns a writable view (`ManifoldMachine.py:814`: `store._xy` -> `store.xy`); the
+  Outcome row's "`edist` and `_coords` are gone from `Point` (no reader)" (`_coords` had three reads).
+  Optional: the "already exists" check above `store.append` (`:362` / `:370`); the PointStore Dev Note
+  on which rows "die". **To later slices:** `profile_figures.MEMORY_GROUPS` has no `point_store`
+  group (eight fixed slots); public names for the store columns (the machine and Point read `_xy`,
+  `_image`, `_preimage`); the NaN-reads-as-None change; the per-step same-store guard in
+  `_iterate_manifold` (reviewer (e)); CLAUDE.md's data-model paragraph and the absence of `PointStore`
+  there (N4 makes it false). N4 request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-25 — N4 `curves-on-order-arrays`, outcome (slice 4 of the numerics-arrays campaign; plan approved round 1 of planning with every default Q1-Q13; review REVISE rounds 1-2 for prose only (engine accepted round 1), PASS round 3; branch `refactor/curves-on-order-arrays` @ `ab7bd20`, base `8fc3933`, nine commits)
+
+- **Said** (plan gate, `artifacts/plan_ok_planner_human.json`): "Approved as written; all defaults
+  Q1-Q13 accepted: one run; curves as views over chains; two int32 store columns _chain/_position;
+  keeper rule reproduced exactly incl. branch (b); (f)-(h) raise AssertionError; BranchPoint
+  insert_point_* set the chain anchor (D5: nothing else in the class); role 5
+  (_branch_forward/_branch_backward) retired in N4 on the 0-through-walk evidence, departing from
+  campaign Q9 which gave it to N8; public read-only store columns plus writers; NaN in arrays, None on
+  Point; stretch_param per chain; merge-branch tests (a)-(e) on both trees; names kept; small
+  pull-ins; MEMORY_GROUPS folded into eight slots." D1-D6 / Q1-Q9 of the campaign plan bound the run,
+  except Q9's role-5 assignment (overridden by the author's Q6 above).
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): the order along a curve is a
+  `PointStore.Chain` (int64 `ids`, `stretch_param`, `anchor`), rows located by two int32 store columns;
+  every curve is a `(root, tail)` view re-resolved per read; `Point.forward` / `backward` /
+  `insert_point_*`, the walkers, the through-walk toggle and `_insert_point_geometrically` are gone;
+  merge = one `searchsorted` (different chains, no shared cdist) or the old zipper on positions;
+  refine = one `chain.insert` per layer. Probe identical on 62 dumps (auditor cross-compared three
+  dump pairs, and N3's pre-N3 base dump against N4's branch: identical); suite 1248 passed / 43
+  skipped / C3 alone (auditor rerun). Sequential profiler pairs at 1e-7: blast 113.1 / 112.2 -> 85.0 s,
+  `walk` 19.2 -> 1.3, `refine` 8.2 -> 1.0, `infer_iterates` unchanged 10.3 (N5's), census 398.5 ->
+  394.6 MiB, `Point` 100 -> 76 B; peak RSS over baseline -70 MiB (coder, branch on a dirty tree) vs
+  -30 MiB (TE, clean commit). Behaviour changes are API-level plus states no build reaches: (f)/(g)/(h)
+  raise; refinement at the anchor reads NaN on its left (library path: base TypeError -> completes;
+  explicit `branch_index`: 9 vs 7 / 25 vs 21 points); anchor-bridge images merge from the slot.
+- **Carried forward to the merge (text and one-liners):** the Outcome row should quote the TE's
+  clean-commit profiler pair (or both); "share no cdist" -> "lie on different chains and share no
+  cdist" (row and `ManifoldMachine.py:525-526`); `BaseManifold.py:248-249` (and `:194`) "None reads to
+  the end of the root's chain" is false (None = the tail; measured 176 vs 232). Optional (D5 fence):
+  `BranchPoint.py:5-12` (`forward`/`backward` pair, `only_forward` Dev Note). **To later slices:** F3
+  (getter test's oracle shares `_span`; compare against `chain.ids`, N6); stale "linked list" text in
+  `design_note.md:82`, `BasePoint`, `gpu.py`, `Trellis`, `BranchPoint`, `tests/helpers/invariants.py`
+  (N6-N9); `_image_chains` reads `store._chain` / `_position` privately (no public view);
+  `Chain.version` unread; plan doc §H / N8 still list the through-walk for N8 (already gone). N5
+  request drafted in the outcome §10 (BranchPoint ends of segments without a row is its hard question).
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-25 — N5a `brackets-on-rows`, outcome (first half of N5 `segments-and-brackets-on-ids`; plan approved round 1 of planning with every default Q1-Q10, Q7 splitting N5 into N5a / N5b; review REVISE round 1 for two Outcome-row sentences and one test comment, PASS round 2; branch `refactor/brackets-on-rows` @ `9b72985`, base `01e991a`, eight commits)
+
+- **Said** (plan gate, `artifacts/plan_ok_planner_human.json`): "Approved as written; all defaults
+  Q1-Q10 accepted: split N5, this run is N5a brackets-on-rows (N5b segments-and-edge-keys-on-rows
+  next); a periodic-point bracket end keeps the BranchPoint object (no -1 sentinel);
+  Intersection.store; readers outside numerics move now via segment_ends, no shim; _polyline_gap on
+  row equality; populate_intersections left (measured 0.23 s); public column views once per batch;
+  batched inference search in scope; the cut converts rows to nodes once; Outcome rows 5a/5b."
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `Intersection.unstable_segment`
+  / `stable_segment` are int store rows (the `BranchPoint` at a periodic-point end), with `store`,
+  `segment_ends(stability)` and the `brackets` memo; the iterate search bisects the same key list and
+  masks one `(m, 4)` bracket array per bucket (`stable_brackets`; `candidates_near_stable_cdist` gone);
+  `_polyline_gap` on row equality; the cut turns rows into nodes once. Probe identical on 62 dumps
+  (auditor: three dump pairs; id 503 of k32_series .b09/.b10 is the only 0.0 bracket end, equal on both
+  trees); suite 1250 passed / 43 skipped / C3 alone (auditor rerun); two ids added (the trap-(a) test
+  and the TE's stable-bracket test). Five sequential profiler pairs, ALL under a concurrent user game:
+  blast -9.1 to -10.6 s, `infer_iterates` 10.5-11.7 -> 1.10-1.34 s, `resolved_ids` -0.62, census +0.83
+  MiB (registry), `segment_index` unchanged, peak RSS noise (base alone spans 1805-1883 MiB). Auditor:
+  the probe is identical under m4 (stable comparisons dropped) and m8 (candidates reversed) -- the
+  stable half of the bracket rule decides nothing on the corpus; only the two new unit tests pin it.
+  No library output changed; API: rows in brackets, new `store` / `segment_ends` / `brackets` /
+  `stable_brackets`, two new one-store assertions.
+- **Carried forward to the merge:** nothing required. Optional text: `Tangle.py:274` "bracketing
+  points" -> rows; `IterateInference.py:241` elliptical window comment. **To later slices:** N5b
+  (`_Segment` rows, row edge keys, batched query-only add, the cut's `_query_edges.update`; trap (b):
+  sid counter, one sid per NEW query edge paired or not, `frozenset((new_sid, cand_id))` order,
+  `tuple(seg_id_pair)` operand order); the `brackets` memo assumes no cdist write after detection
+  (nothing asserts it; N8 must check); peak RSS should not be bounded at 1 % from one pair; N4's
+  carry-forwards (F3, stale "linked list" text, private `_chain`/`_position` reads, `Chain.version`,
+  §H's through-walk line) still open. N5b request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-26 — N5b `segments-and-edge-keys-on-rows`, outcome (second half of N5; plan approved round 1 of planning with every default Q1-Q8; review REVISE round 1 for one Outcome-row sentence (peak RSS), PASS round 2; branch `refactor/segments-and-edge-keys-on-rows` @ `c944cf6`, base `1c25afb`, five commits)
+
+- **Said** (plan gate, `artifacts/plan_ok_planner_human.json`): "Author approved the N5b plan with all
+  Q1-Q8 defaults (2026-10-26)." -- i.e. `_Segment` fields renamed `row0` / `row1` plus `store`; one
+  row key `((lo + 1) << 32) | (hi + 1)` for `_edge_to_sid` and `_query_edges`, `_edge` keeps its name,
+  `_edge_keys` asserts rows < 2**31; sids by `list(islice(Tangle._ids, n))` from the same counter;
+  pairs built per edge exactly as before (`frozenset((new_sid, cand_id))`, then `|=`); the cut's
+  re-keying vectorised and kept; one public view per accessor call on the resolve path and ONE
+  `store.xy` view per batched add; one run; the cdist type pinned by a unit test, not the probe.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `_Segment(id, manifold,
+  store, row0, row1, in_rtree)` with `coords(xy=None)` / `cdists(stability)`; int row keys in both
+  maps; `Tangle._store` via `_adopt_store` (one store asserted at every add; `clear_all` resets it);
+  the query-only add is `_query_curve` (one `intersection_v` per curve, a record only for a pair,
+  every new edge's sid returned); `tuple(seg_id_pair)` and the operand order untouched. Probe
+  identical on 62 dumps (auditor: own branch dumps of 8 builds / 14 dumps against the coder's base
+  dumps, identical); shadow trace equal on 19 targets; suite 1252 passed / 43 skipped / C3 alone
+  (auditor rerun); two ids added (the trap-(b) pins, both passing on `1c25afb`, auditor-verified).
+  Two sequential profiler pairs under a user game: blast 74.9 -> 65.2 s (-13 %), `index` 9.0 -> 0.63,
+  `cut` 0.63 -> 0.08, census 395.2 -> 383.9 MiB (`segment_index` the only component that moves),
+  peak RSS noise. Auditor mutants: dropping the cut's re-keying fails the separator test; an unsorted
+  `_edge` fails `test_readding_a_bridge_is_idempotent`; dropping the BranchPoint mask in
+  `_query_curve` (m9) fails NOTHING and leaves the dumps identical (the path is reached once in the
+  suite, deciding nothing). No library output changed.
+- **Carried forward to the merge:** nothing required. Optional text: row 5b "-12.8" -> "-12.9";
+  `Tangle.py:355-357` capture comment says "nodes" / "never off the index" (rows now). **To later
+  slices:** the BranchPoint root edge of `_query_curve` unpinned (m9); scalar `_edge` has no 31-bit
+  assert; the one-store assert unpinned (m6); `loom/ResonanceZone.py:27-30` `segment.p0_seg1` prose
+  (N6); `_insert_segment`'s dead `else seg.id`; `diagnose` is 82 % of blast (53 of 65 s) and no slice
+  of N6-N10 targets it; float bits still hang on `tuple(frozenset(pair))` (making the operand order
+  explicit would be a D3 exception); the periodic point now has four spellings (object, -1 key
+  offset, `np.maximum(e0, 0)` + mask, `Chain.anchor`) for N8 to retire; N4/N5a carry-forwards as
+  listed in the outcome §9. N6 request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-26 — N6 `readers-on-views`, outcome (slice 6 of the numerics-arrays campaign; plan approved round 1 of planning with every default Q1-Q8; review REVISE round 1 for one false Outcome-row clause plus two wording fixes, PASS round 2; branch `refactor/readers-on-views` @ `e25adf1`, base `9dc702b`, nine commits)
+
+- **The author said** (`artifacts/plan_ok_planner_human.json`): "Author approved the N6 plan with all
+  Q1-Q8 defaults, including Q7 (accept the peak-RSS rise as retained free heap, judged by the two
+  allocator controls) (2026-10-26)." -- i.e. the bridge walk memo and `Chain.version` deleted outright;
+  `_segment_rows` keyed by row + per-store offset and one negative number per periodic point, the float
+  reads moved too, two key pins; `grow_until_turnaround` only its first-segment read moved (§H already
+  fixed by N3/N4); `_image_chains` keeps its private `_chain` / `_position` reads; the `BranchPoint`
+  root edge of `_query_curve` pinned here; one run; the default-allocator peak-RSS rise accepted as
+  retained free heap if both controls hold; `StablePartition.py:835` moved here.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `get_point_array` returns a
+  fresh writable array per call; new `BaseManifold.points` / `cdists` (root to tail); the same-stability
+  field, `arc_polyline` (`stability=` unread), the anchors, the turnaround, `trim_stable_at` and five
+  topology readers read rows / arrays. Probe identical on 62 dumps (auditor: own branch dumps of 8 builds
+  / 14 dumps, identical); reader shadow 19 targets 0 differences; suite 1255 / 43 / C3 alone (auditor
+  rerun); three ids added, all passing on the base (auditor-verified). Blast 63.7 -> 53.2 s (-16 %),
+  `diagnose` 52.3 -> 42.4 s, census 383.9 -> 350.7 MiB. Peak RSS over baseline +156..+217 MiB and held
+  RSS +360..+400 MiB under glibc's default allocator; both controls hold (auditor reran both: trim
+  313 -> 302 / 474 -> 440 MiB, pinned mmap 1808.6 -> 1791.5). Unlisted in the plan's §5: the trellis's
+  cached bridge polyline is now a writable shared array, and `arc_polyline` / `cdists` raise or return
+  an object array on a periodic point not built by `FixedPointSolver` (no library path).
+- **Carried forward to the merge:** nothing required. Optional text in row 6 (the reviewer's comma; the
+  `diagnose` parenthetical; "the branch holds 311 -> 301"). **To later slices:** stale memo prose outside
+  the file list (`CLAUDE.md`, `TangleSession.py:743-745`, `Trellis.py:578-579`, `test_geometry.py:102`,
+  two test names); the profiler's `walk_memo` field; the writable cached polyline; mC / mH, the
+  trim-root and arc-reversal mutants unpinned; `diagnose` 80 % of blast and owned by no slice; N7
+  request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-26 — N7a `engine-on-rows`, outcome (first half of N7 `delete-point`, slice 7a of the numerics-arrays campaign; plan approved with every default Q1-Q10; review REVISE round 1 (R1: `BaseManifold.__init__` set the ends before `branch_index`, so a periodic-point root with a row tail and no `store=` raised; R2: `PointStore.unlink` was a dead write and two prose phrases credited it), PASS round 2; branch `refactor/engine-on-rows` @ `88f1a47`, base `d279815`, eleven commits)
+
+- **The author said** (`artifacts/plan_ok_planner_human.json`): "Author approved the N7 plan with all
+  Q1-Q10 defaults (2026-10-26): split by risk, this run is N7a engine-on-rows; N7b delete-point follows as
+  its own request; Q2-Q5 and Q9 decided now, applied in N7b; Q6 and Q10 applied in N7a." -- i.e. Q1 two
+  runs cut by risk; Q2 ends stored as rows (or the `BranchPoint`) plus `_store`, the API record
+  `End(id, x, y, cdist)` exported from `tanglepack.numerics` only, `Bridge.head` a read-only alias of
+  `root`, `store=` required for a row root; Q3 `BranchPoint` inlines `BasePoint`'s public members
+  verbatim, no private base, both cdist fields kept, each reader on its current field; Q4 delete
+  `return_nodes`, `_walk_nodes`, `first_node` (no row-returning variant); Q5 drop
+  `arc_polyline(stability=)` at its six tracked callers with a pin of the storage-order reversal; Q6
+  the read-only guard in `Trellis.cached_bridge_polyline`; Q7 N7a fixes only its own false sentences, the
+  rest of the memo / linked-list prose, the rst and `design_note.md:82-85` go in N7b's text commit, test
+  names kept, mC / mH pinned in N8, `CLAUDE.md` is the author's (replacement text in the plan's Q7); Q8
+  the census on rows in N7a, `BasePoint` / `store.nodes` out and `MEMORY_GROUPS` relabelled in N7b; Q9
+  `loose_store` deleted in N7b, one module-level test store in `tests/helpers/polylines.py`; Q10
+  `ManifoldView.root` / `.tail` deleted.
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): the engine (`ManifoldMachine`,
+  `ManifoldInitializer`, `Tangle`, `trim_stable_at`) appends, links and reads rows and makes no `Point`;
+  curves store `_root` / `_tail` as rows of `store` (or the `BranchPoint`); `root` / `tail` still return
+  N3's lazy adapter `Point`; a `BranchPoint` slot holds its `Chain`; new `ids`, `store`, `Chain.xy_at`,
+  `store=`; the cached bridge polyline is read-only again. Probe identical on 62 dumps; whole store
+  byte-equal on 7 cases (auditor: own dump of 10 MORE cases, store columns, chains, anchors, every
+  manifold / bridge end row, version, slots and generation all equal); suite 1258 / 43 / 5 / C3 alone
+  (auditor rerun); +3 / -0 ids. Census 350.5 -> 249.3 MiB (`points_image` 101.06 -> 0.24), blast flat
+  (-1 %); malloc_trim control 302 -> 236 / 439 -> 332 MiB (auditor rerun). src +142 lines net (the
+  adapters stay until N7b).
+- **Carried forward to the merge:** nothing required. **To N7b:** the plan's §6 list; R1 unpinned; the two
+  F401s in `profile_numerics.py`; the census on a store-less tree reads `n_points` 0 silently; the
+  `_image_chains` head index unpinnable without a hand-built state; `refine_manifold` /
+  `_refine_layer` `branch_index` unused; `Point.py`'s module docstring is false since N7a (goes with the
+  file); `CLAUDE.md:131` "its slot names the first point" is false since N7a (the author's file).
+  N7b request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-27 — N7b `delete-point`, outcome (second half of N7, slice 7b of the numerics-arrays campaign; plan approved with every default Q1-Q10; review REVISE round 1 (three false `BranchPoint.py` docstrings: `has_iterate_link`'s tie-rule reader, `insert_*_iterate`'s reversed `Raises` and argument name, "lies on one chain"), PASS round 2; branch `refactor/delete-point` @ `647786b`, base `4c9c3cb`, six commits)
+
+- **The author said** (`artifacts/plan_ok_planner_human.json`): "Approved with all defaults Q1-Q10: one
+  run, tests-first commits; five pins; raise on bad ends; keep insert_point_* names to N8; drop unused
+  refine params; census raises on old trees, F401s go; arc_polyline(stability=) dropped at all 10
+  callers; Sphinx = rubric 16 command; hole_sides.py :74 only; tests read ends via public ids."
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `Point` and `BasePoint` are
+  deleted; `root` / `tail` / `Bridge.head` read `End(id, x, y, cdist)` (a `NamedTuple` built per read by
+  `PointStore.end`, exported from `tanglepack.numerics` only) or the `BranchPoint`; `BranchPoint` has no
+  base class (`BasePoint` inlined verbatim, both cdist fields); `_stored` raises `TypeError` /
+  `ValueError`; `store.nodes`, `node`, `node_at`, `loose_store`, `_walk_nodes`, `first_node`,
+  `return_nodes`, `_manifold_from_points`, `arc_polyline(stability=)` and the unused refine parameters
+  are gone; `tanglepack.__all__` 38 -> 36. Probe identical on 62 dumps and whole store byte-equal on 7
+  cases (auditor: own fresh dumps of both trees); suite 1253 / 43 / 5 / C3 alone (auditor rerun);
+  1302 -> 1297 ids (-10 Q7 / +5 pins). Census 249.32 -> 231.85 MiB, blast flat (auditor pair 52.20 ->
+  51.75 s). src -398 lines net.
+- **Carried forward to the merge:** nothing required; optional: `numerics/geometry.py:34` now-unused
+  `Stability` import (new F401). **To N8:** `_stored` accepts an `End` of another store or an
+  out-of-range row silently (reads uninitialised capacity); `BranchPoint` prose ("a fixed point or a
+  crossing", "doubly linked list", `only_forward` Dev Note) and its dead members (`edist`, `edists`,
+  `*_stretch_params`, `has_iterate_link`); the cdist-field choice; the `-1` head placeholder in
+  `_image_chains`; mC / mH pin; the census's `BasePoint` fallback. **The author's:** `CLAUDE.md:131`
+  (replacement in the outcome §9); the three untracked scripts (`henon_k25_length_growth.py:100,113`,
+  `henon_k25_period3_class_focus.py:99`, `henon_k25_period3_class_iterates.py:184`); Sphinx's 25
+  `PointStore` warnings (duplicate `Chain` attributes, two targets for `End`), judged acceptable by the
+  reviewer. N8 request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-27 — N8 `branch-point-storage`, outcome (slice 8 of the numerics-arrays campaign; plan approved with every default Q1-Q10; review REVISE round 1 (Outcome row 8: the Tests sentence counted 1296 ids, not the tip's 1299, and the mmap control listed 3 of 13 pairs), PASS round 2; branch `refactor/branch-point-storage` @ `91677b8`, base `d0d78c5`, eight commits)
+
+- **The author said** (`artifacts/plan_ok_planner_human.json`): "Approved with all defaults Q1-Q10:
+  BranchPoint becomes a view over its FixedPoint (no store row); slot table on FixedPoint with
+  attach/chain; only get_cdist(stability); iterate cycle as a read-only orbit view; IndexError on
+  out-of-store rows; census drops fallback and stops at Chain; mH pin as written; prose fixed here;
+  zero-shadow on base; Outcome row 8 only."
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `BranchPoint(fixed_point,
+  orbit_index)` stores nothing of its own (coordinates from `fp.coordinates[o]`, cdist 0.0, slots in
+  `FixedPoint._slots[(stability, o, branch)]` via `chain` / `attach`, image = next orbit point);
+  `BranchPoint.py` 346 -> 133 lines; no store row is added (the request's literal "a store row" was
+  declined by Q1). Gone: `set_x` / `set_y`, `.cdist`, `cdists`, `edist(s)`, the stretch lists, the
+  stored iterate links and their seven methods, `has_iterate_link`, `_has_iterate`, `insert_point_*`
+  (now `attach`), the census's `BasePoint` fallback. `_stored` raises `IndexError` outside the store.
+  Probe identical on 62 dumps and whole store byte-equal on 7 cases (auditor: fresh dumps of both
+  trees); suite 1255 / 43 / 5 / C3 alone (auditor rerun); ids 1297 -> 1299 (-5 / +7). Census
+  231.85 MiB both (-313 B), blast flat (auditor pair 54.54 -> 54.55 s at load 4-5). src -203 lines net.
+- **Rubric 14(a) (pinned-mmap peak, +25 MiB per pair, "a failure stops the run") failed literally on 5
+  of 13 pairs and passed on the rest; the reviewer judged the bound below the sampler's noise
+  (bimodal peaks on both trees, equal maxima, trim control equal) and the run continued.** The
+  auditor's 14th pair reads 1714.0 -> 1685.9. Recorded for the author's grade, and for the form of the
+  check in later slices (median or max of N >= 3 per tree).
+- **Carried forward to the merge:** nothing required; optional: the `BaseManifold.py:20-21` wording
+  ("the next orbit point" is the unstable direction only) and `BranchPoint.attach`'s unlisted
+  `IndexError`. **To N9 / later:** `attach` accepts a misspelt stability silently (phantom slot);
+  `attach_chain`'s `IndexError` unpinned; stale prose `IterateInference.py:37`, `gpu.py:27` (N9),
+  `test_manifold_initializer.py:101-102`; N10 serialises `FixedPoint._slots`. **The author's:**
+  `CLAUDE.md:131` (now also its `BranchPoint` sentence; replacement in the outcome §9) and the
+  `FixedPoint` row of the key-classes table; the three untracked scripts (unchanged since N7b).
+  N9 request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-27 — N9 `array-namespace`, outcome (slice 9 of the numerics-arrays campaign; plan approved with every default Q1-Q9; review REVISE round 1 (three false sentences: Outcome row 9's Tests count after the test engineer's added id, the design note's "every other stage is host-only", and `gpu.py`'s reasoned list holding the store and registry without a reason), PASS round 2; branch `refactor/array-namespace` @ `4dd587f`, base `a2a2c4b`, five commits)
+
+- **The author said** (`artifacts/plan_ok_planner_human.json`): "Approved with all defaults Q1-Q9: the seam
+  only (array_namespace + the two geometry kernels; everything else named host-only in gpu.py); namespace read
+  off the inputs; new numerics/namespace.py not exported; kernels never transfer, mixed raises; enable_gpu
+  unchanged; fake-cupy plus device-parity tests; gpu.py Measured result restated with 2026-10-27 numbers; memory
+  rubric = median and max of >=3 interleaved mmap runs per tree, trim control decisive; Outcome row 9 only."
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): §C N9's five-stage list is NARROWED to one
+  seam (the plan doc's §C N9 and D6 stay as written history; row 9 records the narrowing). New
+  `numerics/namespace.py` (`array_namespace`, not exported, never imports CuPy); `geometry.curvature_area_batch` /
+  `chord_deviation_batch` compute in their inputs' namespace; no library caller passes device arrays, so nothing
+  the library computes changed. `enable_gpu` / `disable_gpu` unchanged (AST equal). `gpu.py`'s docstring rewritten
+  ("What runs where", re-measured result). Probe identical on 62 dumps and whole store byte-equal on 7 cases
+  (auditor: fresh dumps of both trees); kernels byte-equal on numpy with and without CuPy imported (auditor);
+  suite 1261 / 43 / 5 / C3 alone (auditor rerun); ids 1299 -> 1305 (+6, none removed). Census 231.85 MiB both,
+  blast flat. src +120 / -29 (mostly docstring); `namespace.py` 39 lines.
+- **The memory rubric's new form (Q8) held** on both runs that measured it (coder, test engineer): median and
+  maximum inside +25 MiB, trim control within 0.5 MiB. Proposed for N10's rubric.
+- **Carried forward to the merge:** nothing required; optional: `gpu.py:34` name the bulk segment build
+  (`Tangle.add_manifolds`) beside `_query_curve`; the design note's "the user's map runs on the device" -> "the
+  user's batched map calls". **The author's:** `CLAUDE.md`'s GPU row and data-model paragraph (replacements in the
+  outcome §9); the three untracked scripts (unchanged since N7b); `stress/numerics/harness.py:60` puts its own
+  tree's `src` first (a copied script silently loads main's `tanglepack`). N10 request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-28 — N10a `save-load`, outcome (slice 10a of the numerics-arrays campaign; N10 split by Q1; plan approved with every default Q1-Q11; review REVISE round 1 (a loaded `FixedPoint.coordinates` came back a list, three false sentences on set order / pair order / row 10a's counts), PASS round 2; branch `refactor/save-load` @ `90aba08`, base `ebc9806`, eight commits)
+
+- **The author said** (`artifacts/plan_ok_planner_human.json`): "Approved with all defaults Q1-Q11: split, this run
+  N10a save-load (N10b after-profile next); per-index sid counter as commit 1; session state saved beside the
+  workbench; segment index saved exactly; PointBudgetExceeded state saved as-is with a Note; numerics/persist.py +
+  loom/persist.py; npz+JSON format 1; round-trip tests on 11 law cases + continuation + one subprocess; attach_chain
+  stability check pinned; N10b both cutoffs; Outcome rows 10a/10b."
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): `Tangle._ids` (process-wide) is replaced by a
+  per-index `Tangle._next_sid`; a second build in one process is now byte-equal to a fresh one (no fresh-process
+  output moved: probe identical 62 dumps, store byte-equal on 7 cases). `TangleWorkbench.save` / `load` and
+  `TangleSession.save` / `load` (one npz + one JSON, format 1, `allow_pickle=False`, no float in JSON); a loaded
+  session re-saves byte-equal on the 11 law cases in a fresh process and continues byte-identically (59 series
+  steps, growth, blasts 14-16 at scale). Sets are saved sorted (a deviation, accepted). `attach_chain` refuses a
+  misspelt stability. Suite 1380 / 43 / 5 / C3 alone; ids 1305 -> 1424. Census 231.85 MiB, blast within 0.4 %.
+- **Rule from now on:** once merged, any change to what a save holds bumps `FORMAT_VERSION` (reviewer's rule).
+- **Carried forward:** `CLAUDE.md:174` ("`Tangle._ids` is a process-wide counter"), the key-classes rows for save /
+  load, the data-model paragraph and GPU row (the author's); `docs/open_issues.md:579` (WP8); `FixedPoint.py:81`;
+  `stress/numerics/harness.py:60`; the three untracked scripts. N10b request drafted in the outcome §10.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-28 — N10b `after-profile`, outcome (the LAST slice of the numerics-arrays campaign; plan approved with every default Q1-Q6; review PASS round 1; branch `refactor/after-profile` @ `9aa741e`, base `08b1d12`, three commits)
+
+- **The author said** (`artifacts/plan_ok_planner_human.json`): "Approved with all defaults Q1-Q6: branch
+  refactor/after-profile; skip a case whose stage calls differ with a note; rerun the traced folder; README past tense
+  + row 10b + Closed line, CLAUDE.md drafted only; only stage_peak_rss.png changes; fix the README probe numbers."
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): the profiler ran unchanged at `dc1bd0c`
+  (`src` / `tests` = `08b1d12`'s trees) into `figures/numerics_profile/dc1bd0c{,_scale1e-9,_scale_traced}/`, drawn
+  with `--compare` against the `a8bb8a0*` folders (read, never re-measured). `figure_stage_peaks(runs, base, out)`
+  draws each law case's baseline peak dashed and writes nothing for a scale-only folder; every other png, and every
+  png without `--compare`, byte-equal. The campaign, `a8bb8a0` -> `dc1bd0c`: census 1914.0 -> 231.9 MiB, peak
+  3034.7 -> 2015.0 MiB, blast 458.4 -> 52.2 s at 1e-7; 4683.2 -> 502.3 MiB, 6632.6 -> 1930.8 MiB, 541.4 -> 67.7 s
+  at 1e-9; nothing computed moved. Suite 1380 / 43 / 5 / C3 alone; probe identical 62 / 6024 / 744.
+- **The campaign plan is closed** ("Closed 2026-10-28 by N10b" under the plan doc's title). No further request drafted.
+- **Carried forward (the author's):** every open item of N0-N10 is gathered in the outcome §9: the `CLAUDE.md` lines
+  (`:131`, `:140`, `:174`, the key-classes rows, the drafted profiler line after `:90`), the Merge column of Outcome
+  rows 1-10b, the three untracked scripts, `docs/open_issues.md:579`, `stress/numerics/harness.py:60`, the D6
+  wording, a load-time map check and a `vars()` law; next-campaign candidates `diagnose`'s narrow phase (81 % of
+  blast, and the peak's transient) and the segment index (48 % of the census).
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-28 — D1 `diagnose-on-new-segments`, outcome (the ONE run of the diagnose campaign, by Q1; plan approved with every default Q1-Q7; review PASS round 1; branch `refactor/diagnose-on-new-segments` @ `7d9d009`, base `88c62ea`, five commits)
+
+- **The author said** (`artifacts/plan_ok_planner_human.json`): "Approved with all defaults Q1-Q7: one run; v2 strip
+  sweep in numerics/diagnostics.py; oracle test through public functions; unresolved half out of scope;
+  diagnose=True default kept; new profile folders + README paragraph; _query_curve intersection_v crash carried
+  forward, not in this campaign."
+- **Consequence, as audited** (`artifacts/outcome_auditor_human_2.md`): the same-stability sweep runs inside strips
+  across the sweep axis, only where a new segment lies (`diagnostics.py` 481 -> 537 lines, stateless, nothing else
+  in `src`). Nothing reported moved: probe identical 62 / 6024 / 744 (re-run by the auditor), every
+  `SameStabilityCount` field equal per blast at 1e-7 (32) and 1e-9 (29), listings equal in order and every float,
+  warning text byte-identical. `diagnose` 42.0 -> 22.4 s and blast 52.2 -> 32.5 s at 1e-7; 52.6 -> 30.0 s and
+  67.7 -> 45.2 s at 1e-9. Peak RSS falls ~700-960 MiB at 1e-7 but RISES 60-95 MiB (about 4 %) at 1e-9, reproduced.
+  `same_stability_crossings`' Returns corrected to "sweep order" (it said curve order: false); listing order, pair
+  orientation and the axis-0 tie are now pinned by tests. Suite 1401 / 43 / 5 / C3 alone.
+- **The campaign closes with this run** (Q1), one run of the four allowed.
+- **Carried forward (the author's):** the `Tangle._query_curve` `intersection_v` latent crash (Q7; a small
+  `query-curve-guard` run if wanted); the remaining whole-field ~10 s / ~20 s per series (persistent cache rejected,
+  Q2); `separation` as the next blast cost; the 1e-9 peak rise.
+- **Open for the author:** the grade; the merge (the author's). Not merged at writing.

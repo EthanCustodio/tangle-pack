@@ -1,6 +1,6 @@
 # loom — knowledge file
 
-Last updated 2026-10-21 (blast-steps-compose OUTCOME audit, branch `a6d2ffe` off `c1ca6d0`: the Blast map, "How it works" and Smells blast bullets). Before that 2026-10-15 (B9a `session-three-concerns` OUTCOME, branch `5f0db5f` off `517aa01`: the
+Last updated 2026-10-21 (densify-near-anchor ANALYST at `a8bb8a0`: the zone-filter stall bullet under Smells). Before that 2026-10-21 (blast-steps-compose OUTCOME audit, branch `a6d2ffe` off `c1ca6d0`: the Blast map, "How it works" and Smells blast bullets). Before that 2026-10-15 (B9a `session-three-concerns` OUTCOME, branch `5f0db5f` off `517aa01`: the
 TangleSession / cartoon map below and the "B9" section at the end). Before that 2026-10-14 (B5
 OUTCOME, B3 OUTCOME; `Blast.py` line numbers in the B3 bullets are that branch's). The dated sections
 below are each WP's notes, kept as the record.
@@ -110,8 +110,20 @@ below are each WP's notes, kept as the record.
 - `TangleWorkbench.py:1880` 135-char docstring line; `test_blast_proximity_guard.py:8` 118 chars;
   `test_blast_composes.py:14` imports private `_pip_orbits` (branch nits).
 - Depth stall at k=2.5 (findings 2026-10-21): an unresolved orbit image on a near-anchor stable
-  chord that never refines (p1 id 423 ratio 0.877, p3 id 107 ratio 2.10); `m` deepens with the
-  cutoff (p1 9/11/12 at 1e-7/8/9). Not fixed.
+  chord that never refines (p1 id 415 at `a8bb8a0` (423 earlier) ratio 0.877, p3 id 107 ratio
+  2.10); `m` deepens with the cutoff (p1 9/11/12 at 1e-7/8/9). Not fixed.
+- Stall mechanism (iv), the ZONE FILTER, read at the root (densify analyst, 2026-10-21, `a8bb8a0`):
+  blasting follows the bridge ADJACENT to `f^m(q0)` (the image of the previous one); these bridges
+  converge (lambda lemma) onto the zone's own boundary, and `blast_zone`'s `in_zone` reads ONE
+  vertex, `TangleSession._bridge_test_point` = `polyline_midpoint` (index-middle node,
+  `numerics/geometry.py:217`), against the frozen polygon with `tol=1e-9`. In-zone node fraction of
+  the bridge at `f^j(q0)`, k=2.5 p1 1e-7: j=7 99.6 %, 8 99.5 %, 9 78.6 % (alternating in/out runs),
+  10 0.4 % -> not iterated. Every post-densify stall measured is this: k=2.5 p1 (414,2) 88/921, p3
+  (158,192) 54/154, k28 (244,147) 661/932 nodes in zone YET classified out, k32 (502,2) 62/927,
+  nested_outer (348,349) 203/808, inversion (313,8) 9/21; and p1 at 1e-8 without densify (614,615)
+  344/2009 (middle node 7.67 from the orbit). No detection near `f^{m+1}` exists to resolve, so a
+  near-anchor refinement cannot help; it is a containment-at-the-boundary question (out of the
+  densify slice; cf. the B3 pip-orbit exemption from `min_separation`).
 
 - Fixed since the 2026-10-02 audit: the constant nested slug (API-7, WP11), `_repin` after every
   blast (API-1, WP8), the hand-rolled fixed-point normalisation and the in-loop cKDTree import in
@@ -452,3 +464,18 @@ below are each WP's notes, kept as the record.
   (iv): the bridge ending at `f^11(q0)` is outside the zone and never iterated.
 - Composition-test candidates: `henon_p3_session` sep 0.02 `no_pip` n=4 (0.4 s) or inversion zone
   sep 0.02 n=4 (0.3 s) catch leak (1) only; k28 zone sep 1e-5 n=11 (~22 s) also catches leak (2).
+
+## After N10a `save-load` (outcome audit, 2026-10-28, branch @ `90aba08`, NOT merged at writing)
+
+- `loom/persist.py` (131 lines, Sphinx stanza): `save_session` writes the workbench section (numerics persist's
+  `encode_workbench`) plus `meta["session"]`: `_strong_pips` (as crossings in the shared table), the
+  `BridgeAlphabet.assigned` items in insertion order (each identity's four-tuples sorted by `str`), every resonance
+  zone (fixed point, `stable_branch_key`, boundary / cut crossings, `intersection_ids`, `previous_tails` as row or
+  periodic point, `boundary_arcs`, the frozen `boundary_vertices` in the npz) and `_blast_stats`. `load_session`
+  refuses a `"kind": "workbench"` save (`ValueError` naming `TangleWorkbench.load`); `_trellises` / `_topologies`
+  start empty, so the first `topology()` recomputes.
+- `TangleSession.save(path)` / classmethod `load(path, map, map_inv, jacobian=None)` (`TangleSession.py:142-192`);
+  before N10a `session.save` did not exist (it would have hit `__getattr__`).
+- Why the session section exists (plan Q3): without zones `blast_zone` has no frozen polygon; without letters the
+  class text differs on 9 of 11 law cases. Recapturing a zone polygon gave the saved one on every state tried, so
+  the frozen-polygon test uses a reversed ring.

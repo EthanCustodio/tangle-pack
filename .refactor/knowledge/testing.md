@@ -1,6 +1,7 @@
 # testing — knowledge file
 
-Last updated 2026-10-16 (B12b OUTCOME, branch `refactor/laws-and-loose-ends` @ `e163f7a`: 1208 passed / 43 skipped / 5 deselected / 1 xfailed (C3) in 195 s, 1257 collected, 97 laws; see "B12b outcome" at the end. Before that B12b analyst at `a550a5d` = B12a merged: 1207 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 200 s, 1260 collected; see "B12b analyst" at the end. Before that B12 analyst at `94fca6b`: law classification, id facts, sphinx -- see "B12 analyst" at the end. Before that, B9b OUTCOME, branch `refactor/one-element-at-end` @ `94fca6b`: 1207 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 209 s, see "B9b outcome" at the end. Before that, B9b analyst at `HEAD` `5f0db5f` = B9a merged: 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 199 s). Before that (B9a OUTCOME, branch `refactor/session-three-concerns` @ `5f0db5f`: 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3); see "B9a outcome" at the end). Before that (B9 analyst at `HEAD` `517aa01` (B10 merged): 1215 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 204 s; see the last section). Before that 2026-10-15 (B6b `word-finished` OUTCOME on branch `65edec4`, base `63477e3`: 1223 passed / 47 skipped / 5 deselected / 1 xfailed (C3), see the last section). Before that: B6b analyst at HEAD `63477e3` (B7b merged): 1211 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 214 s; see the last section). Before that: 2026-10-14 (B7 `refined-level-defined` outcome: 1200 passed / 46 skipped / 5 deselected / 2 xfailed on branch `a6a4f68`, base `3fb310a`, see the last section; before that B5 `inertness-is-transience` outcome (MERGED, main `3fb310a`): 1193 passed / 38 / 5 / 1 xfailed on branch `3fb310a`, see the last section; before that B3 `depth-of-n` outcome: 1193 passed / 38 / 5 / 1 xfailed on branch `7d3a294`, see the B3 bullets; before that 2026-10-12 B1 `resolved-crossings` outcome audit, branch @ `76d0710`: 1157 passed / 38 skipped / 5 deselected / 1 xfailed in ~200 s, base `1029fcc` 1117 / 38 / 5 / 1 in ~162 s; see the last section. Before that: B0 `oracle-laws`, branch `refactor/oracle-laws` HEAD `1029fcc`, base `a3bd8f0`; NOT merged at writing): suite 1117 passed, 38 skipped, 5 deselected, 1 xfailed (C3). Base `a3bd8f0` (after D15 `74a19da`): 1117 / 27 / 5 / 1 -- the 1122 / 26 of WP12 predates D15.
+Latest: 2026-10-28 (D1 `diagnose-on-new-segments` OUTCOME audit, branch @ `7d9d009`, base `88c62ea`: 1401 passed / 43 skipped / 5 deselected / 1 xfailed (C3), 1445 collected; base 1396 / 1440; the section "D1 outcome" at the end).
+Last updated 2026-10-27 (N7b `delete-point` OUTCOME audit, branch @ `647786b`, base `4c9c3cb`: 1253 passed / 43 skipped / 5 deselected / 1 xfailed (C3), 1297 collected (1302 with `-m ""`); the section "N7b outcome" at the end). Before that 2026-10-26 (N7a `engine-on-rows` OUTCOME audit, branch @ `88f1a47`: 1258 passed / 43 skipped / 5 deselected / 1 xfailed (C3), 1302 collected; the section "N7a outcome" at the end). Before that 2026-10-26 (N7 `delete-point` ANALYST at main `d279815`: 1299 collected / 5 deselected; the section "N7 `delete-point` analyst" at the end). Before that: 2026-10-16 (B12b OUTCOME, branch `refactor/laws-and-loose-ends` @ `e163f7a`: 1208 passed / 43 skipped / 5 deselected / 1 xfailed (C3) in 195 s, 1257 collected, 97 laws; see "B12b outcome" at the end. Before that B12b analyst at `a550a5d` = B12a merged: 1207 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 200 s, 1260 collected; see "B12b analyst" at the end. Before that B12 analyst at `94fca6b`: law classification, id facts, sphinx -- see "B12 analyst" at the end. Before that, B9b OUTCOME, branch `refactor/one-element-at-end` @ `94fca6b`: 1207 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 209 s, see "B9b outcome" at the end. Before that, B9b analyst at `HEAD` `5f0db5f` = B9a merged: 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 199 s). Before that (B9a OUTCOME, branch `refactor/session-three-concerns` @ `5f0db5f`: 1208 passed / 47 skipped / 5 deselected / 1 xfailed (C3); see "B9a outcome" at the end). Before that (B9 analyst at `HEAD` `517aa01` (B10 merged): 1215 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 204 s; see the last section). Before that 2026-10-15 (B6b `word-finished` OUTCOME on branch `65edec4`, base `63477e3`: 1223 passed / 47 skipped / 5 deselected / 1 xfailed (C3), see the last section). Before that: B6b analyst at HEAD `63477e3` (B7b merged): 1211 passed / 47 skipped / 5 deselected / 1 xfailed (C3) in 214 s; see the last section). Before that: 2026-10-14 (B7 `refined-level-defined` outcome: 1200 passed / 46 skipped / 5 deselected / 2 xfailed on branch `a6a4f68`, base `3fb310a`, see the last section; before that B5 `inertness-is-transience` outcome (MERGED, main `3fb310a`): 1193 passed / 38 / 5 / 1 xfailed on branch `3fb310a`, see the last section; before that B3 `depth-of-n` outcome: 1193 passed / 38 / 5 / 1 xfailed on branch `7d3a294`, see the B3 bullets; before that 2026-10-12 B1 `resolved-crossings` outcome audit, branch @ `76d0710`: 1157 passed / 38 skipped / 5 deselected / 1 xfailed in ~200 s, base `1029fcc` 1117 / 38 / 5 / 1 in ~162 s; see the last section. Before that: B0 `oracle-laws`, branch `refactor/oracle-laws` HEAD `1029fcc`, base `a3bd8f0`; NOT merged at writing): suite 1117 passed, 38 skipped, 5 deselected, 1 xfailed (C3). Base `a3bd8f0` (after D15 `74a19da`): 1117 / 27 / 5 / 1 -- the 1122 / 26 of WP12 predates D15.
 Run: `MPLBACKEND=Agg env/bin/python -m pytest -q -rxX -p no:cacheprovider` (~150 s; `-m perf` adds the 5 timing tests).
 
 - Suite history: 782 at `2315204` (2026-10-02); 833 / 11 xfail after the stress integration
@@ -1398,3 +1399,321 @@ Tests that read the names B4a moves, the two `Hole` fields, or the StablePartiti
   fp1 sep 0.02 `forget_strong_pip` n=4 (0.4 s), inversion zone sep 0.02 n=4 (0.3 s): fail at HEAD,
   pass with drops remembered. k28 zone sep 1e-5 n=11 (~22 s) also fails with memory alone (the
   reference-cloud leak) and passes with either cloud rule.
+
+## N0 `numerics-arrays-skeleton` outcome (2026-10-23, branch `refactor/numerics-arrays-skeleton` @ `41056f8`, base `a8bb8a0`; auditor; NOT merged at writing)
+
+- First run of the NEW numerics-arrays campaign (`docs/numerics_arrays_plan_2026-10-23.md`, N1..N10);
+  no `src/` or `tests/` change. Suite on the branch: 1216 passed / 43 skipped / 5 deselected /
+  1 xfailed (C3), no XPASS (coder, TE, reviewer and auditor runs agree).
+- Worktrees have no env: `PYTHONPATH=src` (plus `PYTHONDONTWRITEBYTECODE=1`) and the main tree's
+  `env/bin/python` by absolute path; without `PYTHONPATH` the editable install imports MAIN's src.
+- The D3 tool every later slice runs: `stress/profile/identity_probe.py dump|compare` (base worktree
+  vs branch worktree, `TANGLEPACK_REPO=`), 58 builds, ~70 s per dump; replaces the ad-hoc scratch
+  probes of B6b/B10. It replays `cases.blast_series`'s loop (blast, dump, plain recompute) but not
+  its read-only checks. It is run-time evidence, never committed golden data (test policy).
+- The profiler rerun (`stress/profile/profile_numerics.py`, ~10 min; `--cases scale --modes time`
+  for a slice's effect check) compares to `figures/numerics_profile/a8bb8a0/` by exact counts and
+  bytes within 5 % (TE's scratch `te/compare_profile.py`, not committed). Times are noise on the
+  law cases.
+
+## N5b `segments-and-edge-keys-on-rows` analyst (2026-10-26, main `1c25afb`, read-only)
+
+- The prototype of the slice (scratch `n5b/new/`) fails exactly six tests, all mechanical:
+  `test_tangle_index_and_orientation.py` x3 (`_Segment(sid, stub, Point, Point)` :108-110 and the
+  id-frozenset `_bridge_node_pairs` :34-37 / :50-56) and `test_segment_index_bookkeeping.py` x3
+  (`_RecordingIndex` :66-74 implements only `intersection`; the batched add calls `intersection_v`).
+- Trap (b) has NO test teeth today: building the pair `(cand, new)` (m1) or giving no sid to an unpaired
+  edge (m2) passes the suite (same six failures only). The probe catches both (30 / 46 items) and the
+  trace catches m1 on 12 of 19 builds. m2 also DROPS an image curve on recompute
+  (`TangleWorkbench.py:1348` reads the returned set's truthiness): `nested_unfiltered.recomputed`,
+  `shared_straddle.recomputed`. No unit test pins "a curve with new edges and no crossing is kept on a
+  fresh recompute" (`test_a_curve_lying_on_a_branch_is_dropped_on_a_fresh_recompute`'s standing curve
+  crosses).
+- The probe does not guard the type of a crossing's cdists (np.float64 against float: identical dumps).
+
+
+## After N5b `segments-and-edge-keys-on-rows` (auditor, 2026-10-26, branch @ `c944cf6`, base `1c25afb`)
+
+- The two gaps above are CLOSED on the branch: `test_segment_index_bookkeeping.py` gains
+  `test_a_crossing_pair_keeps_the_new_sid_first` (monkeypatches `Tangle._ids`; asserts the two
+  frozenset orders differ as a precondition, `tuple(pair) == (new_sid, cand_sid)`, and `type(cdist) is
+  float`) and `test_a_curve_crossing_nothing_takes_one_sid_per_new_edge` (one sid per new edge, the
+  counter advanced by exactly that, the curve kept by a fresh recompute). Both pass on `1c25afb`
+  (auditor: branch file in a base archive, 8 passed). `_RecordingIndex` gains `intersection_v`.
+- `test_tangle_index_and_orientation.py` is branch-only (builds `_Segment(sid, stub, store, row,
+  row)`); its expected edge keys come from `_walk_nodes`, independent of `_curve_ends`.
+- Unpinned (mutants survive the full suite): the one-store assert in `Tangle._adopt_store` (m6); the
+  BranchPoint mask of `Tangle._query_curve` (auditor's m9; reached once in the suite, deciding
+  nothing). Pinned by existing tests: the cut's re-keying (separator test), `_edge`'s sort
+  (`test_readding_a_bridge_is_idempotent`).
+- Suite on the branch: 1252 passed / 43 skipped / 5 deselected / 1 xfailed (C3), 95 s; 1296 collected.
+
+## N6 `readers-on-views` analyst (2026-10-26, main `9dc702b`, read-only)
+
+- Topology readers moved off nodes break three hand-built stubs: `test_stable_partition.py`
+  `_StubManifold` (:515) and `_NodeBridge` (:694), `test_topology_invariants.py` `_StubManifold` (:233);
+  they implement only `get_point_array(return_nodes=)`. Adding `points` / `cdists` properties (keeping
+  the old method) passes on main and on the prototype (64 passed each), so the changed files run on the base.
+- Same-stability field keys have NO teeth: periodic points all keyed -1, rows without a per-store offset,
+  or no BranchPoint-head check in `_curves` each pass `tests/unit/numerics tests/invariants
+  tests/regression` (663 passed) and leave the 62 probe dumps identical. Several stores DO occur in the
+  suite (hand-built curves in `loose_store()`): asserting one store in `_curves` fails 22 tests.
+- The memo tests (`test_generation_and_caches.py:204-319`, `test_point_budget.py:152-166`) pin bridge
+  VERSIONS and fresh-walk equality, not the memo itself: all pass with the memo deleted (their
+  docstrings then describe a memo that is gone).
+- F3 still open: `test_cleanup_walkers_and_examples.py:38-41` `_hand_walk` reads `_walk_nodes`, which
+  shares `_span` with every getter; an independent oracle is `chain.ids` between the root's and the
+  tail's positions found by `np.flatnonzero(chain.ids == row)`.
+
+
+## N6 `readers-on-views` outcome audit (2026-10-26, branch @ `e25adf1`, base `9dc702b`)
+
+- Suite on the branch: 1255 passed / 43 skipped / 5 deselected / 1 xfailed (C3) in 92.5 s (auditor
+  rerun). Collected ids 1296 -> 1299: `test_a_query_only_curve_queries_the_edge_leaving_its_periodic_point`
+  (`test_segment_index_bookkeeping.py`, m9 pin), `test_two_periodic_points_are_two_nodes` and
+  `test_equal_rows_of_two_stores_are_two_nodes` (`test_same_stability_diagnostic.py`, key pins). The
+  branch's 7 changed test files pass on a `git archive` of the base (145 passed; the three pins 3/3).
+- F3 closed: `_hand_walk` reads `store.chain_of(first.row).ids` between the root's and tail's positions.
+- Stubs `_StubManifold` x2 and `_NodeBridge` gained `points` / `cdists`.
+- Mutants that survive the whole suite (auditor): `trim_stable_at` keeping the root as a candidate;
+  `arc_polyline` without its storage-order reversal (never reached in the suite); `_curves` without the
+  BranchPoint-head check (mC / mH, plan §6 left it unpinned).
+- Stale test text kept: `test_geometry.py:102` docstring, the names
+  `test_bridge_classification_uses_the_memoised_midpoint` (`test_resonance_zone.py:111`) and
+  `test_overrun_drops_every_bridge_walk` (`test_point_budget.py:153`).
+
+
+## N7 `delete-point` analyst (2026-10-26, main `d279815`, read-only; prototypes in scratchpad `n7/`)
+
+- Base suite: 1299 collected (5 deselected). Deleting `Point` / `BasePoint` with ends as `End` records
+  (prototype `n7/proto/`), helpers UNCHANGED: 159 failed + 14 collection errors (the law tier alone 55 via
+  `laws.py:2965` / `invariants.py:54`, `test_class_count_under_blasting.py` 50). So a split that moves src
+  without `tests/helpers/{laws,invariants,polylines}.py` cannot be green.
+- With the three helpers rewritten (6 sites in `laws.py`: 186-201, 516-525, 980-981, 1624-1626, 2965;
+  `invariants.py` `walk_nodes` -> `curve_rows` + `manifold_cdists`, the spike / reversal / iterate /
+  one-to-one checks on rows and store columns, the periodic orbit back-link kept; `polylines.py` on
+  `store.append` + `new_chain`, hanging the CHAIN): 35 failed + 12 import errors; with imports fixed the
+  forced churn is 96 test functions / 123 ids in 26 files: unit/numerics 77 fns (101 ids), unit/topology
+  13 (the two hand-built-arrangement builders, `test_arrangement.py:80-82,425`, `test_arrangement_sparse.py:28-30`),
+  unit/loom 3, regression 3 (6 ids). Biggest: `test_order_arrays.py` 19 fns, `test_point_store.py` 9,
+  `test_segment_index_bookkeeping.py` 7, `test_merge_branches.py` 6. ~327 matching lines in those files.
+- `_manifold_from_points` is called by 18 test sites in 10 files (incl. `polylines.py`); `polyline_manifold`
+  callers put several hand-built curves in ONE Tangle, which asserts one store: they rely on the shared
+  `loose_store()`; a replacement must keep one shared store (a module-level store in `polylines.py`, or the
+  workbench's for `polyline_workbench`).
+- Engine-only variant (`n7/proto_a/`: engine on rows, `Point` kept as the lazy adapter, slots hold chains,
+  `_manifold_from_points` kept): 12 failed / 1243 passed on the UNCHANGED base tests: 8 functions in 5 files,
+  all engine-internal pins (slot contents `test_order_arrays.py:212,225,284,309`, `first_node`
+  `test_cleanup_walkers_and_examples.py:179`, `_hand_walk` on `store.nodes` :79/114, `_cdist_between`'s
+  private signature `test_boundary_straddle_cdist.py:107`, `test_refinement.py:60`, phantoms-have-no-Point
+  `test_point_store.py:227`). Probe identical on 62 dumps.
+- Identity on ends in tests (trap b; `End` is a value, `is` on it is always False): `test_stable_trim.py:15,
+  33,46,58`, `test_blast_restore.py:184`, `test_single_source_of_truth.py:70`, `test_point_store.py:45-46`,
+  `test_order_arrays.py:225,261,284,338,351`, `test_refinement.py:52,58`, `test_cleanup_walkers_and_examples.py:
+  153,179,180`, `test_bridge_identity.py:458-459` (`id(node)` sets), `test_boundary_straddle_cdist.py:43`,
+  `test_blast_through_a_shared_straddle.py:35`, `test_segment_index_bookkeeping.py:56`,
+  `test_manifold_initializer.py:111,126,165,180`, `laws.py:516-524`, `invariants.py:313,325`. BranchPoint
+  identity (`root is fp.branch_points[o]`, `unstable_segment[0] is root`) survives as is.
+- Reading `.tail.cdist` keeps working on an `End` (`cases.py:1052`, `e07_breaking.py:189,377`,
+  `test_resolved_crossings.py:157`). The topology stubs `_StubManifold` / `_NodeBridge` still declare
+  `get_point_array(return_nodes=)`; nothing calls it with `True` after the engine moves (cosmetic).
+
+
+## N7a outcome (2026-10-26, branch `refactor/engine-on-rows` @ `88f1a47`, base `d279815`)
+
+- Collected 1299 -> 1302, +3 / -0: `test_order_arrays.py::test_ids_are_the_rows_from_root_to_tail`,
+  `test_stable_trim.py::test_the_root_is_never_the_new_tail` (passes on the base, fails under
+  `candidates = rows`), `test_trellis_cut.py::test_a_cached_bridge_polyline_is_read_only` (fails on the base
+  by design). Base tests on the branch's src: 11 fail (the analyst's 12 less `test_refinement`), each
+  rewritten in its file; `0bf87a7` (test engineer) adds a `Chain.xy_at(-1)` assertion to
+  `_assert_first_on_its_chain`.
+- Rewritten pins now read chains / rows: `test_order_arrays.py` slot tests (slot `is` the Chain),
+  `_hand_walk` via `store.node`, `test_first_node_steps_past_the_root_branch_point` (loops the slots; slot 1
+  is None in `initialized`), the phantom test as an array invariant (phantom = no cdist and no own link,
+  named; fictitious tail = no cdist with an own link, named by nothing).
+- Unpinned after N7a: R1 (ends set after `branch_index`; only `rev7a/f2.py` sees it: no path builds a
+  `BaseManifold` from a BranchPoint root with a row tail and no `store=`); the `_image_chains` head chain
+  index (exact by the slot invariant, needs a hand-built state); `_cdist_between` is reached by no probe
+  build (only a scratch scenario); `ResonanceZone.restore` by no probe build (the suite's
+  `test_blast_restore.py` does call it). N7b may add pins (its id budget is its own).
+
+
+## N7b `delete-point` analyst (2026-10-27, main `4c9c3cb`, read-only; prototype in scratchpad `n7b/`)
+
+- Main collects 1302 (5 deselected). A full N7b prototype (`n7b/proto`: Point/BasePoint deleted, `End`
+  records, Q3 raising, Q5 dropped at all 10 sites) with the tests migrated: 1248 passed / 43 skipped /
+  1 xfailed (C3), 1292 collected; deleted ids (10): `test_order_arrays::test_point_creation`, the four
+  `[point]` iterate-list params (`POINT_KINDS` keeps `branch_point` so those ids stay),
+  `test_point_store::{test_link_setters_write_both_columns, test_a_phantom_row_reads_as_a_point,
+  test_a_link_across_stores_raises, test_get_point_cannot_write_into_the_store}`,
+  `test_generation_and_caches::test_node_walk_is_not_shared_between_callers`.
+- KEY FACT: the migrated tests/helpers use only API both trees share (`ids`, `_rows`, `_root`/`_tail`,
+  `points`/`cdists`, `store.append`/`append_one`/`link`/`new_chain`, `_manifold_from_rows`, `store=`,
+  `insert_point_*(chain)`, `helpers.invariants.node_cdist(end, stab)` which reads `.cdist` on an End/Point
+  and `get_cdist` on a BranchPoint) and PASS UNCHANGED ON MAIN'S SRC (`n7b/tmain`: 1248/43/1). So a
+  tests-first commit (or run) keeps the suite green; src-first is red (36 failed + 12 collection errors,
+  138 ids in the error modules, 174 forced ids in 27 files).
+- Test diff measured +496/-526 in 30 files (helpers: invariants +39/-42, laws +21/-26, polylines +25/-10;
+  `cases.py`, `fakes.py` unchanged). `polylines.py` holds the one test store `TEST_STORE` and
+  `store_rows(points, cdists=None, store=)`.
+- Old vs new law/invariant helpers, both on main's src in one process (`n7b/helpercmp.py`): 2,429 checks
+  on the 11 law cases, all equal.
+- `End` with a NaN cdist != itself (tuple == on two fresh nan floats): compare ends by `.id`; no library
+  curve end has a NaN cdist (0 of 274 curves' ends, 7 builds).
+- After N7b, `test_same_stability_diagnostic::test_two_periodic_points_are_two_nodes` (Bridge with a
+  BranchPoint root, an End tail, no `store=`) pins R1: fails under "ends set before branch_index".
+- Rubric-3 grep extras: fakes declaring `get_point_array(self, return_nodes=False)` in
+  `test_topology_invariants.py:247,266`, `test_stable_partition.py:120,529,717` (dead param);
+  `laws.py:1313` local `first_node`; `test_stable_trim._first_node_at_or_past`; the three
+  `test_first_node_*` ids in `test_cleanup_walkers_and_examples.py`.
+- Sphinx: the configured build fails on main already (no `myst_parser`/`furo` in env); with
+  `-D extensions=sphinx.ext.autodoc,sphinx.ext.napoleon -D html_theme=alabaster` it exits 0 on main
+  (1,514 warnings) and on N7b with the rst unchanged (2 import warnings, not a failure).
+
+
+## N7b outcome (2026-10-27, branch `refactor/delete-point` @ `647786b`, base `4c9c3cb`; auditor)
+
+- Suite on the tip (auditor rerun, `n7b_audit/suite_tip.txt`): 1253 passed / 43 skipped / 5 deselected /
+  1 xfailed (C3 alone, no XPASS), 86.7 s. Collected 1302 -> 1297 (default marker): ten `Point`-mechanics
+  ids removed (`test_point_creation`, four `test_insert_*_iterate*[point]`, four in `test_point_store.py`,
+  `test_node_walk_is_not_shared_between_callers`), five pins added (R1 `test_a_periodic_point_root_takes_a_row_tail_without_store`,
+  `test_a_non_integer_end_raises`, `test_a_row_end_without_a_store_raises`, `test_an_end_is_a_value_of_its_row`,
+  `test_arc_polyline_ascends_on_a_curve_stored_tail_first`); each pin fails under its own mutant (TE).
+- How tests read ends now: a row end is `curve.ids[0]` / `ids[-1]`, a periodic-point end `curve.root`
+  (the `BranchPoint`, compared by `is`); ends of rows compared by `==` / row sets; `id()` keys only on
+  `BranchPoint`s. Private `_root` / `_tail` only in `tests/helpers/*`, `_hand_walk`
+  (`test_cleanup_walkers_and_examples.py:42,52`) and `assert_chains_hold` (`test_order_arrays.py:67`,
+  reason: `ids[-1]` would be a tautology there).
+- Hand-built curves: `tests/helpers/polylines.py` `TEST_STORE` (one module-level `PointStore`, never
+  freed, a `Tangle` asserts one store) and `store_rows(points, cdists, store=)`; curves via
+  `ManifoldMachine._manifold_from_rows` or `BaseManifold(..., store=)`.
+- Law helpers: `laws._unstable_image_curves` keeps the `BranchPoint`-head clause (`heads` set),
+  `invariants.assert_one_to_one` the head back-link (`is head`) and rows `int(back[iterate]) == row`;
+  2,429 helper checks equal old vs new on 11 law cases (TE).
+- Kept on purpose: the ids `test_first_node_*` (three) and `test_stable_trim.py:31`
+  `test_the_trim_keeps_the_first_node_at_or_past_the_cdist` (names hit the N7 grep; renaming would rename ids).
+- Untested: `Bridge.head` (no caller); `_stored`'s range / cross-store acceptance (an `End` of another
+  store or an int past `len(store)` is accepted and reads uninitialised capacity).
+- Pre-existing F401s left: `tests/regression/test_pip_orbit_cut.py:23,25`.
+
+
+## N8 `branch-point-storage` analyst (2026-10-27, main `d0d78c5`, read-only; scratch `n8/`)
+
+- Main collects 1297 (5 deselected); suite 1253 passed / 43 skipped / 1 xfailed (C3), ~89 s.
+- With `BranchPoint` a view over its `FixedPoint` (`n8/proto`), the UNCHANGED tests fail 48 (37 through one helper
+  line, `invariants.node_cdist`'s `node.cdists is None`); with that line gone, 22 in 6 files, all hand-built
+  `BranchPoint(...)` / `insert_point_*` / `set_x` / linked-list mechanics. Migrated (`proto_tests_tools.diff`,
+  +48/-129 in 8 files, one helper `polylines.periodic_point(x, y)` = orbit point of a `FixedPoint(1)`): 1248
+  passed, 1292 collected; removed ids: `test_order_arrays::test_insert_{next,prev}_iterate[branch_point]`,
+  `test_insert_{next,prev}_iterate_twice_raises[branch_point]`, `test_cleanup_walkers_and_examples::
+  test_collect_rejects_a_broken_iterate_link` (a derived cycle cannot claim and lack an image).
+- Behaviour pinned differently after the move (hand-built only): a periodic point always has its image, so an
+  empty-slot periodic root reads as iterated (`test_a_curve_of_one_node_reads_one_row[empty_slot]` flips its two
+  iterated / non-iterated asserts); `chain.xy_at(-1) is p.get_point()` becomes an array equality (two reads are
+  two views).
+- mH pin (`n8/pin_mh.py`): a bridge rooted at a periodic point some registered unstable manifold leaves from, on
+  the OTHER slot, rows off every manifold, crossing that manifold: `same_stability_crossings == []` and count
+  (0, 0). Passes on `d0d78c5` and on the prototype; fails under mH (`head in heads` dropped: one hit listed).
+- Role-4 readers in the suite (keep them green when the cycle moves): `test_merge_branches::
+  test_an_anchor_bridge_image_is_its_branch_from_the_periodic_point`, `test_order_arrays::{test_a_blast_holds_the_invariants,
+  test_growth_after_a_blast_holds_the_invariants, test_ids_are_the_rows_from_root_to_tail,
+  test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point}`, `test_cleanup_walkers_and_examples::
+  test_every_getter_matches_an_independent_walk[*]`, `test_point_budget` (two), `invariants.assert_one_to_one`,
+  `test_blast_through_a_shared_straddle::_image_is_one_curve` (`root.next_iterate`).
+
+
+## N8 outcome (2026-10-27, branch `refactor/branch-point-storage` @ `91677b8`, base `d0d78c5`; auditor)
+
+- Suite at the tip (auditor rerun): 1255 passed / 43 skipped / 5 deselected / 1 xfailed (C3 alone), no XPASS.
+- Ids 1297 -> 1299: removed the four `test_insert_{next,prev}_iterate[_twice_raises][branch_point]` and
+  `test_collect_rejects_a_broken_iterate_link`; added the mH pin
+  (`test_same_stability_diagnostic::test_a_bridge_off_every_manifold_leaving_a_manifold_s_periodic_point_is_that_manifold`),
+  `test_order_arrays::{test_a_periodic_point_reads_its_orbit, test_a_periodic_point_cannot_be_written_through,
+  test_a_row_outside_the_store_raises, test_a_periodic_root_s_image_is_one_orbit_step_along_its_manifold,
+  test_refining_at_a_period_3_point_maps_from_the_right_orbit_neighbour[unstable|stable]}` (the last two are the
+  test engineer's: they kill the `_iterate_of` sign and `_get_preiterate` neighbour mutants, which survived before).
+- Hand-built periodic points: `helpers.polylines.periodic_point(x, y)` (orbit point of a `FixedPoint(1)`), or
+  `bare_fixed_point(period, inversion=, coordinates=).branch_points[o]`; slots via `bp.attach(chain, stability, b)`.
+- Flipped by design: `test_a_curve_of_one_node_reads_one_row[empty_slot]` (a periodic root always has its image).
+- Untested: `FixedPoint.attach_chain`'s `IndexError` (its mutant survives); `attach` with a bad stability (accepted).
+- The rubric-14(a) mmap control as one pair per tree is below the sampler's noise (13 pairs: 5 over +25 MiB, one
+  at -36.7; bimodal peaks 1642-1687 / 1700-1722 on both trees). Use a median or max of N >= 3 per tree.
+
+## N9 analyst note (2026-10-27, main `a2a2c4b`)
+
+- `tests/unit/numerics/test_gpu.py` RUNS here (CuPy 14.1.1, RTX 5060 Ti; the GPU is shared with the user's own
+  programs: keep device runs small). Its parity is `np.allclose(rtol=1e-6, atol=1e-9)` on cdists, never bitwise:
+  CuPy `pow`/`hypot` are not bit-equal to numpy's.
+- A device-less dispatch test is possible with `monkeypatch.setitem(sys.modules, "cupy", fake)` (a fake module
+  with an `ndarray` class) when the namespace is read from `sys.modules`; `array_api_compat` / `array_api_strict`
+  are NOT installed in `env/`.
+- Scratch device parity of the geometry kernels passed at rtol 1e-9 on a smooth 400-point layer; real k28 inputs
+  reach 2.8e-7, so 1e-6 is the safe tolerance.
+
+## N9 outcome (2026-10-27, branch `refactor/array-namespace` @ `4dd587f`, base `a2a2c4b`; auditor)
+
+- Suite at the tip (auditor rerun): 1261 passed / 43 skipped / 5 deselected / 1 xfailed (C3 alone), no XPASS.
+- Ids 1299 -> 1305, all added in the new `tests/unit/numerics/test_array_namespace.py`: three fake-`cupy` ids
+  (`test_host_arrays_compute_in_numpy_itself`, `test_device_arrays_compute_in_their_own_namespace`,
+  `test_mixed_host_and_device_arrays_raise`), the test engineer's `test_tanglepack_never_imports_cupy` (fresh
+  interpreter; kills the "import cupy in namespace.py" mutants the other five let through) and
+  `test_kernel_matches_numpy_on_the_device[curvature_area_batch|chord_deviation_batch]` (rtol 1e-6, skipped without
+  CUDA, run here). No existing test file changed; `test_gpu.py` 3/3 on the device.
+- Seven `xp.` -> `np.` mutants on ufunc / `where` lines are EQUIVALENT (numpy dispatches to CuPy by NEP-13/18);
+  only the `xp.asarray` lines can be pinned.
+- The approved memory form (Q8 of N9): >= 3 interleaved pinned-mmap runs per tree, median AND max each within
+  +25 MiB; the `malloc_trim` control (+10 MiB at blasts 13 / 32) is decisive and the only stop rule. Passed twice
+  (coder, test engineer). Trim absolute values move by a per-session baseline (~74 MiB between two sessions, both
+  trees alike): compare base against branch within one session only.
+- Two long lines in the new test file (`:6` docstring 129 chars, `:64` 102); `ruff --select F` clean.
+
+## N10 analyst note (2026-10-27, main `ebc9806`; scratch `n10/`)
+
+- The whole probe now dumps in ~12 s with `n7b/dump_all.sh` (5 workers; 62 dumps). The README's profiler commands on
+  main into scratch: default (all cases, both modes, 1e-7) 77 s, scale 1e-9 time 86 s.
+- In-process reproducibility is NOT bitwise at main: the class-level `Tangle._ids` makes a second build of a law case
+  in one process move registry last bits (6 of 7 cases). So the law tier's session-scoped builds carry bits that
+  depend on test order (their laws do not). A per-instance counter makes second builds byte-equal (verified).
+- Round-trip harnesses (scratch): `n10/rt.py` (snap / loadsnap / series / resume, probe readers), `cmp_pair.py`
+  (sets compared as sets), `cmp_series.py` (resumed steps vs uninterrupted run AND the probe dumps),
+  `abl_summary.py`, `grow_rt.py`, `inproc.py`, `wb_only.py`, `scale_rt.py`. Without the session section a
+  loaded law case's `classes` text differs on 9 of 11 (zone tags), and letter history differs once topology()
+  calls differ (44 texts on the series when the original skipped them).
+- Two tests read `Tangle._ids` as a class attribute: `test_segment_index_bookkeeping.py::
+  test_a_crossing_pair_keeps_the_new_sid_first` and `::test_a_curve_crossing_nothing_takes_one_sid_per_new_edge`.
+
+## After N10a `save-load` (outcome audit, 2026-10-28, branch @ `90aba08`, NOT merged at writing)
+
+- Ids 1305 -> 1424 (+119, none removed; auditor collect diff): `tests/unit/numerics/test_persist.py` (10: format
+  refusal, older/unversioned refusal (2), object array, dtypes, index ids and `_next_sid`, pair order, `attach_chain`
+  (2), the at-rest state: settings / `unresolved_links` / `_half_iterated_bridges`), `tests/regression/
+  test_save_load_round_trip.py` (108: per law case x 9 laws (workbench and session re-save byte-equal, numbers,
+  crossing types and curve identity, slots, topology, session-as-workbench, operand order, fixed-point containers),
+  growth k10 / nested, blasts k28_two_blasts / p3 / heteroclinic, dropped children, frozen polygon, workbench save
+  is no session, one fresh interpreter), `test_registry_ids_are_reproducible.py::
+  test_two_builds_in_one_process_are_byte_equal` (fails on the base). The two bookkeeping tests set
+  `tangle._next_sid` on the instance.
+- Suite at the tip: 1380 passed / 43 skipped / 5 deselected / 1 xfailed (C3), ~108 s (auditor rerun).
+- Mutants m1-m8 of the plan all killed (coder); the `.get("ndarray_fields", [])` mutant survives (unpinned, accepted).
+- Tools (scratch): `n10_te2/rt.py` + `rt_all.sh OUT [TREE]` (fresh-process round trip of the 11 law cases, asserts
+  the tree, fingerprints fixed-point fields too); `n10_code/run_series_lib.sh TREE OUT SERIES STEP` +
+  `n10/cmp_series.py OUT PROBE_DUMP`; `n10_code/scale_lib.py`, `grow_lib.py`, `mutants.py`.
+
+## D1 outcome (auditor, 2026-10-28; branch `refactor/diagnose-on-new-segments` @ `7d9d009`, base `88c62ea`)
+
+- Suite at the tip (auditor's run): 1401 passed / 43 skipped / 5 deselected / 1 xfailed (C3 only, no XPASS), 105 s;
+  1445 collected (base 1440): +4 `test_the_listing_and_the_count_are_the_sweep_s_in_its_order_and_orientation[1-4]`
+  (coder) and +1 `test_on_a_tie_the_sweep_runs_along_x` (test engineer), both in
+  `tests/unit/numerics/test_same_stability_diagnostic.py`. `-m perf` 5 passed on both trees (test engineer).
+- The oracle test (`_sweep_oracle`, plain loops, public readers only) pins listing ORDER and pair ORIENTATION, which
+  no test saw before (the probe saw orientation only). Its workbench: two unstable curves sharing a periodic root, a
+  third, stable random walk + line, three overlapping partial image bridges via `workbench._register_bridge`, odd
+  seeds rounded (tied minima). No seed ties the axis counts, hence the separate tie test (mutant M7 survived the
+  whole suite and 300 random sets before it).
+- Mutants that bite (test engineer, `d1_te/mutate.py`): orientation swap, dropped lexsort, wrong / every / p-only
+  reference strip, last-owner dedup, no dedup, inverted axis, old box taking every partner, short forward range,
+  unstable sweep or strip sort, tie -> axis 1. Equivalent: the shared-node drop (M5). Strip-width extremes change
+  nothing (W1-W5).
+- Harnesses worth reusing (scratch): `n7b/dump_all.sh` (probe dumps, 5 parallel, `TANGLEPACK_REPO`; the probe asserts
+  the import path), `d1_te/listing_dump.py` (each tree in its own process, floats as hex), `d1_te/random_eq_te.py`,
+  `d1_audit/reader.py` (profiler json pair: per-blast triple, census, stage self-times, peak).
