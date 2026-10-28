@@ -1,6 +1,0 @@
-{
-  "status": "confirmed",
-  "allowed": ["confirmed", "touchup", "figures"],
-  "notes": "Author confirmed the B4b holes-are-combinatorial outcome (2026-10-14): branch refactor/holes-are-combinatorial at ba23a1f off f166573, nine files plus one TangleSession docstring line, suite 1178 passed / 1 KNOWN_ISSUES xfail, no topology change, figures identical (0.0). A hole is its five combinatorial fields; StablePartition.py (1091 lines) calls no map and holds no coordinates; plotting.hole_point carries the reference point back with map_inv. Open for the author: topology() still calls map_inv on the default diagnose=True flag path (measured_sides via hole_point); the law oracles and measured_sides share hole_point with the figure (guarded by a probe only); I1/I2 cores in diagnostics; CLAUDE.md stale; two stale 'seeds already-punched orbits' comments (Trellis.py:1250, StablePartition.py:306). Merge is the author's.",
-  "iteration": 1
-}

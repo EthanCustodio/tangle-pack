@@ -1,6 +1,0 @@
-{
-  "status": "approved",
-  "allowed": ["approved", "revise", "answered"],
-  "notes": "Author approved the B3 depth-of-n plan as written (2026-10-14), question 1 = option (a): N-a as decided and restated (the pip-bearing exemption on the composed +1 chain, BlastResult.pip_depth composed, blast_zone docstring, SeriesStep.pip_depth measured test-side with the series law 'non-decreasing' per question 2's default, the proximity-guard test restated, a new unit test module on a multi-iteration call). Five files. Behaviour: none on any series or law case; the only change is inside a single multi-iteration call. The series stalls are (ii) unresolved or (iii) undetected f^{m+1}(q0) and (iv) the zone filter, all left for a later decision.",
-  "iteration": 1
-}

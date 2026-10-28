@@ -1,4 +1,0 @@
-{
-  "status": "confirmed",
-  "notes": "Author graded the B5 inertness-is-transience outcome 'confirmed' (2026-10-14): the zeroth-hole rule decides what the minimal trellis maps, transience over the words is every class's verdict, heteroclinic u (hole-free) stays inert, an unresolved zeroth-hole class stays active by convention. Branch refactor/inertness-is-transience @3fb310a off 7d3a294; nothing merged, the merge is the author's. Open for the author: whether an unresolved zeroth-hole class should be inert by the rule; inert_classes not re-exported from tanglepack.topology; CLAUDE.md stale on inertness (B12)."
-}

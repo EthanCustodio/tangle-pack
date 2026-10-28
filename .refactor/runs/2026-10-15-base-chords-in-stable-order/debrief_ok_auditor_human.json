@@ -1,4 +1,0 @@
-{
-  "status": "confirmed",
-  "notes": "Confirmed by the author 2026-10-15. B7b base-chords-in-stable-order: chords on every stable branch pair in stable order, reversing the 2026-09-23 chain-order rule on the base branch; the stop rule did not fire (47/47 lobes stable order); the k32 Theorem T known issue is deleted; behaviour changes confined to k32_series steps 2-10 (iterated elements, unmatched_members 1->0 at 6-7, one inert refined token at 8-10); words, M, M_1, counts and is_reliable identical on all 63. Branch refactor/base-chords-in-stable-order @63477e3 off a6a4f68, NOT merged until the author says so."
-}

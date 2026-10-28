@@ -1,6 +1,0 @@
-{
-  "status": "approved",
-  "allowed": ["approved", "revise", "answered"],
-  "notes": "Author approved the B4b holes-are-combinatorial plan as written (2026-10-13): nine files plus one TangleSession docstring line; a hole is its five combinatorial fields; placement moves to plotting.hole_point; the one question takes its default (a): hole_point carries the reference point back with trellis.dynamical_system.map_inv so figures are identical to 1e-12 and StablePartition calls no map; the new WARNING watches scaled span ends only.",
-  "iteration": 1
-}

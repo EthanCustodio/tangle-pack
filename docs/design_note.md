@@ -593,7 +593,8 @@ and tangle 0 (NEST-6). The inversion series loses classes at blast 6 by a genuin
 ## H. History
 
 **The alignment slices** (plan `docs/alignment_plan_2026-10-09.md`, one per `/tangle_refactor` run;
-outcomes in `.refactor/decisions.md` and `.refactor/runs/`), with merge commits:
+outcomes in `.refactor/decisions.md`; the run folders `.refactor/runs/` were removed with the
+Athanor workflow on 2026-10-28 and live in git history up to `ab213db`), with merge commits:
 
 - B0 `oracle-laws` (`1029fcc`): oracle laws on the law cases; the k=10 full 2-shift pinned (plan Q11).
 - B1 `resolved-crossings` (`76d0710`): N is the resolved set (plan Q13 (a)); the blast-path parity vote

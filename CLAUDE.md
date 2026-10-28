@@ -59,6 +59,24 @@ A consequence used by the topological layer: for a HOMOCLINIC intersection point
 
 **Session and API.** `TangleSession` holds the workbench, caches one `Topology` per (generation, selection, pips) and remembers pips and letters; it has no stage fan-outs (`classify_strong_pips` still runs per fixed point, for pip memory) and no plot delegates (`cartoon_zones` and `plot_resonance_zones` are in `loom/cartoon.py`, `cartoon_enclosures` in `topology/plotting.py`). A chosen pip is remembered as a crossing and restored on every rebuilt trellis; `resonance_zone` adopts its pip only when it is a candidate; a remembered pip that stops being one is never replaced, `topology()` raises, and `forget_strong_pip` is the remedy. One resonance zone per fixed point. Fixed points are constructed outermost first, so the period-1 saddle is `A` and tangle 0 (design note §A.11).
 
+## Workflows
+
+One slash command per kind of task (`.claude/skills/<name>/SKILL.md`, hand-written; the heavy ones call saved Workflow scripts in `.claude/workflows/`). The Athanor `/tangle_refactor` sigil, its five agents and the `.refactor/knowledge` / `.refactor/runs` files were removed on 2026-10-28 (git history up to `ab213db`).
+
+| Command | For | Shape |
+|---|---|---|
+| `/refactor` | restructure, nothing computed changes | plan mode → worktree `refactor/<slug>` → `tp-implement` (implement, `tp-review`, fix, suite + `coverage_guard`) → report → ff merge |
+| `/feature` | new behaviour + its tests | as `/refactor`, branch `feature/<slug>` |
+| `/review` | review a branch / range / working tree | `tp-review`: four lenses (physics, correctness, style, tests), two refuters per finding |
+| `/perf` | speed / memory | plan mode → `tp-perf` (candidates in parallel worktrees, measured serially) → pick → merge |
+| `/experiment` | experiment / data-generation scripts | `scripts/<name>.py` → `figures/` or `data/` + CSV, on the current branch |
+| `/figure` | figure design | reuse `topology/plotting.py`, render, look, iterate; `.png/.svg/.fig.pickle` |
+| `/quick` | small edits | edit, run the tier, show the diff |
+| `/investigate` | one question, read-only | code + probes in the scratchpad → answer with `file:line` and numbers |
+| `/campaign` | a larger effort | at most 4 runs, planned in `.refactor/campaigns/<date>-<slug>.md` |
+
+Checkpoints are plan approval and the final diff. `.refactor/decisions.md` is the only kept paper trail; `house-style` (`.claude/skills/house-style/`) is the shared taste and branch convention.
+
 ## Commands
 
 **Install (editable):**

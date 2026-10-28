@@ -1,6 +1,0 @@
-{
-  "status": "confirmed",
-  "allowed": ["confirmed", "touchup", "figures"],
-  "notes": "Author confirmed the B6a walk-bounds-honest outcome (2026-10-12): branch refactor/walk-bounds-honest at 8a1cdc3 off 76d0710, four files, suite 1162 passed / 1 KNOWN_ISSUES xfail, no word change on any case or series. Open for the author: export MembersDisagree from tanglepack.topology (one line, __init__.py was out of scope); the second tier of _nodes_meeting is a tolerance judgement (a span narrower than its error is taken to lie in the edge it overlaps); CLAUDE.md stale on the span fallback and the status list. Merge is the author's.",
-  "iteration": 1
-}

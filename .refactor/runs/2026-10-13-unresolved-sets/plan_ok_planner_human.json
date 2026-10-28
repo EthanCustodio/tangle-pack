@@ -1,6 +1,0 @@
-{
-  "status": "approved",
-  "allowed": ["approved", "revise", "answered"],
-  "notes": "Author approved the B8 unresolved-sets plan as written (2026-10-13): eight files, order-free collision rule, forget_strong_pip resets the cached trellis, candidacy tested post-zone; the one question takes its default (test candidacy in resonance_zone as is, add_resonance_zones unchanged).",
-  "iteration": 1
-}

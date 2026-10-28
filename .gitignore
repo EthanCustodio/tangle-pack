@@ -31,3 +31,8 @@ figures/refactor_proof/**/*.fig.pickle
 
 # Athanor sigil run state (runtime)
 .claude/athanor/state/
+
+# workflow scratch inside a worktree (/refactor, /feature)
+.plan.md
+.base-cov.json
+.cand-cov.json

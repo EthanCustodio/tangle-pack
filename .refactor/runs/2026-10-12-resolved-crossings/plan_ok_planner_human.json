@@ -1,6 +1,0 @@
-{
-  "status": "approved",
-  "allowed": ["approved", "revise", "answered"],
-  "notes": "Author approved the B1 resolved-crossings plan as written (2026-10-12): 14 paths, the three questions take their defaults (no repair for a demoted crossing in B1, None threshold = clause 1 off and clause 2 on, no threshold setter).",
-  "iteration": 1
-}

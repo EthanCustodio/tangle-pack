@@ -1,6 +1,0 @@
-{
-  "status": "confirmed",
-  "allowed": ["confirmed", "touchup", "figures"],
-  "notes": "Author confirmed the B4a holes-algorithm-vs-diagnostics outcome (2026-10-13): branch refactor/holes-algorithm-vs-diagnostics at f166573 off ae18859, eleven files, suite 1173 passed / 1 KNOWN_ISSUES xfail, no result change (identical dumps on the 11 law cases plus p3_coarse_blasts). StablePartition.py 1947 -> 1354 lines; the 16 readings and measured_sides/side_source live in topology/diagnostics.py; Hole lost measured_side and side_source. Open for the author: _map_backward still places propagated holes in the algorithm until B4b (map called twice per step with diagnose=True; B4b must say which placement it means); the I1/I2 cores live in diagnostics (three-line wrappers in the algorithm); stale references in numerics/geometry.py:7, the archived proof script, and CLAUDE.md (:35, :139). Merge is the author's.",
-  "iteration": 1
-}

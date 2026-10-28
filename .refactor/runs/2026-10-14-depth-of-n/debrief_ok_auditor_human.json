@@ -1,6 +1,0 @@
-{
-  "status": "confirmed",
-  "allowed": ["confirmed", "touchup", "figures"],
-  "notes": "Author confirmed the B3 depth-of-n outcome, option (a) (2026-10-14): branch refactor/depth-of-n at 7d3a294 off 9cd29d5, five files, suite 1193 passed / 1 KNOWN_ISSUES xfail, no change on any law case or series. N-a as decided: a child ending on the chosen pip's orbit is exempt from min_separation (composed +1 chain, after the exterior check), BlastResult.pip_depth and SeriesStep.pip_depth as data, the series law 'never shallower'. The plan's diagnosis was wrong: the series stalls are (ii) an unresolved f^{m+1}(q0) (k28 b8, k32 b9, nested_outer b9, inversion b10) or (iii) an undetected one (p3 b15, heteroclinic b6); the pre-B1 k32 stall was (iv) the zone filter. All three are visible as data and unaddressed; the author's options are refine, place by image_cdist (PK-6), or a finer image near the anchor for (iii), each its own slice. Also open: the exemption overrides the resolution guard inside a multi-iteration call (361 same-stability WARNINGs on nested_outer x11); the plan doc's B3 section is stale; scripts/henon_blast_period_3.py is dead on main (pinned pip 12). Merge is the author's.",
-  "iteration": 1
-}

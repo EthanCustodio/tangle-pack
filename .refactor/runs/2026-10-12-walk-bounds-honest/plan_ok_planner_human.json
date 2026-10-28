@@ -1,6 +1,0 @@
-{
-  "status": "approved",
-  "allowed": ["approved", "revise", "answered"],
-  "notes": "Author approved the B6a walk-bounds-honest plan as written (2026-10-12) after asking for a plain description of the issue; the one question takes its default (lobe_image_markers raises MembersDisagree, caught in _resolve_itinerary before walking).",
-  "iteration": 1
-}
