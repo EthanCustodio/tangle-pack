@@ -31,8 +31,8 @@ What runs where
   - refinement's layer loop (``ManifoldMachine._refine_layer``): it reads the
     store and appends to it between kernel calls, so on a device every layer
     would upload its four ``(M, 2)`` arrays and download its flags;
-  - the segment build (``Tangle._query_curve``): libspatialindex runs only on
-    the CPU;
+  - the segment build (``Tangle.add_manifolds`` and ``Tangle._query_curve``):
+    libspatialindex runs only on the CPU;
   - crossing resolution (``Tangle._find_true_intersection``): a 2x2 LAPACK
     solve per candidate pair, not a batched kernel.
 
