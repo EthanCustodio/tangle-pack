@@ -197,6 +197,7 @@ class Tangle:
         _intersecting_segments: Set of frozenset pairs of segment ids that
             cross.
         _store: The one PointStore whose rows every key and record name.
+        _next_sid: The next segment id this index draws (ids are per index).
 
     An edge key (:func:`_edge`) is one int built from the edge's two store rows,
     the same whichever way the edge is walked; both key maps use it. Rows are

@@ -180,6 +180,14 @@ tanglepack.numerics.namespace module
    :undoc-members:
    :show-inheritance:
 
+tanglepack.numerics.persist module
+----------------------------------
+
+.. automodule:: tanglepack.numerics.persist
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

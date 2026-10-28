@@ -52,6 +52,14 @@ tanglepack.loom.cartoon module
    :undoc-members:
    :show-inheritance:
 
+tanglepack.loom.persist module
+------------------------------
+
+.. automodule:: tanglepack.loom.persist
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

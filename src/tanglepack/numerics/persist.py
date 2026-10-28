@@ -4,8 +4,9 @@ Saving and loading a workbench: one ``.npz`` of arrays and one ``.json`` of stru
 ``save(path)`` writes ``<path>.npz`` (plain ``np.savez``, uncompressed) and
 ``<path>.json``. Every float lives in the npz; the JSON holds structure, names,
 ints and ``None`` -- no float is ever written as text. A loaded workbench is the
-saved one: its re-save is byte-equal, and every later growth, recompute or blast
-gives the bits the original would have given (N10a, 2026-10-27).
+saved one: its re-save is byte-equal, and the growth, recomputes and blasts that
+follow give the bits the original's would (N10a, 2026-10-27; measured on the law
+cases, the blast series and the scale series).
 
 What is saved is the workbench's whole state, in its insertion orders:
 
@@ -19,8 +20,8 @@ What is saved is the workbench's whole state, in its insertion orders:
 * the segment index EXACTLY: every record's segment id, the edge maps, the
   crossing pairs in their iteration order and the next id to draw. A pair's
   operand order follows its two ids and decides float bits, so an index rebuilt
-  from scratch would not continue the same (measured: 51 of 59 resumed series
-  steps moved in the last bits);
+  from scratch would not continue the same (the N10a analyst's ablation: 51 of
+  59 resumed series steps moved in the last bits);
 * the bookkeeping later calls read: growth stats, reported findings, epochs,
   the generation, the machine's settings.
 
@@ -29,21 +30,21 @@ What is NOT saved is derived and rebuilt lazily: the registry's caches,
 probe (made on the map passed to ``load``) and the rtrees, which are
 bulk-loaded from the saved records.
 
-A load executes nothing it reads: the npz is opened with
+A load runs nothing it reads: the npz is opened with
 ``allow_pickle=False``, and the map, its inverse and the Jacobian are arguments
 of ``load`` only. A file of another ``"format"`` is refused.
 
 Dev Notes:
 
-Each saved float records its Python type (``float`` or ``np.float64``): a
+Each saved number records its Python type (``float``, ``np.float64`` or ``int``): a
 detected crossing carries ``np.float64`` coordinates and an anchor ``float``
 ones, and texts quote their reprs. A periodic-point end (a
 :class:`~.BranchPoint.BranchPoint`) is two ints of its own, ``(fixed point,
 orbit index)``, beside the row column.
 
 The session's remembered state (pips, letters, zones) is saved beside the
-workbench by ``loom/persist.py``, through :class:`Encoder` / :class:`Decoder`:
-numerics never imports loom.
+workbench by ``TangleSession.save``, through :class:`Encoder` /
+:class:`Decoder` and :func:`write`; nothing here imports the layers above.
 """
 
 from __future__ import annotations
