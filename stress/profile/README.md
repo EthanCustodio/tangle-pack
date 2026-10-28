@@ -66,8 +66,8 @@ The baseline of `a8bb8a0` is committed, unchanged from the analyst's run:
 
 ## After-profile (N10b)
 
-The last slice (N10b, 2026-10-28) reran the two commands above, unchanged, on `dc1bd0c`
-(whose `src` and `tests` are `08b1d12`'s, main at the campaign's end), reran the traced
+The last slice (N10b, 2026-10-28) reran the first two commands above, unchanged, on `dc1bd0c`
+(whose `src` and `tests` are `08b1d12`'s, the N10a merge), reran the traced
 series, and drew both cutoffs beside the baseline:
 
 - `figures/numerics_profile/dc1bd0c/` -- the five law cases and the 1e-7 scaling series
