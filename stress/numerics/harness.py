@@ -54,7 +54,7 @@ import numpy as np
 import psutil
 
 ROOT = Path(__file__).resolve().parent
-REPO = ROOT.parent.parent
+REPO = Path(os.environ.get("TANGLEPACK_REPO", ROOT.parent.parent)).resolve()
 RESULTS = ROOT / "results"
 PROGRESS_LOG = RESULTS / "progress.log"
 sys.path.insert(0, str(REPO / "src"))

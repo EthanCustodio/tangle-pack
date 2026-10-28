@@ -55,6 +55,7 @@ one columnar point store, the single store of points as the registry is of cross
 - **D6. Scale target: ready, not wired.** Arrays throughout; hot paths written against an array
   namespace (numpy now, CuPy swappable); workbench state serialisable. No distributed scheduler; GPU
   stays opt-in (`enable_gpu`).
+  *As delivered (N9, 2026-10-27, measured): only the two geometry kernels take an array namespace; the map keeps its `enable_gpu` seam, and merge, refinement's layer loop, the segment build and crossing resolution stay host-only (together 3.5 % of the 1e-7 scale series, a device bound of 1.037x; `gpu.py`'s "What runs where"). Workbench state is serialisable since N10a.*
 
 ### A.2 The questions, as answered (2026-10-23: every default)
 
