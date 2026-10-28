@@ -1,9 +1,9 @@
 # Numerics profile (campaign N0..Nk: linked lists to arrays)
 
 `profile_numerics.py` measures where memory and time go in the numerics pipeline;
-`profile_figures.py` draws its json. The baseline was taken on `a8bb8a0`; the LAST
-slice of the campaign reruns the same command on its branch and draws both runs on one
-axes.
+`profile_figures.py` draws its json. The baseline was taken on `a8bb8a0`; the last
+slice of the campaign (N10b) reran the same commands on `dc1bd0c` and drew both runs on
+one axes.
 
 ## Commands (from the repository root)
 
@@ -64,20 +64,41 @@ The baseline of `a8bb8a0` is committed, unchanged from the analyst's run:
 - `figures/numerics_profile/a8bb8a0_scale_traced/` -- the 1e-7 series run to its plateau under
   tracemalloc (json only).
 
-The last slice (N10) reruns the first command above on its branch and draws it beside the
-baseline:
+## After-profile (N10b)
+
+The last slice (N10b, 2026-10-28) reran the two commands above, unchanged, on `dc1bd0c`
+(whose `src` and `tests` are `08b1d12`'s, main at the campaign's end), reran the traced
+series, and drew both cutoffs beside the baseline:
+
+- `figures/numerics_profile/dc1bd0c/` -- the five law cases and the 1e-7 scaling series
+  (12 json, 6 png, 1.3 MB);
+- `figures/numerics_profile/dc1bd0c_scale1e-9/` -- the largest scaling point (1 json, 5 png,
+  508 KB; a folder with no law case has no `stage_peak_rss.png`);
+- `figures/numerics_profile/dc1bd0c_scale_traced/` -- the 1e-7 series to its plateau under
+  tracemalloc (1 json, 264 KB).
 
 ```bash
+env/bin/python stress/profile/profile_numerics.py --cases scale --modes memory \
+    --scale-trace-blasts 40 --out figures/numerics_profile/dc1bd0c_scale_traced
 env/bin/python stress/profile/profile_numerics.py --plot-only \
-    --out figures/numerics_profile/<branch-sha> --compare figures/numerics_profile/a8bb8a0
+    --out figures/numerics_profile/dc1bd0c --compare figures/numerics_profile/a8bb8a0
+env/bin/python stress/profile/profile_numerics.py --plot-only \
+    --out figures/numerics_profile/dc1bd0c_scale1e-9 --compare figures/numerics_profile/a8bb8a0_scale1e-9
 ```
+
+The result, `a8bb8a0` -> `dc1bd0c`: census at the plateau 1914.0 -> 231.9 MiB and blast
+458.4 -> 52.2 s at 1e-7, 4683.2 -> 502.3 MiB and 541.4 -> 67.7 s at 1e-9; the traced growth
+1880.6 -> 232.3 MiB. Every blast's `pip_depth`, `points_created` and stage calls are those of
+the baseline (32 blasts at 1e-7, 29 at 1e-9). The peak RSS fell least (3034.7 -> 2015.0 MiB
+at 1e-7, 6632.6 -> 1930.8 at 1e-9): it is a transient inside a blast and bimodal from run to
+run (docs/numerics_arrays_plan_2026-10-23.md, Outcome row 10b).
 
 ## Identity probe
 
 `identity_probe.py` checks D3 for every slice: the points, the registry and the topology of
-every `cases.LAW_CASES` build and of every step of every `cases.SERIES` (58 builds), base
-against branch. Each case runs in a fresh interpreter importing the checkout named by
-`TANGLEPACK_REPO`; nothing is written outside `--out`.
+every `cases.LAW_CASES` build and of every step of every `cases.SERIES` (62 builds at
+`08b1d12`), base against branch. Each case runs in a fresh interpreter importing the checkout
+named by `TANGLEPACK_REPO`; nothing is written outside `--out`.
 
 ```bash
 TANGLEPACK_REPO=../tangle-pack-<slug>-base env/bin/python stress/profile/identity_probe.py dump --out <scratch>/base
@@ -85,11 +106,12 @@ TANGLEPACK_REPO=../tangle-pack-<slug>      env/bin/python stress/profile/identit
 env/bin/python stress/profile/identity_probe.py compare <scratch>/base <scratch>/branch   # exit 1 on any difference
 ```
 
-One dump takes about 60 s (126 MB; k32_series 26 s, nested_outer_series 17 s, k28_series 8 s,
-every other case about 1 s) and a compare about 1 s, measured on `a8bb8a0`. `compare` prints
-one line per differing array (rows differing, length change, max |dxy|, max |dcdist|), a
-unified diff per differing text, and last `identical: 58 builds, 5776 arrays, 638 texts` (at
-`a8bb8a0`) or `differences in K items`.
+One dump takes about 27 s (129 MB) at `08b1d12`, about 60 s (126 MB; k32_series 26 s,
+nested_outer_series 17 s, k28_series 8 s, every other case about 1 s) on `a8bb8a0`, and a
+compare about 1 s. `compare` prints one line per differing array (rows differing, length
+change, max |dxy|, max |dcdist|), a unified diff per differing text, and last
+`identical: 58 builds, 5776 arrays, 638 texts` (at `a8bb8a0`; `identical: 62 builds, 6024
+arrays, 744 texts` at `08b1d12`) or `differences in K items`.
 
 Every blast of the probe runs with `diagnose=True`, and each dump carries one more text,
 `same_stability_counts` (N2, 2026-10-24): one line per blast since the previous dump -- the
