@@ -14,6 +14,11 @@ that has built other cases is as good as one in a fresh process; one test
 loads in a fresh interpreter all the same, against hidden process-global
 state.
 
+Every attribute of every object the save covers is either saved or listed as
+derived, and a loaded object has the original's saved attributes with the same
+value types: a class that gains an attribute fails here until a save holds it
+or the attribute is listed as derived.
+
 No value is pinned: the original is compared with its loaded copy.
 """
 
@@ -29,6 +34,16 @@ import pytest
 
 from cases import BUILDERS, HENON_K28, LAW_CASES, ZONE_MIN_SEPARATION
 from tanglepack import Intersection, TangleSession, TangleWorkbench
+from tanglepack.loom.BridgeAlphabet import BridgeAlphabet
+from tanglepack.loom.ResonanceZone import ResonanceZone
+from tanglepack.numerics.BaseManifold import BaseManifold
+from tanglepack.numerics.Bridge import Bridge
+from tanglepack.numerics.FixedPoint import FixedPoint
+from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
+from tanglepack.numerics.IterateTable import IterateTable
+from tanglepack.numerics.ManifoldMachine import ManifoldMachine
+from tanglepack.numerics.PointStore import Chain, PointStore
+from tanglepack.numerics.Tangle import Tangle
 
 
 def _load_workbench(workbench, path):
@@ -261,3 +276,109 @@ def test_a_fresh_interpreter_loads_the_same_session(tmp_path):
     subprocess.run([sys.executable, "-c", _FRESH_LOAD, *arguments],
                    check=True, env={"PYTHONPATH": str(source)}, timeout=120)
     _assert_same_files(tmp_path / "saved", tmp_path / "resaved")
+
+
+# ── what a save covers ────────────────────────────────────────────────────
+
+# Every attribute of a class the save covers is in exactly one of these two
+# tables. A new attribute is in neither and fails the law below: save it (and
+# bump ``persist.FORMAT_VERSION``) or, if it is derived, list it as not saved.
+_SAVED: dict[type, frozenset[str]] = {
+    TangleSession: frozenset({"workbench", "_strong_pips", "bridge_alphabet", "resonance_zones", "_blast_stats"}),
+    TangleWorkbench: frozenset({
+        "point_store", "fixed_points", "Tangle", "_man_machine", "_intersection_registry", "_manifolds",
+        "_bridges", "_partial_bridges", "_image_curves", "_half_iterated_bridges", "_bridges_at",
+        "_growth_stats", "_reported_flags", "_reported_artifacts", "_registry_id_epoch", "_bridge_id_epoch",
+        "_mutations", "_generation", "_generation_state", "escape_radius", "resolution_ratio_threshold",
+    }),
+    PointStore: frozenset({"_xy", "_cdist", "_image", "_preimage", "_chain", "_position", "_n", "chains"}),
+    Chain: frozenset({"store", "index", "ids", "stretch_param", "anchor"}),
+    FixedPoint: frozenset({
+        "period", "branch_points", "_slots", "coordinates", "unstable_eigenvectors", "unstable_eigenvalues",
+        "stable_eigenvectors", "stable_eigenvalues", "accuracy", "jacobians", "partial_jacobians", "k_value",
+        "label",
+    }),
+    BaseManifold: frozenset({
+        "_root", "_tail", "_store", "_version", "stability", "stretch_param", "fixed_point", "name",
+        "branch_index", "manifold_key",
+    }),
+    IntersectionRegistry: frozenset({
+        "_store", "_next_id", "cdist_tol", "iterate_table", "unresolved_links", "_generation",
+        "_orders_version", "_unstable_order", "_stable_order",
+        "_unstable_keys", "_stable_keys",  # the saved crossings' cdists in the saved orders
+    }),
+    IterateTable: frozenset({"_forward", "_backward"}),
+    Intersection: frozenset({
+        "id", "label", "coords", "unstable_cdist", "stable_cdist", "seg_ids", "manifold_a_key",
+        "manifold_b_key", "unstable_manifold", "unstable_segment", "stable_segment", "store",
+        "crossing_sign", "resolution_ratio", "chord_deviation",
+    }),
+    Tangle: frozenset({
+        "_next_sid", "_edge_to_sid", "_store", "_seg_lookup", "_manifold_segs", "_seg_manifolds",
+        "_query_edges", "_intersecting_segments", "_processed_pairs",
+    }),
+    ManifoldMachine: frozenset({"area_cutoff", "max_points_per_step", "points_created", "max_abs_coord"}),
+    ResonanceZone: frozenset({
+        "fixed_point", "stable_branch_key", "boundary_intersection", "cut_intersections",
+        "intersection_ids", "previous_tails", "boundary_arcs", "boundary_vertices",
+    }),
+    BridgeAlphabet: frozenset({"assigned"}),
+}
+_SAVED[Bridge] = _SAVED[BaseManifold] | {"first_intersection", "second_intersection", "iterated", "dropped_at"}
+
+# Derived or lazy (``persist``'s "What is NOT saved"), or built by the load's
+# constructors around the map it is given.
+_NOT_SAVED: dict[type, frozenset[str]] = {
+    TangleSession: frozenset({"_trellises", "_topologies"}),  # caches; topology() recomputes them
+    TangleWorkbench: frozenset({"dynamical_system", "_fp_solver", "_man_maker", "_bridge_iterator"}),  # the map's
+    PointStore: frozenset({"_xy_read"}),  # the read-only alias of _xy
+    FixedPoint: frozenset({"_branch_cycle_cache", "_branch_position_cache"}),  # memos
+    IntersectionRegistry: frozenset({  # caches, each behind its version counter
+        "_rank_maps", "_rank_version", "_stable_branch_index", "_stable_branch_version", "_runs_cache",
+        "_runs_version", "_resolved_cache", "_resolved_version",
+    }),
+    Intersection: frozenset({"brackets"}),  # lazy
+    Tangle: frozenset({"_rtrees"}),  # bulk-loaded from the saved records
+    ManifoldMachine: frozenset({"system", "_call_depth"}),  # the map's; zero between calls
+}
+
+
+def _attributes(obj) -> dict[str, type]:
+    """An object's attribute names (its set slots for a slotted class) and their value types."""
+    names = vars(obj) if hasattr(obj, "__dict__") else [n for n in obj.__slots__ if hasattr(obj, n)]
+    return {name: type(getattr(obj, name)) for name in names}
+
+
+def _covered_pairs(original: TangleSession, loaded: TangleSession):
+    """Every object the save covers, with its loaded counterpart."""
+    a, b = original.workbench, loaded.workbench
+    yield original, loaded
+    yield original.bridge_alphabet, loaded.bridge_alphabet
+    yield from zip(original.resonance_zones.values(), loaded.resonance_zones.values(), strict=True)
+    yield a, b
+    yield a.point_store, b.point_store
+    yield from zip(a.point_store.chains, b.point_store.chains, strict=True)
+    yield from zip(a.fixed_points, b.fixed_points, strict=True)
+    for curves in ("_manifolds", "_bridges"):
+        yield from zip(getattr(a, curves).values(), getattr(b, curves).values(), strict=True)
+    for curves in ("_partial_bridges", "_image_curves"):
+        yield from zip(getattr(a, curves), getattr(b, curves), strict=True)
+    yield a.intersection_registry, b.intersection_registry
+    yield a.intersection_registry.iterate_table, b.intersection_registry.iterate_table
+    yield from ((x, y) for (_, x), (_, y) in zip(a.intersection_registry, b.intersection_registry, strict=True))
+    yield a.Tangle, b.Tangle
+    yield a._man_machine, b._man_machine
+
+
+def test_a_load_restores_every_attribute(saved_session):
+    case, loaded, _ = saved_session
+    for original, copy in _covered_pairs(case.session, loaded):
+        cls = type(original)
+        assert type(copy) is cls
+        saved, not_saved = _SAVED[cls], _NOT_SAVED.get(cls, frozenset())
+        before, after = _attributes(original), _attributes(copy)
+        unlisted = before.keys() - saved - not_saved
+        assert not unlisted, f"{cls.__name__}.{sorted(unlisted)}: save it (bump FORMAT_VERSION) or list it"
+        assert saved <= before.keys(), f"{cls.__name__} no longer has {sorted(saved - before.keys())}"
+        assert after.keys() - not_saved == before.keys() - not_saved, cls.__name__
+        assert {n: after[n] for n in saved} == {n: before[n] for n in saved}, cls.__name__
