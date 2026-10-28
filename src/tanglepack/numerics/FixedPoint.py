@@ -72,8 +72,12 @@ class FixedPoint:
     Attributes:
 
         period (int): Period of the fixed point.
-        branch_points (List[BranchPoint]): List of the individual BranchPoints that
-            make up the fixed point.
+        branch_points (List[BranchPoint]): One BranchPoint per orbit point, made
+            once here: a view of the orbit point (coordinates, cdist 0.0, the
+            next orbit point as its image) that stores nothing of its own.
+            The chains on its slots live in the fixed point's slot table,
+            ``(stability, orbit_index, branch) -> Chain``, read by
+            :meth:`slot_chain` and written by :meth:`attach_chain`.
         coordinates (List[np.ndarray]): The orbit points, each ``(2,)`` (the
             solver stores the ``(period, 2)`` array).
 
@@ -119,9 +123,9 @@ class FixedPoint:
 
         Note:
             The branch count is NOT an input: it is derived from the eigenvalues
-            by :attr:`num_branches` once :meth:`set_k_value` has run. Each
-            BranchPoint is allocated with a slot per EIGENDIRECTION (always two),
-            which is what the previous callers passed anyway; how many of those
+            by :attr:`num_branches` once :meth:`set_k_value` has run. Each orbit
+            point has a slot per EIGENDIRECTION (always two,
+            ``BranchPoint.num_branches``) on each manifold; how many of those
             slots the k-chain visits is the derived :attr:`num_branches`.
         """
 

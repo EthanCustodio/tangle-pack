@@ -1022,8 +1022,9 @@ class Tangle:
         # unstable manifold: the real point just BELOW its first crossing and the
         # real point just ABOVE its last crossing. These are existing manifold points
         # that already carry the iterate links, so iterating a bridge follows the one
-        # underlying manifold's iterate structure (head.next_iterate, tail.next_iterate)
-        # instead of spawning a parallel, slightly-offset set of points. Using fresh
+        # underlying manifold's links (the store's image column; a periodic-point head's
+        # image is the next orbit point) instead of spawning a parallel,
+        # slightly-offset set of points. Using fresh
         # 10%-offset "straddle" points was what laid a second polyline over existing
         # curve (the zig-zag), produced overlapping duplicate bridges, and -- because
         # each crossing got two distinct offset points that mapped to near-coincident

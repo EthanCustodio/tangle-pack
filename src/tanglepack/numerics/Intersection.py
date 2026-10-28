@@ -30,8 +30,9 @@ Stability = Literal["unstable", "stable"]
 ManifoldKey = tuple["FixedPoint", Stability, int, int]
 
 #: One end of a bracket: a store row, or the periodic point's BranchPoint, which
-#: has no row until N8 (D5). It reads its own point and cdist 0.0, and fails
-#: loudly as an index, where a -1 sentinel would silently read the last row.
+#: has no row (D5: it is a view of its FixedPoint). It reads its orbit point and
+#: cdist 0.0, and fails loudly as an index, where a -1 sentinel would silently
+#: read the last row.
 SegmentEnd = Union[int, "BranchPoint"]
 
 #: A ``(lo, hi)`` interval of canonical distance.

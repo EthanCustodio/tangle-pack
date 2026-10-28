@@ -2,8 +2,9 @@
 Locating periodic orbits and building :class:`~.FixedPoint.FixedPoint` objects.
 
 :class:`FixedPointSolver` runs the shooting solve for a period-p orbit, checks
-that what it found is a saddle, and fills in the eigendata, k-value and branch
-points of the resulting fixed point.
+that what it found is a saddle, and fills in the orbit, eigendata and k-value
+of the resulting fixed point (its branch points are views of that orbit, and
+the slot table starts empty).
 
 Dev Notes:
 

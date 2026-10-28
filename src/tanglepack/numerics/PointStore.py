@@ -40,9 +40,9 @@ hands it to its initializer; the machine stays stateless and appends to the
 store of the curve it grows. A curve built by hand (tests, notebooks) names
 its store (``store=``).
 
-A chain never holds a ``BranchPoint`` (D5: its storage is N8's): a chain that
-hangs off one names it as its ``anchor``, the left neighbour of position 0,
-and the ``BranchPoint``'s slot for that branch holds the chain.
+A chain never holds a ``BranchPoint`` (D5: it is a view of its ``FixedPoint``,
+on no row): a chain that hangs off one names it as its ``anchor``, the left
+neighbour of position 0, and the fixed point's slot table holds the chain.
 A chain a merge absorbs is retired (no rows, no anchor) and keeps its index.
 """
 

@@ -22,8 +22,9 @@ Pins:
    returns its sids, so a fresh recompute keeps it.
 5. The edge leaving a periodic point is queried from the periodic point's
    coordinates (N6, 2026-10-26): the point has no row, and its stand-in index
-   must never read a real row's coordinates. N8 rewrites this spelling of the
-   periodic point; the decoy row 0 gives the pin its teeth.
+   must never read a real row's coordinates. N8 keeps this spelling: the
+   periodic point is a view of its fixed point, still on no row. The decoy
+   row 0 gives the pin its teeth.
 
 Curves that share points are views of one curve between different ends, as
 the images a blast merged and the branch growth merged them into are.

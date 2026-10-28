@@ -80,9 +80,10 @@ counts the points it creates and raises `PointBudgetExceeded` before the map cal
 (S).
 
 The data model (one `PointStore`, chains of its rows, curves as views of a chain whose row ends read
-as `End` records, and `BranchPoint` a node object until N8) is a representation choice, not part of
-the definition. `BranchPoint.edist` and the stretch slots are dead and are kept until the array
-representation (B11, a later optional slice) replaces them.
+as `End` records, and `BranchPoint` a view of its `FixedPoint`: the orbit point's coordinates, a cdist
+of 0.0, the next orbit point as its image, and the fixed point's slot table
+`(stability, orbit_index, branch) -> Chain`, on no row) is a representation choice, not part of the
+definition.
 
 **Implemented by.** `ManifoldInitializer.construct_kevin_way`, `ManifoldMachine.iterate_manifold`,
 `ManifoldMachine._image_chains`, `TangleWorkbench.grow_n_times`, `TangleWorkbench.grow_until_bounded`,

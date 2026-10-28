@@ -17,7 +17,8 @@ The five array getters are one gather: :meth:`BaseManifold._collect` takes the
 row filter (all / iterated / non-iterated), what to read off each row (point
 or cdist), and whether to stop at the tail; every public getter is a thin
 wrapper over it. A ``BranchPoint`` root is the one node read one at a time
-(``_has_iterate`` / ``_iterate_of``): it is no row (D5; its storage is N8's).
+(``_iterate_of``): it is no row (D5) but a view of its ``FixedPoint``'s orbit
+point, and its image is always there, the next orbit point.
 
 Ends are rows inside (N7a); ``root`` / ``tail`` read a row as an
 :class:`~.PointStore.End` record (N7b): a value built from the store's columns
