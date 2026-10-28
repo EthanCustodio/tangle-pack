@@ -32,8 +32,6 @@ the images a blast merged and the branch growth merged them into are.
 
 from __future__ import annotations
 
-from itertools import count
-
 import numpy as np
 
 from cases import build_k10
@@ -204,18 +202,17 @@ def test_a_curve_lying_on_a_branch_is_dropped_on_a_fresh_recompute():
     assert workbench._image_curves == [standing]
 
 
-def test_a_crossing_pair_keeps_the_new_sid_first(monkeypatch):
+def test_a_crossing_pair_keeps_the_new_sid_first():
     fp = bare_fixed_point(label="A")
-    start = 10**6
-    monkeypatch.setattr(Tangle, "_ids", count(start))
     tangle = Tangle()
+    tangle._next_sid = 10**6
     tangle.add_manifolds([polyline_manifold([(0.5, -1.0), (0.5, 1.0)], (fp, "stable", 0, 0))])
     (cand_sid,) = tangle._seg_lookup
     # The new sid lands in the candidate's hash slot, where the frozenset's
     # element order depends on which element went in first.
     new_sid = cand_sid + 8
     assert tuple(frozenset((new_sid, cand_sid))) != tuple(frozenset((cand_sid, new_sid)))
-    monkeypatch.setattr(Tangle, "_ids", count(new_sid))
+    tangle._next_sid = new_sid
 
     image = polyline_manifold([(0.0, 0.0), (1.0, 0.0)], (fp, "unstable", 1, 0))
     assert tangle.add_manifold(image, index_segments=False) == {new_sid}
@@ -226,7 +223,7 @@ def test_a_crossing_pair_keeps_the_new_sid_first(monkeypatch):
     assert type(crossing.unstable_cdist) is float and type(crossing.stable_cdist) is float
 
 
-def test_a_curve_crossing_nothing_takes_one_sid_per_new_edge(monkeypatch):
+def test_a_curve_crossing_nothing_takes_one_sid_per_new_edge():
     fp = bare_fixed_point(label="A")
     branch_key = (fp, "unstable", 0, 0)
     workbench = polyline_workbench(fp, {
@@ -236,11 +233,10 @@ def test_a_curve_crossing_nothing_takes_one_sid_per_new_edge(monkeypatch):
     workbench.compute_intersections([fp], infer_iterates=False, diagnose=False)
     image = polyline_manifold([(x, 5.0) for x in range(5)], branch_key)
 
-    start = next(Tangle._ids)
-    monkeypatch.setattr(Tangle, "_ids", count(start))
+    start = workbench.Tangle._next_sid
     sids = workbench.Tangle.add_manifold(image, index_segments=False)
     assert sids == set(range(start, start + 4))
-    assert next(Tangle._ids) == start + 4
+    assert workbench.Tangle._next_sid == start + 4
     assert not any(pair & sids for pair in workbench.Tangle._intersecting_segments)
 
     standing = Bridge(root=image.root, stability="unstable", stretch_param=1.0, fixed_point=fp,

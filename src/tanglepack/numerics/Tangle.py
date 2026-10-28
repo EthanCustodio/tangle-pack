@@ -59,7 +59,6 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from itertools import count, islice
 from typing import Iterable, Optional
 
 import numpy as np
@@ -212,8 +211,6 @@ class Tangle:
         :meth:`create_bridges` needs to cut at it.
     """
 
-    _ids = count(0)  # global generator -> every segment is given a unique int key
-
     def __init__(self) -> None:
         """
         Initializes an empty index.
@@ -241,8 +238,12 @@ class Tangle:
             _processed_pairs: pairs already handed to _resolve_crossing_pair, so a
                 crossing is resolved (and registered) exactly once
             _store: The PointStore of the first curve added, None until then.
+            _next_sid: The next segment id this index draws. Ids are drawn per
+                index, in order, so two builds in one process number their
+                segments alike; a pair's operand order follows its two ids.
         """
 
+        self._next_sid = 0
         self._rtrees = {"unstable": _segment_index(), "stable": _segment_index()}
         self._edge_to_sid: dict[int, int] = {}
         self._store: Optional[PointStore] = None
@@ -268,6 +269,8 @@ class Tangle:
     def clear_all(self) -> None:
         """
         Completely clear all Tangle state, useful when recomputing everything from scratch.
+
+        The segment-id counter is kept: a recompute draws ids after the old ones.
         """
         self._rtrees = {"unstable": _segment_index(), "stable": _segment_index()}
         self._edge_to_sid.clear()
@@ -572,8 +575,8 @@ class Tangle:
         """
         The query-only add, on the curve's rows: one ``intersection_v`` for all its new edges.
 
-        Each new edge takes, in curve order and whether it pairs or not, the sid
-        ``next(Tangle._ids)`` would have given it: a pair's operand order comes
+        Each new edge takes, in curve order and whether it pairs or not, the
+        next sid of this index (:meth:`_new_sids`): a pair's operand order comes
         from its two sid values, so they decide float bits, and a curve whose add
         returns no sid is dropped on a fresh recompute. A _Segment is kept only
         for an edge whose query found a pair.
@@ -596,7 +599,7 @@ class Tangle:
         if not new:
             return set()
 
-        sids = list(islice(Tangle._ids, len(new)))
+        sids = list(self._new_sids(len(new)))
         e0, e1 = r0[new], r1[new]
         xy = store.xy
         a, b = xy[np.maximum(e0, 0)], xy[e1]
@@ -649,7 +652,7 @@ class Tangle:
                     self._claim_segment(existing_sid, manifold)
                     continue
 
-                segment.id = next(Tangle._ids)
+                segment.id = self._new_sids(1)[0]
                 self._edge_to_sid[edge_key] = segment.id
                 self._seg_lookup[segment.id] = segment
                 self._claim_segment(segment.id, segment.manifold)
@@ -699,6 +702,12 @@ class Tangle:
         )
 
     # ------------- internal helpers -----------------
+    def _new_sids(self, n: int) -> range:
+        """The next ``n`` segment ids of this index, in order."""
+        sids = range(self._next_sid, self._next_sid + n)
+        self._next_sid += n
+        return sids
+
     def _claim_segment(self, sid: int, manifold: BaseManifold) -> None:
         """Record ``manifold`` as an owner of segment ``sid`` (idempotent)."""
         self._manifold_segs[manifold].add(sid)
@@ -751,7 +760,7 @@ class Tangle:
             return None
 
         # choose a new id there for a new segment
-        sid = next(Tangle._ids) if seg.id is None else seg.id
+        sid = self._new_sids(1)[0] if seg.id is None else seg.id
 
         seg.id = sid  # assign the id to the segment
 
