@@ -1,0 +1,3021 @@
+{
+ "case": "scale",
+ "mode": "time",
+ "git_sha": "6860f99",
+ "rss_baseline": 123375616,
+ "traced_baseline": null,
+ "series": [
+  {
+   "blast": 0,
+   "blast_s": 0.0,
+   "step_s": 0.0,
+   "wall_s": 0.5081017090706155,
+   "rss": 146579456,
+   "peak_rss_so_far": 151822336,
+   "step_peak_rss": 151822336,
+   "pip_depth": null,
+   "points_created": 0,
+   "same_stability_count": null,
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 1892496,
+     "curve_ids": 182144,
+     "segment_index": 9223312,
+     "rtree": 1241408,
+     "curve_objects": 1224,
+     "registry": 11208,
+     "topology": 376206,
+     "workbench_other": 11174
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 38208,
+     "store_capacity": 39427,
+     "curve_rows": 22254,
+     "image_rows": 0,
+     "no_cdist_rows": 15954,
+     "phantom_rows": 15952,
+     "off_curve_rows": 0,
+     "chains": 2
+    },
+    "tangle_parts": {
+     "segments": 1971648,
+     "seg_lookup": 589920,
+     "edge_to_sid": 1174320,
+     "owners": 5484816,
+     "pairs": 2608,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18256,
+     "n_query_edges": 0
+    },
+    "n_points": 38208,
+    "n_curve_points": 22254,
+    "n_image_points": 0,
+    "n_phantom": 15954,
+    "n_bridges": 3,
+    "n_image_curves": 0,
+    "n_crossings": 4,
+    "census_s": 0.03075454698409885
+   }
+  },
+  {
+   "blast": 1,
+   "blast_s": 0.013404343044385314,
+   "step_s": 0.018028039019554853,
+   "wall_s": 0.5573938130401075,
+   "rss": 149086208,
+   "peak_rss_so_far": 151822336,
+   "step_peak_rss": 149086208,
+   "pip_depth": {
+    "A": 2
+   },
+   "points_created": 4850,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 2838768,
+     "curve_ids": 221152,
+     "segment_index": 9511720,
+     "rtree": 1241408,
+     "curve_objects": 1784,
+     "registry": 15656,
+     "topology": 381021,
+     "workbench_other": 11618
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 45118,
+     "store_capacity": 59141,
+     "curve_rows": 22254,
+     "image_rows": 4853,
+     "no_cdist_rows": 18011,
+     "phantom_rows": 18009,
+     "off_curve_rows": 0,
+     "chains": 3
+    },
+    "tangle_parts": {
+     "segments": 1971864,
+     "seg_lookup": 589920,
+     "edge_to_sid": 1460656,
+     "owners": 5484816,
+     "pairs": 4464,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18258,
+     "n_query_edges": 4852
+    },
+    "n_points": 45118,
+    "n_curve_points": 22254,
+    "n_image_points": 4853,
+    "n_phantom": 18011,
+    "n_bridges": 4,
+    "n_image_curves": 1,
+    "n_crossings": 6,
+    "census_s": 0.029307911987416446
+   }
+  },
+  {
+   "blast": 2,
+   "blast_s": 0.025940712075680494,
+   "step_s": 0.03497509704902768,
+   "wall_s": 0.6223883840721101,
+   "rss": 153800704,
+   "peak_rss_so_far": 153796608,
+   "step_peak_rss": 153800704,
+   "pip_depth": {
+    "A": 3
+   },
+   "points_created": 10240,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 4258176,
+     "curve_ids": 303256,
+     "segment_index": 10235448,
+     "rtree": 1241408,
+     "curve_objects": 2904,
+     "registry": 22528,
+     "topology": 485238,
+     "workbench_other": 12185
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 60748,
+     "store_capacity": 88712,
+     "curve_rows": 22254,
+     "image_rows": 15093,
+     "no_cdist_rows": 23401,
+     "phantom_rows": 23399,
+     "off_curve_rows": 0,
+     "chains": 4
+    },
+    "tangle_parts": {
+     "segments": 1972296,
+     "seg_lookup": 589920,
+     "edge_to_sid": 2181520,
+     "owners": 5484816,
+     "pairs": 6896,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18262,
+     "n_query_edges": 15091
+    },
+    "n_points": 60748,
+    "n_curve_points": 22254,
+    "n_image_points": 15093,
+    "n_phantom": 23401,
+    "n_bridges": 7,
+    "n_image_curves": 2,
+    "n_crossings": 10,
+    "census_s": 0.03286873595789075
+   }
+  },
+  {
+   "blast": 3,
+   "blast_s": 0.05713915696833283,
+   "step_s": 0.06728090404067189,
+   "wall_s": 0.7232715589925647,
+   "rss": 160559104,
+   "peak_rss_so_far": 171819008,
+   "step_peak_rss": 171819008,
+   "pip_depth": {
+    "A": 4
+   },
+   "points_created": 21910,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 6387312,
+     "curve_ids": 478944,
+     "segment_index": 12514488,
+     "rtree": 1241408,
+     "curve_objects": 5144,
+     "registry": 35720,
+     "topology": 496110,
+     "workbench_other": 13785
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 96359,
+     "store_capacity": 133069,
+     "curve_rows": 22254,
+     "image_rows": 37000,
+     "no_cdist_rows": 37105,
+     "phantom_rows": 37103,
+     "off_curve_rows": 0,
+     "chains": 6
+    },
+    "tangle_parts": {
+     "segments": 1973160,
+     "seg_lookup": 589920,
+     "edge_to_sid": 4455344,
+     "owners": 5484816,
+     "pairs": 11248,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18270,
+     "n_query_edges": 36996
+    },
+    "n_points": 96359,
+    "n_curve_points": 22254,
+    "n_image_points": 37000,
+    "n_phantom": 37105,
+    "n_bridges": 13,
+    "n_image_curves": 4,
+    "n_crossings": 18,
+    "census_s": 0.037957177963107824
+   }
+  },
+  {
+   "blast": 4,
+   "blast_s": 0.10107439197599888,
+   "step_s": 0.11275409895461053,
+   "wall_s": 0.8747617990011349,
+   "rss": 164679680,
+   "peak_rss_so_far": 188059648,
+   "step_peak_rss": 188059648,
+   "pip_depth": {
+    "A": 5
+   },
+   "points_created": 33744,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 9580992,
+     "curve_ids": 749680,
+     "segment_index": 13604232,
+     "rtree": 1241408,
+     "curve_objects": 8504,
+     "registry": 58504,
+     "topology": 515010,
+     "workbench_other": 15857
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 149303,
+     "store_capacity": 199604,
+     "curve_rows": 22254,
+     "image_rows": 70750,
+     "no_cdist_rows": 56299,
+     "phantom_rows": 56297,
+     "off_curve_rows": 0,
+     "chains": 10
+    },
+    "tangle_parts": {
+     "segments": 1974456,
+     "seg_lookup": 589920,
+     "edge_to_sid": 5535216,
+     "owners": 5484816,
+     "pairs": 19824,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18282,
+     "n_query_edges": 70742
+    },
+    "n_points": 149303,
+    "n_curve_points": 22254,
+    "n_image_points": 70750,
+    "n_phantom": 56299,
+    "n_bridges": 21,
+    "n_image_curves": 8,
+    "n_crossings": 30,
+    "census_s": 0.04328996501863003
+   }
+  },
+  {
+   "blast": 5,
+   "blast_s": 0.1644306790549308,
+   "step_s": 0.17872601898852736,
+   "wall_s": 1.0975761800073087,
+   "rss": 177917952,
+   "peak_rss_so_far": 220753920,
+   "step_peak_rss": 220753920,
+   "pip_depth": {
+    "A": 6
+   },
+   "points_created": 54012,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 14371536,
+     "curve_ids": 1183016,
+     "segment_index": 17443928,
+     "rtree": 1241408,
+     "curve_objects": 14104,
+     "registry": 93168,
+     "topology": 542902,
+     "workbench_other": 20097
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 232547,
+     "store_capacity": 299407,
+     "curve_rows": 22254,
+     "image_rows": 124771,
+     "no_cdist_rows": 85522,
+     "phantom_rows": 85520,
+     "off_curve_rows": 0,
+     "chains": 16
+    },
+    "tangle_parts": {
+     "segments": 1976616,
+     "seg_lookup": 589920,
+     "edge_to_sid": 9360848,
+     "owners": 5484816,
+     "pairs": 31728,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18302,
+     "n_query_edges": 124757
+    },
+    "n_points": 232547,
+    "n_curve_points": 22254,
+    "n_image_points": 124771,
+    "n_phantom": 85522,
+    "n_bridges": 35,
+    "n_image_curves": 14,
+    "n_crossings": 50,
+    "census_s": 0.05362583708483726
+   }
+  },
+  {
+   "blast": 6,
+   "blast_s": 0.32614143402315676,
+   "step_s": 0.3464536389801651,
+   "wall_s": 1.4985311570344493,
+   "rss": 199012352,
+   "peak_rss_so_far": 311562240,
+   "step_peak_rss": 311562240,
+   "pip_depth": {
+    "A": 7
+   },
+   "points_created": 96201,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 21557328,
+     "curve_ids": 1954568,
+     "segment_index": 24748040,
+     "rtree": 1241408,
+     "curve_objects": 24184,
+     "registry": 161652,
+     "topology": 608446,
+     "workbench_other": 28305
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 385672,
+     "store_capacity": 449111,
+     "curve_rows": 22254,
+     "image_rows": 220973,
+     "no_cdist_rows": 142445,
+     "phantom_rows": 142443,
+     "off_curve_rows": 0,
+     "chains": 26
+    },
+    "tangle_parts": {
+     "segments": 1980504,
+     "seg_lookup": 589920,
+     "edge_to_sid": 16633296,
+     "owners": 5484816,
+     "pairs": 59504,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18338,
+     "n_query_edges": 220949
+    },
+    "n_points": 385672,
+    "n_curve_points": 22254,
+    "n_image_points": 220973,
+    "n_phantom": 142445,
+    "n_bridges": 61,
+    "n_image_curves": 24,
+    "n_crossings": 86,
+    "census_s": 0.07817695999983698
+   }
+  },
+  {
+   "blast": 7,
+   "blast_s": 0.637924982002005,
+   "step_s": 0.6654422690626234,
+   "wall_s": 2.2430877829901874,
+   "rss": 259846144,
+   "peak_rss_so_far": 479588352,
+   "step_peak_rss": 479588352,
+   "pip_depth": {
+    "A": 8
+   },
+   "points_created": 159438,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 32336016,
+     "curve_ids": 3233584,
+     "segment_index": 38277624,
+     "rtree": 1241408,
+     "curve_objects": 40984,
+     "registry": 262932,
+     "topology": 679870,
+     "workbench_other": 38585
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 636695,
+     "store_capacity": 673667,
+     "curve_rows": 22254,
+     "image_rows": 380424,
+     "no_cdist_rows": 234017,
+     "phantom_rows": 234015,
+     "off_curve_rows": 0,
+     "chains": 44
+    },
+    "tangle_parts": {
+     "segments": 1986984,
+     "seg_lookup": 589920,
+     "edge_to_sid": 30123760,
+     "owners": 5484816,
+     "pairs": 92144,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18398,
+     "n_query_edges": 380382
+    },
+    "n_points": 636695,
+    "n_curve_points": 22254,
+    "n_image_points": 380424,
+    "n_phantom": 234017,
+    "n_bridges": 103,
+    "n_image_curves": 42,
+    "n_crossings": 146,
+    "census_s": 0.10883986193221062
+   }
+  },
+  {
+   "blast": 8,
+   "blast_s": 1.2586902120383456,
+   "step_s": 1.3159709710162133,
+   "wall_s": 3.6689374489942566,
+   "rss": 389550080,
+   "peak_rss_so_far": 765698048,
+   "step_peak_rss": 765698048,
+   "pip_depth": {
+    "A": 9
+   },
+   "points_created": 273554,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 72756096,
+     "curve_ids": 5428064,
+     "segment_index": 63878912,
+     "rtree": 1241408,
+     "curve_objects": 69544,
+     "registry": 431964,
+     "topology": 1653025,
+     "workbench_other": 61017
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 1071490,
+     "store_capacity": 1515752,
+     "curve_rows": 22254,
+     "image_rows": 654000,
+     "no_cdist_rows": 395236,
+     "phantom_rows": 395234,
+     "off_curve_rows": 0,
+     "chains": 74
+    },
+    "tangle_parts": {
+     "segments": 1998000,
+     "seg_lookup": 589920,
+     "edge_to_sid": 55654448,
+     "owners": 5484816,
+     "pairs": 151728,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18500,
+     "n_query_edges": 653928
+    },
+    "n_points": 1071490,
+    "n_curve_points": 22254,
+    "n_image_points": 654000,
+    "n_phantom": 395236,
+    "n_bridges": 175,
+    "n_image_curves": 72,
+    "n_crossings": 248,
+    "census_s": 0.1774858789285645
+   }
+  },
+  {
+   "blast": 9,
+   "blast_s": 2.23290941293817,
+   "step_s": 2.3113708490272984,
+   "wall_s": 6.158896018052474,
+   "rss": 529408000,
+   "peak_rss_so_far": 1014304768,
+   "step_peak_rss": 1014304768,
+   "pip_depth": {
+    "A": 10
+   },
+   "points_created": 399815,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 109134192,
+     "curve_ids": 8635136,
+     "segment_index": 76802696,
+     "rtree": 1241408,
+     "curve_objects": 111544,
+     "registry": 716980,
+     "topology": 1909717,
+     "workbench_other": 89777
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 1702061,
+     "store_capacity": 2273629,
+     "curve_rows": 22254,
+     "image_rows": 1053832,
+     "no_cdist_rows": 625975,
+     "phantom_rows": 625973,
+     "off_curve_rows": 0,
+     "chains": 118
+    },
+    "tangle_parts": {
+     "segments": 2014200,
+     "seg_lookup": 589920,
+     "edge_to_sid": 68447664,
+     "owners": 5484816,
+     "pairs": 266096,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18650,
+     "n_query_edges": 1053716
+    },
+    "n_points": 1702061,
+    "n_curve_points": 22254,
+    "n_image_points": 1053832,
+    "n_phantom": 625975,
+    "n_bridges": 281,
+    "n_image_curves": 116,
+    "n_crossings": 398,
+    "census_s": 0.21463365596719086
+   }
+  },
+  {
+   "blast": 10,
+   "blast_s": 2.9402750780573115,
+   "step_s": 3.0459755080519244,
+   "wall_s": 9.42086326109711,
+   "rss": 672669696,
+   "peak_rss_so_far": 1309392896,
+   "step_peak_rss": 1309392896,
+   "pip_depth": {
+    "A": 11
+   },
+   "points_created": 457634,
+   "same_stability_count": {
+    "in_region": 455,
+    "outside": 3711,
+    "suggested_area_cutoff": 1.3503336568376398e-10,
+    "curve_pairs": [
+     "A unstable 0.0 x image bridge (569, 570)",
+     "A unstable 0.0 x image bridge (570, 571)",
+     "image bridge (569, 570) x A unstable 0.0",
+     "image bridge (570, 571) x A unstable 0.0"
+    ]
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 163701312,
+     "curve_ids": 12306336,
+     "segment_index": 125113240,
+     "rtree": 1241408,
+     "curve_objects": 159704,
+     "registry": 996612,
+     "topology": 2114133,
+     "workbench_other": 121249
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 2420556,
+     "store_capacity": 3410444,
+     "curve_rows": 22254,
+     "image_rows": 1511507,
+     "no_cdist_rows": 886795,
+     "phantom_rows": 886793,
+     "off_curve_rows": 0,
+     "chains": 169
+    },
+    "tangle_parts": {
+     "segments": 2032776,
+     "seg_lookup": 589920,
+     "edge_to_sid": 116646064,
+     "owners": 5484816,
+     "pairs": 359664,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18822,
+     "n_query_edges": 1511340
+    },
+    "n_points": 2420556,
+    "n_curve_points": 22254,
+    "n_image_points": 1511507,
+    "n_phantom": 886795,
+    "n_bridges": 402,
+    "n_image_curves": 167,
+    "n_crossings": 570,
+    "census_s": 0.3382366930600256
+   }
+  },
+  {
+   "blast": 11,
+   "blast_s": 3.190049092983827,
+   "step_s": 3.332337053027004,
+   "wall_s": 13.092849806067534,
+   "rss": 636141568,
+   "peak_rss_so_far": 1545842688,
+   "step_peak_rss": 1545842688,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 408038,
+   "same_stability_count": {
+    "in_region": 3679,
+    "outside": 19901,
+    "suggested_area_cutoff": 1.452109496392688e-10,
+    "curve_pairs": [
+     "A unstable 0.0 x image bridge (720, 721)",
+     "A unstable 0.0 x image bridge (721, 722)",
+     "A unstable 0.0 x image bridge (722, 723)",
+     "image bridge (569, 570) x image bridge (721, 722)",
+     "image bridge (570, 571) x image bridge (722, 723)",
+     "image bridge (720, 721) x A unstable 0.0",
+     "image bridge (721, 722) x A unstable 0.0",
+     "image bridge (721, 722) x image bridge (569, 570)",
+     "image bridge (722, 723) x A unstable 0.0",
+     "image bridge (722, 723) x image bridge (570, 571)"
+    ]
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 163701312,
+     "curve_ids": 15580536,
+     "segment_index": 138285720,
+     "rtree": 1241408,
+     "curve_objects": 202264,
+     "registry": 1284780,
+     "topology": 2354603,
+     "workbench_other": 159313
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 3052683,
+     "store_capacity": 3410444,
+     "curve_rows": 22254,
+     "image_rows": 1919587,
+     "no_cdist_rows": 1110842,
+     "phantom_rows": 1110840,
+     "off_curve_rows": 0,
+     "chains": 218
+    },
+    "tangle_parts": {
+     "segments": 2049192,
+     "seg_lookup": 589920,
+     "edge_to_sid": 129703056,
+     "owners": 5484816,
+     "pairs": 458736,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 18974,
+     "n_query_edges": 1919371
+    },
+    "n_points": 3052683,
+    "n_curve_points": 22254,
+    "n_image_points": 1919587,
+    "n_phantom": 1110842,
+    "n_bridges": 505,
+    "n_image_curves": 216,
+    "n_crossings": 722,
+    "census_s": 0.4183645669836551
+   }
+  },
+  {
+   "blast": 12,
+   "blast_s": 3.2273428549524397,
+   "step_s": 3.3641689899377525,
+   "wall_s": 16.87703115202021,
+   "rss": 1107333120,
+   "peak_rss_so_far": 1733312512,
+   "step_peak_rss": 1733312512,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 371281,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 18558856,
+     "segment_index": 150256208,
+     "rtree": 1241408,
+     "curve_objects": 240904,
+     "registry": 1507060,
+     "topology": 2357747,
+     "workbench_other": 177205
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 3626635,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 2290894,
+     "no_cdist_rows": 1313487,
+     "phantom_rows": 1313485,
+     "off_curve_rows": 0,
+     "chains": 259
+    },
+    "tangle_parts": {
+     "segments": 2064096,
+     "seg_lookup": 589920,
+     "edge_to_sid": 141583568,
+     "owners": 5484816,
+     "pairs": 533808,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19112,
+     "n_query_edges": 2290637
+    },
+    "n_points": 3626635,
+    "n_curve_points": 22254,
+    "n_image_points": 2290894,
+    "n_phantom": 1313487,
+    "n_bridges": 602,
+    "n_image_curves": 257,
+    "n_crossings": 860,
+    "census_s": 0.4498676339862868
+   }
+  },
+  {
+   "blast": 13,
+   "blast_s": 2.477906013955362,
+   "step_s": 2.6112759259995073,
+   "wall_s": 19.939987641060725,
+   "rss": 1146859520,
+   "peak_rss_so_far": 1826217984,
+   "step_peak_rss": 1826217984,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 203980,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 2,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 20195576,
+     "segment_index": 156832136,
+     "rtree": 1241408,
+     "curve_objects": 261624,
+     "registry": 1631772,
+     "topology": 2359415,
+     "workbench_other": 186781
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 3939538,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 2494909,
+     "no_cdist_rows": 1422375,
+     "phantom_rows": 1422373,
+     "off_curve_rows": 0,
+     "chains": 284
+    },
+    "tangle_parts": {
+     "segments": 2072088,
+     "seg_lookup": 589920,
+     "edge_to_sid": 148111248,
+     "owners": 5484816,
+     "pairs": 574064,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19186,
+     "n_query_edges": 2494627
+    },
+    "n_points": 3939538,
+    "n_curve_points": 22254,
+    "n_image_points": 2494909,
+    "n_phantom": 1422375,
+    "n_bridges": 651,
+    "n_image_curves": 282,
+    "n_crossings": 934,
+    "census_s": 0.4586028060875833
+   }
+  },
+  {
+   "blast": 14,
+   "blast_s": 2.5395518789300695,
+   "step_s": 2.6728620709618554,
+   "wall_s": 23.073186477064155,
+   "rss": 1161388032,
+   "peak_rss_so_far": 2006085632,
+   "step_peak_rss": 2006085632,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 180399,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 21643000,
+     "segment_index": 229756960,
+     "rtree": 1241408,
+     "curve_objects": 280104,
+     "registry": 1741756,
+     "topology": 2360867,
+     "workbench_other": 213605
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 4212025,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 2675333,
+     "no_cdist_rows": 1514438,
+     "phantom_rows": 1514436,
+     "off_curve_rows": 0,
+     "chains": 304
+    },
+    "tangle_parts": {
+     "segments": 2079216,
+     "seg_lookup": 589920,
+     "edge_to_sid": 220993040,
+     "owners": 5484816,
+     "pairs": 609968,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19252,
+     "n_query_edges": 2675031
+    },
+    "n_points": 4212025,
+    "n_curve_points": 22254,
+    "n_image_points": 2675333,
+    "n_phantom": 1514438,
+    "n_bridges": 697,
+    "n_image_curves": 302,
+    "n_crossings": 1000,
+    "census_s": 0.49169820197857916
+   }
+  },
+  {
+   "blast": 15,
+   "blast_s": 2.4179366399766877,
+   "step_s": 2.55140324390959,
+   "wall_s": 26.117988988989964,
+   "rss": 1002876928,
+   "peak_rss_so_far": 2065604608,
+   "step_peak_rss": 2065604608,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 134004,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 22717416,
+     "segment_index": 234075936,
+     "rtree": 1241408,
+     "curve_objects": 293544,
+     "registry": 1816348,
+     "topology": 2361963,
+     "workbench_other": 220141
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 4423129,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 2809336,
+     "no_cdist_rows": 1591539,
+     "phantom_rows": 1591537,
+     "off_curve_rows": 0,
+     "chains": 317
+    },
+    "tangle_parts": {
+     "segments": 2084400,
+     "seg_lookup": 589920,
+     "edge_to_sid": 225280720,
+     "owners": 5484816,
+     "pairs": 636080,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19300,
+     "n_query_edges": 2809021
+    },
+    "n_points": 4423129,
+    "n_curve_points": 22254,
+    "n_image_points": 2809336,
+    "n_phantom": 1591539,
+    "n_bridges": 732,
+    "n_image_curves": 315,
+    "n_crossings": 1048,
+    "census_s": 0.531102372915484
+   }
+  },
+  {
+   "blast": 16,
+   "blast_s": 2.4363959659822285,
+   "step_s": 2.57106762600597,
+   "wall_s": 29.222006429103203,
+   "rss": 1014505472,
+   "peak_rss_so_far": 2140770304,
+   "step_peak_rss": 2140770304,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 97475,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 23499664,
+     "segment_index": 237216576,
+     "rtree": 1241408,
+     "curve_objects": 302504,
+     "registry": 1869596,
+     "topology": 2362635,
+     "workbench_other": 224077
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 4573126,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 2906841,
+     "no_cdist_rows": 1644031,
+     "phantom_rows": 1644029,
+     "off_curve_rows": 0,
+     "chains": 329
+    },
+    "tangle_parts": {
+     "segments": 2087856,
+     "seg_lookup": 589920,
+     "edge_to_sid": 228400496,
+     "owners": 5484816,
+     "pairs": 653488,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19332,
+     "n_query_edges": 2906514
+    },
+    "n_points": 4573126,
+    "n_curve_points": 22254,
+    "n_image_points": 2906841,
+    "n_phantom": 1644031,
+    "n_bridges": 752,
+    "n_image_curves": 327,
+    "n_crossings": 1080,
+    "census_s": 0.5440855049528182
+   }
+  },
+  {
+   "blast": 17,
+   "blast_s": 2.37364934803918,
+   "step_s": 2.5084890839643776,
+   "wall_s": 32.276509372051805,
+   "rss": 1044967424,
+   "peak_rss_so_far": 2140770304,
+   "step_peak_rss": 2130894848,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 97405,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 24280832,
+     "segment_index": 240356272,
+     "rtree": 1241408,
+     "curve_objects": 312584,
+     "registry": 1930508,
+     "topology": 2363435,
+     "workbench_other": 228757
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 4718194,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3004232,
+     "no_cdist_rows": 1691708,
+     "phantom_rows": 1691706,
+     "off_curve_rows": 0,
+     "chains": 338
+    },
+    "tangle_parts": {
+     "segments": 2091744,
+     "seg_lookup": 589920,
+     "edge_to_sid": 231516720,
+     "owners": 5484816,
+     "pairs": 673072,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19368,
+     "n_query_edges": 3003896
+    },
+    "n_points": 4718194,
+    "n_curve_points": 22254,
+    "n_image_points": 3004232,
+    "n_phantom": 1691708,
+    "n_bridges": 779,
+    "n_image_curves": 336,
+    "n_crossings": 1116,
+    "census_s": 0.5475111049599946
+   }
+  },
+  {
+   "blast": 18,
+   "blast_s": 2.1941056590294465,
+   "step_s": 2.328106470988132,
+   "wall_s": 35.15415865101386,
+   "rss": 1027633152,
+   "peak_rss_so_far": 2216198144,
+   "step_peak_rss": 2216198144,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 60028,
+   "same_stability_count": {
+    "in_region": 1,
+    "outside": 0,
+    "suggested_area_cutoff": 2.153513654485097e-10,
+    "curve_pairs": [
+     "image bridge (1139, 1140) x image bridge (1139, 1140)"
+    ]
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 24762392,
+     "segment_index": 242292784,
+     "rtree": 1241408,
+     "curve_objects": 319304,
+     "registry": 2005212,
+     "topology": 2363947,
+     "workbench_other": 231821
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 4813529,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3064266,
+     "no_cdist_rows": 1727009,
+     "phantom_rows": 1727007,
+     "off_curve_rows": 0,
+     "chains": 345
+    },
+    "tangle_parts": {
+     "segments": 2094336,
+     "seg_lookup": 589920,
+     "edge_to_sid": 233437584,
+     "owners": 5484816,
+     "pairs": 686128,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19392,
+     "n_query_edges": 3063923
+    },
+    "n_points": 4813529,
+    "n_curve_points": 22254,
+    "n_image_points": 3064266,
+    "n_phantom": 1727009,
+    "n_bridges": 796,
+    "n_image_curves": 343,
+    "n_crossings": 1140,
+    "census_s": 0.5764049820136279
+   }
+  },
+  {
+   "blast": 19,
+   "blast_s": 2.221615132992156,
+   "step_s": 2.3555572759360075,
+   "wall_s": 38.08796042704489,
+   "rss": 1031794688,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 2228985856,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 55641,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 25209176,
+     "segment_index": 244085512,
+     "rtree": 1241408,
+     "curve_objects": 324344,
+     "registry": 2036484,
+     "topology": 2364315,
+     "workbench_other": 233965
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 4896813,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3119930,
+     "no_cdist_rows": 1754629,
+     "phantom_rows": 1754627,
+     "off_curve_rows": 0,
+     "chains": 353
+    },
+    "tangle_parts": {
+     "segments": 2096280,
+     "seg_lookup": 589920,
+     "edge_to_sid": 235218576,
+     "owners": 5484816,
+     "pairs": 695920,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19410,
+     "n_query_edges": 3119579
+    },
+    "n_points": 4896813,
+    "n_curve_points": 22254,
+    "n_image_points": 3119930,
+    "n_phantom": 1754629,
+    "n_bridges": 806,
+    "n_image_curves": 351,
+    "n_crossings": 1158,
+    "census_s": 0.5536618760088459
+   }
+  },
+  {
+   "blast": 20,
+   "blast_s": 2.116319554974325,
+   "step_s": 2.250885504996404,
+   "wall_s": 40.89438873901963,
+   "rss": 1059807232,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 2188402688,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 48352,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 25596496,
+     "segment_index": 245642920,
+     "rtree": 1241408,
+     "curve_objects": 328824,
+     "registry": 2059940,
+     "topology": 2364683,
+     "workbench_other": 236485
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 4969815,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3168276,
+     "no_cdist_rows": 1779285,
+     "phantom_rows": 1779283,
+     "off_curve_rows": 0,
+     "chains": 356
+    },
+    "tangle_parts": {
+     "segments": 2098008,
+     "seg_lookup": 589920,
+     "edge_to_sid": 236765552,
+     "owners": 5484816,
+     "pairs": 704624,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19426,
+     "n_query_edges": 3167922
+    },
+    "n_points": 4969815,
+    "n_curve_points": 22254,
+    "n_image_points": 3168276,
+    "n_phantom": 1779285,
+    "n_bridges": 819,
+    "n_image_curves": 354,
+    "n_crossings": 1174,
+    "census_s": 0.5843855580314994
+   }
+  },
+  {
+   "blast": 21,
+   "blast_s": 1.6317194309085608,
+   "step_s": 1.7670585719170049,
+   "wall_s": 43.24784077599179,
+   "rss": 1063653376,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 1872666624,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 15030,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 25717128,
+     "segment_index": 246126520,
+     "rtree": 1241408,
+     "curve_objects": 329944,
+     "registry": 2067124,
+     "topology": 2364763,
+     "workbench_other": 236949
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 4989517,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3183309,
+     "no_cdist_rows": 1783954,
+     "phantom_rows": 1783952,
+     "off_curve_rows": 0,
+     "chains": 358
+    },
+    "tangle_parts": {
+     "segments": 2098440,
+     "seg_lookup": 589920,
+     "edge_to_sid": 237246544,
+     "owners": 5484816,
+     "pairs": 706800,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19430,
+     "n_query_edges": 3182953
+    },
+    "n_points": 4989517,
+    "n_curve_points": 22254,
+    "n_image_points": 3183309,
+    "n_phantom": 1783954,
+    "n_bridges": 821,
+    "n_image_curves": 356,
+    "n_crossings": 1178,
+    "census_s": 0.6213165139779449
+   }
+  },
+  {
+   "blast": 22,
+   "blast_s": 1.8408830560510978,
+   "step_s": 1.9759002160280943,
+   "wall_s": 45.84714026399888,
+   "rss": 1040109568,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 2031792128,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 26288,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 25927744,
+     "segment_index": 246972664,
+     "rtree": 1241408,
+     "curve_objects": 332184,
+     "registry": 2079380,
+     "topology": 2364939,
+     "workbench_other": 237989
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 5027049,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3209590,
+     "no_cdist_rows": 1795205,
+     "phantom_rows": 1795203,
+     "off_curve_rows": 0,
+     "chains": 360
+    },
+    "tangle_parts": {
+     "segments": 2099304,
+     "seg_lookup": 589920,
+     "edge_to_sid": 238087472,
+     "owners": 5484816,
+     "pairs": 711152,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19438,
+     "n_query_edges": 3209232
+    },
+    "n_points": 5027049,
+    "n_curve_points": 22254,
+    "n_image_points": 3209590,
+    "n_phantom": 1795205,
+    "n_bridges": 827,
+    "n_image_curves": 358,
+    "n_crossings": 1186,
+    "census_s": 0.5775943640619516
+   }
+  },
+  {
+   "blast": 23,
+   "blast_s": 1.5749790970003232,
+   "step_s": 1.7091705380007625,
+   "wall_s": 48.13607182400301,
+   "rss": 1050202112,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 1840386048,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 4804,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 25966376,
+     "segment_index": 247127728,
+     "rtree": 1241408,
+     "curve_objects": 332744,
+     "registry": 2082972,
+     "topology": 2364971,
+     "workbench_other": 238221
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 5033763,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3214396,
+     "no_cdist_rows": 1797113,
+     "phantom_rows": 1797111,
+     "off_curve_rows": 0,
+     "chains": 361
+    },
+    "tangle_parts": {
+     "segments": 2099520,
+     "seg_lookup": 589920,
+     "edge_to_sid": 238241232,
+     "owners": 5484816,
+     "pairs": 712240,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19440,
+     "n_query_edges": 3214037
+    },
+    "n_points": 5033763,
+    "n_curve_points": 22254,
+    "n_image_points": 3214396,
+    "n_phantom": 1797113,
+    "n_bridges": 828,
+    "n_image_curves": 359,
+    "n_crossings": 1188,
+    "census_s": 0.5646896349499002
+   }
+  },
+  {
+   "blast": 24,
+   "blast_s": 1.738395330030471,
+   "step_s": 1.8762002240400761,
+   "wall_s": 50.57910930609796,
+   "rss": 1075073024,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 1963724800,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 8805,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 26037040,
+     "segment_index": 247410920,
+     "rtree": 1241408,
+     "curve_objects": 333304,
+     "registry": 2086564,
+     "topology": 2365019,
+     "workbench_other": 238453
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 5046579,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3223206,
+     "no_cdist_rows": 1801119,
+     "phantom_rows": 1801117,
+     "off_curve_rows": 0,
+     "chains": 362
+    },
+    "tangle_parts": {
+     "segments": 2099736,
+     "seg_lookup": 589920,
+     "edge_to_sid": 238523120,
+     "owners": 5484816,
+     "pairs": 713328,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19442,
+     "n_query_edges": 3222846
+    },
+    "n_points": 5046579,
+    "n_curve_points": 22254,
+    "n_image_points": 3223206,
+    "n_phantom": 1801119,
+    "n_bridges": 829,
+    "n_image_curves": 360,
+    "n_crossings": 1190,
+    "census_s": 0.6158211219590157
+   }
+  },
+  {
+   "blast": 25,
+   "blast_s": 1.9526831039693207,
+   "step_s": 2.088644681032747,
+   "wall_s": 53.28597001009621,
+   "rss": 1047994368,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 2142150656,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 18390,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 26184312,
+     "segment_index": 248003152,
+     "rtree": 1241408,
+     "curve_objects": 334984,
+     "registry": 2095228,
+     "topology": 2365147,
+     "workbench_other": 239261
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 5074546,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3241592,
+     "no_cdist_rows": 1810700,
+     "phantom_rows": 1810698,
+     "off_curve_rows": 0,
+     "chains": 363
+    },
+    "tangle_parts": {
+     "segments": 2100384,
+     "seg_lookup": 589920,
+     "edge_to_sid": 239111440,
+     "owners": 5484816,
+     "pairs": 716592,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19448,
+     "n_query_edges": 3241231
+    },
+    "n_points": 5074546,
+    "n_curve_points": 22254,
+    "n_image_points": 3241592,
+    "n_phantom": 1810700,
+    "n_bridges": 834,
+    "n_image_curves": 361,
+    "n_crossings": 1196,
+    "census_s": 0.6142505169846117
+   }
+  },
+  {
+   "blast": 26,
+   "blast_s": 1.610308119095862,
+   "step_s": 1.7455662060528994,
+   "wall_s": 55.64810158102773,
+   "rss": 1049477120,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 1861136384,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 6396,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 26235696,
+     "segment_index": 248209224,
+     "rtree": 1241408,
+     "curve_objects": 335544,
+     "registry": 2098820,
+     "topology": 2365195,
+     "workbench_other": 239493
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 5082982,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3247992,
+     "no_cdist_rows": 1812736,
+     "phantom_rows": 1812734,
+     "off_curve_rows": 0,
+     "chains": 364
+    },
+    "tangle_parts": {
+     "segments": 2100600,
+     "seg_lookup": 589920,
+     "edge_to_sid": 239316208,
+     "owners": 5484816,
+     "pairs": 717680,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19450,
+     "n_query_edges": 3247630
+    },
+    "n_points": 5082982,
+    "n_curve_points": 22254,
+    "n_image_points": 3247992,
+    "n_phantom": 1812736,
+    "n_bridges": 835,
+    "n_image_curves": 362,
+    "n_crossings": 1198,
+    "census_s": 0.6262658480554819
+   }
+  },
+  {
+   "blast": 27,
+   "blast_s": 1.7851118630496785,
+   "step_s": 1.9201738090487197,
+   "wall_s": 58.19691810000222,
+   "rss": 1052422144,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 2002857984,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 10781,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 26322160,
+     "segment_index": 248555616,
+     "rtree": 1241408,
+     "curve_objects": 336104,
+     "registry": 2102412,
+     "topology": 2365227,
+     "workbench_other": 239725
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 5098156,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3258777,
+     "no_cdist_rows": 1817125,
+     "phantom_rows": 1817123,
+     "off_curve_rows": 0,
+     "chains": 365
+    },
+    "tangle_parts": {
+     "segments": 2100816,
+     "seg_lookup": 589920,
+     "edge_to_sid": 239661296,
+     "owners": 5484816,
+     "pairs": 718768,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19452,
+     "n_query_edges": 3258414
+    },
+    "n_points": 5098156,
+    "n_curve_points": 22254,
+    "n_image_points": 3258777,
+    "n_phantom": 1817125,
+    "n_bridges": 836,
+    "n_image_curves": 363,
+    "n_crossings": 1200,
+    "census_s": 0.5747909150086343
+   }
+  },
+  {
+   "blast": 28,
+   "blast_s": 0.08177641604561359,
+   "step_s": 0.0819249419728294,
+   "wall_s": 58.85591567505617,
+   "rss": 1080262656,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 1080262656,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 0,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 26322160,
+     "segment_index": 248555616,
+     "rtree": 1241408,
+     "curve_objects": 336104,
+     "registry": 2102412,
+     "topology": 2365227,
+     "workbench_other": 239725
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 5098156,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3258777,
+     "no_cdist_rows": 1817125,
+     "phantom_rows": 1817123,
+     "off_curve_rows": 0,
+     "chains": 365
+    },
+    "tangle_parts": {
+     "segments": 2100816,
+     "seg_lookup": 589920,
+     "edge_to_sid": 239661296,
+     "owners": 5484816,
+     "pairs": 718768,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19452,
+     "n_query_edges": 3258414
+    },
+    "n_points": 5098156,
+    "n_curve_points": 22254,
+    "n_image_points": 3258777,
+    "n_phantom": 1817125,
+    "n_bridges": 836,
+    "n_image_curves": 363,
+    "n_crossings": 1200,
+    "census_s": 0.5670235740253702
+   }
+  },
+  {
+   "blast": 29,
+   "blast_s": 0.08191940700635314,
+   "step_s": 0.08206680207513273,
+   "wall_s": 59.50732877000701,
+   "rss": 1082327040,
+   "peak_rss_so_far": 2228985856,
+   "step_peak_rss": 1082327040,
+   "pip_depth": {
+    "A": 12
+   },
+   "points_created": 0,
+   "same_stability_count": {
+    "in_region": 0,
+    "outside": 0,
+    "suggested_area_cutoff": null,
+    "curve_pairs": []
+   },
+   "census": {
+    "bytes": {
+     "branch_points": 152,
+     "point_store": 245552016,
+     "curve_ids": 26322160,
+     "segment_index": 248555616,
+     "rtree": 1241408,
+     "curve_objects": 336104,
+     "registry": 2102412,
+     "topology": 2365227,
+     "workbench_other": 239725
+    },
+    "counts": {
+     "branch_points": 1,
+     "store_rows": 5098156,
+     "store_capacity": 5115667,
+     "curve_rows": 22254,
+     "image_rows": 3258777,
+     "no_cdist_rows": 1817125,
+     "phantom_rows": 1817123,
+     "off_curve_rows": 0,
+     "chains": 365
+    },
+    "tangle_parts": {
+     "segments": 2100816,
+     "seg_lookup": 589920,
+     "edge_to_sid": 239661296,
+     "owners": 5484816,
+     "pairs": 718768,
+     "rtree_entries": {
+      "unstable": 17280,
+      "stable": 976
+     },
+     "n_segments": 19452,
+     "n_query_edges": 3258414
+    },
+    "n_points": 5098156,
+    "n_curve_points": 22254,
+    "n_image_points": 3258777,
+    "n_phantom": 1817125,
+    "n_bridges": 836,
+    "n_image_curves": 363,
+    "n_crossings": 1200,
+    "census_s": 0.5676997089758515
+   }
+  }
+ ],
+ "stopped": "plateau: no new points since blast 27",
+ "scale": {
+  "k": 2.5,
+  "area_cutoff": 1e-09,
+  "min_separation": 1e-05,
+  "stop_gb": 8.0,
+  "max_blasts": 40
+ },
+ "timer": {
+  "paths": [
+   {
+    "path": "blast/diagnose",
+    "self_s": 29.96306644473225,
+    "calls": 29
+   },
+   {
+    "path": "blast/separation",
+    "self_s": 8.368518399540335,
+    "calls": 17422
+   },
+   {
+    "path": "blast",
+    "self_s": 2.730490653309971,
+    "calls": 29
+   },
+   {
+    "path": "topology",
+    "self_s": 2.0200527618872,
+    "calls": 30
+   },
+   {
+    "path": "blast/iterate_bridge/index",
+    "self_s": 1.4587131126318127,
+    "calls": 363
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/refine",
+    "self_s": 1.101305773598142,
+    "calls": 363
+   },
+   {
+    "path": "blast/separation/walk",
+    "self_s": 0.4716082608792931,
+    "calls": 16853
+   },
+   {
+    "path": "topology/topology",
+    "self_s": 0.3253312520682812,
+    "calls": 30
+   },
+   {
+    "path": "blast/walk",
+    "self_s": 0.31115082325413823,
+    "calls": 10478
+   },
+   {
+    "path": "intersections/index",
+    "self_s": 0.23755541909486055,
+    "calls": 1
+   },
+   {
+    "path": "topology/walk",
+    "self_s": 0.23506122757680714,
+    "calls": 10791
+   },
+   {
+    "path": "zone/intersections/index",
+    "self_s": 0.18946884502656758,
+    "calls": 1
+   },
+   {
+    "path": "blast/iterate_bridge/infer_iterates",
+    "self_s": 0.17669859598390758,
+    "calls": 363
+   },
+   {
+    "path": "blast/iterate_bridge/resolve",
+    "self_s": 0.17317046225070953,
+    "calls": 363
+   },
+   {
+    "path": "blast/iterate_bridge/cut",
+    "self_s": 0.11288139666430652,
+    "calls": 363
+   },
+   {
+    "path": "blast/iterate_bridge/resolved_ids",
+    "self_s": 0.09878294891677797,
+    "calls": 363
+   },
+   {
+    "path": "blast/infer_iterates",
+    "self_s": 0.09556884074117988,
+    "calls": 29
+   },
+   {
+    "path": "blast/iterate_bridge/iterate",
+    "self_s": 0.07940966240130365,
+    "calls": 363
+   },
+   {
+    "path": "topology/topology/walk",
+    "self_s": 0.03486187197268009,
+    "calls": 3062
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/walk",
+    "self_s": 0.03241684287786484,
+    "calls": 1089
+   },
+   {
+    "path": "topology/topology/trellis_build",
+    "self_s": 0.02744070766493678,
+    "calls": 27
+   },
+   {
+    "path": "blast/iterate_bridge",
+    "self_s": 0.02572435117326677,
+    "calls": 364
+   },
+   {
+    "path": "intersections/diagnose",
+    "self_s": 0.018561178003437817,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/diagnose",
+    "self_s": 0.015918039018288255,
+    "calls": 1
+   },
+   {
+    "path": "blast/iterate_bridge/generation",
+    "self_s": 0.015219694469124079,
+    "calls": 364
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/refine/map",
+    "self_s": 0.012082725879736245,
+    "calls": 875
+   },
+   {
+    "path": "grow/iterate/refine",
+    "self_s": 0.0112773411674425,
+    "calls": 10
+   },
+   {
+    "path": "create_bridges/cut/index",
+    "self_s": 0.007042120909318328,
+    "calls": 5
+   },
+   {
+    "path": "zone/create_bridges/cut/index",
+    "self_s": 0.006930400035344064,
+    "calls": 3
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/map",
+    "self_s": 0.006482854951173067,
+    "calls": 363
+   },
+   {
+    "path": "blast/iterate_bridge/register_bridge",
+    "self_s": 0.005302435019984841,
+    "calls": 833
+   },
+   {
+    "path": "grow/grow/iterate/refine",
+    "self_s": 0.004517802153714001,
+    "calls": 9
+   },
+   {
+    "path": "blast/iterate_bridge/register",
+    "self_s": 0.0044695456745103,
+    "calls": 1196
+   },
+   {
+    "path": "blast/iterate_bridge/infer_iterates/map",
+    "self_s": 0.004023774294182658,
+    "calls": 363
+   },
+   {
+    "path": "zone",
+    "self_s": 0.0020256417337805033,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections",
+    "self_s": 0.0014313370920717716,
+    "calls": 1
+   },
+   {
+    "path": "intersections/resolve",
+    "self_s": 0.0007999490480870008,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate",
+    "self_s": 0.0007592304609715939,
+    "calls": 10
+   },
+   {
+    "path": "fixed_point",
+    "self_s": 0.0006214161403477192,
+    "calls": 2
+   },
+   {
+    "path": "zone/intersections/resolve",
+    "self_s": 0.0005652960389852524,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate",
+    "self_s": 0.0005492357304319739,
+    "calls": 9
+   },
+   {
+    "path": "blast/iterate_bridge/iterate/image_chains",
+    "self_s": 0.0004191701300442219,
+    "calls": 363
+   },
+   {
+    "path": "grow/iterate/merge",
+    "self_s": 0.00040694500785320997,
+    "calls": 10
+   },
+   {
+    "path": "grow/iterate/walk",
+    "self_s": 0.00030446983873844147,
+    "calls": 30
+   },
+   {
+    "path": "pips",
+    "self_s": 0.00029987492598593235,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/merge",
+    "self_s": 0.0002909650793299079,
+    "calls": 9
+   },
+   {
+    "path": "grow",
+    "self_s": 0.00028335279785096645,
+    "calls": 2
+   },
+   {
+    "path": "blast/iterate_bridge/infer_iterates/resolved_ids",
+    "self_s": 0.00027094141114503145,
+    "calls": 363
+   },
+   {
+    "path": "zone/walk",
+    "self_s": 0.00026352505665272474,
+    "calls": 4
+   },
+   {
+    "path": "grow/walk",
+    "self_s": 0.0002190632512792945,
+    "calls": 31
+   },
+   {
+    "path": "grow/grow",
+    "self_s": 0.000216434127651155,
+    "calls": 9
+   },
+   {
+    "path": "intersections/register/walk",
+    "self_s": 0.00020610098727047443,
+    "calls": 2
+   },
+   {
+    "path": "intersections/infer_iterates",
+    "self_s": 0.00020541390404105186,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/walk",
+    "self_s": 0.0002029107417911291,
+    "calls": 27
+   },
+   {
+    "path": "zone/intersections/register/walk",
+    "self_s": 0.00019750685896724463,
+    "calls": 2
+   },
+   {
+    "path": "initialise",
+    "self_s": 0.0001622240524739027,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate/refine/map",
+    "self_s": 0.00014135788660496473,
+    "calls": 15
+   },
+   {
+    "path": "grow/iterate/map",
+    "self_s": 0.00014030863530933857,
+    "calls": 10
+   },
+   {
+    "path": "zone/intersections/infer_iterates",
+    "self_s": 0.00013765704352408648,
+    "calls": 1
+   },
+   {
+    "path": "grow/iterate/image_chains",
+    "self_s": 0.00013492896687239408,
+    "calls": 10
+   },
+   {
+    "path": "intersections",
+    "self_s": 0.0001326357014477253,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/iterate/map",
+    "self_s": 0.00012186821550130844,
+    "calls": 9
+   },
+   {
+    "path": "grow/grow/iterate/refine/map",
+    "self_s": 0.0001126978313550353,
+    "calls": 12
+   },
+   {
+    "path": "create_bridges",
+    "self_s": 9.891390800476074e-05,
+    "calls": 1
+   },
+   {
+    "path": "blast/diagnose/resolved_ids",
+    "self_s": 9.524705819785595e-05,
+    "calls": 29
+   },
+   {
+    "path": "grow/grow/iterate/image_chains",
+    "self_s": 9.410525672137737e-05,
+    "calls": 9
+   },
+   {
+    "path": "grow/grow/walk",
+    "self_s": 6.994593422859907e-05,
+    "calls": 27
+   },
+   {
+    "path": "create_bridges/cut",
+    "self_s": 4.822609480470419e-05,
+    "calls": 1
+   },
+   {
+    "path": "intersections/register",
+    "self_s": 4.809722304344177e-05,
+    "calls": 7
+   },
+   {
+    "path": "pips/trellis_build",
+    "self_s": 4.360696766525507e-05,
+    "calls": 1
+   },
+   {
+    "path": "blast/infer_iterates/resolved_ids",
+    "self_s": 4.069472197443247e-05,
+    "calls": 29
+   },
+   {
+    "path": "zone/intersections/register",
+    "self_s": 3.904604818671942e-05,
+    "calls": 5
+   },
+   {
+    "path": "zone/create_bridges/cut",
+    "self_s": 3.854499664157629e-05,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/register_bridge",
+    "self_s": 3.28761525452137e-05,
+    "calls": 5
+   },
+   {
+    "path": "trim",
+    "self_s": 3.1231087632477283e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/trellis_build",
+    "self_s": 3.0757044441998005e-05,
+    "calls": 1
+   },
+   {
+    "path": "topology/topology/trellis_build/resolved_ids",
+    "self_s": 2.9347138479351997e-05,
+    "calls": 27
+   },
+   {
+    "path": "zone/create_bridges/register_bridge",
+    "self_s": 2.3311004042625427e-05,
+    "calls": 3
+   },
+   {
+    "path": "zone/create_bridges",
+    "self_s": 2.302299253642559e-05,
+    "calls": 1
+   },
+   {
+    "path": "intersections/infer_iterates/map",
+    "self_s": 1.3218028470873833e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/infer_iterates/map",
+    "self_s": 1.2952019460499287e-05,
+    "calls": 1
+   },
+   {
+    "path": "intersections/infer_iterates/resolved_ids",
+    "self_s": 1.2170989066362381e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/register/register",
+    "self_s": 1.1553056538105011e-05,
+    "calls": 1
+   },
+   {
+    "path": "grow/grow/generation",
+    "self_s": 1.0694027878344059e-05,
+    "calls": 9
+   },
+   {
+    "path": "intersections/register/register",
+    "self_s": 1.0245945304632187e-05,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/infer_iterates/resolved_ids",
+    "self_s": 8.165021426975727e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/generation",
+    "self_s": 2.5980407372117043e-06,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/generation",
+    "self_s": 2.589891664683819e-06,
+    "calls": 1
+   },
+   {
+    "path": "grow/generation",
+    "self_s": 2.2209715098142624e-06,
+    "calls": 1
+   },
+   {
+    "path": "initialise/generation",
+    "self_s": 1.434003934264183e-06,
+    "calls": 2
+   },
+   {
+    "path": "zone/intersections/generation",
+    "self_s": 1.2789387255907059e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/create_bridges/resolved_ids",
+    "self_s": 1.2159580364823341e-06,
+    "calls": 1
+   },
+   {
+    "path": "trim/resolved_ids",
+    "self_s": 1.210952177643776e-06,
+    "calls": 1
+   },
+   {
+    "path": "zone/trellis_build/resolved_ids",
+    "self_s": 1.201988197863102e-06,
+    "calls": 1
+   },
+   {
+    "path": "pips/trellis_build/resolved_ids",
+    "self_s": 9.91043634712696e-07,
+    "calls": 1
+   },
+   {
+    "path": "zone/generation",
+    "self_s": 9.470386430621147e-07,
+    "calls": 1
+   },
+   {
+    "path": "intersections/generation",
+    "self_s": 6.400514394044876e-07,
+    "calls": 1
+   },
+   {
+    "path": "zone/intersections/diagnose/resolved_ids",
+    "self_s": 6.349291652441025e-07,
+    "calls": 1
+   },
+   {
+    "path": "intersections/diagnose/resolved_ids",
+    "self_s": 5.910405889153481e-07,
+    "calls": 1
+   },
+   {
+    "path": "create_bridges/resolved_ids",
+    "self_s": 5.109468474984169e-07,
+    "calls": 1
+   }
+  ],
+  "by_stage": {
+   "fixed_point": {
+    "(self)": 0.0006214161403477192
+   },
+   "initialise": {
+    "generation": 1.434003934264183e-06,
+    "(self)": 0.0001622240524739027
+   },
+   "grow": {
+    "walk": 0.0007963897660374641,
+    "map": 0.000516232568770647,
+    "image_chains": 0.00022903422359377146,
+    "merge": 0.0006979100871831179,
+    "refine": 0.015795143321156502,
+    "iterate": 0.0013084661914035678,
+    "generation": 1.2914999388158321e-05,
+    "(self)": 0.00028335279785096645,
+    "grow": 0.000216434127651155
+   },
+   "intersections": {
+    "generation": 6.400514394044876e-07,
+    "index": 0.23755541909486055,
+    "walk": 0.00020610098727047443,
+    "register": 5.834316834807396e-05,
+    "resolve": 0.0007999490480870008,
+    "resolved_ids": 1.2762029655277729e-05,
+    "map": 1.3218028470873833e-05,
+    "infer_iterates": 0.00020541390404105186,
+    "diagnose": 0.018561178003437817,
+    "(self)": 0.0001326357014477253
+   },
+   "trim": {
+    "resolved_ids": 1.210952177643776e-06,
+    "(self)": 3.1231087632477283e-05
+   },
+   "create_bridges": {
+    "resolved_ids": 5.109468474984169e-07,
+    "index": 0.007042120909318328,
+    "cut": 4.822609480470419e-05,
+    "generation": 2.589891664683819e-06,
+    "register_bridge": 3.28761525452137e-05,
+    "(self)": 9.891390800476074e-05
+   },
+   "pips": {
+    "resolved_ids": 9.91043634712696e-07,
+    "trellis_build": 4.360696766525507e-05,
+    "(self)": 0.00029987492598593235
+   },
+   "zone": {
+    "generation": 4.824018105864525e-06,
+    "index": 0.19639924506191164,
+    "walk": 0.00046103191561996937,
+    "register": 5.059910472482443e-05,
+    "resolve": 0.0005652960389852524,
+    "resolved_ids": 1.1217896826565266e-05,
+    "map": 1.2952019460499287e-05,
+    "infer_iterates": 0.00013765704352408648,
+    "diagnose": 0.015918039018288255,
+    "intersections": 0.0014313370920717716,
+    "cut": 3.854499664157629e-05,
+    "register_bridge": 2.3311004042625427e-05,
+    "create_bridges": 2.302299253642559e-05,
+    "trellis_build": 3.0757044441998005e-05,
+    "(self)": 0.0020256417337805033
+   },
+   "topology": {
+    "walk": 0.26992309954948723,
+    "topology": 0.3253312520682812,
+    "(self)": 2.0200527618872,
+    "resolved_ids": 2.9347138479351997e-05,
+    "trellis_build": 0.02744070766493678
+   },
+   "blast": {
+    "walk": 0.8151759270112962,
+    "separation": 8.368518399540335,
+    "generation": 0.015219694469124079,
+    "iterate_bridge": 0.02572435117326677,
+    "map": 0.02258935512509197,
+    "image_chains": 0.0004191701300442219,
+    "refine": 1.101305773598142,
+    "iterate": 0.07940966240130365,
+    "index": 1.4587131126318127,
+    "resolve": 0.17317046225070953,
+    "register": 0.0044695456745103,
+    "resolved_ids": 0.09918983210809529,
+    "cut": 0.11288139666430652,
+    "infer_iterates": 0.27226743672508746,
+    "register_bridge": 0.005302435019984841,
+    "diagnose": 29.96306644473225,
+    "(self)": 2.730490653309971
+   }
+  },
+  "stage_total": {
+   "fixed_point": 0.0006214161403477192,
+   "initialise": 0.00016365805640816689,
+   "grow": 0.01985587808303535,
+   "intersections": 0.25754566001705825,
+   "trim": 3.244203981012106e-05,
+   "create_bridges": 0.007225237903185189,
+   "pips": 0.0003444729372859001,
+   "zone": 0.21713347698096186,
+   "topology": 2.6427771683083847,
+   "blast": 45.24791365256533
+  },
+  "top_events": [
+   {
+    "stage": "fixed_point",
+    "seconds": 0.0006104800850152969,
+    "peak_rss": 125247488,
+    "rss_after": 125247488
+   },
+   {
+    "stage": "fixed_point",
+    "seconds": 1.0936055332422256e-05,
+    "peak_rss": 125251584,
+    "rss_after": 125251584
+   },
+   {
+    "stage": "initialise",
+    "seconds": 0.00016365805640816689,
+    "peak_rss": 125472768,
+    "rss_after": 125472768
+   },
+   {
+    "stage": "grow",
+    "seconds": 0.01346215303055942,
+    "peak_rss": 130965504,
+    "rss_after": 130965504
+   },
+   {
+    "stage": "grow",
+    "seconds": 0.006393725052475929,
+    "peak_rss": 130985984,
+    "rss_after": 130985984
+   },
+   {
+    "stage": "intersections",
+    "seconds": 0.25754566001705825,
+    "peak_rss": 151822336,
+    "rss_after": 150118400
+   },
+   {
+    "stage": "trim",
+    "seconds": 3.244203981012106e-05,
+    "peak_rss": 150118400,
+    "rss_after": 150118400
+   },
+   {
+    "stage": "create_bridges",
+    "seconds": 0.007225237903185189,
+    "peak_rss": 150118400,
+    "rss_after": 150118400
+   },
+   {
+    "stage": "pips",
+    "seconds": 0.0003444729372859001,
+    "peak_rss": 150122496,
+    "rss_after": 150122496
+   },
+   {
+    "stage": "zone",
+    "seconds": 0.21713347698096186,
+    "peak_rss": 150122496,
+    "rss_after": 146276352
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.004613489028997719,
+    "peak_rss": 146579456,
+    "rss_after": 146579456
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.013335161958821118,
+    "peak_rss": 149086208,
+    "rss_after": 149086208
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.004584231995977461,
+    "peak_rss": 149086208,
+    "rss_after": 149086208
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.025868240045383573,
+    "peak_rss": 153796608,
+    "rss_after": 153796608
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.008996308082714677,
+    "peak_rss": 153800704,
+    "rss_after": 153800704
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.05705383000895381,
+    "peak_rss": 171819008,
+    "rss_after": 160559104
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.010103742009960115,
+    "peak_rss": 160559104,
+    "rss_after": 160559104
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.10097965900786221,
+    "peak_rss": 188059648,
+    "rss_after": 164675584
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.011638185009360313,
+    "peak_rss": 164679680,
+    "rss_after": 164679680
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.16431785305030644,
+    "peak_rss": 220753920,
+    "rss_after": 177917952
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.014250256004743278,
+    "peak_rss": 177917952,
+    "rss_after": 177917952
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.3260046860668808,
+    "peak_rss": 311562240,
+    "rss_after": 199012352
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.020271677989512682,
+    "peak_rss": 199012352,
+    "rss_after": 199012352
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.637809208012186,
+    "peak_rss": 479588352,
+    "rss_after": 259846144
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.027469674008898437,
+    "peak_rss": 259846144,
+    "rss_after": 259846144
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.2585780440131202,
+    "peak_rss": 765698048,
+    "rss_after": 389545984
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.05724709702190012,
+    "peak_rss": 389550080,
+    "rss_after": 389550080
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.232815998024307,
+    "peak_rss": 1014304768,
+    "rss_after": 529408000
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.07842720800545067,
+    "peak_rss": 529408000,
+    "rss_after": 529408000
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.9401617610128596,
+    "peak_rss": 1309392896,
+    "rss_after": 672669696
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.10566589201334864,
+    "peak_rss": 672669696,
+    "rss_after": 672669696
+   },
+   {
+    "stage": "blast",
+    "seconds": 3.1899769549490884,
+    "peak_rss": 1545842688,
+    "rss_after": 740474880
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.14223863405641168,
+    "peak_rss": 740474880,
+    "rss_after": 636141568
+   },
+   {
+    "stage": "blast",
+    "seconds": 3.2272741209017113,
+    "peak_rss": 1733312512,
+    "rss_after": 1107320832
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13678900396917015,
+    "peak_rss": 1107333120,
+    "rss_after": 1107333120
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.4778223850298673,
+    "peak_rss": 1826217984,
+    "rss_after": 1146855424
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13331930001731962,
+    "peak_rss": 1146859520,
+    "rss_after": 1146859520
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.539452514029108,
+    "peak_rss": 2006085632,
+    "rss_after": 1161383936
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13327518699225038,
+    "peak_rss": 1161388032,
+    "rss_after": 1161388032
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.417849275050685,
+    "peak_rss": 2065604608,
+    "rss_after": 1002876928
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13342971599195153,
+    "peak_rss": 1002876928,
+    "rss_after": 1002876928
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.4363079810282215,
+    "peak_rss": 2140770304,
+    "rss_after": 1014505472
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13463067496195436,
+    "peak_rss": 1014505472,
+    "rss_after": 1014505472
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.373563503031619,
+    "peak_rss": 2130894848,
+    "rss_after": 1044967424
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.1348016590345651,
+    "peak_rss": 1044967424,
+    "rss_after": 1044967424
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.194023010088131,
+    "peak_rss": 2216198144,
+    "rss_after": 1027633152
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13395510404370725,
+    "peak_rss": 1027633152,
+    "rss_after": 1027633152
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.2215272550238296,
+    "peak_rss": 2228985856,
+    "rss_after": 1031794688
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13390693604014814,
+    "peak_rss": 1031794688,
+    "rss_after": 1031794688
+   },
+   {
+    "stage": "blast",
+    "seconds": 2.11622357100714,
+    "peak_rss": 2188402688,
+    "rss_after": 1059807232
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.1345300970133394,
+    "peak_rss": 1059807232,
+    "rss_after": 1059807232
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.6316347820684314,
+    "peak_rss": 1872666624,
+    "rss_after": 1063653376
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.135306091979146,
+    "peak_rss": 1063653376,
+    "rss_after": 1063653376
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.8407958149909973,
+    "peak_rss": 2031792128,
+    "rss_after": 1040109568
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13498493994120508,
+    "peak_rss": 1040109568,
+    "rss_after": 1040109568
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.5748832679819316,
+    "peak_rss": 1840386048,
+    "rss_after": 1050202112
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13415819103829563,
+    "peak_rss": 1050202112,
+    "rss_after": 1050202112
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.7382529110182077,
+    "peak_rss": 1963724800,
+    "rss_after": 1075073024
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13776933401823044,
+    "peak_rss": 1075073024,
+    "rss_after": 1075073024
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.952581384102814,
+    "peak_rss": 2142150656,
+    "rss_after": 1047994368
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13591844809707254,
+    "peak_rss": 1047994368,
+    "rss_after": 1047994368
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.610228157020174,
+    "peak_rss": 1861136384,
+    "rss_after": 1049477120
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13522159901913255,
+    "peak_rss": 1049477120,
+    "rss_after": 1049477120
+   },
+   {
+    "stage": "blast",
+    "seconds": 1.7850121990777552,
+    "peak_rss": 2002857984,
+    "rss_after": 1052422144
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.13501302700024098,
+    "peak_rss": 1052422144,
+    "rss_after": 1052422144
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.08172353298868984,
+    "peak_rss": 1080262656,
+    "rss_after": 1080262656
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.00013142195530235767,
+    "peak_rss": 1080262656,
+    "rss_after": 1080262656
+   },
+   {
+    "stage": "blast",
+    "seconds": 0.08185659197624773,
+    "peak_rss": 1082327040,
+    "rss_after": 1082327040
+   },
+   {
+    "stage": "topology",
+    "seconds": 0.0001300419680774212,
+    "peak_rss": 1082327040,
+    "rss_after": 1082327040
+   }
+  ]
+ },
+ "wall_s": 60.77759617904667,
+ "peak_rss": 2228985856,
+ "rss_final": 1084391424,
+ "census": {
+  "bytes": {
+   "branch_points": 152,
+   "point_store": 245552016,
+   "curve_ids": 26322160,
+   "segment_index": 248555616,
+   "rtree": 1241408,
+   "curve_objects": 336104,
+   "registry": 2102412,
+   "topology": 2365227,
+   "workbench_other": 239725
+  },
+  "counts": {
+   "branch_points": 1,
+   "store_rows": 5098156,
+   "store_capacity": 5115667,
+   "curve_rows": 22254,
+   "image_rows": 3258777,
+   "no_cdist_rows": 1817125,
+   "phantom_rows": 1817123,
+   "off_curve_rows": 0,
+   "chains": 365
+  },
+  "tangle_parts": {
+   "segments": 2100816,
+   "seg_lookup": 589920,
+   "edge_to_sid": 239661296,
+   "owners": 5484816,
+   "pairs": 718768,
+   "rtree_entries": {
+    "unstable": 17280,
+    "stable": 976
+   },
+   "n_segments": 19452,
+   "n_query_edges": 3258414
+  },
+  "n_points": 5098156,
+  "n_curve_points": 22254,
+  "n_image_points": 3258777,
+  "n_phantom": 1817125,
+  "n_bridges": 836,
+  "n_image_curves": 363,
+  "n_crossings": 1200,
+  "census_s": 0.566356144961901,
+  "rtree_measured_bytes": 1130496
+ }
+}
