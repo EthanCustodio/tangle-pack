@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Literal, Optional
+from typing import TYPE_CHECKING, Iterable, Iterator, Literal, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -71,6 +71,11 @@ _MARGIN = 1e-9
 _EPS_REL = 1e-12
 # Candidate pairs generated at once by the sweep.
 _PAIR_BLOCK = 2_000_000
+# Sweep strips are this many median extents of the new segments wide, at most _MAX_STRIPS.
+_STRIP_WIDTH = 4.0
+_MAX_STRIPS = 4096
+# Node keys shift by this into an edge key: the periodic points are -1, -2, ...
+_KEY_OFFSET = 1 << 20
 
 
 @dataclass(frozen=True)
@@ -182,7 +187,9 @@ def same_stability_crossings(
         pad: The box padding, as a fraction of its larger side.
 
     Returns:
-        The hits, unstable ones first, each curve pair in curve order.
+        The hits, unstable ones first, in sweep order: each names first the
+        segment earlier along the sweep axis (not always the earlier curve's),
+        and they run by that segment, then the other.
     """
     selected = (
         list(workbench.fixed_points) if fixed_points is None else list(fixed_points)
@@ -209,8 +216,9 @@ def count_same_stability_crossings(
     :func:`same_stability_crossings`; only the segment pairs with a segment of
     one of ``bridges`` are built and tested, and nothing is materialised per
     hit. A blast still pays for the whole field once: the segment rows, the
-    edge dedup and the sweep's sort run over every unstable segment of those
-    fixed points; the pairs are built for the new segments only.
+    edge dedup, the sweep axis and sort and the choice of strips run over every
+    unstable segment of those fixed points; the pairs are built, and tested,
+    for the new segments only, in the strips they span.
 
     Args:
         workbench: The workbench holding the curves.
@@ -332,8 +340,10 @@ def _hits(
     Returns, one entry per hit: the two segments' curve indices and positions
     along their curves, the crossing point, ``|sin|`` of the angle, the larger
     curvature area of the two segments, and whether the point lies in ``box``
-    (never, for None). With ``new`` (one flag per curve) only the segment pairs
-    with a segment of a new curve are tested.
+    (never, for None). A hit names first the segment earlier along the sweep
+    axis. Without ``new`` the hits come in sweep order (by first, then second
+    segment); with ``new`` (one flag per curve) only the segment pairs with a
+    segment of a new curve are tested, and the hits come strip by strip.
     """
     stores = list(dict.fromkeys(store for _name, (_head, store, rows), _bridge in curves if len(rows)))
     offsets = dict(zip(stores, np.cumsum([0, *(len(store) for store in stores[:-1])]).tolist()))
@@ -343,52 +353,51 @@ def _hits(
     if not rows:
         none = np.empty(0, dtype=np.int64)
         return none, none, none, none, np.empty((0, 2)), np.empty(0), np.empty(0), np.empty(0, dtype=bool)
-    a, b, left, right, node_a, node_b, owner, position = (
-        np.concatenate(column) for column in zip(*rows)
-    )
+    a, b, left, right, node_a, node_b, owner, position = (np.concatenate(column) for column in zip(*rows))
     # One edge reached from two curves (overlapping image bridges) is one segment.
-    edges = np.sort(np.stack([node_a, node_b], axis=1), axis=1)
-    _, first = np.unique(edges, axis=0, return_index=True)
-    keep = np.sort(first)
-    a, b, left, right, node_a, node_b, owner, position = (
-        column[keep] for column in (a, b, left, right, node_a, node_b, owner, position)
-    )
+    _, first = np.unique(_edge_keys(node_a, node_b), return_index=True)
+    segment = np.sort(first)
+    mins, maxs = np.minimum(a[segment], b[segment]), np.maximum(a[segment], b[segment])
+    axis = _sweep_axis(mins, maxs)
+    sweep = np.argsort(mins[:, axis], kind="stable")
+    # From here on a segment is its position along the sweep; ``order`` gives its row.
+    order = segment[sweep]
+    mins, maxs = mins[sweep], maxs[sweep]
+    a, b, node_a, node_b = a[order], b[order], node_a[order], node_b[order]
+    is_new = np.ones(len(order), dtype=bool) if new is None else new[owner[order]]
 
-    i, j = _candidate_pairs(a, b, None if new is None else new[owner])
-    shared = (
-        (node_a[i] == node_a[j])
-        | (node_a[i] == node_b[j])
-        | (node_b[i] == node_a[j])
-        | (node_b[i] == node_b[j])
-    )
-    i, j = i[~shared], j[~shared]
+    found = [(np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64), np.empty(0), np.empty(0))]
+    for i, j in _candidate_pairs(mins, maxs, is_new, axis):
+        shared = (node_a[i] == node_a[j]) | (node_a[i] == node_b[j])
+        shared |= (node_b[i] == node_a[j]) | (node_b[i] == node_b[j])
+        i, j = i[~shared], j[~shared]
+        d1, d2 = b[i] - a[i], b[j] - a[j]
+        den = d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]
+        scale = np.hypot(*d1.T) * np.hypot(*d2.T)
+        r = a[j] - a[i]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t = (r[:, 0] * d2[:, 1] - r[:, 1] * d2[:, 0]) / den
+            u = (r[:, 0] * d1[:, 1] - r[:, 1] * d1[:, 0]) / den
+        hit = (np.abs(den) > _EPS_REL * scale) & (t > _MARGIN) & (t < 1 - _MARGIN)
+        hit &= (u > _MARGIN) & (u < 1 - _MARGIN)
+        found.append((i[hit], j[hit], t[hit], np.abs(den[hit]) / scale[hit]))
+    i, j, t, sin = (np.concatenate(column) for column in zip(*found))
+    if new is None:
+        # The strips find the pairs strip by strip; the listing is in sweep order.
+        by_sweep = np.lexsort((j, i))
+        i, j, t, sin = i[by_sweep], j[by_sweep], t[by_sweep], sin[by_sweep]
 
-    d1, d2 = b[i] - a[i], b[j] - a[j]
-    den = d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]
-    scale = np.hypot(*d1.T) * np.hypot(*d2.T)
-    r = a[j] - a[i]
-    with np.errstate(divide="ignore", invalid="ignore"):
-        t = (r[:, 0] * d2[:, 1] - r[:, 1] * d2[:, 0]) / den
-        u = (r[:, 0] * d1[:, 1] - r[:, 1] * d1[:, 0]) / den
-    hit = (
-        (np.abs(den) > _EPS_REL * scale)
-        & (t > _MARGIN)
-        & (t < 1 - _MARGIN)
-        & (u > _MARGIN)
-        & (u < 1 - _MARGIN)
-    )
-    i, j, t = i[hit], j[hit], t[hit]
-    sin = np.abs(den[hit]) / scale[hit]
     point = a[i] + t[:, None] * (b[i] - a[i])
     local_area = np.maximum(
-        curvature_area_batch(a[i], b[i], left[i], right[i]),
-        curvature_area_batch(a[j], b[j], left[j], right[j]),
+        curvature_area_batch(a[i], b[i], left[order[i]], right[order[i]]),
+        curvature_area_batch(a[j], b[j], left[order[j]], right[order[j]]),
     )
     in_region = (
         np.zeros(len(i), dtype=bool)
         if box is None
         else np.all((box[0] <= point) & (point <= box[1]), axis=1)
     )
+    i, j = order[i], order[j]
     return owner[i], owner[j], position[i], position[j], point, sin, local_area, in_region
 
 
@@ -424,58 +433,105 @@ def _segment_rows(
     )
 
 
-def _candidate_pairs(
-    a: NDArray[np.float64], b: NDArray[np.float64], new: Optional[NDArray[np.bool_]] = None
-) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
-    """Every pair of segments whose bounding boxes overlap, by sweep and prune
-    (with ``new``, one flag per segment, only the pairs holding a new segment).
+def _edge_keys(node_a: NDArray[np.int64], node_b: NDArray[np.int64]) -> NDArray[np.int64]:
+    """One integer per edge, the same in both directions: its two node keys,
+    shifted past the periodic points' -1, -2, ..., packed low key high."""
+    low = np.minimum(node_a, node_b) + _KEY_OFFSET
+    high = np.maximum(node_a, node_b) + _KEY_OFFSET
+    assert low.min() >= 0 and high.max() < 1 << 31, "node keys outside the edge-key range"
+    return (low << 32) | high
 
-    The boxes are sorted along the axis on which fewer of them overlap, each is
-    paired with the boxes that start before it ends, and the pairs that also
-    overlap on the other axis are kept. With ``new`` an old segment is paired
-    only with the new segments inside its forward range, so the pairs are built
-    for the new segments alone, in the orientation of the full sweep. A
-    tangle's segments are short next to their spacing, so this yields a few
-    candidates per segment; it runs in blocks of ``_PAIR_BLOCK`` pairs so a
-    dense fold cannot exhaust memory.
-    (rtree's bulk ``intersection_v`` is not used: in 1.4.0 it loses its result
-    buffer once the results outgrow twice the query count, which every polyline
-    does -- each segment meets its two neighbours.)
+
+def _sweep_axis(mins: NDArray[np.float64], maxs: NDArray[np.float64]) -> int:
+    """The axis along which fewer boxes overlap, the first on a tie.
+
+    Sorted by their minima, each box overlaps the boxes after it whose minimum
+    is at most its maximum, so with ``n`` boxes the overlapping pairs along an
+    axis number ``sum(searchsorted(sorted minima, maxima, right)) - n(n+1)/2``,
+    the maxima taken in any order.
     """
-    mins, maxs = np.minimum(a, b), np.maximum(a, b)
-    sweeps = []
-    for axis in (0, 1):
-        order = np.argsort(mins[:, axis], kind="stable")
-        ends = np.searchsorted(mins[order, axis], maxs[order, axis], side="right")
-        sweeps.append((axis, order, np.maximum(ends - np.arange(len(order)) - 1, 0)))
-    axis, order, counts = min(sweeps, key=lambda sweep: sweep[2].sum())
-    other = 1 - axis
+    n = len(mins)
+    overlaps = [
+        int(np.searchsorted(np.sort(mins[:, k]), np.sort(maxs[:, k]), side="right").sum()) - n * (n + 1) // 2
+        for k in (0, 1)
+    ]
+    return int(overlaps[1] < overlaps[0])
 
-    # The partners of sorted position p are pool[start[p] : start[p] + count[p]]:
-    # its whole forward range, or for an old p only the new positions in it.
-    positions = np.arange(len(order))
-    if new is None:
-        pool, start, count = positions, positions + 1, counts
-    else:
-        is_new = new[order]
-        new_positions = np.flatnonzero(is_new)
-        lo = np.searchsorted(new_positions, positions + 1)
-        hi = np.searchsorted(new_positions, positions + 1 + counts)
-        pool = np.concatenate([positions, new_positions])
-        start = np.where(is_new, positions + 1, len(order) + lo)
-        count = np.where(is_new, counts, hi - lo)
+
+def _candidate_pairs(
+    mins: NDArray[np.float64], maxs: NDArray[np.float64], is_new: NDArray[np.bool_], axis: int
+) -> Iterator[tuple[NDArray[np.int64], NDArray[np.int64]]]:
+    """Every pair of boxes that overlap and hold a new one, by sweep and prune
+    inside strips, in blocks of about ``_PAIR_BLOCK`` candidates.
+
+    The boxes come sorted by their minima along ``axis`` (the sweep), and a
+    pair ``(p, q)`` of sweep positions has ``p < q``. The other axis is cut
+    into strips ``_STRIP_WIDTH`` median extents of the new boxes wide (at most
+    ``_MAX_STRIPS``), and only the strips some new box spans are swept. In each,
+    a box is paired with the boxes after it that start no later than it ends --
+    an old box only with the new ones -- and the pairs that also overlap across
+    are kept. Two overlapping boxes both span the strip of the larger of their
+    minima across, so each pair is kept there and only there. A blast's images
+    lie in dense folds: swept over the whole plane, a new box met about a
+    thousand candidates for some 75 overlaps (D1, 2026-10-28); a strip holds
+    only the folds near it. The strip width changes the cost, never the pairs.
+    (rtree's bulk ``intersection_v`` is no help: in 1.4.0 it loses its result
+    buffer once the results outgrow twice the query count, which every polyline
+    does -- each segment meets its two neighbours --, and the workbench's index
+    holds no blast's image curves.)
+    """
+    if not is_new.any():
+        return
+    across = 1 - axis
+    low, high = float(mins[:, across].min()), float(maxs[:, across].max())
+    width = _STRIP_WIDTH * float(np.median(maxs[is_new, across] - mins[is_new, across]))
+    strips = int(min(_MAX_STRIPS, np.ceil((high - low) / width))) if width > 0 and high > low else 1
+    width = (high - low) / strips if high > low else 1.0
+    first_strip, last_strip = (
+        np.clip(np.floor((ends[:, across] - low) / width), 0, strips - 1).astype(np.int64)
+        for ends in (mins, maxs)
+    )
+    spanned = np.cumsum(
+        np.bincount(first_strip[is_new], minlength=strips + 1)
+        - np.bincount(last_strip[is_new] + 1, minlength=strips + 1)
+    )[:strips] > 0
+    reached = np.concatenate(([0], np.cumsum(spanned)))
+    boxes = np.flatnonzero(reached[last_strip + 1] > reached[first_strip])
+
+    # One entry per box and spanned strip it spans, by strip, in sweep order within one.
+    spans = last_strip[boxes] - first_strip[boxes] + 1
+    box = np.repeat(boxes, spans)
+    strip = np.repeat(first_strip[boxes] - np.cumsum(spans) + spans, spans) + np.arange(spans.sum())
+    box, strip = box[spanned[strip]], strip[spanned[strip]]
+    by_strip = np.argsort(strip, kind="stable")
+    box, strip = box[by_strip], strip[by_strip]
+    bounds = np.searchsorted(strip, np.arange(strips + 1))
+    ends = np.empty(len(box), dtype=np.int64)
+    for s in np.flatnonzero(np.diff(bounds)).tolist():
+        lo, hi = bounds[s], bounds[s + 1]
+        ends[lo:hi] = lo + np.searchsorted(mins[box[lo:hi], axis], maxs[box[lo:hi], axis], side="right")
+
+    # The partners of entry e are pool[start[e] : start[e] + count[e]]: its whole
+    # forward range in its strip, or for an old box only the new entries in it.
+    entries = np.arange(len(box))
+    entry_new = is_new[box]
+    new_entries = np.flatnonzero(entry_new)
+    after, until = np.searchsorted(new_entries, entries + 1), np.searchsorted(new_entries, ends)
+    pool = np.concatenate([entries, new_entries])
+    start = np.where(entry_new, entries + 1, len(box) + after)
+    count = np.where(entry_new, ends - entries - 1, until - after)
 
     totals = np.cumsum(count)
-    cuts = np.searchsorted(totals, np.arange(_PAIR_BLOCK, totals[-1], _PAIR_BLOCK))
-    firsts, seconds = [], []
-    for block in np.split(positions, cuts):
+    for block in np.split(entries, np.searchsorted(totals, np.arange(_PAIR_BLOCK, totals[-1], _PAIR_BLOCK))):
         block_counts = count[block]
-        first = np.repeat(block, block_counts)
+        entry = np.repeat(block, block_counts)
         offset = np.arange(block_counts.sum()) - np.repeat(
             np.cumsum(block_counts) - block_counts, block_counts
         )
-        i, j = order[first], order[pool[np.repeat(start[block], block_counts) + offset]]
-        overlap = (mins[i, other] <= maxs[j, other]) & (mins[j, other] <= maxs[i, other])
-        firsts.append(i[overlap])
-        seconds.append(j[overlap])
-    return np.concatenate(firsts), np.concatenate(seconds)
+        p, q = box[entry], box[pool[np.repeat(start[block], block_counts) + offset]]
+        keep = (
+            (mins[p, across] <= maxs[q, across])
+            & (mins[q, across] <= maxs[p, across])
+            & (np.maximum(first_strip[p], first_strip[q]) == strip[entry])
+        )
+        yield p[keep], q[keep]
