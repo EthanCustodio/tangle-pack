@@ -2,21 +2,25 @@
 
 ``array_namespace`` reads the namespace off a kernel's inputs. Host inputs must give
 the ``numpy`` module itself (so the numpy path is the old code, bit for bit), CuPy
-inputs give CuPy, and a mix raises rather than moving data. The first three tests
-run everywhere on a fake ``cupy`` module; the device-parity test of each geometry
+inputs give CuPy, and a mix raises rather than moving data; neither importing
+``tanglepack`` nor running a kernel on host arrays imports CuPy. The namespace tests run everywhere on a fake ``cupy`` module and
+the import test in a fresh interpreter; the device-parity test of each geometry
 kernel needs CuPy and a CUDA device and skips cleanly otherwise, as ``test_gpu.py``
 does.
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
+from pathlib import Path
 from types import ModuleType
 from typing import Callable
 
 import numpy as np
 import pytest
 
+import tanglepack
 from tanglepack.numerics.geometry import chord_deviation_batch, curvature_area_batch
 from tanglepack.numerics.namespace import array_namespace
 
@@ -46,6 +50,19 @@ def test_host_arrays_compute_in_numpy_itself(monkeypatch: pytest.MonkeyPatch) ->
     fake.ndarray = type("ndarray", (), {})
     monkeypatch.setitem(sys.modules, "cupy", fake)
     assert array_namespace(*host) is np
+
+
+def test_tanglepack_never_imports_cupy() -> None:
+    # A fresh interpreter: the device tests of this run may already have imported CuPy here.
+    src = Path(tanglepack.__file__).parents[1]
+    probe = (
+        f"import sys; sys.path.insert(0, {str(src)!r}); import numpy as np; "
+        "from tanglepack.numerics.geometry import chord_deviation_batch; "
+        "chord_deviation_batch(*np.random.default_rng(0).normal(size=(4, 8, 2))); "
+        "print('cupy' in sys.modules)"
+    )
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == "False"
 
 
 def test_device_arrays_compute_in_their_own_namespace(fake_cupy: ModuleType) -> None:
