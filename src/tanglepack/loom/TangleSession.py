@@ -11,6 +11,7 @@ zones and blasting -- that need both halves at once.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Iterable, Literal, Optional, TYPE_CHECKING
 
 import numpy as np
@@ -28,6 +29,7 @@ from ..topology.MinimalTrellis import MinimalTrellis
 from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
 from ..topology.SymbolicDynamics import SymbolicDynamics
 from ..topology.Trellis import Trellis, _is_single_fixed_point
+from . import persist
 from .ResonanceZone import ResonanceZone, define_resonance_zone
 from .Blast import BlastResult, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
@@ -134,6 +136,60 @@ class TangleSession:
         # first iteration from it, since blasts usually come one iteration at
         # a time. Stale once the zone changes; the budget is opt-in.
         self._blast_stats: dict["FixedPoint", float] = {}
+
+    # ── save and load (see persist) ──────────────────────────────────────────
+
+    def save(self, path: str | os.PathLike) -> None:
+        """
+        Write the session to ``<path>.npz`` and ``<path>.json``.
+
+        The workbench is saved whole (:meth:`TangleWorkbench.save`), and beside
+        it what the session remembers: the chosen strong pips, the class
+        letters, the resonance zones with their frozen boundary polygons and the
+        last blast growth factor per zone. The topology is not saved.
+
+        Args:
+            path: The stem of the two files.
+
+        Note:
+            A state left by :class:`~..numerics.budget.PointBudgetExceeded` is
+            saved as it is, and loads just as non-resumable (see
+            :meth:`TangleWorkbench.save`).
+        """
+        persist.save_session(self, path)
+
+    @classmethod
+    def load(
+        cls,
+        path: str | os.PathLike,
+        dynamical_map: MapFunc,
+        dynamical_map_inverse: MapFunc,
+        jacobian_function: Optional[JacFunc] = None,
+    ) -> "TangleSession":
+        """
+        A session saved by :meth:`save`.
+
+        Nothing in the files is executed: the map, its inverse and the Jacobian
+        are given here, and must be the ones the save was made with. The first
+        :meth:`topology` recomputes the topology.
+
+        Args:
+            path: The stem of the two files.
+            dynamical_map: The forward map.
+            dynamical_map_inverse: Its inverse.
+            jacobian_function: Optional analytic Jacobian.
+
+        Returns:
+            The loaded session.
+
+        Raises:
+            ValueError: The save is of another format, its npz holds an object
+                array, or it is a workbench save (load that with
+                :meth:`TangleWorkbench.load`).
+        """
+        session = cls(dynamical_map, dynamical_map_inverse, jacobian_function)
+        persist.load_session(session, path)
+        return session
 
     # ── attribute delegation ─────────────────────────────────────────────────
 
