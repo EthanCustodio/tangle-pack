@@ -20,10 +20,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from cases import P3_ORBIT_SEED, PERIOD3_ORIENTATION
 from helpers.fakes import bare_fixed_point
 from helpers.polylines import periodic_point, polyline_manifold
-from tanglepack import BaseManifold, BranchPoint
-from tanglepack.examples.henon import henon_map, henon_map_inverse
+from tanglepack import BaseManifold, BranchPoint, TangleSession
+from tanglepack.examples import HENON_P3
+from tanglepack.examples.henon import henon_jacobian, henon_map, henon_map_inverse
 from tanglepack.numerics import DynamicalSystem, ManifoldMachine
 from tanglepack.numerics.PointStore import PointStore
 from tanglepack.numerics.Tangle import Tangle
@@ -262,6 +264,22 @@ def test_a_periodic_point_cannot_be_written_through() -> None:
     assert (p.x, p.y) == (1.0, 2.0)
 
 
+def test_a_periodic_root_s_image_is_one_orbit_step_along_its_manifold() -> None:
+    """The iterated getters read a periodic root's image as the orbit point one
+    map step on along the manifold: the next one on an unstable branch, the
+    previous one on a stable branch (period 3, where the two differ)."""
+    session = TangleSession(henon_map(*HENON_P3), henon_map_inverse(*HENON_P3),
+                            henon_jacobian(*HENON_P3), area_cutoff=1e-7)
+    fp = session.construct_fixed_point([list(p) for p in P3_ORBIT_SEED])
+    session.orient_eigenvectors(fp, {s: np.array(v) for s, v in PERIOD3_ORIENTATION.items()})
+    session.initialize_both_manifolds(fp)
+    step = {"unstable": 1, "stable": -1}
+
+    for (_, stability, orbit_index, _), manifold in session.workbench.manifolds.items():
+        image = fp.coordinates[(orbit_index + step[stability]) % fp.period]
+        np.testing.assert_array_equal(manifold.get_iterated_point_array()[0], image)
+
+
 @pytest.mark.parametrize("stability", ["unstable", "stable"])
 def test_each_node_follows_its_chain_from_the_anchor(initialized, stability):
     """Read back along the chain, every row's predecessor is the row before it
@@ -346,6 +364,42 @@ def test_refining_the_pair_at_the_periodic_point_lays_the_new_first_point() -> N
     assert 0.0 < chain.store.cdist[first] < xs[0]
     _assert_first_on_its_chain(periodic, first, curve)
     assert (np.diff(curve.get_cdist_array(), axis=0) >= 0).all()
+
+
+@pytest.mark.parametrize("stability", ["unstable", "stable"])
+def test_refining_at_a_period_3_point_maps_from_the_right_orbit_neighbour(stability: str) -> None:
+    """The periodic point's preiterate is its preimage on an unstable branch and
+    its image on a stable one: on a period-3 orbit, the previous and the next
+    orbit point. The test places only that neighbour where one step along the
+    manifold lands it on the periodic point, so the pair at the anchor refines
+    onto the curve; the other neighbour would throw the new points off it."""
+    neighbour = 2 if stability == "unstable" else 1
+    orbit = [(5.0, 5.0)] * 3
+    orbit[0] = orbit[neighbour] = (0.0, 0.0)
+    periodic = bare_fixed_point(3, coordinates=orbit).branch_points[0]
+    store = PointStore()
+    xs = np.array([0.1, 0.2, 0.4, 0.8])
+    rows = store.append(np.column_stack((xs, xs * xs)), xs)
+    scale = 0.5 if stability == "unstable" else 2.0   # preimages under f = double, images
+    pre = store.append(scale * np.column_stack((xs, xs * xs)), scale * xs)
+    if stability == "unstable":
+        store.link(pre, rows)
+    else:
+        store.link(rows, pre)
+    ManifoldMachine._manifold_from_rows(store, rows, stability, 2.0, None)
+    periodic.attach(store.chain_of(rows[0]), stability, 0)
+    curve = BaseManifold(periodic, stability, 2.0, None, tail=int(rows[-1]), branch_index=0,
+                         manifold_key=None, store=store)
+    double = lambda p: 2 * np.asarray(p)  # noqa: E731
+    half = lambda p: 0.5 * np.asarray(p)  # noqa: E731
+    machine = ManifoldMachine(DynamicalSystem(double, half), area_cutoff=1e-5)
+
+    machine.refine_manifold(curve)
+
+    points = curve.get_point_array()
+    first = int(store.chain_of(rows[0]).ids[0])
+    assert first != rows[0] and 0.0 < store.cdist[first] < xs[0]
+    assert (points >= 0.0).all() and (points <= [xs[-1], xs[-1] ** 2]).all()
 
 
 @pytest.mark.parametrize("root", ["point", "empty_slot"])
