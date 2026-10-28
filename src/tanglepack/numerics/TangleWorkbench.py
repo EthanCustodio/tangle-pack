@@ -2089,8 +2089,9 @@ class TangleWorkbench:
             The loaded workbench.
 
         Raises:
-            ValueError: The save is of another format, or its npz holds an
-                object array.
+            ValueError: The save is of another format, its npz holds an
+                object array, or the map or its inverse disagrees with the
+                saved points (it is not the one the save was made with).
         """
         workbench = cls(dynamical_map, dynamical_map_inverse, jacobian_function)
         persist.restore_workbench(workbench, *persist.read(path))

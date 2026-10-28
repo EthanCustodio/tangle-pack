@@ -6,6 +6,10 @@ segment index travels exactly: every record keeps its segment id, a crossing
 pair keeps its iteration order (a pair's operand order), and the next id to
 draw is the saved one.
 
+A load maps a few linked rows forward and backward and refuses a map or an
+inverse that does not give back their saved images (another Henon ``k``); a
+save with no linked row is not checked, and the check maps a sample only.
+
 Load writes every slot through :meth:`FixedPoint.attach_chain`, the one writer
 of the slot table, and its input is now a file: a misspelt stability raises
 instead of filling a slot no reader looks up.
@@ -20,7 +24,8 @@ import pytest
 
 from cases import build_k10
 from helpers.fakes import bare_fixed_point
-from tanglepack import TangleWorkbench
+from tanglepack import TangleSession, TangleWorkbench
+from tanglepack.examples import HENON_K10, henon_map, henon_map_inverse
 from tanglepack.numerics import persist
 from tanglepack.numerics.budget import PointBudgetExceeded
 from tanglepack.numerics.PointStore import PointStore
@@ -140,3 +145,48 @@ def test_a_pair_is_rebuilt_in_its_iteration_order():
         for b in range(a):
             for saved in {tuple(frozenset((a, b))), tuple(frozenset((b, a)))}:
                 assert tuple(persist._pair(*saved)) == saved
+
+
+# ── the load-time map check ───────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("wrong", ["map", "map_inv"])
+def test_a_load_with_another_map_is_refused(wrong, tmp_path):
+    workbench = build_k10().workbench
+    workbench.save(tmp_path / "k10")
+    k, b = HENON_K10
+    maps = {"map": henon_map(k, b), "map_inv": henon_map_inverse(k, b)}
+    maps[wrong] = {"map": henon_map, "map_inv": henon_map_inverse}[wrong](k + 0.1, b)
+    with pytest.raises(ValueError, match=f"the {wrong} given to load differs from the one the save was made with"):
+        TangleWorkbench.load(tmp_path / "k10", maps["map"], maps["map_inv"])
+
+
+def test_a_session_load_with_another_map_is_refused(tmp_path):
+    session = build_k10().session
+    session.save(tmp_path / "k10")
+    k, b = HENON_K10
+    with pytest.raises(ValueError, match="the map given to load differs"):
+        TangleSession.load(tmp_path / "k10", henon_map(k + 0.1, b), henon_map_inverse(k, b))
+
+
+def test_the_map_check_maps_a_sample_only(tmp_path):
+    workbench = build_k10().workbench
+    workbench.save(tmp_path / "k10")
+    k, b = HENON_K10
+    sizes = []
+
+    def counted(inner):
+        def apply(point):
+            sizes.append(np.size(point) // 2)
+            return inner(point)
+        return apply
+
+    TangleWorkbench.load(tmp_path / "k10", counted(henon_map(k, b)), counted(henon_map_inverse(k, b)))
+    assert sizes and max(sizes) <= persist.MAP_CHECK_SAMPLE
+
+
+def test_a_save_with_no_linked_row_loads_with_any_map(tmp_path):
+    k, b = HENON_K10
+    TangleWorkbench(henon_map(k, b), henon_map_inverse(k, b)).save(tmp_path / "empty")
+    loaded = TangleWorkbench.load(tmp_path / "empty", henon_map(k + 1, b), henon_map_inverse(k + 1, b))
+    assert not len(loaded.point_store)

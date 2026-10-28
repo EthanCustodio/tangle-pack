@@ -91,8 +91,9 @@ def load_session(session: TangleSession, path: str | os.PathLike) -> None:
         path: The stem of the two files.
 
     Raises:
-        ValueError: The save is of another format, holds an object array, or
-            is a workbench save (load that with ``TangleWorkbench.load``).
+        ValueError: The save is of another format, holds an object array, is
+            a workbench save (load that with ``TangleWorkbench.load``), or the
+            session's map disagrees with the saved points.
     """
     meta, arrays = read(path)
     if meta["kind"] != "session":

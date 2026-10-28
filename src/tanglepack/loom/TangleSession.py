@@ -184,8 +184,9 @@ class TangleSession:
 
         Raises:
             ValueError: The save is of another format, its npz holds an object
-                array, or it is a workbench save (load that with
-                :meth:`TangleWorkbench.load`).
+                array, it is a workbench save (load that with
+                :meth:`TangleWorkbench.load`), or the map or its inverse
+                disagrees with the saved points.
         """
         session = cls(dynamical_map, dynamical_map_inverse, jacobian_function)
         persist.load_session(session, path)

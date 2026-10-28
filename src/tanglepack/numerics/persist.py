@@ -35,7 +35,10 @@ bulk-loaded from the saved records.
 
 A load runs nothing it reads: the npz is opened with
 ``allow_pickle=False``, and the map, its inverse and the Jacobian are arguments
-of ``load`` only. A file of another ``"format"`` is refused.
+of ``load`` only. A file of another ``"format"`` is refused, and so is a map
+that is not the save's: once the state is restored, :func:`check_map` maps a few
+linked rows forward (and a few backward) and compares them with their saved
+images (preimages). The check only reads the restored state.
 
 Dev Notes:
 
@@ -74,8 +77,20 @@ from .budget import GrowthStats
 if TYPE_CHECKING:
     from .TangleWorkbench import TangleWorkbench
 
-#: The one save format this tanglepack reads and writes.
+#: The one save format this tanglepack reads and writes. Bump it on ANY change
+#: to what a save holds (a field added, dropped, renamed or re-encoded): a save
+#: of another format is refused rather than misread. The law
+#: ``test_a_load_restores_every_attribute`` fails when a class the save covers
+#: gains an attribute this module does not save.
 FORMAT_VERSION = 1
+#: How many linked rows :func:`check_map` maps, per direction.
+MAP_CHECK_SAMPLE = 8
+#: The relative disagreement :func:`check_map` tolerates. A link the other map
+#: made (a stable row's image is the point ``map_inv`` was applied to, an
+#: unstable row's preimage the point ``map`` was applied to) re-maps only to
+#: rounding: at most 9e-16 forward and 5e-15 backward on the law cases
+#: (relative to the largest coordinate of the pair, at least 1).
+MAP_CHECK_RTOL = 1e-10
 
 STABILITIES = ("unstable", "stable")
 _STORE_COLUMNS = ("_xy", "_cdist", "_image", "_preimage", "_chain", "_position")
@@ -524,6 +539,10 @@ def restore_workbench(workbench: TangleWorkbench, meta: dict, arrays: dict) -> D
 
     Returns:
         The rebuilt objects, for a session section to resolve its references.
+
+    Raises:
+        ValueError: The workbench's map disagrees with the saved points
+            (:func:`check_map`).
     """
     assert not workbench.fixed_points and not len(workbench.point_store), "load into a fresh workbench"
     decoder = Decoder(_load_fixed_points(meta, arrays), workbench)
@@ -534,7 +553,48 @@ def restore_workbench(workbench: TangleWorkbench, meta: dict, arrays: dict) -> D
     _load_registry(workbench, decoder, meta, arrays)
     _load_index(workbench, decoder, meta, arrays)
     _load_bookkeeping(workbench, decoder, meta, arrays)
+    check_map(workbench)
     return decoder
+
+
+def check_map(workbench: TangleWorkbench) -> None:
+    """
+    Refuse a workbench whose map is not the one its points were made with.
+
+    Maps up to :data:`MAP_CHECK_SAMPLE` rows with an image link, evenly spaced
+    among them, through the workbench's batched map, and as many rows with a
+    preimage link through the batched inverse, and compares each result with
+    the saved xy of the linked row. A store with no linked row is not checked.
+
+    Args:
+        workbench: A workbench whose state is restored.
+
+    Raises:
+        ValueError: A mapped row disagrees with its saved image (preimage)
+            beyond :data:`MAP_CHECK_RTOL`, relative to the larger coordinate of
+            the two points and at least 1; the message names the largest
+            disagreement.
+    """
+    store, system = workbench.point_store, workbench.dynamical_system
+    n = len(store)
+    for name, links, apply in (("map", store._image[:n], system.map_batch),
+                               ("map_inv", store._preimage[:n], system.map_inv_batch)):
+        linked = np.flatnonzero(links >= 0)
+        if not len(linked):
+            continue
+        spaced = np.linspace(0, len(linked) - 1, min(MAP_CHECK_SAMPLE, len(linked))).astype(int)
+        rows = np.unique(linked[spaced])
+        source, saved = store._xy[rows], store._xy[links[rows]]
+        mapped = apply(source)
+        scale = np.maximum(1.0, np.maximum(np.abs(source).max(axis=1), np.abs(saved).max(axis=1)))
+        error = np.abs(mapped - saved).max(axis=1) / scale
+        worst = int(np.argmax(error))
+        if not error[worst] <= MAP_CHECK_RTOL:  # NaN fails too
+            raise ValueError(
+                f"the {name} given to load differs from the one the save was made with: row "
+                f"{rows[worst]} at {source[worst].tolist()} maps to {mapped[worst].tolist()}, its saved "
+                f"{'image' if name == 'map' else 'preimage'} is {saved[worst].tolist()} "
+                f"(relative error {error[worst]:.3g} > {MAP_CHECK_RTOL:g})")
 
 
 def _load_fixed_points(meta: dict, arrays: dict) -> list[FixedPoint]:
