@@ -31,12 +31,14 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from collections import Counter
 from typing import Callable, Literal, Iterable, Optional, Sequence, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
 
+from . import persist
 from .BridgeIterator import BridgeIterator
 from .DynamicalSystem import DynamicalSystem, MapFunc, JacFunc
 from .FixedPointSolver import FixedPointSolver
@@ -2041,6 +2043,58 @@ class TangleWorkbench:
             Number of new iterate relationships recorded.
         """
         return infer_iterates(self, sources)
+
+    # ── save and load (see persist) ──────────────────────────────────────────
+
+    def save(self, path: str | os.PathLike) -> None:
+        """
+        Write the workbench to ``<path>.npz`` and ``<path>.json``.
+
+        The whole state is saved, the segment index included, so a loaded
+        workbench re-saves byte-equal and continues with the bits this one would
+        give (see :mod:`~.persist`).
+
+        Args:
+            path: The stem of the two files.
+
+        Note:
+            A state left by :class:`~.budget.PointBudgetExceeded` is saved as it
+            is, and the loaded state is just as non-resumable: the bridges whose
+            image the budget abandoned travel, so :meth:`iterate_bridge` refuses
+            them again, and a half-mapped growth chain stays half-mapped.
+        """
+        persist.save_workbench(self, path)
+
+    @classmethod
+    def load(
+        cls,
+        path: str | os.PathLike,
+        dynamical_map: MapFunc,
+        dynamical_map_inverse: MapFunc,
+        jacobian_function: Optional[JacFunc] = None,
+    ) -> "TangleWorkbench":
+        """
+        A workbench saved by :meth:`save` (or the workbench of a session's save).
+
+        Nothing in the files is executed: the map, its inverse and the Jacobian
+        are given here, and must be the ones the save was made with.
+
+        Args:
+            path: The stem of the two files.
+            dynamical_map: The area-preserving map.
+            dynamical_map_inverse: Its inverse.
+            jacobian_function: Optional analytic Jacobian.
+
+        Returns:
+            The loaded workbench.
+
+        Raises:
+            ValueError: The save is of another format, or its npz holds an
+                object array.
+        """
+        workbench = cls(dynamical_map, dynamical_map_inverse, jacobian_function)
+        persist.restore_workbench(workbench, *persist.read(path))
+        return workbench
 
     def plot_all_bridges(self, bridges: Optional[list[Bridge]] = None) -> None:
         """
