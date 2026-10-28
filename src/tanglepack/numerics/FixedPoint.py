@@ -78,8 +78,8 @@ class FixedPoint:
             The chains on its slots live in the fixed point's slot table,
             ``(stability, orbit_index, branch) -> Chain``, read by
             :meth:`slot_chain` and written by :meth:`attach_chain`.
-        coordinates (List[np.ndarray]): The orbit points, each ``(2,)`` (the
-            solver stores the ``(period, 2)`` array).
+        coordinates (NDArray[np.float64]): The orbit points, one ``(2,)`` row
+            each (the solver stores a ``(period, 2)`` array; a load keeps it).
 
         accuracy (float): Computed as the norm of the difference between the
             fixed point and it's iterate. {latex}
