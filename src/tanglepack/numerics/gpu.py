@@ -34,8 +34,9 @@ What runs where
   - the segment build (``Tangle._query_curve``): libspatialindex runs only on
     the CPU;
   - crossing resolution (``Tangle._find_true_intersection``): a 2x2 LAPACK
-    solve per candidate pair, not a batched kernel;
-  - the point store and the intersection registry.
+    solve per candidate pair, not a batched kernel.
+
+  The point store and the intersection registry stay host arrays.
 
 * **A device result is parity to tolerance, never bit-identical.** CuPy's
   ``pow`` and ``hypot`` differ from numpy's in the last bit, so the curvature

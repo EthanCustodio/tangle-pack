@@ -701,8 +701,9 @@ From `stress/numerics/report/report.pdf` (experiments E1-E12; the E12 re-verific
   opt-in. Re-measured 2026-10-27: 0.98-1.00x end to end, the map 0.56-0.60% of growth, and the map,
   refinement, merge, segment build and crossing resolution together 3.5% of the 1e-7 scale series
   (a cap of 1.037x). The two geometry kernels `curvature_area_batch` and `chord_deviation_batch`
-  compute in their inputs' namespace (`numerics/namespace.py`); every other stage is host-only, each
-  for the reason `gpu.py` gives.
+  compute in their inputs' namespace (`numerics/namespace.py`), and the user's map runs on the device
+  under `enable_gpu`; merge, refinement's layer loop, the segment build and crossing resolution are
+  host-only, each for the reason `gpu.py` gives.
 - **Open for the author:** the blast-end same-stability count does not scale past about 10 blasts.
 
 ## O. Open items
