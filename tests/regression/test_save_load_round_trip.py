@@ -95,6 +95,14 @@ def test_a_loaded_crossing_keeps_its_types_and_its_curve(saved_workbench):
         assert copy.unstable_manifold is None or id(copy.unstable_manifold) in held
 
 
+def test_a_loaded_index_keeps_each_crossing_pair_in_its_operand_order(saved_workbench):
+    # A re-save cannot see this: a pair saved and rebuilt in one wrong order re-saves alike.
+    workbench, loaded, _ = saved_workbench
+    for pairs in ("_intersecting_segments", "_processed_pairs"):
+        assert {tuple(pair) for pair in getattr(loaded.Tangle, pairs)} == {
+            tuple(pair) for pair in getattr(workbench.Tangle, pairs)}
+
+
 def test_every_slot_holds_its_branch_chain(saved_workbench):
     _, loaded, _ = saved_workbench
     store = loaded.point_store

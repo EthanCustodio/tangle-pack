@@ -22,6 +22,7 @@ from cases import build_k10
 from helpers.fakes import bare_fixed_point
 from tanglepack import TangleWorkbench
 from tanglepack.numerics import persist
+from tanglepack.numerics.budget import PointBudgetExceeded
 from tanglepack.numerics.PointStore import PointStore
 
 
@@ -54,6 +55,45 @@ def test_a_save_of_another_format_is_refused(tmp_path):
     meta_path.write_text(json.dumps(meta))
     with pytest.raises(ValueError, match="format 2.*format 1"):
         _load(workbench, tmp_path / "k10")
+
+
+@pytest.mark.parametrize("version", [0, None])
+def test_an_older_or_unversioned_save_is_refused(version, tmp_path):
+    workbench = build_k10().workbench
+    workbench.save(tmp_path / "k10")
+    meta_path = tmp_path / "k10.json"
+    meta = json.loads(meta_path.read_text())
+    meta["format"] = version
+    meta_path.write_text(json.dumps(meta))
+    with pytest.raises(ValueError, match=f"format {version}.*format 1"):
+        _load(workbench, tmp_path / "k10")
+
+
+def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
+    # The law cases keep the default settings, abandon no bridge and leave no link
+    # undecided, so their round trips cannot tell whether these travel.
+    workbench = build_k10().workbench
+    workbench.max_points_per_step = 10
+    workbench.escape_radius = 7.5
+    workbench.resolution_ratio_threshold = 2.5
+    for bridge in workbench.bridges:
+        try:
+            workbench.iterate_bridge(bridge)
+        except PointBudgetExceeded:
+            break
+    abandoned = {bridge.id for bridge in workbench._half_iterated_bridges}
+    assert abandoned, "the budget must abandon a bridge for this test to mean anything"
+    first, *rest = workbench.intersection_registry.resolved_ids(3.0)
+    workbench.intersection_registry.unresolved_links = {first: tuple(rest[:2])}
+    workbench.save(tmp_path / "k10")
+
+    loaded = _load(workbench, tmp_path / "k10")
+    settings = ("area_cutoff", "max_points_per_step", "escape_radius", "resolution_ratio_threshold")
+    assert [getattr(loaded, name) for name in settings] == [getattr(workbench, name) for name in settings]
+    assert loaded.intersection_registry.unresolved_links == workbench.intersection_registry.unresolved_links
+    assert {bridge.id for bridge in loaded._half_iterated_bridges} == abandoned
+    with pytest.raises(RuntimeError, match="half-refined"):
+        loaded.iterate_bridge(loaded.bridge(next(iter(abandoned))))
 
 
 def test_an_object_array_is_refused(tmp_path):
