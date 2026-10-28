@@ -192,10 +192,18 @@ def figure_memory(runs: dict, base: dict, out: Path) -> Path:
     return path
 
 
-def figure_stage_peaks(runs: dict, out: Path) -> Path:
-    """Per case: the RSS peak inside each top-level stage call (transient peaks)."""
+def figure_stage_peaks(runs: dict, base: dict, out: Path) -> Optional[Path]:
+    """Per case: the RSS peak inside each top-level stage call (transient peaks).
+
+    A law case in ``base`` whose top-level stage calls match this run's, call for
+    call, draws its baseline peaks dashed; a case whose calls differ draws this run
+    alone. A folder with no law case draws nothing (None).
+    """
     cases = [c for c in CASE_ORDER if (c, "time") in runs and c != "scale"]
+    if not cases:
+        return None
     fig, ax = plt.subplots(figsize=(9, 3.6))
+    dashed = False
     for case, color in zip(cases, SLOTS):
         rec = runs[(case, "time")]
         ev = rec["timer"]["top_events"]
@@ -203,9 +211,21 @@ def figure_stage_peaks(runs: dict, out: Path) -> Path:
         after = np.array([e["rss_after"] - rec["rss_baseline"] for e in ev]) / 2**20
         ax.plot(np.arange(len(ev)), peaks, color=color, linewidth=2, label=case)
         ax.plot(np.arange(len(ev)), after, color=color, linewidth=1, linestyle=":")
+        ref = base.get((case, "time"))
+        if ref is not None and ([e["stage"] for e in ref["timer"]["top_events"]]
+                                != [e["stage"] for e in ev]):
+            print(f"stage_peak_rss: {case}'s stage calls differ from the baseline's; "
+                  "its baseline is not drawn")
+        elif ref is not None:
+            bev = ref["timer"]["top_events"]
+            ax.plot(np.arange(len(bev)),
+                    np.array([e["peak_rss"] - ref["rss_baseline"] for e in bev]) / 2**20,
+                    color=color, linewidth=1.5, linestyle="--")
+            dashed = True
     ax.set_xlabel("top-level stage call, in order", fontsize=8, color=MUTED)
     ax.set_ylabel("MB over baseline", fontsize=8, color=MUTED)
-    ax.set_title("peak RSS inside each stage call (solid) and after it (dotted)", fontsize=9,
+    ax.set_title("peak RSS inside each stage call (solid) and after it (dotted)"
+                 + ("; baseline peak dashed" if dashed else ""), fontsize=9,
                  loc="left", color=INK)
     ax.legend(frameon=False, fontsize=8)
     _style(ax)
@@ -321,7 +341,9 @@ def draw(out: Path, compare: Optional[Path] = None) -> list[Path]:
     if any(m == "time" for _, m in runs):
         paths.append(figure_stage_time(runs, base, out))
         paths.append(figure_memory(runs, base, out))
-        paths.append(figure_stage_peaks(runs, out))
+        peaks = figure_stage_peaks(runs, base, out)
+        if peaks is not None:
+            paths.append(peaks)
         paths += figure_scaling(runs, base, out)
     for p in paths:
         print("wrote", p)
