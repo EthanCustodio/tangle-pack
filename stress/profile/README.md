@@ -93,6 +93,20 @@ the baseline (32 blasts at 1e-7, 29 at 1e-9). The peak RSS fell least (3034.7 ->
 at 1e-7, 6632.6 -> 1930.8 at 1e-9): it is a transient inside a blast and bimodal from run to
 run (docs/numerics_arrays_plan_2026-10-23.md, Outcome row 10b).
 
+## Diagnose on new segments (D1)
+
+D1 (2026-10-28) runs the same-stability count's sweep inside strips across the sweep axis
+(`numerics/diagnostics.py`), and reran the first two commands above, unchanged, on `6860f99`,
+drawn with `--compare` beside `dc1bd0c` (the same `src` but for save / load, which the profiler
+never runs): `figures/numerics_profile/6860f99/` (12 json, 6 png, 1.3 MB) and
+`figures/numerics_profile/6860f99_scale1e-9/` (1 json, 5 png, 516 KB). The result, `dc1bd0c` ->
+`6860f99`: `diagnose` 42.0 -> 22.4 s and blast 52.2 -> 32.5 s at 1e-7, `diagnose` 52.6 -> 30.0 s
+and blast 67.7 -> 45.2 s at 1e-9. The peak RSS over the baseline fell 2015.0 -> 1054.6 MiB at
+1e-7; at 1e-9 it moved from blast 12 to blast 19 and reads 1930.8 -> 2008.1 MiB (one run each).
+Nothing computed moved: every blast's `same_stability_count`, `pip_depth` and `points_created`
+and the census (231.9 MiB at 1e-7, 502.3 MiB at 1e-9) are `dc1bd0c`'s (32 blasts at 1e-7, 29 at
+1e-9).
+
 ## Identity probe
 
 `identity_probe.py` checks D3 for every slice: the points, the registry and the topology of
