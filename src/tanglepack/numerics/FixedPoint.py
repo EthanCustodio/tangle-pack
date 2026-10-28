@@ -549,9 +549,12 @@ class FixedPoint:
             branch: The eigendirection, 0 or 1.
 
         Raises:
+            ValueError: ``stability`` is neither ``"unstable"`` nor ``"stable"``,
+                or the slot already holds another chain.
             IndexError: ``branch`` is not 0 or 1.
-            ValueError: The slot already holds another chain.
         """
+        if stability not in ("unstable", "stable"):
+            raise ValueError(f"no slot for stability {stability!r}")
         if not 0 <= branch < _EIGENDIRECTIONS:
             raise IndexError(f"branch {branch} is no eigendirection slot")
         held = self._slots.get((stability, orbit_index, branch))

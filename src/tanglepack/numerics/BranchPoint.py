@@ -102,7 +102,8 @@ class BranchPoint:
         chain names this point as its anchor.
 
         Raises:
-            ValueError: The slot already holds another chain.
+            ValueError: ``stability`` is neither ``"unstable"`` nor ``"stable"``,
+                or the slot already holds another chain.
             IndexError: ``branch`` is not 0 or 1.
         """
         self.fixed_point.attach_chain(chain, stability, self.orbit_index, branch)
