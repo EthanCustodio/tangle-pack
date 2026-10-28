@@ -59,7 +59,9 @@ Components of the census (bytes):
 * ``curve_ids`` -- the store's ``Chain`` objects and their ``ids`` arrays, the
   order of points along every curve (count ``chains``, the live ones); 0 on a
   tree without them;
-* ``branch_points`` -- the ``BranchPoint`` objects;
+* ``branch_points`` -- the ``BranchPoint`` objects: the object, its
+  ``__dict__`` and the lists or arrays in it (none since N8, where a
+  ``BranchPoint`` is a view of its ``FixedPoint``);
 * ``segment_index`` -- ``Tangle``'s Python side: ``_Segment`` objects, the
   edge / owner / lookup dicts and sets (the query-only edge set counted with
   ``edge_to_sid``), the crossing-pair sets;
@@ -72,7 +74,9 @@ Components of the census (bytes):
   record's memo bytes still stack;
 * ``registry`` -- the intersection registry (crossings, orders, iterate table);
 * ``topology`` -- the session's trellis and topology caches, alphabet, zones;
-* ``workbench_other`` -- everything else the workbench holds.
+* ``workbench_other`` -- everything else the workbench holds, the fixed
+  points' slot tables included (since N8); the walk stops at a ``Chain``,
+  which ``curve_ids`` counts.
 
 Dev Notes:
     The wrapped functions are listed in :data:`STAGES`; a renamed library
@@ -310,22 +314,6 @@ def malloc_trim() -> None:
         _libc.malloc_trim(0)
 
 
-def _point_bytes(p: Any) -> int:
-    """One point: object, ``__dict__``, ``_coords`` and its own scalars (a slotted
-    point over a store row: the object and its row ``int``)."""
-    if not hasattr(p, "__dict__"):
-        return sys.getsizeof(p) + sys.getsizeof(p.row)
-    size = sys.getsizeof(p) + sys.getsizeof(p.__dict__)
-    coords = p.__dict__.get("_coords")
-    if coords is not None:
-        size += sys.getsizeof(coords)
-    for name in ("x", "y", "cdist", "edist"):
-        value = p.__dict__.get(name)
-        if value is not None:
-            size += sys.getsizeof(value)
-    return size
-
-
 def _walk_ids(manifold: Any) -> list[int]:
     """The store rows of a manifold, root to its PHYSICAL end (the end of its
     chain), the periodic point (no row) left out.
@@ -401,11 +389,11 @@ def _tangle_bytes(tangle: Any) -> dict:
 
 def census(session: Any, *, measure_rtree: bool = False) -> dict:
     """Bytes by component of everything the session holds (see the module docstring)."""
-    import tanglepack.numerics as numerics
     from tanglepack.numerics.BranchPoint import BranchPoint
     from tanglepack.numerics.BaseManifold import BaseManifold
     from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
     from tanglepack.numerics.FixedPoint import FixedPoint
+    from tanglepack.numerics.PointStore import Chain
 
     t0 = time.perf_counter()
     workbench = session.workbench
@@ -415,9 +403,6 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
             f"the census reads a point store and curve rows (the order arrays, N4, on): "
             f"{REPO} has none; compare its committed census JSON instead (--compare)"
         )
-    # A tree before N7b also reads a row as a point object (its ``BasePoint``):
-    # those count under ``points_*``; from N7b on the class is the BranchPoint alone.
-    point_class = getattr(numerics, "BasePoint", BranchPoint)
     gc.collect()
 
     curves = list(workbench.manifolds.values())
@@ -433,26 +418,12 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
     counts = defaultdict(int)
     sizes = defaultdict(int)
     for obj in gc.get_objects():
-        if not isinstance(obj, point_class):
-            continue
         if isinstance(obj, BranchPoint):
-            kind = "branch_points"
-            size = sys.getsizeof(obj) + sys.getsizeof(obj.__dict__) + sum(
+            counts["branch_points"] += 1
+            sizes["branch_points"] += sys.getsizeof(obj) + sys.getsizeof(obj.__dict__) + sum(
                 sys.getsizeof(v) for v in obj.__dict__.values()
                 if isinstance(v, (list, tuple, np.ndarray))
             )
-        else:
-            if obj.row in on_curve:
-                kind = "points_curve"
-            elif obj.row in on_image:
-                kind = "points_image"
-            elif obj.cdist is None:
-                kind = "points_phantom"
-            else:
-                kind = "points_other"
-            size = _point_bytes(obj)
-        counts[kind] += 1
-        sizes[kind] += size
     rows = len(store)
     on_a_curve = np.zeros(rows, bool)
     on_a_curve[list(on_curve | on_image)] = True
@@ -482,9 +453,6 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
     rtree_entries = sum(tangle_parts["rtree_entries"].values())
     sizes["rtree"] = int(rtree_entries * RTREE_BYTES_PER_ENTRY)
 
-    def is_point(o: Any) -> bool:
-        return isinstance(o, point_class)
-
     held_curves = {id(c) for c in curves + bridges + images}
     seen: set[int] = set()
     # curve objects (the manifold / bridge objects and their dicts)
@@ -495,7 +463,7 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
     sizes["curve_objects"] = curve_bytes
 
     def stop_numerics(o: Any) -> bool:
-        return (is_point(o) or o is store or (isinstance(o, BaseManifold) and id(o) in held_curves)
+        return (isinstance(o, BranchPoint) or o is store or (isinstance(o, BaseManifold) and id(o) in held_curves)
                 or o is workbench or o is tangle or isinstance(o, FixedPoint)
                 or type(o).__name__ in ("Index", "Property", "DynamicalSystem",
                                         "ManifoldMachine", "ManifoldInitializer",
@@ -513,8 +481,10 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
 
     sizes["topology"] = _deep_size(topo_roots, seen, stop_topology)
     seen.add(id(session.__dict__))
+    # The fixed points' slot tables name chains, which ``curve_ids`` counts.
     sizes["workbench_other"] = _deep_size([workbench.__dict__], seen,
-                                          lambda o: is_point(o) or o is tangle or o is store)
+                                          lambda o: isinstance(o, (BranchPoint, Chain))
+                                          or o is tangle or o is store)
 
     result = {
         "bytes": dict(sizes),
