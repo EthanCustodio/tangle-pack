@@ -359,6 +359,24 @@ def test_the_listing_and_the_count_are_the_sweep_s_in_its_order_and_orientation(
     assert count.curve_pairs == tuple(sorted({f"{a} x {b}" for a, _, b, _, inside in involved if inside}))
 
 
+def test_on_a_tie_the_sweep_runs_along_x():
+    """Two segments, each the other's mirror in the diagonal, overlap as often
+    along x as along y: the sweep runs along x, so the hit names first the
+    segment that starts further left (the lower one starts first along y; D1,
+    2026-10-28: no random seed of the oracle test ties)."""
+    fp = bare_fixed_point(label="A")
+    workbench = polyline_workbench(
+        fp,
+        {
+            (fp, "unstable", 0, 0): np.array([[1.0, 0.0], [2.0, 3.0]]),
+            (fp, "unstable", 0, 1): np.array([[0.0, 1.0], [3.0, 2.0]]),
+        },
+    )
+    (hit,) = same_stability_crossings(workbench, region="all")
+    assert (hit.curve_a, hit.curve_b) == ("A unstable 0.1", "A unstable 0.0")
+    assert np.allclose(hit.point, (1.5, 1.5))
+
+
 @pytest.mark.perf
 def test_the_diagnostic_costs_at_most_half_a_compute_intersections():
     """On the largest law build (the inversion case's ~5e4 points, its escaping
