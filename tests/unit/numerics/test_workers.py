@@ -1,8 +1,8 @@
 """The ``workers`` option runs on several cores and changes nothing computed.
 
-``workers`` splits a large map batch across a thread or forked process pool,
-tests the same-stability sweep's pair blocks on threads and passes the cores
-to the blast's separation queries. For an elementwise map every result is the
+``workers`` splits a large map batch across a thread or forked process pool
+and tests the same-stability sweep's pair blocks on threads. For an
+elementwise map every result is the
 serial one, number for number: each test compares workers 1 with workers 4.
 These are execution properties, not physical laws, so they live in the unit
 tier. The builds are small, so where a test must see the map split it lowers

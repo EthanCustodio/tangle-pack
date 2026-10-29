@@ -163,8 +163,8 @@ class TangleWorkbench:
             (see :attr:`max_points_per_step`).
         escape_radius: Optional ``max|coordinate|`` above which a growth step
             logs a WARNING; off by default.
-        workers: Cores the batched map, the same-stability sweep and the blast's
-            separation queries run on (see :attr:`workers`); 1 by default.
+        workers: Cores the batched map and the same-stability sweep run on
+            (see :attr:`workers`); 1 by default.
         map_executor: The pool the map split runs in (see :attr:`map_executor`).
         resolution_ratio_threshold: Part of the definition of N: a detection
             whose resolution ratio is below it is no crossing (see the
@@ -230,9 +230,8 @@ class TangleWorkbench:
                 ``None`` disables it.
             escape_radius (Optional[float]): ``max|coordinate|`` above which a
                 growth step warns; ``None`` (default) never warns.
-            workers (int): Cores to run the batched map, the same-stability
-                sweep and the separation queries on; 1 (default) runs them in
-                the caller. Nothing computed depends on it for an elementwise
+            workers (int): Cores to run the batched map and the
+                same-stability sweep on; 1 (default) runs them in the caller. Nothing computed depends on it for an elementwise
                 map (:mod:`.DynamicalSystem`).
             map_executor (MapExecutor): ``"thread"`` (default) or
                 ``"process"``, the pool the map split runs in.
@@ -360,8 +359,8 @@ class TangleWorkbench:
     @property
     def workers(self) -> int:
         """
-        Cores the batched map, the same-stability sweep and the blast's
-        separation queries run on; 1 runs them in the caller.
+        Cores the batched map and the same-stability sweep run on; 1 runs
+        them in the caller.
 
         A runtime resource: :meth:`save` does not store it and :meth:`load`
         gives 1. For an elementwise map nothing computed depends on it.

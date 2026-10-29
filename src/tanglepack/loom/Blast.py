@@ -113,12 +113,13 @@ class _Cloud:
     there are O(log n) trees and each point is rebuilt O(log n) times. A query
     reads every tree. The verdict is that of one tree over the union -- the
     distance to a union is the least over its parts -- without building one
-    tree per child over everything kept so far.
+    tree per child over everything kept so far. The queries run in the caller:
+    a child's interior is too small for ``workers`` threads to pay (2026-10-29,
+    the 1e-7 scale series: separation 4.0 s at one worker, 5.8 s at 16).
     """
 
-    def __init__(self, workers: int) -> None:
+    def __init__(self) -> None:
         self.trees: list[tuple[np.ndarray, cKDTree]] = []
-        self.workers = workers
 
     def add(self, interiors: list[np.ndarray]) -> None:
         """Hold the points of ``interiors`` too (one batch: one merge)."""
@@ -138,7 +139,7 @@ class _Cloud:
         a farther one cannot change the verdict.
         """
         return len(points) > 0 and any(
-            float(tree.query(points, distance_upper_bound=separation, workers=self.workers)[0].min())
+            float(tree.query(points, distance_upper_bound=separation)[0].min())
             < separation
             for _held, tree in self.trees
         )
@@ -403,7 +404,7 @@ def blast_zone(
     # cross (the "zig-zag"). Stopping a bridge whose image lands that close to ANY
     # existing fold (not just a same-generation sibling) keeps the blast on the
     # well-resolved side of that limit while still letting it extend into fresh space.
-    cloud = _Cloud(workbench.workers)
+    cloud = _Cloud()
     if min_separation is not None:
         cloud.add([_interior_points(b) for b in workbench.bridges])
 

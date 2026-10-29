@@ -158,7 +158,7 @@ def _blast_view(result) -> list:
 def test_workers_give_the_same_blast(monkeypatch):
     """A ``cases.SERIES`` blast with ``min_separation`` keeps and drops the same
     children, creates the same points and registers the same crossings at
-    workers 1 and 4 (every map batch split, the separation queried on 4 cores)."""
+    workers 1 and 4 (every map batch split, the sweep on 4 threads)."""
     monkeypatch.setattr(importlib.import_module("tanglepack.numerics.DynamicalSystem"),
                         "MIN_PARALLEL_POINTS", 16)
     series = cases.SERIES["k28_series"]
