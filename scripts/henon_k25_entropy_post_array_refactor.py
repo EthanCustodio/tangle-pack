@@ -107,11 +107,12 @@ def components_at_finest() -> None:
 
 
 def sweep_done(case: str, cutoff: float, max_blasts: int) -> bool:
-    """A sweep is finished when its JSON records a stop or a row at its last blast."""
+    """A sweep is finished when its JSON records a stop or a row at its last blast (an unreadable one is not)."""
     path = entropy.data_path(case, cutoff)
-    if not path.exists():
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
         return False
-    record = json.loads(path.read_text())
     return bool(record["stopped"] or (record["rows"] and record["rows"][-1]["blasts"] >= max_blasts))
 
 

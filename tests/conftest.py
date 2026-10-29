@@ -50,6 +50,11 @@ Layout (tiers; every test basename is unique, no ``__init__.py``):
 * ``unit/numerics``, ``unit/topology``, ``unit/loom`` -- rules and kernels of
   each layer, public API first (private access only for the pure kernels the
   2026-10-05 policy allows).
+* ``unit/scripts`` -- the sweep scripts' plumbing (``scripts/`` on
+  ``sys.path``): the pool of ``sweep_pool.py`` on tiny ``python -c``
+  subprocesses (a second or two of real time each; ``psutil`` reads their
+  memory), and the sweeps' job lists and resume rules on hand-written files
+  and a stubbed pool or frame builder, never a tangle.
 * ``facade/`` -- ``TangleSession``: cache freshness (every product x event equals a
   direct build; reuse only on no change), session = direct build, fan-outs,
   delegates and reports.

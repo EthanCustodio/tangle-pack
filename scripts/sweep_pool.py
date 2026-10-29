@@ -174,8 +174,8 @@ def run_pool(
     (out / "logs").mkdir(parents=True, exist_ok=True)
     status = read_status(out)
 
-    def record(job: Job, outcome: str, returncode: object = "", seconds: float = 0.0, peak: float = 0.0) -> None:
-        status[job.name] = {"name": job.name, "status": outcome, "returncode": str(returncode),
+    def record(job: Job, outcome: str, returncode: Optional[int] = None, seconds: float = 0.0, peak: float = 0.0) -> None:
+        status[job.name] = {"name": job.name, "status": outcome, "returncode": "" if returncode is None else str(returncode),
                             "seconds": f"{seconds:.1f}", "peak_rss_gb": f"{peak:.3f}"}
         write_status(out, status)
         print(f"[pool] {job.name}: {outcome}" + (f" ({seconds:.0f} s, {peak:.2f} GB)" if seconds else ""), flush=True)

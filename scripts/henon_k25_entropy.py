@@ -326,7 +326,10 @@ def sweep(case: str, area_cutoff: float, max_blasts: int, max_seconds: Optional[
     start = time.perf_counter()
 
     def save() -> None:
-        path.write_text(json.dumps(record, indent=1))
+        # Written aside and renamed, so a job killed mid-save leaves the last complete record.
+        partial = path.with_name(path.name + ".partial")
+        partial.write_text(json.dumps(record, indent=1))
+        partial.replace(path)
         write_summary_row(record, path.with_suffix(".csv"))
 
     try:

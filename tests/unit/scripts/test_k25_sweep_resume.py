@@ -1,7 +1,8 @@
-"""The k25 entropy sweep's resume rule (``sweep_done``) and its summary row, on hand-written records."""
+"""The k25 entropy sweep's resume rule (``sweep_done``), its pool's jobs and its summary row, on hand-written records."""
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import sys
@@ -12,6 +13,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 
 import henon_k25_entropy as entropy  # noqa: E402
+import henon_k25_entropy_post_array_refactor as post  # noqa: E402
 from henon_k25_entropy_post_array_refactor import sweep_done  # noqa: E402
 
 
@@ -42,6 +44,45 @@ def test_a_sweep_is_done_on_a_stop_or_a_row_at_its_last_blast(rec, done):
 
 def test_a_sweep_without_its_json_is_not_done():
     assert not sweep_done("p1", 1e-5, max_blasts=2)
+
+
+def test_a_truncated_json_is_not_done():
+    entropy.data_path("p1", 1e-5).write_text(json.dumps(record([], stopped="x"))[:-7])
+    assert not sweep_done("p1", 1e-5, max_blasts=2)
+
+
+def pool_jobs(monkeypatch, **options) -> tuple[list, dict]:
+    """The jobs and keywords :func:`post.pool` hands :func:`sweep_pool.run_pool` (stubbed: nothing runs)."""
+    seen: dict = {}
+    monkeypatch.setattr(post, "run_pool", lambda jobs, **kwargs: seen.update(jobs=jobs, kwargs=kwargs))
+    args = argparse.Namespace(cases=["p1", "p3"], cutoffs=[1e-5, 1e-6], max_blasts=2, max_seconds=None,
+                              max_rss_gb=4.0, processes=2, workers=3, retry=False)
+    vars(args).update(options)
+    post.pool(args)
+    return seen["jobs"], seen["kwargs"]
+
+
+def test_the_pool_has_one_sweep_job_per_case_and_cutoff_each_reading_its_own_files(monkeypatch):
+    jobs, kwargs = pool_jobs(monkeypatch)
+    pairs = [("p1", 1e-5), ("p3", 1e-5), ("p1", 1e-6), ("p3", 1e-6)]
+    assert len({job.name for job in jobs}) == len(jobs) == len(pairs)
+    for job, (case, cutoff) in zip(jobs, pairs):
+        command = job.argv[job.argv.index("sweep"):]
+        assert command[:5] == ["sweep", "--cases", case, "--cutoffs", f"{cutoff:g}"]
+        assert "--workers" not in command
+        assert job.csv == entropy.data_path(case, cutoff).with_suffix(".csv")
+    assert (kwargs["processes"], kwargs["workers"], kwargs["merged_csv"]) == (2, 3, entropy.DATA_DIR / "sweeps.csv")
+
+    write({**record([], stopped="done"), "case": "p3", "area_cutoff": 1e-6})
+    assert [job.done() for job in jobs] == [False, False, False, True]
+
+
+def test_the_pool_time_cap_is_behind_the_sweep_soft_stop(monkeypatch):
+    jobs, kwargs = pool_jobs(monkeypatch, max_seconds=60.0)
+    assert all(job.argv[job.argv.index("--max-seconds") + 1] == "60" for job in jobs)
+    assert kwargs["max_seconds"] == post.HARD_TIME_FACTOR * 60.0 > 60.0
+    assert kwargs["max_rss_gb"] == 4.0
+    assert pool_jobs(monkeypatch)[1]["max_seconds"] is None
 
 
 def read_row(path: Path) -> tuple[list[str], list[dict[str, str]]]:
