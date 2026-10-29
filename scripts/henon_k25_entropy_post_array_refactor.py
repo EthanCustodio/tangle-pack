@@ -12,6 +12,13 @@ memory budget runs out.
 Subcommands (one process each; ``PYTHONPATH=src env/bin/python scripts/henon_k25_entropy_post_array_refactor.py``):
 
 * ``sweep --cases p1 --cutoffs 1e-10`` -- the pruned entropy sweep (``data/``);
+* ``pool --cases p1 p3 --cutoffs 1e-9 1e-10 --processes 4 --workers 4`` -- one
+  ``sweep`` job per case and cutoff in ``scripts/sweep_pool.py`` (``pool/``:
+  status and logs), merged into ``data/sweeps.csv``; ``--max-rss-gb`` and
+  ``--max-seconds`` are both the sweep's own soft stop (before a blast) and the
+  pool's hard cap (kills the job), and a rerun skips every finished job (one
+  whose JSON records a stop or its last blast) and every capped one unless
+  ``--retry``;
 * ``unpruned --cases p1 --cutoff 1e-9`` -- the unpruned series of
   ``henon_k25_components_unpruned.py`` (``components/unpruned/data/``);
 * ``length ...`` -- ``henon_k25_length_growth.py`` (``length_growth/``), its arguments passed on;
@@ -25,6 +32,7 @@ Subcommands (one process each; ``PYTHONPATH=src env/bin/python scripts/henon_k25
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 from pathlib import Path
@@ -39,6 +47,7 @@ import henon_k25_components_unpruned as unpruned  # noqa: E402
 import henon_k25_entropy as entropy  # noqa: E402
 import henon_k25_length_compare as length_compare  # noqa: E402
 import henon_k25_length_growth as length_growth  # noqa: E402
+from sweep_pool import Job, run_pool  # noqa: E402
 from symbolic_figures import FIGURES_DIR, configure_logging  # noqa: E402
 
 OUT_DIR = FIGURES_DIR / "henon_k25_entropy_post_array_refactor"
@@ -93,6 +102,32 @@ def components_at_finest() -> None:
         draw(results, label)
 
 
+def sweep_done(case: str, cutoff: float, max_blasts: int) -> bool:
+    """A sweep is finished when its JSON records a stop or a row at its last blast."""
+    path = entropy.data_path(case, cutoff)
+    if not path.exists():
+        return False
+    record = json.loads(path.read_text())
+    return bool(record["stopped"]) or bool(record["rows"]) and record["rows"][-1]["blasts"] >= max_blasts
+
+
+def pool(args: argparse.Namespace) -> None:
+    """One ``sweep`` job per (case, cutoff) in a :func:`sweep_pool.run_pool`, merged into ``data/sweeps.csv``."""
+    limits = [*(["--max-seconds", f"{args.max_seconds:g}"] if args.max_seconds is not None else []),
+              "--max-rss-gb", f"{args.max_rss_gb:g}"]
+    jobs = [
+        Job(f"{case}_a{cutoff:.0e}",
+            [sys.executable, str(Path(__file__).resolve()), "sweep", "--cases", case, "--cutoffs", f"{cutoff:g}",
+             "--max-blasts", str(args.max_blasts), *limits],
+            lambda case=case, cutoff=cutoff: sweep_done(case, cutoff, args.max_blasts),
+            csv=entropy.data_path(case, cutoff).with_suffix(".csv"))
+        for cutoff in args.cutoffs for case in args.cases
+    ]
+    run_pool(jobs, processes=args.processes, workers=args.workers, out=OUT_DIR / "pool",
+             max_rss_gb=args.max_rss_gb, max_seconds=args.max_seconds,
+             merged_csv=entropy.DATA_DIR / "sweeps.csv", retry=args.retry)
+
+
 def main() -> None:
     command, rest = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("plot", [])
     configure_logging()
@@ -110,15 +145,20 @@ def main() -> None:
     parser.add_argument("--max-blasts", type=int, default=400)
     parser.add_argument("--max-seconds", type=float, default=None)
     parser.add_argument("--max-rss-gb", type=float, default=64.0)
+    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--processes", type=int, default=1)
+    parser.add_argument("--retry", action="store_true")
     args = parser.parse_args(rest)
     if command == "sweep":
         for cutoff in args.cutoffs:
             for case in args.cases:
-                entropy.sweep(case, cutoff, args.max_blasts, args.max_seconds, args.max_rss_gb)
+                entropy.sweep(case, cutoff, args.max_blasts, args.max_seconds, args.max_rss_gb, args.workers)
+    elif command == "pool":
+        pool(args)
     elif command == "unpruned":
         unpruned.install()
         for case in args.cases:
-            entropy.sweep(case, args.cutoff, args.max_blasts, args.max_seconds, args.max_rss_gb)
+            entropy.sweep(case, args.cutoff, args.max_blasts, args.max_seconds, args.max_rss_gb, args.workers)
     elif command == "plot":
         entropy.draw_figures()
         sys.argv = [sys.argv[0], "--cutoff", f"{args.cutoff:g}"]

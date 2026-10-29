@@ -68,6 +68,7 @@ Dev Notes:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import logging
 import math
@@ -267,6 +268,22 @@ def data_path(case: str, area_cutoff: float) -> Path:
     return DATA_DIR / f"{case}_a{area_cutoff:.0e}.json"
 
 
+#: The columns of a sweep's summary CSV (``data/<case>_a<cutoff>.csv``, its last step).
+SUMMARY_COLUMNS = ["case", "area_cutoff", "blasts", "entropy", "entropy_class", "reliable", "points",
+                   "seconds", "peak_gb", "stopped"]
+
+
+def write_summary_row(record: dict, path: Path) -> None:
+    """One CSV row summing a sweep's record up at its last step (empty fields before the first)."""
+    last = record["rows"][-1] if record["rows"] else {}
+    row = {"case": record["case"], "area_cutoff": f"{record['area_cutoff']:g}", "stopped": record["stopped"] or ""}
+    row.update({key: last.get(key, "") for key in SUMMARY_COLUMNS if key not in row})
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SUMMARY_COLUMNS)
+        writer.writeheader()
+        writer.writerow(row)
+
+
 def resident_gb(field: str = "VmRSS") -> float:
     """This process's resident memory in GB (Linux ``/proc``; 0 elsewhere); ``VmHWM`` is its peak."""
     try:
@@ -285,7 +302,7 @@ def arc_length(bridge) -> float:
 
 
 def sweep(case: str, area_cutoff: float, max_blasts: int, max_seconds: Optional[float],
-          max_rss_gb: Optional[float] = None) -> dict:
+          max_rss_gb: Optional[float] = None, workers: int = 1) -> dict:
     """
     Build one case and blast it step by step, measuring after every step.
 
@@ -296,9 +313,11 @@ def sweep(case: str, area_cutoff: float, max_blasts: int, max_seconds: Optional[
         max_seconds: Stop before a step once the sweep has run this long.
         max_rss_gb: Stop before a step whose peak resident memory, extrapolated
             by the last step's growth, would pass this many GB.
+        workers: The session's ``workers`` (set once the case is built).
 
     Returns:
-        The sweep's record (also written to :func:`data_path` after every step).
+        The sweep's record (also written to :func:`data_path` after every
+        step, with its summary row beside it as ``.csv``).
     """
     path = data_path(case, area_cutoff)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -308,9 +327,11 @@ def sweep(case: str, area_cutoff: float, max_blasts: int, max_seconds: Optional[
 
     def save() -> None:
         path.write_text(json.dumps(record, indent=1))
+        write_summary_row(record, path.with_suffix(".csv"))
 
     try:
         session, fixed_points, zones = build_case(case, area_cutoff)
+        session.workers = workers
         pip_depth: dict = {}
         blast_points = 0
         previous_peak = resident_gb("VmHWM")
@@ -869,6 +890,7 @@ def main() -> None:
                         help="stop a sweep before the next blast once it has run this long")
     parser.add_argument("--max-rss-gb", type=float, default=20.0,
                         help="stop a sweep before a blast predicted to peak past this resident memory")
+    parser.add_argument("--workers", type=int, default=1, help="the cores of each sweep's session (default 1)")
     parser.add_argument("--plot-only", action="store_true", help="redraw the figures from the data")
     args = parser.parse_args()
     configure_logging()
@@ -877,7 +899,7 @@ def main() -> None:
     if not args.plot_only:
         for cutoff in args.cutoffs:
             for case in args.cases:
-                sweep(case, cutoff, args.max_blasts, args.max_seconds, args.max_rss_gb)
+                sweep(case, cutoff, args.max_blasts, args.max_seconds, args.max_rss_gb, args.workers)
     draw_figures()
 
 
