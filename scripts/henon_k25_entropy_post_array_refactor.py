@@ -15,10 +15,11 @@ Subcommands (one process each; ``PYTHONPATH=src env/bin/python scripts/henon_k25
 * ``pool --cases p1 p3 --cutoffs 1e-9 1e-10 --processes 4 --workers 4`` -- one
   ``sweep`` job per case and cutoff in ``scripts/sweep_pool.py`` (``pool/``:
   status and logs), merged into ``data/sweeps.csv``; ``--max-rss-gb`` and
-  ``--max-seconds`` are both the sweep's own soft stop (before a blast) and the
-  pool's hard cap (kills the job), and a rerun skips every finished job (one
-  whose JSON records a stop or its last blast) and every capped one unless
-  ``--retry``;
+  ``--max-seconds`` are the sweep's own soft stop (before a blast), and the
+  pool's hard cap (kills the job) is the same memory and ``HARD_TIME_FACTOR``
+  times the time, so the soft time stop fires first; a rerun skips every
+  finished job (one whose JSON records a stop or its last blast) and every
+  capped one unless ``--retry``;
 * ``unpruned --cases p1 --cutoff 1e-9`` -- the unpruned series of
   ``henon_k25_components_unpruned.py`` (``components/unpruned/data/``);
 * ``length ...`` -- ``henon_k25_length_growth.py`` (``length_growth/``), its arguments passed on;
@@ -51,6 +52,9 @@ from sweep_pool import Job, run_pool  # noqa: E402
 from symbolic_figures import FIGURES_DIR, configure_logging  # noqa: E402
 
 OUT_DIR = FIGURES_DIR / "henon_k25_entropy_post_array_refactor"
+#: The pool's hard time cap over ``--max-seconds``: the sweep only checks its clock between
+#: blasts, and the last blast of a series can take about as long as all before it.
+HARD_TIME_FACTOR = 2.0
 
 
 def install() -> None:
@@ -108,7 +112,7 @@ def sweep_done(case: str, cutoff: float, max_blasts: int) -> bool:
     if not path.exists():
         return False
     record = json.loads(path.read_text())
-    return bool(record["stopped"]) or bool(record["rows"]) and record["rows"][-1]["blasts"] >= max_blasts
+    return bool(record["stopped"] or (record["rows"] and record["rows"][-1]["blasts"] >= max_blasts))
 
 
 def pool(args: argparse.Namespace) -> None:
@@ -124,7 +128,8 @@ def pool(args: argparse.Namespace) -> None:
         for cutoff in args.cutoffs for case in args.cases
     ]
     run_pool(jobs, processes=args.processes, workers=args.workers, out=OUT_DIR / "pool",
-             max_rss_gb=args.max_rss_gb, max_seconds=args.max_seconds,
+             max_rss_gb=args.max_rss_gb,
+             max_seconds=None if args.max_seconds is None else HARD_TIME_FACTOR * args.max_seconds,
              merged_csv=entropy.DATA_DIR / "sweeps.csv", retry=args.retry)
 
 

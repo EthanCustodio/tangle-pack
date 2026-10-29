@@ -74,7 +74,10 @@ A job writes ``rows/<k>.csv``, the frame and its geometry as each ``k``
 finishes; rerun the same command after a stop and a job warm-steps (no blast)
 through every ``k`` whose row exists, so the pip track continues to the next
 missing one, and a finished job is skipped (a capped one too, unless
-``--retry``). The rows are then merged into ``zones.csv`` (sorted by ``k``)
+``--retry``). A ``k`` whose build fails (``ValueError``, ``PointBudgetExceeded``)
+leaves ``rows/<k>.skipped`` with its error instead of a row: it counts as
+finished, a rerun skips it as the in-process run does, and deleting the file
+rebuilds it. The rows are then merged into ``zones.csv`` (sorted by ``k``)
 and the summary drawn. ``--axes common`` needs every frame's box, so it is
 refused with ``--processes``. The blast cost grows ~1.4x per blast at high
 ``k`` (``k = 4``: ~2 min a frame).
@@ -796,6 +799,11 @@ def row_path(out: Path, k: float) -> Path:
     return out / "rows" / f"{frame_name(k)}.csv"
 
 
+def skip_path(out: Path, k: float) -> Path:
+    """``rows/<k>.skipped``: a ``--job`` frame whose build failed, its error inside; a rerun does not retry it."""
+    return out / "rows" / f"{frame_name(k)}.skipped"
+
+
 def padded(box: tuple[float, float, float, float], pad: float) -> tuple[float, float, float, float]:
     """A box grown by ``pad`` times its larger side."""
     xmin, xmax, ymin, ymax = box
@@ -803,13 +811,17 @@ def padded(box: tuple[float, float, float, float], pad: float) -> tuple[float, f
     return xmin - margin, xmax + margin, ymin - margin, ymax + margin
 
 
-def write_job_frame(frame: ZoneFrame, args: argparse.Namespace) -> None:
-    """A ``--job`` run's outputs of one frame, on its own axes: the drawing, the geometry, then the row."""
-    draw_zone_frame(frame, padded(frame.box(), args.pad), args.out / f"frame_{frame_name(frame.k)}.png",
-                    fill=not args.no_fill)
+def write_frame(frame: ZoneFrame, limits: tuple[float, float, float, float], args: argparse.Namespace) -> None:
+    """One frame's drawing on ``limits`` and its geometry (both paths of the sweep write frames here)."""
+    draw_zone_frame(frame, limits, args.out / f"frame_{frame_name(frame.k)}.png", fill=not args.no_fill)
     if not args.no_geometry:
         (args.out / "geometry").mkdir(exist_ok=True)
         save_geometry(frame, args.out / "geometry" / f"{frame_name(frame.k)}.npz")
+
+
+def write_job_frame(frame: ZoneFrame, args: argparse.Namespace) -> None:
+    """A ``--job`` run's outputs of one frame, on its own axes: the drawing, the geometry, then the row."""
+    write_frame(frame, padded(frame.box(), args.pad), args)
     row_path(args.out, frame.k).parent.mkdir(exist_ok=True)
     write_csv([csv_row(frame)], row_path(args.out, frame.k))
 
@@ -841,7 +853,8 @@ def run_jobs(parser: argparse.ArgumentParser, args: argparse.Namespace, ks: list
             argv = [sys.executable, str(Path(__file__).resolve()), "--job",
                     "--k-min", repr(low), "--k-max", repr(high), *passed]
             jobs.append(Job(f"{frame_name(low)}_{frame_name(high)}", argv,
-                            lambda chunk=chunk: all(row_path(args.out, k).exists() for k in chunk)))
+                            lambda chunk=chunk: all(row_path(args.out, k).exists() or skip_path(args.out, k).exists()
+                                                     for k in chunk)))
     run_pool(jobs, processes=args.processes, workers=args.workers, out=args.out,
              max_rss_gb=args.max_rss_gb, max_seconds=args.max_seconds, retry=args.retry)
     rows = []
@@ -855,7 +868,9 @@ def run_jobs(parser: argparse.ArgumentParser, args: argparse.Namespace, ks: list
     rows.sort(key=lambda row: float(row["k"]))
     write_csv(rows, args.out / "zones.csv")
     draw_summary(rows, args.out / "summary.png")
-    print(f"{len(rows)} of {len(ks)} rows merged into {args.out / 'zones.csv'}; summary.png drawn")
+    skipped = sum(skip_path(args.out, k).exists() for k in ks)
+    print(f"{len(rows)} of {len(ks)} rows merged into {args.out / 'zones.csv'} ({skipped} k skipped on an error, "
+          f"rows/*.skipped); summary.png drawn")
 
 
 # ── the sweep ──────────────────────────────────────────────────────────────
@@ -969,6 +984,9 @@ def main() -> None:
                     wanted = frame.pip
                 logger.info("k = %.3f: row on disk, warm-stepped", k)
                 continue
+            if args.job and skip_path(args.out, k).exists():
+                logger.info("k = %.3f: failed before (%s), skipped", k, skip_path(args.out, k))
+                continue
             started = time.time()
             try:
                 frame, guess, orientation = build_zone_frame(
@@ -976,6 +994,9 @@ def main() -> None:
                 )
             except (ValueError, tanglepack.PointBudgetExceeded) as exc:
                 logger.warning("k = %.3f skipped: %s: %s", k, type(exc).__name__, str(exc)[:200])
+                if args.job:
+                    skip_path(args.out, k).parent.mkdir(exist_ok=True)
+                    skip_path(args.out, k).write_text(f"{type(exc).__name__}: {exc}\n")
                 continue
             if args.job:
                 write_job_frame(frame, args)
@@ -1001,13 +1022,8 @@ def main() -> None:
 
     boxes = np.array([f.box() for f in frames])
     common = padded((boxes[:, 0].min(), boxes[:, 1].max(), boxes[:, 2].min(), boxes[:, 3].max()), args.pad)
-    if not args.no_geometry:
-        (args.out / "geometry").mkdir(exist_ok=True)
     for frame in frames:
-        limits = common if args.axes == "common" else padded(frame.box(), args.pad)
-        draw_zone_frame(frame, limits, args.out / f"frame_{frame_name(frame.k)}.png", fill=not args.no_fill)
-        if not args.no_geometry:
-            save_geometry(frame, args.out / "geometry" / f"{frame_name(frame.k)}.npz")
+        write_frame(frame, common if args.axes == "common" else padded(frame.box(), args.pad), args)
     rows = [csv_row(f) for f in frames]
     write_csv(rows, args.out / "zones.csv")
     draw_summary(rows, args.out / "summary.png")

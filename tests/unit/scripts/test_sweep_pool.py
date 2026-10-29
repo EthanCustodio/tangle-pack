@@ -71,6 +71,14 @@ def test_done_jobs_are_skipped_and_a_rerun_runs_only_the_missing_ones(tmp_path):
     rows = run_pool(jobs, processes=2, out=tmp_path)
     assert statuses(rows) == {"old": "skipped", "new": "done"}
     assert statuses(read_status(tmp_path).values()) == {"old": "skipped", "new": "done"}
+    assert (tmp_path / "new.ran").exists()
+
+
+def test_a_failed_job_runs_again_on_resume(tmp_path):
+    run_pool([Job("flaky", python("raise SystemExit(1)"), lambda: False)], processes=1, out=tmp_path)
+    rows = run_pool([marker_job(tmp_path, "flaky")], processes=1, out=tmp_path)
+    assert statuses(rows) == {"flaky": "done"}
+    assert (tmp_path / "flaky.ran").exists()
 
 
 def test_a_job_past_the_memory_cap_is_killed_with_its_whole_tree(tmp_path):
@@ -98,13 +106,13 @@ def test_a_job_past_the_time_cap_ends_as_time_cap(tmp_path):
 
 
 def test_a_capped_job_is_not_relaunched_unless_retry(tmp_path):
-    job = marker_job(tmp_path, "capped", "import time; time.sleep(30)")
-    run_pool([job], processes=1, out=tmp_path, max_seconds=1.5)
-    rows = run_pool([job], processes=1, out=tmp_path, max_seconds=1.5)
+    run_pool([marker_job(tmp_path, "capped", "import time; time.sleep(30)")], processes=1, out=tmp_path,
+             max_seconds=1.5)
+    quick = marker_job(tmp_path, "capped")
+    rows = run_pool([quick], processes=1, out=tmp_path)
     assert statuses(rows) == {"capped": "time_cap"}
     assert not (tmp_path / "capped.ran").exists()
 
-    quick = marker_job(tmp_path, "capped")
     rows = run_pool([quick], processes=1, out=tmp_path, retry=True)
     assert statuses(rows) == {"capped": "done"}
     assert (tmp_path / "capped.ran").exists()

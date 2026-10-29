@@ -1277,5 +1277,9 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
 - **Deviations, measured or forced:** a k25 sweep that reaches `--max-blasts` records no `stopped` reason, so a
   job is done when its JSON records a stop OR a row at its last blast; the zone sweep's seed `k` stays in the
   first chunk of the upward run (its row is written by that job), and each run of `sweep_order` gets its own chunks
-  (`--processes 1` is one job per side of the seed); `--max-rss-gb` / `--max-seconds` of `pool` are both the
-  sweep's own soft stop and the pool's hard cap.
+  (`--processes 1` is one job per side of the seed); `--max-rss-gb` / `--max-seconds` of `pool` are the sweep's
+  own soft stop, and the pool's hard cap is the same memory but TWICE the time (`HARD_TIME_FACTOR`: the sweep reads
+  its clock only between blasts, so an equal cap always killed the job before the soft time stop fired; the memory
+  stop is predictive, so an equal memory cap is a true backstop); a zone-sweep `k` whose build fails leaves
+  `rows/<k>.skipped` (its error) and counts as finished, so a deterministic failure no longer relaunches its job on
+  every rerun (delete the file to rebuild it).
