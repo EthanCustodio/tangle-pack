@@ -1,8 +1,9 @@
 """The optional GPU backend: parity with the CPU path, and a clear error without CuPy.
 
 When CuPy and a device are present, routing the batched map through the GPU
-(``tanglepack.enable_gpu``) must grow the same manifold as the CPU path, and
-``disable_gpu`` must restore the CPU callables; the parity test skips cleanly
+(``tanglepack.enable_gpu``) must grow the same manifold as the CPU path,
+``disable_gpu`` must restore the CPU callables, and the same-stability sweep
+on the device must list exactly the CPU's hits; these tests skip cleanly
 otherwise. The always-present API surface runs everywhere: ``enable_gpu``
 raises ``ImportError`` when CuPy cannot be imported (forced by hiding the
 module, so the path runs even where CuPy is installed) and ``TypeError`` on a
@@ -19,7 +20,9 @@ import pytest
 import tanglepack
 from tanglepack import DynamicalSystem
 from tanglepack.examples import HENON_K10, henon_jacobian, henon_map, henon_map_inverse
+from tanglepack.numerics.diagnostics import count_same_stability_crossings, same_stability_crossings
 
+import cases
 from cases import K10_SADDLE_SEED, PERIOD1_ORIENTATION
 
 #: Unstable growth steps compared between the two backends.
@@ -55,7 +58,8 @@ def _k10_session() -> tanglepack.TangleSession:
     )
 
 
-def test_gpu_growth_matches_cpu() -> None:
+def _require_device() -> None:
+    """Skip unless CuPy imports and sees a CUDA device."""
     cp = pytest.importorskip("cupy")
     try:
         devices = cp.cuda.runtime.getDeviceCount()
@@ -64,6 +68,9 @@ def test_gpu_growth_matches_cpu() -> None:
     if devices < 1:
         pytest.skip("CuPy is installed but no CUDA device is available")
 
+
+def test_gpu_growth_matches_cpu() -> None:
+    _require_device()
     cpu = _grown_cdists(_k10_session())
 
     session = _k10_session()
@@ -92,3 +99,31 @@ def test_enable_gpu_without_cupy_raises_clearly(monkeypatch: pytest.MonkeyPatch)
 def test_enable_gpu_rejects_a_target_without_a_system() -> None:
     with pytest.raises(TypeError):
         tanglepack.enable_gpu(object())
+
+
+def test_gpu_same_stability_readings_are_the_cpus() -> None:
+    """The listings (in order) and the counts are equal on the CPU and on the
+    device, on the k28 series blasted to its depth, its last bridges counted
+    alone too."""
+    _require_device()
+    series = cases.SERIES["k28_series"]
+    case = series.build()
+    zone = max(case.zones, key=lambda zone: zone.area)
+    for _ in range(series.blasts):
+        cases._blast(case.session, zone, [zone.fixed_point], diagnose=False,
+                     min_separation=series.min_separation)
+    workbench = case.workbench
+    readings = []
+    for gpu in (False, True):
+        if gpu:
+            tanglepack.enable_gpu(case.session)
+        readings.append((
+            same_stability_crossings(workbench, region="all"),
+            same_stability_crossings(workbench),
+            count_same_stability_crossings(workbench, workbench.bridges),
+            count_same_stability_crossings(workbench, workbench.bridges[-50:]),
+        ))
+    tanglepack.disable_gpu(case.session)
+    cpu, device = readings
+    assert cpu[0] and cpu[2].in_region, "the case must hold hits for the test to bite"
+    assert device == cpu

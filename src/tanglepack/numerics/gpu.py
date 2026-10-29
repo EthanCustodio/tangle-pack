@@ -40,6 +40,15 @@ What runs where
 
   The point store and the intersection registry stay host arrays.
 
+* **The same-stability sweep** (``numerics/diagnostics.py``'s ``_hits``, the
+  ``diagnose`` count of every blast) runs on the device while
+  :func:`gpu_enabled`: the segment rows are gathered on the host and uploaded
+  once, and the edge dedup, the sweep axis and sort, the strips and the
+  candidate pairs are built there, pre-tested by one fused kernel whose margins
+  are loosened so it keeps every pair the exact test keeps. Only the surviving
+  pairs come back, and the host re-runs its exact test on them, so the listing
+  and the count are byte-identical to the CPU's.
+
 * **A device result is parity to tolerance, never bit-identical.** CuPy's
   ``pow`` and ``hypot`` differ from numpy's in the last bit, so the curvature
   kernel on the device differs by up to 2.8e-7 (relative) on real refinement
@@ -135,6 +144,11 @@ def _import_cupy():
     return cp
 
 
+def gpu_enabled(system: DynamicalSystem) -> bool:
+    """Whether :func:`enable_gpu` routes ``system`` through the GPU."""
+    return getattr(system, "_gpu_enabled", False)
+
+
 def _wrap_for_gpu(fn: Callable, cp, min_batch_points: int) -> Callable:
     """Wrap ``fn`` so large batches run on the GPU and small inputs stay on CPU."""
 
@@ -181,7 +195,7 @@ def enable_gpu(target: Any, min_batch_points: int = 64) -> DynamicalSystem:
     cp = _import_cupy()
 
     # Stash the CPU callables once so repeated enable/disable stays correct.
-    if not getattr(system, "_gpu_enabled", False):
+    if not gpu_enabled(system):
         system._cpu_map = system.map
         system._cpu_map_inv = system.map_inv
 
@@ -206,7 +220,7 @@ def enable_gpu(target: Any, min_batch_points: int = 64) -> DynamicalSystem:
 def disable_gpu(target: Any) -> DynamicalSystem:
     """Restore the original CPU map callables wrapped by :func:`enable_gpu`."""
     system = _resolve_system(target)
-    if not getattr(system, "_gpu_enabled", False):
+    if not gpu_enabled(system):
         return system
 
     system.map = system._cpu_map

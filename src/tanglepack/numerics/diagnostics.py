@@ -47,12 +47,14 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import cache
 from typing import TYPE_CHECKING, Iterable, Literal, Optional
 
 import numpy as np
 from numpy.typing import NDArray
 
 from .geometry import curvature_area_batch
+from .gpu import gpu_enabled
 from .Intersection import Stability
 
 if TYPE_CHECKING:
@@ -77,6 +79,11 @@ _STRIP_WIDTH = 4.0
 _MAX_STRIPS = 4096
 # Node keys shift by this into an edge key: the periodic points are -1, -2, ...
 _KEY_OFFSET = 1 << 20
+# Candidate pairs the device builds and pre-tests at once.
+_DEVICE_PAIR_BLOCK = 1 << 23
+# How far the device pre-test widens the exact test's parameter margins, so that
+# its own rounding can only keep more pairs.
+_DEVICE_SLACK = 1e-6
 
 
 @dataclass(frozen=True)
@@ -200,11 +207,12 @@ def same_stability_crossings(
         if region == "tangle"
         else (np.full(2, -np.inf), np.full(2, np.inf))
     )
+    device = gpu_enabled(workbench.dynamical_system)
     return [
         hit
         for stability in ("unstable", "stable")
         for hit in _crossings_among(
-            _curves(workbench, selected, stability), stability, box, workbench.workers
+            _curves(workbench, selected, stability), stability, box, workbench.workers, device
         )
     ]
 
@@ -241,6 +249,7 @@ def count_same_stability_crossings(
         _tangle_box(workbench, fixed_points, pad),
         new=np.array([id(bridge) in new for _name, _read, bridge in curves], dtype=bool),
         workers=workbench.workers,
+        device=gpu_enabled(workbench.dynamical_system),
     )
     pairs = np.unique(np.stack([owner_a[inside], owner_b[inside]], axis=1), axis=0)
     return SameStabilityCount(
@@ -316,6 +325,7 @@ def _crossings_among(
     stability: Stability,
     box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
     workers: int,
+    device: bool,
 ) -> list[SameStabilityCrossing]:
     """The transversal interior crossings among the segments of some curves."""
     return [
@@ -331,7 +341,9 @@ def _crossings_among(
             suggested_area_cutoff=0.5 * float(area),
             in_tangle_region=bool(inside),
         )
-        for p, q, seg_p, seg_q, (x, y), sin, area, inside in zip(*_hits(curves, box, workers=workers))
+        for p, q, seg_p, seg_q, (x, y), sin, area, inside in zip(
+            *_hits(curves, box, workers=workers, device=device)
+        )
     ]
 
 
@@ -341,6 +353,7 @@ def _hits(
     new: Optional[NDArray[np.bool_]] = None,
     *,
     workers: int,
+    device: bool = False,
 ) -> tuple[NDArray, ...]:
     """The transversal interior crossings among the segments of some curves, as arrays.
 
@@ -351,7 +364,8 @@ def _hits(
     axis. Without ``new`` the hits come in sweep order (by first, then second
     segment); with ``new`` (one flag per curve) only the segment pairs with a
     segment of a new curve are tested, and the hits come strip by strip.
-    ``workers`` threads test the candidate blocks; the hits are the same.
+    ``workers`` threads test the candidate blocks; with ``device`` the GPU
+    finds the candidates and the host tests them. The hits are the same.
     """
     stores = list(dict.fromkeys(store for _name, (_head, store, rows), _bridge in curves if len(rows)))
     offsets = dict(zip(stores, np.cumsum([0, *(len(store) for store in stores[:-1])]).tolist()))
@@ -361,24 +375,32 @@ def _hits(
     if not rows:
         return _no_hits()
     a, b, left, right, node_a, node_b, owner, position = (np.concatenate(column) for column in zip(*rows))
-    # One edge reached from two curves (overlapping image bridges) is one segment.
-    _, first = np.unique(_edge_keys(node_a, node_b), return_index=True)
-    segment = np.sort(first)
-    mins, maxs = np.minimum(a[segment], b[segment]), np.maximum(a[segment], b[segment])
-    axis = _sweep_axis(mins, maxs)
-    sweep = np.argsort(mins[:, axis], kind="stable")
-    # From here on a segment is its position along the sweep; ``order`` gives its row.
-    order = segment[sweep]
-    mins, maxs = mins[sweep], maxs[sweep]
+    if device:
+        swept = _device_pairs(a, b, node_a, node_b, None if new is None else new[owner])
+        if swept is None:
+            return _no_hits()
+        order, i, j = swept
+        blocks, pairs_of = [(i, j)], lambda pair: pair
+    else:
+        # One edge reached from two curves (overlapping image bridges) is one segment.
+        _, first = np.unique(_edge_keys(node_a, node_b), return_index=True)
+        segment = np.sort(first)
+        mins, maxs = np.minimum(a[segment], b[segment]), np.maximum(a[segment], b[segment])
+        axis = _sweep_axis(mins, maxs)
+        sweep = np.argsort(mins[:, axis], kind="stable")
+        # From here on a segment is its position along the sweep; ``order`` gives its row.
+        order = segment[sweep]
+        mins, maxs = mins[sweep], maxs[sweep]
+        is_new = np.ones(len(order), dtype=bool) if new is None else new[owner[order]]
+        if not is_new.any():
+            return _no_hits()
+        candidates = _candidate_pairs(mins, maxs, is_new, axis, workers)
+        blocks, pairs_of = candidates.blocks, candidates.pairs
     a, b, node_a, node_b = a[order], b[order], node_a[order], node_b[order]
-    is_new = np.ones(len(order), dtype=bool) if new is None else new[owner[order]]
-    if not is_new.any():
-        return _no_hits()
-    candidates = _candidate_pairs(mins, maxs, is_new, axis, workers)
 
-    def crossings_in(block: NDArray[np.int64]) -> tuple[NDArray, ...]:
+    def crossings_in(block) -> tuple[NDArray, ...]:
         """The transversal interior crossings among one block's candidate pairs."""
-        i, j = candidates.pairs(block)
+        i, j = pairs_of(block)
         shared = (node_a[i] == node_a[j]) | (node_a[i] == node_b[j])
         shared |= (node_b[i] == node_a[j]) | (node_b[i] == node_b[j])
         i, j = i[~shared], j[~shared]
@@ -396,11 +418,11 @@ def _hits(
     # The blocks are independent, so they run on ``workers`` threads (numpy
     # releases the GIL in their array work), in block order either way.
     found = [(np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64), np.empty(0), np.empty(0))]
-    if workers > 1 and len(candidates.blocks) > 1:
+    if workers > 1 and len(blocks) > 1:
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            found += pool.map(crossings_in, candidates.blocks)
+            found += pool.map(crossings_in, blocks)
     else:
-        found += map(crossings_in, candidates.blocks)
+        found += map(crossings_in, blocks)
     i, j, t, sin = (np.concatenate(column) for column in zip(*found))
     if new is None:
         # The strips find the pairs strip by strip; the listing is in sweep order.
@@ -586,3 +608,128 @@ class _Candidates:
             & (np.maximum(self.first_strip[p], self.first_strip[q]) == self.strip[entry])
         )
         return p[keep], q[keep]
+
+
+def _device_pairs(
+    a: NDArray[np.float64],
+    b: NDArray[np.float64],
+    node_a: NDArray[np.int64],
+    node_b: NDArray[np.int64],
+    is_new: Optional[NDArray[np.bool_]],
+) -> Optional[tuple[NDArray[np.int64], NDArray[np.int64], NDArray[np.int64]]]:
+    """:func:`_hits`' sweep on the GPU: ``order``, and the candidate pairs ``(i, j)``
+    of sweep positions that may cross; None when no segment is new.
+
+    The segment rows are uploaded once and the CPU path's steps run on the
+    device: the edge dedup (the first row of each edge), the sweep axis and the
+    stable sweep sort (ties broken by row, as numpy's stable sorts do), the
+    strips of :func:`_candidate_pairs` and the pairs it keeps, in its order. A
+    fused kernel pre-tests them with the exact test's margins widened by
+    ``_DEVICE_SLACK``, so it keeps a superset of the pairs that test keeps,
+    whatever the device's rounding; the caller re-tests the survivors exactly,
+    which makes every hit, and their order, the CPU's.
+    """
+    import cupy as cp
+
+    a, b, node_a, node_b = (cp.asarray(column) for column in (a, b, node_a, node_b))
+    keys = _edge_keys(node_a, node_b)
+    by_key = cp.lexsort(cp.stack([cp.arange(len(keys)), keys]))
+    sorted_keys = keys[by_key]
+    first = by_key[cp.concatenate((cp.ones(1, dtype=bool), sorted_keys[1:] != sorted_keys[:-1]))]
+    segment = cp.sort(first)
+    mins, maxs = cp.minimum(a[segment], b[segment]), cp.maximum(a[segment], b[segment])
+    axis = _sweep_axis(mins, maxs)
+    sweep = cp.lexsort(cp.stack([cp.arange(len(segment)), mins[:, axis]]))
+    order = segment[sweep]
+    mins, maxs = mins[sweep], maxs[sweep]
+    a, b, node_a, node_b = a[order], b[order], node_a[order], node_b[order]
+    is_new = cp.ones(len(order), dtype=bool) if is_new is None else cp.asarray(is_new)[order]
+    if not bool(is_new.any()):
+        return None
+
+    # The strips, as in _candidate_pairs.
+    across = 1 - axis
+    low, high = float(mins[:, across].min()), float(maxs[:, across].max())
+    width = _STRIP_WIDTH * float(cp.median(maxs[is_new, across] - mins[is_new, across]))
+    strips = int(min(_MAX_STRIPS, np.ceil((high - low) / width))) if width > 0 and high > low else 1
+    width = (high - low) / strips if high > low else 1.0
+    first_strip, last_strip = (
+        cp.clip(cp.floor((ends[:, across] - low) / width), 0, strips - 1).astype(cp.int64)
+        for ends in (mins, maxs)
+    )
+    spanned = cp.cumsum(
+        cp.bincount(first_strip[is_new], minlength=strips + 1)
+        - cp.bincount(last_strip[is_new] + 1, minlength=strips + 1)
+    )[:strips] > 0
+    reached = cp.concatenate((cp.zeros(1, dtype=cp.int64), cp.cumsum(spanned)))
+    boxes = cp.flatnonzero(reached[last_strip + 1] > reached[first_strip])
+    entry, offset = _device_ranges(cp, last_strip[boxes] - first_strip[boxes] + 1, 0, None)
+    box, strip = boxes[entry], first_strip[boxes][entry] + offset
+    box, strip = box[spanned[strip]], strip[spanned[strip]]
+    by_strip = cp.lexsort(cp.stack([cp.arange(len(strip)), strip]))
+    box, strip = box[by_strip], strip[by_strip]
+    # An entry's forward range in its strip ends at the first entry of the strip
+    # starting after it ends: entries run by (strip, box), and the boxes starting
+    # no later than it ends are those before ``reach`` (the minima are sorted).
+    n = len(order)
+    reach = cp.searchsorted(mins[:, axis], maxs[box, axis], side="right")
+    ends = cp.searchsorted(strip * (n + 1) + box, strip * (n + 1) + reach, side="left")
+
+    entries = cp.arange(len(box))
+    entry_new = is_new[box]
+    new_entries = cp.flatnonzero(entry_new)
+    after, until = cp.searchsorted(new_entries, entries + 1), cp.searchsorted(new_entries, ends)
+    pool = cp.concatenate([entries, new_entries])
+    start = cp.where(entry_new, entries + 1, len(box) + after)
+    count = cp.where(entry_new, ends - entries - 1, until - after)
+
+    test = _device_crossing_test(cp)
+    total = int(count.sum())
+    survivors = []
+    for first_pair in range(0, total, _DEVICE_PAIR_BLOCK):
+        entry, offset = _device_ranges(cp, count, first_pair, min(total, first_pair + _DEVICE_PAIR_BLOCK))
+        p, q = box[entry], box[pool[start[entry] + offset]]
+        keep = (
+            (mins[p, across] <= maxs[q, across])
+            & (mins[q, across] <= maxs[p, across])
+            & (cp.maximum(first_strip[p], first_strip[q]) == strip[entry])
+        )
+        p, q = p[keep], q[keep]
+        keep = test(a, b, node_a, node_b, p, q, _MARGIN - _DEVICE_SLACK)
+        survivors.append((p[keep], q[keep]))
+    if not survivors:
+        return cp.asnumpy(order), np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64)
+    i, j = (cp.asnumpy(cp.concatenate(column)) for column in zip(*survivors))
+    return cp.asnumpy(order), i, j
+
+
+def _device_ranges(cp, counts, begin: int, end: Optional[int]):
+    """Items ``begin`` to ``end`` of ``counts[e]`` ranges laid end to end, as
+    (range ``e``, offset in it): numpy's ``repeat`` and ``arange`` trick, on
+    the device."""
+    totals = cp.cumsum(counts)
+    item = cp.arange(begin, int(totals[-1]) if end is None else end)
+    entry = cp.searchsorted(totals, item, side="right")
+    return entry, item - (totals[entry] - counts[entry])
+
+
+@cache
+def _device_crossing_test(cp):
+    """The fused pre-test of :func:`_device_pairs`: no shared node, not parallel
+    (at half the exact ``_EPS_REL``), both parameters in ``(margin, 1 - margin)``."""
+    return cp.ElementwiseKernel(
+        "raw float64 a, raw float64 b, raw int64 node_a, raw int64 node_b, int64 p, int64 q, float64 margin",
+        "bool keep",
+        f"""
+        const double d1x = b[2 * p] - a[2 * p], d1y = b[2 * p + 1] - a[2 * p + 1];
+        const double d2x = b[2 * q] - a[2 * q], d2y = b[2 * q + 1] - a[2 * q + 1];
+        const double rx = a[2 * q] - a[2 * p], ry = a[2 * q + 1] - a[2 * p + 1];
+        const double den = d1x * d2y - d1y * d2x;
+        const double t = (rx * d2y - ry * d2x) / den, u = (rx * d1y - ry * d1x) / den;
+        const bool shared = node_a[p] == node_a[q] || node_a[p] == node_b[q]
+            || node_b[p] == node_a[q] || node_b[p] == node_b[q];
+        keep = !shared && fabs(den) > {0.5 * _EPS_REL!r} * hypot(d1x, d1y) * hypot(d2x, d2y)
+            && t > margin && t < 1 - margin && u > margin && u < 1 - margin;
+        """,
+        "same_stability_pretest",
+    )
