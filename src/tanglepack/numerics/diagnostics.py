@@ -198,7 +198,11 @@ def same_stability_crossings(
         The hits, unstable ones first, in sweep order: each names first the
         segment earlier along the sweep axis (not always the earlier curve's),
         and they run by that segment, then the other.
+
+    Raises:
+        CurveReleased: A lean blast has freed curve this reads.
     """
+    workbench._refuse_if_lean("same_stability_crossings")
     selected = (
         list(workbench.fixed_points) if fixed_points is None else list(fixed_points)
     )

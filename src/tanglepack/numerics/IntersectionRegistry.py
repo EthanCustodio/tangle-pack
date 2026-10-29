@@ -274,6 +274,27 @@ class IntersectionRegistry:
         """
         return self._find_collision(intersection)
 
+    def remap_rows(self, old_to_new: NDArray[np.int64]) -> None:
+        """
+        Renumber every crossing's bracket rows after the store was compacted.
+
+        The rows keep their points (``PointStore.compact``), so no cdist, order
+        or cache changes; only the row numbers the brackets name do.
+
+        Args:
+            old_to_new: The compaction's map; every bracket row survives it.
+        """
+        def remap(segment):
+            if segment is None:
+                return None
+            ends = tuple(end if not isinstance(end, int) else int(old_to_new[end]) for end in segment)
+            assert all(not isinstance(end, int) or end >= 0 for end in ends), "a bracket row was freed"
+            return ends
+
+        for crossing in self._store.values():
+            crossing.unstable_segment = remap(crossing.unstable_segment)
+            crossing.stable_segment = remap(crossing.stable_segment)
+
     def reindex_from(self, old: "IntersectionRegistry") -> None:
         """
         Re-number this registry so crossings carried over from ``old`` keep their id.

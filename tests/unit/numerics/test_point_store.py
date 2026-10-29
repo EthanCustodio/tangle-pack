@@ -187,3 +187,107 @@ def test_a_blasted_build_leaves_phantoms_as_rows(k28_partitioned) -> None:
     phantoms, tails = no_cdist & ~own_link, no_cdist & own_link
     assert phantoms.any() and named[phantoms].all()
     assert tails.any() and not named[tails].any()
+
+
+# ------------------------------------------------------------- compaction
+
+
+def test_compact_keeps_every_surviving_row(store) -> None:
+    """A compaction renumbers the kept rows in order: each keeps its point, its
+    cdist and every link into a kept row (one into a dropped row reads -1), and
+    every chain keeps its kept rows in order, renumbered from 0."""
+    rows = store.append(np.arange(16.0).reshape(8, 2), np.arange(8.0))
+    phantom = store.append_one(0.5, 0.5, None)
+    chain = store.new_chain(rows[[0, 1, 2, 3, 4]], 1.0)
+    other = store.new_chain(rows[[5, 6, 7]], 1.0)
+    store.link(rows[[0, 1]], rows[[5, 6]])
+    store.link_phantoms(rows[[3]], [phantom], "unstable")
+    keep = np.ones(len(store), dtype=bool)
+    keep[[rows[1], rows[2], phantom]] = False
+    before_xy, before_cdist = store.xy.copy(), store.cdist.copy()
+
+    old_to_new = store.compact(keep)
+
+    assert len(store) == int(keep.sum())
+    assert old_to_new.tolist() == [0, -1, -1, 1, 2, 3, 4, 5, -1]
+    survivors = np.flatnonzero(keep)
+    np.testing.assert_array_equal(store.xy, before_xy[survivors])
+    np.testing.assert_array_equal(store.cdist, before_cdist[survivors])
+    assert store.image[old_to_new[rows[0]]] == old_to_new[rows[5]]
+    assert store.preimage[old_to_new[rows[5]]] == old_to_new[rows[0]]
+    assert store.preimage[old_to_new[rows[6]]] == -1  # its preimage was dropped
+    assert store.preimage[old_to_new[rows[3]]] == -1  # its phantom was dropped
+    assert chain.ids.tolist() == old_to_new[rows[[0, 3, 4]]].tolist()
+    assert other.ids.tolist() == old_to_new[rows[[5, 6, 7]]].tolist()
+    for each in (chain, other):
+        for position, row in enumerate(each.ids):
+            assert store.chain_of(row) is each and store.position_of(row) == position
+
+
+def _lean_k28():
+    """The k28 zone blasted lean (width guard) until a bridge is released."""
+    from cases import build_k28
+
+    case = build_k28(blasts=0, through="zones")
+    session, zone = case.session, case.zones[0]
+    for _ in range(8):
+        session.blast_zone(zone, 1, fixed_point=[zone.fixed_point], min_separation="width", lean=True)
+        if any(bridge.released for bridge in session.workbench.bridges):
+            return session
+    raise AssertionError("no bridge was released")
+
+
+def test_a_release_keeps_the_invariants() -> None:
+    """After a release every curve still read is cdist non-decreasing and ends
+    on rows of its chain, the iterate table is a partial bijection and every
+    crossing is unstable x stable, its brackets rows of the store."""
+    workbench = _lean_k28().workbench
+    store = workbench.point_store
+    curves = [*workbench.manifolds.values(), *(b for b in workbench.bridges if not b.released)]
+    for curve in curves:
+        cdists = curve.get_cdist_array().ravel()
+        assert (np.diff(cdists) >= 0).all()
+        for end in (curve.root, curve.tail):
+            if hasattr(end, "id"):
+                assert store.chain_of(end.id) is not None
+    registry = workbench.intersection_registry
+    images = [registry.iterate_table[iid, 1] for iid, _ in registry]
+    linked = [image for image in images if image is not None]
+    assert len(linked) == len(set(linked))
+    for _iid, crossing in registry:
+        assert crossing.manifold_a_key[1] == "unstable" and crossing.manifold_b_key[1] == "stable"
+        for end in (*(crossing.unstable_segment or ()), *(crossing.stable_segment or ())):
+            assert not isinstance(end, int) or 0 <= end < len(store)
+        if crossing.unstable_segment is not None:
+            (u_lo, u_hi), _ = crossing.brackets
+            cdists = sorted(crossing.segment_ends("unstable")[1].tolist())
+            assert cdists == [u_lo, u_hi]
+
+
+def test_a_straddle_neighbours_images_survive_a_release() -> None:
+    """A kept un-iterated bridge whose straddle rows an iterated neighbour already
+    mapped keeps those images: released on its own, it iterates as on a full twin."""
+    from cases import build_k28
+
+    def frontier_with_images():
+        case = build_k28(blasts=0, through="zones")
+        session, zone = case.session, case.zones[0]
+        session.blast_zone(zone, 1, fixed_point=[zone.fixed_point], diagnose=False)
+        workbench = session.workbench
+        for bridge in workbench.uniiterated_bridges:
+            rows = bridge.ids
+            if bridge.id is not None and (workbench.point_store.image[rows] >= 0).any():
+                return workbench, bridge
+        raise AssertionError("no frontier bridge shares an iterated neighbour's rows")
+
+    full, full_bridge = frontier_with_images()
+    lean, lean_bridge = frontier_with_images()
+    assert full_bridge.id == lean_bridge.id
+    assert lean.release_curves({lean_bridge.id}) > 0
+    assert lean.lean and any(b.released for b in lean.bridges)
+
+    full_children, lean_children = full.iterate_bridge(full_bridge), lean.iterate_bridge(lean_bridge)
+
+    assert [c.id for c in lean_children] == [c.id for c in full_children]
+    for a, b in zip(full_children, lean_children):
+        np.testing.assert_array_equal(a.get_point_array(), b.get_point_array())

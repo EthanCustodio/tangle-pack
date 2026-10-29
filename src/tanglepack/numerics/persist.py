@@ -17,7 +17,9 @@ orders, sets sorted (a set's iteration order is its hash table's, not state):
   the container it was set as (the solver leaves ``coordinates`` a
   ``(period, 2)`` ndarray, the other fields are lists of rows);
 * every curve once, by object identity (a crossing's ``unstable_manifold`` is
-  compared with ``is`` downstream);
+  compared with ``is`` downstream); a bridge's ``width`` (the width guard's)
+  as a column written only when some bridge has one, so a save without one
+  is the save of format 1 before the guard existed;
 * every :class:`~.Intersection.Intersection` once, the registry's first, in one
   table, with the registry's orders, iterate table and counters;
 * the segment index EXACTLY: every record's segment id, the edge maps, the
@@ -32,6 +34,9 @@ What is NOT saved is derived and rebuilt lazily: the registry's caches,
 ``Intersection.brackets``, the fixed points' memos, the system's batchability
 probe (made on the map passed to ``load``) and the rtrees, which are
 bulk-loaded from the saved records.
+
+A lean workbench (``TangleWorkbench.lean``) is never saved: the curve a
+lean blast freed cannot be restored, so the save raises ``CurveReleased``.
 
 A load runs nothing it reads: the npz is opened with
 ``allow_pickle=False``, and the map, its inverse and the Jacobian are arguments
@@ -281,7 +286,12 @@ def encode_workbench(workbench: TangleWorkbench, encoder: Encoder) -> tuple[dict
 
     Returns:
         ``(meta, arrays)``.
+
+    Raises:
+        CurveReleased: The workbench is lean: a load could not rebuild the
+            curve a lean blast freed.
     """
+    workbench._refuse_if_lean("save")
     meta: dict = {}
     arrays: dict[str, np.ndarray] = {}
     _save_store(workbench, encoder, meta, arrays)
@@ -498,6 +508,11 @@ def _save_curves(encoder: Encoder, meta: dict, arrays: dict) -> None:
         "stretch_types": stretch_types,
         "dropped_at_types": dropped_types,
     }
+    # Only a width blast sets widths: a save without one holds no width column,
+    # byte-equal to a save before the width guard existed.
+    widths = [getattr(curve, "width", None) for curve in curves]
+    if any(width is not None for width in widths):
+        arrays["curve_width"], meta["curves"]["width_types"] = typed_floats(widths)
 
 
 # ── load ──────────────────────────────────────────────────────────────────
@@ -652,7 +667,11 @@ def _load_curves(decoder: Decoder, meta: dict, arrays: dict) -> None:
     stretches = floats_of(arrays["curve_stretch"], saved["stretch_types"])
     dropped = floats_of(arrays["curve_dropped_at"], saved["dropped_at_types"])
     rows = arrays["curve_ints"].tolist()
-    for row, name, stretch, dropped_at in zip(rows, saved["names"], stretches, dropped):
+    widths = (
+        floats_of(arrays["curve_width"], saved["width_types"])
+        if "curve_width" in arrays else [None] * len(rows)
+    )
+    for row, name, stretch, dropped_at, width in zip(rows, saved["names"], stretches, dropped, widths):
         is_bridge, root, tail = row[0], decoder.end(*row[1:4]), decoder.end(*row[4:7])
         has_row = not (isinstance(root, BranchPoint) and isinstance(tail, BranchPoint))
         fields = dict(
@@ -664,7 +683,7 @@ def _load_curves(decoder: Decoder, meta: dict, arrays: dict) -> None:
         if is_bridge:
             first, second = (None if i < 0 else i for i in row[16:18])
             curve = Bridge(**fields, first_intersection=first, second_intersection=second)
-            curve.iterated, curve.dropped_at = bool(row[15]), dropped_at
+            curve.iterated, curve.dropped_at, curve.width = bool(row[15]), dropped_at, width
         else:
             curve = BaseManifold(**fields)
         curve._version = row[14]

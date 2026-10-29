@@ -13,8 +13,11 @@ at most one chain, and two store columns say which and where (``_chain``,
 (a branch, a bridge, a partial piece, a blast image curve) is a view of a
 chain between its root and its tail (:class:`~.BaseManifold.BaseManifold`).
 
-Rows are appended and never removed or reused, so a row id names one point for
-the life of its store, and the coordinates of a row never change once written.
+Rows are appended and never reused, so a row id names one point until the
+store is compacted, and the coordinates of a row never change once written.
+Only a lean blast removes rows (:meth:`PointStore.compact`, called by
+``TangleWorkbench.release_curves``): it renumbers the survivors in order and
+hands back the old-to-new map every holder of a row is remapped through.
 
 "No value" is NaN in every float array and -1 in every row column. No curve
 row is ever NaN: the NaN rows are phantoms and the initializer's fictitious
@@ -30,10 +33,10 @@ image on a stable one -- and naming nothing themselves).
 
 Dev Notes:
 
-Append-only until N10 (numerics arrays plan, Q7): the only rows the base would
-have freed are the initializer's detached fictitious tails, one per seeded
-chain; merge-dropped duplicates are off-curve but named by their preimage's
-link. Compaction belongs to save/load.
+Append-only but for the lean blast (2026-10-29): ``compact`` frees the rows a
+released bridge held, and its phantoms. Rows nothing frees stay, the
+initializer's detached fictitious tails and the merge-dropped duplicates
+among them.
 
 Who owns a store (Q5): the workbench (``TangleWorkbench.point_store``), which
 hands it to its initializer; the machine stays stateless and appends to the
@@ -363,6 +366,45 @@ class PointStore:
             column.nbytes
             for column in (self._xy, self._cdist, self._image, self._preimage, self._chain, self._position)
         )
+
+    def compact(self, keep: NDArray[np.bool_]) -> NDArray[np.int64]:
+        """
+        Drops every row ``keep`` does not hold, renumbering the rest in order.
+
+        Each surviving row keeps its coordinates, cdist and the links into rows
+        that survive; a link into a dropped row becomes -1. Every chain keeps
+        its surviving rows in their order, renumbered from position 0 (a
+        retired chain stays empty). The capacity is not shrunk below the rows
+        kept, so the arrays are reallocated once.
+
+        Args:
+            keep: One bool per written row.
+
+        Returns:
+            np.ndarray: The new row of each old row, -1 for a dropped one. Every
+            other holder of a row (a curve end, a crossing's bracket, an edge
+            key) is remapped through it by the caller.
+        """
+        keep = np.asarray(keep, dtype=bool)
+        assert len(keep) == self._n, "one keep flag per written row"
+        old_to_new = np.full(self._n, -1, dtype=np.int64)
+        old_to_new[keep] = np.arange(int(keep.sum()))
+        n = int(keep.sum())
+        for name in ("_xy", "_cdist", "_image", "_preimage", "_chain", "_position"):
+            old = getattr(self, name)
+            new = np.empty((max(n, 1),) + old.shape[1:], dtype=old.dtype)
+            new[:n] = old[: self._n][keep]
+            setattr(self, name, new)
+        for column in (self._image, self._preimage):
+            linked = column[:n] >= 0
+            column[:n][linked] = old_to_new[column[:n][linked]]
+        self._n = n
+        for chain in self.chains:
+            rows = old_to_new[chain.ids]
+            chain.ids = rows[rows >= 0]
+            chain._renumber(0)
+        self._alias_xy()
+        return old_to_new
 
     def _reserve(self, rows: int) -> None:
         """Grow the columns so that ``rows`` rows fit."""

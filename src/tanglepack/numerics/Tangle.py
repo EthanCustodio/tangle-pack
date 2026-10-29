@@ -783,6 +783,44 @@ class Tangle:
 
         return sid
 
+    def remap_rows(self, old_to_new: NDArray[np.int64]) -> None:
+        """
+        Renumber the index's rows after the store was compacted.
+
+        Every record and edge key names its rows anew; one that names a freed
+        row is dropped: a freed row was interior to a released bridge, so its
+        edges are never queried again, and their records are query-only
+        segments nobody owns. The rtrees hold segment ids and bounds, which do
+        not move, and so do the crossing pairs.
+
+        Args:
+            old_to_new: The compaction's map (-1 for a freed row).
+        """
+        def row(end: int | BranchPoint) -> int | BranchPoint:
+            return end if isinstance(end, BranchPoint) else int(old_to_new[end])
+
+        for sid in list(self._seg_lookup):
+            segment = self._seg_lookup[sid]
+            segment.row0, segment.row1 = row(segment.row0), row(segment.row1)
+            if any(isinstance(end, int) and end < 0 for end in (segment.row0, segment.row1)):
+                assert not segment.in_rtree and not self._seg_manifolds.get(sid), sid
+                del self._seg_lookup[sid]
+        indexed = self._remap_edges(np.fromiter(self._edge_to_sid, dtype=np.int64), old_to_new)
+        assert (indexed >= 0).all(), "an indexed edge lies on a grown curve, never freed"
+        self._edge_to_sid = dict(zip(indexed.tolist(), self._edge_to_sid.values()))
+        query = self._remap_edges(np.fromiter(self._query_edges, dtype=np.int64), old_to_new)
+        self._query_edges = set(query[query >= 0].tolist())
+
+    @staticmethod
+    def _remap_edges(keys: NDArray[np.int64], old_to_new: NDArray[np.int64]) -> NDArray[np.int64]:
+        """Edge keys (:func:`_edge`) renumbered through ``old_to_new``; -1 where
+        an end was freed (a BranchPoint end, -1 in the key, stays one)."""
+        lo, hi = (keys >> 32) - 1, (keys & 0xFFFFFFFF) - 1
+        new_lo = np.where(lo < 0, -1, old_to_new[np.maximum(lo, 0)])
+        new_hi = old_to_new[hi]
+        freed = (new_hi < 0) | ((lo >= 0) & (new_lo < 0))
+        return np.where(freed, -1, _edge_keys(new_lo, new_hi))
+
     def release_manifold(self, manifold: BaseManifold) -> None:
         """
         Drop every claim ``manifold`` has on the index.

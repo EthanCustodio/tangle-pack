@@ -324,13 +324,18 @@ _SAVED: dict[type, frozenset[str]] = {
     }),
     BridgeAlphabet: frozenset({"assigned"}),
 }
-_SAVED[Bridge] = _SAVED[BaseManifold] | {"first_intersection", "second_intersection", "iterated", "dropped_at"}
+_SAVED[Bridge] = _SAVED[BaseManifold] | {
+    "first_intersection", "second_intersection", "iterated", "dropped_at", "width",
+}
 
 # Derived or lazy (``persist``'s "What is NOT saved"), or built by the load's
 # constructors around the map it is given.
 _NOT_SAVED: dict[type, frozenset[str]] = {
     TangleSession: frozenset({"_trellises", "_topologies"}),  # caches; topology() recomputes them
-    TangleWorkbench: frozenset({"dynamical_system", "_fp_solver", "_man_maker", "_bridge_iterator"}),  # the map's
+    TangleWorkbench: frozenset({
+        "dynamical_system", "_fp_solver", "_man_maker", "_bridge_iterator",  # the map's
+        "_lean",  # False on every save: a lean workbench refuses to save
+    }),
     PointStore: frozenset({"_xy_read"}),  # the read-only alias of _xy
     FixedPoint: frozenset({"_branch_cycle_cache", "_branch_position_cache"}),  # memos
     IntersectionRegistry: frozenset({  # caches, each behind its version counter

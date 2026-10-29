@@ -49,7 +49,7 @@ from .budget import DEFAULT_MAX_POINTS_PER_STEP, GrowthStats
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
 from .BaseManifold import BaseManifold
-from .Bridge import Bridge, BridgeId
+from .Bridge import Bridge, BridgeId, CurveReleased
 from .BranchPoint import BranchPoint
 from .Intersection import Intersection, ManifoldKey, Stability
 from .IntersectionRegistry import DEDUP_RTOL, IntersectionRegistry
@@ -313,6 +313,9 @@ class TangleWorkbench:
         # Bridges whose image a PointBudgetExceeded abandoned half-refined; see
         # BridgeIterator.iterate_bridge, which refuses to iterate them again.
         self._half_iterated_bridges: set[Bridge] = set()
+        # True once a lean blast has released curve (release_curves): every
+        # operation that would re-read freed curve refuses from then on.
+        self._lean: bool = False
 
         # Generation bookkeeping (see the `generation` property). `_mutations`
         # counts the changes this object makes that nothing else can observe
@@ -706,6 +709,7 @@ class TangleWorkbench:
             crossings: that is a depth problem, not a bug. Grow on a stop
             condition (``grow_until_*``, ``grow_until(predicate)``) instead.
         """
+        self._refuse_if_lean("grow_n_times")
 
         self._require_manifold(fixed_point, stability, branch_index)
 
@@ -814,6 +818,7 @@ class TangleWorkbench:
             MaxIterationsReached: A ``ValueError`` raised when the cap is reached
                 before a turnaround is detected; it carries ``suggested_max_iterations``.
         """
+        self._refuse_if_lean("grow_until_turnaround")
 
         manifold = self._require_manifold(fixed_point, stability, branch_index)
 
@@ -877,6 +882,7 @@ class TangleWorkbench:
                 is reached with the manifold still inside ``radius``.
             PointBudgetExceeded: As :meth:`grow_n_times`.
         """
+        self._refuse_if_lean("grow_until_bounded")
         self._require_manifold(fixed_point, stability, branch_index)
 
         if max_iterations is None:
@@ -919,6 +925,7 @@ class TangleWorkbench:
                 before the polyline reaches ``length``; it carries
                 ``suggested_max_iterations``.
         """
+        self._refuse_if_lean("grow_until_arclength")
 
         self._require_manifold(fixed_point, stability, branch_index)
 
@@ -967,6 +974,7 @@ class TangleWorkbench:
             MaxIterationsReached: A ``ValueError`` raised when the cap is reached
                 before a new crossing appears; it carries ``suggested_max_iterations``.
         """
+        self._refuse_if_lean("grow_until_intersection")
 
         self._require_manifold(fixed_point, stability, branch_index)
 
@@ -1059,6 +1067,7 @@ class TangleWorkbench:
             branches, so the blast frontier, its partial pieces and the
             ``iterated`` flags survive the round.
         """
+        self._refuse_if_lean("grow_until")
         stabilities = tuple(grow)
         if not stabilities:
             raise ValueError("grow must name at least one stability to advance.")
@@ -1204,6 +1213,7 @@ class TangleWorkbench:
                 id is not in the registry, if the id set is empty, or if the cap is
                 reached with some iterate still undetected.
         """
+        self._refuse_if_lean("grow_until_iterates_closed")
         if direction not in ("forward", "backward"):
             raise ValueError(
                 f"direction must be 'forward' or 'backward', not {direction!r}."
@@ -1282,6 +1292,7 @@ class TangleWorkbench:
             ``u-`` / ``s-`` stubs (the other half of each manifold is not
             computed), so its faces through them are open as well.
         """
+        self._refuse_if_lean("grow_until_faces_closed")
         from ..topology.Trellis import Trellis
 
         targets = self._frozen_ids(ids, fixed_point=fixed_point, allow_all=False)
@@ -1356,6 +1367,7 @@ class TangleWorkbench:
             this return value. Coordinates are ``[ix.coords for _, ix in
             registry]``.
         """
+        self._refuse_if_lean("compute_intersections")
         fixed_points = (
             [fixed_points] if isinstance(fixed_points, FixedPoint) else list(fixed_points)
         )
@@ -1449,6 +1461,7 @@ class TangleWorkbench:
             reliability verdict; the unresolved detections are already out of N
             by definition, and the report only names them.
         """
+        self._refuse_if_lean("check_resolution")
         selected = self._selection(fixed_points)
         return ResolutionReport(
             threshold=self.resolution_ratio_threshold,
@@ -1838,6 +1851,7 @@ class TangleWorkbench:
             The bridges cut, each the single registered copy for its
             :data:`~.Bridge.BridgeId`.
         """
+        self._refuse_if_lean("create_bridges")
         registry = self._intersection_registry
         resolved = registry.resolved_ids(self.resolution_ratio_threshold)
         crossings = [ix for iid, ix in registry if iid in resolved]
@@ -1891,6 +1905,7 @@ class TangleWorkbench:
             fixed_point: If given, discard only that fixed point's bridges (and
                 partial pieces); the others keep their objects and ids.
         """
+        self._refuse_if_lean("clear_bridges")
         def dropped(bridge: Bridge) -> bool:
             return fixed_point is None or bridge.fixed_point is fixed_point
 
@@ -1945,6 +1960,7 @@ class TangleWorkbench:
         Returns:
             The freshly created bridges.
         """
+        self._refuse_if_lean("rebuild_bridges")
         carried: dict[BridgeId, tuple[bool, Optional[float]]] = {}
         if self._bridge_id_epoch == self._registry_id_epoch:
             carried = {
@@ -2016,6 +2032,217 @@ class TangleWorkbench:
             list[BridgeId]: The ids, in the order the bridges were cut.
         """
         return list(self._bridges_at.get(intersection_id, ()))
+
+    # ── lean blasting: freeing curve nothing reads again ─────────────────────
+
+    @property
+    def lean(self) -> bool:
+        """Whether a lean blast has released curve of this workbench
+        (:meth:`release_curves`); a lean workbench refuses every operation
+        that would re-read freed curve (growth, recomputes, cuts, trims, save,
+        the same-stability readings), raising
+        :class:`~.Bridge.CurveReleased`."""
+        return self._lean
+
+    def _refuse_if_lean(self, operation: str) -> None:
+        """Raise :class:`~.Bridge.CurveReleased` when a lean blast has freed curve."""
+        if self._lean:
+            raise CurveReleased(
+                f"{operation} would re-read curve a lean blast released; rebuild "
+                "the session and blast it without lean"
+            )
+
+    def release_curves(self, keep: Iterable[BridgeId | Bridge]) -> int:
+        """
+        Free the interior rows of every bridge not in ``keep``, and their phantoms.
+
+        A bridge is kept when ``keep`` names it (by id, or by object for a
+        partial piece) or when it lies on a grown branch (whose rows stay). Every
+        other bridge, and every blast image curve not kept, is RELEASED
+        (:meth:`Bridge.release`): its ends, id, key and flags stay, its rows
+        between the ends go, and a later read raises
+        :class:`~.Bridge.CurveReleased`. Rows any reader still needs are never
+        freed:
+
+        * every row of a kept bridge, and one chain neighbour past each end;
+        * every row of a grown branch;
+        * each crossing's four bracket rows and one chain neighbour of each
+          (``Tangle._outer_neighbours``);
+        * the ends of every bridge and image curve;
+        * the images an un-iterated kept bridge already has (it shares its
+          straddle rows with an iterated neighbour), the run of their chain
+          between them and one neighbour past it, with their phantoms: the
+          merge and the refinement of its image read them
+          (``ManifoldMachine._image_chains``).
+
+        The store is compacted (:meth:`PointStore.compact`) and every holder of
+        a row remapped: curve ends, the registry's brackets and the segment
+        index. The generation advances.
+
+        Args:
+            keep: The bridges to keep, by :data:`~.Bridge.BridgeId` or object.
+
+        Returns:
+            int: The rows freed.
+        """
+        store = self.point_store
+        ids = {k for k in keep if not isinstance(k, Bridge)}
+        objects = {id(k) for k in keep if isinstance(k, Bridge)}
+        branch_chains = {
+            chain.index for m in self._manifolds.values()
+            if (chain := m._span(stop_at_final=False)[1]) is not None
+        }
+        n = len(store)
+        protected = np.isin(store._chain[:n], list(branch_chains))
+
+        def protect(chain, lo: int, hi: int) -> None:
+            protected[chain.ids[max(lo, 0):min(hi, len(chain))]] = True
+
+        frontier = [
+            b for b in self.bridges
+            if not b.released and not b.iterated and (b.id in ids or id(b) in objects)
+        ]
+        objects |= {id(b) for b in self._lineage(frontier)}
+        curves = {id(c): c for c in [*self.bridges, *self._image_curves]}
+        released: list[Bridge] = []
+        freed_spans = []
+        for curve in curves.values():
+            # A released bridge refuses _span; its chain is read past the guard.
+            _head, chain, lo, hi = BaseManifold._span(curve)
+            kept = not curve.released and (curve.id in ids or id(curve) in objects)
+            if kept or chain is None or chain.index in branch_chains:
+                if chain is not None:
+                    protect(chain, lo - 1, hi + 1)
+                if kept and not curve.iterated:
+                    self._protect_images(curve, protected)
+            else:
+                if not curve.released:
+                    released.append(curve)
+                freed_spans.append((chain, lo + 1, hi - 1))
+            for end in (curve._root, curve._tail):
+                if not isinstance(end, BranchPoint):
+                    protected[end] = True
+        for _iid, crossing in self._intersection_registry:
+            for segment in (crossing.unstable_segment, crossing.stable_segment):
+                for end in segment or ():
+                    if isinstance(end, BranchPoint):
+                        continue
+                    chain = store.chain_of(end)
+                    if chain is None:
+                        protected[end] = True
+                    else:
+                        position = store.position_of(end)
+                        protect(chain, position - 1, position + 2)
+
+        freed = np.zeros(n, dtype=bool)
+        for chain, lo, hi in freed_spans:
+            freed[chain.ids[lo:hi]] = True
+        freed &= ~protected
+        rows = np.flatnonzero(freed)
+        phantoms = store._preimage[rows]
+        phantoms = phantoms[phantoms >= 0]
+        phantoms = phantoms[np.isnan(store._cdist[phantoms]) & (store._chain[phantoms] < 0)]
+        freed[phantoms] = True
+        freed &= ~protected
+        for curve in released:
+            curve.release()
+        # A released bridge refuses its rows whether or not any was freed.
+        self._lean = self._lean or bool(released) or bool(freed.any())
+        if not freed.any():
+            self._bump_generation(invalidate_walks=True)
+            return 0
+
+        old_to_new = store.compact(~freed)
+        for curve in self._curves_holding_rows():
+            for name in ("_root", "_tail"):
+                end = getattr(curve, name)
+                if not isinstance(end, BranchPoint) and end is not None:
+                    assert old_to_new[end] >= 0, f"an end of {curve.name} was freed"
+                    setattr(curve, name, int(old_to_new[end]))
+        self._intersection_registry.remap_rows(old_to_new)
+        self.Tangle.remap_rows(old_to_new)
+        self._bump_generation(invalidate_walks=True)
+        return int(freed.sum())
+
+    def _lineage(self, frontier: list[Bridge]) -> list[Bridge]:
+        """The ancestors of the frontier bridges and every bridge their images tile.
+
+        A bridge's parent is the bridge whose interior holds the preimage of
+        one of its rows; its children are the bridges whose interiors hold the
+        images of its rows. A later reference pair is cut from a frontier
+        descendant, and its holes propagate backward through the ancestors
+        (each a hole bridge), whose images the minimal trellis maps.
+        """
+        store = self.point_store
+        spans: dict[int, list[tuple[int, int, Bridge]]] = {}
+        for bridge in self.bridges:
+            if bridge.released:
+                continue
+            _head, chain, lo, hi = bridge._span()
+            if chain is not None:
+                spans.setdefault(chain.index, []).append((lo, hi, bridge))
+        index = {}
+        for chain_index, entries in spans.items():
+            entries.sort(key=lambda entry: entry[0])
+            index[chain_index] = (np.array([e[0] for e in entries]), np.array([e[1] for e in entries]),
+                                  [e[2] for e in entries])
+
+        def owners(bridge: Bridge, link: np.ndarray) -> set[Bridge]:
+            rows = link[bridge._rows()[2]]
+            rows = rows[rows >= 0]
+            chains, positions = store._chain[rows], store._position[rows]
+            found = set()
+            for chain_index in np.unique(chains[chains >= 0]).tolist():
+                if chain_index not in index:
+                    continue
+                los, his, bridges = index[chain_index]
+                at = positions[chains == chain_index]
+                k = np.searchsorted(los, at, side="left") - 1
+                inside = (k >= 0) & (at < his[np.maximum(k, 0)] - 1)
+                found.update(bridges[i] for i in np.unique(k[inside]).tolist())
+            return found
+
+        ancestors: dict[int, Bridge] = {}
+        stack = list(frontier)
+        while stack:
+            for parent in owners(stack.pop(), store._preimage):
+                if id(parent) not in ancestors:
+                    ancestors[id(parent)] = parent
+                    stack.append(parent)
+        lineage = dict(ancestors)
+        for ancestor in ancestors.values():
+            lineage.update((id(child), child) for child in owners(ancestor, store._image))
+        return list(lineage.values())
+
+    def _protect_images(self, bridge: Bridge, protected: np.ndarray) -> None:
+        """Protect the images an un-iterated bridge already has, the run of each
+        of their chains between them plus one neighbour, and their phantoms."""
+        store = self.point_store
+        _head, _store, rows = bridge._rows()
+        images = store._image[rows]
+        images = images[images >= 0]
+        by_chain: dict[int, list[int]] = {}
+        for image in images.tolist():
+            chain = store.chain_of(image)
+            if chain is None:
+                protected[image] = True
+            else:
+                by_chain.setdefault(chain.index, []).append(store.position_of(image))
+        for index, positions in by_chain.items():
+            chain = store.chains[index]
+            run = chain.ids[max(min(positions) - 1, 0):max(positions) + 2]
+            protected[run] = True
+            phantoms = store._preimage[run]
+            protected[phantoms[phantoms >= 0]] = True
+
+    def _curves_holding_rows(self) -> list[BaseManifold]:
+        """Every curve object whose ends are store rows: the branches, the
+        bridges, the image curves and every curve a crossing or a segment
+        names, each once."""
+        curves = [*self._manifolds.values(), *self.bridges, *self._image_curves]
+        curves += [ix.unstable_manifold for _iid, ix in self._intersection_registry]
+        curves += [segment.manifold for segment in self.Tangle._seg_lookup.values()]
+        return list({id(c): c for c in curves if c is not None}.values())
 
     # ── bridge iteration and genealogy (see BridgeIterator) ─────────────────
 
@@ -2180,6 +2407,7 @@ class TangleWorkbench:
             The (trimmed) stable manifold. A branch with no node at or past
             ``cdist`` is left untrimmed, with a WARNING.
         """
+        self._refuse_if_lean("trim_stable_at")
         manifold = self.manifolds[key]
         head, store, rows = manifold._rows(stop_at_final=False)
         candidates = rows if head is not None else rows[1:]  # the root is never the new tail
@@ -2216,6 +2444,7 @@ class TangleWorkbench:
             for crossings; an unresolved detection never sets the trim. The cut
             is :meth:`trim_stable_at`.
         """
+        self._refuse_if_lean("trim_stable_manifolds")
         registry = self._intersection_registry
         outermost: dict[ManifoldKey, float] = {}
         for iid in registry.resolved_ids(self.resolution_ratio_threshold):

@@ -10,11 +10,15 @@ on and the registry ids of the two crossings that bound it (its
 from __future__ import annotations
 from typing import Optional, Sequence
 
+import numpy as np
+from numpy.typing import NDArray
+
 from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 from .BranchPoint import BranchPoint
 from .Intersection import ManifoldKey, Stability
 from .PointStore import End, PointStore
+from .geometry import polyline_midpoint
 
 #: Topological identity of a bridge: the registry ids of the two crossings it
 #: connects, ordered by increasing unstable canonical distance (i.e. in the
@@ -22,6 +26,15 @@ from .PointStore import End, PointStore
 #: between two consecutive crossings, so this pair identifies it completely --
 #: there is exactly one bridge per pair, on exactly one unstable branch.
 BridgeId = tuple[int, int]
+
+
+class CurveReleased(RuntimeError):
+    """A read of curve a lean blast freed (``TangleWorkbench.release_curves``).
+
+    Raised by every row read of a released bridge, and by every workbench
+    operation that would re-read freed curve once a lean blast has run. The
+    remedy is to rebuild the session and blast it without ``lean``.
+    """
 
 
 class Bridge(BaseManifold):
@@ -123,10 +136,54 @@ class Bridge(BaseManifold):
         )
 
         self.iterated: bool = False
-        # The min_separation a blast dropped this bridge at (loom/Blast.py).
+        # The min_separation a blast dropped this bridge at (loom/Blast.py);
+        # -1.0 for a drop by the width guard.
         self.dropped_at: Optional[float] = None
+        # The lobe width the width guard carries down the image chain
+        # (loom/Blast.py); None until a width blast seeds or inherits it.
+        self.width: Optional[float] = None
         self.first_intersection: Optional[int] = first_intersection
         self.second_intersection: Optional[int] = second_intersection
+
+    # What a lean blast leaves of a released bridge (release): class defaults,
+    # set on the instance only when it is released.
+    released: bool = False
+    _test_point: Optional[NDArray[np.float64]] = None
+    _point_count: int = 0
+
+    def release(self) -> None:
+        """
+        Mark the bridge's interior as freed, keeping what readers still need.
+
+        Its ends, id, key, ``iterated``, ``dropped_at`` and ``width`` stay; its
+        midpoint node (:attr:`test_point`) and point count are stored first.
+        Every later row read raises :class:`CurveReleased`. Called by
+        ``TangleWorkbench.release_curves`` before the rows go.
+        """
+        self._test_point = polyline_midpoint(self.get_point_array())
+        self._point_count = len(self.get_point_array())
+        self.released = True
+
+    @property
+    def test_point(self) -> Optional[NDArray[np.float64]]:
+        """The bridge's midpoint node, the point zone membership is tested at
+        (None for an empty bridge); stored when it was released."""
+        return self._test_point if self.released else polyline_midpoint(self.get_point_array())
+
+    @property
+    def point_count(self) -> int:
+        """The points of the bridge's polyline, a periodic-point root included;
+        stored when it was released."""
+        return self._point_count if self.released else len(self.get_point_array())
+
+    def _span(self, *args, **kwargs):
+        """:meth:`BaseManifold._span`, refused once the bridge is released."""
+        if self.released:
+            raise CurveReleased(
+                f"bridge {self.id} was released by a lean blast and its points are "
+                "freed; rebuild without lean to read it"
+            )
+        return super()._span(*args, **kwargs)
 
     @classmethod
     def joined(cls, pieces: Sequence["Bridge"]) -> "Bridge":
