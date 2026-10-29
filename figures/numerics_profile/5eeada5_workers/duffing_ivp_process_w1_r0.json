@@ -1,0 +1,11 @@
+{
+ "workload": "duffing_ivp_process",
+ "workers": 1,
+ "affinity": [
+  16
+ ],
+ "growth_s": 3.5786520399851725,
+ "intersections_s": 0.13353166892193258,
+ "points": 1898,
+ "crossings": 40
+}

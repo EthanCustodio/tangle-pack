@@ -1228,3 +1228,23 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   `query-curve-guard` run if wanted); the remaining whole-field ~10 s / ~20 s per series (persistent cache rejected,
   Q2); `separation` as the next blast cost; the 1e-9 peak rise.
 - **Open for the author:** the grade; the merge (the author's). Not merged at writing.
+
+## 2026-10-29 — Run 1 `cpu-workers` of the speedup campaign (/feature; branch `feature/cpu-workers`, base `5ed9940`)
+
+- **The author's rulings (the approved plan):** `workers` is OPT-IN, default 1 (nothing runs on another core
+  unless asked); `map_executor="process"` uses the FORK start method (the initializer installs the maps in the
+  child, so a closure is never pickled; `ValueError` where fork is missing); the "lean blast" was rejected
+  (the blast keeps every step it has; only the cores change). `workers` is a runtime resource: `save` / `load`
+  neither store nor read it (format 1 unchanged).
+- **Consequence:** for an elementwise map nothing computed moves at any worker count (identity probe identical
+  62 / 6024 / 744 base vs branch at 1 worker and branch at 1 vs 8 workers with every batch split).
+  Deviations from the plan, all measured: two split thresholds (`MIN_PARALLEL_POINTS` 32768 for a vectorised
+  map in threads, `MIN_PARALLEL_POINTS_EXPENSIVE` 16 for a per-point map or a process pool); the separation
+  guard is one logarithmic cloud of KD-trees queried with `distance_upper_bound` (the plan's per-sibling trees
+  measured slower, 8.5 s against 4.1 s), and its queries take no workers (slower at 16); the Duffing example
+  replaces the campaign's pendulum.
+- **Measured** (`bench_workers.py`, E-cores, median of 3): the Duffing `solve_ivp` growth 3.58 -> 0.98 s at 8
+  workers (3.65x); the leapfrog map does not speed up (too cheap); the 1e-7 scale blast 56.9 -> 37.6 s at 8
+  (`diagnose` 1.76x), the 1e-9 blast 72.5 -> 58.3 s (1.24x); the sweep's serial whole-field part (19.3 of
+  44.3 s at 1e-7, 39.0 of 56.3 s at 1e-9) is the ceiling. Suite 1421 / 43 / 5 / C3 alone.
+- **Open for the author:** the merge; whether the sweep's whole-field prefix is the next target.

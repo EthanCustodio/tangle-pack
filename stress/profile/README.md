@@ -139,3 +139,34 @@ change to `compare`; `diagnose=True` leaves every other item as it was.
 
 A slice that changes an accessor the probe reads edits only its readers (`curve_arrays`,
 `curve_extent`, `bracket_cdists`, `image_curves`, `key_text`), in its own diff.
+
+## Workers (speedup campaign run 1, 2026-10-29)
+
+`bench_workers.py` times the opt-in `workers` (`DynamicalSystem` map split, the same-stability
+sweep's pair blocks on threads) at workers 1 / 4 / 8 / 16, median of 3, each run in a fresh
+interpreter pinned with `taskset` to the first `workers` cores of `--cores` (default 16-31: on
+the author's i9-14900K these are the 16 E-cores, free of the author's sweeps on the P-cores).
+`profile_numerics.py --workers N` builds every session with that count.
+
+```bash
+env/bin/python stress/profile/bench_workers.py      # -> figures/numerics_profile/<sha>_workers/
+```
+
+The result (`figures/numerics_profile/5eeada5_workers/`, `table.txt` and one json per run; the
+Duffing runs were taken at `ef7af3b`, whose map code is `5eeada5`'s), medians on the E-cores:
+
+| workload | workers 1 | 4 | 8 | 16 |
+|---|---|---|---|---|
+| Duffing `solve_ivp`, process pool: growth | 3.58 s | 1.38 (2.60x) | 0.98 (3.65x) | 0.81 (4.43x) |
+| Duffing leapfrog, thread pool: growth | 0.27 s | 1.00x | 0.99x | 1.00x |
+| Duffing leapfrog, process pool: growth | 0.27 s | 0.96x | 0.85x | 0.68x |
+| scale 1e-7: blast | 56.9 s | 41.8 (1.36x) | 37.6 (1.51x) | 36.7 (1.55x) |
+| scale 1e-7: diagnose | 44.3 s | 29.2 (1.52x) | 25.2 (1.76x) | 24.1 (1.84x) |
+| scale 1e-9: blast | 72.5 s | 61.0 (1.19x) | 58.3 (1.24x) | 57.7 (1.26x) |
+| scale 1e-9: diagnose | 56.3 s | 45.0 (1.25x) | 42.4 (1.33x) | 41.5 (1.36x) |
+
+The leapfrog map is cheap (0.7 us a point in a batch), so its batches stay below the thread
+threshold and a process pool only adds hand-offs. The sweep's serial part (the whole-field
+segment rows, edge dedup, sweep sort and strip setup) is 19.3 of 44.3 s of `diagnose` at 1e-7
+and 39.0 of 56.3 s at 1e-9: the Amdahl ceiling of its threads. Separation (3.96 s at 1e-7, 7.90 s
+at 1e-9) and the rest of the blast do not move with workers. Every count is the serial one.

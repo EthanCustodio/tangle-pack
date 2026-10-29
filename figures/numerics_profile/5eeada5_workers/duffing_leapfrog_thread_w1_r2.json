@@ -1,0 +1,11 @@
+{
+ "workload": "duffing_leapfrog_thread",
+ "workers": 1,
+ "affinity": [
+  16
+ ],
+ "growth_s": 0.27090152201708406,
+ "intersections_s": 3.608031964977272,
+ "points": 108567,
+ "crossings": 5467
+}

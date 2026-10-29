@@ -77,7 +77,9 @@ default, so a small stretch gets the depth it needs (NUM-15); `grow_until_arclen
 polyline's arc length, not on the tail's canonical distance (NUM-13). Every top-level growth call
 counts the points it creates and raises `PointBudgetExceeded` before the map call that would exceed
 `max_points_per_step` (a resource guard, never an invariant; S). The default `area_cutoff` is 1e-7
-(S).
+(S). The opt-in `workers` (default 1) splits a large map batch across a thread or forked process
+pool and concatenates the chunks in order, so for an elementwise map it changes no result
+(cpu-workers, 2026-10-29).
 
 The data model (one `PointStore`, chains of its rows, curves as views of a chain whose row ends read
 as `End` records, and `BranchPoint` a view of its `FixedPoint`: the orbit point's coordinates, a cdist
@@ -552,7 +554,9 @@ children included. So `n` single-iteration blasts equal one `n`-iteration blast 
 `min_separation="resolution"` is `RESOLUTION_SEPARATION = 1e-5` at the default cutoff, scaled as the
 polylines' chord deviation, `area_cutoff ** (2/3)` (measured on k=2.5: the median deviation falls by
 `10^(2/3)` per decade). A finer cutoff then keeps curves that run closer; the recipes and law cases
-keep their explicit constants.
+keep their explicit constants. `workers` changes no blast result: the map batches and the
+resolution sweep's pair blocks run on that many cores, and every verdict and count is the serial
+one (cpu-workers, 2026-10-29).
 
 **Zones.** A stable trim is a VIEW (C22): growth re-finds every branch's physical end and so
 un-trims a zone, the topology never depends on the trim (the trellis is cut at the pip orbit), and
