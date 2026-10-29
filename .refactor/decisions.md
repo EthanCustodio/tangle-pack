@@ -1264,3 +1264,18 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   0.56 s, the state byte-equal CPU vs GPU. `min_batch_points` default 64 -> 16 (a fused map breaks even at ~10).
 - **Open for the author:** `gpu_enabled` is not re-exported from `tanglepack`; `device-pairs`' 1.6x is recorded
   only here.
+
+## 2026-10-29 — Run 3 `sweep-runner` of the speedup campaign (/feature; branch `feature/sweep-runner`, base `3a35d74`)
+
+- **The author's rulings (plan):** the sweep runner is a script, `scripts/sweep_pool.py` (`Job`, `run_pool`), so the
+  library still has no scheduler (D6); `processes x workers <= cores` or `ValueError`; resume is per finished job
+  (the zone sweep: per finished `k`), never a mid-job workbench save; a job ended by a memory or time cap is not
+  relaunched unless `retry`. The zone sweep's `--processes` replaces `--chunk` / `--merge`; the in-process path is
+  unchanged (its `zones.csv` byte-equal to the base's). The author's nine k25 entropy scripts are tracked (commit 1
+  verbatim, SHA-256 equal to the untracked copies on main at the cut), and only `henon_k25_entropy.py` (`workers`,
+  the summary CSV) and `henon_k25_entropy_post_array_refactor.py` (`pool`) are edited.
+- **Deviations, measured or forced:** a k25 sweep that reaches `--max-blasts` records no `stopped` reason, so a
+  job is done when its JSON records a stop OR a row at its last blast; the zone sweep's seed `k` stays in the
+  first chunk of the upward run (its row is written by that job), and each run of `sweep_order` gets its own chunks
+  (`--processes 1` is one job per side of the seed); `--max-rss-gb` / `--max-seconds` of `pool` are both the
+  sweep's own soft stop and the pool's hard cap.
