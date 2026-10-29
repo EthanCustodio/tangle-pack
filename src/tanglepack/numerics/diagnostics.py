@@ -45,8 +45,9 @@ not sufficient -- a kink can survive one level of refinement.
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Iterator, Literal, Optional
+from typing import TYPE_CHECKING, Callable, Iterable, Literal, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -202,7 +203,9 @@ def same_stability_crossings(
     return [
         hit
         for stability in ("unstable", "stable")
-        for hit in _crossings_among(_curves(workbench, selected, stability), stability, box)
+        for hit in _crossings_among(
+            _curves(workbench, selected, stability), stability, box, workbench.workers
+        )
     ]
 
 
@@ -237,6 +240,7 @@ def count_same_stability_crossings(
         curves,
         _tangle_box(workbench, fixed_points, pad),
         new=np.array([id(bridge) in new for _name, _read, bridge in curves], dtype=bool),
+        workers=workbench.workers,
     )
     pairs = np.unique(np.stack([owner_a[inside], owner_b[inside]], axis=1), axis=0)
     return SameStabilityCount(
@@ -311,6 +315,7 @@ def _crossings_among(
     curves: list[tuple[str, tuple, Optional["Bridge"]]],
     stability: Stability,
     box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
+    workers: int = 1,
 ) -> list[SameStabilityCrossing]:
     """The transversal interior crossings among the segments of some curves."""
     return [
@@ -326,7 +331,7 @@ def _crossings_among(
             suggested_area_cutoff=0.5 * float(area),
             in_tangle_region=bool(inside),
         )
-        for p, q, seg_p, seg_q, (x, y), sin, area, inside in zip(*_hits(curves, box))
+        for p, q, seg_p, seg_q, (x, y), sin, area, inside in zip(*_hits(curves, box, workers=workers))
     ]
 
 
@@ -334,6 +339,7 @@ def _hits(
     curves: list[tuple[str, tuple, Optional["Bridge"]]],
     box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
     new: Optional[NDArray[np.bool_]] = None,
+    workers: int = 1,
 ) -> tuple[NDArray, ...]:
     """The transversal interior crossings among the segments of some curves, as arrays.
 
@@ -344,6 +350,7 @@ def _hits(
     axis. Without ``new`` the hits come in sweep order (by first, then second
     segment); with ``new`` (one flag per curve) only the segment pairs with a
     segment of a new curve are tested, and the hits come strip by strip.
+    ``workers`` threads test the candidate blocks; the hits are the same.
     """
     stores = list(dict.fromkeys(store for _name, (_head, store, rows), _bridge in curves if len(rows)))
     offsets = dict(zip(stores, np.cumsum([0, *(len(store) for store in stores[:-1])]).tolist()))
@@ -366,8 +373,11 @@ def _hits(
     a, b, node_a, node_b = a[order], b[order], node_a[order], node_b[order]
     is_new = np.ones(len(order), dtype=bool) if new is None else new[owner[order]]
 
-    found = [(np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64), np.empty(0), np.empty(0))]
-    for i, j in _candidate_pairs(mins, maxs, is_new, axis):
+    blocks, pairs_in = _candidate_pairs(mins, maxs, is_new, axis, workers)
+
+    def crossings_in(block: NDArray[np.int64]) -> tuple[NDArray, ...]:
+        """The transversal interior crossings among one block's candidate pairs."""
+        i, j = pairs_in(block)
         shared = (node_a[i] == node_a[j]) | (node_a[i] == node_b[j])
         shared |= (node_b[i] == node_a[j]) | (node_b[i] == node_b[j])
         i, j = i[~shared], j[~shared]
@@ -380,7 +390,16 @@ def _hits(
             u = (r[:, 0] * d1[:, 1] - r[:, 1] * d1[:, 0]) / den
         hit = (np.abs(den) > _EPS_REL * scale) & (t > _MARGIN) & (t < 1 - _MARGIN)
         hit &= (u > _MARGIN) & (u < 1 - _MARGIN)
-        found.append((i[hit], j[hit], t[hit], np.abs(den[hit]) / scale[hit]))
+        return i[hit], j[hit], t[hit], np.abs(den[hit]) / scale[hit]
+
+    # The blocks are independent, so they run on ``workers`` threads (numpy
+    # releases the GIL in their array work), in block order either way.
+    found = [(np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64), np.empty(0), np.empty(0))]
+    if workers > 1 and len(blocks) > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            found += pool.map(crossings_in, blocks)
+    else:
+        found += map(crossings_in, blocks)
     i, j, t, sin = (np.concatenate(column) for column in zip(*found))
     if new is None:
         # The strips find the pairs strip by strip; the listing is in sweep order.
@@ -459,11 +478,16 @@ def _sweep_axis(mins: NDArray[np.float64], maxs: NDArray[np.float64]) -> int:
 
 
 def _candidate_pairs(
-    mins: NDArray[np.float64], maxs: NDArray[np.float64], is_new: NDArray[np.bool_], axis: int
-) -> Iterator[tuple[NDArray[np.int64], NDArray[np.int64]]]:
+    mins: NDArray[np.float64],
+    maxs: NDArray[np.float64],
+    is_new: NDArray[np.bool_],
+    axis: int,
+    workers: int = 1,
+) -> tuple[list[NDArray[np.int64]], Callable[[NDArray[np.int64]], tuple[NDArray, NDArray]]]:
     """Every pair of boxes that overlap and hold a new one, by sweep and prune
-    inside strips, in blocks of about ``_PAIR_BLOCK`` candidates.
-
+    inside strips, as blocks of about ``_PAIR_BLOCK`` candidates (a quarter of
+    each worker's share with ``workers`` above 1) and the function that builds
+    one block's pairs.
     The boxes come sorted by their minima along ``axis`` (the sweep), and a
     pair ``(p, q)`` of sweep positions has ``p < q``. The other axis is cut
     into strips ``_STRIP_WIDTH`` median extents of the new boxes wide (at most
@@ -481,7 +505,7 @@ def _candidate_pairs(
     holds no blast's image curves.)
     """
     if not is_new.any():
-        return
+        return [], None
     across = 1 - axis
     low, high = float(mins[:, across].min()), float(maxs[:, across].max())
     width = _STRIP_WIDTH * float(np.median(maxs[is_new, across] - mins[is_new, across]))
@@ -522,7 +546,11 @@ def _candidate_pairs(
     count = np.where(entry_new, ends - entries - 1, until - after)
 
     totals = np.cumsum(count)
-    for block in np.split(entries, np.searchsorted(totals, np.arange(_PAIR_BLOCK, totals[-1], _PAIR_BLOCK))):
+    size = _PAIR_BLOCK if workers == 1 else max(1, min(_PAIR_BLOCK, int(totals[-1]) // (4 * workers)))
+    blocks = np.split(entries, np.searchsorted(totals, np.arange(size, totals[-1], size)))
+
+    def pairs_in(block: NDArray[np.int64]) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
+        """The overlapping pairs of one block's candidates."""
         block_counts = count[block]
         entry = np.repeat(block, block_counts)
         offset = np.arange(block_counts.sum()) - np.repeat(
@@ -534,4 +562,6 @@ def _candidate_pairs(
             & (mins[q, across] <= maxs[p, across])
             & (np.maximum(first_strip[p], first_strip[q]) == strip[entry])
         )
-        yield p[keep], q[keep]
+        return p[keep], q[keep]
+
+    return blocks, pairs_in
