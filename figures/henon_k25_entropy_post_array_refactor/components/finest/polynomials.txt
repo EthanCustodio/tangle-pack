@@ -1,0 +1,49 @@
+Henon k=2.5, cutoff finest per case: p1 1e-13, p3 1e-14, nested 1e-12: char(M_1) factored over Z; [ ] = the factor holding rho
+
+period 1 (outer) alone
+  blasts       0  h=0.0000000000  size   2  recurrent   1  leading   1: x^1 * [(x - 1)]
+  blasts       1  h=0.0000000000  size   1  recurrent   1  leading   1: [(x - 1)]
+  blasts     2-7  h=0.5280489095  size   4  recurrent   4  leading   4: x^1 * [(x^3 - x^2 - 2)]
+  blasts    8-13  h=0.5280489095  size  19  recurrent  11  leading  10: x^15 * [(x^3 - x^2 - 2)] * (x - 1)
+  blasts   14-16  h=0.5280489095  size  44  recurrent  18  leading  17: x^40 * [(x^3 - x^2 - 2)] * (x - 1)
+  blasts      17  h=0.5281138883  size  61  recurrent  32  leading  31: x^39 * [(P20(x))] * (x + 1) * (x - 1)
+  blasts   18-19  h=0.5281138883  size  63  recurrent  33  leading  32: x^41 * [(P20(x))] * (x + 1) * (x - 1)
+  blasts   20-27  h=0.5281271971  size  70  recurrent  40  leading  39: x^45 * [(P24(x))] * (x - 1)
+  P20(x), largest root 1.6957309525: x^20 - 2*x^19 + 2*x^18 - 4*x^17 + 4*x^16 - 4*x^15 + 4*x^14 - 4*x^13 + 4*x^12 - 4*x^11 + 4*x^10 - 4*x^9 + 4*x^8 - 4*x^7 + 4*x^6 - 4*x^5 + 4*x^4 - 4*x^3 + 2*x^2 - 2*x + 2
+  P24(x), largest root 1.6957535207: x^24 - x^23 - 2*x^21 - 2*x^6 + 2
+
+period 3 (inner) alone
+  blasts     0-5  h=0.0000000000  size   3  recurrent   3  leading   3: [(x - 1)] * [(x^2 + x + 1)]
+  blasts    6-10  h=0.1535942074  size  27  recurrent  15  leading  12: x^13 * [(P11(x))] * (x - 1) * (x^2 + x + 1)
+  blasts   11-13  h=0.1773337568  size  46  recurrent  29  leading  26: x^19 * [(P21(x))] * (x + 1) * (x - 1) * (x^2 + x + 1) * (x^2 - x + 1)
+  blasts   14-18  h=0.1859098875  size  56  recurrent  44  leading  41: x^23 * [(P29(x))] * (x + 1) * (x - 1) * (x^2 + x + 1)
+  blasts   19-21  h=0.1859098875  size  86  recurrent  53  leading  50: x^53 * [(P29(x))] * (x + 1) * (x - 1) * (x^2 + x + 1)
+  blasts   22-26  h=0.1877778171  size 106  recurrent  62  leading  59: x^57 * [(P45(x))] * (x + 1) * (x - 1) * (x^2 + x + 1)
+  blasts   27-29  h=0.1885179724  size 131  recurrent  87  leading  84: x^58 * [(P69(x))] * (x + 1) * (x - 1) * (x^2 + x + 1)
+  blasts   30-31  h=0.1886213525  size 131  recurrent  98  leading  95: x^58 * [(P69'(x))] * (x + 1) * (x - 1) * (x^2 + x + 1)
+  blasts   32-60  h=0.1892423013  size 134  recurrent  87  leading  84: x^72 * [(P58(x))] * (x + 1) * (x - 1) * (x^2 + x + 1)
+  P11(x), largest root 1.1660176295: x^11 - x^8 - 2
+  P21(x), largest root 1.1940295421: x^21 - 2*x^18 + 2*x^15 - x^13 - 2*x^12 + 2*x^9 - 2*x^6 + 2*x^3 - 2
+  P29(x), largest root 1.2043137318: x^29 - x^28 + x^27 - 2*x^26 + 2*x^25 - 2*x^24 + 2*x^23 - 2*x^22 + 2*x^10 - 2*x^9 + 2*x^8 - 2*x^7 + 2*x^6 - 2*x^5 + 2*x^4 - 2*x^3 - 2*x^2 + 2*x - 2
+  P45(x), largest root 1.2065654073: x^45 - x^44 + x^43 - 2*x^42 + 2*x^41 - 2*x^40 + 2*x^39 - 2*x^38 + x^26 - x^25 + x^24 - 2*x^18 + 2*x^17 - 2*x^16 - 2*x^15 + 2*x^14 - 2*x^13 + 2*x^7 - 2*x^6 + 2*x^5 - 2*x^4 + 2*x^3 - 2*x^2 + 2*x - 2
+  P69(x), largest root 1.2074587837: x^69 - x^68 + x^67 - 2*x^66 + 2*x^65 - 2*x^64 + 2*x^63 - 2*x^62 + x^50 - x^49 + x^48 - 2*x^42 + 2*x^41 - 2*x^40 - 2*x^39 + 2*x^38 - 4*x^37 + 2*x^36 - 2*x^35 + 2*x^34 - 2*x^33 + 2*x^32 + 2*x^29 - 2*x^28 + 2*x^27 - 2*x^26 + 2*x^25 - 2*x^24 - 2*x^18 + 2*x^17 - 2*x^16 + 2*x^15 - 2*x^14 + 2*x^13 - 2*x^12 + 2*x^11 - 4*x^7 + 4*x^6 - 4*x^5 + 4*x^4 - 4*x^3 + 4*x^2 - 4*x + 4
+  P69'(x), largest root 1.2075836174: x^69 - x^68 + x^67 - 2*x^66 + 2*x^65 - 2*x^64 + 2*x^63 - 2*x^62 + 2*x^47 - 2*x^46 + 2*x^45 - 2*x^44 + 2*x^43 - 2*x^42 + 2*x^41 - 2*x^40 - 2*x^39 + 2*x^38 - 4*x^37 + 2*x^36 - 2*x^35 + 2*x^34 - 2*x^33 + 2*x^32 - 2*x^31 + 2*x^30 + 2*x^23 - 2*x^22 + 2*x^21 - 2*x^20 + 2*x^19 - 2*x^18 + 2*x^17 - 2*x^16 - 4*x^7 + 4*x^6 - 4*x^5 + 4*x^4 - 4*x^3 + 4*x^2 - 4*x + 4
+  P58(x), largest root 1.2083336979: x^58 - x^57 + x^56 - 2*x^55 + 2*x^54 - 2*x^53 + 2*x^52 - 2*x^51 - 2*x^37 + 4*x^36 - 4*x^35 + 6*x^34 - 6*x^33 + 6*x^32 - 6*x^31 + 6*x^30 - 4*x^29 - 2*x^25 + 2*x^24 - 2*x^23 + 2*x^22 - 4*x^15 + 4*x^14 - 4*x^13 + 6*x^12 - 6*x^11 + 6*x^10 - 6*x^9 + 6*x^8 - 2*x^7 + 2*x^6 - 2*x^5 + 4*x^4 - 4*x^3 + 4*x^2 - 4*x + 4
+
+nested: period 1 + period 3
+  blasts       0  h=0.0000000000  size  14  recurrent   6  leading   3: x^8 * [(x - 1)^2] * [(x^2 + x + 1)^2]
+  blasts     1-4  h=0.5280489095  size  16  recurrent  10  leading   4: x^7 * [(x^3 - x^2 - 2)] * (x - 1)^2 * (x^2 + x + 1)^2
+  blasts       5  h=0.5281313392  size  32  recurrent  27  leading  24: x^11 * [(P18(x))] * (x - 1) * (x^2 + x + 1)
+  blasts       6  h=0.5281313392  size  56  recurrent  39  leading  24: x^24 * [(P18(x))] * (P11(x)) * (x - 1) * (x^2 + x + 1)
+  blasts    7-10  h=0.5281516730  size  61  recurrent  40  leading  24: x^28 * [(P18'(x))] * (P11(x)) * (x - 1)^2 * (x^2 + x + 1)
+  blasts   11-12  h=0.5281516730  size  80  recurrent  54  leading  24: x^34 * [(P18'(x))] * (P21(x)) * (x + 1) * (x - 1)^2 * (x^2 + x + 1) * (x^2 - x + 1)
+  blasts      13  h=0.5281516730  size  93  recurrent  55  leading  25: x^47 * [(P18'(x))] * (P21(x)) * (x + 1) * (x - 1)^2 * (x^2 + x + 1) * (x^2 - x + 1)
+  blasts   14-18  h=0.5281516730  size 103  recurrent  70  leading  25: x^51 * [(P18'(x))] * (P29(x)) * (x + 1) * (x - 1)^2 * (x^2 + x + 1)
+  blasts   19-21  h=0.5281516730  size 133  recurrent  79  leading  25: x^81 * [(P18'(x))] * (P29(x)) * (x + 1) * (x - 1)^2 * (x^2 + x + 1)
+  blasts   22-60  h=0.5281516730  size 153  recurrent  88  leading  25: x^85 * [(P18'(x))] * (P45(x)) * (x + 1) * (x - 1)^2 * (x^2 + x + 1)
+  P18(x), largest root 1.6957605449: x^18 - x^17 - 2*x^15 - x^9 + x^8 + 2*x^6 - 2
+  P11(x), largest root 1.1660176295: x^11 - x^8 - 2
+  P18'(x), largest root 1.6957950264: x^18 - x^17 - 3*x^15 + x^14 + 2*x^12 - 2
+  P21(x), largest root 1.1940295421: x^21 - 2*x^18 + 2*x^15 - x^13 - 2*x^12 + 2*x^9 - 2*x^6 + 2*x^3 - 2
+  P29(x), largest root 1.2043137318: x^29 - x^28 + x^27 - 2*x^26 + 2*x^25 - 2*x^24 + 2*x^23 - 2*x^22 + 2*x^10 - 2*x^9 + 2*x^8 - 2*x^7 + 2*x^6 - 2*x^5 + 2*x^4 - 2*x^3 - 2*x^2 + 2*x - 2
+  P45(x), largest root 1.2065654073: x^45 - x^44 + x^43 - 2*x^42 + 2*x^41 - 2*x^40 + 2*x^39 - 2*x^38 + x^26 - x^25 + x^24 - 2*x^18 + 2*x^17 - 2*x^16 - 2*x^15 + 2*x^14 - 2*x^13 + 2*x^7 - 2*x^6 + 2*x^5 - 2*x^4 + 2*x^3 - 2*x^2 + 2*x - 2

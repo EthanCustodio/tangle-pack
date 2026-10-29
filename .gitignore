@@ -36,3 +36,8 @@ figures/refactor_proof/**/*.fig.pickle
 .plan.md
 .base-cov.json
 .cand-cov.json
+
+# k25 entropy rerun: PNGs, READMEs and summaries are tracked, the heavy SVG/pickle copies and the sweep data stay local
+figures/henon_k25_entropy_post_array_refactor/**/*.svg
+figures/henon_k25_entropy_post_array_refactor/**/*.fig.pickle
+figures/henon_k25_entropy_post_array_refactor/**/*.json

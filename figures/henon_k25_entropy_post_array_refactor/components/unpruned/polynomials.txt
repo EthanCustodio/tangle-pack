@@ -1,0 +1,31 @@
+Henon k=2.5, cutoff 1e-09: char(M_1) factored over Z; [ ] = the factor holding rho
+
+period 1 (outer) alone
+  blasts       0  h=0.0000000000  size   2  recurrent   1  leading   1: x^1 * [(x - 1)]
+  blasts       1  h=0.0000000000  size   1  recurrent   1  leading   1: [(x - 1)]
+  blasts     2-7  h=0.5280489095  size   4  recurrent   4  leading   4: x^1 * [(x^3 - x^2 - 2)]
+  blasts    8-18  h=0.5280489095  size  19  recurrent  11  leading  10: x^15 * [(x^3 - x^2 - 2)] * (x - 1)
+
+period 3 (inner) alone
+  blasts     0-5  h=0.0000000000  size   3  recurrent   3  leading   3: [(x - 1)] * [(x^2 + x + 1)]
+  blasts    6-10  h=0.1535942074  size  27  recurrent  15  leading  12: x^13 * [(P11(x))] * (x - 1) * (x^2 + x + 1)
+  blasts   11-13  h=0.1773337568  size  46  recurrent  29  leading  26: x^19 * [(P21(x))] * (x + 1) * (x - 1) * (x^2 + x + 1) * (x^2 - x + 1)
+  blasts   14-18  h=0.1859098875  size  56  recurrent  44  leading  41: x^23 * [(P29(x))] * (x + 1) * (x - 1) * (x^2 + x + 1)
+  blasts   19-45  h=0.1859098875  size  86  recurrent  53  leading  50: x^53 * [(P29(x))] * (x + 1) * (x - 1) * (x^2 + x + 1)
+  P11(x), largest root 1.1660176295: x^11 - x^8 - 2
+  P21(x), largest root 1.1940295421: x^21 - 2*x^18 + 2*x^15 - x^13 - 2*x^12 + 2*x^9 - 2*x^6 + 2*x^3 - 2
+  P29(x), largest root 1.2043137318: x^29 - x^28 + x^27 - 2*x^26 + 2*x^25 - 2*x^24 + 2*x^23 - 2*x^22 + 2*x^10 - 2*x^9 + 2*x^8 - 2*x^7 + 2*x^6 - 2*x^5 + 2*x^4 - 2*x^3 - 2*x^2 + 2*x - 2
+
+nested: period 1 + period 3
+  blasts       0  h=0.0000000000  size  14  recurrent   6  leading   3: x^8 * [(x - 1)^2] * [(x^2 + x + 1)^2]
+  blasts     1-4  h=0.5280489095  size  16  recurrent  10  leading   4: x^7 * [(x^3 - x^2 - 2)] * (x - 1)^2 * (x^2 + x + 1)^2
+  blasts       5  h=0.5281313392  size  32  recurrent  27  leading  24: x^11 * [(P18(x))] * (x - 1) * (x^2 + x + 1)
+  blasts       6  h=0.5281313392  size  56  recurrent  39  leading  24: x^24 * [(P18(x))] * (P11(x)) * (x - 1) * (x^2 + x + 1)
+  blasts    7-10  h=0.5281516730  size  61  recurrent  40  leading  24: x^28 * [(P18'(x))] * (P11(x)) * (x - 1)^2 * (x^2 + x + 1)
+  blasts   11-13  h=0.5281516730  size  80  recurrent  54  leading  24: x^34 * [(P18'(x))] * (P21(x)) * (x + 1) * (x - 1)^2 * (x^2 + x + 1) * (x^2 - x + 1)
+  blasts   14-17  h=0.5281516730  size  90  recurrent  69  leading  24: x^38 * [(P18'(x))] * (P29(x)) * (x + 1) * (x - 1)^2 * (x^2 + x + 1)
+  P18(x), largest root 1.6957605449: x^18 - x^17 - 2*x^15 - x^9 + x^8 + 2*x^6 - 2
+  P11(x), largest root 1.1660176295: x^11 - x^8 - 2
+  P18'(x), largest root 1.6957950264: x^18 - x^17 - 3*x^15 + x^14 + 2*x^12 - 2
+  P21(x), largest root 1.1940295421: x^21 - 2*x^18 + 2*x^15 - x^13 - 2*x^12 + 2*x^9 - 2*x^6 + 2*x^3 - 2
+  P29(x), largest root 1.2043137318: x^29 - x^28 + x^27 - 2*x^26 + 2*x^25 - 2*x^24 + 2*x^23 - 2*x^22 + 2*x^10 - 2*x^9 + 2*x^8 - 2*x^7 + 2*x^6 - 2*x^5 + 2*x^4 - 2*x^3 - 2*x^2 + 2*x - 2
