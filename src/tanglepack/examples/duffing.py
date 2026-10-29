@@ -19,9 +19,9 @@ Two forms of the map:
   scheme run with ``-h`` from ``T`` back to 0. Both are array-API
   (``np.stack``) and batch-capable on axis 0, as :mod:`.henon`'s.
 * :func:`duffing_map_ivp` / :func:`duffing_map_ivp_inverse` integrate one
-  point at a time with ``scipy.integrate.solve_ivp`` (DOP853), the GIL-bound
-  form ``map_executor="process"`` is for. They are area-preserving only to
-  their tolerance.
+  point at a time with ``scipy.integrate.solve_ivp`` (DOP853), a batch in a
+  Python loop: the GIL-bound form ``map_executor="process"`` is for. They are
+  area-preserving only to their tolerance.
 """
 
 from __future__ import annotations
@@ -101,20 +101,21 @@ def duffing_map_inverse(
 
 
 def _ivp(eps: float, omega: float, rtol: float, direction: int) -> MapFunction:
-    """The flow over one forcing period by ``solve_ivp``, one ``(2,)`` point at a time."""
+    """The flow over one forcing period by ``solve_ivp``, one point per integration."""
     period = 2 * np.pi / omega
+    span = (0.0, period) if direction > 0 else (period, 0.0)
 
     def field(t: float, state: NDArray[np.float64]) -> list[float]:
         q, p = state
         return [p, q - q**3 + eps * np.cos(omega * t)]
 
     def flow(point: NDArray[np.float64]) -> NDArray[np.float64]:
-        start, end = (0.0, period) if direction > 0 else (period, 0.0)
-        solution = solve_ivp(
-            field, (start, end), np.asarray(point, dtype=float),
-            method="DOP853", rtol=rtol, atol=rtol,
-        )
-        return solution.y[:, -1]
+        point = np.asarray(point, dtype=float)
+        images = [
+            solve_ivp(field, span, column, method="DOP853", rtol=rtol, atol=rtol).y[:, -1]
+            for column in point.reshape(2, -1).T
+        ]
+        return np.stack(images, axis=1).reshape(point.shape)
 
     return flow
 
@@ -131,9 +132,9 @@ def duffing_map_ivp(
         rtol (float): The integrator's relative (and absolute) tolerance.
 
     Returns:
-        MapFunction: The map on a single ``(2,)`` point (not batch-capable:
-        the library maps a batch point by point). Area-preserving only to
-        ``rtol``.
+        MapFunction: The map on a ``(2,)`` point or a ``(2, N)`` batch, each
+        point integrated on its own in Python (GIL-bound). Area-preserving
+        only to ``rtol``.
     """
     return _ivp(eps, omega, rtol, +1)
 
@@ -150,7 +151,7 @@ def duffing_map_ivp_inverse(
         rtol (float): The integrator's tolerance.
 
     Returns:
-        MapFunction: The inverse map on a single ``(2,)`` point.
+        MapFunction: The inverse map, per point as :func:`duffing_map_ivp`.
     """
     return _ivp(eps, omega, rtol, -1)
 
