@@ -40,7 +40,7 @@ import matplotlib.pyplot as plt
 
 from . import persist
 from .BridgeIterator import BridgeIterator
-from .DynamicalSystem import DynamicalSystem, MapFunc, JacFunc
+from .DynamicalSystem import DynamicalSystem, JacFunc, MapExecutor, MapFunc
 from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import DEFAULT_AREA_CUTOFF, ManifoldMachine
@@ -163,6 +163,9 @@ class TangleWorkbench:
             (see :attr:`max_points_per_step`).
         escape_radius: Optional ``max|coordinate|`` above which a growth step
             logs a WARNING; off by default.
+        workers: Cores the batched map, the same-stability sweep and the blast's
+            separation queries run on (see :attr:`workers`); 1 by default.
+        map_executor: The pool the map split runs in (see :attr:`map_executor`).
         resolution_ratio_threshold: Part of the definition of N: a detection
             whose resolution ratio is below it is no crossing (see the
             constructor).
@@ -207,6 +210,8 @@ class TangleWorkbench:
         area_cutoff: float = DEFAULT_AREA_CUTOFF,
         max_points_per_step: Optional[int] = DEFAULT_MAX_POINTS_PER_STEP,
         escape_radius: Optional[float] = None,
+        workers: int = 1,
+        map_executor: MapExecutor = "thread",
         resolution_ratio_threshold: Optional[float] = 3.0,
     ) -> None:
         """
@@ -225,6 +230,12 @@ class TangleWorkbench:
                 ``None`` disables it.
             escape_radius (Optional[float]): ``max|coordinate|`` above which a
                 growth step warns; ``None`` (default) never warns.
+            workers (int): Cores to run the batched map, the same-stability
+                sweep and the separation queries on; 1 (default) runs them in
+                the caller. Nothing computed depends on it for an elementwise
+                map (:mod:`.DynamicalSystem`).
+            map_executor (MapExecutor): ``"thread"`` (default) or
+                ``"process"``, the pool the map split runs in.
             resolution_ratio_threshold (Optional[float]): Part of the
                 definition of N (design note §A.2): a detection whose
                 :attr:`~.Intersection.Intersection.resolution_ratio` is below it
@@ -243,7 +254,11 @@ class TangleWorkbench:
         """
 
         self.dynamical_system = DynamicalSystem(
-            dynamical_map, dynamical_map_inverse, jacobian_function
+            dynamical_map,
+            dynamical_map_inverse,
+            jacobian_function,
+            workers=workers,
+            map_executor=map_executor,
         )
 
         self._fp_solver = FixedPointSolver(self.dynamical_system)
@@ -339,6 +354,33 @@ class TangleWorkbench:
     @max_points_per_step.setter
     def max_points_per_step(self, value: Optional[int]) -> None:
         self._man_machine.max_points_per_step = value
+
+    # ── cores ────────────────────────────────────────────────────────────────
+
+    @property
+    def workers(self) -> int:
+        """
+        Cores the batched map, the same-stability sweep and the blast's
+        separation queries run on; 1 runs them in the caller.
+
+        A runtime resource: :meth:`save` does not store it and :meth:`load`
+        gives 1. For an elementwise map nothing computed depends on it.
+        """
+        return self.dynamical_system.workers
+
+    @workers.setter
+    def workers(self, value: int) -> None:
+        self.dynamical_system.workers = value
+
+    @property
+    def map_executor(self) -> MapExecutor:
+        """The pool the map split runs in, ``"thread"`` or ``"process"``
+        (:attr:`.DynamicalSystem.DynamicalSystem.map_executor`)."""
+        return self.dynamical_system.map_executor
+
+    @map_executor.setter
+    def map_executor(self, value: MapExecutor) -> None:
+        self.dynamical_system.map_executor = value
 
     def growth_stats(
         self,

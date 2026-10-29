@@ -13,7 +13,9 @@ and every manifold iteration maps a whole ``(2, N)`` batch in a single call (see
 :meth:`DynamicalSystem.map_batch`), and that single call is what runs on the
 device. Per-point evaluations (a single ``(2,)`` point, as used by the
 initializer and the fixed-point solver) stay on the CPU to avoid paying the
-host<->device transfer for two numbers.
+host<->device transfer for two numbers. While the map is wrapped,
+``DynamicalSystem``'s ``workers`` split is skipped: the device gets the whole
+batch.
 
 What runs where
 ---------------

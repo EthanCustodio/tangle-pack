@@ -18,7 +18,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..numerics.TangleWorkbench import TangleWorkbench
-from ..numerics.DynamicalSystem import MapFunc, JacFunc
+from ..numerics.DynamicalSystem import JacFunc, MapExecutor, MapFunc
 from ..numerics.ManifoldMachine import DEFAULT_AREA_CUTOFF
 from ..numerics.budget import DEFAULT_MAX_POINTS_PER_STEP
 from ..numerics.geometry import polyline_midpoint
@@ -94,6 +94,8 @@ class TangleSession:
         area_cutoff: float = DEFAULT_AREA_CUTOFF,
         max_points_per_step: Optional[int] = DEFAULT_MAX_POINTS_PER_STEP,
         escape_radius: Optional[float] = None,
+        workers: int = 1,
+        map_executor: MapExecutor = "thread",
     ):
         """
         Build a session around a fresh workbench for the given map.
@@ -108,6 +110,9 @@ class TangleSession:
                 disables it.
             escape_radius: ``max|coordinate|`` above which a growth step warns;
                 ``None`` (default) never warns.
+            workers: The workbench's core count (1 by default; see
+                :attr:`~.numerics.TangleWorkbench.TangleWorkbench.workers`).
+            map_executor: The workbench's map pool, ``"thread"`` or ``"process"``.
         """
         self.workbench = TangleWorkbench(
             dynamical_map,
@@ -116,6 +121,8 @@ class TangleSession:
             area_cutoff=area_cutoff,
             max_points_per_step=max_points_per_step,
             escape_radius=escape_radius,
+            workers=workers,
+            map_executor=map_executor,
         )
         # One Trellis snapshot and one Topology per fixed-point selection.
         self._trellises: dict[frozenset, Trellis] = {}
@@ -236,6 +243,24 @@ class TangleSession:
     @escape_radius.setter
     def escape_radius(self, value: Optional[float]) -> None:
         self.workbench.escape_radius = value
+
+    @property
+    def workers(self) -> int:
+        """The workbench's core count (read and set through)."""
+        return self.workbench.workers
+
+    @workers.setter
+    def workers(self, value: int) -> None:
+        self.workbench.workers = value
+
+    @property
+    def map_executor(self) -> MapExecutor:
+        """The workbench's map pool (read and set through)."""
+        return self.workbench.map_executor
+
+    @map_executor.setter
+    def map_executor(self, value: MapExecutor) -> None:
+        self.workbench.map_executor = value
 
     # ── topological view ─────────────────────────────────────────────────────
 
