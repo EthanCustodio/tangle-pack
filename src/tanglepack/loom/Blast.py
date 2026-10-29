@@ -105,26 +105,43 @@ def _interior_points(bridge: "Bridge") -> np.ndarray:
     return pts[margin:-margin]
 
 
-def _near_sibling(
-    interior: np.ndarray,
-    siblings: list[tuple[np.ndarray, np.ndarray, cKDTree]],
-    separation: float,
-) -> bool:
-    """Whether ``interior`` comes within ``separation`` of a kept sibling's interior.
+class _Cloud:
+    """The interiors the proximity guard tests against, as a few KD-trees.
 
-    Each sibling is ``(lo, hi, tree)``, its interior's bounding box and KD-tree.
-    A sibling whose box lies ``separation`` or more from the child's box on one
-    axis holds no point that close, so only the others are queried: the verdict
-    of one tree over every sibling's points, without the tree.
+    Bentley and Saxe's logarithmic method: the points sit in trees of distinct
+    sizes, and adding a batch merges it with every tree no larger than it, so
+    there are O(log n) trees and each point is rebuilt O(log n) times. A query
+    reads every tree. The verdict is that of one tree over the union -- the
+    distance to a union is the least over its parts -- without building one
+    tree per child over everything kept so far.
     """
-    if not len(interior):
-        return False
-    lo, hi = interior.min(axis=0), interior.max(axis=0)
-    return any(
-        float(tree.query(interior)[0].min()) < separation
-        for sibling_lo, sibling_hi, tree in siblings
-        if np.all(sibling_lo - hi < separation) and np.all(lo - sibling_hi < separation)
-    )
+
+    def __init__(self, workers: int) -> None:
+        self.trees: list[tuple[np.ndarray, cKDTree]] = []
+        self.workers = workers
+
+    def add(self, interiors: list[np.ndarray]) -> None:
+        """Hold the points of ``interiors`` too (one batch: one merge)."""
+        interiors = [points for points in interiors if len(points)]
+        if not interiors:
+            return
+        points = np.vstack(interiors)
+        while self.trees and len(self.trees[-1][0]) <= len(points):
+            points = np.vstack((self.trees.pop()[0], points))
+        # The sliding-midpoint tree builds twice as fast; its nearest points are exact too.
+        self.trees.append((points, cKDTree(points, balanced_tree=False, compact_nodes=False)))
+
+    def near(self, points: np.ndarray, separation: float) -> bool:
+        """Whether a point of ``points`` lies closer than ``separation`` to one held.
+
+        The queries stop at ``separation``: a nearer point is found exactly, and
+        a farther one cannot change the verdict.
+        """
+        return len(points) > 0 and any(
+            float(tree.query(points, distance_upper_bound=separation, workers=self.workers)[0].min())
+            < separation
+            for _held, tree in self.trees
+        )
 
 
 def _pip_orbits(
@@ -386,12 +403,9 @@ def blast_zone(
     # cross (the "zig-zag"). Stopping a bridge whose image lands that close to ANY
     # existing fold (not just a same-generation sibling) keeps the blast on the
     # well-resolved side of that limit while still letting it extend into fresh space.
-    reference_points: list[np.ndarray] = []
+    cloud = _Cloud(workbench.workers)
     if min_separation is not None:
-        for b in workbench.bridges:
-            interior = _interior_points(b)
-            if len(interior):
-                reference_points.append(interior)
+        cloud.add([_interior_points(b) for b in workbench.bridges])
 
     # The point budget's bookkeeping: the bridges the workbench already holds
     # (an image piece resolving to one of them adds no points) and the growth
@@ -432,16 +446,6 @@ def blast_zone(
         discarded: list["Bridge"] = []
         too_close: list["Bridge"] = []
         already_known: list["Bridge"] = []
-
-        # Snapshot the accumulated manifold once per generation (one KDTree build,
-        # not one per child). Bridges kept within this generation are still caught by
-        # the same-generation siblings below, each with its box and tree.
-        ref_tree = (
-            cKDTree(np.vstack(reference_points))
-            if (min_separation is not None and reference_points)
-            else None
-        )
-        kept_siblings: list[tuple[np.ndarray, np.ndarray, cKDTree]] = []
 
         for parent in frontier:
             if parent.iterated:
@@ -486,29 +490,17 @@ def blast_zone(
                     "kept regardless of separation",
                     child.id, n, owner.label, pip_end,
                 )
-            elif min_separation is not None:
-                interior = _interior_points(child)
-                too_near_existing = (
-                    ref_tree is not None
-                    and len(interior)
-                    and float(ref_tree.query(interior, workers=workbench.workers)[0].min())
-                    < min_separation
-                )
-                if too_near_existing or _near_sibling(interior, kept_siblings, min_separation):
-                    seen.add(_seen_key(child))
-                    child.dropped_at = min_separation
-                    too_close.append(child)
-                    continue
+            elif min_separation is not None and cloud.near(_interior_points(child), min_separation):
+                seen.add(_seen_key(child))
+                child.dropped_at = min_separation
+                too_close.append(child)
+                continue
 
             seen.add(_seen_key(child))
             kept.append(child)
+            # A kept child is curve every later child keeps clear of.
             if min_separation is not None:
-                interior = _interior_points(child)
-                if len(interior):
-                    reference_points.append(interior)
-                    kept_siblings.append(
-                        (interior.min(axis=0), interior.max(axis=0), cKDTree(interior))
-                    )
+                cloud.add([_interior_points(child)])
 
         result.steps.append(
             BlastStep(
@@ -526,9 +518,7 @@ def blast_zone(
         # Every child is curve the workbench now holds, dropped or exterior
         # alike: the next step's cloud is the one a later call would build.
         if min_separation is not None:
-            reference_points += [
-                p for c in discarded + too_close if len(p := _interior_points(c))
-            ]
+            cloud.add([_interior_points(c) for c in discarded + too_close])
 
         new_points = 0
         for child in produced:
