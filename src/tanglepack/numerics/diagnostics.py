@@ -47,7 +47,7 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Iterable, Literal, Optional
+from typing import TYPE_CHECKING, Iterable, Literal, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -315,7 +315,7 @@ def _crossings_among(
     curves: list[tuple[str, tuple, Optional["Bridge"]]],
     stability: Stability,
     box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
-    workers: int = 1,
+    workers: int,
 ) -> list[SameStabilityCrossing]:
     """The transversal interior crossings among the segments of some curves."""
     return [
@@ -339,7 +339,8 @@ def _hits(
     curves: list[tuple[str, tuple, Optional["Bridge"]]],
     box: Optional[tuple[NDArray[np.float64], NDArray[np.float64]]],
     new: Optional[NDArray[np.bool_]] = None,
-    workers: int = 1,
+    *,
+    workers: int,
 ) -> tuple[NDArray, ...]:
     """The transversal interior crossings among the segments of some curves, as arrays.
 
@@ -358,8 +359,7 @@ def _hits(
     rows = [_segment_rows(k, read, offsets, periodic) for k, (_name, read, _bridge) in enumerate(curves)]
     rows = [row for row in rows if row is not None]
     if not rows:
-        none = np.empty(0, dtype=np.int64)
-        return none, none, none, none, np.empty((0, 2)), np.empty(0), np.empty(0), np.empty(0, dtype=bool)
+        return _no_hits()
     a, b, left, right, node_a, node_b, owner, position = (np.concatenate(column) for column in zip(*rows))
     # One edge reached from two curves (overlapping image bridges) is one segment.
     _, first = np.unique(_edge_keys(node_a, node_b), return_index=True)
@@ -372,12 +372,13 @@ def _hits(
     mins, maxs = mins[sweep], maxs[sweep]
     a, b, node_a, node_b = a[order], b[order], node_a[order], node_b[order]
     is_new = np.ones(len(order), dtype=bool) if new is None else new[owner[order]]
-
-    blocks, pairs_in = _candidate_pairs(mins, maxs, is_new, axis, workers)
+    if not is_new.any():
+        return _no_hits()
+    candidates = _candidate_pairs(mins, maxs, is_new, axis, workers)
 
     def crossings_in(block: NDArray[np.int64]) -> tuple[NDArray, ...]:
         """The transversal interior crossings among one block's candidate pairs."""
-        i, j = pairs_in(block)
+        i, j = candidates.pairs(block)
         shared = (node_a[i] == node_a[j]) | (node_a[i] == node_b[j])
         shared |= (node_b[i] == node_a[j]) | (node_b[i] == node_b[j])
         i, j = i[~shared], j[~shared]
@@ -395,11 +396,11 @@ def _hits(
     # The blocks are independent, so they run on ``workers`` threads (numpy
     # releases the GIL in their array work), in block order either way.
     found = [(np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64), np.empty(0), np.empty(0))]
-    if workers > 1 and len(blocks) > 1:
+    if workers > 1 and len(candidates.blocks) > 1:
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            found += pool.map(crossings_in, blocks)
+            found += pool.map(crossings_in, candidates.blocks)
     else:
-        found += map(crossings_in, blocks)
+        found += map(crossings_in, candidates.blocks)
     i, j, t, sin = (np.concatenate(column) for column in zip(*found))
     if new is None:
         # The strips find the pairs strip by strip; the listing is in sweep order.
@@ -418,6 +419,12 @@ def _hits(
     )
     i, j = order[i], order[j]
     return owner[i], owner[j], position[i], position[j], point, sin, local_area, in_region
+
+
+def _no_hits() -> tuple[NDArray, ...]:
+    """The arrays of :func:`_hits` for no hit."""
+    none = np.empty(0, dtype=np.int64)
+    return none, none, none, none, np.empty((0, 2)), np.empty(0), np.empty(0), np.empty(0, dtype=bool)
 
 
 def _segment_rows(
@@ -482,12 +489,11 @@ def _candidate_pairs(
     maxs: NDArray[np.float64],
     is_new: NDArray[np.bool_],
     axis: int,
-    workers: int = 1,
-) -> tuple[list[NDArray[np.int64]], Optional[Callable[[NDArray[np.int64]], tuple[NDArray, NDArray]]]]:
-    """Every pair of boxes that overlap and hold a new one, by sweep and prune
-    inside strips, as blocks of about ``_PAIR_BLOCK`` candidates (a quarter of
-    each worker's share with ``workers`` above 1) and the function that builds
-    one block's pairs (None when no box is new, with no block).
+    workers: int,
+) -> _Candidates:
+    """Every pair of boxes that overlap and hold a new one (some box is), by
+    sweep and prune inside strips, as blocks of about ``_PAIR_BLOCK`` candidates
+    (a quarter of each worker's share with ``workers`` above 1).
 
     The boxes come sorted by their minima along ``axis`` (the sweep), and a
     pair ``(p, q)`` of sweep positions has ``p < q``. The other axis is cut
@@ -505,8 +511,6 @@ def _candidate_pairs(
     does -- each segment meets its two neighbours --, and the workbench's index
     holds no blast's image curves.)
     """
-    if not is_new.any():
-        return [], None
     across = 1 - axis
     low, high = float(mins[:, across].min()), float(maxs[:, across].max())
     width = _STRIP_WIDTH * float(np.median(maxs[is_new, across] - mins[is_new, across]))
@@ -550,19 +554,35 @@ def _candidate_pairs(
     size = _PAIR_BLOCK if workers == 1 else max(1, min(_PAIR_BLOCK, int(totals[-1]) // (4 * workers)))
     blocks = np.split(entries, np.searchsorted(totals, np.arange(size, totals[-1], size)))
 
-    def pairs_in(block: NDArray[np.int64]) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
-        """The overlapping pairs of one block's candidates."""
-        block_counts = count[block]
-        entry = np.repeat(block, block_counts)
-        offset = np.arange(block_counts.sum()) - np.repeat(
-            np.cumsum(block_counts) - block_counts, block_counts
-        )
-        p, q = box[entry], box[pool[np.repeat(start[block], block_counts) + offset]]
+    return _Candidates(blocks, box, strip, pool, start, count, first_strip, mins, maxs, across)
+
+
+@dataclass(frozen=True)
+class _Candidates:
+    """The candidate pairs of :func:`_candidate_pairs`: entry ``e`` (box
+    ``box[e]`` in strip ``strip[e]``) meets ``pool[start[e] : start[e] + count[e]]``."""
+
+    blocks: list[NDArray[np.int64]]
+    box: NDArray[np.int64]
+    strip: NDArray[np.int64]
+    pool: NDArray[np.int64]
+    start: NDArray[np.int64]
+    count: NDArray[np.int64]
+    first_strip: NDArray[np.int64]
+    mins: NDArray[np.float64]
+    maxs: NDArray[np.float64]
+    across: int
+
+    def pairs(self, block: NDArray[np.int64]) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
+        """The overlapping pairs ``(p, q)`` of one block's candidates."""
+        counts = self.count[block]
+        entry = np.repeat(block, counts)
+        offset = np.arange(counts.sum()) - np.repeat(np.cumsum(counts) - counts, counts)
+        p, q = self.box[entry], self.box[self.pool[np.repeat(self.start[block], counts) + offset]]
+        mins, maxs, across = self.mins, self.maxs, self.across
         keep = (
             (mins[p, across] <= maxs[q, across])
             & (mins[q, across] <= maxs[p, across])
-            & (np.maximum(first_strip[p], first_strip[q]) == strip[entry])
+            & (np.maximum(self.first_strip[p], self.first_strip[q]) == self.strip[entry])
         )
         return p[keep], q[keep]
-
-    return blocks, pairs_in

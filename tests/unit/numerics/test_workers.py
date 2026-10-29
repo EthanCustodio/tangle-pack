@@ -65,6 +65,11 @@ def _pids(point):
     return np.full(point.shape, float(os.getpid()))
 
 
+def _negative_pids(point):
+    """``_pids`` negated: an image that says which of the two maps ran."""
+    return -_pids(point)
+
+
 def _kill_child(point):
     """A map that kills the worker process it runs in (and maps in the caller)."""
     if os.getpid() != _CALLER_PID:
@@ -155,6 +160,18 @@ def test_a_broken_pool_is_rebuilt():
         system.map_batch(np.zeros((smallest, 2)))
     pids = set(system.map_inv_batch(np.zeros((smallest, 2))).ravel())
     assert pids and float(os.getpid()) not in pids
+
+
+def test_a_replaced_map_rebuilds_the_pool():
+    """A forked child holds the map it inherited: assigning ``system.map`` maps
+    the next batch in a new pool, with the new map."""
+    coords = np.zeros((_system_module.MIN_PARALLEL_POINTS_EXPENSIVE, 2))
+    system = DynamicalSystem(_pids, _pids, workers=WORKERS, map_executor="process")
+    first = set(system.map_batch(coords).ravel())
+    assert first and min(first) > 0
+    system.map = _negative_pids
+    second = set(system.map_batch(coords).ravel())
+    assert second and max(second) < 0 and float(-os.getpid()) not in second
 
 
 def test_setters_rebuild_the_pool():

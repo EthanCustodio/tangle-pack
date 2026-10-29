@@ -119,7 +119,7 @@ class _Cloud:
     """
 
     def __init__(self) -> None:
-        self.trees: list[tuple[np.ndarray, cKDTree]] = []
+        self.trees: list[cKDTree] = []
 
     def add(self, interiors: list[np.ndarray]) -> None:
         """Hold the points of ``interiors`` too (one batch: one merge)."""
@@ -127,10 +127,10 @@ class _Cloud:
         if not interiors:
             return
         points = np.vstack(interiors)
-        while self.trees and len(self.trees[-1][0]) <= len(points):
-            points = np.vstack((self.trees.pop()[0], points))
+        while self.trees and self.trees[-1].n <= len(points):
+            points = np.vstack((self.trees.pop().data, points))
         # The sliding-midpoint tree builds twice as fast; its nearest points are exact too.
-        self.trees.append((points, cKDTree(points, balanced_tree=False, compact_nodes=False)))
+        self.trees.append(cKDTree(points, balanced_tree=False, compact_nodes=False))
 
     def near(self, points: np.ndarray, separation: float) -> bool:
         """Whether a point of ``points`` lies closer than ``separation`` to one held.
@@ -141,7 +141,7 @@ class _Cloud:
         return len(points) > 0 and any(
             float(tree.query(points, distance_upper_bound=separation)[0].min())
             < separation
-            for _held, tree in self.trees
+            for tree in self.trees
         )
 
 
