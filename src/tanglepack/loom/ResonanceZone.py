@@ -359,7 +359,10 @@ class ResonanceZone:
 
         Raises:
             ValueError: If this zone captured no tails to restore.
+            CurveReleased: A lean blast has freed curve (its tails are rows
+                of the uncompacted store).
         """
+        workbench._refuse_if_lean("ResonanceZone.restore")
         if not self.previous_tails:
             raise ValueError("Resonance zone has no captured tails to restore.")
         for key, tail in self.previous_tails.items():

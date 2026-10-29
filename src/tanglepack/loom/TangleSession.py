@@ -21,7 +21,6 @@ from ..numerics.TangleWorkbench import TangleWorkbench
 from ..numerics.DynamicalSystem import JacFunc, MapExecutor, MapFunc
 from ..numerics.ManifoldMachine import DEFAULT_AREA_CUTOFF
 from ..numerics.budget import DEFAULT_MAX_POINTS_PER_STEP
-from ..numerics.geometry import polyline_midpoint
 from ..topology.Arrangement import Arrangement
 from ..topology.BridgeClass import BridgeClassTable
 from ..topology.DualGraph import DualGraph
@@ -352,7 +351,12 @@ class TangleSession:
 
         Returns:
             The Arrangement for that selection.
+
+        Raises:
+            CurveReleased: A lean blast has freed curve the dense arrangement
+                reads (every computed arc).
         """
+        self.workbench._refuse_if_lean("arrangement")
         trellis = self.trellis(fixed_points, rebuild=rebuild)
         if rebuild:
             trellis._arrangement = None
@@ -750,7 +754,12 @@ class TangleSession:
 
         Returns:
             The stored :class:`ResonanceZone`.
+
+        Raises:
+            CurveReleased: A lean blast has freed curve (the trim recomputes
+                the crossings).
         """
+        self.workbench._refuse_if_lean("resonance_zone")
         pip = self.workbench.intersection_registry[intersection_id]
         rz = define_resonance_zone(
             self.workbench, intersection_id, fixed_points, recompute=recompute
@@ -824,9 +833,11 @@ class TangleSession:
         boundary arc lands exactly on that zone's boundary (and, with boundary-inclusive
         containment, is attributed to it). ``None`` for an empty bridge. Each call
         gathers the bridge's points afresh (no read is memoised since N6), and
-        :meth:`classify_bridge` makes one call per bridge, not one per zone.
+        :meth:`classify_bridge` makes one call per bridge, not one per zone. A
+        bridge a lean blast released reads the node it stored
+        (:attr:`~tanglepack.numerics.Bridge.Bridge.test_point`).
         """
-        return polyline_midpoint(bridge.get_point_array())
+        return bridge.test_point
 
     def classify_bridge(self, bridge: "Bridge") -> Optional[ResonanceZone]:
         """
@@ -862,10 +873,11 @@ class TangleSession:
         num_iterations: int,
         *,
         fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
-        min_separation: "Optional[float | Literal['resolution']]" = None,
-        diagnose: bool = True,
+        min_separation: "Optional[float | Literal['resolution', 'width']]" = None,
+        diagnose: Optional[bool] = None,
         max_points: Optional[int] = None,
         predict: bool = True,
+        lean: bool = False,
     ) -> BlastResult:
         """
         Repeatedly iterate the bridges inside a resonance zone.
@@ -893,9 +905,12 @@ class TangleSession:
                 remembered on the bridge and later calls skip it unless they
                 pass a smaller separation or None, so single-iteration blasts
                 compose. ``"resolution"`` derives it from the machine's
-                ``area_cutoff`` (see :func:`~tanglepack.loom.Blast.blast_zone`).
+                ``area_cutoff``; ``"width"`` is the analytic lobe-width guard,
+                which needs no point cloud (see
+                :func:`~tanglepack.loom.Blast.blast_zone`).
             diagnose: Finish with one resolution report on the workbench logger
-                (default; see :func:`~tanglepack.loom.Blast.blast_zone`).
+                (None: True unless ``lean``; see
+                :func:`~tanglepack.loom.Blast.blast_zone`).
             max_points: Opt-in point budget of the whole blast; it stops
                 BETWEEN iterations on a resumable state with
                 ``stop_reason == "point_budget"`` (default: no budget).
@@ -903,6 +918,13 @@ class TangleSession:
                 times the zone's last growth factor) would exceed
                 ``max_points`` (default); False stops only once the budget is
                 reached.
+            lean: Free, after each iteration, the curve neither the topology
+                nor a later blast reads (default False). The session can then
+                only blast lean and compute its topology: growth, recomputes,
+                zones, the dense arrangement and save raise
+                :class:`~tanglepack.numerics.Bridge.CurveReleased`. A lean blast
+                takes ``min_separation`` None or ``"width"`` and cannot
+                diagnose.
 
         Returns:
             A :class:`~tanglepack.loom.Blast.BlastResult` genealogy of the blast.
@@ -927,4 +949,5 @@ class TangleSession:
             diagnose=diagnose,
             max_points=max_points,
             predict=predict,
+            lean=lean,
         )

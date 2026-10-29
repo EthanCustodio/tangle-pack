@@ -42,6 +42,17 @@ A blast ends with a registry-wide ``infer_iterates``, so the iterate table is
 exact after it, whatever the stop reason (a raised ``PointBudgetExceeded``
 excepted: that state is not resumable).
 
+A LEAN blast (``lean=True``, 2026-10-29) frees, after each iteration, the
+curve nothing reads again: it links the iterate table, recomputes the topology
+of the selection and keeps the bridges the topology and later blasts can read
+(:func:`_lean_keep`); every other bridge's interior goes
+(:meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.release_curves`).
+The geometric guard reads every interior, so a lean blast takes the width
+guard (``min_separation="width"``) or none. The width guard needs no point
+cloud: a lobe's width (its area over its unstable length) contracts by the
+stable factor per step, and a child thinner than ``WIDTH_SEPARATION_FACTOR``
+chord deviations of its own polyline is below the resolution.
+
 This is a loom-layer algorithm: it reads the topological notion of a zone and acts on
 the numerical layer (:meth:`TangleWorkbench.iterate_bridge`). It is exposed on the
 facade as :meth:`tanglepack.loom.TangleSession.blast_zone`.
@@ -58,6 +69,7 @@ from scipy.spatial import cKDTree
 
 from ..numerics.ManifoldMachine import DEFAULT_AREA_CUTOFF
 from ..numerics.budget import PointBudgetExceeded
+from ..numerics.geometry import arc_polyline, signed_polygon_area
 from .ResonanceZone import ResonanceZone
 
 if TYPE_CHECKING:
@@ -75,6 +87,15 @@ logger.addHandler(logging.NullHandler())
 #: a finer cutoff resolves, and keeps, curves that run closer together. The author's
 #: rule, 2026-10-21: the guard follows the resolution.
 RESOLUTION_SEPARATION: float = 1e-5
+
+#: ``min_separation="width"`` drops a child whose width is below this many
+#: chord deviations ``h = 1.5 * area_cutoff / L`` of its own polyline (``L`` its
+#: median chord): a lobe thinner than the polygon error is not resolved.
+WIDTH_SEPARATION_FACTOR: float = 1.0
+
+#: ``Bridge.dropped_at`` of a width drop: below every float separation, so only
+#: ``min_separation=None`` re-admits it.
+WIDTH_DROP: float = -1.0
 
 
 def _seen_key(bridge: "Bridge") -> "BridgeId | int":
@@ -167,6 +188,100 @@ def _pip_orbits(
     return orbits
 
 
+def _ring_width(session: "TangleSession", bridge: "Bridge") -> Optional[float]:
+    """The width of a bridge's lobe: ``|area| / L`` of the ring the bridge and
+    its stable segment bound, ``L`` the unstable arc length.
+
+    None when the two crossings lie on two stable branches (no ring), or the
+    bridge is a partial piece. At an anchor an arc of ``u(o, b)`` meets
+    ``s(o, b)``.
+    """
+    if bridge.partial:
+        return None
+    registry = session.workbench.intersection_registry
+    first, second = (registry[i] for i in bridge.id)
+    fp, _, orbit, branch = bridge.manifold_key
+    keys = [
+        (fp, "stable", orbit, branch) if x.is_anchor else x.manifold_b_key for x in (first, second)
+    ]
+    if keys[0] != keys[1]:
+        return None
+    stable = session.workbench.manifolds[keys[0]]
+    unstable = np.vstack((
+        first.coords,
+        arc_polyline(bridge, first.unstable_cdist, second.unstable_cdist),
+        second.coords,
+    ))
+    back = arc_polyline(
+        stable, first.stable_cdist, second.stable_cdist,
+        reverse=second.stable_cdist > first.stable_cdist,
+    )
+    length = float(np.hypot(*np.diff(unstable, axis=0).T).sum())
+    if length == 0.0:
+        return None
+    return abs(signed_polygon_area(np.vstack((unstable, back)))) / length
+
+
+def _too_thin(session: "TangleSession", child: "Bridge") -> bool:
+    """Whether a child's width is below ``WIDTH_SEPARATION_FACTOR`` chord deviations."""
+    if child.width is None:
+        return False
+    points = child.get_point_array()
+    chords = np.hypot(*np.diff(points, axis=0).T)
+    if not len(chords):
+        return False
+    deviation = 1.5 * session.workbench.area_cutoff / float(np.median(chords))
+    return child.width < WIDTH_SEPARATION_FACTOR * deviation
+
+
+def _lean_keep(
+    session: "TangleSession",
+    fixed_points: list["FixedPoint"],
+    in_zone,
+) -> list["BridgeId | Bridge"]:
+    """What a lean blast keeps: the bridges the topology and later blasts read.
+
+    The future frontiers (every un-iterated, undropped bridge some stored zone,
+    or the blasted one, holds), the minimal trellis of the selection (and of
+    every fixed point, when the selection is not all of them), the pieces of
+    every joined arc a trellis holds (``Bridge.joined`` reads their rows) and
+    every bridge ending on a pip-orbit crossing. The straddle rows a frontier
+    shares with an iterated neighbour are kept by ``release_curves`` itself.
+    """
+    workbench = session.workbench
+    keep: list = [
+        b for b in workbench.uniiterated_bridges
+        if b.dropped_at is None and (session.classify_bridge(b) is not None or in_zone(b))
+    ]
+    selections = [fixed_points]
+    if set(map(id, fixed_points)) != set(map(id, workbench.fixed_points)):
+        selections.append(None)
+    for selection in selections:
+        topology = session.topology(selection)
+        keep += topology.minimal.kept_bridge_ids
+        trellises = [topology.trellis, *session._trellises.values()]
+        for trellis in trellises:
+            for joined in trellis._joined.values():
+                keep += _pieces(workbench, joined)
+    for orbit in _pip_orbits(session, fixed_points).values():
+        for x in orbit:
+            keep += workbench.bridges_at(x)
+    return keep
+
+
+def _pieces(workbench, joined: "Bridge") -> list["BridgeId"]:
+    """The ids of the consecutive bridges a joined arc runs through."""
+    pieces, at = [], joined.first_intersection
+    while at != joined.second_intersection:
+        bid = next(
+            bid for bid in workbench.bridges_at(at)
+            if bid[0] == at and workbench.bridge(bid).manifold_key == joined.manifold_key
+        )
+        pieces.append(bid)
+        at = bid[1]
+    return pieces
+
+
 @dataclass
 class BlastStep:
     """
@@ -224,6 +339,8 @@ class BlastResult:
             the final ``infer_iterates``: the length of the pip's registered
             ``+1`` chain, ``f^m(q0)`` being its deepest registered iterate and
             so the depth ``T(q0)`` is cut at (data, never a stop condition).
+        released_rows: Store rows a lean blast freed, over every step (0 for
+            a blast that is not lean).
     """
 
     zone: "ResonanceZone"
@@ -240,6 +357,7 @@ class BlastResult:
     skipped_dropped: int = 0
     already_known: int = 0
     pip_depth: dict["FixedPoint", int] = field(default_factory=dict)
+    released_rows: int = 0
 
     def all_interior_bridges(self) -> list["Bridge"]:
         """Every distinct bridge that was ever an interior survivor, in order."""
@@ -256,10 +374,11 @@ def blast_zone(
     num_iterations: int,
     *,
     fixed_point: "Optional[FixedPoint | list[FixedPoint]]" = None,
-    min_separation: "Optional[float | Literal['resolution']]" = None,
-    diagnose: bool = True,
+    min_separation: "Optional[float | Literal['resolution', 'width']]" = None,
+    diagnose: Optional[bool] = None,
     max_points: Optional[int] = None,
     predict: bool = True,
+    lean: bool = False,
 ) -> BlastResult:
     """
     Repeatedly iterate the bridges inside a resonance zone (see the module docstring).
@@ -290,15 +409,22 @@ def blast_zone(
             they pass a smaller separation or None. The curve tested against is
             every curve the workbench holds (dropped and exterior children
             included), so ``n`` single-iteration blasts equal one
-            ``n``-iteration blast. ``None`` (default) disables the guard.
-        diagnose: If True (default) finish with ONE
+            ``n``-iteration blast. ``"width"`` is the analytic guard instead
+            (no point cloud): a child is dropped when its lobe width, carried
+            down the image chain from the ring area of the first bridge
+            iterated (``Bridge.width``), is below ``WIDTH_SEPARATION_FACTOR``
+            chord deviations of its polyline; the pip-orbit exemption holds,
+            and a width drop (``dropped_at == WIDTH_DROP``) is re-admitted by
+            ``None`` only. ``None`` (default) disables the guard.
+        diagnose: If True (the default unless ``lean``) finish with ONE
             :meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.report_resolution`
             pass over the blasted fixed points: deep blasting is where
             under-resolved crossings and same-stability polyline crossings
             appear, and ``iterate_bridge`` never passes through
             ``compute_intersections``. Its same-stability part only COUNTS the
             hits of the bridges this blast added. It logs on the workbench's
-            logger, never on this module's.
+            logger, never on this module's. A lean blast cannot diagnose: the
+            same-stability reading needs every curve.
         max_points: Opt-in point budget of the whole blast (points its new
             bridges hold). Checked BETWEEN iterations: the blast stops, without
             an exception and on a consistent, resumable state, before an
@@ -311,6 +437,13 @@ def blast_zone(
             first iteration) it runs, backed by the machine's per-call cap. If
             False the blast only stops once it has already reached
             ``max_points``, so it can overshoot by one iteration.
+        lean: If True, after each iteration link the iterate table, recompute
+            the topology of the selection and free the curve no reader needs
+            (:func:`_lean_keep`); ``BlastResult.released_rows`` counts the rows.
+            The workbench is lean from then on and refuses whatever would
+            re-read freed curve (growth, recomputes, zones, save, a blast
+            that is not lean), raising
+            :class:`~tanglepack.numerics.Bridge.CurveReleased`.
 
     Note:
         Bridges that re-trace curve an existing bridge already holds -- e.g. the
@@ -324,7 +457,9 @@ def blast_zone(
     Raises:
         KeyError: If ``zone`` is a key not present in ``session.resonance_zones``.
         ValueError: If the resolved zone has no captured boundary (cannot test
-            containment).
+            containment), or ``lean`` is passed with a geometric separation
+            (a float or ``"resolution"``) or with ``diagnose=True``.
+        CurveReleased: A blast that is not lean on a lean workbench.
         PointBudgetExceeded: If one bridge's image would exceed the machine's
             per-call point budget. It always propagates, its message extended
             with the zone, iteration and bridge (also on ``exc.blast_context``
@@ -333,6 +468,17 @@ def blast_zone(
             rebuild with fewer blasts or a larger budget. ``max_points`` is the
             budget that stops cleanly instead.
     """
+    if lean and min_separation not in (None, "width"):
+        raise ValueError(
+            f"a lean blast frees the interiors min_separation={min_separation!r} reads; "
+            "pass 'width' or None"
+        )
+    if lean and diagnose:
+        raise ValueError("a lean blast cannot diagnose: the same-stability reading needs every curve")
+    if not lean:
+        session.workbench._refuse_if_lean("a blast that is not lean")
+    diagnose = not lean if diagnose is None else diagnose
+    width = min_separation == "width"
     if not isinstance(zone, ResonanceZone):
         zone = session.resonance_zones[zone]
     if zone.boundary_vertices is None:
@@ -372,7 +518,9 @@ def blast_zone(
     # A drop stands until a call passes a smaller separation or None.
     frontier = [
         b for b in in_reach
-        if b.dropped_at is None or min_separation is None or min_separation < b.dropped_at
+        if b.dropped_at is None
+        or min_separation is None
+        or (not width and min_separation < b.dropped_at)
     ]
 
     result = BlastResult(
@@ -405,7 +553,7 @@ def blast_zone(
     # existing fold (not just a same-generation sibling) keeps the blast on the
     # well-resolved side of that limit while still letting it extend into fresh space.
     cloud = _Cloud()
-    if min_separation is not None:
+    if min_separation is not None and not width:
         cloud.add([_interior_points(b) for b in workbench.bridges])
 
     # The point budget's bookkeeping: the bridges the workbench already holds
@@ -420,9 +568,7 @@ def blast_zone(
             result.stop_reason = "frontier_empty"
             break
 
-        frontier_points = sum(
-            len(b.get_point_array()) for b in frontier if not b.iterated
-        )
+        frontier_points = sum(b.point_count for b in frontier if not b.iterated)
         if max_points is not None:
             predicted = factor * frontier_points if predict and factor else 0.0
             if (
@@ -451,6 +597,8 @@ def blast_zone(
         for parent in frontier:
             if parent.iterated:
                 continue
+            if width and parent.width is None:
+                parent.width = _ring_width(session, parent)
             try:
                 children = workbench.iterate_bridge(parent)
             except PointBudgetExceeded as exc:
@@ -461,6 +609,11 @@ def blast_zone(
                 )
                 raise
 
+            if width and parent.width is not None:
+                contraction = parent.fixed_point.per_step_beta("stable")
+                for child in children:
+                    if child.width is None:
+                        child.width = parent.width * contraction
             produced.extend(children)
 
         # Iterating the bridge ending at f^m(q0) linked f^{m+1}(q0), so the
@@ -491,7 +644,16 @@ def blast_zone(
                     "kept regardless of separation",
                     child.id, n, owner.label, pip_end,
                 )
-            elif min_separation is not None and cloud.near(_interior_points(child), min_separation):
+            elif width and _too_thin(session, child):
+                seen.add(_seen_key(child))
+                child.dropped_at = WIDTH_DROP
+                too_close.append(child)
+                continue
+            elif (
+                min_separation is not None
+                and not width
+                and cloud.near(_interior_points(child), min_separation)
+            ):
                 seen.add(_seen_key(child))
                 child.dropped_at = min_separation
                 too_close.append(child)
@@ -500,7 +662,7 @@ def blast_zone(
             seen.add(_seen_key(child))
             kept.append(child)
             # A kept child is curve every later child keeps clear of.
-            if min_separation is not None:
+            if min_separation is not None and not width:
                 cloud.add([_interior_points(child)])
 
         result.steps.append(
@@ -518,7 +680,7 @@ def blast_zone(
         result.already_known += len(already_known)
         # Every child is curve the workbench now holds, dropped or exterior
         # alike: the next step's cloud is the one a later call would build.
-        if min_separation is not None:
+        if min_separation is not None and not width:
             cloud.add([_interior_points(c) for c in discarded + too_close])
 
         new_points = 0
@@ -526,7 +688,7 @@ def blast_zone(
             if _seen_key(child) not in held:
                 held.add(_seen_key(child))
                 added.append(child)
-                new_points += len(child.get_point_array())
+                new_points += child.point_count
         result.points_created += new_points
         if frontier_points > 0:
             factor = new_points / frontier_points
@@ -545,6 +707,13 @@ def blast_zone(
             len(too_close),
         )
         frontier = kept
+        if lean:
+            # The table and the topology the keep rule reads are this
+            # iteration's: a later one never needs what they do not name.
+            workbench.infer_iterates()
+            result.released_rows += workbench.release_curves(
+                _lean_keep(session, fixed_points, in_zone)
+            )
 
     # The table is exact after every blast: a crossing born early in
     # the blast may only now have its image registered.
