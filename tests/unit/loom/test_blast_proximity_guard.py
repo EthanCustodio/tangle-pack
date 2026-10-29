@@ -11,12 +11,16 @@ guard never decides the depth of ``T(q0)``.
 
 from __future__ import annotations
 
+import importlib
+
 import numpy as np
 import pytest
 from scipy.spatial import cKDTree
 
 from tanglepack.loom.Blast import RESOLUTION_SEPARATION
 from tanglepack.numerics import DEFAULT_AREA_CUTOFF
+
+import cases
 
 MIN_SEPARATION = 0.02
 
@@ -136,3 +140,44 @@ def test_resolution_separation_follows_the_area_cutoff(henon_p3_session):
     dropped = [c for s in result.steps for c in s.discarded_too_close]
     assert dropped
     assert all(c.dropped_at == pytest.approx(expected) for c in dropped)
+
+
+def _blast_view(result) -> list:
+    """Every step's children by verdict, each child as its id and its points."""
+
+    def children(bridges):
+        return [(b.id, np.asarray(b.get_point_array()).tobytes()) for b in bridges]
+
+    return [
+        (children(step.kept_interior), children(step.discarded_too_close),
+         children(step.discarded_exterior), children(step.already_known))
+        for step in result.steps
+    ] + [result.points_created, result.too_close, result.stop_reason]
+
+
+def test_workers_give_the_same_blast(monkeypatch):
+    """A ``cases.SERIES`` blast with ``min_separation`` keeps and drops the same
+    children, creates the same points and registers the same crossings at
+    workers 1 and 4 (every map batch split, the separation queried on 4 cores)."""
+    monkeypatch.setattr(importlib.import_module("tanglepack.numerics.DynamicalSystem"),
+                        "MIN_PARALLEL_POINTS", 16)
+    series = cases.SERIES["k28_series"]
+    runs = []
+    for workers in (1, 4):
+        case = series.build()
+        case.session.workers = workers
+        zone = max(case.zones, key=lambda zone: zone.area)
+        results = [
+            case.session.blast_zone(zone, num_iterations=1, fixed_point=[zone.fixed_point],
+                                    min_separation=series.min_separation, diagnose=True)
+            for _ in range(series.blasts)
+        ]
+        registry = case.workbench.intersection_registry
+        runs.append((
+            [_blast_view(result) for result in results],
+            sorted((iid, ix.unstable_cdist, ix.stable_cdist) for iid, ix in registry),
+            sorted(registry.iterate_table.items()),
+        ))
+    serial, split = runs
+    assert any(views[-2] for views in serial[0]), "some child must be dropped"
+    assert split == serial
