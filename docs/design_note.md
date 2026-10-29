@@ -85,7 +85,10 @@ The data model (one `PointStore`, chains of its rows, curves as views of a chain
 as `End` records, and `BranchPoint` a view of its `FixedPoint`: the orbit point's coordinates, a cdist
 of 0.0, the next orbit point as its image, and the fixed point's slot table
 `(stability, orbit_index, branch) -> Chain`, on no row) is a representation choice, not part of the
-definition.
+definition. Rows are appended and never reused; only a lean blast removes any (`PointStore.compact`,
+lean-blast 2026-10-29): it renumbers the survivors in order, and every holder of a row (curve ends,
+the registry's brackets, the segment index's records and edge keys) is remapped through the
+old-to-new map (`TangleWorkbench.release_curves`, A.10).
 
 **Implemented by.** `ManifoldInitializer.construct_kevin_way`, `ManifoldMachine.iterate_manifold`,
 `ManifoldMachine._image_chains`, `TangleWorkbench.grow_n_times`, `TangleWorkbench.grow_until_bounded`,
@@ -558,6 +561,49 @@ keep their explicit constants. `workers` changes no blast result: the map batche
 resolution sweep's pair blocks run on that many cores, and every verdict and count is the serial
 one (cpu-workers, 2026-10-29).
 
+**Lean blasting (lean-blast, 2026-10-29).** `blast_zone(lean=True)` frees, at the END of each
+iteration (the author's choice: nothing can be freed before that iteration's topology is known),
+the curve neither the topology nor a later blast reads. It links the iterate table, computes
+`session.topology()` of the selection (and of every fixed point when the selection is not all of
+them) and calls `TangleWorkbench.release_curves(keep)`. Kept: every bridge on a grown branch, every
+un-iterated undropped bridge some stored zone (or the blasted one) holds, the minimal trellis, the
+pieces of every joined arc a trellis holds, every bridge ending on a pip-orbit crossing, and the
+LINEAGE of the kept frontier: its ancestors (the bridges its rows' preimages lie inside) and every
+bridge their images tile. The lineage is not in the plan; it is forced: a later reference pair is
+cut from a frontier descendant and its holes propagate backward through those ancestors, whose
+first images the minimal trellis maps (k32_series: without the ancestors a later topology reads a
+freed hole bridge, without their images a freed image bridge). Rows a reader still needs are never
+freed: a kept bridge's rows and one neighbour past each end, each crossing's four bracket rows and
+one neighbour of each, the ends of every curve, and the images an un-iterated kept bridge already
+has through a straddle neighbour (the run of their chain and its phantoms, which
+`ManifoldMachine._image_chains` merges into and refinement reads). A released bridge keeps its ends,
+id, key, flags and width, its midpoint node (`Bridge.test_point`, zone membership) and its point
+count; a row read raises `CurveReleased`. A lean workbench (`TangleWorkbench.lean`) refuses whatever
+would re-read freed curve: recomputes, cuts, growth, trims, zones, save, the same-stability readings,
+the dense arrangement and a blast that is not lean. The geometric guard reads every interior, so a
+lean blast takes `min_separation` None or `"width"` and never diagnoses. Measured on the blast series
+(the lean-vs-full law, `tests/regression/test_lean_blast.py`): unguarded, every lineage survives and
+lean frees 0.2-1.3% of the rows; with the width guard, whose drops end lineages, the store ends
+2.6-4.8x smaller. On the k=2.5 scale series (`profile_numerics.py --cases scale`) lean unguarded
+freed 0.5% (1e-7) and 0.01% (1e-9) and grew 1.7x per blast as before; lean width ended at 24k / 320k
+rows against full width's 116k / 1.13M (peak RSS 141 / 290 MiB against 165 / 591). Lean mode buys a
+constant factor, and only where a guard ends lineages; it is not a new exponent.
+
+**The width guard.** `min_separation="width"` needs no point cloud. A bridge's width is seeded, when
+it is first iterated, as `|area| / L` of the ring it and its stable segment bound (`L` its unstable
+arc length; a bridge whose crossings lie on two stable branches has no ring and is never dropped),
+and its children carry `w * per_step_beta("stable")` (the lobe contracts across as it stretches
+along: area is preserved; the plan's `w / beta_s` read the stable factor as a magnitude above 1). A
+child is dropped when `w < WIDTH_SEPARATION_FACTOR * h`, `h = 1.5 * area_cutoff / L` with `L` its
+median chord: a lobe thinner than its polygon error is not resolved. The pip-orbit exemption holds,
+a width drop is remembered as `dropped_at = WIDTH_DROP` (-1.0, so only `None` re-admits it), widths
+are saved (a column only when some bridge has one), and `n` single-iteration width blasts equal one
+`n`-iteration blast. Measured on the scale series against `min_separation=1e-5`: the same pip
+depth (9 at 1e-7, 12 at 1e-9), 116k / 1.13M rows against 2.18M / 5.10M, blast 0.5 / 4.8 s against
+54 / 71 s; its drops start earlier (blast 6 against 8 at 1e-7). `WIDTH_SEPARATION_FACTOR` stays at
+the plan's 1.0: 0.01 matches the 1e-5 guard's first drop (blast 8) but drops nothing in the coarse
+k28 test builds; the calibration is the author's call.
+
 **Zones.** A stable trim is a VIEW (C22): growth re-finds every branch's physical end and so
 un-trims a zone, the topology never depends on the trim (the trellis is cut at the pip orbit), and
 `ResonanceZone.restore` never shortens a branch growth has run past. Zones, trims and letters feed no
@@ -565,7 +611,8 @@ topology output. Simplify freely toward the chalkboard design; aligning the publ
 author's use is a later plan (D8).
 
 **Implemented by.** `Topology`, `TangleSession.topology`, `blast_zone`, `BlastResult`,
-`TangleWorkbench.compute_intersections`, `ResonanceZone.restore`.
+`TangleWorkbench.compute_intersections`, `ResonanceZone.restore`, `TangleWorkbench.release_curves`,
+`PointStore.compact`, `Bridge.release`, `Blast._lean_keep`, `Blast._ring_width`, `Blast._too_thin`.
 
 ## A.11 Session and API
 

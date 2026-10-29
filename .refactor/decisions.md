@@ -1283,3 +1283,21 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   stop is predictive, so an equal memory cap is a true backstop); a zone-sweep `k` whose build fails leaves
   `rows/<k>.skipped` (its error) and counts as finished, so a deterministic failure no longer relaunches its job on
   every rerun (delete the file to rebuild it).
+
+## 2026-10-29 — Run 1 `lean-blast` of the deeper-blasts campaign (/feature; branch `feature/lean-blast`, base `8ce14b6`)
+
+- **The author's rulings (plan):** a lean blast releases at the END of each iteration, never inside one (nothing
+  can be freed before that iteration's topology is known); lean takes `min_separation` None or `"width"` and never
+  diagnoses; a lean workbench refuses recomputes, cuts, growth, trims, zones, save, the same-stability readings,
+  the dense arrangement and a blast that is not lean (`CurveReleased`); the default path is unchanged (identity
+  probe: 62 builds identical).
+- **Deviations, measured or forced:** the plan's keep rule let a later topology read a freed bridge (k32_series:
+  a hole bridge released steps earlier), so `release_curves` also keeps the LINEAGE of the kept frontier, its
+  ancestors (preimage rows) and every bridge their images tile (ancestors alone fail too: a mapped hole bridge's
+  image). Unguarded, nothing dies, so lean frees about 1% or less (scale series 0.5% at 1e-7); with the width
+  guard the store ends 3-5x smaller. The straddle rule keeps a frontier's existing images, the run of their chain
+  and its phantoms, finer than "the neighbour's whole image chain". The width contracts by `per_step_beta("stable")`
+  (< 1) per step, not `w / beta_s` (that would grow it). `WIDTH_SEPARATION_FACTOR` stays 1.0 (0.01 matches the
+  1e-5 guard's onset on the 1e-7 scale series but drops nothing in the k28 test builds): the author's call. Widths
+  are saved as an optional column (format 1 unchanged for a save without one). No series has a joined arc on a
+  released chain: the joined-pieces rule is unexercised by any build.
