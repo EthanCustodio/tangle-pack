@@ -11,6 +11,7 @@ Usage (from the repository root)::
     env/bin/python stress/profile/profile_numerics.py --cases k10 scale
     env/bin/python stress/profile/profile_numerics.py --plot-only --out DIR
     env/bin/python stress/profile/profile_numerics.py --compare BASE_DIR --out BRANCH_DIR
+    env/bin/python stress/profile/profile_numerics.py --cases scale --modes time --workers 8
 
 Output: ``figures/numerics_profile/<git-sha>/`` (``--out`` overrides): one
 ``<case>_<mode>.json`` per run and the figures (``stage_time.png``,
@@ -32,6 +33,11 @@ leaks into another's:
 * ``memory`` -- the same build under ``tracemalloc``: per top-level stage the
   Python-heap peak, at the end the traced total (the reference the census must
   sum to) and the top allocation sites.
+
+``--workers N`` builds every session with ``workers=N`` (the labels stay; the
+json records ``workers``; at 1 a checkout without the option runs as before).
+Only the main thread is timed: a split map batch counts under ``map``, the
+sweep's threads under ``diagnose``.
 
 Components of the census (bytes):
 
@@ -519,6 +525,13 @@ def census(session: Any, *, measure_rtree: bool = False) -> dict:
 # --------------------------------------------------------------------------- #
 # Cases
 # --------------------------------------------------------------------------- #
+def set_workers(workers: int) -> None:
+    """Make ``workers`` the default of every ``TangleSession`` the run builds."""
+    from tanglepack.loom.TangleSession import TangleSession
+
+    TangleSession.__init__ = functools.partialmethod(TangleSession.__init__, workers=workers)
+
+
 def build_law_case(name: str) -> Any:
     """Build one case through its frozen ``tests/cases.py`` builder."""
     import cases
@@ -565,6 +578,8 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
     # RSS growth then measure what the pipeline holds, not module code.
     for name in PRELOAD:
         importlib.import_module(name)
+    if args.workers != 1:
+        set_workers(args.workers)
     timer = StageTimer(trace)
     install(timer)
     gc.collect()
@@ -575,7 +590,8 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
         tracemalloc.start(1)
     traced0 = tracemalloc.get_traced_memory()[0] if trace else None
     timer.start()
-    record: dict = {"case": case, "mode": mode, "git_sha": git_sha(), "rss_baseline": rss0,
+    record: dict = {"case": case, "mode": mode, "git_sha": git_sha(), "workers": args.workers,
+                    "rss_baseline": rss0,
                     "traced_baseline": traced0, "series": [], "stopped": None}
     path = out / f"{case}_{mode}.json"
     t0 = time.perf_counter()
@@ -717,7 +733,7 @@ def launch(case: str, mode: str, args: argparse.Namespace, out: Path) -> int:
            "--out", str(out), "--scale-cutoff", repr(args.scale_cutoff),
            "--scale-stop-gb", repr(args.scale_stop_gb),
            "--scale-max-blasts", str(args.scale_max_blasts),
-           "--scale-trace-blasts", str(args.scale_trace_blasts)]
+           "--scale-trace-blasts", str(args.scale_trace_blasts), "--workers", str(args.workers)]
     child = subprocess.Popen(cmd, cwd=REPO)
     handle = psutil.Process(child.pid)
     while child.poll() is None:
@@ -747,6 +763,7 @@ def main() -> None:
     parser.add_argument("--scale-trace-blasts", type=int, default=8,
                         help="blasts of the scaling case run under tracemalloc (memory mode)")
     parser.add_argument("--cap-gb", type=float, default=12.0, help="kill a worker past this RSS")
+    parser.add_argument("--workers", type=int, default=1, help="every session's workers")
     parser.add_argument("--plot-only", action="store_true")
     parser.add_argument("--compare", type=Path, default=None,
                         help="a baseline output dir: figures draw it beside --out")
