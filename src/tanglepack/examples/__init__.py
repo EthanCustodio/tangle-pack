@@ -1,6 +1,8 @@
 """Reference dynamical systems shared by the tests, scripts and notebooks.
 
-Only the Hénon family lives here today. Import the factories rather than
+The Hénon family is exported here; the forced Duffing oscillator, the
+expensive map of the ``workers`` option, is imported from
+:mod:`.duffing`. Import the factories rather than
 re-typing a map: a script that defines its own copy is a map the test suite
 cannot pin.
 """
