@@ -90,17 +90,17 @@ def tree_rss_gb(process: psutil.Process) -> float:
 
 
 def kill_tree(process: psutil.Process) -> None:
-    """Kill a process and every descendant, and reap the process."""
+    """Kill a process and every descendant; the caller reaps the process (``Popen.wait`` keeps its return code)."""
     try:
-        members = [*process.children(recursive=True), process]
+        descendants = process.children(recursive=True)
     except psutil.NoSuchProcess:
-        members = [process]
-    for member in members:
+        descendants = []
+    for member in [*descendants, process]:
         try:
             member.kill()
         except psutil.NoSuchProcess:
             pass
-    psutil.wait_procs(members, timeout=5)
+    psutil.wait_procs(descendants, timeout=5)
 
 
 def merge_csvs(paths: list[Path], merged: Path) -> int:

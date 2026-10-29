@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import signal
 import sys
 from pathlib import Path
 
@@ -92,6 +93,7 @@ def test_a_job_past_the_time_cap_ends_as_time_cap(tmp_path):
     rows = run_pool([Job("sleeper", python("import time; time.sleep(30)"), lambda: False)],
                     processes=1, out=tmp_path, max_seconds=1.5)
     assert statuses(rows) == {"sleeper": "time_cap"}
+    assert rows[0]["returncode"] == str(-signal.SIGKILL)
     assert float(rows[0]["seconds"]) < 10
 
 
