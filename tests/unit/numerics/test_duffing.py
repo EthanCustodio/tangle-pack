@@ -17,6 +17,7 @@ from tanglepack.examples.duffing import (
     duffing_map,
     duffing_map_inverse,
     duffing_map_ivp,
+    duffing_map_ivp_inverse,
     saddle_guess,
 )
 
@@ -61,7 +62,11 @@ def test_saddle_solves_and_the_tangle_crosses():
 
 
 def test_ivp_form_integrates_the_same_flow():
-    """At a step of ``T / 8000`` leapfrog agrees with ``solve_ivp`` to 1e-6."""
+    """At a step of ``T / 8000`` leapfrog agrees with ``solve_ivp`` to 1e-6,
+    forward and backward, and the ``solve_ivp`` inverse undoes its map."""
     leapfrog, ivp = duffing_map(steps=8000), duffing_map_ivp(rtol=1e-11)
+    leapfrog_inv, ivp_inv = duffing_map_inverse(steps=8000), duffing_map_ivp_inverse(rtol=1e-11)
     for point in POINTS:
         assert np.abs(leapfrog(point) - ivp(point)).max() < 1e-6
+        assert np.abs(leapfrog_inv(point) - ivp_inv(point)).max() < 1e-6
+        assert np.abs(ivp_inv(ivp(point)) - point).max() < 1e-8

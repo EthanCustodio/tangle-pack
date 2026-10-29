@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import multiprocessing
 import weakref
-from concurrent.futures import Executor, ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import BrokenExecutor, Executor, ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 from typing import Annotated, Callable, Literal, Optional
 
@@ -277,9 +277,9 @@ class DynamicalSystem:
             batchable = self._detect_batchable(fn, coords)
             setattr(self, cache_attr, batchable)
 
-        # Under enable_gpu the device gets the whole batch.
         threads = self.map_executor == "thread"
         smallest = MIN_PARALLEL_POINTS if batchable and threads else MIN_PARALLEL_POINTS_EXPENSIVE
+        # Under enable_gpu the device gets the whole batch.
         if self.workers == 1 or len(coords) < smallest or getattr(self, "_gpu_enabled", False):
             return _map_points(fn, batchable, coords)
         task = (
@@ -288,7 +288,12 @@ class DynamicalSystem:
             else partial(_child_map_points, name, batchable)
         )
         chunks = np.array_split(coords, min(self.workers, len(coords)))
-        return np.concatenate(list(self._executor().map(task, chunks)))
+        try:
+            return np.concatenate(list(self._executor().map(task, chunks)))
+        except BrokenExecutor:
+            # A worker died (killed, segfault): drop the pool so the next call builds a new one.
+            self._shutdown_pool()
+            raise
 
     @staticmethod
     def _detect_batchable(fn: MapFunc, coords: npt.NDArray[float64]) -> bool:

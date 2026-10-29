@@ -483,11 +483,12 @@ def _candidate_pairs(
     is_new: NDArray[np.bool_],
     axis: int,
     workers: int = 1,
-) -> tuple[list[NDArray[np.int64]], Callable[[NDArray[np.int64]], tuple[NDArray, NDArray]]]:
+) -> tuple[list[NDArray[np.int64]], Optional[Callable[[NDArray[np.int64]], tuple[NDArray, NDArray]]]]:
     """Every pair of boxes that overlap and hold a new one, by sweep and prune
     inside strips, as blocks of about ``_PAIR_BLOCK`` candidates (a quarter of
     each worker's share with ``workers`` above 1) and the function that builds
-    one block's pairs.
+    one block's pairs (None when no box is new, with no block).
+
     The boxes come sorted by their minima along ``axis`` (the sweep), and a
     pair ``(p, q)`` of sweep positions has ``p < q``. The other axis is cut
     into strips ``_STRIP_WIDTH`` median extents of the new boxes wide (at most

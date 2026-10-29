@@ -2,8 +2,8 @@
 
 ``workers`` splits a large map batch across a thread or forked process pool
 and tests the same-stability sweep's pair blocks on threads. For an
-elementwise map every result is the
-serial one, number for number: each test compares workers 1 with workers 4.
+elementwise map every result is the serial one, number for number: each
+test compares workers 1 with workers 4.
 These are execution properties, not physical laws, so they live in the unit
 tier. The builds are small, so where a test must see the map split it lowers
 ``MIN_PARALLEL_POINTS`` (the size below which a batch stays in the caller).
@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import functools
 import importlib
+import os
+import signal
 import threading
+from concurrent.futures import BrokenExecutor
 
 import numpy as np
 import pytest
@@ -54,6 +57,22 @@ def _thread_names(fn, names: set):
         return fn(point)
 
     return wrapped
+
+
+def _pids(point):
+    """A map whose image of every point is the id of the process it ran in."""
+    point = np.asarray(point, dtype=float)
+    return np.full(point.shape, float(os.getpid()))
+
+
+def _kill_child(point):
+    """A map that kills the worker process it runs in (and maps in the caller)."""
+    if os.getpid() != _CALLER_PID:
+        os.kill(os.getpid(), signal.SIGKILL)
+    return np.asarray(point, dtype=float)
+
+
+_CALLER_PID = os.getpid()
 
 
 MAPS = {
@@ -98,6 +117,44 @@ def test_small_batches_stay_in_the_caller():
     names.clear()
     system.map_batch(np.zeros((_system_module.MIN_PARALLEL_POINTS, 2)))
     assert caller not in names and len(names) > 1
+
+
+@pytest.mark.parametrize(
+    "executor, scalar", [("process", False), ("process", True), ("thread", True)],
+    ids=["process", "process_scalar_only", "thread_scalar_only"],
+)
+def test_expensive_batches_split_from_their_threshold(executor, scalar):
+    """A process pool, or a scalar-only map on threads, maps a batch of
+    ``MIN_PARALLEL_POINTS_EXPENSIVE`` points in the pool and a smaller one
+    in the caller."""
+    smallest = _system_module.MIN_PARALLEL_POINTS_EXPENSIVE
+    if executor == "process":
+        forward = _scalar_only(_pids) if scalar else _pids
+        system = DynamicalSystem(forward, forward, workers=WORKERS, map_executor="process")
+        caller = {float(os.getpid())}
+        assert set(system.map_batch(np.zeros((smallest - 1, 2))).ravel()) == caller
+        pids = set(system.map_batch(np.zeros((smallest, 2))).ravel())
+        assert pids and caller.isdisjoint(pids)
+        return
+    names: set = set()
+    forward, backward = MAPS["henon"]
+    system = DynamicalSystem(_scalar_only(_thread_names(forward, names)), backward, workers=WORKERS)
+    caller = threading.current_thread().name
+    system.map_batch(np.zeros((smallest - 1, 2)))
+    assert names == {caller}
+    names.clear()
+    system.map_batch(np.zeros((smallest, 2)))
+    assert names and caller not in names
+
+
+def test_a_broken_pool_is_rebuilt():
+    """A worker process that dies breaks that call only: the next one maps in a new pool."""
+    smallest = _system_module.MIN_PARALLEL_POINTS_EXPENSIVE
+    system = DynamicalSystem(_kill_child, _pids, workers=WORKERS, map_executor="process")
+    with pytest.raises(BrokenExecutor):
+        system.map_batch(np.zeros((smallest, 2)))
+    pids = set(system.map_inv_batch(np.zeros((smallest, 2))).ravel())
+    assert pids and float(os.getpid()) not in pids
 
 
 def test_setters_rebuild_the_pool():

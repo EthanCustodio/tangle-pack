@@ -231,7 +231,8 @@ class TangleWorkbench:
             escape_radius (Optional[float]): ``max|coordinate|`` above which a
                 growth step warns; ``None`` (default) never warns.
             workers (int): Cores to run the batched map and the
-                same-stability sweep on; 1 (default) runs them in the caller. Nothing computed depends on it for an elementwise
+                same-stability sweep on; 1 (default) runs them in the
+                caller. Nothing computed depends on it for an elementwise
                 map (:mod:`.DynamicalSystem`).
             map_executor (MapExecutor): ``"thread"`` (default) or
                 ``"process"``, the pool the map split runs in.

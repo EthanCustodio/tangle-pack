@@ -51,7 +51,7 @@ def _leapfrog(
     # Forcing at the grid times i * T / steps, read from the same integer index
     # forward and backward, so the inverse retraces the forward map's floats.
     times = range(steps + 1) if direction > 0 else range(steps, -1, -1)
-    forcing = [eps * np.cos(omega * i * 2 * np.pi / omega / steps) for i in times]
+    forcing = [eps * np.cos(2 * np.pi * i / steps) for i in times]
 
     def flow(point: NDArray[np.float64]) -> NDArray[np.float64]:
         q, p = point[0], point[1]
