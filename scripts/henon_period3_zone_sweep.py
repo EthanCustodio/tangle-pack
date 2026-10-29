@@ -62,21 +62,27 @@ lobe statistics, blast sizes, the pip per ``k``), ``summary.png`` (zone area,
 mean lobe area and their ratio against ``k``) and ``geometry/k<k>.npz`` (every
 curve and number of the frame, NaN-separated polylines, for an animation).
 
-Chunked runs: a sweep over a sub-range (``--k-min`` above the seed, or
-``--k-max`` below it) first WARMS UP from the seed to the chunk's first ``k``
-in steps of ``--warmup-step`` (default 0.1) -- orbit, orientation and tracked
-pip carried, nothing blasted or drawn -- so a chunk continues the same pip as
-the whole sweep would. With ``--chunk`` the CSV is named after the range and
-no summary is drawn; ``--merge`` then concatenates every ``zones_k*.csv`` of
-the output folder into ``zones.csv`` and draws the summary. Frames and
-geometry files of several chunks share the folder by their ``k`` names. The
-blast cost grows ~1.4x per blast at high ``k`` (``k = 4``: ~2 min a frame),
-so a dense sweep is best run as parallel chunks of equal cost.
+Parallel runs: a sweep over a sub-range (``--k-min`` above the seed, or
+``--k-max`` below it) first WARMS UP from the seed to its first ``k`` in steps
+of ``--warmup-step`` (default 0.1) -- orbit, orientation and tracked pip
+carried, nothing blasted or drawn -- so it continues the same pip as the whole
+sweep would. ``--processes P`` splits the range, each run of
+``sweep_order``, into about ``P`` contiguous chunks and runs each as one job
+of ``scripts/sweep_pool.py`` (this script again, with ``--job``), ``P`` at a
+time with ``--workers`` cores each, under ``--max-rss-gb`` / ``--max-seconds``.
+A job writes ``rows/<k>.csv``, the frame and its geometry as each ``k``
+finishes; rerun the same command after a stop and a job warm-steps (no blast)
+through every ``k`` whose row exists, so the pip track continues to the next
+missing one, and a finished job is skipped (a capped one too, unless
+``--retry``). The rows are then merged into ``zones.csv`` (sorted by ``k``)
+and the summary drawn. ``--axes common`` needs every frame's box, so it is
+refused with ``--processes``. The blast cost grows ~1.4x per blast at high
+``k`` (``k = 4``: ~2 min a frame).
 
 Run with ``PYTHONPATH=src python3 scripts/henon_period3_zone_sweep.py``
 (``--k-min``, ``--k-max``, ``--k-step``, ``--blasts``, ``--min-separation``,
-``--seed-pip-id``, ``--list-seed-pips``, plus the growth and drawing options of
-``henon_period3_k_sweep.py``).
+``--seed-pip-id``, ``--list-seed-pips``, ``--processes``, ``--workers``, plus the
+growth and drawing options of ``henon_period3_k_sweep.py``).
 
 Dev Notes:
     * The zone is defined on the session (``session.resonance_zone``), which
@@ -152,6 +158,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tanglepack  # noqa: E402
 from tanglepack.examples.henon import henon_jacobian, henon_map, henon_map_inverse  # noqa: E402
 
+from sweep_pool import Job, run_pool  # noqa: E402
 from henon_period3_k_sweep import (  # noqa: E402
     LOBE_COLOR,
     SEED_GUESS,
@@ -384,6 +391,7 @@ def build_zone_frame(
     seed_pip: str = "central",
     seed_pip_id: Optional[int] = None,
     untrimmed: bool = False,
+    workers: int = 1,
 ) -> tuple[ZoneFrame, list, dict[str, NDArray[np.float64]]]:
     """
     Build the period-3 tangle at one ``k``, cut its zone at the tracked pip and blast it.
@@ -405,6 +413,7 @@ def build_zone_frame(
             orbit points it connects) or ``"default"`` (the library's).
         seed_pip_id: At the seed, a candidate id overriding ``seed_pip``.
         untrimmed: Also keep the whole unstable manifold for a faint underlay.
+        workers: The session's ``workers``.
 
     Returns:
         ``(frame, orbit, oriented eigenvectors)``.
@@ -412,6 +421,7 @@ def build_zone_frame(
     session = tanglepack.TangleSession(
         henon_map(k), henon_map_inverse(k), henon_jacobian(k), area_cutoff=area_cutoff
     )
+    session.workers = workers
     fp = session.construct_fixed_point(guess)
     session.orient_eigenvectors(fp, orientation)
     session.initialize_both_manifolds(fp)
@@ -776,30 +786,76 @@ def draw_summary(rows: list[dict[str, str]], path: Path) -> None:
     plt.close(fig)
 
 
-def merge_chunks(out: Path) -> None:
-    """Concatenate every ``zones_k*.csv`` of ``out`` into ``zones.csv`` and draw the summary."""
-    rows: list[dict[str, str]] = []
-    for chunk in sorted(out.glob("zones_k*.csv")):
-        with chunk.open(newline="") as handle:
-            for row in csv.DictReader(handle):
-                if "blast_sizes" not in row:  # chunks written before the column existed
-                    sizes = row.get("interior_bridges", "")
-                    row["blast_sizes"] = sizes
-                    row["interior_bridges"] = str(sum(int(x) for x in sizes.split()))
-                row.setdefault("area_cutoff", "1e-07")
-                rows.append({column: row.get(column, "") for column in CSV_COLUMNS})
-    if not rows:
-        print(f"no zones_k*.csv in {out}", file=sys.stderr)
-        sys.exit(1)
-    rows.sort(key=lambda row: float(row["k"]))
-    write_csv(rows, out / "zones.csv")
-    draw_summary(rows, out / "summary.png")
-    print(f"{len(rows)} rows merged into {out / 'zones.csv'}; summary.png drawn")
-
-
 def frame_name(k: float) -> str:
     """``k02.0143``: zero-padded so names sort in ``k`` order."""
     return f"k{k:07.4f}"
+
+
+def row_path(out: Path, k: float) -> Path:
+    """``rows/<k>.csv``: one ``--job`` frame's row, written last, so it marks the ``k`` as done."""
+    return out / "rows" / f"{frame_name(k)}.csv"
+
+
+def padded(box: tuple[float, float, float, float], pad: float) -> tuple[float, float, float, float]:
+    """A box grown by ``pad`` times its larger side."""
+    xmin, xmax, ymin, ymax = box
+    margin = pad * max(xmax - xmin, ymax - ymin)
+    return xmin - margin, xmax + margin, ymin - margin, ymax + margin
+
+
+def write_job_frame(frame: ZoneFrame, args: argparse.Namespace) -> None:
+    """A ``--job`` run's outputs of one frame, on its own axes: the drawing, the geometry, then the row."""
+    draw_zone_frame(frame, padded(frame.box(), args.pad), args.out / f"frame_{frame_name(frame.k)}.png",
+                    fill=not args.no_fill)
+    if not args.no_geometry:
+        (args.out / "geometry").mkdir(exist_ok=True)
+        save_geometry(frame, args.out / "geometry" / f"{frame_name(frame.k)}.npz")
+    row_path(args.out, frame.k).parent.mkdir(exist_ok=True)
+    write_csv([csv_row(frame)], row_path(args.out, frame.k))
+
+
+def run_jobs(parser: argparse.ArgumentParser, args: argparse.Namespace, ks: list[float]) -> None:
+    """
+    Run the sweep as ``--job`` chunks in a :func:`sweep_pool.run_pool`, then merge their rows.
+
+    Each run of :func:`sweep_order` is split into contiguous chunks, about
+    ``--processes`` in all (in proportion to the run's length); a job is this
+    script on its chunk, with ``--job`` and every option the user set but the
+    pool's own.
+    """
+    pool_only = {"help", "k_min", "k_max", "processes", "workers", "max_rss_gb", "max_seconds", "retry", "job"}
+    passed: list[str] = []
+    for action in parser._actions:
+        value = getattr(args, action.dest, None)
+        if action.dest in pool_only or value == action.default:
+            continue
+        flag = next(option for option in action.option_strings if option.startswith("--"))
+        passed += [flag] if action.nargs == 0 else [flag, str(value)]
+    runs = sweep_order(ks)
+    jobs = []
+    for run in runs:
+        count = min(len(run), max(1, round(args.processes * len(run) / len(ks))))
+        for chunk in np.array_split(np.array(run), count):
+            chunk = [float(k) for k in chunk]
+            low, high = min(chunk), max(chunk)
+            argv = [sys.executable, str(Path(__file__).resolve()), "--job",
+                    "--k-min", repr(low), "--k-max", repr(high), *passed]
+            jobs.append(Job(f"{frame_name(low)}_{frame_name(high)}", argv,
+                            lambda chunk=chunk: all(row_path(args.out, k).exists() for k in chunk)))
+    run_pool(jobs, processes=args.processes, workers=args.workers, out=args.out,
+             max_rss_gb=args.max_rss_gb, max_seconds=args.max_seconds, retry=args.retry)
+    rows = []
+    for k in ks:
+        if row_path(args.out, k).exists():
+            with row_path(args.out, k).open(newline="") as handle:
+                rows.extend(csv.DictReader(handle))
+    if not rows:
+        print("no frame built", file=sys.stderr)
+        sys.exit(1)
+    rows.sort(key=lambda row: float(row["k"]))
+    write_csv(rows, args.out / "zones.csv")
+    draw_summary(rows, args.out / "summary.png")
+    print(f"{len(rows)} of {len(ks)} rows merged into {args.out / 'zones.csv'}; summary.png drawn")
 
 
 # ── the sweep ──────────────────────────────────────────────────────────────
@@ -822,9 +878,13 @@ def main() -> None:
     parser.add_argument("--list-seed-pips", action="store_true", help="print the seed's candidates and exit")
     parser.add_argument("--warmup-step", type=float, default=0.1,
                         help="k step of the warm-up from the seed to a sub-range's first k (default 0.1)")
-    parser.add_argument("--chunk", action="store_true",
-                        help="a chunk of a larger sweep: CSV named after the range, no summary (see --merge)")
-    parser.add_argument("--merge", action="store_true", help="merge the chunk CSVs in --out into zones.csv and draw the summary")
+    parser.add_argument("--processes", type=int, default=None,
+                        help="run the range as this many parallel jobs (resumable; see the module docstring)")
+    parser.add_argument("--workers", type=int, default=1, help="the cores of each session (default 1)")
+    parser.add_argument("--max-rss-gb", type=float, default=None, help="with --processes: kill a job past this memory")
+    parser.add_argument("--max-seconds", type=float, default=None, help="with --processes: kill a job running longer")
+    parser.add_argument("--retry", action="store_true", help="with --processes: relaunch the jobs a cap ended")
+    parser.add_argument("--job", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-geometry", action="store_true", help="do not write geometry/<k>.npz per frame")
     parser.add_argument("--area-cutoff", type=float, default=1e-7, help="refinement cutoff (default 1e-7)")
     parser.add_argument("--radius", type=float, default=None, help="escape radius (default 2 * (1 + sqrt(1 + k)))")
@@ -849,20 +909,21 @@ def main() -> None:
     if args.list_seed_pips:
         list_seed_pips()
         return
-    if args.merge:
-        merge_chunks(args.out)
-        return
-
     count = int(round((args.k_max - args.k_min) / args.k_step)) + 1
     ks = [round(args.k_min + i * args.k_step, 10) for i in range(count)]
     args.out.mkdir(parents=True, exist_ok=True)
+    if args.processes is not None:
+        if args.axes == "common":
+            parser.error("--axes common needs every frame's box: it cannot be used with --processes")
+        run_jobs(parser, args, ks)
+        return
 
     growth = dict(
         area_cutoff=args.area_cutoff, radius=args.radius,
         unstable_steps=args.unstable_steps, stable_steps=args.stable_steps,
         scale=not args.no_scale, step_budget=args.step_budget,
         blasts=args.blasts, min_separation=args.min_separation,
-        stable_overgrow=args.stable_overgrow, untrimmed=args.untrimmed,
+        stable_overgrow=args.stable_overgrow, untrimmed=args.untrimmed, workers=args.workers,
     )
 
     # The seed: the orbit, its eigenvalue (the step counts are read at it) and
@@ -880,7 +941,9 @@ def main() -> None:
     print(f"seed k = {SEED_K:g}: pip {seed_frame.pip.label()} at ({seed_frame.pip.point[0]:+.4f}, {seed_frame.pip.point[1]:+.4f}), "
           f"zone area {seed_frame.zone_area:.4g}", flush=True)
 
-    frames: list[ZoneFrame] = [seed_frame] if SEED_K in ks else []
+    frames: list[ZoneFrame] = [seed_frame] if SEED_K in ks and not args.job else []
+    if args.job and SEED_K in ks and not row_path(args.out, SEED_K).exists():
+        write_job_frame(seed_frame, args)
     for run in sweep_order([k for k in ks if k != SEED_K]):
         guess, orientation, wanted = seed_guess, seed_orientation, seed_frame.pip
         # Warm up from the seed to the run's first k: continue the orbit and the
@@ -897,6 +960,15 @@ def main() -> None:
             logger.info("warm-up k = %.3f: pip %s, jump %.2f", k_warm, frame.pip.label() if frame.pip else None, frame.pip_jump)
             k_warm += direction * args.warmup_step
         for k in run:
+            if args.job and row_path(args.out, k).exists():
+                # Resume: a finished k is only warm-stepped, so the track reaches the next missing one.
+                frame, guess, orientation = build_zone_frame(
+                    k, guess, orientation, wanted, lambda_ref=lambda_ref, **{**growth, "blasts": 0}
+                )
+                if frame.pip is not None:
+                    wanted = frame.pip
+                logger.info("k = %.3f: row on disk, warm-stepped", k)
+                continue
             started = time.time()
             try:
                 frame, guess, orientation = build_zone_frame(
@@ -905,7 +977,10 @@ def main() -> None:
             except (ValueError, tanglepack.PointBudgetExceeded) as exc:
                 logger.warning("k = %.3f skipped: %s: %s", k, type(exc).__name__, str(exc)[:200])
                 continue
-            frames.append(frame)
+            if args.job:
+                write_job_frame(frame, args)
+            else:
+                frames.append(frame)
             if frame.pip is not None:
                 wanted = frame.pip
             print(
@@ -916,34 +991,27 @@ def main() -> None:
                 flush=True,
             )
 
+    if args.job:
+        print(f"job k = {ks[0]:g}..{ks[-1]:g} finished: rows in {args.out / 'rows'}")
+        return
     if not frames:
         print("no frame built", file=sys.stderr)
         sys.exit(1)
     frames.sort(key=lambda f: f.k)
 
-    def padded(box: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-        xmin, xmax, ymin, ymax = box
-        pad = args.pad * max(xmax - xmin, ymax - ymin)
-        return xmin - pad, xmax + pad, ymin - pad, ymax + pad
-
     boxes = np.array([f.box() for f in frames])
-    common = padded((boxes[:, 0].min(), boxes[:, 1].max(), boxes[:, 2].min(), boxes[:, 3].max()))
+    common = padded((boxes[:, 0].min(), boxes[:, 1].max(), boxes[:, 2].min(), boxes[:, 3].max()), args.pad)
     if not args.no_geometry:
         (args.out / "geometry").mkdir(exist_ok=True)
     for frame in frames:
-        limits = common if args.axes == "common" else padded(frame.box())
+        limits = common if args.axes == "common" else padded(frame.box(), args.pad)
         draw_zone_frame(frame, limits, args.out / f"frame_{frame_name(frame.k)}.png", fill=not args.no_fill)
         if not args.no_geometry:
             save_geometry(frame, args.out / "geometry" / f"{frame_name(frame.k)}.npz")
     rows = [csv_row(f) for f in frames]
-    if args.chunk:
-        name = f"zones_{frame_name(frames[0].k)}_{frame_name(frames[-1].k)}.csv"
-        write_csv(rows, args.out / name)
-        print(f"{len(frames)} frames and {name} written to {args.out} (chunk: run --merge for zones.csv and summary.png)")
-    else:
-        write_csv(rows, args.out / "zones.csv")
-        draw_summary(rows, args.out / "summary.png")
-        print(f"{len(frames)} frames, zones.csv, summary.png and geometry/ written to {args.out}")
+    write_csv(rows, args.out / "zones.csv")
+    draw_summary(rows, args.out / "summary.png")
+    print(f"{len(frames)} frames, zones.csv, summary.png and geometry/ written to {args.out}")
 
 
 if __name__ == "__main__":
