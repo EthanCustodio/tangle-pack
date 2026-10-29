@@ -702,10 +702,13 @@ From `stress/numerics/report/report.pdf` (experiments E1-E12; the E12 re-verific
 - **The point budget** (E3, E7, E11): past escape a step's point count can jump 5-8x in one refinement
   step, so the budget is checked inside the step; `grow_until_bounded` is the one stop condition
   shown to stop before take-off.
-- **GPU gives no gain** (E1, E2: 0.96-1.00x end to end; the map is under 1% of growth). It stays
-  opt-in. Re-measured 2026-10-27: 0.98-1.00x end to end, the map 0.56-0.60% of growth, and the map,
-  refinement, merge, segment build and crossing resolution together 3.5% of the 1e-7 scale series
-  (a cap of 1.037x). The two geometry kernels `curvature_area_batch` and `chord_deviation_batch`
+- **The GPU gains on the sweep and on a fused map, not on a cheap map** (E1, E2: routing Hénon
+  gives 0.96-1.00x end to end; re-measured 2026-10-27: 0.98-1.00x, the map, refinement, merge, segment
+  build and crossing resolution together 3.5% of the 1e-7 scale series, a cap of 1.037x). It stays
+  opt-in. Since 2026-10-29 `enable_gpu` also builds and pre-tests the same-stability sweep's candidate
+  pairs on the device, the host re-testing the survivors exactly (byte-identical); `route_map=False`
+  keeps the map on the host (the 1e-7 scale series 50.1 -> 17.4 s, state byte-equal). An ODE map
+  written as one `--fmad=false` kernel is bit-identical and fast (`duffing_map`). The two geometry kernels `curvature_area_batch` and `chord_deviation_batch`
   compute in their inputs' namespace (`numerics/namespace.py`), and the user's batched map calls run on the device
   under `enable_gpu`; merge, refinement's layer loop, the segment build and crossing resolution are
   host-only, each for the reason `gpu.py` gives.

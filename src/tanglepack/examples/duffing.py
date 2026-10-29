@@ -16,8 +16,10 @@ Two forms of the map:
 * :func:`duffing_map` / :func:`duffing_map_inverse` integrate with leapfrog
   (kick-drift-kick), a composition of shears, so the map is EXACTLY symplectic
   (``det J = 1`` to rounding) and time-reversible: the inverse is the same
-  scheme run with ``-h`` from ``T`` back to 0. Both are array-API
-  (``np.stack``) and batch-capable on axis 0, as :mod:`.henon`'s.
+  scheme run with ``-h`` from ``T`` back to 0. Both are batch-capable on
+  axis 0, as :mod:`.henon`'s. Handed a CuPy array (``enable_gpu``) they run
+  the whole leapfrog loop as ONE device kernel, bit-identical to the numpy
+  loop: the worked example of a device map in ``tanglepack.numerics.gpu``.
 * :func:`duffing_map_ivp` / :func:`duffing_map_ivp_inverse` integrate one
   point at a time with ``scipy.integrate.solve_ivp`` (DOP853), a batch in a
   Python loop: the GIL-bound form ``map_executor="process"`` is for. They are
@@ -30,6 +32,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.integrate import solve_ivp
 
+from ..numerics.namespace import array_namespace
 from .henon import MapFunction
 
 #: Forcing amplitude: four steps of each manifold cross at ``area_cutoff = 1e-5``.
@@ -42,6 +45,20 @@ DUFFING_OMEGA: float = 1.5
 #: batch call, an expensive map, and still resolves the flow.
 DUFFING_STEPS: int = 200
 
+#: The leapfrog loop as one CUDA kernel, in numpy's operation order (``0.5 * h``
+#: first, ``(q - q*q*q) + F``); compiled with ``--fmad=false`` so no
+#: multiply-add is fused, which makes it bit-identical to the numpy loop.
+_LEAPFROG_KERNEL = """
+double q = q0, p = p0;
+for (int i = 0; i < steps; i++) {
+    p = p + (0.5 * h) * ((q - q * q * q) + forcing[i]);
+    q = q + h * p;
+    p = p + (0.5 * h) * ((q - q * q * q) + forcing[i + 1]);
+}
+q1 = q;
+p1 = p;
+"""
+
 
 def _leapfrog(
     eps: float, omega: float, steps: int, direction: int
@@ -52,8 +69,26 @@ def _leapfrog(
     # forward and backward, so the inverse retraces the forward map's floats.
     times = range(steps + 1) if direction > 0 else range(steps, -1, -1)
     forcing = [eps * np.cos(2 * np.pi * i / steps) for i in times]
+    device = {}  # the compiled kernel and the forcing table, built on the first CuPy call
+
+    def device_flow(cp, point):
+        """The flow of a CuPy batch, by :data:`_LEAPFROG_KERNEL`: one launch per call."""
+        if not device:
+            device["kernel"] = cp.ElementwiseKernel(
+                "raw float64 forcing, float64 h, int32 steps, float64 q0, float64 p0",
+                "float64 q1, float64 p1",
+                _LEAPFROG_KERNEL,
+                "duffing_leapfrog",
+                options=("--fmad=false",),
+            )
+            device["forcing"] = cp.asarray(forcing, dtype=cp.float64)
+        q, p = device["kernel"](device["forcing"], h, steps, point[0], point[1])
+        return cp.stack([q, p], axis=0)
 
     def flow(point: NDArray[np.float64]) -> NDArray[np.float64]:
+        xp = array_namespace(point)
+        if xp is not np:
+            return device_flow(xp, point)
         q, p = point[0], point[1]
         for before, after in zip(forcing, forcing[1:]):
             p = p + 0.5 * h * (q - q * q * q + before)

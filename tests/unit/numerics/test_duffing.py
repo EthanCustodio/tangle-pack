@@ -5,12 +5,14 @@ measured on. Its leapfrog form must be what the library assumes of any map:
 area-preserving (``|det J| = 1``), with an inverse that undoes it, and
 batch-capable on axis 0. Its saddle must solve and its tangle cross at the
 recipe's ``area_cutoff``, and the ``solve_ivp`` form must integrate the same
-flow.
+flow. Handed a CuPy array the leapfrog map runs as one device kernel, and
+that kernel must give the numpy map's floats exactly (skipped without a GPU).
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import tanglepack
 from tanglepack.examples.duffing import (
@@ -70,3 +72,20 @@ def test_ivp_form_integrates_the_same_flow():
         assert np.abs(leapfrog(point) - ivp(point)).max() < 1e-6
         assert np.abs(leapfrog_inv(point) - ivp_inv(point)).max() < 1e-6
         assert np.abs(ivp_inv(ivp(point)) - point).max() < 1e-8
+
+
+def test_device_map_is_the_numpy_map():
+    """On a CuPy batch the fused kernel's images equal the numpy loop's bit for bit,
+    forward and backward, at the default step and at ten times it."""
+    cp = pytest.importorskip("cupy")
+    try:
+        devices = cp.cuda.runtime.getDeviceCount()
+    except Exception:  # noqa: BLE001 - any CUDA runtime failure means no device
+        devices = 0
+    if devices < 1:
+        pytest.skip("CuPy is installed but no CUDA device is available")
+    batch = np.random.default_rng(1).normal(0.0, 0.6, (2, 20_000))
+    for fn in (duffing_map(), duffing_map_inverse(), duffing_map(steps=2000)):
+        image = fn(cp.asarray(batch))
+        assert isinstance(image, cp.ndarray)
+        assert np.array_equal(cp.asnumpy(image), fn(batch))

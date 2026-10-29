@@ -1248,3 +1248,19 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   (`diagnose` 1.76x), the 1e-9 blast 72.5 -> 58.3 s (1.24x); the sweep's serial whole-field part (19.3 of
   44.3 s at 1e-7, 39.0 of 56.3 s at 1e-9) is the ceiling. Suite 1421 / 43 / 5 / C3 alone.
 - **Open for the author:** the merge; whether the sweep's whole-field prefix is the next target.
+
+## 2026-10-29 — Run 2 `gpu-device` of the speedup campaign (/perf; branch `perf/gpu-device`, base `5dec003`)
+
+- **The author's rulings:** keep `device-sweep` (the whole sweep on the device: edge dedup, sweep sort, strips,
+  candidate pairs and a fused pre-test with loosened margins; the host re-tests the survivors exactly) and
+  `device-map` (Duffing's leapfrog as one `--fmad=false` ElementwiseKernel in numpy's operation order,
+  bit-identical; `gpu.py` documents how to write one); `device-pairs` dropped. The sweep must be usable with the
+  map left on the host, so `enable_gpu(..., route_map=False)` exists: a Hénon run gets the sweep speedup with a
+  byte-equal state (a routed Hénon map's CuPy last bits change the state, base behaviour, and by 32 blasts the
+  same-stability counts too).
+- **Measured** (`bench_gpu.py`, cores 16-31, RTX 5060 Ti, median of 3): the 1e-7 scale series, 32 blasts,
+  CPU 50.1 s / `diagnose` 38.7 s -> `route_map=False` 17.4 s / 5.9 s (2.9x), digest and counts equal to the CPU;
+  routed 18.0 s. Duffing growth 200 steps 0.27 s CPU / 2.33 s base GPU / 0.35 s fused; 2000 steps 1.93 / 19.6 /
+  0.56 s, the state byte-equal CPU vs GPU. `min_batch_points` default 64 -> 16 (a fused map breaks even at ~10).
+- **Open for the author:** `gpu_enabled` is not re-exported from `tanglepack`; `device-pairs`' 1.6x is recorded
+  only here.

@@ -279,8 +279,8 @@ class DynamicalSystem:
 
         threads = self.map_executor == "thread"
         smallest = MIN_PARALLEL_POINTS if batchable and threads else MIN_PARALLEL_POINTS_EXPENSIVE
-        # Under enable_gpu the device gets the whole batch.
-        if self.workers == 1 or len(coords) < smallest or getattr(self, "_gpu_enabled", False):
+        # A map routed by enable_gpu gets the whole batch on the device.
+        if self.workers == 1 or len(coords) < smallest or getattr(self, "_gpu_map", False):
             return _map_points(fn, batchable, coords)
         task = (
             partial(_map_points, fn, batchable)

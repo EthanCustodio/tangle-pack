@@ -2,8 +2,9 @@
 
 When CuPy and a device are present, routing the batched map through the GPU
 (``tanglepack.enable_gpu``) must grow the same manifold as the CPU path,
-``disable_gpu`` must restore the CPU callables, and the same-stability sweep
-on the device must list exactly the CPU's hits; these tests skip cleanly
+``disable_gpu`` must restore the CPU callables, ``gpu_enabled`` reading which
+is in place, and the same-stability sweep on the device must list exactly the
+CPU's hits; these tests skip cleanly
 otherwise. The always-present API surface runs everywhere: ``enable_gpu``
 raises ``ImportError`` when CuPy cannot be imported (forced by hiding the
 module, so the path runs even where CuPy is installed) and ``TypeError`` on a
@@ -21,6 +22,7 @@ import tanglepack
 from tanglepack import DynamicalSystem
 from tanglepack.examples import HENON_K10, henon_jacobian, henon_map, henon_map_inverse
 from tanglepack.numerics.diagnostics import count_same_stability_crossings, same_stability_crossings
+from tanglepack.numerics.gpu import gpu_enabled
 
 import cases
 from cases import K10_SADDLE_SEED, PERIOD1_ORIENTATION
@@ -76,14 +78,34 @@ def test_gpu_growth_matches_cpu() -> None:
     session = _k10_session()
     system = session.workbench.dynamical_system
     cpu_map = system.map
+    assert not gpu_enabled(session)
     assert tanglepack.enable_gpu(session, min_batch_points=1) is system
     assert system.map is not cpu_map
+    assert gpu_enabled(session) and gpu_enabled(system)
     gpu = _grown_cdists(session)
 
     assert len(cpu) == len(gpu)
     assert np.allclose(cpu, gpu, rtol=1e-6, atol=1e-9)
     tanglepack.disable_gpu(session)
     assert system.map is cpu_map
+    assert not gpu_enabled(session)
+
+
+def test_route_map_false_keeps_the_host_map_and_grows_the_cpus_manifold() -> None:
+    """``route_map=False`` leaves the CPU callables in place (the sweep alone is
+    on the device), replaces a routed call, and grows the CPU's cdists exactly."""
+    _require_device()
+    cpu = _grown_cdists(_k10_session())
+
+    session = _k10_session()
+    system = session.workbench.dynamical_system
+    cpu_map = system.map
+    tanglepack.enable_gpu(session)
+    tanglepack.enable_gpu(session, route_map=False)
+    assert system.map is cpu_map and gpu_enabled(session)
+    assert np.array_equal(_grown_cdists(session), cpu)
+    tanglepack.disable_gpu(session)
+    assert system.map is cpu_map and not gpu_enabled(session)
 
 
 def test_enable_gpu_without_cupy_raises_clearly(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,12 +121,14 @@ def test_enable_gpu_without_cupy_raises_clearly(monkeypatch: pytest.MonkeyPatch)
 def test_enable_gpu_rejects_a_target_without_a_system() -> None:
     with pytest.raises(TypeError):
         tanglepack.enable_gpu(object())
+    with pytest.raises(TypeError):
+        gpu_enabled(object())
 
 
 def test_gpu_same_stability_readings_are_the_cpus() -> None:
     """The listings (in order) and the counts are equal on the CPU and on the
     device, on the k28 series blasted to its depth, its last bridges counted
-    alone too."""
+    alone too, and a count with no new segment."""
     _require_device()
     series = cases.SERIES["k28_series"]
     case = series.build()
@@ -122,8 +146,11 @@ def test_gpu_same_stability_readings_are_the_cpus() -> None:
             same_stability_crossings(workbench),
             count_same_stability_crossings(workbench, workbench.bridges),
             count_same_stability_crossings(workbench, workbench.bridges[-50:]),
+            # A bridge cut from a grown manifold is no curve of its own: nothing is new.
+            count_same_stability_crossings(workbench, workbench.bridges[:1]),
         ))
     tanglepack.disable_gpu(case.session)
     cpu, device = readings
     assert cpu[0] and cpu[2].in_region, "the case must hold hits for the test to bite"
+    assert cpu[4].in_region == cpu[4].outside == 0
     assert device == cpu
