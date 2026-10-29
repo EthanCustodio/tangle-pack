@@ -9,9 +9,13 @@ blast the registry, the iterate table, the pip depth and the topology
 crossing ids are compared as they are: breadth-first order is unchanged, so a
 lean build numbers its crossings as the full one does.
 
-The series cover the keep rule's cases: ``nested_outer_series`` keeps another
-zone's frontier, ``inversion_series`` the pieces of joined arcs. No count or
-word of a case is pinned; the two builds are compared with each other.
+A series whose lean blasts free nothing compares nothing, and is a visible
+skip (``inversion_series`` frees no row). ``nested_outer_series`` keeps another
+zone's frontier; no series holds a joined arc over released curve, so the
+joined-pieces rule is tested directly
+(``test_lean_blast_refusals.py::test_a_joined_arcs_pieces_survive_a_release``).
+No count or word of a case is pinned; the two builds are compared with each
+other.
 """
 
 from __future__ import annotations
@@ -92,8 +96,10 @@ def _assert_equal(full: list[dict], lean: list[dict]) -> None:
 def test_a_lean_series_equals_the_full_one(name, separation):
     """Every step of a lean series equals the full series' step."""
     series = SERIES[name]
+    lean, released, _ = _blasts(series.build, series.blasts, separation, lean=True)
+    if not released:
+        pytest.skip(f"a lean {name} frees no row: there is nothing to compare")
     full, _, _ = _blasts(series.build, series.blasts, separation, lean=False)
-    lean, _, _ = _blasts(series.build, series.blasts, separation, lean=True)
     _assert_equal(full, lean)
 
 
@@ -103,7 +109,8 @@ def test_a_lean_outer_blast_equals_the_full_one(name):
     is another zone's, kept), and the heteroclinic tangle, whose per-fixed-point
     trellis joins arcs across a crossing of the other tangle."""
     full, _, _ = _blasts(BUILDERS[name], 3, "width", lean=False)
-    lean, _, _ = _blasts(BUILDERS[name], 3, "width", lean=True)
+    lean, released, _ = _blasts(BUILDERS[name], 3, "width", lean=True)
+    assert released > 0
     _assert_equal(full, lean)
 
 

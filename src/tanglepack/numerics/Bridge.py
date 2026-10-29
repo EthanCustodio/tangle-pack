@@ -17,7 +17,7 @@ from .FixedPoint import FixedPoint
 from .BaseManifold import BaseManifold
 from .BranchPoint import BranchPoint
 from .Intersection import ManifoldKey, Stability
-from .PointStore import End, PointStore
+from .PointStore import Chain, End, PointStore
 from .geometry import polyline_midpoint
 
 #: Topological identity of a bridge: the registry ids of the two crossings it
@@ -160,14 +160,22 @@ class Bridge(BaseManifold):
         Every later row read raises :class:`CurveReleased`. Called by
         ``TangleWorkbench.release_curves`` before the rows go.
         """
-        self._test_point = polyline_midpoint(self.get_point_array())
-        self._point_count = len(self.get_point_array())
+        points = self.get_point_array()
+        self._test_point = polyline_midpoint(points)
+        self._point_count = len(points)
         self.released = True
 
     @property
     def test_point(self) -> Optional[NDArray[np.float64]]:
         """The bridge's midpoint node, the point zone membership is tested at
-        (None for an empty bridge); stored when it was released."""
+        (``TangleSession.classify_bridge``, a blast's ``in_zone``).
+
+        The geometric middle NODE, so a bridge that is a zone's own unstable
+        boundary arc lands exactly on that boundary and, containment being
+        boundary-inclusive, is attributed to it. None for an empty bridge.
+        Gathered afresh on each read (no read is memoised since N6); stored
+        when the bridge is released.
+        """
         return self._test_point if self.released else polyline_midpoint(self.get_point_array())
 
     @property
@@ -176,14 +184,20 @@ class Bridge(BaseManifold):
         stored when it was released."""
         return self._point_count if self.released else len(self.get_point_array())
 
-    def _span(self, *args, **kwargs):
-        """:meth:`BaseManifold._span`, refused once the bridge is released."""
+    def _span(
+        self, final_node: Optional[End | int] = None, stop_at_final: bool = True
+    ) -> tuple[Optional[BranchPoint], Optional[Chain], int, int]:
+        """:meth:`BaseManifold._span`, refused once the bridge is released.
+
+        Raises:
+            CurveReleased: The bridge was released by a lean blast.
+        """
         if self.released:
             raise CurveReleased(
                 f"bridge {self.id} was released by a lean blast and its points are "
                 "freed; rebuild without lean to read it"
             )
-        return super()._span(*args, **kwargs)
+        return super()._span(final_node, stop_at_final)
 
     @classmethod
     def joined(cls, pieces: Sequence["Bridge"]) -> "Bridge":

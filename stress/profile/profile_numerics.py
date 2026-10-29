@@ -618,7 +618,8 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
             session = build_law_case(case)
             record["wall_build_s"] = time.perf_counter() - t0
         else:
-            separation = _separation(args.separation)
+            text = args.separation
+            separation = None if text == "none" else text if text == "width" else float(text)
             record["scale"] = {"k": SCALE_K, "area_cutoff": args.scale_cutoff,
                                "min_separation": separation, "lean": args.lean,
                                "stop_gb": args.scale_stop_gb, "max_blasts": args.scale_max_blasts}
@@ -715,11 +716,6 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
         record["traceback"] = traceback.format_exc()[-3000:]
     timer.stop()
     save()
-
-
-def _separation(text: str) -> Any:
-    """``--separation`` as ``blast_zone`` takes it: ``none``, ``width`` or a float."""
-    return {"none": None, "width": "width"}[text] if text in ("none", "width") else float(text)
 
 
 def _jsonable(value: Any) -> Any:

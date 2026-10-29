@@ -1300,4 +1300,6 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   (< 1) per step, not `w / beta_s` (that would grow it). `WIDTH_SEPARATION_FACTOR` stays 1.0 (0.01 matches the
   1e-5 guard's onset on the 1e-7 scale series but drops nothing in the k28 test builds): the author's call. Widths
   are saved as an optional column (format 1 unchanged for a save without one). No series has a joined arc on a
-  released chain: the joined-pieces rule is unexercised by any build.
+  released chain: the joined-pieces rule is unexercised by any build, so a unit test joins two blast children
+  and releases around them. A lean blast's released drops stay out: `min_separation=None` refuses to re-admit
+  one (`CurveReleased`) instead of keeping every drop's rows.

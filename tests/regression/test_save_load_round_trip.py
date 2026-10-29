@@ -246,6 +246,30 @@ def test_a_loaded_session_remembers_its_dropped_children(tmp_path):
     assert _numbers(loaded.workbench) == _numbers(session.workbench)
 
 
+def test_a_loaded_session_keeps_its_widths(tmp_path):
+    """A width blast's ``Bridge.width``s load as saved, and the next width blasts
+    drop as the original's: a lost width would be re-seeded from its ring."""
+    session = BUILDERS["k28_two_blasts"]().session
+    zone = max(session.resonance_zones.values(), key=lambda zone: zone.area)
+    session.blast_zone(zone, 3, fixed_point=[zone.fixed_point], min_separation="width", diagnose=False)
+    widths = [(b.id, b.width) for b in session.workbench.bridges]
+    assert any(width is not None for _, width in widths)
+
+    session.save(tmp_path / "session")
+    loaded = _load_session(session, tmp_path / "session")
+    assert [(b.id, b.width) for b in loaded.workbench.bridges] == widths
+
+    outcomes = []
+    for copy in (session, loaded):
+        zone = max(copy.resonance_zones.values(), key=lambda zone: zone.area)
+        result = copy.blast_zone(zone, 3, fixed_point=[copy.workbench.fixed_points[0]],
+                                 min_separation="width", diagnose=False)
+        bridges = copy.workbench.bridges
+        outcomes.append((result.too_close, _numbers(copy.workbench),
+                         [(b.id, b.width, b.dropped_at) for b in bridges]))
+    assert outcomes[0] == outcomes[1]
+
+
 def test_a_zone_polygon_loads_as_frozen(tmp_path):
     # The polygon is history: blast_zone tests membership against the one captured
     # when the zone was defined. The reversed ring bounds the same region, and is

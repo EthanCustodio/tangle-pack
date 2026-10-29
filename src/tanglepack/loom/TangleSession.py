@@ -825,20 +825,6 @@ class TangleSession:
 
     # ── bridge ↔ resonance-zone classification ───────────────────────────────
 
-    @staticmethod
-    def _bridge_test_point(bridge: "Bridge") -> Optional[NDArray[np.float64]]:
-        """The midpoint node of a bridge, used as its representative point.
-
-        Returns the geometric middle node so a bridge that forms a zone's own unstable
-        boundary arc lands exactly on that zone's boundary (and, with boundary-inclusive
-        containment, is attributed to it). ``None`` for an empty bridge. Each call
-        gathers the bridge's points afresh (no read is memoised since N6), and
-        :meth:`classify_bridge` makes one call per bridge, not one per zone. A
-        bridge a lean blast released reads the node it stored
-        (:attr:`~tanglepack.numerics.Bridge.Bridge.test_point`).
-        """
-        return bridge.test_point
-
     def classify_bridge(self, bridge: "Bridge") -> Optional[ResonanceZone]:
         """
         Determine which resonance zone a single bridge lies in.
@@ -855,7 +841,7 @@ class TangleSession:
             The innermost :class:`ResonanceZone` containing the bridge, or ``None`` if
             it lies outside every zone (or no zones are defined).
         """
-        point = self._bridge_test_point(bridge)
+        point = bridge.test_point
         if point is None:
             return None
         containing = [

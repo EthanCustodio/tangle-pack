@@ -32,7 +32,7 @@ def _iterable_interior_bridge(session, fp, zone):
     for bridge in session.workbench.uniiterated_bridges:
         if bridge.fixed_point is not fp or bridge.partial:
             continue
-        point = session._bridge_test_point(bridge)
+        point = bridge.test_point
         if point is not None and zone.contains_point(point):
             return bridge
     return None

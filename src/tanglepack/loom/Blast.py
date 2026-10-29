@@ -62,11 +62,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Callable, Literal, Optional
 
 import numpy as np
 from scipy.spatial import cKDTree
 
+from ..numerics.Bridge import CurveReleased
 from ..numerics.ManifoldMachine import DEFAULT_AREA_CUTOFF
 from ..numerics.budget import PointBudgetExceeded
 from ..numerics.geometry import arc_polyline, signed_polygon_area
@@ -75,6 +76,7 @@ from .ResonanceZone import ResonanceZone
 if TYPE_CHECKING:
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
+    from ..numerics.TangleWorkbench import TangleWorkbench
     from .TangleSession import TangleSession
 
 logger = logging.getLogger(__name__)
@@ -217,8 +219,6 @@ def _ring_width(session: "TangleSession", bridge: "Bridge") -> Optional[float]:
         reverse=second.stable_cdist > first.stable_cdist,
     )
     length = float(np.hypot(*np.diff(unstable, axis=0).T).sum())
-    if length == 0.0:
-        return None
     return abs(signed_polygon_area(np.vstack((unstable, back)))) / length
 
 
@@ -226,10 +226,7 @@ def _too_thin(session: "TangleSession", child: "Bridge") -> bool:
     """Whether a child's width is below ``WIDTH_SEPARATION_FACTOR`` chord deviations."""
     if child.width is None:
         return False
-    points = child.get_point_array()
-    chords = np.hypot(*np.diff(points, axis=0).T)
-    if not len(chords):
-        return False
+    chords = np.hypot(*np.diff(child.get_point_array(), axis=0).T)
     deviation = 1.5 * session.workbench.area_cutoff / float(np.median(chords))
     return child.width < WIDTH_SEPARATION_FACTOR * deviation
 
@@ -237,7 +234,7 @@ def _too_thin(session: "TangleSession", child: "Bridge") -> bool:
 def _lean_keep(
     session: "TangleSession",
     fixed_points: list["FixedPoint"],
-    in_zone,
+    in_zone: Callable[["Bridge"], bool],
 ) -> list["BridgeId | Bridge"]:
     """What a lean blast keeps: the bridges the topology and later blasts read.
 
@@ -249,27 +246,29 @@ def _lean_keep(
     shares with an iterated neighbour are kept by ``release_curves`` itself.
     """
     workbench = session.workbench
-    keep: list = [
+    keep: list["BridgeId | Bridge"] = [
         b for b in workbench.uniiterated_bridges
         if b.dropped_at is None and (session.classify_bridge(b) is not None or in_zone(b))
     ]
     selections = [fixed_points]
     if set(map(id, fixed_points)) != set(map(id, workbench.fixed_points)):
         selections.append(None)
+    trellises = []
     for selection in selections:
         topology = session.topology(selection)
         keep += topology.minimal.kept_bridge_ids
-        trellises = [topology.trellis, *session._trellises.values()]
-        for trellis in trellises:
-            for joined in trellis._joined.values():
-                keep += _pieces(workbench, joined)
+        trellises.append(topology.trellis)
+    # Every cached trellis memoises its joined arcs (a re-cut hands them back).
+    for trellis in {id(t): t for t in [*trellises, *session._trellises.values()]}.values():
+        for joined in trellis._joined.values():
+            keep += _pieces(workbench, joined)
     for orbit in _pip_orbits(session, fixed_points).values():
         for x in orbit:
             keep += workbench.bridges_at(x)
     return keep
 
 
-def _pieces(workbench, joined: "Bridge") -> list["BridgeId"]:
+def _pieces(workbench: "TangleWorkbench", joined: "Bridge") -> list["BridgeId"]:
     """The ids of the consecutive bridges a joined arc runs through."""
     pieces, at = [], joined.first_intersection
     while at != joined.second_intersection:
@@ -415,7 +414,8 @@ def blast_zone(
             iterated (``Bridge.width``), is below ``WIDTH_SEPARATION_FACTOR``
             chord deviations of its polyline; the pip-orbit exemption holds,
             and a width drop (``dropped_at == WIDTH_DROP``) is re-admitted by
-            ``None`` only. ``None`` (default) disables the guard.
+            ``None`` only (never after a lean blast released the dropped
+            bridge). ``None`` (default) disables the guard.
         diagnose: If True (the default unless ``lean``) finish with ONE
             :meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.report_resolution`
             pass over the blasted fixed points: deep blasting is where
@@ -459,7 +459,9 @@ def blast_zone(
         ValueError: If the resolved zone has no captured boundary (cannot test
             containment), or ``lean`` is passed with a geometric separation
             (a float or ``"resolution"``) or with ``diagnose=True``.
-        CurveReleased: A blast that is not lean on a lean workbench.
+        CurveReleased: A blast that is not lean on a lean workbench, or a
+            ``min_separation=None`` blast that would re-admit a dropped bridge
+            a lean blast released.
         PointBudgetExceeded: If one bridge's image would exceed the machine's
             per-call point budget. It always propagates, its message extended
             with the zone, iteration and bridge (also on ``exc.blast_context``
@@ -496,7 +498,7 @@ def blast_zone(
     ]
 
     def in_zone(bridge: "Bridge") -> bool:
-        point = session._bridge_test_point(bridge)
+        point = bridge.test_point
         return (
             point is not None
             and zone.contains_point(point)
@@ -522,6 +524,15 @@ def blast_zone(
         or min_separation is None
         or (not width and min_separation < b.dropped_at)
     ]
+    # A lean blast released the bridges it dropped (_lean_keep): re-admitting
+    # one would read freed curve mid-blast.
+    released = [b.id for b in frontier if b.released]
+    if released:
+        raise CurveReleased(
+            f"bridges {released} were dropped and then released by a lean blast, so "
+            "min_separation=None cannot re-admit them; rebuild the session and blast "
+            "it without lean"
+        )
 
     result = BlastResult(
         zone=zone,

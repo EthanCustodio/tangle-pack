@@ -3,16 +3,19 @@
 A lean blast frees the interiors of the bridges nothing reads again
 (``TangleWorkbench.release_curves``). From then on a read of a freed bridge,
 and every operation that would re-read freed curve, raises ``CurveReleased``;
-the topology and the drawing of the kept bridges still work.
+the topology and the drawing of the kept bridges still work, and so do the
+joined arcs a trellis holds.
 """
 
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
 from cases import build_k28
-from tanglepack.numerics.Bridge import CurveReleased
+from tanglepack.loom.Blast import _pieces
+from tanglepack.numerics.Bridge import Bridge, CurveReleased
 from tanglepack.topology.plotting import plot_bridges_by_class
 
 
@@ -43,6 +46,7 @@ _REFUSALS = {
     "grow_until_iterates_closed": lambda s, z, fp: s.grow_until_iterates_closed(fp),
     "grow_until_faces_closed": lambda s, z, fp: s.grow_until_faces_closed(fp, [0]),
     "trim_stable_manifolds": lambda s, z, fp: s.trim_stable_manifolds(fp),
+    "trim_stable_at": lambda s, z, fp: s.trim_stable_at((fp, "stable", 0, 0), 1e-3),
     "resonance_zone": lambda s, z, fp: s.resonance_zone(z.resolve_boundary_intersection_id(s.workbench)),
     "restore": lambda s, z, fp: z.restore(s.workbench),
     "session save": lambda s, z, fp: s.save("unused"),
@@ -96,3 +100,46 @@ def test_the_topology_and_the_kept_bridges_still_draw(lean):
     finally:
         plt.close(fig)
     session.blast_zone(zone, 1, fixed_point=[fp], min_separation="width", lean=True)
+
+
+def test_a_dropped_bridge_a_lean_blast_released_is_not_re_admitted():
+    """min_separation=None re-admits a width drop, but not one a lean blast
+    released: the blast refuses before it maps anything."""
+    case = build_k28(blasts=0, through="zones")
+    session, zone = case.session, case.zones[0]
+    workbench = session.workbench
+    for _ in range(8):
+        session.blast_zone(zone, 1, fixed_point=[zone.fixed_point], min_separation="width", lean=True)
+        if any(b.dropped_at is not None and b.released for b in workbench.bridges):
+            break
+    else:
+        pytest.skip("no width drop was released")
+    generation = workbench.generation
+    with pytest.raises(CurveReleased, match="cannot re-admit"):
+        session.blast_zone(zone, 1, fixed_point=[zone.fixed_point], min_separation=None, lean=True)
+    assert workbench.generation == generation
+
+
+def test_a_joined_arcs_pieces_survive_a_release():
+    """A joined arc over blast curve reads as before once its pieces are kept
+    (``Blast._pieces``), however much else is freed."""
+    case = build_k28(blasts=0, through="zones")
+    session, zone = case.session, case.zones[0]
+    session.blast_zone(zone, 2, fixed_point=[zone.fixed_point], diagnose=False)
+    workbench = session.workbench
+    branches = {m._span(stop_at_final=False)[1].index for m in workbench.manifolds.values()}
+    off_branch = {
+        b.id[0]: b for b in workbench.bridges
+        if b.id is not None and b._span()[1].index not in branches
+    }
+    a, b = next(
+        (a, off_branch[a.id[1]]) for a in off_branch.values()
+        if a.id[1] in off_branch and off_branch[a.id[1]].manifold_key == a.manifold_key
+    )
+    joined = Bridge.joined([a, b])
+    before = joined.get_point_array()
+
+    workbench.release_curves(_pieces(workbench, joined))
+
+    assert not (a.released or b.released)
+    np.testing.assert_array_equal(joined.get_point_array(), before)
