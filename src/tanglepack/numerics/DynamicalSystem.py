@@ -42,13 +42,16 @@ JacFunc = Callable[[Point2D], Matrix2D]
 
 MapExecutor = Literal["thread", "process"]
 
-#: A batch of a batch-capable map with fewer points runs in the caller: below it
-#: the hand-off costs more than the split saves (2026-10-29, 4-8 cores: the Henon
-#: map breaks even near 1e5 points, the leapfrog Duffing map near 2e4).
+#: A batch of a batch-capable map in a thread pool with fewer points runs in the
+#: caller: below it the hand-off costs more than the split saves (2026-10-29, 4-8
+#: cores: the Henon map breaks even near 1e5 points, the leapfrog Duffing map
+#: near 2e4).
 MIN_PARALLEL_POINTS: int = 32768
-#: The same for a map evaluated point by point: a forked pool beats the serial
-#: loop from about 128 points even for the Henon map written in Python.
-MIN_PARALLEL_POINTS_PER_POINT: int = 128
+#: The same for an expensive call: a map evaluated point by point, or any map in
+#: a process pool (chosen for an expensive map). The forked pool's hand-off, about
+#: 0.5 ms, is repaid from a dozen points of an ODE map (``solve_ivp``, ~2 ms a
+#: point); a cheap map in a process pool loses at most that per call.
+MIN_PARALLEL_POINTS_EXPENSIVE: int = 16
 
 # The maps a forked worker process applies, installed by its initializer.
 _CHILD_MAPS: dict[str, MapFunc] = {}
@@ -143,8 +146,8 @@ class DynamicalSystem:
     def workers(self) -> int:
         """
         Cores a large batch is split across (at least :data:`MIN_PARALLEL_POINTS`
-        points, or :data:`MIN_PARALLEL_POINTS_PER_POINT` for a map that takes
-        one point at a time); 1 maps every batch in the caller.
+        points for a batch-capable map in threads, else
+        :data:`MIN_PARALLEL_POINTS_EXPENSIVE`); 1 maps every batch in the caller.
 
         Setting it shuts the current pool down; the next split builds a new one.
         It is a runtime resource: ``save`` does not store it.
@@ -275,12 +278,13 @@ class DynamicalSystem:
             setattr(self, cache_attr, batchable)
 
         # Under enable_gpu the device gets the whole batch.
-        smallest = MIN_PARALLEL_POINTS if batchable else MIN_PARALLEL_POINTS_PER_POINT
+        threads = self.map_executor == "thread"
+        smallest = MIN_PARALLEL_POINTS if batchable and threads else MIN_PARALLEL_POINTS_EXPENSIVE
         if self.workers == 1 or len(coords) < smallest or getattr(self, "_gpu_enabled", False):
             return _map_points(fn, batchable, coords)
         task = (
             partial(_map_points, fn, batchable)
-            if self.map_executor == "thread"
+            if threads
             else partial(_child_map_points, name, batchable)
         )
         chunks = np.array_split(coords, min(self.workers, len(coords)))

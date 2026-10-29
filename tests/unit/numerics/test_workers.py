@@ -66,7 +66,7 @@ MAPS = {
 def split_small(monkeypatch):
     """Split every batch of the builds below, however small."""
     monkeypatch.setattr(_system_module, "MIN_PARALLEL_POINTS", 16)
-    monkeypatch.setattr(_system_module, "MIN_PARALLEL_POINTS_PER_POINT", 16)
+    monkeypatch.setattr(_system_module, "MIN_PARALLEL_POINTS_EXPENSIVE", 16)
 
 
 @pytest.mark.parametrize("executor", ["thread", "process"])
@@ -78,7 +78,7 @@ def test_split_batch_equals_serial(name, scalar, executor):
     if scalar:
         forward, backward = _scalar_only(forward), _scalar_only(backward)
     size = (
-        _system_module.MIN_PARALLEL_POINTS_PER_POINT if scalar else _system_module.MIN_PARALLEL_POINTS
+        _system_module.MIN_PARALLEL_POINTS_EXPENSIVE if scalar else _system_module.MIN_PARALLEL_POINTS
     ) + 37
     coords = np.random.default_rng(0).uniform(-1.5, 1.5, (size, 2))
     serial = DynamicalSystem(forward, backward)
