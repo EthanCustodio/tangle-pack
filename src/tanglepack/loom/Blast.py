@@ -105,13 +105,26 @@ def _interior_points(bridge: "Bridge") -> np.ndarray:
     return pts[margin:-margin]
 
 
-def _min_interior_distance(child: "Bridge", reference: np.ndarray) -> float:
-    """Smallest distance from ``child``'s interior to a reference point cloud."""
-    pts = _interior_points(child)
-    if len(pts) == 0 or len(reference) == 0:
-        return float("inf")
-    dists, _ = cKDTree(reference).query(pts)
-    return float(np.min(dists))
+def _near_sibling(
+    interior: np.ndarray,
+    siblings: list[tuple[np.ndarray, np.ndarray, cKDTree]],
+    separation: float,
+) -> bool:
+    """Whether ``interior`` comes within ``separation`` of a kept sibling's interior.
+
+    Each sibling is ``(lo, hi, tree)``, its interior's bounding box and KD-tree.
+    A sibling whose box lies ``separation`` or more from the child's box on one
+    axis holds no point that close, so only the others are queried: the verdict
+    of one tree over every sibling's points, without the tree.
+    """
+    if not len(interior):
+        return False
+    lo, hi = interior.min(axis=0), interior.max(axis=0)
+    return any(
+        float(tree.query(interior)[0].min()) < separation
+        for sibling_lo, sibling_hi, tree in siblings
+        if np.all(sibling_lo - hi < separation) and np.all(lo - sibling_hi < separation)
+    )
 
 
 def _pip_orbits(
@@ -422,13 +435,13 @@ def blast_zone(
 
         # Snapshot the accumulated manifold once per generation (one KDTree build,
         # not one per child). Bridges kept within this generation are still caught by
-        # the same-generation ``kept_points`` cloud below.
+        # the same-generation siblings below, each with its box and tree.
         ref_tree = (
             cKDTree(np.vstack(reference_points))
             if (min_separation is not None and reference_points)
             else None
         )
-        kept_points: list[np.ndarray] = []
+        kept_siblings: list[tuple[np.ndarray, np.ndarray, cKDTree]] = []
 
         for parent in frontier:
             if parent.iterated:
@@ -478,14 +491,10 @@ def blast_zone(
                 too_near_existing = (
                     ref_tree is not None
                     and len(interior)
-                    and float(ref_tree.query(interior)[0].min()) < min_separation
-                )
-                too_near_sibling = (
-                    bool(kept_points)
-                    and _min_interior_distance(child, np.vstack(kept_points))
+                    and float(ref_tree.query(interior, workers=workbench.workers)[0].min())
                     < min_separation
                 )
-                if too_near_existing or too_near_sibling:
+                if too_near_existing or _near_sibling(interior, kept_siblings, min_separation):
                     seen.add(_seen_key(child))
                     child.dropped_at = min_separation
                     too_close.append(child)
@@ -497,7 +506,9 @@ def blast_zone(
                 interior = _interior_points(child)
                 if len(interior):
                     reference_points.append(interior)
-                    kept_points.append(interior)
+                    kept_siblings.append(
+                        (interior.min(axis=0), interior.max(axis=0), cKDTree(interior))
+                    )
 
         result.steps.append(
             BlastStep(
