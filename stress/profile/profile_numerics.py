@@ -12,6 +12,7 @@ Usage (from the repository root)::
     env/bin/python stress/profile/profile_numerics.py --plot-only --out DIR
     env/bin/python stress/profile/profile_numerics.py --compare BASE_DIR --out BRANCH_DIR
     env/bin/python stress/profile/profile_numerics.py --cases scale --modes time --workers 8
+    env/bin/python stress/profile/profile_numerics.py --cases scale --lean --separation width
 
 Output: ``figures/numerics_profile/<git-sha>/`` (``--out`` overrides): one
 ``<case>_<mode>.json`` per run and the figures (``stage_time.png``,
@@ -33,6 +34,11 @@ leaks into another's:
 * ``memory`` -- the same build under ``tracemalloc``: per top-level stage the
   Python-heap peak, at the end the traced total (the reference the census must
   sum to) and the top allocation sites.
+
+``--lean`` blasts the scaling case lean (``blast_zone(lean=True)``, no
+diagnose) and ``--separation`` sets its ``min_separation`` (``1e-5`` by
+default, a float, ``width`` or ``none``); each scaling row records the rows
+the blast freed (``released_rows``) and its drops (``too_close``).
 
 ``--workers N`` builds every session with ``workers=N`` (the labels stay; the
 json records ``workers``; at 1 a checkout without the option runs as before).
@@ -324,10 +330,13 @@ def _walk_ids(manifold: Any) -> list[int]:
     """The store rows of a manifold, root to its PHYSICAL end (the end of its
     chain), the periodic point (no row) left out.
 
-    Read through ``_rows`` (since the order arrays) rather than ``_collect``,
-    which the timer wraps."""
-    _head, _store, rows = manifold._rows(stop_at_final=False)
-    return rows.tolist()
+    Read off the chain (since the order arrays) rather than ``_collect``,
+    which the timer wraps, and past a lean blast's read guard: a released
+    bridge's rows are what is left of it."""
+    from tanglepack.numerics.BaseManifold import BaseManifold
+
+    _head, chain, lo, hi = BaseManifold._span(manifold, stop_at_final=False)
+    return [] if chain is None else chain.ids[lo:hi].tolist()
 
 
 def _deep_size(roots: list, seen: set, stop: Callable[[Any], bool]) -> int:
@@ -609,8 +618,9 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
             session = build_law_case(case)
             record["wall_build_s"] = time.perf_counter() - t0
         else:
+            separation = _separation(args.separation)
             record["scale"] = {"k": SCALE_K, "area_cutoff": args.scale_cutoff,
-                               "min_separation": SCALE_MIN_SEPARATION,
+                               "min_separation": separation, "lean": args.lean,
                                "stop_gb": args.scale_stop_gb, "max_blasts": args.scale_max_blasts}
             counts = record_counts()
             session, fp, zone = scale_build(args.scale_cutoff)
@@ -627,8 +637,8 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
                 if blast:
                     t_blast = time.perf_counter()
                     result = session.blast_zone(zone, num_iterations=1, fixed_point=[fp],
-                                                min_separation=SCALE_MIN_SEPARATION,
-                                                diagnose=True)
+                                                min_separation=separation,
+                                                diagnose=not args.lean, lean=args.lean)
                     blast_s = time.perf_counter() - t_blast
                     timer.enter("topology")
                     try:
@@ -650,7 +660,10 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
                     "pip_depth": ({str(k.label): v for k, v in result.pip_depth.items()}
                                   if result is not None else None),
                     "points_created": result.points_created if result is not None else 0,
-                    "same_stability_count": dataclasses.asdict(counts[-1]) if blast else None,
+                    "released_rows": result.released_rows if result is not None else 0,
+                    "too_close": result.too_close if result is not None else 0,
+                    "same_stability_count": (dataclasses.asdict(counts[-1])
+                                             if blast and counts else None),
                 }
                 counts.clear()
                 if trace:
@@ -704,6 +717,11 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
     save()
 
 
+def _separation(text: str) -> Any:
+    """``--separation`` as ``blast_zone`` takes it: ``none``, ``width`` or a float."""
+    return {"none": None, "width": "width"}[text] if text in ("none", "width") else float(text)
+
+
 def _jsonable(value: Any) -> Any:
     if isinstance(value, np.integer):
         return int(value)
@@ -733,7 +751,8 @@ def launch(case: str, mode: str, args: argparse.Namespace, out: Path) -> int:
            "--out", str(out), "--scale-cutoff", repr(args.scale_cutoff),
            "--scale-stop-gb", repr(args.scale_stop_gb),
            "--scale-max-blasts", str(args.scale_max_blasts),
-           "--scale-trace-blasts", str(args.scale_trace_blasts), "--workers", str(args.workers)]
+           "--scale-trace-blasts", str(args.scale_trace_blasts), "--workers", str(args.workers),
+           "--separation", args.separation, *(["--lean"] if args.lean else [])]
     child = subprocess.Popen(cmd, cwd=REPO)
     handle = psutil.Process(child.pid)
     while child.poll() is None:
@@ -764,6 +783,9 @@ def main() -> None:
                         help="blasts of the scaling case run under tracemalloc (memory mode)")
     parser.add_argument("--cap-gb", type=float, default=12.0, help="kill a worker past this RSS")
     parser.add_argument("--workers", type=int, default=1, help="every session's workers")
+    parser.add_argument("--lean", action="store_true", help="blast the scaling case lean")
+    parser.add_argument("--separation", default=repr(SCALE_MIN_SEPARATION),
+                        help="the scaling blasts' min_separation: a float, width or none")
     parser.add_argument("--plot-only", action="store_true")
     parser.add_argument("--compare", type=Path, default=None,
                         help="a baseline output dir: figures draw it beside --out")

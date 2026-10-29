@@ -16,7 +16,9 @@ with one row of ``out/pool_status.csv`` (``done``, ``failed``, ``rss_cap``,
 * every other job runs, a ``failed`` one included.
 
 Resume is per finished job: a killed job starts over (its script may resume
-inside, as the zone sweep does per ``k``). The pool lives in ``scripts/`` on
+inside, as the zone sweep does per ``k``). A job that blasts lean
+(``blast_zone(lean=True)``) cannot save its session, so it starts from scratch
+every time, with no resume inside. The pool lives in ``scripts/`` on
 purpose: the library has no scheduler (D6).
 
 Dev Notes:
