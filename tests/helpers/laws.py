@@ -411,10 +411,23 @@ def check_case_heteroclinic(case: "Case") -> int:
 # Manifolds
 # --------------------------------------------------------------------------- #
 def check_manifold_cdist_monotone(case: "Case") -> int:
-    """cdist is non-decreasing along every manifold and every bridge (ties allowed)."""
+    """cdist is non-decreasing along every manifold and every bridge (ties allowed),
+    and where two neighbours tie as plain floats their residuals put them in order.
+
+    Not "the precise cdist never decreases": the merge orders a chain by the
+    plain floats, and the k=2.8 and inversion cases hold neighbours one ULP
+    apart whose residuals order them the other way (2026-10-30).
+    """
+    from tanglepack.numerics.precise import compare
+
     curves = list(case.workbench.manifolds.values()) + list(case.workbench.bridges)
     for curve in curves:
         assert_cdist_monotonic(curve, strict=False)
+        _head, store, rows = curve._rows(stop_at_final=False)
+        hi, lo = store.precise_cdist(rows)
+        tied = np.flatnonzero(store.cdist[rows][1:] == store.cdist[rows][:-1])
+        assert (compare(hi[tied + 1], lo[tied + 1], hi[tied], lo[tied]) > 0).all(), (
+            curve.manifold_key, rows[tied].tolist())
     return len(curves)
 
 
