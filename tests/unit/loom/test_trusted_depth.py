@@ -10,11 +10,14 @@ crossings at chosen distances), the blast on a real build by rule only.
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from helpers.fakes import bare_fixed_point
+from tanglepack.loom import Blast
 from tanglepack.loom.Blast import TRUST_BAND, TRUST_LINEAR_RADIUS, _trusted_depth
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 
@@ -65,8 +68,32 @@ def test_a_period_divides_the_distance_by_the_multiplier():
     assert _trusted_depth(session, fp, ids) == len(ids) - 1
 
 
-def test_a_blast_trusts_no_deeper_than_it_registers(henon_p3_session):
+def _composed_orbit(session, fp) -> list[int]:
+    """``[q0, ..., f^m(q0)]`` of ``fp``'s chosen pip, composed through ``trellis.iterate``."""
+    trellis = session.trellis(fp)
+    orbit = [trellis.registry.find(session.chosen_strong_pip(fp))]
+    while (image := trellis.iterate(orbit[-1], 1)) is not None:
+        orbit.append(image)
+    return orbit
+
+
+def test_a_blast_trusts_its_own_pip_orbit(henon_p3_session):
     session, _fp3, fp1, zone = henon_p3_session
     result = session.blast_zone(zone, num_iterations=2, fixed_point=fp1, min_separation=0.02)
-    assert result.trusted_depth.keys() == result.pip_depth.keys()
-    assert all(0 <= result.trusted_depth[fp] <= result.pip_depth[fp] for fp in result.pip_depth)
+    orbit = _composed_orbit(session, fp1)
+    assert result.trusted_depth.keys() == result.pip_depth.keys() == {fp1}
+    assert result.pip_depth[fp1] == len(orbit) - 1
+    assert result.trusted_depth[fp1] == _trusted_depth(session, fp1, orbit)
+
+
+def test_a_blast_logs_a_trust_shallower_than_its_depth(henon_p3_session, monkeypatch, caplog):
+    # No step is in an empty band, so the trust ends at the first period.
+    monkeypatch.setattr(Blast, "TRUST_BAND", (1.0, 1.0))
+    monkeypatch.setattr(Blast, "TRUST_LINEAR_RADIUS", np.inf)
+    session, _fp3, fp1, zone = henon_p3_session
+    with caplog.at_level(logging.INFO, logger=Blast.__name__):
+        result = session.blast_zone(zone, num_iterations=2, fixed_point=fp1, min_separation=0.02)
+
+    assert result.trusted_depth[fp1] == fp1.period - 1 < result.pip_depth[fp1]
+    logged = [r.args for r in caplog.records if r.name == Blast.__name__ and r.levelno == logging.INFO]
+    assert (fp1.label, result.pip_depth[fp1], result.trusted_depth[fp1]) in logged

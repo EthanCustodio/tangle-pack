@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from helpers.fakes import bare_fixed_point
 from helpers.polylines import polyline_workbench
 from tanglepack.numerics.IntersectionRegistry import ANCHOR_RESOLUTION_FACTOR
@@ -96,17 +98,26 @@ def test_the_factor_survives_a_registry_swap():
     assert workbench.intersection_registry.anchor_resolution_factor == 7.5
 
 
-def test_the_nearer_orbit_point_of_either_branch_decides():
-    # A heteroclinic-style detection: its unstable branch belongs to a far
-    # fixed point, its stable branch to one beside it.
+@pytest.mark.parametrize("near_side", ["stable", "unstable"])
+def test_the_nearer_orbit_point_of_either_branch_decides(near_side):
+    # A heteroclinic detection: the branch on ``near_side`` belongs to a fixed
+    # point beside it, the other branch to a far one.
     far, near_fp = (bare_fixed_point(label=label, coordinates=[xy]) for label, xy in
                     (("A", (50.0, 50.0)), ("B", (-4.5, 0.05))))
+    owner = {"unstable": near_fp if near_side == "unstable" else far,
+             "stable": near_fp if near_side == "stable" else far}
     workbench = polyline_workbench(
-        far, {(far, "unstable", 0, 0): BENT, (near_fp, "stable", 0, 0): STABLE},
+        owner["unstable"],
+        {(owner["unstable"], "unstable", 0, 0): BENT, (owner["stable"], "stable", 0, 0): STABLE},
         anchor_resolution_factor=FACTOR,
     )
-    workbench.fixed_points.append(near_fp)
-    registry = workbench.compute_intersections([far, near_fp], diagnose=False)
-    near, _far = _detections(registry)
-    assert registry.orbit_clearance(near) < FACTOR
+    other = owner["stable"]
+    if other is not owner["unstable"]:
+        workbench.fixed_points.append(other)
+    registry = workbench.compute_intersections(workbench.fixed_points, diagnose=False)
+    near, distant = _detections(registry)
+    assert registry[near].manifold_a_key[0] is owner["unstable"]
+    assert registry[near].manifold_b_key[0] is owner["stable"]
+    assert registry.orbit_clearance(near) < FACTOR <= registry.orbit_clearance(distant)
     assert near not in registry.resolved_ids(THRESHOLD)
+    assert distant in registry.resolved_ids(THRESHOLD)

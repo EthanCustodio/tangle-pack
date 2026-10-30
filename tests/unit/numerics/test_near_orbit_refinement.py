@@ -6,7 +6,9 @@ at least ``area_cutoff * (r / r0) ** 2`` or its chord is longer than ``r``
 seed's segment at the orbit point is graded once at initialisation, carried
 inward along the seed's ray. ``None`` is today's refinement exactly, and the
 point budget still guards. Checked on the ``k = 2.5`` period-1 saddle of the
-scale series at a coarse cutoff: rules only, no count of the build.
+scale series at a coarse cutoff, and the seed's walk along its chain on the
+period-3 orbit and the ``k = 4`` inversion saddle (a branch flip on every
+return): rules only, no count of the build.
 """
 
 from __future__ import annotations
@@ -14,11 +16,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from cases import HENON_K4, HENON_P3, K4_INVERSION_SEED, P3_ORBIT_SEED, PERIOD3_ORIENTATION
 from tanglepack import TangleWorkbench
 from tanglepack.examples.henon import henon_jacobian, henon_map, henon_map_inverse
 from tanglepack.numerics.budget import PointBudgetExceeded
 from tanglepack.numerics.geometry import curvature_area_batch
-from tanglepack.numerics.ManifoldMachine import SPACING_FLOOR
+from tanglepack.numerics.ManifoldMachine import SPACING_FLOOR, ManifoldMachine
 
 K, SEED = 2.5, (4.0, -4.0)
 AREA_CUTOFF = 1e-5
@@ -73,15 +76,22 @@ def test_the_chord_deviation_falls_like_r_squared_near_the_orbit_point():
     assert np.all(areas[near] < AREA_CUTOFF * (r[near] / R0) ** 2)
 
 
-def test_none_is_todays_refinement_byte_for_byte():
-    rows = []
-    for radius in ("omit", None):
-        workbench, fp = _workbench(radius)
-        workbench.grow_n_times(fp, "unstable", num_iterations=4)
-        workbench.grow_n_times(fp, "stable", num_iterations=4)
-        store = workbench.point_store
-        rows.append([np.asarray(column).tobytes() for column in (store.xy, store.cdist, store.image, store.preimage)])
-    assert rows[0] == rows[1]
+def _grown_rows(near_orbit_radius="omit"):
+    workbench, fp = _workbench(near_orbit_radius)
+    workbench.grow_n_times(fp, "unstable", num_iterations=10)  # deep enough that refinement acts
+    workbench.grow_n_times(fp, "stable", num_iterations=10)
+    store = workbench.point_store
+    return [np.asarray(column).tobytes() for column in (store.xy, store.cdist, store.image, store.preimage)]
+
+
+def test_none_is_the_graded_rule_at_a_vanishing_radius(monkeypatch):
+    # The reference: as r0 -> 0 the graded rule IS the plain one (no pair
+    # passes within r0, so the area cutoff and spacing floor are today's), and
+    # the seed is left ungraded. Two code paths, one refinement.
+    plain = _grown_rows()
+    assert _grown_rows(None) == plain
+    monkeypatch.setattr(ManifoldMachine, "grade_seed", lambda self, *args: None)
+    assert _grown_rows(1e-300) == plain
 
 
 def test_the_point_budget_still_raises():
@@ -93,3 +103,53 @@ def test_the_point_budget_still_raises():
 def test_the_seed_grading_is_budgeted():
     with pytest.raises(PointBudgetExceeded):
         _workbench(R0, max_points_per_step=5)
+
+
+SEEDS = {
+    "period3": (HENON_P3, [list(p) for p in P3_ORBIT_SEED], PERIOD3_ORIENTATION),
+    "inversion": (HENON_K4, list(K4_INVERSION_SEED), None),
+}
+
+
+def _seeded(name, near_orbit_radius):
+    params, seed, orientation = SEEDS[name]
+    workbench = TangleWorkbench(henon_map(*params), henon_map_inverse(*params), henon_jacobian(*params),
+                                area_cutoff=AREA_CUTOFF, near_orbit_radius=near_orbit_radius)
+    fp = workbench.construct_fixed_point(seed)
+    if orientation is not None:
+        workbench.orient_eigenvectors(fp, {s: np.array(v) for s, v in orientation.items()})
+    workbench.initialize_both_manifolds(fp)
+    return workbench, fp
+
+
+@pytest.mark.parametrize("stability", ["stable", "unstable"])
+@pytest.mark.parametrize("name", list(SEEDS))
+def test_every_piece_of_the_seed_chain_is_graded_and_linked_along_it(name, stability):
+    (workbench, fp), (plain, plain_fp) = _seeded(name, R0), _seeded(name, None)
+    assert fp.k_value > 1
+    store = workbench.point_store
+    # The source of a carried point: its preimage on a stable seed, its image on an unstable one.
+    source = store.preimage if stability == "stable" else store.image
+    for key in fp.branch_cycle(stability):
+        chain, orbit_point = fp.slot_chain(stability, key[2], key[3]), fp.coordinates[key[2]]
+        rows = np.asarray(chain.ids)
+        offsets = store.xy[rows] - orbit_point
+        distances = np.hypot(*offsets.T)
+        seed = plain_fp.slot_chain(stability, key[2], key[3])
+        seed_ray = plain.point_store.xy[seed.ids[0]] - plain_fp.coordinates[key[2]]
+        seed_innermost = np.hypot(*seed_ray)
+        assert np.all(np.diff(distances) > 0), key
+        assert _floor(fp) <= distances[0] < 1e-6 * seed_innermost, key
+        # Inside the seed's innermost point, on its ray (where xy rounding leaves a direction).
+        inside = (distances > 1e-9) & (distances < seed_innermost)
+        cosines = offsets[inside] @ seed_ray / distances[inside] / seed_innermost
+        assert inside.sum() > 5 and np.all(cosines > 1 - 1e-12), f"{key}: the carried points leave the seed's ray"
+
+        # Each carried point comes from the piece one step outward, scaled by the stretch.
+        outward = fp.advance_key(key, -1 if stability == "stable" else 1)
+        expected = fp.slot_chain(stability, outward[2], outward[3]).index
+        linked = rows[(source[rows] >= 0) & (store._chain[np.maximum(source[rows], 0)] >= 0)]
+        assert len(linked) > len(seed), key
+        assert np.all(store._chain[source[linked]] == expected), key
+        np.testing.assert_allclose(store.cdist[source[linked]], store.cdist[linked] * chain.stretch_param,
+                                   rtol=1e-9, err_msg=str(key))

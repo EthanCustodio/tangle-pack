@@ -14,7 +14,8 @@ bridge inside a smaller zone of another fixed point stored on the session, and n
 blasting does not depend on the order of the zones. The one exception is the bridge
 that carries the zone's own pip orbit (2026-10-29): an un-iterated bridge whose second
 crossing is ``f^j(q0)``, ``j >= 1``, on the registered orbit of the blasted zone's
-chosen pip is the zone's whatever its midpoint says, because near the periodic point
+own corner pip (``ResonanceZone.boundary_intersection``, which need not be the
+session's chosen pip) is the zone's whatever its midpoint says, because near the periodic point
 the frozen zone polygon cannot tell a thin lobe's midpoint from the outside, and that
 filter, not the dynamics, set the depth of ``T(q0)`` at fine cutoffs. Only that bridge:
 ``f^j`` maps the zone's corner at ``q0``, between ``W^u[P, q0]`` arriving and
@@ -87,6 +88,8 @@ from .ResonanceZone import ResonanceZone
 if TYPE_CHECKING:
     from ..numerics.Bridge import Bridge, BridgeId
     from ..numerics.FixedPoint import FixedPoint
+    from ..numerics.Intersection import Intersection
+    from ..numerics.IntersectionRegistry import IntersectionRegistry
     from ..numerics.TangleWorkbench import TangleWorkbench
     from .TangleSession import TangleSession
 
@@ -199,13 +202,19 @@ def _pip_orbits(
     orbits = {}
     for fp in fixed_points:
         chosen = session.chosen_strong_pip(fp)
-        x = registry.find(chosen) if chosen is not None else None
-        if x is None:
-            continue
-        orbits[fp] = [x]
-        while (x := registry.iterate_table[x, 1]) is not None:
-            orbits[fp].append(x)
+        if chosen is not None and (orbit := _registered_orbit(registry, chosen)):
+            orbits[fp] = orbit
     return orbits
+
+
+def _registered_orbit(registry: "IntersectionRegistry", pip: "Intersection") -> list[int]:
+    """``[q0, f(q0), ..., f^m(q0)]`` of one pip by its ``+1`` links; empty when it is not registered."""
+    x = registry.find(pip)
+    orbit = []
+    while x is not None:
+        orbit.append(x)
+        x = registry.iterate_table[x, 1]
+    return orbit
 
 
 def _trusted_depth(session: "TangleSession", fp: "FixedPoint", orbit: list[int]) -> int:
@@ -552,16 +561,13 @@ def blast_zone(
     def fp_ok(bridge: "Bridge") -> bool:
         return any(bridge.fixed_point is fp for fp in fixed_points)
 
-    # f(q0), ..., f^m(q0) of the zone's own pip, re-read once per iteration: the
-    # bridge arriving at one of them is inside (module docstring).
-    zone_orbit: set[int] = set()
-
-    def read_zone_orbit() -> None:
-        zone_orbit.clear()
-        zone_orbit.update(_pip_orbits(session, [zone.key]).get(zone.key, [])[1:])
+    # f(q0), ..., f^m(q0) of the zone's own corner pip (not the session's chosen
+    # one, which may differ), re-read once per iteration: the bridge arriving at
+    # one of them is inside (module docstring).
+    zone_ends = set(_registered_orbit(session.workbench.intersection_registry, zone.boundary_intersection)[1:])
 
     def in_zone(bridge: "Bridge") -> bool:
-        if not bridge.iterated and fp_ok(bridge) and bridge.id is not None and bridge.id[1] in zone_orbit:
+        if not bridge.iterated and fp_ok(bridge) and bridge.id is not None and bridge.id[1] in zone_ends:
             return True
         point = bridge.test_point
         return (
@@ -576,7 +582,6 @@ def blast_zone(
             workbench.area_cutoff / DEFAULT_AREA_CUTOFF
         ) ** (2 / 3)
         logger.info("blast: min_separation %.3g from the resolution", min_separation)
-    read_zone_orbit()
     in_reach = [b for b in workbench.uniiterated_bridges if fp_ok(b) and in_zone(b)]
     # A drop stands until a call passes a smaller separation or None.
     frontier = [
@@ -698,7 +703,7 @@ def blast_zone(
             for fp, chain in _pip_orbits(session, fixed_points).items()
             for n, x in enumerate(chain)
         }
-        read_zone_orbit()
+        zone_ends = set(_registered_orbit(workbench.intersection_registry, zone.boundary_intersection)[1:])
         for child in produced:
             # A bridge already in the trellis (the fixed-point bridge's self-image
             # and any image piece that re-traces grown curve resolve to the

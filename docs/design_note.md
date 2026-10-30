@@ -585,7 +585,8 @@ an unresolved orbit point freezes `T(q0)` (B1). D1 does not bind the closed alph
 the smallest zone holding its midpoint, so an outer blast never iterates a bridge inside an inner
 zone and nested blasting is order independent. One exception (anchor-depth, 2026-10-29): an
 un-iterated bridge of a selected fixed point ARRIVING at `f^j(q0)`, `j >= 1` (its second crossing on
-the registered orbit of the blasted zone's own pip, read once per iteration), is the zone's whatever
+the registered orbit of the blasted zone's own corner pip `ResonanceZone.boundary_intersection`,
+not the session's chosen pip, which may differ, read once per iteration), is the zone's whatever
 its midpoint says, in the initial frontier and among the children: near `P` the frozen zone polygon
 cannot place a thin lobe's midpoint. Only the arriving arc: `f^j` maps the zone's corner at `q0`
 (between `W^u[P, q0]` arriving and `W^s[P, q0]`) onto the corner at `f^j(q0)` on the zone's side of

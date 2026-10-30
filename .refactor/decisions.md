@@ -1319,7 +1319,7 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   Restricting it to one unstable curve still broke `heteroclinic`. The pair rule is the author's call. (2) Clause 3 floors
   `h` at the xy resolution `64 eps max(1, |P|)` (`geometry.xy_resolution`): with the mesh `h` falls below what float64
   resolves and the orbit was registered to 1 ulp of P (depth 23, trusted 21 at 1e-7). (3) The pip-end zone rule takes only
-  the bridge ARRIVING at `f^j(q0)`, `j >= 1` (second crossing on the zone's own orbit): the plan's "ends on the orbit"
+  the bridge ARRIVING at `f^j(q0)`, `j >= 1` (second crossing on the orbit of the zone's own corner pip, `boundary_intersection`, never the session's chosen one): the plan's "ends on the orbit"
   iterated the turnstile's exit lobe leaving `q0` and changed every blasted law case; the arriving arc is inside by
   orientation (design note A.10). (4) The mesh reads `r` as the CHORD's distance to the orbit point (a deep image curve
   passes P between nodes 0.04 apart), and grades the seed once at initialisation (`ManifoldMachine.grade_seed`: the first
