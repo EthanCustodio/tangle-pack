@@ -564,10 +564,14 @@ def blast_zone(
     # f(q0), ..., f^m(q0) of the zone's own corner pip (not the session's chosen
     # one, which may differ), re-read once per iteration: the bridge arriving at
     # one of them is inside (module docstring).
-    zone_ends = set(_registered_orbit(session.workbench.intersection_registry, zone.boundary_intersection)[1:])
+    def arriving_ends() -> set[int]:
+        return set(_registered_orbit(session.workbench.intersection_registry, zone.boundary_intersection)[1:])
+
+    zone_ends = arriving_ends()
 
     def in_zone(bridge: "Bridge") -> bool:
-        if not bridge.iterated and fp_ok(bridge) and bridge.id is not None and bridge.id[1] in zone_ends:
+        """Whether an un-iterated bridge of a selected fixed point is the zone's to blast."""
+        if bridge.id is not None and bridge.id[1] in zone_ends:
             return True
         point = bridge.test_point
         return (
@@ -703,7 +707,7 @@ def blast_zone(
             for fp, chain in _pip_orbits(session, fixed_points).items()
             for n, x in enumerate(chain)
         }
-        zone_ends = set(_registered_orbit(workbench.intersection_registry, zone.boundary_intersection)[1:])
+        zone_ends = arriving_ends()
         for child in produced:
             # A bridge already in the trellis (the fixed-point bridge's self-image
             # and any image piece that re-traces grown curve resolve to the

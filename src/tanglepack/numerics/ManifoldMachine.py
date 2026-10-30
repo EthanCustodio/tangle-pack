@@ -812,16 +812,7 @@ class ManifoldMachine:
         p0_xy, p1_xy = coords(layer), coords(layer + 1)
         rows_0 = ids[np.maximum(layer, 0)]
         rows_1 = ids[layer + 1]
-        pre_rows_0, pre_rows_1 = preiterate[rows_0], preiterate[rows_1]
-        pre0 = xy[np.maximum(pre_rows_0, 0)]
-        pre1 = xy[np.maximum(pre_rows_1, 0)]
-        c0, c1 = cdist[rows_0], cdist[rows_1]
         at_anchor = layer == -1
-        if at_anchor.any():
-            # The anchor always has its preiterate, an orbit point (0 marks it as present).
-            pre_rows_0 = np.where(at_anchor, 0, pre_rows_0)
-            pre0[at_anchor] = self._get_preiterate(anchor, stability)
-            c0 = np.where(at_anchor, anchor.get_cdist(stability), c0)
 
         # Pairs that are degenerate (near-coincident points) or missing the data
         # needed to refine (a missing preiterate on a bridge boundary point) are
@@ -844,22 +835,25 @@ class ManifoldMachine:
             # A seed's inner end has no preiterate, so grade_seed could not
             # grade the seed's first piece: within r0 a missing preiterate is
             # mapped now, a phantom as a refined point's own.
-            lacking = apart & (r < self.near_orbit_radius) & ((pre_rows_0 < 0) | (pre_rows_1 < 0))
-            if lacking.any():
-                ends = np.concatenate((rows_0[lacking & (pre_rows_0 < 0) & ~at_anchor],
-                                       rows_1[lacking & (pre_rows_1 < 0)]))
-                ends = np.unique(ends)
+            lacking_0 = apart & (r < self.near_orbit_radius) & (preiterate[rows_0] < 0) & ~at_anchor
+            lacking_1 = apart & (r < self.near_orbit_radius) & (preiterate[rows_1] < 0)
+            ends = np.unique(np.concatenate((rows_0[lacking_0], rows_1[lacking_1])))
+            if ends.size:
                 phantoms = store.append(viewer.map_back_batch(xy[ends]), None)
                 store.link_phantoms(ends, phantoms, stability)
                 # The append may have moved the columns.
-                xy = store.xy
+                xy, cdist = store.xy, store.cdist
                 preiterate = store.preimage if stability == "unstable" else store.image
-                pre_rows_0 = np.where(at_anchor, 0, preiterate[rows_0])
-                pre_rows_1 = preiterate[rows_1]
-                pre0 = xy[np.maximum(pre_rows_0, 0)]
-                pre1 = xy[np.maximum(pre_rows_1, 0)]
-                if at_anchor.any():
-                    pre0[at_anchor] = self._get_preiterate(anchor, stability)
+
+        pre_rows_0, pre_rows_1 = preiterate[rows_0], preiterate[rows_1]
+        pre0 = xy[np.maximum(pre_rows_0, 0)]
+        pre1 = xy[np.maximum(pre_rows_1, 0)]
+        c0, c1 = cdist[rows_0], cdist[rows_1]
+        if at_anchor.any():
+            # The anchor always has its preiterate, an orbit point (0 marks it as present).
+            pre_rows_0 = np.where(at_anchor, 0, pre_rows_0)
+            pre0[at_anchor] = self._get_preiterate(anchor, stability)
+            c0 = np.where(at_anchor, anchor.get_cdist(stability), c0)
         has_pre = (pre_rows_0 >= 0) & (pre_rows_1 >= 0)
         if logger.isEnabledFor(logging.DEBUG):
             for k in np.flatnonzero(apart & ~has_pre):
@@ -885,7 +879,8 @@ class ManifoldMachine:
         # may round exactly onto an endpoint. That tie is harmless here -- the point
         # is inserted at its position between its neighbours, not re-sorted by cdist
         # -- and bridging the gap is exactly what keeps the curve smooth instead of
-        # leaving a coarse spike. The ``< 1e-8`` spacing guard above guarantees the
+        # leaving a coarse spike. The spacing floor above (SPACING_FLOOR, scaled
+        # down near the orbit and never below the xy resolution) guarantees the
         # subdivision still terminates once the two points effectively coincide.
         mid_cd = 0.5 * (c0[keep] + c1[keep])
         pre_mid = 0.5 * (pre0[keep] + pre1[keep])

@@ -106,3 +106,31 @@ def test_another_fixed_points_pip_orbit_bridge_keeps_the_innermost_zone_rule(hen
     result = session.blast_zone(zone, 1, fixed_point=None, min_separation=MIN_SEPARATION)
     assert not {id(b) for b in arriving} & {id(b) for b in result.interior_bridges_by_iteration[0]}
     assert not any(b.iterated for b in arriving)
+
+
+def test_a_bridge_arriving_at_an_orbit_point_registered_mid_blast_is_the_zones(henon_p3_session, monkeypatch):
+    # Every bridge arriving on the zone's registered orbit, as it stands when
+    # the midpoint is read, is moved out: a child arriving at an orbit point
+    # the first iteration links is kept only by the orbit re-read.
+    session, _fp3, fp1, zone = henon_p3_session
+    registry = lambda: session.workbench.intersection_registry  # noqa: E731 - replaced by every recompute
+
+    def registered_orbit() -> list[int]:
+        orbit = [registry().find(zone.boundary_intersection)]
+        while (image := registry().iterate_table[orbit[-1], 1]) is not None:
+            orbit.append(image)
+        return orbit
+
+    original = Bridge.test_point.fget
+    monkeypatch.setattr(Bridge, "test_point", property(
+        lambda b: FAR if b.fixed_point is zone.key and b.id is not None and b.id[1] in registered_orbit()[1:]
+        else original(b)
+    ))
+    before = registered_orbit()
+
+    result = session.blast_zone(zone, 2, fixed_point=fp1, min_separation=MIN_SEPARATION)
+    new_points = set(registered_orbit()) - set(before)
+    arriving = [b for b in result.interior_bridges_by_iteration[1] if b.id is not None and b.id[1] in new_points]
+    assert new_points, "the first iteration must link a deeper orbit point"
+    assert arriving, "the bridge arriving at it is the second iteration's frontier"
+    assert all(b.iterated for b in arriving)

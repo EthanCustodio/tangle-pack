@@ -522,7 +522,10 @@ class IntersectionRegistry:
         factor = self.anchor_resolution_factor
         if (threshold, factor) not in self._resolved_cache:
             runs = self._runs()[1]
-            near = set() if factor is None else self._near_anchor(factor)
+            near = set() if factor is None else {
+                iid for iid, ix in self._store.items()
+                if (clearance := self._orbit_clearance(ix)) is not None and clearance < factor
+            }
             self._resolved_cache[threshold, factor] = frozenset(
                 iid
                 for iid, ix in self._store.items()
@@ -547,13 +550,6 @@ class IntersectionRegistry:
         """
         resolved = self.resolved_ids(threshold)
         return [iid for iid in self._unstable_order if iid not in resolved]
-
-    def _near_anchor(self, factor: float) -> set[int]:
-        """The detections clause 3 takes out of N at this factor."""
-        return {
-            iid for iid, ix in self._store.items()
-            if (clearance := self._orbit_clearance(ix)) is not None and clearance < factor
-        }
 
     def _orbit_clearance(self, ix: Intersection) -> Optional[float]:
         """:meth:`orbit_clearance` of one crossing object, memoised on it."""

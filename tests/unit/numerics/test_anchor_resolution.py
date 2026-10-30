@@ -16,6 +16,7 @@ import pytest
 
 from helpers.fakes import bare_fixed_point
 from helpers.polylines import polyline_workbench
+from tanglepack.numerics.geometry import xy_resolution
 from tanglepack.numerics.IntersectionRegistry import ANCHOR_RESOLUTION_FACTOR
 
 WORKBENCH = "tanglepack.numerics.TangleWorkbench"
@@ -121,3 +122,24 @@ def test_the_nearer_orbit_point_of_either_branch_decides(near_side):
     assert registry.orbit_clearance(near) < FACTOR <= registry.orbit_clearance(distant)
     assert near not in registry.resolved_ids(THRESHOLD)
     assert distant in registry.resolved_ids(THRESHOLD)
+
+
+def test_a_straight_crossing_is_judged_against_the_xy_resolution():
+    # Two straight two-point pieces: the chord deviation is exactly 0.0, and
+    # the clearance is the distance in xy resolutions of the orbit point (the
+    # nearest a polyline graded down to it can place anything).
+    stable = [(-1.0, 0.0), (1.0, 0.0)]
+    for multiple, in_n in ((FACTOR / 2, False), (4 * FACTOR, True)):
+        orbit_point = (0.0, 0.0)
+        offset = multiple * xy_resolution(orbit_point)
+        fp = bare_fixed_point(label="A", coordinates=[orbit_point])
+        workbench = polyline_workbench(
+            fp,
+            {(fp, "unstable", 0, 0): [(offset, -1.0), (offset, 1.0)], (fp, "stable", 0, 0): stable},
+            anchor_resolution_factor=FACTOR,
+        )
+        registry = workbench.compute_intersections([fp], diagnose=False)
+        (crossing,) = _detections(registry)
+        assert registry[crossing].chord_deviation == 0.0
+        assert registry.orbit_clearance(crossing) == pytest.approx(multiple)
+        assert (crossing in registry.resolved_ids(THRESHOLD)) is in_n

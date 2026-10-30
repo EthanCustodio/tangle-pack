@@ -2,7 +2,8 @@
 
 Within ``r0`` of an orbit point a pair is refined when its curvature area is
 at least ``area_cutoff * (r / r0) ** 2`` or its chord is longer than ``r``
-(``r`` how near the chord passes the orbit point), down to a spacing floor; the
+(``r`` how near the chord passes the orbit point, so a straight chord between
+far nodes passing it is graded too), down to a spacing floor; the
 seed's segment at the orbit point is graded once at initialisation, carried
 inward along the seed's ray. ``None`` is today's refinement exactly, and the
 point budget still guards. Checked on the ``k = 2.5`` period-1 saddle of the
@@ -17,6 +18,7 @@ import numpy as np
 import pytest
 
 from cases import HENON_K4, HENON_P3, K4_INVERSION_SEED, P3_ORBIT_SEED, PERIOD3_ORIENTATION
+from helpers.polylines import polyline_manifold
 from tanglepack import TangleWorkbench
 from tanglepack.examples.henon import henon_jacobian, henon_map, henon_map_inverse
 from tanglepack.numerics.budget import PointBudgetExceeded
@@ -63,20 +65,50 @@ def test_the_seed_segment_is_graded_toward_the_orbit_point(stability):
     assert np.all(np.diff(inner) <= inner[:-1] + 1e-12 * inner[:-1]), "no chord longer than its distance"
 
 
+def _chord_distance(p0, p1, point):
+    """How near each chord ``p0 -> p1`` passes ``point``."""
+    chord, offset = p1 - p0, point - p0
+    along = np.clip(np.sum(offset * chord, axis=1) / np.sum(chord * chord, axis=1), 0.0, 1.0)
+    return np.hypot(*(offset - along[:, None] * chord).T)
+
+
 def test_the_chord_deviation_falls_like_r_squared_near_the_orbit_point():
     workbench, fp = _workbench(R0)
     workbench.grow_n_times(fp, "unstable", num_iterations=4)
     points = workbench.manifolds[(fp, "unstable", 0, 0)].get_point_array()
-    p0, p1 = points[1:-2], points[2:-1]
+    p0, p1 = points[1:-2], points[2:-1]  # the pair at the anchor is grade_seed's
     areas = curvature_area_batch(p0, p1, points[:-3], points[3:])
-    r = np.minimum(np.hypot(*(p0 - fp.coordinates[0]).T), np.hypot(*(p1 - fp.coordinates[0]).T))
+    r = _chord_distance(p0, p1, fp.coordinates[0])
     chords = np.hypot(*(p1 - p0).T)
     near = (r < R0) & (chords >= np.maximum(SPACING_FLOOR * r / R0, _floor(fp)))
     assert near.sum() > 10
     assert np.all(areas[near] < AREA_CUTOFF * (r[near] / R0) ** 2)
+    assert np.all(chords[near] <= r[near]), "no chord within r0 longer than its distance"
 
 
-def _grown_rows(near_orbit_radius="omit"):
+def test_a_chord_passing_the_orbit_point_between_far_nodes_is_graded():
+    # A linear saddle at the origin and a straight curve y = DELTA whose two
+    # nodes lie 2 r0 out: both nodes are beyond r0 and the curve is straight,
+    # so only the chord's own distance to the orbit point can refine it.
+    delta = 1e-6
+    stretch = np.array([2.0, 0.5])
+    workbench = TangleWorkbench(lambda p: np.asarray(p) * stretch, lambda p: np.asarray(p) / stretch,
+                                lambda p: np.diag(stretch), area_cutoff=AREA_CUTOFF, near_orbit_radius=R0)
+    fp = workbench.construct_fixed_point([0.0, 0.0])
+    store = workbench.point_store
+    curve = polyline_manifold([(-2 * R0, delta), (2 * R0, delta)], (fp, "unstable", 0, 0), store=store)
+    store.link(store.append([(-R0, 2 * delta), (R0, 2 * delta)], None), curve.ids)
+    workbench._man_machine.refine_manifold(curve)
+
+    points = curve.get_point_array()
+    p0, p1 = points[:-1], points[1:]
+    r, chords = _chord_distance(p0, p1, fp.coordinates[0]), np.hypot(*(p1 - p0).T)
+    assert len(points) > 2 and np.all(points[:, 1] == delta)
+    assert np.all(chords <= np.maximum(r, R0)), "within r0 no chord longer than its distance"
+    assert chords.min() < 2 * delta, "the grading reaches the chord's distance"
+
+
+def _grown_rows(near_orbit_radius):
     workbench, fp = _workbench(near_orbit_radius)
     workbench.grow_n_times(fp, "unstable", num_iterations=10)  # deep enough that refinement acts
     workbench.grow_n_times(fp, "stable", num_iterations=10)
@@ -88,8 +120,7 @@ def test_none_is_the_graded_rule_at_a_vanishing_radius(monkeypatch):
     # The reference: as r0 -> 0 the graded rule IS the plain one (no pair
     # passes within r0, so the area cutoff and spacing floor are today's), and
     # the seed is left ungraded. Two code paths, one refinement.
-    plain = _grown_rows()
-    assert _grown_rows(None) == plain
+    plain = _grown_rows(None)
     monkeypatch.setattr(ManifoldMachine, "grade_seed", lambda self, *args: None)
     assert _grown_rows(1e-300) == plain
 
