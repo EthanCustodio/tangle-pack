@@ -141,7 +141,7 @@ Success:
 - Suite and `coverage_guard`.
 
 ## Run 2: anchor-depth (/feature)
-- [ ] done
+- [x] done (5990bb9, near-anchor guard on at c=5 (orbit-distance half only, floored at the xy resolution; the stable-pair rule stays out, author) cuts pip_depth to trusted_depth; pip-end arriving-bridge zone rule; trusted_depth as data; opt-in graded mesh r0=1e-3 gives depth 18 = trusted at 1e-7 and 1e-9 (base 9/7, 12/9), at the xy floor, with no more points; k25 errors sweep not rerun)
 
 Goal: pip depth stops being set by the absolute cutoff near the periodic orbit, and every reported level is a
 resolved one.

@@ -1316,7 +1316,7 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   well-resolved crossings (ratio 4000-6000) out of `heteroclinic` (three of one fold) and, on the k28 / k32 / nested series,
   a crossing of the original trellis whose stable neighbour is a deep blast crossing of another curve; an arc then loses an
   odd number of crossings and the arrangement, the heteroclinic case sanity and the hole-sign assertion fail (76 tests).
-  Restricting it to one unstable curve still broke `heteroclinic`. The pair rule is the author's call. (2) Clause 3 floors
+  Restricting it to one unstable curve still broke `heteroclinic`. Author at merge (2026-10-30): the pair rule stays out. (2) Clause 3 floors
   `h` at the xy resolution `64 eps max(1, |P|)` (`geometry.xy_resolution`): with the mesh `h` falls below what float64
   resolves and the orbit was registered to 1 ulp of P (depth 23, trusted 21 at 1e-7). (3) The pip-end zone rule takes only
   the bridge ARRIVING at `f^j(q0)`, `j >= 1` (second crossing on the orbit of the zone's own corner pip, `boundary_intersection`, never the session's chosen one): the plan's "ends on the orbit"
