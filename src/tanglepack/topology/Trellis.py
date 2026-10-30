@@ -350,6 +350,12 @@ class Trellis:
                     inside.append(self._joined[ids])
         return inside
 
+    @property
+    def joined_arcs(self) -> list[Bridge]:
+        """Every joined arc this trellis has made (memoised across re-cuts): curve
+        that reads its pieces' rows."""
+        return list(self._joined.values())
+
     def __contains__(self, intersection_id: Optional[int]) -> bool:
         """Whether a crossing is a crossing of this trellis (of N, once cut at the pip)."""
         return intersection_id in self._crossings

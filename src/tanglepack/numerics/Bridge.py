@@ -141,7 +141,10 @@ class Bridge(BaseManifold):
         self.dropped_at: Optional[float] = None
         # The lobe width the width guard carries down the image chain
         # (loom/Blast.py); None until a width blast seeds or inherits it.
+        # The saddle whose stable factor contracts it: the fixed point of the
+        # stable branch the seed ring's base lies on.
         self.width: Optional[float] = None
+        self.width_saddle: Optional[FixedPoint] = None
         self.first_intersection: Optional[int] = first_intersection
         self.second_intersection: Optional[int] = second_intersection
 
@@ -155,8 +158,9 @@ class Bridge(BaseManifold):
         """
         Mark the bridge's interior as freed, keeping what readers still need.
 
-        Its ends, id, key, ``iterated``, ``dropped_at`` and ``width`` stay; its
-        midpoint node (:attr:`test_point`) and point count are stored first.
+        Its ends, id, key, ``iterated``, ``dropped_at``, ``width`` and
+        ``width_saddle`` stay; its midpoint node (:attr:`test_point`) and point
+        count are stored first.
         Every later row read raises :class:`CurveReleased`. Called by
         ``TangleWorkbench.release_curves`` before the rows go.
         """

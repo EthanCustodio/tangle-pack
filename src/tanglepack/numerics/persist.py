@@ -17,9 +17,9 @@ orders, sets sorted (a set's iteration order is its hash table's, not state):
   the container it was set as (the solver leaves ``coordinates`` a
   ``(period, 2)`` ndarray, the other fields are lists of rows);
 * every curve once, by object identity (a crossing's ``unstable_manifold`` is
-  compared with ``is`` downstream); a bridge's ``width`` (the width guard's)
-  as a column written only when some bridge has one, so a save without one
-  is the save of format 1 before the guard existed;
+  compared with ``is`` downstream); a bridge's ``width`` and ``width_saddle``
+  (the width guard's) as columns written only when some bridge has a width,
+  so a save without one is the save of format 1 before the guard existed;
 * every :class:`~.Intersection.Intersection` once, the registry's first, in one
   table, with the registry's orders, iterate table and counters;
 * the segment index EXACTLY: every record's segment id, the edge maps, the
@@ -513,6 +513,11 @@ def _save_curves(encoder: Encoder, meta: dict, arrays: dict) -> None:
     widths = [getattr(curve, "width", None) for curve in curves]
     if any(width is not None for width in widths):
         arrays["curve_width"], meta["curves"]["width_types"] = typed_floats(widths)
+        arrays["curve_width_saddle"] = np.array([
+            -1 if (saddle := getattr(curve, "width_saddle", None)) is None
+            else encoder.fixed_point(saddle)
+            for curve in curves
+        ], dtype=np.int64)
 
 
 # ── load ──────────────────────────────────────────────────────────────────
@@ -671,7 +676,13 @@ def _load_curves(decoder: Decoder, meta: dict, arrays: dict) -> None:
         floats_of(arrays["curve_width"], saved["width_types"])
         if "curve_width" in arrays else [None] * len(rows)
     )
-    for row, name, stretch, dropped_at, width in zip(rows, saved["names"], stretches, dropped, widths):
+    saddles = [
+        None if i < 0 else decoder.fixed_points[i]
+        for i in arrays.get("curve_width_saddle", np.full(len(rows), -1)).tolist()
+    ]
+    for row, name, stretch, dropped_at, width, saddle in zip(
+        rows, saved["names"], stretches, dropped, widths, saddles
+    ):
         is_bridge, root, tail = row[0], decoder.end(*row[1:4]), decoder.end(*row[4:7])
         has_row = not (isinstance(root, BranchPoint) and isinstance(tail, BranchPoint))
         fields = dict(
@@ -683,7 +694,8 @@ def _load_curves(decoder: Decoder, meta: dict, arrays: dict) -> None:
         if is_bridge:
             first, second = (None if i < 0 else i for i in row[16:18])
             curve = Bridge(**fields, first_intersection=first, second_intersection=second)
-            curve.iterated, curve.dropped_at, curve.width = bool(row[15]), dropped_at, width
+            curve.iterated, curve.dropped_at = bool(row[15]), dropped_at
+            curve.width, curve.width_saddle = width, saddle
         else:
             curve = BaseManifold(**fields)
         curve._version = row[14]

@@ -247,17 +247,22 @@ def test_a_loaded_session_remembers_its_dropped_children(tmp_path):
 
 
 def test_a_loaded_session_keeps_its_widths(tmp_path):
-    """A width blast's ``Bridge.width``s load as saved, and the next width blasts
-    drop as the original's: a lost width would be re-seeded from its ring."""
+    """A width blast's ``Bridge.width``s and their saddles load as saved, and the
+    next width blasts drop as the original's: a lost width would be re-seeded
+    from its ring."""
+    def widths(workbench):
+        saddle = {id(fp): i for i, fp in enumerate(workbench.fixed_points)}
+        return [(b.id, b.width, saddle.get(id(b.width_saddle))) for b in workbench.bridges]
+
     session = BUILDERS["k28_two_blasts"]().session
     zone = max(session.resonance_zones.values(), key=lambda zone: zone.area)
     session.blast_zone(zone, 3, fixed_point=[zone.fixed_point], min_separation="width", diagnose=False)
-    widths = [(b.id, b.width) for b in session.workbench.bridges]
-    assert any(width is not None for _, width in widths)
+    saved = widths(session.workbench)
+    assert any(width is not None and saddle is not None for _, width, saddle in saved)
 
     session.save(tmp_path / "session")
     loaded = _load_session(session, tmp_path / "session")
-    assert [(b.id, b.width) for b in loaded.workbench.bridges] == widths
+    assert widths(loaded.workbench) == saved
 
     outcomes = []
     for copy in (session, loaded):
@@ -349,7 +354,7 @@ _SAVED: dict[type, frozenset[str]] = {
     BridgeAlphabet: frozenset({"assigned"}),
 }
 _SAVED[Bridge] = _SAVED[BaseManifold] | {
-    "first_intersection", "second_intersection", "iterated", "dropped_at", "width",
+    "first_intersection", "second_intersection", "iterated", "dropped_at", "width", "width_saddle",
 }
 
 # Derived or lazy (``persist``'s "What is NOT saved"), or built by the load's

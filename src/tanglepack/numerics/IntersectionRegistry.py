@@ -284,10 +284,11 @@ class IntersectionRegistry:
         Args:
             old_to_new: The compaction's map; every bracket row survives it.
         """
-        def remap(segment):
+        def remap(segment: Optional[tuple]) -> Optional[tuple]:
+            """A bracket's rows renumbered; its ``BranchPoint`` ends pass through."""
             if segment is None:
                 return None
-            ends = tuple(end if not isinstance(end, int) else int(old_to_new[end]) for end in segment)
+            ends = tuple(int(old_to_new[end]) if isinstance(end, int) else end for end in segment)
             assert all(not isinstance(end, int) or end >= 0 for end in ends), "a bracket row was freed"
             return ends
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cases import build_k28
+from cases import BUILDERS, build_k28
 from tanglepack.loom import Blast
 from tanglepack.loom.Blast import WIDTH_DROP, WIDTH_SEPARATION_FACTOR, _pip_orbits
 
@@ -51,24 +51,53 @@ def test_a_child_is_dropped_iff_thinner_than_its_deviation():
             assert child.width >= WIDTH_SEPARATION_FACTOR * _deviation(session, child)
 
 
+def _contractions(session, result) -> list[tuple["Bridge", "Bridge"]]:
+    """``(parent, child)`` for every child a seeded parent of the first step
+    gave its width, checking the child's width and saddle on the way."""
+    pairs = []
+    for parent in result.steps[0].interior_parents:
+        if parent.width is None or parent.id is None:
+            continue
+        assert parent.width > 0.0
+        contraction = parent.width_saddle.per_step_beta("stable")
+        for child_id in session.workbench.image_bridges(parent.id) or ():
+            child = session.workbench.bridge(child_id)
+            if child.width_saddle is parent.width_saddle and child.width == pytest.approx(
+                parent.width * contraction, rel=1e-12
+            ):
+                pairs.append((parent, child))
+    return pairs
+
+
 def test_a_width_contracts_by_the_stable_factor():
     """A child born of a seeded parent carries the parent's width times the stable factor."""
     session, fp, zone = _k28_zone()
-    frontier = [b for b in session.workbench.uniiterated_bridges if b.width is None]
     result = _blast(session, fp, zone, 1)
-    contraction = fp.per_step_beta("stable")
-    checked = 0
-    for parent in result.steps[0].interior_parents:
-        if parent.width is None or parent.id is None or parent not in frontier:
-            continue
-        assert parent.width > 0.0
-        for child_id in session.workbench.image_bridges(parent.id) or ():
-            child = session.workbench.bridge(child_id)
-            if child in frontier:
-                continue
-            assert child.width == pytest.approx(parent.width * contraction, rel=1e-12)
-            checked += 1
-    assert checked
+    pairs = _contractions(session, result)
+    assert pairs
+    assert all(parent.width_saddle is fp for parent, _ in pairs)
+
+
+def test_a_heteroclinic_lobe_contracts_by_its_stable_saddle():
+    """A lobe of ``W^u(B)`` based on ``W^s(A)`` contracts by A's stable factor
+    (NUM-20): its saddle is the fixed point of the stable branch its ring lies on."""
+    case = BUILDERS["heteroclinic_17u"]()
+    session = case.session
+    zone = max(case.zones, key=lambda zone: zone.area)
+    result = session.blast_zone(zone, 1, fixed_point=None, min_separation="width", diagnose=False)
+    registry = session.workbench.intersection_registry
+    heteroclinic = [
+        (parent, child) for parent, child in _contractions(session, result)
+        if parent.width_saddle is not parent.fixed_point
+    ]
+    assert heteroclinic
+    assert all(
+        parent.width_saddle.per_step_beta("stable") != parent.fixed_point.per_step_beta("stable")
+        for parent, _ in heteroclinic
+    )
+    for parent, _ in heteroclinic:
+        base = {registry[i].manifold_b_key[0] for i in parent.id if not registry[i].is_anchor}
+        assert base == {parent.width_saddle}
 
 
 def test_the_pip_orbit_child_is_kept(monkeypatch):

@@ -268,6 +268,11 @@ class TangleSession:
         """The workbench's fixed points."""
         return self.workbench.fixed_points
 
+    @property
+    def cached_trellises(self) -> list[Trellis]:
+        """The trellis snapshots the session holds, one per selection read."""
+        return list(self._trellises.values())
+
     def trellis(
         self,
         fixed_points: Optional["FixedPoint | Iterable[FixedPoint]"] = None,

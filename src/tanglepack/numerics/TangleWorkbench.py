@@ -44,7 +44,7 @@ from .DynamicalSystem import DynamicalSystem, JacFunc, MapExecutor, MapFunc
 from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import DEFAULT_AREA_CUTOFF, ManifoldMachine
-from .PointStore import PointStore
+from .PointStore import Chain, PointStore
 from .budget import DEFAULT_MAX_POINTS_PER_STEP, GrowthStats
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
@@ -2095,7 +2095,7 @@ class TangleWorkbench:
         n = len(store)
         protected = np.isin(store._chain[:n], list(branch_chains))
 
-        def protect(chain, lo: int, hi: int) -> None:
+        def protect(chain: Chain, lo: int, hi: int) -> None:
             protected[chain.ids[max(lo, 0):min(hi, len(chain))]] = True
 
         frontier = [

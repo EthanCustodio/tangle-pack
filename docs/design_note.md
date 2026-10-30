@@ -593,7 +593,10 @@ constant factor, and only where a guard ends lineages; it is not a new exponent.
 it is first iterated, as `|area| / L` of the ring it and its stable segment bound (`L` its unstable
 arc length; a bridge whose crossings lie on two stable branches has no ring and is never dropped),
 and its children carry `w * per_step_beta("stable")` (the lobe contracts across as it stretches
-along: area is preserved; the plan's `w / beta_s` read the stable factor as a magnitude above 1). A
+along: area is preserved; the plan's `w / beta_s` read the stable factor as a magnitude above 1). The
+factor is the saddle's whose stable branch holds the seed ring (`Bridge.width_saddle`, carried with
+the width): a lobe of `W^u(A)` based on `W^s(B)` contracts by B's, as NUM-20 reads each side of a
+heteroclinic link by its own saddle. A
 child is dropped when `w < WIDTH_SEPARATION_FACTOR * h`, `h = 1.5 * area_cutoff / L` with `L` its
 median chord: a lobe thinner than its polygon error is not resolved. The pip-orbit exemption holds,
 a width drop is remembered as `dropped_at = WIDTH_DROP` (-1.0, so only `None` re-admits it), widths

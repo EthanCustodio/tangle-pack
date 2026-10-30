@@ -16,6 +16,7 @@ import pytest
 from cases import build_k28
 from tanglepack.loom.Blast import _pieces
 from tanglepack.numerics.Bridge import Bridge, CurveReleased
+from tanglepack.topology.Trellis import Trellis
 from tanglepack.topology.plotting import plot_bridges_by_class
 
 
@@ -120,26 +121,51 @@ def test_a_dropped_bridge_a_lean_blast_released_is_not_re_admitted():
     assert workbench.generation == generation
 
 
-def test_a_joined_arcs_pieces_survive_a_release():
-    """A joined arc over blast curve reads as before once its pieces are kept
-    (``Blast._pieces``), however much else is freed."""
+def _blasted_k28():
+    """The k28 zone after six full blasts, and every two consecutive bridges of
+    one blast image curve (off every branch), by id: a joined arc's pieces."""
     case = build_k28(blasts=0, through="zones")
     session, zone = case.session, case.zones[0]
-    session.blast_zone(zone, 2, fixed_point=[zone.fixed_point], diagnose=False)
+    session.blast_zone(zone, 6, fixed_point=[zone.fixed_point], min_separation="width", diagnose=False)
     workbench = session.workbench
     branches = {m._span(stop_at_final=False)[1].index for m in workbench.manifolds.values()}
     off_branch = {
         b.id[0]: b for b in workbench.bridges
         if b.id is not None and b._span()[1].index not in branches
     }
-    a, b = next(
-        (a, off_branch[a.id[1]]) for a in off_branch.values()
+    pairs = [
+        (a.id, off_branch[a.id[1]].id) for a in off_branch.values()
         if a.id[1] in off_branch and off_branch[a.id[1]].manifold_key == a.manifold_key
-    )
-    joined = Bridge.joined([a, b])
+    ]
+    return session, zone, pairs
+
+
+def _lean_blasts(session, zone, n):
+    """``n`` width-guarded lean blasts of ``zone``."""
+    for _ in range(n):
+        session.blast_zone(zone, 1, fixed_point=[zone.fixed_point], min_separation="width", lean=True)
+
+
+def test_a_lean_blast_keeps_a_trellis_joined_arc(monkeypatch):
+    """The pieces of a joined arc a trellis holds over blast curve survive a
+    lean blast that releases them when no trellis holds it, and the arc the
+    next trellis joins from them reads as before (a release renumbers rows, so
+    the next generation's trellis joins its arcs afresh)."""
+    session, zone, pairs = _blasted_k28()
+    _lean_blasts(session, zone, 1)
+    workbench = session.workbench
+    freed = [pair for pair in pairs if all(workbench.bridge(bid).released for bid in pair)]
+    assert freed, "no joined pair is released: the test has no teeth"
+
+    session, zone, _ = _blasted_k28()
+    workbench = session.workbench
+    pieces = [workbench.bridge(bid) for bid in freed[0]]
+    joined = Bridge.joined(pieces)
+    assert _pieces(workbench, joined) == list(freed[0])
     before = joined.get_point_array()
+    held = Trellis.joined_arcs.fget
+    monkeypatch.setattr(Trellis, "joined_arcs", property(lambda trellis: [*held(trellis), joined]))
+    _lean_blasts(session, zone, 1)
 
-    workbench.release_curves(_pieces(workbench, joined))
-
-    assert not (a.released or b.released)
-    np.testing.assert_array_equal(joined.get_point_array(), before)
+    assert not any(piece.released for piece in pieces)
+    np.testing.assert_array_equal(Bridge.joined(pieces).get_point_array(), before)

@@ -36,8 +36,9 @@ leaks into another's:
   sum to) and the top allocation sites.
 
 ``--lean`` blasts the scaling case lean (``blast_zone(lean=True)``, no
-diagnose) and ``--separation`` sets its ``min_separation`` (``1e-5`` by
-default, a float, ``width`` or ``none``); each scaling row records the rows
+diagnose) and ``--separation`` sets its ``min_separation`` (a float,
+``width`` or ``none``; ``1e-5`` by default, ``width`` with ``--lean``, which
+refuses a float); each scaling row records the rows
 the blast freed (``released_rows``) and its drops (``too_close``).
 
 ``--workers N`` builds every session with ``workers=N`` (the labels stay; the
@@ -780,13 +781,18 @@ def main() -> None:
     parser.add_argument("--cap-gb", type=float, default=12.0, help="kill a worker past this RSS")
     parser.add_argument("--workers", type=int, default=1, help="every session's workers")
     parser.add_argument("--lean", action="store_true", help="blast the scaling case lean")
-    parser.add_argument("--separation", default=repr(SCALE_MIN_SEPARATION),
-                        help="the scaling blasts' min_separation: a float, width or none")
+    parser.add_argument("--separation", default=None,
+                        help="the scaling blasts' min_separation: a float, width or none "
+                             f"(default {SCALE_MIN_SEPARATION!r}, width with --lean)")
     parser.add_argument("--plot-only", action="store_true")
     parser.add_argument("--compare", type=Path, default=None,
                         help="a baseline output dir: figures draw it beside --out")
     parser.add_argument("--worker", nargs=2, metavar=("CASE", "MODE"), help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.separation is None:
+        args.separation = "width" if args.lean else repr(SCALE_MIN_SEPARATION)
+    if args.lean and args.separation not in ("width", "none"):
+        parser.error("--lean takes --separation width or none: a float separation reads every interior")
 
     out = args.out or REPO / "figures" / "numerics_profile" / git_sha()
     out.mkdir(parents=True, exist_ok=True)

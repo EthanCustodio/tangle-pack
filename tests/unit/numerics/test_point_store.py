@@ -258,10 +258,37 @@ def test_a_release_keeps_the_invariants() -> None:
         assert crossing.manifold_a_key[1] == "unstable" and crossing.manifold_b_key[1] == "stable"
         for end in (*(crossing.unstable_segment or ()), *(crossing.stable_segment or ())):
             assert not isinstance(end, int) or 0 <= end < len(store)
-        if crossing.unstable_segment is not None:
-            (u_lo, u_hi), _ = crossing.brackets
-            cdists = sorted(crossing.segment_ends("unstable")[1].tolist())
-            assert cdists == [u_lo, u_hi]
+        brackets = crossing.brackets if crossing.unstable_segment is not None else ()
+        for stability, (lo, hi) in zip(("unstable", "stable"), brackets):
+            assert sorted(crossing.segment_ends(stability)[1].tolist()) == [lo, hi]
+
+
+def test_a_release_renumbers_stable_brackets_above_freed_rows() -> None:
+    """Stable growth after a full blast puts stable bracket rows above blast
+    rows a release frees: each bracket still reads its own two points."""
+    from cases import build_k28
+
+    case = build_k28(blasts=0, through="zones")
+    session, zone = case.session, case.zones[0]
+    fp = zone.fixed_point
+    session.blast_zone(zone, 2, fixed_point=[fp], diagnose=False)
+    session.grow_n_times(fp, "stable", 1)
+    session.compute_intersections([fp], preserve_ids=True)
+    session.create_bridges(fp)
+    workbench = session.workbench
+    registry = workbench.intersection_registry
+    grown = len(workbench.point_store)
+
+    def stable_ends():
+        return {
+            iid: tuple(map(np.ndarray.tolist, crossing.segment_ends("stable")))
+            for iid, crossing in registry if crossing.stable_segment is not None
+        }
+
+    before = stable_ends()
+    assert workbench.release_curves(set()) > 0
+    assert len(workbench.point_store) < grown
+    assert stable_ends() == before
 
 
 def test_a_straddle_neighbours_images_survive_a_release() -> None:

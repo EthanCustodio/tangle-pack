@@ -49,8 +49,9 @@ of the selection and keeps the bridges the topology and later blasts can read
 (:meth:`~tanglepack.numerics.TangleWorkbench.TangleWorkbench.release_curves`).
 The geometric guard reads every interior, so a lean blast takes the width
 guard (``min_separation="width"``) or none. The width guard needs no point
-cloud: a lobe's width (its area over its unstable length) contracts by the
-stable factor per step, and a child thinner than ``WIDTH_SEPARATION_FACTOR``
+cloud: a lobe's width (its area over its unstable length) contracts per step
+by the stable factor of the saddle whose stable branch holds its base
+(``Bridge.width_saddle``), and a child thinner than ``WIDTH_SEPARATION_FACTOR``
 chord deviations of its own polyline is below the resolution.
 
 This is a loom-layer algorithm: it reads the topological notion of a zone and acts on
@@ -190,12 +191,16 @@ def _pip_orbits(
     return orbits
 
 
-def _ring_width(session: "TangleSession", bridge: "Bridge") -> Optional[float]:
-    """The width of a bridge's lobe: ``|area| / L`` of the ring the bridge and
-    its stable segment bound, ``L`` the unstable arc length.
+def _ring_width(
+    session: "TangleSession", bridge: "Bridge"
+) -> Optional[tuple[float, "FixedPoint"]]:
+    """The width of a bridge's lobe and the saddle that contracts it.
 
-    None when the two crossings lie on two stable branches (no ring), or the
-    bridge is a partial piece. At an anchor an arc of ``u(o, b)`` meets
+    The width is ``|area| / L`` of the ring the bridge and its stable segment
+    bound, ``L`` the unstable arc length; the saddle is the stable branch's
+    fixed point (a lobe of ``W^u(A)`` on ``W^s(B)`` contracts by B's factor,
+    NUM-20). None when the two crossings lie on two stable branches (no ring),
+    or the bridge is a partial piece. At an anchor an arc of ``u(o, b)`` meets
     ``s(o, b)``.
     """
     if bridge.partial:
@@ -219,7 +224,7 @@ def _ring_width(session: "TangleSession", bridge: "Bridge") -> Optional[float]:
         reverse=second.stable_cdist > first.stable_cdist,
     )
     length = float(np.hypot(*np.diff(unstable, axis=0).T).sum())
-    return abs(signed_polygon_area(np.vstack((unstable, back)))) / length
+    return abs(signed_polygon_area(np.vstack((unstable, back)))) / length, keys[0][0]
 
 
 def _too_thin(session: "TangleSession", child: "Bridge") -> bool:
@@ -259,8 +264,8 @@ def _lean_keep(
         keep += topology.minimal.kept_bridge_ids
         trellises.append(topology.trellis)
     # Every cached trellis memoises its joined arcs (a re-cut hands them back).
-    for trellis in {id(t): t for t in [*trellises, *session._trellises.values()]}.values():
-        for joined in trellis._joined.values():
+    for trellis in {id(t): t for t in [*trellises, *session.cached_trellises]}.values():
+        for joined in trellis.joined_arcs:
             keep += _pieces(workbench, joined)
     for orbit in _pip_orbits(session, fixed_points).values():
         for x in orbit:
@@ -481,6 +486,7 @@ def blast_zone(
         session.workbench._refuse_if_lean("a blast that is not lean")
     diagnose = not lean if diagnose is None else diagnose
     width = min_separation == "width"
+    cloud_guard = min_separation not in (None, "width")
     if not isinstance(zone, ResonanceZone):
         zone = session.resonance_zones[zone]
     if zone.boundary_vertices is None:
@@ -564,7 +570,7 @@ def blast_zone(
     # existing fold (not just a same-generation sibling) keeps the blast on the
     # well-resolved side of that limit while still letting it extend into fresh space.
     cloud = _Cloud()
-    if min_separation is not None and not width:
+    if cloud_guard:
         cloud.add([_interior_points(b) for b in workbench.bridges])
 
     # The point budget's bookkeeping: the bridges the workbench already holds
@@ -609,7 +615,7 @@ def blast_zone(
             if parent.iterated:
                 continue
             if width and parent.width is None:
-                parent.width = _ring_width(session, parent)
+                parent.width, parent.width_saddle = _ring_width(session, parent) or (None, None)
             try:
                 children = workbench.iterate_bridge(parent)
             except PointBudgetExceeded as exc:
@@ -621,10 +627,13 @@ def blast_zone(
                 raise
 
             if width and parent.width is not None:
-                contraction = parent.fixed_point.per_step_beta("stable")
+                # The lobe's base lies on the stable manifold of the seed ring's
+                # saddle, so that saddle contracts it (W^u(A) x W^s(B): B's).
+                contraction = parent.width_saddle.per_step_beta("stable")
                 for child in children:
                     if child.width is None:
                         child.width = parent.width * contraction
+                        child.width_saddle = parent.width_saddle
             produced.extend(children)
 
         # Iterating the bridge ending at f^m(q0) linked f^{m+1}(q0), so the
@@ -660,11 +669,7 @@ def blast_zone(
                 child.dropped_at = WIDTH_DROP
                 too_close.append(child)
                 continue
-            elif (
-                min_separation is not None
-                and not width
-                and cloud.near(_interior_points(child), min_separation)
-            ):
+            elif cloud_guard and cloud.near(_interior_points(child), min_separation):
                 seen.add(_seen_key(child))
                 child.dropped_at = min_separation
                 too_close.append(child)
@@ -673,7 +678,7 @@ def blast_zone(
             seen.add(_seen_key(child))
             kept.append(child)
             # A kept child is curve every later child keeps clear of.
-            if min_separation is not None and not width:
+            if cloud_guard:
                 cloud.add([_interior_points(child)])
 
         result.steps.append(
@@ -691,7 +696,7 @@ def blast_zone(
         result.already_known += len(already_known)
         # Every child is curve the workbench now holds, dropped or exterior
         # alike: the next step's cloud is the one a later call would build.
-        if min_separation is not None and not width:
+        if cloud_guard:
             cloud.add([_interior_points(c) for c in discarded + too_close])
 
         new_points = 0
