@@ -318,3 +318,25 @@ def test_a_straddle_neighbours_images_survive_a_release() -> None:
     assert [c.id for c in lean_children] == [c.id for c in full_children]
     for a, b in zip(full_children, lean_children):
         np.testing.assert_array_equal(a.get_point_array(), b.get_point_array())
+
+
+def test_a_release_leaves_a_bracket_end_at_the_periodic_point() -> None:
+    """A bracket on the first segment from the anchor ends on the ``BranchPoint``,
+    which is no row: a release keeps it and renumbers the other end."""
+    from cases import build_k28
+    from tanglepack.numerics.BranchPoint import BranchPoint
+
+    case = build_k28(blasts=0, through="zones")
+    session, zone = case.session, case.zones[0]
+    session.blast_zone(zone, 2, fixed_point=[zone.fixed_point], diagnose=False)
+    workbench = session.workbench
+    store = workbench.point_store
+    crossing = next(x for _iid, x in workbench.intersection_registry if x.stable_segment is not None)
+    anchor = zone.fixed_point.branch_points[crossing.manifold_b_key[2]]
+    row = crossing.stable_segment[1]
+    point = store.xy[row].copy()
+    crossing.stable_segment = (anchor, row)
+    assert workbench.release_curves(set()) > 0
+    lo, hi = crossing.stable_segment
+    assert isinstance(lo, BranchPoint) and lo is anchor
+    assert np.array_equal(store.xy[hi], point)
