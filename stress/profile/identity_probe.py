@@ -32,6 +32,12 @@ build or step it writes ``<name>.npz`` (float arrays) and ``<name>.json``
 * texts -- extents, the crossings' branch keys, N, the iterate table,
   ``unresolved_links``, the holes, ``pip_depth``, the class table, the
   dynamics and the refined transition matrix;
+* ``<name>.lo.npz`` (since the cdist-precision run, 2026-10-30) -- the cdist
+  residuals, apart so the plain arrays compare as before: ``curve:``,
+  ``image:``, ``bridge:`` and ``partial:`` arrays of each point's residual,
+  ``registry`` rows of each crossing's two residuals and its four bracket
+  ends'. A checkout without residuals writes none; ``compare`` compares them
+  only when both dumps hold them;
 * ``same_stability_counts`` -- one line per blast since the previous dump (a
   law case: every blast of its build; a series step: its own blast; a
   scenario: its blasts, in ``.blasted``): the ``SameStabilityCount`` its
@@ -105,6 +111,26 @@ def curve_arrays(curve: Any, whole: bool) -> np.ndarray:
     return np.array(rows, dtype=np.float64).reshape(-1, 3)
 
 
+def curve_residuals(curve: Any, whole: bool) -> np.ndarray:
+    """The cdist residual per point of :func:`curve_arrays` (a periodic-point head 0.0)."""
+    head, store, rows = curve._rows(stop_at_final=not whole)
+    return np.concatenate(([0.0] if head is not None else [], store._cdist_lo[rows] if len(rows) else []))
+
+
+def bracket_residuals(crossing: Any) -> list[float]:
+    """The residuals of the crossing's two cdists and of its four bracket ends (NaN if none)."""
+    own = [_float(crossing.unstable_cdist_lo), _float(crossing.stable_cdist_lo)]
+    if crossing.unstable_segment is None:
+        return own + [np.nan] * 4
+    return own + [0.0 if not isinstance(end, int) else float(crossing.store._cdist_lo[end])
+                  for segment in (crossing.unstable_segment, crossing.stable_segment) for end in segment]
+
+
+def has_residuals(workbench: Any) -> bool:
+    """Whether the checkout carries cdist residuals."""
+    return hasattr(workbench.point_store, "_cdist_lo")
+
+
 def curve_extent(curve: Any) -> int:
     """How many points lie from the root to the (possibly trimmed) tail."""
     if hasattr(curve, "ids"):
@@ -175,22 +201,30 @@ def _float(value: Any) -> float:
 # --------------------------------------------------------------------------- #
 # Dump (inside the per-case interpreter)
 # --------------------------------------------------------------------------- #
-def numerics_state(workbench: Any) -> tuple[dict, dict]:
-    """The arrays and texts of the manifolds, bridges and registry."""
-    arrays, extents = {}, []
+def numerics_state(workbench: Any) -> tuple[dict, dict, dict]:
+    """The arrays and texts of the manifolds, bridges and registry, and the
+    residual arrays (empty without residuals)."""
+    arrays, residuals, extents = {}, {}, []
+    precise = has_residuals(workbench)
+
+    def add(name: str, curve: Any, whole: bool) -> None:
+        arrays[name] = curve_arrays(curve, whole=whole)
+        if precise:
+            residuals[name] = curve_residuals(curve, whole=whole)
+
     for key, manifold in workbench.manifolds.items():
         name = f"curve:{key_text(workbench, key)}"
-        arrays[name] = curve_arrays(manifold, whole=True)
+        add(name, manifold, whole=True)
         extents.append(f"{name} {curve_extent(manifold)}")
     for i, curve in enumerate(image_curves(workbench)):
-        arrays[f"image:{i}"] = curve_arrays(curve, whole=False)
+        add(f"image:{i}", curve, whole=False)
     partial = 0
     for bridge in workbench.bridges:
         if bridge.id is None:
             name, partial = f"partial:{partial}", partial + 1
         else:
             name = f"bridge:{bridge.id[0]},{bridge.id[1]}"
-        arrays[name] = curve_arrays(bridge, whole=False)
+        add(name, bridge, whole=False)
 
     registry = workbench.intersection_registry
     ids = sorted(registry.all_ids())
@@ -204,6 +238,9 @@ def numerics_state(workbench: Any) -> tuple[dict, dict]:
         keys.append(f"{i} {key_text(workbench, ix.manifold_a_key)} "
                     f"{key_text(workbench, ix.manifold_b_key)}")
     arrays["registry"] = np.array(rows, dtype=np.float64).reshape(-1, 12)
+    if precise:
+        residuals["registry"] = np.array(
+            [bracket_residuals(registry[i]) for i in ids], dtype=np.float64).reshape(-1, 6)
     texts = {
         "extents": "\n".join(extents),
         "crossing_keys": "\n".join(keys),
@@ -212,7 +249,7 @@ def numerics_state(workbench: Any) -> tuple[dict, dict]:
         "iterate_table": "\n".join(f"{s} {n} {t}" for s, n, t in sorted(registry.iterate_table.items())),
         "unresolved_links": "\n".join(f"{s} {sorted(c)}" for s, c in sorted(registry.unresolved_links.items())),
     }
-    return arrays, texts
+    return arrays, texts, residuals
 
 
 def topology_texts(session: Any) -> dict:
@@ -250,11 +287,13 @@ def topology_texts(session: Any) -> dict:
 def save(out: Path, name: str, session: Any, counts: list) -> None:
     """Write ``<name>.npz`` and ``<name>.json`` for the session's current state,
     taking the blast counts recorded since the previous dump out of ``counts``."""
-    arrays, texts = numerics_state(session.workbench)
+    arrays, texts, residuals = numerics_state(session.workbench)
     texts.update(topology_texts(session))
     texts["same_stability_counts"] = "\n".join(map(count_text, counts))
     counts.clear()
     np.savez(out / f"{name}.npz", **arrays)
+    if residuals:
+        np.savez(out / f"{name}.lo.npz", **residuals)
     (out / f"{name}.json").write_text(json.dumps(texts, indent=1, sort_keys=True))
     print(f"  {name}: {len(arrays)} arrays, {len(texts)} texts", flush=True)
 
@@ -348,6 +387,7 @@ def compare(base: Path, branch: Path) -> int:
     """Compare two dumps item by item; print the differences and a last summary line."""
     differences, n_arrays, n_texts = [], 0, 0
     names = sorted({p.stem for p in base.glob("*.json")} | {p.stem for p in branch.glob("*.json")})
+    n_residuals = 0
     for name in names:
         if not ((base / f"{name}.json").exists() and (branch / f"{name}.json").exists()):
             differences.append(f"{name}: dumped only in {base if (base / f'{name}.json').exists() else branch}")
@@ -359,6 +399,14 @@ def compare(base: Path, branch: Path) -> int:
                     differences.append(f"{name} {item}: only in {'branch' if item in new.files else 'base'}")
                 elif old[item].dtype != new[item].dtype or old[item].tobytes() != new[item].tobytes():
                     differences.append(array_difference(f"{name} {item}", old[item], new[item]))
+        if (base / f"{name}.lo.npz").exists() and (branch / f"{name}.lo.npz").exists():
+            with np.load(base / f"{name}.lo.npz") as old, np.load(branch / f"{name}.lo.npz") as new:
+                for item in sorted(set(old.files) | set(new.files)):
+                    n_residuals += 1
+                    if item not in old.files or item not in new.files:
+                        differences.append(f"{name} residual {item}: only in {'branch' if item in new.files else 'base'}")
+                    elif old[item].tobytes() != new[item].tobytes():
+                        differences.append(array_difference(f"{name} residual {item}", old[item], new[item]))
         old_texts = json.loads((base / f"{name}.json").read_text())
         new_texts = json.loads((branch / f"{name}.json").read_text())
         for item in sorted(set(old_texts) | set(new_texts)):
@@ -373,7 +421,8 @@ def compare(base: Path, branch: Path) -> int:
     if differences:
         print(f"differences in {len(differences)} items")
         return 1
-    print(f"identical: {len(names)} builds, {n_arrays} arrays, {n_texts} texts")
+    print(f"identical: {len(names)} builds, {n_arrays} arrays, {n_texts} texts"
+          + (f", {n_residuals} residual arrays" if n_residuals else ""))
     return 0
 
 
