@@ -46,7 +46,6 @@ from numpy.typing import NDArray
 from .Intersection import CdistKey, Intersection, ManifoldKey, Stability
 from .IterateTable import IterateTable
 from .geometry import xy_resolution
-from .precise import dd_sub
 
 if TYPE_CHECKING:
     from .FixedPoint import FixedPoint
@@ -79,9 +78,12 @@ _EMPTY_BUCKET: _StableBucket = ([], np.empty(0, dtype=np.int64), np.empty((0, 4)
 
 
 def _close(a: CdistKey, b: CdistKey) -> bool:
-    """The precise ``a`` and ``b`` agree to :data:`DEDUP_RTOL`, relative to the larger."""
-    difference, _ = dd_sub(*a, *b)
-    return abs(float(difference)) <= DEDUP_RTOL * max(abs(a[0]), abs(b[0]))
+    """The precise ``a`` and ``b`` agree to :data:`DEDUP_RTOL`, relative to the larger.
+
+    ``a[0] - b[0]`` is exact wherever it can matter (Sterbenz), so the sum with
+    the residuals' difference is the precise difference to far below the tolerance.
+    """
+    return abs((a[0] - b[0]) + (a[1] - b[1])) <= DEDUP_RTOL * max(abs(a[0]), abs(b[0]))
 
 
 def _polyline_gap(a: Intersection, b: Intersection) -> Optional[float]:

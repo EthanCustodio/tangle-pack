@@ -148,6 +148,13 @@ def rank(hi: ArrayLike, lo: ArrayLike) -> NDArray[np.int64]:
 
 
 def as_key(hi: float, lo: float) -> tuple[float, float]:
-    """One value's normalised pair as Python floats: a tuple compares as the precise value."""
-    s, e = normalise(hi, lo)
-    return float(s), float(e)
+    """
+    One value's normalised pair as Python floats: a tuple compares as the precise value.
+
+    :func:`normalise` in plain Python arithmetic (the same IEEE operations),
+    for the per-crossing reads where a numpy scalar call would dominate.
+    """
+    hi, lo = float(hi), float(lo)
+    s = hi + lo
+    bb = s - hi
+    return s, (hi - (s - bb)) + (lo - bb)
