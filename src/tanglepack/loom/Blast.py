@@ -11,7 +11,17 @@ the process recurses up to ``num_iterations`` times.
 Zones nest: a bridge belongs to the smallest zone containing its midpoint
 (:meth:`TangleSession.classify_bridge`), so an outer zone's blast never iterates a
 bridge inside a smaller zone of another fixed point stored on the session, and nested
-blasting does not depend on the order of the zones. The blasted zone itself need not
+blasting does not depend on the order of the zones. The one exception is the bridge
+that carries the zone's own pip orbit (2026-10-29): an un-iterated bridge whose second
+crossing is ``f^j(q0)``, ``j >= 1``, on the registered orbit of the blasted zone's
+chosen pip is the zone's whatever its midpoint says, because near the periodic point
+the frozen zone polygon cannot tell a thin lobe's midpoint from the outside, and that
+filter, not the dynamics, set the depth of ``T(q0)`` at fine cutoffs. Only that bridge:
+``f^j`` maps the zone's corner at ``q0``, between ``W^u[P, q0]`` arriving and
+``W^s[P, q0]``, onto the corner at ``f^j(q0)`` on the zone's side of ``W^s[P, q0]``
+(an orientation-preserving map keeps the side), so the unstable arc ARRIVING at
+``f^j(q0)`` lies inside; the one leaving it lies outside (at ``q0`` it is the exit
+lobe of the turnstile). The blasted zone itself need not
 be stored (:func:`define_resonance_zone`, or a replaced handle). With ``fixed_point=None`` an outer blast still iterates an inner tangle's bridges
 lying in the annulus between the two zones: they are the outer zone's bridges. The
 recipes pass the zone's own fixed point, which leaves them alone.
@@ -90,6 +100,13 @@ logger.addHandler(logging.NullHandler())
 #: a finer cutoff resolves, and keeps, curves that run closer together. The author's
 #: rule, 2026-10-21: the guard follows the resolution.
 RESOLUTION_SEPARATION: float = 1e-5
+
+#: ``BlastResult.trusted_depth``: inside this distance of its orbit point the
+#: pip orbit is in the linear regime, where each period must divide the
+#: distance by the stable multiplier to within :data:`TRUST_BAND` (the test of
+#: ``scripts/henon_k25_errors_figures.py:trustworthy_depth``).
+TRUST_LINEAR_RADIUS: float = 1e-3
+TRUST_BAND: tuple[float, float] = (0.8, 1.25)
 
 #: ``min_separation="width"`` drops a child whose width is below this many
 #: chord deviations ``h = 1.5 * area_cutoff / L`` of its own polyline (``L`` its
@@ -189,6 +206,29 @@ def _pip_orbits(
         while (x := registry.iterate_table[x, 1]) is not None:
             orbits[fp].append(x)
     return orbits
+
+
+def _trusted_depth(session: "TangleSession", fp: "FixedPoint", orbit: list[int]) -> int:
+    """The deepest ``j`` up to which the registered pip orbit contracts like the real one.
+
+    Each crossing's distance to the orbit point of its stable branch is read
+    off its ``coords`` (no map call). Inside :data:`TRUST_LINEAR_RADIUS` each
+    period must divide it by ``per_step_beta("stable") ** -period`` to within
+    :data:`TRUST_BAND`; the first period that does not ends the trusted orbit.
+    """
+    registry = session.workbench.intersection_registry
+    distances = []
+    for x in orbit:
+        crossing = registry[x]
+        key = crossing.manifold_b_key
+        distances.append(float(np.hypot(*(np.asarray(crossing.coords) - key[0].coordinates[key[2]]))))
+    contraction = fp.per_step_beta("stable") ** -fp.period
+    low, high = TRUST_BAND
+    for j in range(fp.period, len(distances)):
+        before = distances[j - fp.period]
+        if before < TRUST_LINEAR_RADIUS and not low < before / distances[j] / contraction < high:
+            return j - 1
+    return len(distances) - 1
 
 
 def _ring_width(
@@ -343,6 +383,10 @@ class BlastResult:
             the final ``infer_iterates``: the length of the pip's registered
             ``+1`` chain, ``f^m(q0)`` being its deepest registered iterate and
             so the depth ``T(q0)`` is cut at (data, never a stop condition).
+        trusted_depth: Per fixed point of ``pip_depth``, the deepest ``j`` up
+            to which that registered orbit contracts like the real one
+            (:func:`_trusted_depth`), at most ``pip_depth``. A flag, never a
+            decision: nothing reads it, and a smaller value is logged at INFO.
         released_rows: Store rows a lean blast freed, over every step (0 for
             a blast that is not lean).
     """
@@ -361,6 +405,7 @@ class BlastResult:
     skipped_dropped: int = 0
     already_known: int = 0
     pip_depth: dict["FixedPoint", int] = field(default_factory=dict)
+    trusted_depth: dict["FixedPoint", int] = field(default_factory=dict)
     released_rows: int = 0
 
     def all_interior_bridges(self) -> list["Bridge"]:
@@ -502,8 +547,22 @@ def blast_zone(
         other for other in session.resonance_zones.values()
         if other.key is not zone.key and other.area < zone.area
     ]
+    fixed_points = session._resolve_fixed_points(fixed_point)
+
+    def fp_ok(bridge: "Bridge") -> bool:
+        return any(bridge.fixed_point is fp for fp in fixed_points)
+
+    # f(q0), ..., f^m(q0) of the zone's own pip, re-read once per iteration: the
+    # bridge arriving at one of them is inside (module docstring).
+    zone_orbit: set[int] = set()
+
+    def read_zone_orbit() -> None:
+        zone_orbit.clear()
+        zone_orbit.update(_pip_orbits(session, [zone.key]).get(zone.key, [])[1:])
 
     def in_zone(bridge: "Bridge") -> bool:
+        if not bridge.iterated and fp_ok(bridge) and bridge.id is not None and bridge.id[1] in zone_orbit:
+            return True
         point = bridge.test_point
         return (
             point is not None
@@ -511,17 +570,13 @@ def blast_zone(
             and not any(inner.contains_point(point) for inner in inner_zones)
         )
 
-    fixed_points = session._resolve_fixed_points(fixed_point)
-
-    def fp_ok(bridge: "Bridge") -> bool:
-        return any(bridge.fixed_point is fp for fp in fixed_points)
-
     workbench = session.workbench
     if min_separation == "resolution":
         min_separation = RESOLUTION_SEPARATION * (
             workbench.area_cutoff / DEFAULT_AREA_CUTOFF
         ) ** (2 / 3)
         logger.info("blast: min_separation %.3g from the resolution", min_separation)
+    read_zone_orbit()
     in_reach = [b for b in workbench.uniiterated_bridges if fp_ok(b) and in_zone(b)]
     # A drop stands until a call passes a smaller separation or None.
     frontier = [
@@ -643,6 +698,7 @@ def blast_zone(
             for fp, chain in _pip_orbits(session, fixed_points).items()
             for n, x in enumerate(chain)
         }
+        read_zone_orbit()
         for child in produced:
             # A bridge already in the trellis (the fixed-point bridge's self-image
             # and any image piece that re-traces grown curve resolve to the
@@ -734,9 +790,15 @@ def blast_zone(
     # The table is exact after every blast: a crossing born early in
     # the blast may only now have its image registered.
     workbench.infer_iterates()
-    result.pip_depth = {
-        fp: len(orbit) - 1 for fp, orbit in _pip_orbits(session, fixed_points).items()
-    }
+    for fp, orbit in _pip_orbits(session, fixed_points).items():
+        result.pip_depth[fp] = len(orbit) - 1
+        result.trusted_depth[fp] = _trusted_depth(session, fp, orbit)
+        if result.trusted_depth[fp] < result.pip_depth[fp]:
+            logger.info(
+                "blast: the pip orbit of %s is registered to depth %d and contracts like "
+                "the real one to depth %d only",
+                fp.label, result.pip_depth[fp], result.trusted_depth[fp],
+            )
     if diagnose:
         workbench.report_resolution(fixed_points, new_bridges=added)
     return result

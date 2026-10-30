@@ -190,6 +190,15 @@ def test_pip_orbit_never_shallower(name: str) -> None:
     assert depths == sorted(depths), depths
 
 
+@pytest.mark.parametrize("name", _params("series_trusted_depth_within_pip_depth"))
+def test_trusted_depth_never_exceeds_pip_depth(name: str) -> None:
+    """2026-10-29: every blast trusts its registered pip orbit no deeper than it
+    registers it, and its ``pip_depth`` is the depth composed here."""
+    depths = [(s.blasts, s.pip_depth, s.blast_depths) for s in _series(name) if s.blast_depths]
+    assert depths
+    assert all(trusted <= pip == composed for _b, composed, (pip, trusted) in depths), depths
+
+
 @pytest.mark.parametrize("name", _params("series_members_share_the_P1_itinerary"))
 def test_members_share_the_P1_itinerary_under_blasting(name: str) -> None:
     """Theorem T after every blast: no class's members read different ``P1``

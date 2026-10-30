@@ -129,6 +129,7 @@ from helpers.laws import base_chord_misreadings, p1_itinerary_disagreements, ref
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from tanglepack import FixedPoint, IntersectionRegistry, TangleWorkbench
+    from tanglepack.loom.Blast import BlastResult
     from tanglepack.loom.ResonanceZone import ResonanceZone
 
 #: How far a builder runs. Each stage includes every earlier one:
@@ -303,9 +304,9 @@ def _blast(
     *,
     diagnose: bool = True,
     min_separation: float = ZONE_MIN_SEPARATION,
-) -> None:
+) -> "BlastResult":
     """One single-iteration blast of ``zone`` (at ``ZONE_MIN_SEPARATION`` by default)."""
-    session.blast_zone(
+    return session.blast_zone(
         zone,
         num_iterations=1,
         fixed_point=fixed_points,
@@ -1119,6 +1120,8 @@ class SeriesStep:
         pip_depth: ``m``, the depth of ``T(q0)``: the deepest registered forward
             iterate of the blasted fixed point's chosen pip, composed here
             through ``trellis.iterate`` (never the library's own count).
+        blast_depths: The blast's own ``(pip_depth, trusted_depth)`` of the
+            blasted fixed point (``BlastResult``), None for the unblasted step.
         history_free: Whether ``session.trellis()`` read BEFORE the recompute
             shows the crossings and bridges of the recomputed topology's
             trellis (D1: the snapshot never depends on what ran first).
@@ -1151,6 +1154,7 @@ class SeriesStep:
     unwitnessed: frozenset
     letters: frozenset
     pip_depth: int
+    blast_depths: Optional[tuple[int, int]]
     history_free: bool
     crossings: tuple[frozenset, frozenset]
     recomputed: tuple[frozenset, frozenset]
@@ -1209,8 +1213,9 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
     fp = zone.fixed_point
     steps: list[SeriesStep] = []
     for blast in range(series.blasts + 1):
+        result = None
         if blast:
-            _blast(session, zone, [fp], diagnose=False, min_separation=series.min_separation)
+            result = _blast(session, zone, [fp], diagnose=False, min_separation=series.min_separation)
         shown = trellis_view(session.trellis())
         table = session.bridge_classes()
         kept = set(session.minimal_trellis().kept_bridge_ids)
@@ -1245,6 +1250,8 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
                     if entry.letter is not None
                 ),
                 pip_depth=_pip_depth(session, fp),
+                blast_depths=None if result is None or fp not in result.pip_depth
+                else (result.pip_depth[fp], result.trusted_depth[fp]),
                 history_free=shown == trellis_view(session.topology().trellis),
                 crossings=_crossings_and_bridges(session.workbench),
                 recomputed=_recomputed(session.workbench),
