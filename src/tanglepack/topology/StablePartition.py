@@ -146,9 +146,12 @@ fixed in conversation with the author:
   synthetic ``(None, 0.0)`` anchor aside), so a registered crossing is owned
   without any tolerance: a boundary crossing by the element closed at its id
   (the singleton if it has one, else the closed neighbour), any other by its
-  exact stable cdist. An absolute cdist slack is no ownership tolerance: deep
-  blasts put real crossings 1e-6 apart (68% of consecutive k=2.8 gaps by
-  blast 14). The topology reads no absolute cdist slack at all: an
+  exact stable cdist. Ownership reads the PLAIN float, as the intervals are
+  sorted by it (:func:`intervals_from_marks`) and ``PartitionFamily`` reads
+  it (2026-10-30: the precise cdists, :meth:`Trellis.cdist_key`, order the
+  crossings, a hole bridge's ends and the containers). An absolute cdist
+  slack is no ownership tolerance: deep blasts put real crossings 1e-6 apart
+  (68% of consecutive k=2.8 gaps by blast 14). The topology reads no absolute cdist slack at all: an
   anchor is told by identity (``Intersection.is_anchor``, synthetic at
   exactly 0.0), ownership and containment are exact, and the one slack left
   is the RELATIVE error of a scaled cdist (``SCALING_RTOL`` at a scaled
@@ -204,7 +207,7 @@ if TYPE_CHECKING:
     from .Trellis import Trellis
     from .TrellisBranch import TrellisBranch
     from ..numerics.Bridge import Bridge, BridgeId
-    from ..numerics.Intersection import Intersection, ManifoldKey
+    from ..numerics.Intersection import CdistKey, Intersection, ManifoldKey
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -310,8 +313,8 @@ def punch_holes(
         # segment runs from `first` along s+ when it heads outward, and s+ is
         # on the left of u+ iff crossing_sign > 0. The nearest bridge
         # vertex would pick the wrong fold on a thin lobe.
-        first, second = sorted((near, far), key=lambda x: x.unstable_cdist)
-        outward = 1 if second.stable_cdist > first.stable_cdist else -1
+        first, second = sorted((near, far), key=lambda x: x.cdist_key("unstable"))
+        outward = 1 if second.cdist_key("stable") > first.cdist_key("stable") else -1
         bridge_side = "left" if first.crossing_sign * outward > 0 else "right"
         openings = _hole_openings(trellis, bridge, bridge_side)
 
@@ -404,7 +407,7 @@ def propagate_reference_holes(
         for step in count(1):
             # The span's interior is never a crossing of N (it lies past the pip cut); one end
             # may be a registered crossing, which is then the container's own end.
-            ends = [trellis.image_cdist(end_id, -step, "unstable", branch=start_key) for end_id in start_ids]
+            ends = [trellis.image_cdist_key(end_id, -step, "unstable", branch=start_key) for end_id in start_ids]
             span = tuple(sorted(c for _, c, _ in ends))
 
             branch_key = advance(start_key, -step)
@@ -419,8 +422,8 @@ def propagate_reference_holes(
                 # the bisect may have picked the neighbour bridge.
                 ids, cdists = orders[branch_key]
                 near = next((
-                    (c, iid) for _, c, from_table in ends if not from_table
-                    for iid, x in zip(ids, cdists) if abs(c - x) <= SCALING_RTOL * abs(x)
+                    (c, iid) for _, (c, _), from_table in ends if not from_table
+                    for iid, (x, _) in zip(ids, cdists) if abs(c - x) <= SCALING_RTOL * abs(x)
                 ), None)
                 if near is not None:
                     warned.add(branch_key)
@@ -689,14 +692,14 @@ def _near_far(trellis: "Trellis", id_a: int, id_b: int) -> tuple[int, int]:
     a = trellis.intersection(id_a)
     b = trellis.intersection(id_b)
     if a.manifold_b_key is not None and a.manifold_b_key == b.manifold_b_key:
-        return (id_a, id_b) if a.stable_cdist <= b.stable_cdist else (id_b, id_a)
+        return (id_a, id_b) if a.cdist_key("stable") <= b.cdist_key("stable") else (id_b, id_a)
     logger.debug(
         "Crossings %d and %d sit on different stable branches; ordering them "
         "by unstable cdist (the dynamical direction)",
         id_a,
         id_b,
     )
-    return (id_a, id_b) if a.unstable_cdist <= b.unstable_cdist else (id_b, id_a)
+    return (id_a, id_b) if a.cdist_key("unstable") <= b.cdist_key("unstable") else (id_b, id_a)
 
 
 def _is_forward_iterate(pair: PseudoneighborPair) -> bool:
@@ -712,7 +715,7 @@ def _is_forward_iterate(pair: PseudoneighborPair) -> bool:
 
 def _containing_bridge(
     trellis: "Trellis",
-    span: tuple[float, float],
+    span: tuple["CdistKey", "CdistKey"],
     branch_key: "ManifoldKey",
     orders: dict,
 ) -> Optional["Bridge"]:
@@ -720,13 +723,14 @@ def _containing_bridge(
 
     Bridges tile an unstable branch between consecutive crossings, so this is
     a bisect over the branch's crossing order (anchor first), memoised per
-    branch in ``orders`` for one propagation. A span that straddles a crossing,
-    or lies past the last one, has no container; so has a pair of consecutive
-    crossings no Bridge object spans.
+    branch in ``orders`` for one propagation, on precise cdists
+    (:meth:`Trellis.cdist_key`; a scaled span end is ``(c, 0.0)``). A span
+    that straddles a crossing, or lies past the last one, has no container;
+    so has a pair of consecutive crossings no Bridge object spans.
     """
     if branch_key not in orders:
         ids = trellis.branch(branch_key).intersection_ids
-        orders[branch_key] = (ids, [trellis.intersection(i).unstable_cdist for i in ids])
+        orders[branch_key] = (ids, [trellis.cdist_key(i, "unstable") for i in ids])
     ids, cdists = orders[branch_key]
     i = bisect_right(cdists, span[0]) - 1
     if i < 0 or i + 1 == len(ids) or span[1] > cdists[i + 1]:

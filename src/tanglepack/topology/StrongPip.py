@@ -146,8 +146,7 @@ def is_strong_pip(
         )
 
     fixed_point = branch_key[0]
-    s0 = q0.stable_cdist
-    u0 = q0.unstable_cdist
+    s0, u0 = q0.cdist_key("stable"), q0.cdist_key("unstable")
     pos_map, k = fixed_point.branch_position_map("stable")
 
     pos_B = pos_map.get(branch_key)
@@ -163,7 +162,7 @@ def is_strong_pip(
     # that lands strictly inside the open box (0, s0) x (0, u0): on the stable arc
     # W^S(z'_0, q0) (stable_rep < s0) and inside the unstable arc (unstable_rep < u0).
     # Among those, the innermost (smallest mapped unstable cdist) is reported.
-    best_rep = math.inf
+    best_rep = (math.inf, 0.0)
     best_id: Optional[int] = None
     for r_id, r in trellis.registry:
         if r_id == intersection_id or r_id not in trellis.resolved_ids:
@@ -189,14 +188,12 @@ def is_strong_pip(
         if back is not None:
             if back == intersection_id:
                 continue
-            rep = trellis.intersection(back)
-            stable_rep = rep.stable_cdist
-            unstable_rep = rep.unstable_cdist
+            stable_rep, unstable_rep = trellis.cdist_key(back, "stable"), trellis.cdist_key(back, "unstable")
         else:
             # Unlinked: backward_steps applications of M^-1 by the cdist
             # definition, through the one scaling path.
-            _, stable_rep, _ = trellis.image_cdist(r_id, -backward_steps, "stable")
-            _, unstable_rep, _ = trellis.image_cdist(r_id, -backward_steps, "unstable")
+            _, stable_rep, _ = trellis.image_cdist_key(r_id, -backward_steps, "stable")
+            _, unstable_rep, _ = trellis.image_cdist_key(r_id, -backward_steps, "unstable")
 
             # q0's own orbit maps back onto q0 itself — a collision on BOTH
             # cdists. That is the same point, not a disqualifier, so skip it.
@@ -204,9 +201,10 @@ def is_strong_pip(
             # q0's genuine iterates are skipped; a distinct chain that merely
             # shares q0's stable OR unstable cdist — or an equal "action"
             # product — is not mistaken for q0.
-            if same_point(unstable_rep, stable_rep, u0, s0, collision_rtol):
+            if same_point(unstable_rep[0], stable_rep[0], u0[0], s0[0], collision_rtol):
                 continue
 
+        # Precise cdists (Trellis.cdist_key; a scaled one is (c, 0.0)).
         if stable_rep < s0 and unstable_rep < u0 and unstable_rep < best_rep:
             best_rep = unstable_rep
             best_id = r_id
@@ -216,8 +214,8 @@ def is_strong_pip(
             "Intersection %s is not a strong pip: %s maps into the box at u=%.6g < %.6g",
             intersection_id,
             best_id,
-            best_rep,
-            u0,
+            best_rep[0],
+            u0[0],
         )
         return StrongPipResult(intersection_id, False, blocking_intersection_id=best_id)
 

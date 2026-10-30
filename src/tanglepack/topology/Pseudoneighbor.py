@@ -143,7 +143,7 @@ from itertools import count
 from operator import attrgetter
 from typing import Iterable, Optional, TYPE_CHECKING
 
-from ..numerics.Intersection import ManifoldKey, Stability
+from ..numerics.Intersection import CdistKey, ManifoldKey, Stability
 from .TopologyResults import PseudoneighborPair
 from .Trellis import same_point
 
@@ -366,6 +366,8 @@ def _interval_is_clear(
     and the landing is skipped only when it 2D-collides with an endpoint (both
     the scaled unstable and stable positions match within ``collision_rtol``)
     — x0/x1's own orbit up to cdist noise, ``Trellis.same_point``.
+    Every comparison with a registered cdist reads the precise one
+    (``Trellis.cdist_key``; a scaled value is ``(c, 0.0)``).
 
     The arc is the pair's ``stability`` arc, so the cycle, ``k`` and ``beta``
     are those of ITS fixed point: A's for the unstable arc of a heteroclinic
@@ -378,6 +380,10 @@ def _interval_is_clear(
     other_key = attrgetter("manifold_b_key" if stability == "unstable" else "manifold_a_key")
     cdist = attrgetter(f"{stability}_cdist")
     other = "stable" if stability == "unstable" else "unstable"
+
+    def at(crossing_id: int) -> CdistKey:
+        """A registered crossing's precise cdist on the arc (``Trellis.cdist_key``)."""
+        return trellis.cdist_key(crossing_id, stability)
 
     def point(value: float, other_value: float) -> tuple[float, float]:
         """``(value, other_value)`` as ``same_point`` reads it: (unstable, stable)."""
@@ -394,8 +400,9 @@ def _interval_is_clear(
     beta = owner.per_step_beta(stability)  # < 1 for the stable arc: image_cdist's factor
     pos_target = pos_map[key]
 
-    lo, hi = sorted((cdist(ix0), cdist(ix1)))
-    if hi == lo or lo <= 0.0:
+    lo_key, hi_key = sorted((at(x0), at(x1)))
+    lo, hi = lo_key[0], hi_key[0]
+    if hi_key == lo_key or lo <= 0.0:
         return False  # degenerate interval (near-tangency or anchor endpoint)
     endpoints = [(ix.unstable_cdist, ix.stable_cdist) for ix in (ix0, ix1)]
 
@@ -429,7 +436,7 @@ def _interval_is_clear(
         bounds = (math.log(lo / c) / log_lap, math.log(hi / c) / log_lap)
         for m in range(math.floor(min(bounds)), math.ceil(max(bounds)) + 1):
             value = c * lap**m
-            if not (lo < value < hi):
+            if not (lo_key < (value, 0.0) < hi_key):
                 continue
             steps = d + m * k
 
@@ -448,7 +455,7 @@ def _interval_is_clear(
                         r_id, steps, landing, stability, arc_key(z), key,
                     )
                     continue
-                if lo < cdist(z) < hi:
+                if lo_key < at(landing) < hi_key:
                     log_puncture(r_id, steps, "table", cdist(z), (lo, hi))
                     return False
                 continue
@@ -461,7 +468,7 @@ def _interval_is_clear(
                 ends = []
                 for x, image in zip((x0, x1), images):
                     if image is not None:
-                        ends.append(cdist(trellis.intersection(image)))
+                        ends.append(at(image))
                         continue
                     _, c_e, _ = trellis.image_cdist(x, -steps, stability)
                     _, o_e, _ = trellis.image_cdist(x, -steps, other)
@@ -469,12 +476,12 @@ def _interval_is_clear(
                         r.unstable_cdist, r.stable_cdist, *point(c_e, o_e), collision_rtol
                     ):
                         continue  # r is x's own unlinked orbit (2D collision)
-                    ends.append(c_e)
+                    ends.append((c_e, 0.0))
                 if r_id in images or len(ends) < 2:
                     continue  # an endpoint itself, or its own unlinked orbit
                 lo_r, hi_r = sorted(ends)
-                if lo_r < cdist(r) < hi_r:
-                    log_puncture(r_id, steps, "own frame", cdist(r), (lo_r, hi_r))
+                if lo_r < at(r_id) < hi_r:
+                    log_puncture(r_id, steps, "own frame", cdist(r), (lo_r[0], hi_r[0]))
                     return False
                 continue
 

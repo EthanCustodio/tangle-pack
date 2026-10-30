@@ -674,13 +674,13 @@ def test_containing_bridge_brackets_by_bisect():
     first0 = branches[ray0].intersection_ids
 
     orders: dict = {}
-    assert _containing_bridge(trellis, (1.2, 1.8), ray0, orders) is bridges[ray0, first0[1]]
-    assert _containing_bridge(trellis, (1.0, 1.5), ray0, orders) is bridges[ray0, first0[1]]
-    assert _containing_bridge(trellis, (1.5, 2.5), ray0, orders) is None  # straddles 2.0
-    assert _containing_bridge(trellis, (3.2, 3.5), ray0, orders) is None  # past the last
-    assert _containing_bridge(trellis, (0.2, 0.4), ray0, orders) is None  # before the first
+    assert _containing_bridge(trellis, ((1.2, 0.0), (1.8, 0.0)), ray0, orders) is bridges[ray0, first0[1]]
+    assert _containing_bridge(trellis, ((1.0, 0.0), (1.5, 0.0)), ray0, orders) is bridges[ray0, first0[1]]
+    assert _containing_bridge(trellis, ((1.5, 0.0), (2.5, 0.0)), ray0, orders) is None  # straddles 2.0
+    assert _containing_bridge(trellis, ((3.2, 0.0), (3.5, 0.0)), ray0, orders) is None  # past the last
+    assert _containing_bridge(trellis, ((0.2, 0.0), (0.4, 0.0)), ray0, orders) is None  # before the first
     first1 = branches[ray1].intersection_ids[0]
-    assert _containing_bridge(trellis, (0.6, 0.9), ray1, orders) is bridges[ray1, first1]
+    assert _containing_bridge(trellis, ((0.6, 0.0), (0.9, 0.0)), ray1, orders) is bridges[ray1, first1]
 
 
 # --------------------------------------------------------------------------- #
