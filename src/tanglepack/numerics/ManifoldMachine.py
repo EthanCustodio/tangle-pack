@@ -161,9 +161,10 @@ class ManifoldMachine:
             (so ``h ~ r**2``) or its chord is longer than ``r`` (a geometric
             grading toward the point), down to a spacing floor of
             ``max(SPACING_FLOOR * r / r0, xy_resolution(P))``, the xy
-            resolution near ``P`` (:func:`.geometry.xy_resolution`). The seed's segment at the orbit point is
-            graded once, by :meth:`grade_seed`. It acts on every refinement
-            from when it is set; curve already refined is not revisited.
+            resolution near ``P`` (:func:`.geometry.xy_resolution`). The
+            seed's segment at the orbit point is graded once, by
+            :meth:`grade_seed`. It acts on every refinement from when it is
+            set; curve already refined is not revisited.
     """
 
     def __init__(
@@ -339,10 +340,10 @@ class ManifoldMachine:
         inward one map step at a time, one piece of the chain per step, each
         linked to the point it came from as its iterate, down to the spacing
         floor of its orbit point (the pair at the orbit point is never
-        refined, :meth:`_refine_layer`). A carried
-        point is placed on the ray from the target piece's orbit point through
-        that piece's innermost row, at the distance its canonical distance
-        gives: the seed's own linear approximation. It is not mapped: the
+        refined, :meth:`_refine_layer`). A carried point is placed on the
+        ray from the target piece's orbit point through that piece's
+        innermost row, at the distance its canonical distance gives: the
+        seed's own linear approximation. It is not mapped: the
         forward map along a stable seed (and the inverse along an unstable
         one) multiplies the seed's distance from the true manifold by
         ``lambda_u / lambda_s`` per step. Every point inside the seed's outer
@@ -835,16 +836,14 @@ class ManifoldMachine:
             orbit = np.asarray(manifold.fixed_point.coordinates, dtype=float)
             chord = (p1_xy - p0_xy)[:, None, :]
             offset = orbit[None, :, :] - p0_xy[:, None, :]
-            along = np.clip(
-                np.sum(offset * chord, axis=2) / np.maximum(np.sum(chord * chord, axis=2), np.finfo(float).tiny),
-                0.0, 1.0,
-            )
+            length2 = np.maximum(np.sum(chord * chord, axis=2), np.finfo(float).tiny)
+            along = np.clip(np.sum(offset * chord, axis=2) / length2, 0.0, 1.0)
             r = np.hypot(*(offset - along[:, :, None] * chord).transpose(2, 0, 1)).min(axis=1)
             near = np.where(at_anchor, 1.0, np.minimum(1.0, r / self.near_orbit_radius))
             apart = chords >= np.maximum(SPACING_FLOOR * near, xy_resolution(orbit))
-            # A seed point has no preiterate (the seed segment's inner end), so
-            # the pair at the anchor could never be graded: within r0 it gets a
-            # phantom one, mapped now, as a refined point gets its own.
+            # A seed's inner end has no preiterate, so grade_seed could not
+            # grade the seed's first piece: within r0 a missing preiterate is
+            # mapped now, a phantom as a refined point's own.
             lacking = apart & (r < self.near_orbit_radius) & ((pre_rows_0 < 0) | (pre_rows_1 < 0))
             if lacking.any():
                 ends = np.concatenate((rows_0[lacking & (pre_rows_0 < 0) & ~at_anchor],
