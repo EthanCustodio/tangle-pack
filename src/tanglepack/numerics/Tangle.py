@@ -392,8 +392,9 @@ class Tangle:
         the cdists are read rather than assumed so a reversed or hand-built
         segment cannot silently flip the sign of a whole tangle. They are the
         PLAIN cdists, the order the merge built the chain in: a precise reading
-        flips a sign of the k=2.8 series at seven blasts, on a segment whose
-        ends tie as floats and whose residuals run against the chain.
+        flips a sign of the k=2.8 series at seven blasts, on a stable segment
+        whose ends are one ULP apart and whose residuals order them the other
+        way (2026-10-30).
 
         Args:
             u_seg: The unstable segment of the crossing pair.

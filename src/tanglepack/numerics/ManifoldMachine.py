@@ -83,6 +83,16 @@ explicitly; the topology there is the same at both.
 ``iterate_manifold`` maps exactly one step and takes no ``num_iterations``:
 repeated iteration is the caller's loop (``grow_n_times``), settled (an old
 TODO asked for the parameter; it is not wanted).
+
+The merge stays on PLAIN cdists (2026-10-30, the cdist-precision run): every
+writer here carries the residual (``dd_mul``, ``dd_mean``), but ordering the
+merge, its run cuts (``_image_chains``) and the chain check by the precise
+value changes today's builds. The k=2.8 law cases merge 17 plain ties at cdist
+1 to 36 whose two points lie 4e-5 to 9e-3 apart: the zipper drops one, the
+precise order keeps both. The k=2.8 and inversion cases also hold 4 and 1
+neighbours one ULP apart whose residuals order them the other way, so a
+precise check of a plain-merged chain fails. Switching the merge is the
+author's decision, and it changes what is computed.
 """
 
 from __future__ import annotations
