@@ -121,7 +121,7 @@ initializer's fictitious tails, NaN with no cdist; 8 bytes a row). `PointStore.p
 one reader; `Intersection` carries `unstable_cdist_lo` / `stable_cdist_lo` and `cdist_key(stability)`,
 the normalised pair, and topology reads it through `Trellis.cdist_key` (a scaled cdist is
 `(c, 0.0)`). The precise value orders and compares crossings: the registry orders and dedup, the
-iterate inference's carried brackets (`dd_mul` / `dd_div`, `BRACKET_PAD` 1e-24), the bridge cut and
+iterate inference's carried brackets (`dd_mul` / `dd_div`; `BRACKET_PAD` stays 1e-12: at 1e-24 the k=2.8 deep-blast sliver build links three crossings fewer), the bridge cut and
 the `_register_bridge` checks, each branch's crossing order, the pip-orbit cuts, the hole bridge's
 ends, the containing bridge, the pseudoneighbor intervals and the strong-pip box. The PLAIN float
 still orders the merge, its run cuts and the chain check (a precise merge keeps 17 plain ties the

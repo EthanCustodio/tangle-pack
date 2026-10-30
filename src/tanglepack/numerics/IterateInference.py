@@ -63,12 +63,13 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle guard
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-#: Relative slack of a bracket: the error of the precise carry. A node's cdist
-#: and its image's are one double-double computation apart (a product by the
-#: stretch, a mean of neighbours), exact to about 1e-32 relative; 1e-24 is far
-#: above that and far below a deep bracket's width. It was 1e-12 on plain
-#: floats (2026-10-30: the identity probe is unchanged by the switch).
-BRACKET_PAD = 1e-24
+#: Relative slack of a bracket. Refined nodes are means of their
+#: neighbours, not products, so a carried bracket meets its image only up to
+#: rounding, and nodes tie to the ULP at folds. Kept at 1e-12 with the precise
+#: carry (2026-10-30): 1e-24 left the identity probe unchanged but linked three
+#: crossings fewer on the k=2.8 deep-blast sliver build (422 crossings -> 418),
+#: so the precise carry does not meet every image to double-double precision.
+BRACKET_PAD = 1e-12
 
 #: A bracket row as precise pairs: ``(hi, lo)`` arrays of ``(u_lo, u_hi, s_lo, s_hi)``.
 PreciseBrackets = tuple[NDArray[np.float64], NDArray[np.float64]]
