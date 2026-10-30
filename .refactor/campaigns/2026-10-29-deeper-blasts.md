@@ -84,7 +84,7 @@
   - `profile_numerics.py --cases scale` before and after, on an idle machine or pinned cores.
 
 ## Run 1: lean-blast (/feature)
-- [ ] done
+- [x] done (876f241, lean keeps the frontier lineage, so alone it frees <=1.3%; the opt-in width guard reaches the 1e-5 guard's pip depth at 1/19 (1e-7) and 1/4.5 (1e-9) of the rows, lean+width a further 3.5-4.8x; width guard off by default, WIDTH_SEPARATION_FACTOR=1.0 uncalibrated, author's choice)
 
 Goal: an opt-in lean blast (`lean=True`, default off) holds only what the topology reads, plus the frontier.
 Its separation is the analytic width guard (`min_separation="width"`), which is also available to ordinary

@@ -7,7 +7,8 @@
 - **Author decisions at planning:** `workers` defaults to 1 (opt-in); a sweep runner is in scope, in
   `scripts/` (D6 "no scheduler in the library" holds); maps will often be ODE integrations, so the map is a
   target; a lean-blast run (map only new bridges, drop older point data) was planned, then
-  dropped by the author the same day.
+  dropped by the author the same day (reversed 2026-10-29: deeper-blasts run 1, main 876f241; its opt-in
+  `min_separation="width"` needs no cKDTree, so the separation cloud remains only for the geometric guard).
 - **Scout (Hénon, figures/numerics_profile/6860f99*):** 1e-7 k=2.5 blast series 32.5 s, of which the
   same-stability sweep (`diagnostics._hits` / `_candidate_pairs`) is 22.4 s, separation
   (`Blast._min_interior_distance`, a cKDTree per child) 4.8 s, and the map about 0%. At 1e-9 the sweep is

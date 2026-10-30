@@ -1299,7 +1299,7 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   and its phantoms, finer than "the neighbour's whole image chain". The width contracts by `per_step_beta("stable")`
   (< 1) per step, not `w / beta_s` (that would grow it), of the saddle whose stable branch holds the seed ring
   (`Bridge.width_saddle`; review round 2: a heteroclinic lobe of `W^u(A)` on `W^s(B)` read A's factor, NUM-20). `WIDTH_SEPARATION_FACTOR` stays 1.0 (0.01 matches the
-  1e-5 guard's onset on the 1e-7 scale series but drops nothing in the k28 test builds): the author's call. Widths
+  1e-5 guard's onset on the 1e-7 scale series but drops nothing in the k28 test builds). Author at merge (2026-10-29): the width guard stays OFF by default (`min_separation=None`) and the factor uncalibrated; whoever opts in sets `Blast.WIDTH_SEPARATION_FACTOR`. Widths
   are saved as an optional column (format 1 unchanged for a save without one). No series has a joined arc on a
   released chain: the joined-pieces rule is unexercised by any build, so a test hands a trellis a joined arc of
   two blast children a lean blast would release, and the keep rule's clauses are asserted directly
