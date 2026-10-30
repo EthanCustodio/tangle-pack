@@ -83,6 +83,7 @@ def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
     workbench.escape_radius = 7.5
     workbench.resolution_ratio_threshold = 2.5
     workbench.anchor_resolution_factor = 7.5
+    workbench.near_orbit_radius = 1e-3
     for bridge in workbench.bridges:
         try:
             workbench.iterate_bridge(bridge)
@@ -96,7 +97,7 @@ def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
 
     loaded = _load(workbench, tmp_path / "k10")
     settings = ("area_cutoff", "max_points_per_step", "escape_radius", "resolution_ratio_threshold",
-                "anchor_resolution_factor")
+                "anchor_resolution_factor", "near_orbit_radius")
     assert [getattr(loaded, name) for name in settings] == [getattr(workbench, name) for name in settings]
     assert loaded.intersection_registry.unresolved_links == workbench.intersection_registry.unresolved_links
     assert {bridge.id for bridge in loaded._half_iterated_bridges} == abandoned
@@ -106,9 +107,9 @@ def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
 
 def test_a_format_1_save_without_the_guard_settings_loads_the_defaults(tmp_path):
     # Saves written before 2026-10-29 hold four settings: the near-anchor guard
-    # is an optional addition to format 1.
+    # and the graded mesh were optional additions to format 1.
     workbench = build_k10().workbench
-    workbench.anchor_resolution_factor = 7.5
+    workbench.anchor_resolution_factor, workbench.near_orbit_radius = 7.5, 1e-3
     workbench.save(tmp_path / "k10")
     meta_path, arrays_path = tmp_path / "k10.json", tmp_path / "k10.npz"
     meta = json.loads(meta_path.read_text())
@@ -121,6 +122,7 @@ def test_a_format_1_save_without_the_guard_settings_loads_the_defaults(tmp_path)
 
     loaded = _load(workbench, tmp_path / "k10")
     assert loaded.anchor_resolution_factor == ANCHOR_RESOLUTION_FACTOR
+    assert loaded.near_orbit_radius is None
 
 
 def test_an_object_array_is_refused(tmp_path):

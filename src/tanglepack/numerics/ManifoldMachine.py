@@ -101,7 +101,7 @@ from .BranchPoint import BranchPoint
 from .Bridge import Bridge
 from .Intersection import ManifoldKey, Stability
 from .budget import DEFAULT_MAX_POINTS_PER_STEP, PointBudgetExceeded
-from .geometry import curvature_area_batch
+from .geometry import curvature_area_batch, xy_resolution
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -109,6 +109,9 @@ logger.addHandler(logging.NullHandler())
 #: Library default for :attr:`ManifoldMachine.area_cutoff` (see the module
 #: Dev Notes).
 DEFAULT_AREA_CUTOFF = 1e-7
+
+#: The spacing floor of a refined pair far from the periodic orbit.
+SPACING_FLOOR = 1e-8
 
 
 class ManifoldMachine:
@@ -149,6 +152,18 @@ class ManifoldMachine:
             top-level call.
         max_abs_coord (float): Largest ``|coordinate|`` among the points the
             current (or last) top-level call mapped or created.
+        near_orbit_radius (Optional[float]): The radius ``r0`` of the opt-in
+            graded mesh near the periodic orbit; None (default) refines as
+            always. Within ``r0`` of an orbit point of the curve's own fixed
+            point (``r`` the distance of a pair's chord to the nearest: an
+            image curve passes the orbit point between far nodes), a pair is
+            refined when its area is at least ``area_cutoff * (r / r0) ** 2``
+            (so ``h ~ r**2``) or its chord is longer than ``r`` (a geometric
+            grading toward the point), down to a spacing floor of
+            ``max(SPACING_FLOOR * r / r0, xy_resolution(P))``, the xy
+            resolution near ``P`` (:func:`.geometry.xy_resolution`). The seed's segment at the orbit point is
+            graded once, by :meth:`grade_seed`. It acts on every refinement
+            from when it is set; curve already refined is not revisited.
     """
 
     def __init__(
@@ -156,6 +171,7 @@ class ManifoldMachine:
         system: DynamicalSystem,
         area_cutoff: float = DEFAULT_AREA_CUTOFF,
         max_points_per_step: Optional[int] = DEFAULT_MAX_POINTS_PER_STEP,
+        near_orbit_radius: Optional[float] = None,
     ) -> None:
         """
         Bind a machine to the system it will map with.
@@ -166,11 +182,14 @@ class ManifoldMachine:
                 :data:`DEFAULT_AREA_CUTOFF` (1e-7) by default.
             max_points_per_step (Optional[int]): Per-call point budget; ``None``
                 disables it.
+            near_orbit_radius (Optional[float]): The graded mesh's radius (see
+                the class docs); None (default) leaves it off.
         """
 
         self.system = system
         self.area_cutoff = area_cutoff
         self.max_points_per_step = max_points_per_step
+        self.near_orbit_radius = near_orbit_radius
         self.points_created = 0
         self.max_abs_coord = 0.0
         self._call_depth = 0
@@ -303,6 +322,80 @@ class ManifoldMachine:
                         f"manifold piece {key[2], key[3]} of a chain that started "
                         f"at branch {b} is not initialized"
                     )
+
+    def grade_seed(
+        self,
+        fixed_point: FixedPoint,
+        stability: Stability,
+        segments: dict[tuple[int, int], BaseManifold],
+    ) -> None:
+        """
+        Carry the graded mesh down to the orbit points: the seed continued toward them.
+
+        Growth refines only the images it makes, so the segment between an
+        orbit point and its seed is never graded, and a point refined into it
+        would have no iterate (growth maps only the seed's tail). Instead the
+        first piece of each seed chain is graded, and its points are carried
+        inward one map step at a time, one piece of the chain per step, each
+        linked to the point it came from as its iterate, down to the spacing
+        floor of its orbit point (the pair at the orbit point is never
+        refined, :meth:`_refine_layer`). A carried
+        point is placed on the ray from the target piece's orbit point through
+        that piece's innermost row, at the distance its canonical distance
+        gives: the seed's own linear approximation. It is not mapped: the
+        forward map along a stable seed (and the inverse along an unstable
+        one) multiplies the seed's distance from the true manifold by
+        ``lambda_u / lambda_s`` per step. Every point inside the seed's outer
+        fundamental domain then has its iterate, so growth maps only the
+        seed's tail, as without the mesh.
+
+        Args:
+            fixed_point: The seeded fixed point.
+            stability: The seeded manifold.
+            segments: The initial segments, ``(orbit_index, branch_index) ->
+                segment`` (:meth:`ManifoldInitializer.construct_kevin_way`).
+
+        Raises:
+            PointBudgetExceeded: If the carried points would exceed
+                :attr:`max_points_per_step`.
+        """
+        inward = 1 if stability == "stable" else -1
+        orbit = np.asarray(fixed_point.coordinates, dtype=float)
+        floor = xy_resolution(orbit)
+        with self._top_level_call():
+            for (orbit_index, branch), segment in segments.items():
+                if orbit_index != 0 or (branch == 1 and fixed_point.check_inversion()):
+                    continue  # one walk per chain, from its first piece
+                _head, chain, lo, hi = segment._span()
+                store = chain.store
+                domain = BaseManifold(
+                    int(chain.ids[lo]), stability, chain.stretch_param, fixed_point,
+                    tail=int(chain.ids[hi - 1]), manifold_key=None, store=store,
+                )
+                self.refine_manifold(domain)
+                # The graded first piece, less the rows whose inward iterate is
+                # already a point of a chain (a period-1 seed's outer end).
+                rows = chain.ids[lo : domain._span()[3]]
+                links = (store.image if stability == "stable" else store.preimage)[rows]
+                rows = rows[(links < 0) | (store._chain[np.maximum(links, 0)] < 0)]
+                key = segment.manifold_key
+                while len(rows):
+                    key = fixed_point.advance_key(key, inward)
+                    target = fixed_point.slot_chain(stability, key[2], key[3])
+                    innermost = int(target.ids[0])
+                    scale = store.cdist[rows] / target.stretch_param / store.cdist[innermost]
+                    ray = store.xy[innermost] - orbit[key[2]]
+                    above = scale * np.hypot(*ray) >= floor
+                    rows, scale = rows[above], scale[above]
+                    self._charge(len(rows), "map", segment)
+                    carried = store.append(orbit[key[2]] + np.outer(scale, ray),
+                                           scale * store.cdist[innermost])
+                    if stability == "stable":
+                        store.link(rows, carried)
+                    else:
+                        store.link(carried, rows)
+                    target.insert(np.zeros(len(carried), dtype=np.int64), carried)
+                    rows = carried if above.all() else rows[:0]
 
     def iterate_manifold(self, manifold: BaseManifold) -> BaseManifold:
         """
@@ -732,7 +825,42 @@ class ManifoldMachine:
         # Pairs that are degenerate (near-coincident points) or missing the data
         # needed to refine (a missing preiterate on a bridge boundary point) are
         # dropped.
-        apart = np.hypot(p1_xy[:, 0] - p0_xy[:, 0], p1_xy[:, 1] - p0_xy[:, 1]) >= 1e-8
+        chords = np.hypot(p1_xy[:, 0] - p0_xy[:, 0], p1_xy[:, 1] - p0_xy[:, 1])
+        if self.near_orbit_radius is None:
+            apart = chords >= SPACING_FLOOR
+        else:
+            # r: how near the pair's chord passes an orbit point (an image
+            # curve can pass the orbit point between two far nodes). The pair
+            # at the anchor keeps the plain rule: grade_seed grades it.
+            orbit = np.asarray(manifold.fixed_point.coordinates, dtype=float)
+            chord = (p1_xy - p0_xy)[:, None, :]
+            offset = orbit[None, :, :] - p0_xy[:, None, :]
+            along = np.clip(
+                np.sum(offset * chord, axis=2) / np.maximum(np.sum(chord * chord, axis=2), np.finfo(float).tiny),
+                0.0, 1.0,
+            )
+            r = np.hypot(*(offset - along[:, :, None] * chord).transpose(2, 0, 1)).min(axis=1)
+            near = np.where(at_anchor, 1.0, np.minimum(1.0, r / self.near_orbit_radius))
+            apart = chords >= np.maximum(SPACING_FLOOR * near, xy_resolution(orbit))
+            # A seed point has no preiterate (the seed segment's inner end), so
+            # the pair at the anchor could never be graded: within r0 it gets a
+            # phantom one, mapped now, as a refined point gets its own.
+            lacking = apart & (r < self.near_orbit_radius) & ((pre_rows_0 < 0) | (pre_rows_1 < 0))
+            if lacking.any():
+                ends = np.concatenate((rows_0[lacking & (pre_rows_0 < 0) & ~at_anchor],
+                                       rows_1[lacking & (pre_rows_1 < 0)]))
+                ends = np.unique(ends)
+                phantoms = store.append(viewer.map_back_batch(xy[ends]), None)
+                store.link_phantoms(ends, phantoms, stability)
+                # The append may have moved the columns.
+                xy = store.xy
+                preiterate = store.preimage if stability == "unstable" else store.image
+                pre_rows_0 = np.where(at_anchor, 0, preiterate[rows_0])
+                pre_rows_1 = preiterate[rows_1]
+                pre0 = xy[np.maximum(pre_rows_0, 0)]
+                pre1 = xy[np.maximum(pre_rows_1, 0)]
+                if at_anchor.any():
+                    pre0[at_anchor] = self._get_preiterate(anchor, stability)
         has_pre = (pre_rows_0 >= 0) & (pre_rows_1 >= 0)
         if logger.isEnabledFor(logging.DEBUG):
             for k in np.flatnonzero(apart & ~has_pre):
@@ -763,7 +891,17 @@ class ManifoldMachine:
         mid_cd = 0.5 * (c0[keep] + c1[keep])
         pre_mid = 0.5 * (pre0[keep] + pre1[keep])
 
-        flagged = np.flatnonzero(areas >= self.area_cutoff)
+        if self.near_orbit_radius is None:
+            flagged = np.flatnonzero(areas >= self.area_cutoff)
+        else:
+            # The graded mesh: h ~ r**2 within r0, and no chord longer than r.
+            # The pair at the anchor is graded by grade_seed, never here: a
+            # point refined into it would have no iterate.
+            near_kept, r_kept = near[keep], r[keep]
+            flagged = np.flatnonzero(
+                (areas >= self.area_cutoff * near_kept**2)
+                | ((r_kept < self.near_orbit_radius) & (chords[keep] > r_kept) & ~at_anchor[keep])
+            )
         if flagged.size == 0:
             return np.empty(0, dtype=np.int64)
 

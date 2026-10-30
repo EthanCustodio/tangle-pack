@@ -347,7 +347,9 @@ _SAVED: dict[type, frozenset[str]] = {
         "_next_sid", "_edge_to_sid", "_store", "_seg_lookup", "_manifold_segs", "_seg_manifolds",
         "_query_edges", "_intersecting_segments", "_processed_pairs",
     }),
-    ManifoldMachine: frozenset({"area_cutoff", "max_points_per_step", "points_created", "max_abs_coord"}),
+    ManifoldMachine: frozenset({
+        "area_cutoff", "max_points_per_step", "points_created", "max_abs_coord", "near_orbit_radius",
+    }),
     ResonanceZone: frozenset({
         "fixed_point", "stable_branch_key", "boundary_intersection", "cut_intersections",
         "intersection_ids", "previous_tails", "boundary_arcs", "boundary_vertices",
