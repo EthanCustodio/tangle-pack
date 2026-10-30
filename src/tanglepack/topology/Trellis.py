@@ -93,10 +93,12 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 #: Relative accuracy of the canonical-distance scaling law against the iterate
-#: table. A canonical distance is an arc length measured on a POLYLINE, and two
-#: branches of one orbit are refined independently, so ``c * per_step_beta ** n``
-#: reproduces the recorded image only to the discretisation error of the two
-#: curves -- 1.35e-3 at worst across the repository's fixtures, not the
+#: table. A canonical distance is a PRODUCT, not an arc length: the seed's
+#: distance scaled by the curve's own stretch one map step at a time and
+#: interpolated between nodes on a POLYLINE. The stretch differs from
+#: ``per_step_beta`` and two branches of one orbit are refined independently, so
+#: ``c * per_step_beta ** n`` reproduces the recorded image only to the
+#: discretisation error of the two curves -- 1.35e-3 at worst across the repository's fixtures, not the
 #: registry's 1e-6 ``cdist_tol``. This is the AGREEMENT bound: what a test
 #: comparing a derived distance against a registered one may demand, set an
 #: order of magnitude above the observed error.
@@ -934,8 +936,8 @@ class Trellis:
 
         The derived answer is exact for the true crossing -- canonical distance
         is the linearising coordinate the eigenvalue scales -- but the two cdists
-        it is computed from are arc lengths on independently refined polylines,
-        so it reproduces the table's value only to :data:`SCALING_RTOL`
+        it is computed from are products of each curve's own stretch,
+        interpolated on independently refined polylines, so it reproduces the table's value only to :data:`SCALING_RTOL`
         (about 1e-3 on the repository's fixtures), NOT to the registry's
         ``cdist_tol``. Callers that compare a derived distance against a
         registered one must budget for that.
