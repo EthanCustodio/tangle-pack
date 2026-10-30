@@ -320,7 +320,9 @@ _SAVED: dict[type, frozenset[str]] = {
         "_growth_stats", "_reported_flags", "_reported_artifacts", "_registry_id_epoch", "_bridge_id_epoch",
         "_mutations", "_generation", "_generation_state", "escape_radius", "resolution_ratio_threshold",
     }),
-    PointStore: frozenset({"_xy", "_cdist", "_image", "_preimage", "_chain", "_position", "_n", "chains"}),
+    PointStore: frozenset({
+        "_xy", "_cdist", "_cdist_lo", "_image", "_preimage", "_chain", "_position", "_n", "chains",
+    }),
     Chain: frozenset({"store", "index", "ids", "stretch_param", "anchor"}),
     FixedPoint: frozenset({
         "period", "branch_points", "_slots", "coordinates", "unstable_eigenvectors", "unstable_eigenvalues",
@@ -341,7 +343,7 @@ _SAVED: dict[type, frozenset[str]] = {
     Intersection: frozenset({
         "id", "label", "coords", "unstable_cdist", "stable_cdist", "seg_ids", "manifold_a_key",
         "manifold_b_key", "unstable_manifold", "unstable_segment", "stable_segment", "store",
-        "crossing_sign", "resolution_ratio", "chord_deviation",
+        "crossing_sign", "resolution_ratio", "chord_deviation", "unstable_cdist_lo", "stable_cdist_lo",
     }),
     Tangle: frozenset({
         "_next_sid", "_edge_to_sid", "_store", "_seg_lookup", "_manifold_segs", "_seg_manifolds",
@@ -375,7 +377,7 @@ _NOT_SAVED: dict[type, frozenset[str]] = {
         "_runs_version", "_resolved_cache", "_resolved_version",
         "_orbit_clearances",  # per crossing object, read off its coords
     }),
-    Intersection: frozenset({"brackets"}),  # lazy
+    Intersection: frozenset({"brackets", "precise_brackets"}),  # lazy
     Tangle: frozenset({"_rtrees"}),  # bulk-loaded from the saved records
     ManifoldMachine: frozenset({"system", "_call_depth"}),  # the map's; zero between calls
 }
