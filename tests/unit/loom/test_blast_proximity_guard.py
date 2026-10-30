@@ -133,6 +133,7 @@ def test_resolution_separation_follows_the_area_cutoff(henon_p3_session):
     """
     session, _fp3, fp1, zone = henon_p3_session
     session.forget_strong_pip(fp1)
+    session.anchor_resolution_factor = None  # at 1e-4 the guard ends the blast first
     expected = RESOLUTION_SEPARATION * (session.area_cutoff / DEFAULT_AREA_CUTOFF) ** (2 / 3)
     result = session.blast_zone(
         zone, num_iterations=6, fixed_point=fp1, min_separation="resolution"

@@ -52,7 +52,7 @@ from .BaseManifold import BaseManifold
 from .Bridge import Bridge, BridgeId, CurveReleased
 from .BranchPoint import BranchPoint
 from .Intersection import Intersection, ManifoldKey, Stability
-from .IntersectionRegistry import DEDUP_RTOL, IntersectionRegistry
+from .IntersectionRegistry import ANCHOR_RESOLUTION_FACTOR, DEDUP_RTOL, IntersectionRegistry
 from .IterateInference import infer_iterates
 from .diagnostics import (
     ResolutionReport,
@@ -169,6 +169,8 @@ class TangleWorkbench:
         resolution_ratio_threshold: Part of the definition of N: a detection
             whose resolution ratio is below it is no crossing (see the
             constructor).
+        anchor_resolution_factor: Clause 3 of N, the near-anchor guard (see
+            :attr:`anchor_resolution_factor`).
 
     Note:
         Bridge iteration and iterate-table inference are delegated to
@@ -213,6 +215,7 @@ class TangleWorkbench:
         workers: int = 1,
         map_executor: MapExecutor = "thread",
         resolution_ratio_threshold: Optional[float] = 3.0,
+        anchor_resolution_factor: Optional[float] = ANCHOR_RESOLUTION_FACTOR,
     ) -> None:
         """
         Build an empty workbench around one dynamical system.
@@ -251,6 +254,12 @@ class TangleWorkbench:
                 every detection pass and every trellis built afterwards: after
                 changing it on a workbench that holds crossings, run
                 :meth:`compute_intersections` to re-cut.
+            anchor_resolution_factor (Optional[float]): Clause 3 of N, the
+                near-anchor guard: a detection within this many chord
+                deviations of its orbit point is out of N (see
+                :attr:`anchor_resolution_factor`);
+                :data:`~.IntersectionRegistry.ANCHOR_RESOLUTION_FACTOR` (5) by
+                default, None turns it off.
         """
 
         self.dynamical_system = DynamicalSystem(
@@ -284,7 +293,9 @@ class TangleWorkbench:
         # manifolds are keyed like (fixed_point, stability, orbit_index, branch_index)
         self._manifolds: dict[tuple[FixedPoint, Stability, int, int], BaseManifold] = {}
 
-        self._intersection_registry = IntersectionRegistry()
+        self._intersection_registry = IntersectionRegistry(
+            anchor_resolution_factor=anchor_resolution_factor
+        )
         self.resolution_ratio_threshold = resolution_ratio_threshold
         # What report_resolution has already logged, so a repeated pass (a zone
         # recompute, the next blast) only speaks about NEW findings: the flagged
@@ -357,6 +368,27 @@ class TangleWorkbench:
     @max_points_per_step.setter
     def max_points_per_step(self, value: Optional[int]) -> None:
         self._man_machine.max_points_per_step = value
+
+    @property
+    def anchor_resolution_factor(self) -> Optional[float]:
+        """
+        Clause 3 of N, the near-anchor guard (design note §A.2).
+
+        A detection is no crossing of N when it lies within this many chord
+        deviations of the orbit point of either of its branches. Near the
+        orbit point the polyline's error on the contraction of the pip orbit
+        is about ``h / d``, so a closer detection would be a level of the
+        orbit that does not contract like the real one. ``h`` is floored at
+        the xy resolution near the point (:func:`.geometry.xy_resolution`).
+        None turns it off. The registry holds it, so every reader of N reads
+        the same set; after changing it on a workbench that holds bridges,
+        run :meth:`compute_intersections` to re-cut.
+        """
+        return self._intersection_registry.anchor_resolution_factor
+
+    @anchor_resolution_factor.setter
+    def anchor_resolution_factor(self, value: Optional[float]) -> None:
+        self._intersection_registry.anchor_resolution_factor = value
 
     # ── cores ────────────────────────────────────────────────────────────────
 
@@ -1381,7 +1413,9 @@ class TangleWorkbench:
                     len(old_registry),
                 )
             self.Tangle.clear_all()
-            self._intersection_registry = IntersectionRegistry()
+            self._intersection_registry = IntersectionRegistry(
+                anchor_resolution_factor=old_registry.anchor_resolution_factor
+            )
             # The registry object itself changed; its own generation restarts at
             # zero, so the swap has to be recorded here or the two could cancel.
             self._bump_generation()
@@ -1455,7 +1489,8 @@ class TangleWorkbench:
 
         Returns:
             The registered detections that are not crossings of N (below
-            :attr:`resolution_ratio_threshold`, or in a run) and every
+            :attr:`resolution_ratio_threshold`, in a run, or too near their
+            orbit point) and every
             same-stability polyline crossing
             (:func:`~.diagnostics.same_stability_crossings`). Neither feeds any
             reliability verdict; the unresolved detections are already out of N
@@ -1571,6 +1606,12 @@ class TangleWorkbench:
                 clauses.append(
                     f"in a run with {partner}, the nearest detection "
                     f"{registry.run_separation(iid):.3g} away along the polyline (clause 2)"
+                )
+            factor = registry.anchor_resolution_factor
+            clearance = registry.orbit_clearance(iid)
+            if factor is not None and clearance is not None and clearance < factor:
+                clauses.append(
+                    f"{clearance:.3g} chord deviations from its orbit point, below {factor:.3g} (clause 3)"
                 )
             lines.append(
                 f"  {iid} at ({ix.coords[0]:.12g}, {ix.coords[1]:.12g}): ratio "

@@ -74,7 +74,7 @@ from .BranchPoint import BranchPoint
 from .Bridge import Bridge
 from .FixedPoint import FixedPoint
 from .Intersection import Intersection, ManifoldKey
-from .IntersectionRegistry import IntersectionRegistry
+from .IntersectionRegistry import ANCHOR_RESOLUTION_FACTOR, IntersectionRegistry
 from .PointStore import Chain
 from .Tangle import _Segment, _segment_index
 from .budget import GrowthStats
@@ -446,7 +446,7 @@ def _save_bookkeeping(workbench: TangleWorkbench, encoder: Encoder, meta: dict, 
         [artifact[3] for artifact in artifacts], dtype=np.float64).reshape(-1, 2)
     arrays["settings"], meta["workbench"]["settings_types"] = typed_floats([
         machine.area_cutoff, workbench.escape_radius, workbench.resolution_ratio_threshold,
-        machine.max_abs_coord,
+        machine.max_abs_coord, workbench.anchor_resolution_factor,
     ])
 
 
@@ -813,9 +813,13 @@ def _load_bookkeeping(workbench: TangleWorkbench, decoder: Decoder, meta: dict, 
     workbench._generation_state = None if state is None else (state[0], state[1], tuple(state[2]))
 
     machine = workbench._man_machine
-    area_cutoff, escape_radius, threshold, max_abs_coord = floats_of(
-        arrays["settings"], saved["settings_types"])
+    # The last setting is optional (2026-10-29): an earlier format-1 file has
+    # four and loads the default guard.
+    area_cutoff, escape_radius, threshold, max_abs_coord, anchor_factor = (
+        floats_of(arrays["settings"], saved["settings_types"]) + [ANCHOR_RESOLUTION_FACTOR]
+    )[:5]
     machine.area_cutoff, machine.max_points_per_step = area_cutoff, saved["max_points_per_step"]
     machine.points_created, machine.max_abs_coord = saved["points_created"], max_abs_coord
     workbench.escape_radius = escape_radius
     workbench.resolution_ratio_threshold = threshold
+    workbench.anchor_resolution_factor = anchor_factor

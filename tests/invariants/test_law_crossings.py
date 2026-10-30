@@ -4,7 +4,9 @@ Only an unstable manifold can cross a stable one (CLAUDE.md, "Fundamental
 invariant"): every registered crossing is one unstable key times one stable
 key, and no two unstable (or two stable) curves cross geometrically, within
 one branch, across branches or across fixed points. A crossing's cdists are
-defined and bracketed by the segment it was found on, its sign is the cross
+defined and bracketed by the segment it was found on, every crossing of N
+clears the near-anchor guard (clause 3: at least ``c h`` from its orbit
+points), its sign is the cross
 product of the two increasing-cdist directions, and every registered ``+1``
 link scales each cdist by the ``per_step_beta`` of its own saddle (so a
 homoclinic link preserves the canonical area and a heteroclinic one scales it

@@ -335,6 +335,7 @@ _SAVED: dict[type, frozenset[str]] = {
         "_store", "_next_id", "cdist_tol", "iterate_table", "unresolved_links", "_generation",
         "_orders_version", "_unstable_order", "_stable_order",
         "_unstable_keys", "_stable_keys",  # the saved crossings' cdists in the saved orders
+        "anchor_resolution_factor",  # a workbench setting
     }),
     IterateTable: frozenset({"_forward", "_backward"}),
     Intersection: frozenset({
@@ -370,6 +371,7 @@ _NOT_SAVED: dict[type, frozenset[str]] = {
     IntersectionRegistry: frozenset({  # caches, each behind its version counter
         "_rank_maps", "_rank_version", "_stable_branch_index", "_stable_branch_version", "_runs_cache",
         "_runs_version", "_resolved_cache", "_resolved_version",
+        "_orbit_clearances",  # per crossing object, read off its coords
     }),
     Intersection: frozenset({"brackets"}),  # lazy
     Tangle: frozenset({"_rtrees"}),  # bulk-loaded from the saved records

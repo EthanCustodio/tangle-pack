@@ -82,6 +82,7 @@ def polyline_workbench(
     curves: Mapping[tuple, Sequence[Sequence[float]]],
     *,
     resolution_ratio_threshold: Optional[float] = 3.0,
+    anchor_resolution_factor: Optional[float] = None,
 ) -> TangleWorkbench:
     """
     A workbench holding hand-placed curves of one fixed point.
@@ -90,13 +91,20 @@ def polyline_workbench(
         fixed_point: The curves' fixed point (see ``helpers.fakes.bare_fixed_point``).
         curves: Manifold key -> polyline vertices.
         resolution_ratio_threshold: Passed to the workbench.
+        anchor_resolution_factor: Passed to the workbench. None by default:
+            hand-placed curves put their fixed point anywhere (the origin) and
+            their coarse polylines near it, so clause 3 of N is off unless a
+            test of it asks for it.
 
     Returns:
         The workbench, nothing computed yet.
     """
     identity = lambda point: point  # noqa: E731 - the map is never called
     workbench = TangleWorkbench(
-        identity, identity, resolution_ratio_threshold=resolution_ratio_threshold
+        identity,
+        identity,
+        resolution_ratio_threshold=resolution_ratio_threshold,
+        anchor_resolution_factor=anchor_resolution_factor,
     )
     workbench.fixed_points.append(fixed_point)
     for key, points in curves.items():

@@ -27,6 +27,7 @@ from helpers.fakes import bare_fixed_point
 from tanglepack import TangleSession, TangleWorkbench
 from tanglepack.examples import HENON_K10, henon_map, henon_map_inverse
 from tanglepack.numerics import persist
+from tanglepack.numerics.IntersectionRegistry import ANCHOR_RESOLUTION_FACTOR
 from tanglepack.numerics.budget import PointBudgetExceeded
 from tanglepack.numerics.PointStore import PointStore
 
@@ -81,6 +82,7 @@ def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
     workbench.max_points_per_step = 10
     workbench.escape_radius = 7.5
     workbench.resolution_ratio_threshold = 2.5
+    workbench.anchor_resolution_factor = 7.5
     for bridge in workbench.bridges:
         try:
             workbench.iterate_bridge(bridge)
@@ -93,12 +95,32 @@ def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
     workbench.save(tmp_path / "k10")
 
     loaded = _load(workbench, tmp_path / "k10")
-    settings = ("area_cutoff", "max_points_per_step", "escape_radius", "resolution_ratio_threshold")
+    settings = ("area_cutoff", "max_points_per_step", "escape_radius", "resolution_ratio_threshold",
+                "anchor_resolution_factor")
     assert [getattr(loaded, name) for name in settings] == [getattr(workbench, name) for name in settings]
     assert loaded.intersection_registry.unresolved_links == workbench.intersection_registry.unresolved_links
     assert {bridge.id for bridge in loaded._half_iterated_bridges} == abandoned
     with pytest.raises(RuntimeError, match="half-refined"):
         loaded.iterate_bridge(loaded.bridge(next(iter(abandoned))))
+
+
+def test_a_format_1_save_without_the_guard_settings_loads_the_defaults(tmp_path):
+    # Saves written before 2026-10-29 hold four settings: the near-anchor guard
+    # is an optional addition to format 1.
+    workbench = build_k10().workbench
+    workbench.anchor_resolution_factor = 7.5
+    workbench.save(tmp_path / "k10")
+    meta_path, arrays_path = tmp_path / "k10.json", tmp_path / "k10.npz"
+    meta = json.loads(meta_path.read_text())
+    meta["workbench"]["settings_types"] = meta["workbench"]["settings_types"][:4]
+    meta_path.write_text(json.dumps(meta))
+    with np.load(arrays_path) as saved:
+        arrays = dict(saved)
+    arrays["settings"] = arrays["settings"][:4]
+    np.savez(arrays_path, **arrays)
+
+    loaded = _load(workbench, tmp_path / "k10")
+    assert loaded.anchor_resolution_factor == ANCHOR_RESOLUTION_FACTOR
 
 
 def test_an_object_array_is_refused(tmp_path):

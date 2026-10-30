@@ -128,8 +128,13 @@ def test_an_unresolved_detection_is_on_no_trellis_branch():
 
 @pytest.mark.parametrize("name", LAW_CASES)
 def test_every_law_case_crossing_is_in_n(name: str) -> None:
-    """The law cases are resolved, so N is the whole registry and the rule moves nothing there."""
+    """The law cases are resolved, so clauses 1 and 2 move nothing there.
+
+    Clause 3, the near-anchor guard, is checked by its own law (the crossings
+    layer); here it is off, so the test reads clauses 1 and 2 alone.
+    """
     case = BUILDERS[name]()
+    case.registry.anchor_resolution_factor = None
     assert case.registry.unresolved_crossings(case.workbench.resolution_ratio_threshold) == []
 
 

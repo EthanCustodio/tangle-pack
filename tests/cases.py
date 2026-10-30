@@ -79,7 +79,9 @@ Cases:
   straddling each other: the resolution guards' positive case. NOT a law case.
 * ``k28_deep_blast_sliver`` -- ``k28`` from the analytic seed, blasted nine
   times: a crossing sits a sliver narrower than ``2 * cdist_tol`` past the pip
-  (stress campaign E11, 2026-10-07; the exact-ownership regression).
+  (stress campaign E11, 2026-10-07; the exact-ownership regression). The blasts
+  run with clause 3 of N off: the near-anchor guard (2026-10-29) ends the pip
+  orbit before the ninth blast makes the sliver.
 
 The blast series (:data:`SERIES`, :func:`blast_series`) run the D1 loop --
 blast once, recompute the topology from scratch, compare -- from the zone
@@ -456,6 +458,28 @@ def build_k28(
     )
 
 
+def build_k28_deep_blast_sliver() -> Case:
+    """
+    ``k28`` from the analytic seed, blasted nine times with clause 3 of N off.
+
+    The sliver past the pip (stress campaign E11) is made by the ninth blast,
+    which the near-anchor guard (2026-10-29) never reaches: it ends the pip
+    orbit first. The build is :func:`build_k28` otherwise.
+
+    Returns:
+        The partitioned case.
+    """
+    case = build_k28(blasts=0, through="zones", seed=K28_ANALYTIC_SADDLE_SEED)
+    session, (fp,), (zone,) = case.session, case.fixed_points, case.zones
+    session.anchor_resolution_factor = None
+    for _ in range(9):
+        _blast(session, zone, [fp])
+    session.topology()
+    case.name, case.stage = "k28_9_blasts", "partitioned"
+    case.expect = CaseExpect(periods=(1,), area_cutoff=1e-7, blasts=9)
+    return case
+
+
 def build_k32_zone() -> Case:
     """
     The ``k=3.2`` saddle by the ``k28`` recipe, from its analytic seed (E11's
@@ -579,7 +603,8 @@ def build_period3_coarse_blasts(*, blasts: int = 6, area_cutoff: float = 1e-5) -
     the crossing signs (NUM-1). Their ends have resolution ratios near 1, so the
     blasts run with clause 1 of N off (``resolution_ratio_threshold = None``):
     under the default threshold those detections are outside N (Q13 a, B1) and
-    no hole bridge is that coarse.
+    no hole bridge is that coarse. Clause 3 is off too (2026-10-29): at 1e-5 the
+    near-anchor guard stops the coarse blasts before they make such a bridge.
 
     Args:
         blasts: Single-iteration blasts of the zone.
@@ -592,6 +617,7 @@ def build_period3_coarse_blasts(*, blasts: int = 6, area_cutoff: float = 1e-5) -
     session = case.session
     session.area_cutoff = area_cutoff
     session.workbench.resolution_ratio_threshold = None
+    session.anchor_resolution_factor = None
     (zone,) = case.zones
     for _ in range(blasts):
         session.blast_zone(
@@ -1317,7 +1343,7 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         ),
         "p3_coarse_blasts": build_period3_coarse_blasts,
         "near_tangency": build_near_tangency,
-        "k28_deep_blast_sliver": lambda: build_k28(blasts=9, seed=K28_ANALYTIC_SADDLE_SEED),
+        "k28_deep_blast_sliver": build_k28_deep_blast_sliver,
     }
 )
 

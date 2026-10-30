@@ -562,6 +562,27 @@ def check_crossings_cdists_defined(case: "Case") -> int:
     return count
 
 
+def check_crossings_of_n_clear_the_anchor_guard(case: "Case") -> int:
+    """Clause 3 of N: every crossing of N lies at least ``c h`` from the orbit points of its two branches."""
+    factor = case.workbench.anchor_resolution_factor
+    if factor is None:
+        return 0
+    registry = case.registry
+    count = 0
+    for iid in registry.resolved_ids(case.workbench.resolution_ratio_threshold):
+        ix = registry[iid]
+        if ix.is_synthetic:
+            continue
+        for key in (ix.manifold_a_key, ix.manifold_b_key):
+            point = np.asarray(key[0].coordinates[key[2]])
+            distance = float(np.hypot(*(np.asarray(ix.coords) - point)))
+            # The deviation is floored at the xy resolution near the point.
+            deviation = max(ix.chord_deviation, 64 * np.finfo(float).eps * max(1.0, float(np.abs(point).max())))
+            assert distance >= factor * deviation, (iid, key[1:], distance, ix.chord_deviation)
+        count += 1
+    return count
+
+
 def check_crossing_cdist_bracketed(case: "Case") -> int:
     """A crossing's unstable cdist lies between the cdists of the segment it was found on."""
     tol = _tol(case)
@@ -3189,6 +3210,7 @@ LAYERS: dict[str, list[LawCheck]] = {
         check_crossings_unstable_by_stable,
         check_no_same_stability_crossing,
         check_crossings_cdists_defined,
+        check_crossings_of_n_clear_the_anchor_guard,
         check_crossing_cdist_bracketed,
         check_crossing_sign_is_cross_product,
         check_area_along_iterate_links,

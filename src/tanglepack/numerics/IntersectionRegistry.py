@@ -10,7 +10,26 @@ It also decides which detections are crossings of N (design note §A.2): every
 detection is registered, and :meth:`IntersectionRegistry.resolved_ids` keeps the
 ones the polylines resolve. A run of detections closer along the unstable
 polyline than their chord deviation is judged over the WHOLE registry, because
-on the blast path one run can straddle two ``iterate_bridge`` calls.
+on the blast path one run can straddle two ``iterate_bridge`` calls. The
+near-anchor guard (clause 3) keeps a detection out of N when it sits within
+:attr:`IntersectionRegistry.anchor_resolution_factor` chord deviations of its
+orbit point.
+
+Dev Notes:
+
+Clause 3 had a second half in the plan of 2026-10-29: a detection closer to its
+stable-order neighbour (same stable branch, same or node-sharing stable
+segment) than ``c * max(h_a, h_b)`` along the stable polyline, both of the pair
+out. It is not part of N. Measured on the branch: it takes out real,
+well-resolved crossings (ratio 4000-6000) of a tight fold on the heteroclinic
+law case, three on one unstable curve, and a crossing of the original trellis
+(k28 series, blast 7: the crossing between ``q0`` and ``f(q0)``, whose stable
+neighbour is a deep blast crossing of another curve). Either way an unstable
+arc loses an odd number of crossings, so a bridge spans a real crossing: the
+arrangement's regions overlap, the heteroclinic case loses its heteroclinic
+crossings and a hole bridge's crossing signs stop alternating (an assertion).
+The pip orbit is stopped by the first half alone (the scout's ``d / h``
+table). Whether a pair rule comes back, and in what form, is the author's call.
 """
 
 from __future__ import annotations
@@ -25,6 +44,7 @@ from numpy.typing import NDArray
 
 from .Intersection import Intersection, ManifoldKey, Stability
 from .IterateTable import IterateTable
+from .geometry import xy_resolution
 
 if TYPE_CHECKING:
     from .FixedPoint import FixedPoint
@@ -39,6 +59,15 @@ logger.addHandler(logging.NullHandler())
 #: an absolute 1e-6 would merge deep ones. An anchor (cdists exactly 0.0) matches
 #: only another exact 0.0 at the same periodic point.
 DEDUP_RTOL = 1e-9
+
+#: Clause 3 of N (2026-10-29): a detection nearer its orbit point than this
+#: many chord deviations is out of N. Near the
+#: orbit point ``d = |x - P|`` contracts by beta per step, and a polyline that
+#: strays ``h`` from the curve puts an error of about ``h / d`` on each step's
+#: contraction; the trust band of the registered orbit allows 20%
+#: (``TRUST_BAND`` of ``loom/Blast.py``), so ``h / d <= 1 - 0.8`` gives
+#: ``c = 1 / (1 - 0.8) = 5``.
+ANCHOR_RESOLUTION_FACTOR = 5.0
 
 
 #: Per stable branch: the sorted stable cdists, the ids, their brackets.
@@ -96,6 +125,7 @@ class IntersectionRegistry:
         registry.by_unstable_cdist               → list[int]  (sorted by u-cdist)
         registry.by_stable_cdist                 → list[int]  (sorted by s-cdist)
         registry.resolved_ids(threshold)         → frozenset[int]  (N)
+        registry.anchor_resolution_factor        → Optional[float] (clause 3)
 
     Query interface (all return list[Intersection]):
         registry.from_fixed_point(fp)            → intersections involving fp
@@ -109,6 +139,10 @@ class IntersectionRegistry:
             ``BridgeIterator``) and clipping a polyline to an arc. Never
             identity, ownership or containment (the topology reads none),
             and NOT the dedup rule, which is :data:`DEDUP_RTOL`
+        anchor_resolution_factor: Optional[float]  — clause 3 of N (see
+            :meth:`resolved_ids`); None turns it off. A workbench sets its own
+            (:data:`ANCHOR_RESOLUTION_FACTOR` by default) on every registry it
+            holds, so every reader of N reads the same set
         iterate_table: IterateTable  — a partial bijection: the map is injective
         unresolved_links: dict[int, tuple[int, ...]]  — source id -> the candidate
             images the exact rule cannot decide between (several bracketed
@@ -130,7 +164,9 @@ class IntersectionRegistry:
         or a renumbering.
     """
 
-    def __init__(self, cdist_tol: float = 1e-6) -> None:
+    def __init__(
+        self, cdist_tol: float = 1e-6, anchor_resolution_factor: Optional[float] = None
+    ) -> None:
         """
         Build an empty registry.
 
@@ -138,10 +174,14 @@ class IntersectionRegistry:
             cdist_tol (float): The absolute canonical-distance slack of
                 degenerate bridge cuts and polyline clipping (never identity,
                 and never the dedup rule; see :data:`DEDUP_RTOL`).
+            anchor_resolution_factor (Optional[float]): Clause 3 of N (see
+                :meth:`resolved_ids`); None (default for a bare registry) turns
+                it off. A workbench passes its own.
         """
         self._store: dict[int, Intersection] = {}
         self._next_id: int = 0
         self.cdist_tol = cdist_tol
+        self.anchor_resolution_factor = anchor_resolution_factor
         self.iterate_table = IterateTable()
         self.unresolved_links: dict[int, tuple[int, ...]] = {}
 
@@ -171,7 +211,11 @@ class IntersectionRegistry:
         # per threshold.
         self._runs_cache: tuple[dict[int, tuple[float, int]], dict[int, int]] = ({}, {})
         self._runs_version: int = -1
-        self._resolved_cache: dict[Optional[float], frozenset[int]] = {}
+        # Clause 3: each detection's distance to its orbit point in chord
+        # deviations, per crossing object (it never changes, and an object
+        # keeps it across a renumbering).
+        self._orbit_clearances: dict[Intersection, float] = {}
+        self._resolved_cache: dict[tuple[Optional[float], Optional[float]], frozenset[int]] = {}
         self._resolved_version: int = -1
 
     # ── generation ─────────────────────────────────────────────────────────
@@ -434,37 +478,59 @@ class IntersectionRegistry:
         """The nearest neighbour a detection forms a run with (clause 2), or None when in no run."""
         return self._runs()[1].get(id)
 
+    def orbit_clearance(self, id: int) -> Optional[float]:
+        """
+        How far a detection lies from its orbit point, in chord deviations.
+
+        Args:
+            id: A registered crossing.
+
+        Returns:
+            ``|x - P| / max(chord_deviation, xy_resolution(P))`` for the
+            nearer of the orbit points ``P`` of its two branches
+            (``key[0].coordinates[key[2]]``); None for an anchor or a
+            synthetic crossing.
+        """
+        return self._orbit_clearance(self._store[id])
+
     def resolved_ids(self, threshold: Optional[float]) -> frozenset[int]:
         """
         N: the registered crossings the polylines resolve (design note §A.2).
 
         A crossing is in N when it is synthetic, or when (clause 1) its
-        resolution ratio is at least ``threshold`` and (clause 2) it is in no
-        run. Two neighbouring detections (:meth:`run_separation`) are a run
+        resolution ratio is at least ``threshold``, (clause 2) it is in no
+        run and (clause 3) its :meth:`orbit_clearance` is at least
+        :attr:`anchor_resolution_factor` (None: clause 3 is off). Two
+        neighbouring detections (:meth:`run_separation`) are a run
         when they sit no farther apart than the LARGER of their two chord
         deviations: the pair is judged as a pair, so both are out, and a run is
-        out whole, median included. Every path that reads the registry as the
-        crossing set reads this set.
+        out whole, median included. Clause 3 is the near-anchor guard: near the
+        periodic orbit the polyline's error on the pip orbit's contraction is
+        about ``h / d`` (:data:`ANCHOR_RESOLUTION_FACTOR`). Every path that
+        reads the registry as the crossing set reads this set.
 
         Args:
             threshold: The smallest resolution ratio a crossing may have
                 (``TangleWorkbench.resolution_ratio_threshold``); None turns
-                clause 1 off, and clause 2 still applies.
+                clause 1 off, and clauses 2 and 3 still apply.
 
         Returns:
             The ids of N, cached until the stored crossings change.
         """
         if self._resolved_version != self._orders_version:
             self._resolved_cache, self._resolved_version = {}, self._orders_version
-        if threshold not in self._resolved_cache:
+        factor = self.anchor_resolution_factor
+        if (threshold, factor) not in self._resolved_cache:
             runs = self._runs()[1]
-            self._resolved_cache[threshold] = frozenset(
+            near = set() if factor is None else self._near_anchor(factor)
+            self._resolved_cache[threshold, factor] = frozenset(
                 iid
                 for iid, ix in self._store.items()
                 if iid not in runs
+                and iid not in near
                 and (threshold is None or ix.resolution_ratio is None or ix.resolution_ratio >= threshold)
             )
-        return self._resolved_cache[threshold]
+        return self._resolved_cache[threshold, factor]
 
     def unresolved_crossings(self, threshold: Optional[float]) -> list[int]:
         """
@@ -475,12 +541,34 @@ class IntersectionRegistry:
 
         Returns:
             The complement of :meth:`resolved_ids`, in unstable cdist order:
-            the detections below ``threshold`` (clause 1) and every member of
-            every run (clause 2). Anchors and synthetic crossings are never
-            listed.
+            the detections below ``threshold`` (clause 1), every member of
+            every run (clause 2) and every detection too near its orbit point
+            (clause 3). Anchors and synthetic crossings are never listed.
         """
         resolved = self.resolved_ids(threshold)
         return [iid for iid in self._unstable_order if iid not in resolved]
+
+    def _near_anchor(self, factor: float) -> set[int]:
+        """The detections clause 3 takes out of N at this factor."""
+        return {
+            iid for iid, ix in self._store.items()
+            if (clearance := self._orbit_clearance(ix)) is not None and clearance < factor
+        }
+
+    def _orbit_clearance(self, ix: Intersection) -> Optional[float]:
+        """:meth:`orbit_clearance` of one crossing object, memoised on it."""
+        if ix.is_synthetic or ix.chord_deviation is None:
+            return None
+        if ix not in self._orbit_clearances:
+            xy = np.asarray(ix.coords, dtype=float)
+            # Floored at the xy resolution: a polyline graded down to it
+            # (near_orbit_radius) places nothing nearer its orbit point than that.
+            self._orbit_clearances[ix] = min(
+                float(np.hypot(*(xy - point))) / max(ix.chord_deviation, xy_resolution(point))
+                for point in (np.asarray(key[0].coordinates[key[2]], dtype=float)
+                              for key in (ix.manifold_a_key, ix.manifold_b_key))
+            )
+        return self._orbit_clearances[ix]
 
     def _runs(self) -> tuple[dict[int, tuple[float, int]], dict[int, int]]:
         """Per detection its nearest neighbour ``(separation, id)``, and per run member its partner.

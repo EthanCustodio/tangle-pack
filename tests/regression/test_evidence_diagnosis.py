@@ -114,6 +114,7 @@ def test_an_order_flip_gives_no_verdict(caplog):
     case = build_k28(blasts=0, through="zones")
     session, (fp,), (zone,) = case.session, case.fixed_points, case.zones
     session.workbench.resolution_ratio_threshold = None
+    session.anchor_resolution_factor = None  # the guard ends the orbit before the ninth blast
     for _ in range(9):
         session.blast_zone(
             zone, num_iterations=1, fixed_point=[fp], min_separation=ZONE_MIN_SEPARATION

@@ -424,3 +424,20 @@ def chord_deviation_batch(
     length = xp.hypot(*(xp.asarray(p1, dtype=float) - xp.asarray(p0, dtype=float)).T)
     with np.errstate(divide="ignore", invalid="ignore"):
         return xp.where(length > 0.0, 1.5 * area / length, 0.0)
+
+
+def xy_resolution(points: NDArray[np.float64]) -> float:
+    """
+    The smallest distance float64 coordinates resolve near ``points``: ``64 eps max(1, |x|)``.
+
+    Below it two points near an orbit point are one point; the graded mesh
+    near the orbit stops there and the near-anchor guard of N floors its chord
+    deviation at it (2026-10-29).
+
+    Args:
+        points: The orbit points, any shape.
+
+    Returns:
+        The resolution.
+    """
+    return 64 * float(np.finfo(np.float64).eps) * max(1.0, float(np.abs(np.asarray(points)).max()))

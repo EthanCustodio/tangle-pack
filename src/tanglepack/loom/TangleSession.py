@@ -244,6 +244,15 @@ class TangleSession:
         self.workbench.escape_radius = value
 
     @property
+    def anchor_resolution_factor(self) -> Optional[float]:
+        """The workbench's near-anchor guard, clause 3 of N (read and set through)."""
+        return self.workbench.anchor_resolution_factor
+
+    @anchor_resolution_factor.setter
+    def anchor_resolution_factor(self, value: Optional[float]) -> None:
+        self.workbench.anchor_resolution_factor = value
+
+    @property
     def workers(self) -> int:
         """The workbench's core count (read and set through)."""
         return self.workbench.workers
