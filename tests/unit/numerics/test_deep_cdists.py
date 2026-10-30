@@ -71,3 +71,12 @@ def test_a_cut_between_tied_crossings_runs_in_precise_order():
     rows = unstable.ids
     assert bridge.id == (left.id, right.id)
     assert (bridge.root.id, bridge.tail.id) == (rows[1], rows[4])
+
+
+def test_a_synthetic_crossing_has_no_brackets_and_a_zero_residual():
+    """An anchor carries no segment: neither bracket reading has one, and its key is (0, 0)."""
+    from tanglepack import Intersection
+
+    anchor = Intersection.synthetic(coords=(0.0, 0.0), unstable_cdist=0.0, stable_cdist=0.0)
+    assert anchor.brackets is None and anchor.precise_brackets is None
+    assert anchor.cdist_key("unstable") == anchor.cdist_key("stable") == (0.0, 0.0)
