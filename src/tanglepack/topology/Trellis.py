@@ -98,8 +98,8 @@ logger.addHandler(logging.NullHandler())
 #: interpolated between nodes on a POLYLINE. The stretch differs from
 #: ``per_step_beta`` and two branches of one orbit are refined independently, so
 #: ``c * per_step_beta ** n`` reproduces the recorded image only to the
-#: discretisation error of the two curves -- 1.35e-3 at worst across the repository's fixtures, not the
-#: registry's 1e-6 ``cdist_tol``. This is the AGREEMENT bound: what a test
+#: discretisation error of the two curves -- 1.35e-3 at worst across the
+#: repository's fixtures, not the registry's 1e-6 ``cdist_tol``. This is the AGREEMENT bound: what a test
 #: comparing a derived distance against a registered one may demand, set an
 #: order of magnitude above the observed error.
 SCALING_RTOL = 1e-2
