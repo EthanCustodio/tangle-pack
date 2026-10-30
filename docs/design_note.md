@@ -113,7 +113,7 @@ old-to-new map (`TangleWorkbench.release_curves`, A.10).
 PRODUCT, never an arc-length sum: the seed's Euclidean distance, scaled by the chain's stretch one map
 step at a time (`stretch * c`, the graded seed's `scale * c`), averaged by refinement
 (`0.5 * (c0 + c1)`) and interpolated at a separator or a crossing (`(1 - t) * ca + t * cb`). Deep in a
-blast it reaches 6e12 with neighbours `dc / c` below float eps, where plain floats tie. The store
+blast it reaches 3e13 with neighbours `dc / c` below float eps, where plain floats tie. The store
 keeps beside the plain float a residual column, `cdist_lo`: what each of those expressions' rounding
 dropped (`numerics/precise.py`: error-free `two_sum` and fma-free `two_prod`, so `hi` is the plain
 expression bit for bit and `hi + lo` carries about 32 digits; 0.0 for a seed row and the
@@ -121,15 +121,19 @@ initializer's fictitious tails, NaN with no cdist; 8 bytes a row). `PointStore.p
 one reader; `Intersection` carries `unstable_cdist_lo` / `stable_cdist_lo` and `cdist_key(stability)`,
 the normalised pair, and topology reads it through `Trellis.cdist_key` (a scaled cdist is
 `(c, 0.0)`). The precise value orders and compares crossings: the registry orders and dedup, the
-iterate inference's carried brackets (`dd_mul` / `dd_div`; `BRACKET_PAD` stays 1e-12: at 1e-24 the k=2.8 deep-blast sliver build links three crossings fewer), the bridge cut and
-the `_register_bridge` checks, each branch's crossing order, the pip-orbit cuts, the hole bridge's
-ends, the containing bridge, the pseudoneighbor intervals and the strong-pip box. The PLAIN float
-still orders the merge, its run cuts and the chain check (a precise merge keeps 17 plain ties the
-zipper drops on the k=2.8 one-blast build and reorders neighbours one ULP apart on the k=2.8 and
-inversion builds: a change of what is computed, the author's to make), the crossing sign (the
-segment's chain order), the stable partition's intervals and ownership, and the dual-graph nodes.
-Scaled cdists and plotting stay float. Save format 2 holds the residuals; a format-1 save loads with
-0.0.
+iterate inference's carried brackets (`dd_mul` / `dd_div`), the bridge cut and the
+`_register_bridge` checks, each branch's crossing order, the pip-orbit cuts, the hole bridge's ends,
+the containing bridge, the pseudoneighbor intervals and the strong-pip box. `BRACKET_PAD` stays
+1e-12: at 1e-24 the k=2.8 deep-blast sliver build links three crossings fewer, so the carry does
+not meet every image to double-double precision. The PLAIN float still orders the merge, its run
+cuts and the chain check (a precise merge keeps 17 plain ties the zipper drops on the k=2.8
+one-blast build and reorders neighbours one ULP apart on the k=2.8 and inversion builds: a change
+of what is computed, the author's to make), the crossing sign (the segment's chain order), the
+stable partition's intervals and ownership, and the dual-graph nodes. Scaled cdists and plotting
+stay float. Save format 2 holds the residuals; a format-1 save loads with 0.0. On the unguarded
+k=2.5 scale series at 1e-7 (`near_orbit_radius = 1e-3`, `min_separation=None`) neighbours first tie
+as plain floats at blast 10 (8 ties; 773 at blast 15, 9.1M rows); the residuals tell every one of
+them apart, and none runs against the chain.
 
 **Implemented by.** `ManifoldInitializer.construct_kevin_way`, `ManifoldMachine.iterate_manifold`,
 `ManifoldMachine._image_chains`, `TangleWorkbench.grow_n_times`, `TangleWorkbench.grow_until_bounded`,

@@ -1331,3 +1331,19 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   pip end + mesh (r0 = 1e-3) 18 / 18 at both cutoffs, ended by the xy-resolution floor (d = 2.8e-13), blast 51 s / 103 s
   against base 76 s / 98 s, plateau points 2.10M / 5.33M against 2.18M / 5.10M. Identity probe: knobs off identical on all
   62 builds; defaults differ only on `k32_series` from blast 7 and `nested_outer_series` from blast 8 (shallower pip orbit).
+
+## 2026-10-30 — Run 3 `cdist-precision` of the deeper-blasts campaign (/refactor; branch `refactor/cdist-precision`, base `da963fb`)
+
+- **The author's choice (plan):** the residual column. The float `cdist` column stays, computed exactly as before;
+  a float64 `cdist_lo` beside it holds what the rounding dropped, so the precise value is the double-double
+  `cdist + cdist_lo` (`numerics/precise.py`, each kernel's `hi` the old float expression bit for bit). Plain cdists,
+  merges and the public API (`cdist`, `get_cdist_array`) are unchanged; 8 bytes a row; save format 2, format 1
+  loading with residual 0.0.
+- **Readers left on the plain float, measured or forced:** (1) the merge, its run cuts and the chain check: a precise
+  merge keeps the 17 plain ties the zipper drops on the k=2.8 one-blast build (cdist 1 to 36, the two points 4e-5 to
+  9e-3 apart) and reorders neighbours one ULP apart (4 on k=2.8, 1 on the inversion builds), which changes the law
+  cases; switching it is the author's decision. (2) The crossing sign: a precise reading flips one sign of the k=2.8
+  series at blast 7, on a stable segment whose ends are one ULP apart. (3) `BRACKET_PAD` stays 1e-12: 1e-24 left the
+  identity probe unchanged but linked three crossings fewer on the k=2.8 deep-blast sliver build (422 -> 418
+  crossings). (4) Partition ownership and the dual-graph walks: their intervals and nodes hold plain floats
+  (`intervals_from_marks`, `PartitionFamily`, `DualGraph`, outside the run's files).
