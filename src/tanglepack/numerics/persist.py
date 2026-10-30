@@ -12,7 +12,9 @@ What is saved is the workbench's whole state: lists and dicts in their insertion
 orders, sets sorted (a set's iteration order is its hash table's, not state):
 
 * the :class:`~.PointStore.PointStore` (written rows, capacity) and every chain,
-  retired ones included;
+  retired ones included; the cdist residuals (:mod:`~.precise`) of the rows and
+  of the crossings since format 2 (2026-10-30), a format-1 save loading with
+  residual 0.0;
 * the fixed points with their eigendata and slot tables, each array field in
   the container it was set as (the solver leaves ``coordinates`` a
   ``(period, 2)`` ndarray, the other fields are lists of rows);
@@ -87,7 +89,9 @@ if TYPE_CHECKING:
 #: of another format is refused rather than misread. The law
 #: ``test_a_load_restores_every_attribute`` fails when a class the save covers
 #: gains an attribute this module does not save.
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+#: The formats a load reads: format 1 holds no cdist residuals, read as 0.0.
+READ_FORMATS = (1, FORMAT_VERSION)
 #: How many linked rows :func:`check_map` maps, per direction.
 MAP_CHECK_SAMPLE = 8
 #: The relative disagreement :func:`check_map` tolerates. A link the other map
@@ -98,7 +102,7 @@ MAP_CHECK_SAMPLE = 8
 MAP_CHECK_RTOL = 1e-10
 
 STABILITIES = ("unstable", "stable")
-_STORE_COLUMNS = ("_xy", "_cdist", "_image", "_preimage", "_chain", "_position")
+_STORE_COLUMNS = ("_xy", "_cdist", "_cdist_lo", "_image", "_preimage", "_chain", "_position")
 _FIXED_POINT_ARRAYS = ("coordinates", "unstable_eigenvectors", "stable_eigenvectors", "jacobians")
 _TYPE_TAGS = {float: "f", np.float64: "d", int: "i", type(None): "-"}
 _NO_KEY = (-1, -1, -1, -1)
@@ -540,9 +544,9 @@ def read(path: str | os.PathLike) -> tuple[dict, dict[str, np.ndarray]]:
     path = os.fspath(path)
     with open(f"{path}.json") as handle:
         meta = json.load(handle)
-    if meta.get("format") != FORMAT_VERSION:
+    if meta.get("format") not in READ_FORMATS:
         raise ValueError(f"{path}.json is save format {meta.get('format')!r}; "
-                         f"this tanglepack reads format {FORMAT_VERSION}")
+                         f"this tanglepack reads format {FORMAT_VERSION} (and format 1)")
     with np.load(f"{path}.npz", allow_pickle=False) as npz:
         arrays = {name: npz[name] for name in npz.files}
     return meta, arrays
@@ -646,6 +650,8 @@ def _load_store(decoder: Decoder, meta: dict, arrays: dict) -> None:
     """The store's columns at their saved capacity, every chain, and the slots."""
     store = decoder.store
     rows = len(arrays["store_cdist"])
+    if "store_cdist_lo" not in arrays:  # format 1: no residuals
+        arrays = {**arrays, "store_cdist_lo": np.where(np.isnan(arrays["store_cdist"]), np.nan, 0.0)}
     for name in _STORE_COLUMNS:
         saved, fresh = arrays[f"store{name}"], getattr(store, name)
         column = np.empty((meta["store"]["capacity"],) + fresh.shape[1:], dtype=fresh.dtype)

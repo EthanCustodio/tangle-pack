@@ -57,9 +57,9 @@ def test_a_save_of_another_format_is_refused(tmp_path):
     workbench.save(tmp_path / "k10")
     meta_path = tmp_path / "k10.json"
     meta = json.loads(meta_path.read_text())
-    meta["format"] = 2
+    meta["format"] = 3
     meta_path.write_text(json.dumps(meta))
-    with pytest.raises(ValueError, match="format 2.*format 1"):
+    with pytest.raises(ValueError, match="format 3.*format 2"):
         _load(workbench, tmp_path / "k10")
 
 
@@ -71,7 +71,7 @@ def test_an_older_or_unversioned_save_is_refused(version, tmp_path):
     meta = json.loads(meta_path.read_text())
     meta["format"] = version
     meta_path.write_text(json.dumps(meta))
-    with pytest.raises(ValueError, match=f"format {version}.*format 1"):
+    with pytest.raises(ValueError, match=f"format {version}.*format 2"):
         _load(workbench, tmp_path / "k10")
 
 

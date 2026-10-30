@@ -1,8 +1,8 @@
 """
 The point store: every manifold point of a workbench as one row of arrays.
 
-A row holds a point's coordinates, its canonical distance and its two iterate
-links (the row of its image and of its preimage). A point is its row: no
+A row holds a point's coordinates, its canonical distance (a float and the
+residual its rounding dropped, :mod:`~.precise`) and its two iterate links (the row of its image and of its preimage). A point is its row: no
 object stands for it (N7b); a curve's end reads as an :class:`End`, a value
 built from the row's columns.
 
@@ -56,6 +56,8 @@ from typing import TYPE_CHECKING, NamedTuple, Optional
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from .precise import normalise
+
 if TYPE_CHECKING:
     from .BranchPoint import BranchPoint
     from .Intersection import Stability
@@ -64,6 +66,7 @@ if TYPE_CHECKING:
 class End(NamedTuple):
     """A curve end as a VALUE: its store row, coordinates and cdist, no links.
 
+    ``cdist`` is the plain float; ``cdist + cdist_lo`` the precise value.
     Compare two ends by ``id``: a row with no cdist reads NaN, and NaN != NaN.
     """
 
@@ -71,6 +74,7 @@ class End(NamedTuple):
     x: float
     y: float
     cdist: float
+    cdist_lo: float = 0.0
 
 
 #: Capacity grows by this factor when an append does not fit.
@@ -78,6 +82,9 @@ _GROWTH = 1.5
 
 #: ``_position`` of a row a merge left off its chain (a dropped duplicate).
 LEFT_OFF = -2
+
+#: Every column of the store, in the order a resize or a compaction copies them.
+_COLUMNS = ("_xy", "_cdist", "_cdist_lo", "_image", "_preimage", "_chain", "_position")
 
 
 class Chain:
@@ -191,8 +198,8 @@ class Chain:
 
 class PointStore:
     """
-    Append-only columns of points: xy, cdist, image row and preimage row, and
-    the chain and position of every row on a curve.
+    Append-only columns of points: xy, cdist and its residual, image row and
+    preimage row, and the chain and position of every row on a curve.
 
     Attributes:
         chains (list[Chain]): Every chain of the store, by index (retired ones
@@ -208,6 +215,7 @@ class PointStore:
         """
         self._xy = np.empty((capacity, 2))
         self._cdist = np.empty(capacity)  # NaN = no cdist (a phantom)
+        self._cdist_lo = np.empty(capacity)  # the residual: 0.0 for a seed row, NaN with no cdist
         self._image = np.empty(capacity, dtype=np.int64)  # -1 = no link
         self._preimage = np.empty(capacity, dtype=np.int64)
         self._chain = np.empty(capacity, dtype=np.int32)  # -1 = on no chain
@@ -250,7 +258,9 @@ class PointStore:
 
     # ── writers ────────────────────────────────────────────────────────────
 
-    def append(self, xy: ArrayLike, cdist: Optional[ArrayLike]) -> NDArray[np.int64]:
+    def append(
+        self, xy: ArrayLike, cdist: Optional[ArrayLike], cdist_lo: ArrayLike = 0.0
+    ) -> NDArray[np.int64]:
         """
         Appends one row per coordinate pair, with no iterate links, on no chain.
 
@@ -258,6 +268,8 @@ class PointStore:
             xy (ArrayLike): The ``(m, 2)`` coordinates.
             cdist (Optional[ArrayLike]): Their ``m`` canonical distances, or None
                 for rows without one (phantoms).
+            cdist_lo (ArrayLike): The residuals of the cdists (:mod:`~.precise`).
+                Defaults to 0.0; ignored for rows without a cdist.
 
         Returns:
             np.ndarray: The ids of the new rows, in order.
@@ -267,13 +279,14 @@ class PointStore:
         self._reserve(hi)
         self._xy[lo:hi] = xy
         self._cdist[lo:hi] = np.nan if cdist is None else cdist
+        self._cdist_lo[lo:hi] = np.nan if cdist is None else cdist_lo
         for column in (self._image, self._preimage, self._chain, self._position):
             column[lo:hi] = -1
         self._n = hi
         return np.arange(lo, hi)
 
     def append_one(
-        self, x: Optional[float], y: Optional[float], cdist: Optional[float]
+        self, x: Optional[float], y: Optional[float], cdist: Optional[float], cdist_lo: float = 0.0
     ) -> int:
         """
         Appends one row (a missing coordinate or cdist is stored as NaN).
@@ -282,6 +295,7 @@ class PointStore:
             x (Optional[float]): x-coordinate.
             y (Optional[float]): y-coordinate.
             cdist (Optional[float]): Canonical distance.
+            cdist_lo (float): Its residual. Defaults to 0.0.
 
         Returns:
             int: The id of the new row.
@@ -290,6 +304,7 @@ class PointStore:
         self._reserve(row + 1)
         self._xy[row] = (np.nan if x is None else x, np.nan if y is None else y)
         self._cdist[row] = np.nan if cdist is None else cdist
+        self._cdist_lo[row] = np.nan if cdist is None else cdist_lo
         for column in (self._image, self._preimage, self._chain, self._position):
             column[row] = -1
         self._n = row + 1
@@ -318,15 +333,17 @@ class PointStore:
         """
         (self._preimage if stability == "unstable" else self._image)[rows] = phantoms
 
-    def set_cdist(self, row: int, value: Optional[float]) -> None:
+    def set_cdist(self, row: int, value: Optional[float], lo: float = 0.0) -> None:
         """
         Writes one row's canonical distance (None is stored as NaN).
 
         Args:
             row (int): The row.
             value (Optional[float]): Its canonical distance.
+            lo (float): Its residual. Defaults to 0.0.
         """
         self._cdist[row] = np.nan if value is None else value
+        self._cdist_lo[row] = np.nan if value is None else lo
 
     def new_chain(self, rows: ArrayLike, stretch_param: float) -> Chain:
         """
@@ -357,21 +374,36 @@ class PointStore:
     def end(self, row: int) -> End:
         """The :class:`End` record of a row (a fresh value per read)."""
         x, y = self._xy[row]
-        return End(int(row), float(x), float(y), float(self._cdist[row]))
+        return End(int(row), float(x), float(y), float(self._cdist[row]), float(self._cdist_lo[row]))
+
+    def precise_cdist(self, rows: ArrayLike) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """
+        The precise canonical distances of rows, as normalised pairs.
+
+        The one reader of the residual column: an order or a comparison that
+        must hold where plain cdists tie reads this (:func:`.precise.rank`,
+        :func:`.precise.compare`). ``hi`` may differ from the plain cdist by
+        an ULP where the residual is that large.
+
+        Args:
+            rows (ArrayLike): Store rows.
+
+        Returns:
+            tuple: ``(hi, lo)``, each of the shape of ``rows``.
+        """
+        rows = np.asarray(rows, dtype=np.int64)
+        return normalise(self._cdist[rows], self._cdist_lo[rows])
 
     @property
     def nbytes(self) -> int:
-        """The bytes of the six columns, capacity included."""
-        return sum(
-            column.nbytes
-            for column in (self._xy, self._cdist, self._image, self._preimage, self._chain, self._position)
-        )
+        """The bytes of the seven columns, capacity included."""
+        return sum(getattr(self, name).nbytes for name in _COLUMNS)
 
     def compact(self, keep: NDArray[np.bool_]) -> NDArray[np.int64]:
         """
         Drops every row ``keep`` does not hold, renumbering the rest in order.
 
-        Each surviving row keeps its coordinates, cdist and the links into rows
+        Each surviving row keeps its coordinates, cdist (with its residual) and the links into rows
         that survive; a link into a dropped row becomes -1. Every chain keeps
         its surviving rows in their order, renumbered from position 0 (a
         retired chain stays empty). The capacity is not shrunk below the rows
@@ -390,7 +422,7 @@ class PointStore:
         old_to_new = np.full(self._n, -1, dtype=np.int64)
         old_to_new[keep] = np.arange(int(keep.sum()))
         n = int(keep.sum())
-        for name in ("_xy", "_cdist", "_image", "_preimage", "_chain", "_position"):
+        for name in _COLUMNS:
             old = getattr(self, name)
             new = np.empty((max(n, 1),) + old.shape[1:], dtype=old.dtype)
             new[:n] = old[: self._n][keep]
@@ -412,7 +444,7 @@ class PointStore:
         if rows <= capacity:
             return
         capacity = max(rows, int(capacity * _GROWTH) + 1)
-        for name in ("_xy", "_cdist", "_image", "_preimage", "_chain", "_position"):
+        for name in _COLUMNS:
             old = getattr(self, name)
             new = np.empty((capacity,) + old.shape[1:], dtype=old.dtype)
             new[: self._n] = old[: self._n]

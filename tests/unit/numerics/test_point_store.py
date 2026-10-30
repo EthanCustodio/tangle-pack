@@ -340,3 +340,26 @@ def test_a_release_leaves_a_bracket_end_at_the_periodic_point() -> None:
     lo, hi = crossing.stable_segment
     assert isinstance(lo, BranchPoint) and lo is anchor
     assert np.array_equal(store.xy[hi], point)
+
+
+# ------------------------------------------------------------- the residual column
+
+
+def test_the_residual_travels_with_its_row(store) -> None:
+    """``cdist_lo`` is written by every writer (0.0 by default, NaN with no cdist),
+    read by ``end`` and ``precise_cdist`` and kept by a resize and a compaction."""
+    rows = store.append(np.zeros((3, 2)), [1.0, 1.0, 2.0], [1e-17, -1e-17, 0.0])
+    plain = store.append_one(0.0, 0.0, 3.0)
+    (phantom,) = store.append([[9.0, 9.0]], None)
+    store.set_cdist(rows[2], 2.0, 2e-17)
+    assert store.end(rows[0]).cdist_lo == 1e-17 and store.end(plain).cdist_lo == 0.0
+    assert np.isnan(store._cdist_lo[phantom])
+
+    store.append(np.zeros((5000, 2)), np.ones(5000))  # a resize
+    hi, lo = store.precise_cdist(rows)
+    assert hi.tolist() == [1.0, 1.0, 2.0] and lo.tolist() == [1e-17, -1e-17, 2e-17]
+
+    keep = np.ones(len(store), dtype=bool)
+    keep[rows[1]] = False
+    old_to_new = store.compact(keep)
+    assert store.precise_cdist(old_to_new[rows[[0, 2]]])[1].tolist() == [1e-17, 2e-17]
