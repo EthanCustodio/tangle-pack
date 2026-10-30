@@ -1306,3 +1306,28 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   (`_lean_keep` names every reader); the all-fixed-points minimal trellis is never released without its clause
   on any suite build, so only the direct assertion depends on it. A lean blast's released drops stay out: `min_separation=None` refuses to re-admit
   one (`CurveReleased`) instead of keeping every drop's rows.
+
+## 2026-10-29 — Run 2 `anchor-depth` of the deeper-blasts campaign (/feature; branch `feature/anchor-depth`, base `d4c068d`)
+
+- **The author's rulings (plan):** clause 3 of N, the near-anchor guard, at `c = 5 = 1/(1 - 0.8)` (the trust band) and ON by
+  default (`anchor_resolution_factor`, None off); the graded mesh near the orbit is opt-in (`near_orbit_radius`, None
+  default); trusted depth is a flag, never a decision.
+- **Deviations, measured or forced:** (1) the stable-neighbour half of clause 3 is NOT in N: at c = 5 it took real,
+  well-resolved crossings (ratio 4000-6000) out of `heteroclinic` (three of one fold) and, on the k28 / k32 / nested series,
+  a crossing of the original trellis whose stable neighbour is a deep blast crossing of another curve; an arc then loses an
+  odd number of crossings and the arrangement, the heteroclinic case sanity and the hole-sign assertion fail (76 tests).
+  Restricting it to one unstable curve still broke `heteroclinic`. The pair rule is the author's call. (2) Clause 3 floors
+  `h` at the xy resolution `64 eps max(1, |P|)` (`geometry.xy_resolution`): with the mesh `h` falls below what float64
+  resolves and the orbit was registered to 1 ulp of P (depth 23, trusted 21 at 1e-7). (3) The pip-end zone rule takes only
+  the bridge ARRIVING at `f^j(q0)`, `j >= 1` (second crossing on the zone's own orbit): the plan's "ends on the orbit"
+  iterated the turnstile's exit lobe leaving `q0` and changed every blasted law case; the arriving arc is inside by
+  orientation (design note A.10). (4) The mesh reads `r` as the CHORD's distance to the orbit point (a deep image curve
+  passes P between nodes 0.04 apart), and grades the seed once at initialisation (`ManifoldMachine.grade_seed`: the first
+  fundamental domain carried inward on the seed's ray, linked as iterates; mapping a stable seed forward amplified its
+  error 31x per step). (5) Five regression builds that reproduce pre-guard defects at deep or coarse blasts run with the
+  guard off, as they already run with clause 1 off.
+- **Measured (k=2.5 scale series, 1e-5 separation, to the plateau, one core each):** pip / trusted depth base 9 / 7 and
+  12 / 9 (1e-7 / 1e-9); guard 7 / 7 and 9 / 9; guard + pip end the same (the guard binds before the zone filter); guard +
+  pip end + mesh (r0 = 1e-3) 18 / 18 at both cutoffs, ended by the xy-resolution floor (d = 2.8e-13), blast 51 s / 103 s
+  against base 76 s / 98 s, plateau points 2.10M / 5.33M against 2.18M / 5.10M. Identity probe: knobs off identical on all
+  62 builds; defaults differ only on `k32_series` from blast 7 and `nested_outer_series` from blast 8 (shallower pip orbit).

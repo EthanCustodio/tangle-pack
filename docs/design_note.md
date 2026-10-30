@@ -81,6 +81,25 @@ counts the points it creates and raises `PointBudgetExceeded` before the map cal
 pool and concatenates the chunks in order, so for an elementwise map it changes no result
 (cpu-workers, 2026-10-29).
 
+**The graded mesh near the orbit (anchor-depth, 2026-10-29, opt-in).** With `near_orbit_radius = r0`
+set (before growth; None, the default, is the refinement above byte for byte), a pair within `r0` of
+an orbit point of its curve's own fixed point refines when its curvature area is at least
+`area_cutoff * (r / r0) ** 2` (so `h ~ r ** 2` falls faster than `r` and the near-anchor guard of
+A.2 does not stop the pip orbit) or when its chord is longer than `r`, down to a spacing floor
+`max(1e-8 * r / r0, xy_resolution(P))` (`xy_resolution = 64 eps max(1, |P|)`). Two choices are not
+the plan's and were forced. `r` is how near the pair's CHORD passes the orbit point, not its
+midpoint's distance: a deep blast image curve runs straight past `P` between nodes 0.04 apart with
+its closest approach at 8e-6 (1e-7 scale series, blast 7), and the midpoint rule never refined it.
+And growth refines only the images it makes, so the seed's segment at the orbit point would never
+be graded, and a point refined into it would have no iterate (the merge of its image fails). So
+`ManifoldMachine.grade_seed` grades the first fundamental domain of each seed chain once, at
+initialisation, and carries its points inward one piece of the chain per map step, each linked to
+its source as its iterate, placed on the ray from the target piece's orbit point through its
+innermost row at the distance its cdist gives (the seed's own linear approximation), down to the xy
+resolution. They are not mapped: the forward map along a stable seed multiplies the seed's distance
+from the true manifold by `lambda_u / lambda_s` per step (measured: the fourth generation was off by
+its own size). The pair at the orbit point keeps the plain rule. The point budget is unchanged.
+
 The data model (one `PointStore`, chains of its rows, curves as views of a chain whose row ends read
 as `End` records, and `BranchPoint` a view of its `FixedPoint`: the orbit point's coordinates, a cdist
 of 0.0, the next orbit point as its image, and the fixed point's slot table
@@ -93,7 +112,7 @@ old-to-new map (`TangleWorkbench.release_curves`, A.10).
 **Implemented by.** `ManifoldInitializer.construct_kevin_way`, `ManifoldMachine.iterate_manifold`,
 `ManifoldMachine._image_chains`, `TangleWorkbench.grow_n_times`, `TangleWorkbench.grow_until_bounded`,
 `TangleWorkbench.grow_until_arclength`, `FixedPoint.advance_key`, `FixedPoint.per_step_beta`,
-`FixedPoint.preserves_orientation`, `budget.PointBudgetExceeded`.
+`FixedPoint.preserves_orientation`, `budget.PointBudgetExceeded`, `ManifoldMachine.grade_seed`.
 
 ## A.2 Stage 1 — the crossing set N
 
@@ -117,6 +136,22 @@ Every detection is registered and reported, but N is the RESOLVED subset
 2. it is in no RUN: no other detection of the same two curves lies closer to it along the unstable
    polyline than their chord deviation (`IntersectionRegistry.run_separation`). A near-coincident run
    is one unresolved stretch whatever its parity.
+3. it clears the NEAR-ANCHOR GUARD (anchor-depth, 2026-10-29): its distance to the orbit point of
+   either of its branches is at least `anchor_resolution_factor * max(h, xy_resolution(P))`
+   (`IntersectionRegistry.orbit_clearance`). Near the orbit point the pip orbit contracts by the
+   stable multiplier, and a polyline straying `h` puts an error of about `h / d` on each step's
+   contraction; the trusted band allows 20%, so `c = 1 / (1 - 0.8) = 5`
+   (`ANCHOR_RESOLUTION_FACTOR`, on by default, None off). The floor at the xy resolution matters only
+   with the graded mesh (A.1), whose `h` falls below what float64 resolves near `P`. The registry
+   holds the factor (`IntersectionRegistry.anchor_resolution_factor`; the workbench sets its own on
+   every registry it holds and persists it as an optional setting), so every reader of N reads one
+   set. The plan's second half, a detection closer to its stable-order neighbour than `c` times the
+   pair's larger deviation (both out), is NOT part of N: measured, it takes out real, well-resolved
+   crossings (ratio 4000-6000) of a tight fold on `heteroclinic`, three on one unstable curve, and on
+   the k28 series a crossing of the original trellis whose stable neighbour is a deep blast crossing of
+   another curve; an arc then loses an odd number of crossings, the arrangement's regions overlap,
+   the heteroclinic case loses its heteroclinic crossings and a hole bridge's signs stop
+   alternating. Whether a pair rule returns, and in what form, is the author's call.
 
 An unresolved detection is not a point of N and not of X: no bridge ends at it, no iterate link
 starts or ends at it, the arc across it is one arc, and `TangleWorkbench.report_resolution` names it
@@ -147,7 +182,8 @@ never crossings: the fundamental invariant forbids them.
 **Implemented by.** `Tangle.resolve_crossings`, `Tangle.create_bridges`,
 `TangleWorkbench.compute_intersections`, `TangleWorkbench._register_anchors`,
 `TangleWorkbench._register_bridge`, `IntersectionRegistry.resolved_ids`,
-`IntersectionRegistry.run_separation`, `IntersectionRegistry.unresolved_crossings`,
+`IntersectionRegistry.run_separation`, `IntersectionRegistry.orbit_clearance`,
+`IntersectionRegistry.unresolved_crossings`, `geometry.xy_resolution`,
 `TangleWorkbench.report_resolution`, `diagnostics.same_stability_crossings`,
 `diagnostics.count_same_stability_crossings`.
 
@@ -547,7 +583,21 @@ an unresolved orbit point freezes `T(q0)` (B1). D1 does not bind the closed alph
 
 **Blasting.** `blast_zone` iterates the bridges whose INNERMOST zone it is (C4): a bridge belongs to
 the smallest zone holding its midpoint, so an outer blast never iterates a bridge inside an inner
-zone and nested blasting is order independent. Any failure to map a bridge forward propagates
+zone and nested blasting is order independent. One exception (anchor-depth, 2026-10-29): an
+un-iterated bridge of a selected fixed point ARRIVING at `f^j(q0)`, `j >= 1` (its second crossing on
+the registered orbit of the blasted zone's own pip, read once per iteration), is the zone's whatever
+its midpoint says, in the initial frontier and among the children: near `P` the frozen zone polygon
+cannot place a thin lobe's midpoint. Only the arriving arc: `f^j` maps the zone's corner at `q0`
+(between `W^u[P, q0]` arriving and `W^s[P, q0]`) onto the corner at `f^j(q0)` on the zone's side of
+`W^s[P, q0]`, the side an orientation-preserving map keeps, so the arc arriving lies inside and the
+one leaving lies outside (at `q0` it is the turnstile's exit lobe). The plan's "ends on a crossing of
+the orbit" iterated that exit lobe and changed every blasted law case. Other fixed points' pip-orbit
+bridges keep the innermost-zone rule; `classify_bridge` and the class zones are unchanged.
+`BlastResult.trusted_depth` is a flag beside `pip_depth`: the deepest `j` to which the registered
+orbit contracts like the real one (inside `TRUST_LINEAR_RADIUS = 1e-3` each period divides the
+distance to the orbit point, read off `coords`, by `per_step_beta("stable") ** -period` within
+`TRUST_BAND = (0.8, 1.25)`; the test of `scripts/henon_k25_errors_figures.py`), logged at INFO when
+smaller; nothing reads it. Any failure to map a bridge forward propagates
 (NUM-10). `max_points` is an opt-in budget checked between iterations, a clean resumable stop.
 A `min_separation` drop is remembered on the bridge (`Bridge.dropped_at`, carried by
 `rebuild_bridges` beside `iterated`), and the zone's later calls skip it unless they pass a smaller
@@ -615,7 +665,8 @@ author's use is a later plan (D8).
 
 **Implemented by.** `Topology`, `TangleSession.topology`, `blast_zone`, `BlastResult`,
 `TangleWorkbench.compute_intersections`, `ResonanceZone.restore`, `TangleWorkbench.release_curves`,
-`PointStore.compact`, `Bridge.release`, `Blast._lean_keep`, `Blast._ring_width`, `Blast._too_thin`.
+`PointStore.compact`, `Bridge.release`, `Blast._lean_keep`, `Blast._ring_width`, `Blast._too_thin`,
+`Blast._trusted_depth`.
 
 ## A.11 Session and API
 
