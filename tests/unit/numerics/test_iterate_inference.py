@@ -121,7 +121,7 @@ def test_a_multi_match_is_recorded_and_a_second_pass_changes_nothing(
     workbench, _fp = henon_tangle_with_bridges
     registry = workbench.intersection_registry
     # Brackets wide enough that every crossing on the advanced branches meets them.
-    monkeypatch.setattr(IterateInference, "_brackets", lambda crossing: ((0.0, 1e100), (0.0, 1e100)))
+    monkeypatch.setattr(IterateInference, "_brackets", lambda crossing: (np.array([0.0, 1e100, 0.0, 1e100]), np.zeros(4)))
     registry.iterate_table = IterateTable()
     detected = [i for i, ix in registry if not ix.is_synthetic]
     start = registry.generation
@@ -152,8 +152,9 @@ def test_an_image_whose_stable_bracket_misses_the_carried_one_is_no_image(
     source, image = registry[x], registry[y]
     stretch_s = workbench.manifolds[source.manifold_b_key].stretch_param
     brackets = IterateInference._brackets
-    unstable, (s_lo, s_hi) = brackets(source)
-    y_lo, y_hi = brackets(image)[1]
+    hi, lo = brackets(source)
+    s_lo, s_hi = hi[2:]
+    y_lo, y_hi = brackets(image)[0][2:]
     # Just beside y's bracket, on the side away from y's own cdist. The window
     # (the carried bracket widened by the branch's widest, about twice y's here)
     # still holds y: dropping the stable comparisons links x again.
@@ -162,7 +163,8 @@ def test_an_image_whose_stable_bracket_misses_the_carried_one_is_no_image(
         carried = (y_lo - gap - (s_hi - s_lo) / stretch_s, y_lo - gap)
     else:
         carried = (y_hi + gap, y_hi + gap + (s_hi - s_lo) / stretch_s)
-    beside = (unstable, (carried[0] * stretch_s, carried[1] * stretch_s))
+    beside = (np.concatenate((hi[:2], [carried[0] * stretch_s, carried[1] * stretch_s])),
+              np.concatenate((lo[:2], [0.0, 0.0])))
     monkeypatch.setattr(
         IterateInference, "_brackets", lambda crossing: beside if crossing is source else brackets(crossing)
     )
@@ -214,7 +216,7 @@ def test_a_pass_re_decides_its_own_sources(henon_tangle_with_bridges, monkeypatc
     registry = workbench.intersection_registry
     links = set(registry.iterate_table.items())
     with monkeypatch.context() as patch:
-        patch.setattr(IterateInference, "_brackets", lambda crossing: ((0.0, 1e100), (0.0, 1e100)))
+        patch.setattr(IterateInference, "_brackets", lambda crossing: (np.array([0.0, 1e100, 0.0, 1e100]), np.zeros(4)))
         registry.iterate_table = IterateTable()
         infer_iterates(workbench)
     assert registry.unresolved_links

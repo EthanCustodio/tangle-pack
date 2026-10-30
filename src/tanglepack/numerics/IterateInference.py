@@ -23,6 +23,10 @@ so the topology trusts the table and never matches identities by cdist itself.
 
 Dev Notes:
 
+* The brackets are read and carried PRECISELY (:mod:`~.precise`): each end is
+  its node's cdist with its residual, carried by ``dd_mul`` / ``dd_div``, and
+  the meet test compares the precise values, so a deep bracket narrower than a
+  float's ULP still meets only what it meets.
 * Why each manifold's own ``stretch_param`` and not
   :meth:`~.FixedPoint.FixedPoint.per_step_beta`: the stretch is the conjugacy the
   polylines were BUILT with, so the brackets are carried to float rounding.
@@ -49,8 +53,9 @@ from typing import TYPE_CHECKING, Iterable, Optional
 import numpy as np
 from numpy.typing import NDArray
 
-from .Intersection import Bracket, Intersection, ManifoldKey
+from .Intersection import Intersection, ManifoldKey
 from .IntersectionRegistry import IntersectionRegistry
+from .precise import compare, dd_div, dd_mul, two_sum
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from .TangleWorkbench import TangleWorkbench
@@ -58,26 +63,28 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle guard
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
-#: Relative float slack of a bracket. Refined nodes are means of their
-#: neighbours, not products, so a carried bracket meets its image only up to
-#: rounding, and nodes tie to the ULP at folds.
-BRACKET_PAD = 1e-12
+#: Relative slack of a bracket: the error of the precise carry. A node's cdist
+#: and its image's are one double-double computation apart (a product by the
+#: stretch, a mean of neighbours), exact to about 1e-32 relative; 1e-24 is far
+#: above that and far below a deep bracket's width. It was 1e-12 on plain
+#: floats (2026-10-30: the identity probe is unchanged by the switch).
+BRACKET_PAD = 1e-24
+
+#: A bracket row as precise pairs: ``(hi, lo)`` arrays of ``(u_lo, u_hi, s_lo, s_hi)``.
+PreciseBrackets = tuple[NDArray[np.float64], NDArray[np.float64]]
 
 
-def _brackets(crossing: Intersection) -> tuple[Bracket, Bracket]:
-    """The crossing's unstable and stable brackets, padded by :data:`BRACKET_PAD`."""
-    return tuple(
-        (lo - BRACKET_PAD * abs(lo), hi + BRACKET_PAD * abs(hi)) for lo, hi in crossing.brackets
-    )
+def _padded(hi: NDArray[np.float64], lo: NDArray[np.float64]) -> PreciseBrackets:
+    """Precise bracket ends ``(u_lo, u_hi, s_lo, s_hi)`` (last axis), each side
+    widened by :data:`BRACKET_PAD` of its ends, lower ends down and upper ends up."""
+    sign = np.where(np.arange(4) % 2 == 0, -1.0, 1.0)
+    s, e = two_sum(hi, sign * BRACKET_PAD * np.abs(hi))
+    return s, e + lo
 
 
-def _padded(brackets: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Rows ``(u_lo, u_hi, s_lo, s_hi)`` padded as :func:`_brackets` pads one crossing."""
-    lo, hi = brackets[:, 0::2], brackets[:, 1::2]
-    padded = np.empty_like(brackets)
-    padded[:, 0::2] = lo - BRACKET_PAD * np.abs(lo)
-    padded[:, 1::2] = hi + BRACKET_PAD * np.abs(hi)
-    return padded
+def _brackets(crossing: Intersection) -> PreciseBrackets:
+    """The crossing's precise brackets ``(u_lo, u_hi, s_lo, s_hi)``, padded by :data:`BRACKET_PAD`."""
+    return _padded(*crossing.precise_brackets)
 
 
 def infer_iterates(workbench: "TangleWorkbench", sources: Optional[Iterable[int]] = None) -> int:
@@ -211,8 +218,8 @@ def _widest_stable_brackets(registry: IntersectionRegistry) -> dict[ManifoldKey,
     candidates of a predicted stable bracket are those within this width of it.
     """
     widest: dict[ManifoldKey, float] = defaultdict(float)
-    for branch_key, (_cdists, _ids, brackets) in registry._stable_branch_buckets().items():
-        stable = _padded(brackets)[:, 2:]
+    for branch_key, (_cdists, _ids, hi, lo) in registry._stable_branch_buckets().items():
+        stable = _padded(hi, lo)[0][:, 2:]
         # fmax skips the NaN rows of crossings without brackets; 0.0 when none has one.
         widest[branch_key] = float(np.fmax.reduce(stable[:, 1] - stable[:, 0], initial=0.0))
     return widest
@@ -235,25 +242,27 @@ def _bracketed_image(
     )
     stretch_u = source.unstable_manifold.stretch_param
     stretch_s = workbench.manifolds[source.manifold_b_key].stretch_param
-    (u_lo, u_hi), (s_lo, s_hi) = _brackets(source)
-    unstable, stable = (u_lo * stretch_u, u_hi * stretch_u), (s_lo / stretch_s, s_hi / stretch_s)
+    hi, lo = _brackets(source)
+    (u_hi, u_lo), (s_hi, s_lo) = dd_mul(hi[:2], lo[:2], stretch_u), dd_div(hi[2:], lo[2:], stretch_s)
+    carried = np.concatenate((u_hi, s_hi)), np.concatenate((u_lo, s_lo))
+    stable = s_hi
 
     # A candidate's stable cdist lies within the predicted bracket widened by the
     # branch's widest stable bracket.
-    cdists, ids, brackets = registry.stable_brackets(b_key)
+    cdists, ids, near_hi, near_lo = registry.stable_brackets(b_key)
     centre, window = 0.5 * (stable[0] + stable[1]), 0.5 * (stable[1] - stable[0]) + widest[b_key]
-    lo = bisect.bisect_left(cdists, centre - window)
-    hi = bisect.bisect_right(cdists, centre + window)
-    near = _padded(brackets[lo:hi])  # NaN rows (no brackets) meet nothing
-    meets = (
-        (unstable[0] <= near[:, 1])
-        & (near[:, 0] <= unstable[1])
-        & (stable[0] <= near[:, 3])
-        & (near[:, 2] <= stable[1])
+    first = bisect.bisect_left(cdists, centre - window)
+    last = bisect.bisect_right(cdists, centre + window)
+    near = _padded(near_hi[first:last], near_lo[first:last])  # NaN rows (no brackets) meet nothing
+    # Each lower end of one bracket at most the upper end of the other, precisely.
+    meets = np.all(
+        (compare(*(c[[0, 2]] for c in carried), *(n[:, [1, 3]] for n in near)) <= 0)
+        & (compare(*(n[:, [0, 2]] for n in near), *(c[[1, 3]] for c in carried)) <= 0),
+        axis=1,
     )
     images = [
         j
-        for j in ids[lo:hi][meets].tolist()
+        for j in ids[first:last][meets].tolist()
         if j in resolved and registry[j].manifold_a_key == a_key
     ]
     if len(images) > 1:

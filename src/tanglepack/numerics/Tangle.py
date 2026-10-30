@@ -73,6 +73,7 @@ from .PointStore import PointStore
 from .BranchPoint import BranchPoint
 from .Bridge import Bridge
 from .geometry import chord_deviation_batch
+from .precise import dd_lerp
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -154,10 +155,12 @@ class _Segment:
         return np.array([end.get_point() if isinstance(end, BranchPoint) else xy[end]
                          for end in (self.row0, self.row1)], dtype=np.float64)
 
-    def cdists(self, stability: Stability) -> list[float]:
-        """The two ends' cdists as Python floats (a BranchPoint reads its own)."""
-        cdist = self.store.cdist
-        return [end.get_cdist(stability) if isinstance(end, BranchPoint) else float(cdist[end])
+    def cdists(self, stability: Stability) -> list[tuple[float, float]]:
+        """The two ends' cdists as ``(cdist, residual)`` Python floats (a
+        BranchPoint reads its own, residual 0.0)."""
+        store = self.store
+        return [(end.get_cdist(stability), 0.0) if isinstance(end, BranchPoint)
+                else (float(store._cdist[end]), float(store._cdist_lo[end]))
                 for end in (self.row0, self.row1)]
 
     def intersects(self, other: _Segment) -> bool:
@@ -346,10 +349,13 @@ class Tangle:
         ratio, deviation = self._resolution_ratio(u_seg, s_seg, sin_theta)
         assert u_seg.store is s_seg.store, f"the bracket ends of {seg_id_pair} span two stores"
         # cdist interpolated at the true crossing (not the segment midpoint)
+        (u_cdist, u_lo), (s_cdist, s_lo) = (self._cdist_at_point(seg, point) for seg in (u_seg, s_seg))
         intersection = Intersection.from_segments(
             coords=tuple(point),
-            unstable_cdist=self._cdist_at_point(u_seg, point),
-            stable_cdist=self._cdist_at_point(s_seg, point),
+            unstable_cdist=u_cdist,
+            stable_cdist=s_cdist,
+            unstable_cdist_lo=u_lo,
+            stable_cdist_lo=s_lo,
             seg1_id=seg1_id,
             seg2_id=seg2_id,
             manifold_a_key=Tangle._key_of(u_seg),
@@ -384,7 +390,10 @@ class Tangle:
 
         Segment endpoints are stored root to tail, which is increasing cdist, but
         the cdists are read rather than assumed so a reversed or hand-built
-        segment cannot silently flip the sign of a whole tangle.
+        segment cannot silently flip the sign of a whole tangle. They are the
+        PLAIN cdists, the order the merge built the chain in: a precise reading
+        flips a sign of the k=2.8 series at seven blasts, on a segment whose
+        ends tie as floats and whose residuals run against the chain.
 
         Args:
             u_seg: The unstable segment of the crossing pair.
@@ -397,7 +406,7 @@ class Tangle:
         """
         def direction(seg: _Segment, stability: Stability) -> NDArray[np.float64]:
             a, b = seg.coords()
-            ca, cb = seg.cdists(stability)
+            (ca, _), (cb, _) = seg.cdists(stability)
             vec = b - a
             return -vec if cb < ca else vec
 
@@ -1025,11 +1034,11 @@ class Tangle:
         """
         crossings = list(crossings)
         # --- 1. Collect crossings grouped by their parent unstable manifold ---
-        # entry: (unstable cdist, Intersection, orig_p0, orig_p1), the bracket
-        # ends rows (or the root BranchPoint)
+        # entry: (precise unstable cdist, Intersection, orig_p0, orig_p1), the
+        # bracket ends rows (or the root BranchPoint)
         manifold_crossings: dict[
             BaseManifold,
-            list[tuple[float, Intersection, int | BranchPoint, int | BranchPoint]],
+            list[tuple[tuple[float, float], Intersection, int | BranchPoint, int | BranchPoint]],
         ] = defaultdict(list)
 
         for intersection in crossings:
@@ -1050,7 +1059,7 @@ class Tangle:
 
             p0, p1 = intersection.unstable_segment
             manifold_crossings[manifold].append(
-                (float(intersection.unstable_cdist), intersection, p0, p1)
+                (intersection.cdist_key("unstable"), intersection, p0, p1)
             )
 
         # An anchor is ONE crossing on every branch of its periodic point:
@@ -1063,7 +1072,7 @@ class Tangle:
             anchor = anchors.get((fp, orbit_index))
             if anchor is not None and manifold._root is fp.branch_points[orbit_index]:
                 head, _store, rows = manifold._rows()
-                group.append((0.0, anchor, head, int(rows[0])))
+                group.append(((0.0, 0.0), anchor, head, int(rows[0])))
 
         # --- 2. Build bridges as two points picked from the single manifold ---
         # A bridge is defined by a head and a tail point taken from its parent
@@ -1101,7 +1110,7 @@ class Tangle:
             # Bridge (k, k+1) runs from the node below crossing k to the node above
             # crossing k+1. It inherits the parent's manifold_key, and its endpoints
             # are the crossings the cut was made at.
-            for k, ((cdist_a, first, *_), (cdist_b, second, *_)) in enumerate(
+            for k, (((cdist_a, _), first, *_), ((cdist_b, _), second, *_)) in enumerate(
                 zip(manifold_group, manifold_group[1:])
             ):
                 if cdist_b - cdist_a <= cdist_tol:
@@ -1183,19 +1192,20 @@ class Tangle:
         """
         mid_xy = 0.5 * (np.asarray(coords1) + np.asarray(coords2))
         store = manifold.store
-        cdist = self._cdist_between(store, p0, p1, manifold.stability, mid_xy)
-        separator = store.append_one(float(mid_xy[0]), float(mid_xy[1]), cdist)
+        cdist, lo = self._cdist_between(store, p0, p1, manifold.stability, mid_xy)
+        separator = store.append_one(float(mid_xy[0]), float(mid_xy[1]), cdist, lo)
         position = 0 if isinstance(after, BranchPoint) else store.position_of(after) + 1
         store.chain_of(p1).insert([position], [separator])
         return separator
 
-    def _cdist_at_point(self, seg: _Segment, point: np.ndarray) -> float:
+    def _cdist_at_point(self, seg: _Segment, point: np.ndarray) -> tuple[float, float]:
         """
         Interpolate the cdist of `seg`'s manifold at the true crossing `point`.
 
         Uses the fractional projection of `point` onto the segment, so two
         crossings that share one segment receive distinct cdists (a
-        segment-midpoint value would give them one).
+        segment-midpoint value would give them one). Returns the cdist and its
+        residual (:func:`_interpolate`).
         """
         a, b = seg.coords()
         ca, cb = seg.cdists(seg.manifold.stability)
@@ -1208,7 +1218,7 @@ class Tangle:
         p1: int | BranchPoint,
         stability: Stability,
         point: np.ndarray,
-    ) -> float:
+    ) -> tuple[float, float]:
         """
         Interpolate cdist at `point` between the two explicit endpoints p0, p1.
 
@@ -1218,19 +1228,29 @@ class Tangle:
         the ORIGINAL segment endpoints captured before any point is spliced in.
         """
         (a, ca), (b, cb) = (
-            (p.get_point(), p.get_cdist(stability)) if isinstance(p, BranchPoint)
-            else (store.xy[p], float(store.cdist[p]))
+            (p.get_point(), (p.get_cdist(stability), 0.0)) if isinstance(p, BranchPoint)
+            else (store.xy[p], (float(store._cdist[p]), float(store._cdist_lo[p])))
             for p in (p0, p1)
         )
         return Tangle._interpolate(a, b, ca, cb, point)
 
     @staticmethod
     def _interpolate(
-        a: NDArray[np.float64], b: NDArray[np.float64], ca: float, cb: float, point: np.ndarray
-    ) -> float:
-        """The cdist at ``point``, interpolated between ends ``a`` (``ca``) and ``b`` (``cb``)."""
+        a: NDArray[np.float64],
+        b: NDArray[np.float64],
+        ca: tuple[float, float],
+        cb: tuple[float, float],
+        point: np.ndarray,
+    ) -> tuple[float, float]:
+        """
+        The cdist at ``point``, interpolated between ends ``a`` (``ca``) and ``b`` (``cb``).
+
+        Each cdist is a ``(cdist, residual)`` pair; so is the result, its cdist
+        the float ``(1 - t) * ca + t * cb`` (:func:`.precise.dd_lerp`).
+        """
         ab = b - a
         denom = float(ab @ ab)
         t = 0.0 if denom == 0.0 else float((np.asarray(point) - a) @ ab) / denom
         t = min(1.0, max(0.0, t))
-        return (1 - t) * ca + t * cb
+        hi, lo = dd_lerp(t, *ca, *cb)
+        return float(hi), float(lo)

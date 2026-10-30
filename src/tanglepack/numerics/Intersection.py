@@ -15,6 +15,8 @@ from typing import Optional, Literal, TYPE_CHECKING, Union
 import numpy as np
 from numpy.typing import NDArray
 
+from .precise import as_key
+
 if TYPE_CHECKING:
     from .BaseManifold import BaseManifold
     from .BranchPoint import BranchPoint
@@ -38,6 +40,10 @@ SegmentEnd = Union[int, "BranchPoint"]
 #: A ``(lo, hi)`` interval of canonical distance.
 Bracket = tuple[float, float]
 
+#: A precise canonical distance as a normalised ``(hi, lo)`` pair of Python
+#: floats (:func:`.precise.as_key`): tuples compare as the precise values.
+CdistKey = tuple[float, float]
+
 
 class Intersection:
     """
@@ -50,6 +56,9 @@ class Intersection:
         coords: Geometric (x, y) of the crossing.
         unstable_cdist: Position along the unstable manifold at this crossing.
         stable_cdist: Position along the stable manifold at this crossing.
+        unstable_cdist_lo: The residual of ``unstable_cdist`` (:mod:`~.precise`):
+            the precise value is the sum. 0.0 for an anchor or a hand-built one.
+        stable_cdist_lo: The residual of ``stable_cdist``.
         seg_ids: The pair of R-tree segment IDs that produced this crossing.
             None for synthetic intersections.
         label: Optional human-readable name.
@@ -117,6 +126,8 @@ class Intersection:
         stable_segment: Optional[tuple[SegmentEnd, SegmentEnd]] = None,
         chord_deviation: Optional[float] = None,
         store: Optional["PointStore"] = None,
+        unstable_cdist_lo: float = 0.0,
+        stable_cdist_lo: float = 0.0,
     ) -> None:
         """
         Build one crossing. Every field is optional so that a synthetic
@@ -126,6 +137,8 @@ class Intersection:
         self.coords = coords
         self.unstable_cdist = unstable_cdist
         self.stable_cdist = stable_cdist
+        self.unstable_cdist_lo = unstable_cdist_lo
+        self.stable_cdist_lo = stable_cdist_lo
         self.seg_ids = seg_ids
         self.id = id
         self.label = label
@@ -157,6 +170,8 @@ class Intersection:
         stable_segment: Optional[tuple[SegmentEnd, SegmentEnd]] = None,
         chord_deviation: Optional[float] = None,
         store: Optional["PointStore"] = None,
+        unstable_cdist_lo: float = 0.0,
+        stable_cdist_lo: float = 0.0,
     ) -> Intersection:
         """Create an Intersection backed by two R-tree segment IDs."""
         return cls(
@@ -174,7 +189,26 @@ class Intersection:
             stable_segment=stable_segment,
             chord_deviation=chord_deviation,
             store=store,
+            unstable_cdist_lo=unstable_cdist_lo,
+            stable_cdist_lo=stable_cdist_lo,
         )
+
+    def cdist_key(self, stability: Stability) -> CdistKey:
+        """
+        The precise canonical distance on one side, as a normalised pair.
+
+        Every order or exact comparison of crossings by cdist reads this: two
+        crossings whose plain cdists tie are told apart by their residuals.
+
+        Args:
+            stability: Which side.
+
+        Returns:
+            ``(hi, lo)`` Python floats; a tuple compares as the precise value.
+        """
+        if stability == "unstable":
+            return as_key(self.unstable_cdist, self.unstable_cdist_lo)
+        return as_key(self.stable_cdist, self.stable_cdist_lo)
 
     def segment_ends(self, stability: Stability) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         """
@@ -221,6 +255,30 @@ class Intersection:
             for stability in ("unstable", "stable")
         )
         return (unstable[0], unstable[1]), (stable[0], stable[1])
+
+    @cached_property
+    def precise_brackets(self) -> Optional[tuple[NDArray[np.float64], NDArray[np.float64]]]:
+        """
+        :attr:`brackets` to the precision of the residuals: what the iterate
+        inference compares.
+
+        Returns:
+            ``(hi, lo)``: the normalised pairs of ``(u_lo, u_hi, s_lo, s_hi)``,
+            each side's two ends in increasing precise order (a ``BranchPoint``
+            end at 0.0), or None for a crossing without brackets.
+        """
+        if self.unstable_segment is None:
+            return None
+        ends = [
+            sorted(
+                (0.0, 0.0) if not isinstance(end, int)
+                else as_key(self.store._cdist[end], self.store._cdist_lo[end])
+                for end in segment
+            )
+            for segment in (self.unstable_segment, self.stable_segment)
+        ]
+        hi, lo = np.array([end for side in ends for end in side], dtype=np.float64).T
+        return hi, lo
 
     @property
     def fixed_points(self) -> tuple["FixedPoint", ...]:

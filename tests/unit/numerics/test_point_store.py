@@ -363,3 +363,36 @@ def test_the_residual_travels_with_its_row(store) -> None:
     keep[rows[1]] = False
     old_to_new = store.compact(keep)
     assert store.precise_cdist(old_to_new[rows[[0, 2]]])[1].tolist() == [1e-17, 2e-17]
+
+
+def test_a_format_1_save_loads_with_residual_zero(tmp_path) -> None:
+    """A save keeps the residuals; one without them (format 1) loads with 0.0."""
+    import json
+
+    from cases import build_k10
+    from tanglepack import TangleWorkbench
+
+    workbench = build_k10().workbench
+    store = workbench.point_store
+    assert np.count_nonzero(np.nan_to_num(store._cdist_lo[: len(store)])), "growth writes residuals"
+    system = workbench.dynamical_system
+    workbench.save(tmp_path / "k10")
+    loaded = TangleWorkbench.load(tmp_path / "k10", system.map, system.map_inv, system.jacobian)
+    np.testing.assert_array_equal(loaded.point_store._cdist_lo[: len(store)], store._cdist_lo[: len(store)])
+    assert [x.unstable_cdist_lo for _i, x in loaded.intersection_registry] == [
+        x.unstable_cdist_lo for _i, x in workbench.intersection_registry]
+
+    meta = json.loads((tmp_path / "k10.json").read_text())
+    meta["format"] = 1
+    for name in ("unstable_cdist_lo", "stable_cdist_lo"):
+        del meta["crossings"]["types"][name]
+    (tmp_path / "k10.json").write_text(json.dumps(meta))
+    with np.load(tmp_path / "k10.npz") as saved:
+        arrays = {name: saved[name] for name in saved.files
+                  if name not in ("store_cdist_lo", "crossing_unstable_cdist_lo", "crossing_stable_cdist_lo")}
+    np.savez(tmp_path / "k10.npz", **arrays)
+    old = TangleWorkbench.load(tmp_path / "k10", system.map, system.map_inv, system.jacobian)
+    lo = old.point_store._cdist_lo[: len(store)]
+    assert np.array_equal(np.isnan(lo), np.isnan(store.cdist)) and not np.nan_to_num(lo).any()
+    np.testing.assert_array_equal(old.point_store.cdist, store.cdist)
+    assert all(x.unstable_cdist_lo == x.stable_cdist_lo == 0.0 for _i, x in old.intersection_registry)

@@ -72,7 +72,7 @@ def test_dd_sub_compare_and_rank_order_the_precise_values() -> None:
     assert precise.compare(hi[:-1], lo[:-1], hi[1:], lo[1:]).tolist() == [1, -1, 1, -1]
     s, e = precise.dd_sub(5.0, 1e-16, 5.0, -1e-16)
     assert (float(s), float(e)) == (2e-16, 0.0)
-    assert precise.key(5.0, 1e-16) < precise.key(5.0, 2e-16) < precise.key(np.nextafter(5.0, 6.0), 0.0)
+    assert precise.as_key(5.0, 1e-16) < precise.as_key(5.0, 2e-16) < precise.as_key(np.nextafter(5.0, 6.0), 0.0)
 
 
 @pytest.mark.parametrize("ulps", [1, 3])

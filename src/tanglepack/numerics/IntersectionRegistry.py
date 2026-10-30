@@ -36,15 +36,17 @@ from __future__ import annotations
 
 import bisect
 import logging
+import math
 from collections import defaultdict
 from typing import Callable, Iterator, Optional, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
 
-from .Intersection import Intersection, ManifoldKey, Stability
+from .Intersection import CdistKey, Intersection, ManifoldKey, Stability
 from .IterateTable import IterateTable
 from .geometry import xy_resolution
+from .precise import dd_sub
 
 if TYPE_CHECKING:
     from .FixedPoint import FixedPoint
@@ -70,14 +72,16 @@ DEDUP_RTOL = 1e-9
 ANCHOR_RESOLUTION_FACTOR = 5.0
 
 
-#: Per stable branch: the sorted stable cdists, the ids, their brackets.
-_StableBucket = tuple[list[float], NDArray[np.int64], NDArray[np.float64]]
-_EMPTY_BUCKET: _StableBucket = ([], np.empty(0, dtype=np.int64), np.empty((0, 4)))
+#: Per stable branch: the sorted stable cdists, the ids, their brackets (the
+#: ``hi`` and the ``lo`` of the precise pairs).
+_StableBucket = tuple[list[float], NDArray[np.int64], NDArray[np.float64], NDArray[np.float64]]
+_EMPTY_BUCKET: _StableBucket = ([], np.empty(0, dtype=np.int64), np.empty((0, 4)), np.empty((0, 4)))
 
 
-def _close(a: float, b: float) -> bool:
-    """``a`` and ``b`` agree to :data:`DEDUP_RTOL`, relative to the larger."""
-    return abs(a - b) <= DEDUP_RTOL * max(abs(a), abs(b))
+def _close(a: CdistKey, b: CdistKey) -> bool:
+    """The precise ``a`` and ``b`` agree to :data:`DEDUP_RTOL`, relative to the larger."""
+    difference, _ = dd_sub(*a, *b)
+    return abs(float(difference)) <= DEDUP_RTOL * max(abs(a[0]), abs(b[0]))
 
 
 def _polyline_gap(a: Intersection, b: Intersection) -> Optional[float]:
@@ -151,10 +155,10 @@ class IntersectionRegistry:
         _generation: int  — bumped by every mutation; read via :attr:`generation`
         _orders_version: int  — bumped by the mutations that change the stored
             crossings (insert, renumber); the ordering-derived views key on it
-        _unstable_order: list[int]  — IDs sorted ascending by unstable_cdist
-        _unstable_keys: list[float] — those IDs' unstable cdists, same order
-        _stable_order: list[int]    — IDs sorted ascending by stable_cdist
-        _stable_keys: list[float]   — those IDs' stable cdists, same order
+        _unstable_order: list[int]  — IDs sorted ascending by precise unstable cdist
+        _unstable_keys: list[CdistKey] — those IDs' precise unstable cdists, same order
+        _stable_order: list[int]    — IDs sorted ascending by precise stable cdist
+        _stable_keys: list[CdistKey]   — those IDs' precise stable cdists, same order
 
     Note:
         The two sorted key arrays are maintained on insertion (bisect), so no
@@ -197,9 +201,9 @@ class IntersectionRegistry:
         self._orders_version: int = 0
 
         self._unstable_order: list[int] = []
-        self._unstable_keys: list[float] = []
+        self._unstable_keys: list[CdistKey] = []
         self._stable_order: list[int] = []
-        self._stable_keys: list[float] = []
+        self._stable_keys: list[CdistKey] = []
 
         # Lazily rebuilt views, each stamped with the _orders_version it was
         # built at.
@@ -264,8 +268,8 @@ class IntersectionRegistry:
         intersection.id = new_id
         self._store[new_id] = intersection
 
-        self._insert_into_unstable_order(new_id, intersection.unstable_cdist)
-        self._insert_into_stable_order(new_id, intersection.stable_cdist)
+        self._insert_into_unstable_order(new_id, intersection.cdist_key("unstable"))
+        self._insert_into_stable_order(new_id, intersection.cdist_key("stable"))
         self._generation += 1
         self._orders_version += 1
 
@@ -403,8 +407,8 @@ class IntersectionRegistry:
             fid = final_id[id(ix)]
             ix.id = fid
             self._store[fid] = ix
-            self._insert_into_unstable_order(fid, ix.unstable_cdist)
-            self._insert_into_stable_order(fid, ix.stable_cdist)
+            self._insert_into_unstable_order(fid, ix.cdist_key("unstable"))
+            self._insert_into_stable_order(fid, ix.cdist_key("stable"))
 
     def __getitem__(self, id: int) -> Intersection:
         """registry[id] → Intersection. Raises KeyError if id is unknown."""
@@ -746,10 +750,10 @@ class IntersectionRegistry:
         by :meth:`reindex_from`, so that is the oldest and the deterministic
         choice.
         """
-        u, s = intersection.unstable_cdist, intersection.stable_cdist
+        u, s = intersection.cdist_key("unstable"), intersection.cdist_key("stable")
         # A periodic point is ONE crossing of every branch attached to it:
         # at exactly (0, 0) any two of its branches meet at its one anchor.
-        at_anchor = u == 0.0 and s == 0.0
+        at_anchor = u == s == (0.0, 0.0)
 
         def branches(crossing: Intersection) -> tuple:
             keys = (crossing.manifold_a_key, crossing.manifold_b_key)
@@ -758,13 +762,14 @@ class IntersectionRegistry:
             return keys
 
         own = branches(intersection)
-        lo = bisect.bisect_left(self._unstable_keys, u - DEDUP_RTOL * abs(u))
-        hi = bisect.bisect_right(self._unstable_keys, u + DEDUP_RTOL * abs(u))
+        window = DEDUP_RTOL * abs(u[0])
+        lo = bisect.bisect_left(self._unstable_keys, (u[0] - window, -math.inf))
+        hi = bisect.bisect_right(self._unstable_keys, (u[0] + window, math.inf))
         matches = (
             candidate_id
             for candidate_id in self._unstable_order[lo:hi]
-            if _close(self._store[candidate_id].unstable_cdist, u)
-            and _close(self._store[candidate_id].stable_cdist, s)
+            if _close(self._store[candidate_id].cdist_key("unstable"), u)
+            and _close(self._store[candidate_id].cdist_key("stable"), s)
             and branches(self._store[candidate_id]) == own
         )
         return min(matches, default=None)
@@ -783,15 +788,16 @@ class IntersectionRegistry:
             branch_key: The stable branch (``manifold_b_key``).
 
         Returns:
-            The stable cdists (a list: the bisect keys), the ids (int64) and
-            their unpadded brackets ``(u_lo, u_hi, s_lo, s_hi)`` per row (an
-            ``(m, 4)`` float array, NaN where a crossing has none). Empty for a
-            branch no crossing is on.
+            The stable cdists (a list: the bisect keys, the ``hi`` of the
+            precise values), the ids (int64) and their unpadded precise
+            brackets ``(u_lo, u_hi, s_lo, s_hi)`` per row, as two ``(m, 4)``
+            float arrays, the pairs' ``hi`` and ``lo`` (NaN where a crossing
+            has none). Empty for a branch no crossing is on.
 
         Note:
             Rebuilt when the stored crossings change (an insert or a
             renumbering), never by an iterate link; each crossing's brackets
-            are read once, into ``Intersection.brackets``.
+            are read once, into ``Intersection.precise_brackets``.
         """
         return self._stable_branch_buckets().get(branch_key, _EMPTY_BUCKET)
 
@@ -804,26 +810,27 @@ class IntersectionRegistry:
             members: dict[Optional[ManifoldKey], list[int]] = defaultdict(list)
             for iid in self._stable_order:  # already in ascending stable cdist
                 members[self._store[iid].manifold_b_key].append(iid)
-            nan = ((np.nan, np.nan), (np.nan, np.nan))
-            self._stable_branch_index = {
-                branch_key: (
-                    [self._store[iid].stable_cdist for iid in ids],
+            nan = np.full((2, 4), np.nan)
+            self._stable_branch_index = {}
+            for branch_key, ids in members.items():
+                brackets = np.array(
+                    [nan if (pairs := self._store[iid].precise_brackets) is None else pairs for iid in ids]
+                ).reshape(-1, 2, 4)
+                self._stable_branch_index[branch_key] = (
+                    [self._store[iid].cdist_key("stable")[0] for iid in ids],
                     np.array(ids, dtype=np.int64),
-                    np.array(
-                        [self._store[iid].brackets or nan for iid in ids], dtype=np.float64
-                    ).reshape(-1, 4),
+                    brackets[:, 0],
+                    brackets[:, 1],
                 )
-                for branch_key, ids in members.items()
-            }
             self._stable_branch_version = self._orders_version
         return self._stable_branch_index
 
-    def _insert_into_unstable_order(self, id: int, unstable_cdist: float) -> None:
+    def _insert_into_unstable_order(self, id: int, unstable_cdist: CdistKey) -> None:
         pos = bisect.bisect_left(self._unstable_keys, unstable_cdist)
         self._unstable_order.insert(pos, id)
         self._unstable_keys.insert(pos, unstable_cdist)
 
-    def _insert_into_stable_order(self, id: int, stable_cdist: float) -> None:
+    def _insert_into_stable_order(self, id: int, stable_cdist: CdistKey) -> None:
         pos = bisect.bisect_left(self._stable_keys, stable_cdist)
         self._stable_order.insert(pos, id)
         self._stable_keys.insert(pos, stable_cdist)

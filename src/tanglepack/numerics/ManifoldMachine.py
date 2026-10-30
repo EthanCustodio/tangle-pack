@@ -14,7 +14,9 @@ Invariants it maintains:
 * Every chain is ordered by canonical distance. That order is
   non-decreasing, not strictly increasing: at a high-stretch fold adjacent
   cdists can collapse to within a float ULP, and a tie is harmless because
-  points are inserted at a position and never re-sorted by cdist.
+  points are inserted at a position and never re-sorted by cdist. Each cdist
+  is carried with its residual (:mod:`~.precise`), but the merge, its run
+  cuts and this check read the plain float (see the Dev Notes).
 * Every point it inserts keeps its iterate links, so a grown curve can always
   be walked back to the seed segment.
 * Refinement is breadth-first and batched: one map evaluation per layer, not
@@ -102,6 +104,7 @@ from .Bridge import Bridge
 from .Intersection import ManifoldKey, Stability
 from .budget import DEFAULT_MAX_POINTS_PER_STEP, PointBudgetExceeded
 from .geometry import curvature_area_batch, xy_resolution
+from .precise import dd_mean, dd_mul
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -389,8 +392,8 @@ class ManifoldMachine:
                     above = scale * np.hypot(*ray) >= floor
                     rows, scale = rows[above], scale[above]
                     self._charge(len(rows), "map", segment)
-                    carried = store.append(orbit[key[2]] + np.outer(scale, ray),
-                                           scale * store.cdist[innermost])
+                    cdists = dd_mul(store._cdist[innermost], store._cdist_lo[innermost], scale)
+                    carried = store.append(orbit[key[2]] + np.outer(scale, ray), *cdists)
                     if stability == "stable":
                         store.link(rows, carried)
                     else:
@@ -436,7 +439,6 @@ class ManifoldMachine:
         viewer = ManifoldView(manifold, self.system)
 
         non_iterated_coords = manifold.get_non_iterated_point_array()
-        non_iterated_cdists = manifold.get_non_iterated_cdist_array()
         _head, store, sources = manifold._select("non_iterated")
         image_head, image_store, image_rows = manifold._select("iterated")
 
@@ -446,12 +448,13 @@ class ManifoldMachine:
             self._charge(len(non_iterated_coords), "map", manifold)
             iterated_points = viewer.map_fwd_batch(non_iterated_coords)
             self._note_coords(iterated_points)
-            distances = np.ravel(manifold.stretch_param * non_iterated_cdists)
+            # cdist(f(p)) = stretch * cdist(p), carried with its residual.
+            distances = dd_mul(store._cdist[sources], store._cdist_lo[sources], manifold.stretch_param)
 
             # The images go into the store of the curve (a chain's rows share one
             # store), in one append; each pair is linked both ways (the image on
             # an unstable curve, the preimage on a stable one).
-            rows = store.append(iterated_points, distances)
+            rows = store.append(iterated_points, *distances)
             unstable = manifold.stability == "unstable"
             if ((store.image if unstable else store.preimage)[sources] >= 0).any():
                 raise ValueError(f"{'Iterate' if unstable else 'Pre-iterate'} 1 already exists")
@@ -849,11 +852,13 @@ class ManifoldMachine:
         pre0 = xy[np.maximum(pre_rows_0, 0)]
         pre1 = xy[np.maximum(pre_rows_1, 0)]
         c0, c1 = cdist[rows_0], cdist[rows_1]
+        lo0, lo1 = store._cdist_lo[rows_0], store._cdist_lo[rows_1]
         if at_anchor.any():
             # The anchor always has its preiterate, an orbit point (0 marks it as present).
             pre_rows_0 = np.where(at_anchor, 0, pre_rows_0)
             pre0[at_anchor] = self._get_preiterate(anchor, stability)
             c0 = np.where(at_anchor, anchor.get_cdist(stability), c0)
+            lo0 = np.where(at_anchor, 0.0, lo0)
         has_pre = (pre_rows_0 >= 0) & (pre_rows_1 >= 0)
         if logger.isEnabledFor(logging.DEBUG):
             for k in np.flatnonzero(apart & ~has_pre):
@@ -882,7 +887,7 @@ class ManifoldMachine:
         # leaving a coarse spike. The spacing floor above (SPACING_FLOOR, scaled
         # down near the orbit and never below the xy resolution) guarantees the
         # subdivision still terminates once the two points effectively coincide.
-        mid_cd = 0.5 * (c0[keep] + c1[keep])
+        mid_cd = dd_mean(c0[keep], lo0[keep], c1[keep], lo1[keep])
         pre_mid = 0.5 * (pre0[keep] + pre1[keep])
 
         if self.near_orbit_radius is None:
@@ -907,7 +912,7 @@ class ManifoldMachine:
         # images on a stable one): phantom rows (no cdist) the child pairs refine
         # from next layer, named by a one-way link. A new first point (position 0)
         # needs no slot update: the slot holds the chain.
-        rows = store.append(new_coords, mid_cd[flagged])
+        rows = store.append(new_coords, mid_cd[0][flagged], mid_cd[1][flagged])
         phantoms = store.append(pre_mid[flagged], None)
         store.link_phantoms(rows, phantoms, stability)
 

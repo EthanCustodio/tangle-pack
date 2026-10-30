@@ -33,7 +33,7 @@ orders, sets sorted (a set's iteration order is its hash table's, not state):
   the generation, the machine's settings.
 
 What is NOT saved is derived and rebuilt lazily: the registry's caches,
-``Intersection.brackets``, the fixed points' memos, the system's batchability
+``Intersection.brackets`` and ``precise_brackets``, the fixed points' memos, the system's batchability
 probe (made on the map passed to ``load``) and the rtrees, which are
 bulk-loaded from the saved records.
 
@@ -476,6 +476,8 @@ def _save_crossings(encoder: Encoder, meta: dict, arrays: dict) -> None:
         "y": [None if x.coords is None else x.coords[1] for x in crossings],
         "unstable_cdist": [x.unstable_cdist for x in crossings],
         "stable_cdist": [x.stable_cdist for x in crossings],
+        "unstable_cdist_lo": [x.unstable_cdist_lo for x in crossings],
+        "stable_cdist_lo": [x.stable_cdist_lo for x in crossings],
         "resolution_ratio": [x.resolution_ratio for x in crossings],
         "chord_deviation": [x.chord_deviation for x in crossings],
     }
@@ -712,6 +714,8 @@ def _load_crossings(decoder: Decoder, meta: dict, arrays: dict) -> None:
     """Every Intersection, with its saved value types and object references."""
     saved = meta["crossings"]
     columns = {name: floats_of(arrays[f"crossing_{name}"], tags) for name, tags in saved["types"].items()}
+    for name in ("unstable_cdist_lo", "stable_cdist_lo"):  # format 1: no residuals
+        columns.setdefault(name, [0.0] * len(saved["labels"]))
     for i, (row, label) in enumerate(zip(arrays["crossing_ints"].tolist(), saved["labels"])):
         x, y = columns["x"][i], columns["y"][i]
         decoder.crossings.append(Intersection(
@@ -730,6 +734,8 @@ def _load_crossings(decoder: Decoder, meta: dict, arrays: dict) -> None:
             crossing_sign=row[1],
             resolution_ratio=columns["resolution_ratio"][i],
             chord_deviation=columns["chord_deviation"][i],
+            unstable_cdist_lo=columns["unstable_cdist_lo"][i],
+            stable_cdist_lo=columns["stable_cdist_lo"][i],
         ))
 
 
@@ -745,8 +751,8 @@ def _load_registry(workbench: TangleWorkbench, decoder: Decoder, meta: dict, arr
     registry._unstable_order = arrays["registry_unstable_order"].tolist()
     registry._stable_order = arrays["registry_stable_order"].tolist()
     # the sorted keys are the crossings' own cdists, in the saved order
-    registry._unstable_keys = [registry._store[i].unstable_cdist for i in registry._unstable_order]
-    registry._stable_keys = [registry._store[i].stable_cdist for i in registry._stable_order]
+    registry._unstable_keys = [registry._store[i].cdist_key("unstable") for i in registry._unstable_order]
+    registry._stable_keys = [registry._store[i].cdist_key("stable") for i in registry._stable_order]
     table = registry.iterate_table
     for name, links in (("forward", table._forward), ("backward", table._backward)):
         for source, n, target in arrays[f"registry_{name}"].tolist():

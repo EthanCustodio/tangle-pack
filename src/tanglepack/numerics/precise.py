@@ -125,10 +125,11 @@ def dd_sub(
 
 def compare(
     hi_a: ArrayLike, lo_a: ArrayLike, hi_b: ArrayLike, lo_b: ArrayLike
-) -> NDArray[np.int64]:
-    """The sign of ``a - b`` (-1, 0 or +1), elementwise."""
+) -> NDArray[np.float64]:
+    """The sign of ``a - b`` (-1.0, 0.0 or +1.0), elementwise; NaN where either is
+    NaN, so every comparison of it with 0 is False, as a plain float's would be."""
     s, e = dd_sub(hi_a, lo_a, hi_b, lo_b)
-    return np.where(s != 0.0, np.sign(s), np.sign(e)).astype(np.int64)
+    return np.where(s != 0.0, np.sign(s), np.sign(e))
 
 
 def rank(hi: ArrayLike, lo: ArrayLike) -> NDArray[np.int64]:
@@ -146,7 +147,7 @@ def rank(hi: ArrayLike, lo: ArrayLike) -> NDArray[np.int64]:
     return ranks
 
 
-def key(hi: float, lo: float) -> tuple[float, float]:
+def as_key(hi: float, lo: float) -> tuple[float, float]:
     """One value's normalised pair as Python floats: a tuple compares as the precise value."""
     s, e = normalise(hi, lo)
     return float(s), float(e)

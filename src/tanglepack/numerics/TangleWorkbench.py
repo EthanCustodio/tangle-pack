@@ -45,6 +45,7 @@ from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import DEFAULT_AREA_CUTOFF, ManifoldMachine
 from .PointStore import Chain, PointStore
+from .precise import as_key
 from .budget import DEFAULT_MAX_POINTS_PER_STEP, GrowthStats
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
@@ -1877,14 +1878,15 @@ class TangleWorkbench:
                 self.Tangle.release_manifold(bridge)
             return existing
 
+        # The precise cdists (:mod:`.precise`): a plain-float tie orders nothing.
         lo, hi = sorted(
-            float(end.get_cdist("unstable") if isinstance(end, BranchPoint) else end.cdist)
+            (0.0, 0.0) if isinstance(end, BranchPoint) else as_key(end.cdist, end.cdist_lo)
             for end in (bridge.root, bridge.tail)
         )
-        slack = DEDUP_RTOL * max(abs(hi), 1.0)
+        slack = DEDUP_RTOL * max(abs(hi[0]), 1.0)
         fixed_point, _, orbit_index, _ = bridge.manifold_key
         first, second = (self._intersection_registry[end] for end in bid)
-        assert first.is_anchor or first.unstable_cdist <= second.unstable_cdist, bid
+        assert first.is_anchor or first.cdist_key("unstable") <= second.cdist_key("unstable"), bid
         for end in bid:
             crossing = self._intersection_registry[end]
             if crossing.is_anchor:
@@ -1892,7 +1894,8 @@ class TangleWorkbench:
                 assert crossing.manifold_a_key[0] is fixed_point and crossing.manifold_a_key[2] == orbit_index, bid
             else:
                 assert crossing.manifold_a_key == bridge.manifold_key, (bid, end, crossing.manifold_a_key[1:])
-                assert lo - slack <= crossing.unstable_cdist <= hi + slack, (bid, end, lo, crossing.unstable_cdist, hi)
+                u = crossing.cdist_key("unstable")
+                assert (lo[0] - slack, lo[1]) <= u <= (hi[0] + slack, hi[1]), (bid, end, lo, u, hi)
 
         self._bridges[bid] = bridge
         for endpoint in bid:
