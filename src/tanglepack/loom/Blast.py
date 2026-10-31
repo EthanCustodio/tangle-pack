@@ -727,22 +727,20 @@ def blast_zone(
     # The point budget's bookkeeping: the bridges the workbench already holds
     # (an image piece resolving to one of them adds no points) and the growth
     # factor of the zone's last blast iteration, this call's or a previous one's.
-    held: set["BridgeId | int"] = {_seen_key(b) for b in workbench.bridges}
+    in_workbench: set["BridgeId | int"] = {_seen_key(b) for b in workbench.bridges}
     added: list["Bridge"] = []
     factor: Optional[float] = session._blast_stats.get(zone.key)
     # The candidates a representative step held: offered again at the next step.
     waiting: list["Bridge"] = []
 
     for iteration in range(1, num_iterations + 1):
-        if representatives is not None:
-            frontier = [*frontier, *waiting]
-        if not frontier:
+        candidates = [*frontier, *waiting]
+        if not candidates:
             result.stop_reason = "frontier_empty"
             break
         held_now: dict["BridgeId", "BridgeId"] = {}
         if representatives is not None:
-            candidates = {_seen_key(b): b for b in frontier}
-            frontier, held_now = _representatives(session, fixed_points, frontier, representatives)
+            frontier, held_now = _representatives(session, fixed_points, candidates, representatives)
 
         frontier_points = sum(b.point_count for b in frontier if not b.iterated)
         if max_points is not None:
@@ -853,7 +851,7 @@ def blast_zone(
                 held=held_now,
             )
         )
-        waiting = [candidates[bid] for bid in held_now] if representatives is not None else []
+        waiting = [b for b in candidates if b.id in held_now]
         result.too_close += len(too_close)
         result.already_known += len(already_known)
         # Every child is curve the workbench now holds, dropped or exterior
@@ -863,8 +861,8 @@ def blast_zone(
 
         new_points = 0
         for child in produced:
-            if _seen_key(child) not in held:
-                held.add(_seen_key(child))
+            if _seen_key(child) not in in_workbench:
+                in_workbench.add(_seen_key(child))
                 added.append(child)
                 new_points += child.point_count
         result.points_created += new_points
