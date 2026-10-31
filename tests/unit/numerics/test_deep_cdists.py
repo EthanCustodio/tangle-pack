@@ -53,7 +53,7 @@ def test_brackets_carry_the_residuals():
     """Each crossing's unstable bracket is its two nodes, told apart by their residuals."""
     _tangle, _unstable, (left, right) = _deep_tangle()
     for crossing, below in ((left, 1), (right, 3)):
-        hi, lo = crossing.precise_brackets
+        hi, lo = np.array(crossing.precise_brackets)
         assert hi[:2].tolist() == [DEEP, DEEP]
         np.testing.assert_allclose(lo[:2], [below * STEP, (below + 1) * STEP], rtol=1e-12)
         _, lo_u = crossing.cdist_key("unstable")

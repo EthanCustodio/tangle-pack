@@ -257,15 +257,17 @@ class Intersection:
         return (unstable[0], unstable[1]), (stable[0], stable[1])
 
     @cached_property
-    def precise_brackets(self) -> Optional[tuple[NDArray[np.float64], NDArray[np.float64]]]:
+    def precise_brackets(self) -> Optional[tuple[tuple[float, ...], tuple[float, ...]]]:
         """
         :attr:`brackets` to the precision of the residuals: what the iterate
         inference compares.
 
         Returns:
-            ``(hi, lo)``: the normalised pairs of ``(u_lo, u_hi, s_lo, s_hi)``,
-            each side's two ends in increasing precise order (a ``BranchPoint``
-            end at 0.0), or None for a crossing without brackets.
+            ``(hi, lo)``, two tuples of four Python floats: the normalised
+            pairs of ``(u_lo, u_hi, s_lo, s_hi)``, each side's two ends in
+            increasing precise order (a ``BranchPoint`` end at 0.0), or None
+            for a crossing without brackets. Tuples, so a registry bucket of
+            many crossings is one ``np.array`` call.
         """
         if self.unstable_segment is None:
             return None
@@ -277,8 +279,7 @@ class Intersection:
             )
             for segment in (self.unstable_segment, self.stable_segment)
         ]
-        hi, lo = np.array([end for side in ends for end in side], dtype=np.float64).T
-        return hi, lo
+        return tuple(zip(*(end for side in ends for end in side)))
 
     @property
     def fixed_points(self) -> tuple["FixedPoint", ...]:

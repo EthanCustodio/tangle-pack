@@ -810,16 +810,20 @@ class IntersectionRegistry:
             or self._stable_branch_version != self._orders_version
         ):
             members: dict[Optional[ManifoldKey], list[int]] = defaultdict(list)
-            for iid in self._stable_order:  # already in ascending stable cdist
-                members[self._store[iid].manifold_b_key].append(iid)
-            nan = np.full((2, 4), np.nan)
+            cdists: dict[Optional[ManifoldKey], list[float]] = defaultdict(list)
+            for iid, (cdist, _) in zip(self._stable_order, self._stable_keys):  # ascending stable cdist
+                branch_key = self._store[iid].manifold_b_key
+                members[branch_key].append(iid)
+                cdists[branch_key].append(cdist)
+            nan = ((np.nan,) * 4,) * 2
             self._stable_branch_index = {}
             for branch_key, ids in members.items():
                 brackets = np.array(
-                    [nan if (pairs := self._store[iid].precise_brackets) is None else pairs for iid in ids]
+                    [nan if (pairs := self._store[iid].precise_brackets) is None else pairs for iid in ids],
+                    dtype=np.float64,
                 ).reshape(-1, 2, 4)
                 self._stable_branch_index[branch_key] = (
-                    [self._store[iid].cdist_key("stable")[0] for iid in ids],
+                    cdists[branch_key],
                     np.array(ids, dtype=np.int64),
                     brackets[:, 0],
                     brackets[:, 1],

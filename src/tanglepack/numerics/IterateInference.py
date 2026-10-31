@@ -85,7 +85,7 @@ def _padded(hi: NDArray[np.float64], lo: NDArray[np.float64]) -> PreciseBrackets
 
 def _brackets(crossing: Intersection) -> PreciseBrackets:
     """The crossing's precise brackets ``(u_lo, u_hi, s_lo, s_hi)``, padded by :data:`BRACKET_PAD`."""
-    return _padded(*crossing.precise_brackets)
+    return _padded(*np.array(crossing.precise_brackets))
 
 
 def infer_iterates(workbench: "TangleWorkbench", sources: Optional[Iterable[int]] = None) -> int:
@@ -219,8 +219,9 @@ def _widest_stable_brackets(registry: IntersectionRegistry) -> dict[ManifoldKey,
     candidates of a predicted stable bracket are those within this width of it.
     """
     widest: dict[ManifoldKey, float] = defaultdict(float)
-    for branch_key, (_cdists, _ids, hi, lo) in registry._stable_branch_buckets().items():
-        stable = _padded(hi, lo)[0][:, 2:]
+    for branch_key, (_cdists, _ids, hi, _lo) in registry._stable_branch_buckets().items():
+        # A window, not a decision: the plain ends, padded as the precise ones are.
+        stable = hi[:, 2:] + BRACKET_PAD * np.abs(hi[:, 2:]) * np.array([-1.0, 1.0])
         # fmax skips the NaN rows of crossings without brackets; 0.0 when none has one.
         widest[branch_key] = float(np.fmax.reduce(stable[:, 1] - stable[:, 0], initial=0.0))
     return widest
@@ -257,8 +258,8 @@ def _bracketed_image(
     near = _padded(near_hi[first:last], near_lo[first:last])  # NaN rows (no brackets) meet nothing
     # Each lower end of one bracket at most the upper end of the other, precisely.
     meets = np.all(
-        (compare(*(c[[0, 2]] for c in carried), *(n[:, [1, 3]] for n in near)) <= 0)
-        & (compare(*(n[:, [0, 2]] for n in near), *(c[[1, 3]] for c in carried)) <= 0),
+        (compare(*(c[0::2] for c in carried), *(n[:, 1::2] for n in near)) <= 0)
+        & (compare(*(n[:, 0::2] for n in near), *(c[1::2] for c in carried)) <= 0),
         axis=1,
     )
     images = [
