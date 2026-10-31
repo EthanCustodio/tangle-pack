@@ -1347,3 +1347,10 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   identity probe unchanged but linked three crossings fewer on the k=2.8 deep-blast sliver build (422 -> 418
   crossings). (4) Partition ownership and the dual-graph walks: their intervals and nodes hold plain floats
   (`intervals_from_marks`, `PartitionFamily`, `DualGraph`, outside the run's files).
+- **Measured:** identity probe identical on all 62 builds (the residuals dumped apart, `<name>.lo.npz`). Unguarded k=2.5
+  scale series at 1e-7 (`near_orbit_radius=1e-3`, `min_separation=None`, stopped at 9.1M rows, blast 15): base and branch
+  compute the same rows, crossings, links and depth (pip / trusted 16 / 16); neighbours tie as plain floats from blast 10
+  (8 ties; 773 at blast 15, `dc/c` down to 1.1e-16) and the residuals tell every one apart, none against the chain; no
+  merge drop, no crossing-order tie or flip and no ambiguous link on either. Cost: +17.3 MiB at the 1e-7 guarded
+  plateau (2.10M rows, store 104 -> 121 MiB); blasts about 15% slower deep in the series (13.2 -> 15.2 s at blast 14),
+  in the registry's stable buckets and the per-source precise meet test of `infer_iterates`.
