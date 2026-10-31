@@ -1361,3 +1361,7 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   brackets never step back along the chain. Dedup and the iterate brackets still compare the precise value. Left
   open: two crossings on ONE segment whose ends the residuals reverse, tied as plain floats, are still ordered by
   their residuals (against `t`); it needs the merge on precise values (the author's decision above).
+- **At merge (2026-10-30), the author accepted** the reworded bridge invariant (a `BridgeId` runs in chain order,
+  the unstable-cdist order up to the ULP a lerped cdist steps back by at a fold of tied nodes) and merged with the
+  merge, the crossing sign, `BRACKET_PAD`, ownership and the dual walks left plain. A precise merge would change
+  computed results: a `/feature` of its own if wanted.

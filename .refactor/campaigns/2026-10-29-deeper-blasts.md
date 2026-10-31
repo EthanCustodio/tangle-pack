@@ -185,7 +185,7 @@ Success:
 - the laws pass (topology change is discovery).
 
 ## Run 3: cdist-precision (/refactor)
-- [ ] done
+- [x] done (1bff84d, residual column cdist_lo (double-double); probe identical on 62 builds; deep unguarded 1e-7 series: 773 plain neighbour ties at blast 15 all split by the residuals, same rows/links/depth 16 as base; merge, crossing sign, BRACKET_PAD 1e-12, ownership and dual walks stay plain (a precise merge changes k28/inversion: a /feature if wanted); +17 MiB at the 1e-7 plateau, deep blasts ~15% slower)
 
 Goal: canonical distances keep their full relative precision however deep a curve is. Nothing computed changes
 on today's cases.
