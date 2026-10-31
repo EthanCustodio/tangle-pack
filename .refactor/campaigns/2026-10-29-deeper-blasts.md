@@ -1,5 +1,7 @@
 # Campaign: deeper blasts
 
+**Outcome (2026-10-31, complete in 4 runs, main 7015483).** Run 1 brought the lean blast and the opt-in width guard: lean alone frees about 1% because exact topology keeps the frontier's lineage, lean plus width ends 3-5x smaller, and the width guard stays off by default. Run 2 made the near-anchor guard (clause 3 of N, c=5) the default, so `pip_depth` equals `trusted_depth`, and added the opt-in graded mesh `near_orbit_radius`, which reaches depth 18 at 1e-7 and 1e-9 (the xy floor). Run 3 added the cdist residual column (double-double): the 773 plain neighbour ties of the deep unguarded series are all split, nothing computed changed, the merge stays plain, and it costs +17 MiB and about 15% deep. Run 4 added representative blasts: the topology matches the full series except a delayed k32 reference switch, but they are only 2-2.6x cheaper while the pip depth is stalled. The prune question is answered: at trusted depth 9-12 (1e-9 to 1e-12), 1e-5, "resolution" and None agree on everything. Open for a later effort: holding unclassed bridges past the cut, or representatives with the graded mesh; a precise merge; the heteroclinic `blast_zone(fixed_point=None)` TypeError; the forked-pool futex hang in the suite.
+
 - **Goal:** blast deeper, to more iterates and more pip depth, with less memory (author, 2026-10-29).
 - **Date:** 2026-10-29. **Base:** main `5dec003` (planned on `5ed9940`; the speedup campaign's run 1, cpu-workers,
   merged in between and touched `loom/Blast.py`'s separation, `diagnostics.py` and `DynamicalSystem.py`; its
@@ -229,7 +231,7 @@ Success:
 - suite and `coverage_guard`.
 
 ## Run 4: class-representatives (/feature)
-- [ ] done
+- [x] done (7015483, representatives= opt-in; probe identical on 62 builds; full-series topology everywhere but a delayed k32 reference switch at blasts 6-9/10 (a held witness) and 1-4 fewer trajectory pairs; 1.9-2.6x cheaper at k=2.5 blast 12, not 10x: past the stalled pip depth the frontier is unclassed; lean+rep unguarded to blast 18 at 15.3M rows; the prune hides nothing at trusted depth 9-12)
 
 Goal: an opt-in blast that iterates one bridge per (class, landing element) plus every pip-orbit child, so cost
 scales with the alphabet and not with e^{hn}.
