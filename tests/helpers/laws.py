@@ -53,6 +53,7 @@ import pytest
 
 from helpers.invariants import (
     assert_cdist_monotonic,
+    assert_plain_ties_ordered,
     assert_no_geometric_spikes,
     assert_one_to_one,
 )
@@ -412,22 +413,12 @@ def check_case_heteroclinic(case: "Case") -> int:
 # --------------------------------------------------------------------------- #
 def check_manifold_cdist_monotone(case: "Case") -> int:
     """cdist is non-decreasing along every manifold and every bridge (ties allowed),
-    and where two neighbours tie as plain floats their residuals put them in order.
-
-    Not "the precise cdist never decreases": the merge orders a chain by the
-    plain floats, and the k=2.8 and inversion cases hold neighbours one ULP
-    apart whose residuals order them the other way (2026-10-30).
-    """
-    from tanglepack.numerics.precise import compare
-
+    and where two neighbours tie as plain floats their residuals put them in order
+    (no law case holds such a tie: ``test_deep_cdists.py`` gives the clause teeth)."""
     curves = list(case.workbench.manifolds.values()) + list(case.workbench.bridges)
     for curve in curves:
         assert_cdist_monotonic(curve, strict=False)
-        _head, store, rows = curve._rows(stop_at_final=False)
-        hi, lo = store.precise_cdist(rows)
-        tied = np.flatnonzero(store.cdist[rows][1:] == store.cdist[rows][:-1])
-        assert (compare(hi[tied + 1], lo[tied + 1], hi[tied], lo[tied]) > 0).all(), (
-            curve.manifold_key, rows[tied].tolist())
+        assert_plain_ties_ordered(curve)
     return len(curves)
 
 

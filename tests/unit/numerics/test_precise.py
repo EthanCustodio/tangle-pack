@@ -64,14 +64,11 @@ def test_dd_mean_and_dd_lerp() -> None:
                for pair, ti, x, lx, y, ly in zip(zip(hi, lo), t, a, la, b, lb))
 
 
-def test_dd_sub_compare_and_rank_order_the_precise_values() -> None:
+def test_compare_and_as_key_order_the_precise_values() -> None:
     """Values that tie as floats are told apart by their residuals."""
     hi = np.array([5.0, 5.0, 5.0, 3.0, 5.0])
     lo = np.array([1e-16, -1e-16, 0.0, 0.0, 1e-16])
-    assert precise.rank(hi, lo).tolist() == [3, 1, 2, 0, 3]
     assert precise.compare(hi[:-1], lo[:-1], hi[1:], lo[1:]).tolist() == [1, -1, 1, -1]
-    s, e = precise.dd_sub(5.0, 1e-16, 5.0, -1e-16)
-    assert (float(s), float(e)) == (2e-16, 0.0)
     assert precise.as_key(5.0, 1e-16) < precise.as_key(5.0, 2e-16) < precise.as_key(np.nextafter(5.0, 6.0), 0.0)
 
 

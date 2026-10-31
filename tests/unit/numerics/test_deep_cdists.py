@@ -4,14 +4,17 @@ A hand-built unstable curve at cdist 1e13 whose nodes are 1e-4 apart
 (``dc / c = 1e-17``, below float eps): every plain cdist ties, the residuals
 do not (:mod:`tanglepack.numerics.precise`). Two crossings on it tie as plain
 floats too; the registry, the brackets and the bridge cut order them by their
-precise values.
+residuals (``Intersection.cdist_key``). The topology's readers of the key are
+tested on tied crossings in ``tests/unit/topology/test_tied_cdists.py``.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from helpers.fakes import bare_fixed_point
+from helpers.invariants import assert_plain_ties_ordered
 from helpers.polylines import TEST_STORE, polyline_manifold
 from tanglepack import BaseManifold, IntersectionRegistry
 from tanglepack.numerics.Tangle import Tangle
@@ -80,3 +83,14 @@ def test_a_synthetic_crossing_has_no_brackets_and_a_zero_residual():
     anchor = Intersection.synthetic(coords=(0.0, 0.0), unstable_cdist=0.0, stable_cdist=0.0)
     assert anchor.brackets is None and anchor.precise_brackets is None
     assert anchor.cdist_key("unstable") == anchor.cdist_key("stable") == (0.0, 0.0)
+
+
+def test_the_manifold_law_reads_the_residuals_at_a_plain_tie():
+    """The deep curve passes the law's tie clause; the same curve with its
+    residuals equal (or reversed) at a tie fails it."""
+    _tangle, unstable, _crossings = _deep_tangle()
+    assert_plain_ties_ordered(unstable)
+    rows = unstable.ids
+    TEST_STORE._cdist_lo[rows[3]] = TEST_STORE._cdist_lo[rows[2]]
+    with pytest.raises(AssertionError):
+        assert_plain_ties_ordered(unstable)

@@ -347,7 +347,7 @@ def test_a_release_leaves_a_bracket_end_at_the_periodic_point() -> None:
 
 def test_the_residual_travels_with_its_row(store) -> None:
     """``cdist_lo`` is written by every writer (0.0 by default, NaN with no cdist),
-    read by ``end`` and ``precise_cdist`` and kept by a resize and a compaction."""
+    read by ``end`` and kept by a resize and a compaction."""
     rows = store.append(np.zeros((3, 2)), [1.0, 1.0, 2.0], [1e-17, -1e-17, 0.0])
     plain = store.append_one(0.0, 0.0, 3.0)
     (phantom,) = store.append([[9.0, 9.0]], None)
@@ -356,13 +356,13 @@ def test_the_residual_travels_with_its_row(store) -> None:
     assert np.isnan(store._cdist_lo[phantom])
 
     store.append(np.zeros((5000, 2)), np.ones(5000))  # a resize
-    hi, lo = store.precise_cdist(rows)
-    assert hi.tolist() == [1.0, 1.0, 2.0] and lo.tolist() == [1e-17, -1e-17, 2e-17]
+    assert store.cdist[rows].tolist() == [1.0, 1.0, 2.0]
+    assert store._cdist_lo[rows].tolist() == [1e-17, -1e-17, 2e-17]
 
     keep = np.ones(len(store), dtype=bool)
     keep[rows[1]] = False
     old_to_new = store.compact(keep)
-    assert store.precise_cdist(old_to_new[rows[[0, 2]]])[1].tolist() == [1e-17, 2e-17]
+    assert store._cdist_lo[old_to_new[rows[[0, 2]]]].tolist() == [1e-17, 2e-17]
 
 
 def test_a_format_1_save_loads_with_residual_zero(tmp_path) -> None:
@@ -396,3 +396,37 @@ def test_a_format_1_save_loads_with_residual_zero(tmp_path) -> None:
     assert np.array_equal(np.isnan(lo), np.isnan(store.cdist)) and not np.nan_to_num(lo).any()
     np.testing.assert_array_equal(old.point_store.cdist, store.cdist)
     assert all(x.unstable_cdist_lo == x.stable_cdist_lo == 0.0 for _i, x in old.intersection_registry)
+
+
+def test_growth_and_refinement_write_the_precise_residuals() -> None:
+    """Every grown row is ``stretch * (its parent's precise cdist)`` (``dd_mul``)
+    and every refined row the precise mean of the two older neighbours it was
+    put between (``dd_mean``), residual for residual; only the seed rows, at
+    the fundamental segment, carry none."""
+    from cases import build_k10
+    from tanglepack.numerics.precise import dd_mean, dd_mul
+
+    workbench = build_k10().workbench
+    grown = refined = 0
+    for key, manifold in workbench.manifolds.items():
+        _head, store, rows = manifold._rows(stop_at_final=False)
+        cdist, lo = store._cdist, store._cdist_lo
+        parents = (store._preimage if manifold.stability == "unstable" else store._image)[rows]
+        for i, (row, parent) in enumerate(zip(rows, parents)):
+            if parent < 0:
+                continue
+            if np.isnan(cdist[parent]):  # a phantom parent: a refined row
+                older = [[r for r in side if r < row] for side in (rows[i - 1::-1] if i else [], rows[i + 1:])]
+                if not all(older):
+                    continue
+                (a, *_), (b, *_) = older
+                expected = dd_mean(cdist[a], lo[a], cdist[b], lo[b])
+                refined += 1
+            else:
+                expected = dd_mul(cdist[parent], lo[parent], manifold.stretch_param)
+                if (cdist[row], lo[row]) != expected:
+                    assert i <= key[0].k_value and lo[row] == 0.0, (key[1:], i)  # a seed row
+                    continue
+                grown += 1
+            assert (cdist[row], lo[row]) == expected, (key[1:], i)
+    assert grown > 100 and refined > 100

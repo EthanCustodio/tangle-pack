@@ -102,6 +102,27 @@ def assert_cdist_monotonic(
         )
 
 
+def assert_plain_ties_ordered(manifold: BaseManifold) -> None:
+    """Assert that where two neighbours tie as plain cdists, their residuals
+    put them in curve order (:mod:`tanglepack.numerics.precise`).
+
+    With equal plain floats the residuals' difference IS the precise one. Not
+    "the precise cdist never decreases": the merge orders a chain by the plain
+    floats, and the k=2.8 and inversion cases hold neighbours one ULP apart
+    whose residuals order them the other way (2026-10-30).
+
+    Raises:
+        AssertionError: Naming the curve and the rows of the misordered ties.
+    """
+    _head, store, rows = manifold._rows(stop_at_final=False)
+    if store is None or len(rows) < 2:
+        return
+    cdist, lo = store.cdist[rows], store._cdist_lo[rows]
+    tied = np.flatnonzero(cdist[1:] == cdist[:-1])
+    bad = tied[lo[tied + 1] <= lo[tied]]
+    assert not len(bad), (manifold.manifold_key, rows[bad].tolist())
+
+
 def assert_no_cdist_collision(
     manifold: BaseManifold, *, atol: float = 1e-12
 ) -> None:
