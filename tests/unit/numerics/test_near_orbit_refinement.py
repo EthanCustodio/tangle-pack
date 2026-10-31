@@ -184,3 +184,19 @@ def test_every_piece_of_the_seed_chain_is_graded_and_linked_along_it(name, stabi
         assert np.all(store._chain[source[linked]] == expected), key
         np.testing.assert_allclose(store.cdist[source[linked]], store.cdist[linked] * chain.stretch_param,
                                    rtol=1e-9, err_msg=str(key))
+
+
+@pytest.mark.parametrize("stability", ["stable", "unstable"])
+def test_the_carried_points_keep_their_cdist_residuals(stability):
+    """A carried point's cdist is ``scale * (the innermost point's precise cdist)``
+    (``dd_mul``): its residual is that product's rounding error plus the scaled
+    residual of the innermost point, nonzero on most points and within a couple
+    of ULPs of the plain value (the pair is not normalised)."""
+    workbench, fp = _workbench(R0)
+    store = workbench.point_store
+    source = store.preimage if stability == "stable" else store.image
+    rows = np.asarray(fp.slot_chain(stability, 0, 0).ids)
+    carried = rows[(source[rows] >= 0) & (store._chain[np.maximum(source[rows], 0)] >= 0)]
+    cdist, lo = store._cdist[carried], store._cdist_lo[carried]
+    assert len(carried) > 10 and np.count_nonzero(lo) > len(carried) // 2
+    assert np.all(np.abs(lo) <= 2 * np.spacing(cdist))

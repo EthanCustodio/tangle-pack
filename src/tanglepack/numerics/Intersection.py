@@ -15,7 +15,7 @@ from typing import Optional, Literal, TYPE_CHECKING, Union
 import numpy as np
 from numpy.typing import NDArray
 
-from .precise import as_key
+from .precise import two_sum
 
 if TYPE_CHECKING:
     from .BaseManifold import BaseManifold
@@ -278,7 +278,7 @@ class Intersection:
         ends = [
             sorted(
                 (0.0, 0.0) if not isinstance(end, int)
-                else as_key(self.store._cdist[end], self.store._cdist_lo[end])
+                else two_sum(float(self.store._cdist[end]), float(self.store._cdist_lo[end]))
                 for end in segment
             )
             for segment in (self.unstable_segment, self.stable_segment)

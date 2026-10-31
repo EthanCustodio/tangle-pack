@@ -247,12 +247,11 @@ def _bracketed_image(
     hi, lo = _brackets(source)
     (u_hi, u_lo), (s_hi, s_lo) = dd_mul(hi[:2], lo[:2], stretch_u), dd_div(hi[2:], lo[2:], stretch_s)
     carried = np.concatenate((u_hi, s_hi)), np.concatenate((u_lo, s_lo))
-    stable = s_hi
 
     # A candidate's stable cdist lies within the predicted bracket widened by the
     # branch's widest stable bracket.
     cdists, ids, near_hi, near_lo = registry.stable_brackets(b_key)
-    centre, window = 0.5 * (stable[0] + stable[1]), 0.5 * (stable[1] - stable[0]) + widest[b_key]
+    centre, window = 0.5 * (s_hi[0] + s_hi[1]), 0.5 * (s_hi[1] - s_hi[0]) + widest[b_key]
     first = bisect.bisect_left(cdists, centre - window)
     last = bisect.bisect_right(cdists, centre + window)
     near = _padded(near_hi[first:last], near_lo[first:last])  # NaN rows (no brackets) meet nothing

@@ -1036,8 +1036,8 @@ class Tangle:
         crossings = list(crossings)
         # --- 1. Collect crossings grouped by their parent unstable manifold ---
         # entry: (unstable cdist key, Intersection, orig_p0, orig_p1), the
-        # bracket ends rows (or the root BranchPoint); the key keeps the chain's
-        # plain order and breaks a plain tie by the residuals (CdistKey)
+        # bracket ends rows (or the root BranchPoint); the key orders the
+        # crossings on one segment, a residual breaking a plain tie (CdistKey)
         manifold_crossings: dict[
             BaseManifold,
             list[tuple[tuple[float, float], Intersection, int | BranchPoint, int | BranchPoint]],
@@ -1090,12 +1090,14 @@ class Tangle:
         # images -- tripped the unstable x unstable detector all along the tangle.
         cut: list[tuple[BaseManifold, Bridge]] = []  # (parent, bridge)
         for manifold, manifold_group in manifold_crossings.items():
-            manifold_group.sort(key=lambda entry: entry[0])
-            # The key keeps the chain's plain order, a residual breaking only a plain
-            # tie (CdistKey): sorted, the lower bracket ends never step back along it.
-            positions = [-1 if isinstance(p0, BranchPoint) else manifold.store.position_of(p0)
-                         for _key, _crossing, p0, _p1 in manifold_group]
-            assert all(a <= b for a, b in zip(positions, positions[1:])), (manifold.manifold_key, positions)
+            # Chain order first (the root BranchPoint before every row), then the
+            # cdist key within one segment: a lerped cdist can step back by an ULP
+            # across a fold of tied nodes, the segment never does.
+            store = manifold.store
+            manifold_group.sort(key=lambda entry: (
+                -1 if isinstance(entry[2], BranchPoint) else store.position_of(entry[2]),
+                entry[0],
+            ))
 
             # The real points bracketing each crossing on the CURRENT polyline. A run
             # of crossings on one segment has no node between them, so each one after

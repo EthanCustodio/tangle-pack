@@ -10,9 +10,9 @@ cdist as two floats: ``hi``, computed by the SAME float expression as before
 rounding dropped. ``hi + lo`` carries about 32 digits.
 
 Each kernel below returns ``(hi, lo)`` with ``hi`` today's float. The pair is
-NOT normalised (``|lo|`` may exceed half an ULP of ``hi``); :func:`normalise`
+NOT normalised (``|lo|`` may exceed half an ULP of ``hi``); ``two_sum(hi, lo)``
 makes it the unique pair of its value, which a bracket's ends read
-(:func:`as_key`). The error-free transforms are Knuth's ``two_sum`` and Dekker's
+(``Intersection.precise_brackets``). The error-free transforms are Knuth's ``two_sum`` and Dekker's
 ``two_prod`` (no fused multiply-add); they hold for finite cdists far from
 overflow, which every cdist is. The kernels use arithmetic operators only, so
 float64 arrays give arrays and Python floats give Python floats (the same IEEE
@@ -37,7 +37,12 @@ _SPLITTER = 134217729.0
 
 
 def two_sum(a: Floats, b: Floats) -> tuple[Floats, Floats]:
-    """``s = fl(a + b)`` and the exact error ``e``: ``a + b == s + e``."""
+    """``s = fl(a + b)`` and the exact error ``e``: ``a + b == s + e``.
+
+    ``two_sum(hi, lo)`` normalises a pair: the unique pair of the value ``hi + lo``,
+    ``hi`` rounded and ``|lo| <= ulp(hi) / 2``, so two such pairs compare as tuples
+    the way their precise values do.
+    """
     s = a + b
     bb = s - a
     return s, (a - (s - bb)) + (b - bb)
@@ -55,11 +60,6 @@ def two_prod(a: Floats, b: Floats) -> tuple[Floats, Floats]:
     p = a * b
     (ah, al), (bh, bl) = _split(a), _split(b)
     return p, ((ah * bh - p) + ah * bl + al * bh) + al * bl
-
-
-def normalise(hi: Floats, lo: Floats) -> tuple[Floats, Floats]:
-    """The unique pair of the value ``hi + lo``: ``hi`` rounded, ``|lo| <= ulp(hi) / 2``."""
-    return two_sum(hi, lo)
 
 
 def dd_mul(hi: Floats, lo: Floats, s: Floats) -> tuple[Floats, Floats]:
@@ -129,9 +129,3 @@ def compare(
     """
     s, e = two_sum(hi_a, -hi_b)
     return np.sign(s + (e + (lo_a - lo_b)))
-
-
-def as_key(hi: float, lo: float) -> tuple[float, float]:
-    """One value's normalised pair as Python floats: a tuple compares as the precise value
-    (a bracket end of the iterate inference)."""
-    return normalise(float(hi), float(lo))

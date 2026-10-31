@@ -141,24 +141,26 @@ fixed in conversation with the author:
   its preimages leaves T and the backward walk stops at once), which
   ``punch_holes`` asserts. A reference whose pair has no spanning
   Bridge object punches no hole and starts no chain (``punch_holes`` warns).
-* Exact ownership. Every partition boundary
-  IS a registry float (asserted in :func:`_element_of_intersection`; the
-  synthetic ``(None, 0.0)`` anchor aside), so a registered crossing is owned
-  without any tolerance: a boundary crossing by the element closed at its id
-  (the singleton if it has one, else the closed neighbour), any other by its
-  exact stable cdist. Ownership reads the PLAIN float, as the intervals are
-  sorted by it (:func:`intervals_from_marks`) and ``PartitionFamily`` reads
-  it (2026-10-30: the cdist keys, :meth:`.Intersection.cdist_key`, order the
+* Exact ownership. Every partition boundary IS a registry float (asserted in
+  :func:`_element_of_intersection`; the synthetic ``(None, 0.0)`` anchor
+  aside), so a registered crossing is owned without any tolerance: a
+  boundary crossing by the element closed at its id (the singleton if it has
+  one, else the closed neighbour), any other by its exact stable cdist.
+  Ownership reads the PLAIN float, as the intervals are sorted by it
+  (:func:`intervals_from_marks`) and ``PartitionFamily`` reads it
+  (2026-10-30: the cdist keys, :meth:`.Intersection.cdist_key`, order the
   crossings, a hole bridge's ends and the containers). An absolute cdist
-  slack is no ownership tolerance: deep blasts put real crossings 1e-6
-  apart (68% of consecutive k=2.8 gaps by blast 14). The topology reads no
-  absolute cdist slack at all: an anchor is told by identity (``Intersection.is_anchor``, synthetic at
-  exactly 0.0), ownership and containment are exact, and the one slack left
-  is the RELATIVE error of a scaled cdist (``SCALING_RTOL`` at a scaled
-  landing end, ``collision_rtol`` in ``Trellis.same_point``). Forcing the slack
-  to 0 moved no output on any fixture. ``cdist_tol`` survives only as
-  geometry -- clipping a polyline to its arc (``Arc._interior_polyline``,
-  ``diagnostics._oriented_bridge_polyline``) -- never as identity or ownership.
+  slack is no ownership tolerance: deep blasts put real crossings 1e-6 apart
+  (68% of consecutive k=2.8 gaps by blast 14). The topology reads no
+  absolute cdist slack at all: an anchor is told by identity
+  (``Intersection.is_anchor``, synthetic at exactly 0.0), ownership and
+  containment are exact, and the one slack left is the RELATIVE error of a
+  scaled cdist (``SCALING_RTOL`` at a scaled landing end, ``collision_rtol``
+  in ``Trellis.same_point``). Forcing the slack to 0 moved no output on any
+  fixture. ``cdist_tol`` survives only as geometry -- clipping a polyline to
+  its arc (``Arc._interior_polyline``,
+  ``diagnostics._oriented_bridge_polyline``) -- never as identity or
+  ownership.
 * The anchor. A periodic point is ONE crossing on every
   branch attached to it. Both stable branches leave it, so an anchor
   opening faces the outward half of the branch the signs pick

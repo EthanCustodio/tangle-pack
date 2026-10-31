@@ -1864,7 +1864,8 @@ class TangleWorkbench:
         crossings. A non-anchor end sits on the bridge's own branch, inside its node
         span up to the registry's dedup tolerance; an anchor end comes first and is
         the bridge's own periodic point (one anchor on every branch there); and
-        the id runs in unstable-cdist order.
+        the id runs in chain order (the unstable-cdist order up to the ULP a
+        lerped cdist can step back by at a fold of tied nodes).
         """
         bid = bridge.id
         if bid is None:
@@ -1885,7 +1886,13 @@ class TangleWorkbench:
         slack = DEDUP_RTOL * max(abs(hi[0]), 1.0)
         fixed_point, _, orbit_index, _ = bridge.manifold_key
         first, second = (self._intersection_registry[end] for end in bid)
-        assert first.is_anchor or first.cdist_key("unstable") <= second.cdist_key("unstable"), bid
+        # Chain order, which the cut follows: a lerped cdist key can step back by
+        # an ULP across a fold of tied nodes, the chain never does.
+        below = [
+            -1 if isinstance(p0, BranchPoint) else bridge.store.position_of(p0)
+            for p0 in (crossing.unstable_segment[0] for crossing in (first, second) if not crossing.is_anchor)
+        ]
+        assert below == sorted(below), bid
         for end in bid:
             crossing = self._intersection_registry[end]
             if crossing.is_anchor:

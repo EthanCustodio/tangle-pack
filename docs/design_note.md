@@ -151,7 +151,9 @@ against the index of the OTHER stability only, so no same-stability pair is ever
 resolved once, deduplicated by branch keys and by both canonical distances to the relative tolerance
 `DEDUP_RTOL` (an absolute slack would merge distinct deep crossings, NUM-8), and bracketed on the
 current polyline. A run of crossings on one segment gets a separator after each crossing's lower
-bracket, and a `BridgeId` runs in unstable-cdist order (NUM-19). Crossings are registered along each
+bracket, and a `BridgeId` runs in chain order (NUM-19): the cut sorts a branch's crossings by their
+lower bracket's chain position, then by cdist key, since a lerped cdist can step back by an ULP across
+a fold of tied nodes (2026-10-30). Crossings are registered along each
 unstable branch in unstable-cdist order, so registry ids are reproducible within and between
 processes (INT-7).
 

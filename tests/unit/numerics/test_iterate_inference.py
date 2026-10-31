@@ -10,11 +10,13 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+import pytest
 
 from helpers.logs import assert_logged
 from tanglepack.numerics import IterateInference
 from tanglepack.numerics.IterateInference import infer_iterates
 from tanglepack.numerics.IterateTable import IterateTable
+from tanglepack.numerics.precise import dd_div, two_prod
 
 
 def _detected_links(registry) -> set[tuple[int, int]]:
@@ -173,6 +175,42 @@ def test_an_image_whose_stable_bracket_misses_the_carried_one_is_no_image(
     infer_iterates(workbench, [x])
 
     assert registry.iterate_table[x, 1] is None and registry.iterate_table[y, -1] is None
+    assert x not in registry.unresolved_links
+
+
+@pytest.mark.parametrize(("ulps", "linked"), [(-0.25, True), (0.25, False)], ids=["meets", "misses"])
+def test_the_bracket_meet_reads_the_residuals(henon_tangle_with_bridges, monkeypatch, ulps, linked):
+    """x's stable bracket, carried one step, starts at y's padded upper end as a
+    plain float: a quarter ULP below it (in the residual) the two meet and x -> y
+    is linked, a quarter ULP above it they do not."""
+    workbench, _fp = henon_tangle_with_bridges
+    registry = workbench.intersection_registry
+    x, y = min(_detected_links(registry))
+    source = registry[x]
+    stretch_s = workbench.manifolds[source.manifold_b_key].stretch_param
+    image_branch = source.manifold_b_key[0].advance_key(source.manifold_b_key, 1)
+    _cdists, ids, near_hi, near_lo = registry.stable_brackets(image_branch)
+    row = ids.tolist().index(y)
+    padded_hi, padded_lo = IterateInference._padded(near_hi[row], near_lo[row])
+    end_hi, end_lo = float(padded_hi[3]), float(padded_lo[3]) + ulps * np.spacing(padded_hi[3])
+    # A source stable end whose carry is (end_hi, end_lo): dd_div's hi is fl(h / s).
+    guess = end_hi * stretch_s
+    h = next(c for c in (guess, np.nextafter(guess, 0.0), np.nextafter(guess, np.inf)) if c / stretch_s == end_hi)
+    p, e = two_prod(end_hi, stretch_s)
+    lo = end_lo * stretch_s - ((h - p) - e)
+    assert dd_div(h, lo, stretch_s)[0] == end_hi
+    hi, lo_row = IterateInference._brackets(source)
+    width = (hi[3] - hi[2]) / stretch_s
+    beside = (np.concatenate((hi[:2], [h, (end_hi + width) * stretch_s])), np.concatenate((lo_row[:2], [lo, 0.0])))
+    brackets = IterateInference._brackets
+    monkeypatch.setattr(
+        IterateInference, "_brackets", lambda crossing: beside if crossing is source else brackets(crossing)
+    )
+    registry.iterate_table = IterateTable()
+
+    infer_iterates(workbench, [x])
+
+    assert (registry.iterate_table[x, 1] == y) is linked
     assert x not in registry.unresolved_links
 
 

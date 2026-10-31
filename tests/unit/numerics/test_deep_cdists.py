@@ -76,6 +76,47 @@ def test_a_cut_between_tied_crossings_runs_in_precise_order():
     assert (bridge.root.id, bridge.tail.id) == (rows[1], rows[4])
 
 
+def test_a_cut_follows_the_chain_where_a_lerped_key_steps_back():
+    """Across a fold of tied nodes a lerped cdist can come out an ULP high: the
+    left crossing reads a larger key than the right one. The cut follows the
+    chain, not the key, and still brackets each crossing by its own segment."""
+    tangle, unstable, (left, right) = _deep_tangle()
+    left.unstable_cdist_lo = 10 * STEP
+    assert left.cdist_key("unstable") > right.cdist_key("unstable")
+    registry = IntersectionRegistry()
+    for crossing in (left, right):
+        registry.add(crossing)
+    (bridge,) = tangle.create_bridges([right, left], for_manifold=unstable)
+    rows = unstable.ids
+    assert (bridge.first_intersection, bridge.second_intersection) == (left.id, right.id)
+    assert (bridge.root.id, bridge.tail.id) == (rows[1], rows[4])
+
+
+def test_a_bridge_between_tied_crossings_named_backwards_is_refused():
+    """``_register_bridge`` asserts the id runs along the chain: across two
+    crossings tied as plain floats the reversed id is refused, the cut one kept."""
+    from tanglepack import Bridge, TangleWorkbench
+
+    tangle, unstable, (left, right) = _deep_tangle()
+    identity = lambda point: point  # noqa: E731 - the map is never called
+    workbench = TangleWorkbench(identity, identity)
+    registry = workbench.intersection_registry
+    for crossing in (left, right):
+        registry.add(crossing)
+    rows = unstable.ids.tolist()
+
+    def bridge(first, second):
+        return Bridge(
+            root=rows[1], stability="unstable", stretch_param=1.0, fixed_point=unstable.fixed_point,
+            tail=rows[4], branch_index=0, manifold_key=unstable.manifold_key, store=unstable.store,
+            first_intersection=first.id, second_intersection=second.id,
+        )
+
+    with pytest.raises(AssertionError):
+        workbench._register_bridge(bridge(right, left))
+    assert workbench._register_bridge(bridge(left, right)).id == (left.id, right.id)
+
+
 def test_a_synthetic_crossing_has_no_brackets_and_a_zero_residual():
     """An anchor carries no segment: neither bracket reading has one, and its key is (0, 0)."""
     from tanglepack import Intersection

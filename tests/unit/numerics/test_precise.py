@@ -64,17 +64,24 @@ def test_dd_mean_and_dd_lerp() -> None:
                for pair, ti, x, lx, y, ly in zip(zip(hi, lo), t, a, la, b, lb))
 
 
-def test_compare_and_as_key_order_the_precise_values() -> None:
+def test_compare_and_normalised_pairs_order_the_precise_values() -> None:
     """Values that tie as floats are told apart by their residuals."""
     hi = np.array([5.0, 5.0, 5.0, 3.0, 5.0])
     lo = np.array([1e-16, -1e-16, 0.0, 0.0, 1e-16])
     assert precise.compare(hi[:-1], lo[:-1], hi[1:], lo[1:]).tolist() == [1, -1, 1, -1]
-    assert precise.as_key(5.0, 1e-16) < precise.as_key(5.0, 2e-16) < precise.as_key(np.nextafter(5.0, 6.0), 0.0)
+    assert precise.two_sum(5.0, 1e-16) < precise.two_sum(5.0, 2e-16) < precise.two_sum(np.nextafter(5.0, 6.0), 0.0)
+
+
+def test_compare_is_nan_where_either_value_is():
+    """A NaN row (a crossing without brackets) compares as nothing: no sign, so
+    every test of it against 0 is False."""
+    signs = precise.compare(np.array([np.nan, 1.0]), np.zeros(2), np.array([1.0, np.nan]), np.zeros(2))
+    assert np.isnan(signs).all() and not (signs <= 0).any() and not (signs >= 0).any()
 
 
 @pytest.mark.parametrize("ulps", [1, 3])
-def test_normalise_gives_the_unique_pair(ulps: int) -> None:
+def test_two_sum_normalises_a_pair(ulps: int) -> None:
     """A residual of a few ULPs moves into ``hi``; the value is unchanged."""
     hi, lo = 7.0, ulps * np.spacing(7.0)
-    s, e = precise.normalise(hi, lo)
+    s, e = precise.two_sum(hi, lo)
     assert _exact(s, e) == _exact(hi, lo) and abs(e) <= np.spacing(s) / 2
