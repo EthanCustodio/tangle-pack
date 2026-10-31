@@ -352,12 +352,16 @@ def prune(args) -> None:
         if time.perf_counter() - start > args.max_seconds:
             record["stop"] = "time"
             break
+        if snap["points"] > args.max_total_points:
+            record["stop"] = "total_points"
+            break
     record["stop"] = record["stop"] or "max_iterations"
     path.write_text(json.dumps(record))
 
 
 def prune_report(args) -> None:
-    """Each cutoff's runs compared with the unguarded one at their common trusted depth; ``prune.csv``."""
+    """Each cutoff's runs compared with the unguarded one, first at their common trusted depth, then
+    at the last blast all of them ran; ``prune.csv``."""
     rows = []
     runs: dict[str, dict[str, dict]] = {}
     for path in sorted((OUT / "prune").glob("*.json")):
@@ -371,19 +375,30 @@ def prune_report(args) -> None:
         common = min(reached.values())
         at = {s: next((b for b in r["blasts"] if (b["trusted_depth"] or 0) >= common), None)
               for s, r in by_separation.items()}
-        reference = at.get("none")
-        for separation, snap in at.items():
-            record = by_separation[separation]
-            row = {"cutoff": cutoff, "separation": separation, "common_trusted_depth": common,
-                   "deepest_trusted": reached[separation],
-                   "deepest_pip": max((b["pip_depth"] or 0 for b in record["blasts"]), default=0),
-                   "blasts_run": len(record["blasts"]), "stop": record["stop"],
-                   "at_blast": snap["blast"] if snap else None,
-                   "classes": len(snap["alphabet"]) if snap else None}
-            if snap and reference and separation != "none":
-                row.update({f"vs_none_{k}": v for k, v in compare(reference, snap).items()})
-            rows.append(row)
+        last = min(len(r["blasts"]) for r in by_separation.values())
+        for where, chosen in (("first at the common trusted depth", at),
+                              ("last common blast", {s: r["blasts"][last - 1] for s, r in by_separation.items()})):
+            rows += _prune_rows(cutoff, where, chosen, by_separation, common, reached)
     _write(OUT / "prune.csv", rows)
+
+
+def _prune_rows(cutoff, where, at, by_separation, common, reached) -> list[dict]:
+    """One row per separation of one cutoff: its snapshot ``at`` compared with the unguarded one."""
+    rows = []
+    reference = at.get("none")
+    for separation, snap in at.items():
+        record = by_separation[separation]
+        row = {"cutoff": cutoff, "compared": where, "separation": separation, "common_trusted_depth": common,
+               "deepest_trusted": reached[separation],
+               "deepest_pip": max((b["pip_depth"] or 0 for b in record["blasts"]), default=0),
+               "blasts_run": len(record["blasts"]), "stop": record["stop"],
+               "at_blast": snap["blast"] if snap else None,
+               "classes": len(snap["alphabet"]) if snap else None}
+        row["pip_depth"], row["trusted_depth"] = (snap["pip_depth"], snap["trusted_depth"]) if snap else (None, None)
+        if snap and reference and separation != "none":
+            row.update({f"vs_none_{k}": v for k, v in compare(reference, snap).items()})
+        rows.append(row)
+    return rows
 
 
 # --------------------------------------------------------------------------- #
@@ -434,6 +449,7 @@ def main() -> None:
         sub.add_argument("--max-seconds", type=float, default=1800)
         if name == "prune":
             sub.add_argument("--separation", default="none")
+            sub.add_argument("--max-total-points", type=int, default=15_000_000)
     commands.add_parser("prune-report")
     commands.add_parser("table")
     args = parser.parse_args()

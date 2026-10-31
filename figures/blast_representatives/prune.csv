@@ -1,0 +1,25 @@
+cutoff,compared,separation,common_trusted_depth,deepest_trusted,deepest_pip,blasts_run,stop,at_blast,classes,pip_depth,trusted_depth,vs_none_alphabet_only_full,vs_none_alphabet_only_other,vs_none_closed_only_full,vs_none_closed_only_other,vs_none_pairs_only_full,vs_none_pairs_only_other,vs_none_references_only_full,vs_none_references_only_other,vs_none_holes_only_full,vs_none_holes_only_other,vs_none_words_differ,vs_none_matrix_iso,vs_none_pip_depth_full,vs_none_pip_depth_other,vs_none_trusted_depth_full,vs_none_trusted_depth_other,vs_none_T_tested_full,vs_none_T_fail_full,vs_none_T_tested_other,vs_none_T_fail_other,vs_none_differs
+1e-09,first at the common trusted depth,1e-5,9,9,9,34,frontier_empty,8,4,9,9,0,0,0,0,0,0,0,0,0,0,0,True,9,9,9,9,4,0,4,0,False
+1e-09,first at the common trusted depth,none,9,9,9,18,point_budget,8,4,9,9,,,,,,,,,,,,,,,,,,,,,
+1e-09,first at the common trusted depth,resolution,9,9,9,19,total_points,8,4,9,9,0,0,0,0,0,0,0,0,0,0,0,True,9,9,9,9,4,0,4,0,False
+1e-09,last common blast,1e-5,9,9,9,34,frontier_empty,18,4,9,9,0,0,0,0,0,0,0,0,0,0,0,True,9,9,9,9,4,0,4,0,False
+1e-09,last common blast,none,9,9,9,18,point_budget,18,4,9,9,,,,,,,,,,,,,,,,,,,,,
+1e-09,last common blast,resolution,9,9,9,19,total_points,18,4,9,9,0,0,0,0,0,0,0,0,0,0,0,True,9,9,9,9,4,0,4,0,False
+1e-10,first at the common trusted depth,1e-5,10,10,10,36,frontier_empty,9,4,10,10,0,0,0,0,0,0,0,0,0,0,0,True,10,10,10,10,4,0,4,0,False
+1e-10,first at the common trusted depth,none,10,10,10,17,point_budget,9,4,10,10,,,,,,,,,,,,,,,,,,,,,
+1e-10,first at the common trusted depth,resolution,10,10,10,18,point_budget,9,4,10,10,0,0,0,0,0,0,0,0,0,0,0,True,10,10,10,10,4,0,4,0,False
+1e-10,last common blast,1e-5,10,10,10,36,frontier_empty,17,4,10,10,0,0,0,0,0,0,0,0,0,0,0,True,10,10,10,10,4,0,4,0,False
+1e-10,last common blast,none,10,10,10,17,point_budget,17,4,10,10,,,,,,,,,,,,,,,,,,,,,
+1e-10,last common blast,resolution,10,10,10,18,point_budget,17,4,10,10,0,0,0,0,0,0,0,0,0,0,0,True,10,10,10,10,4,0,4,0,False
+1e-11,first at the common trusted depth,1e-5,11,11,11,21,total_points,10,4,11,11,0,0,0,0,0,0,0,0,0,0,0,True,11,11,11,11,4,0,4,0,False
+1e-11,first at the common trusted depth,none,11,11,11,16,total_points,10,4,11,11,,,,,,,,,,,,,,,,,,,,,
+1e-11,first at the common trusted depth,resolution,11,11,11,17,point_budget,10,4,11,11,0,0,0,0,0,0,0,0,0,0,0,True,11,11,11,11,4,0,4,0,False
+1e-11,last common blast,1e-5,11,11,11,21,total_points,16,4,11,11,0,0,0,0,0,0,0,0,0,0,0,True,11,11,11,11,4,0,4,0,False
+1e-11,last common blast,none,11,11,11,16,total_points,16,4,11,11,,,,,,,,,,,,,,,,,,,,,
+1e-11,last common blast,resolution,11,11,11,17,point_budget,16,4,11,11,0,0,0,0,0,0,0,0,0,0,0,True,11,11,11,11,4,0,4,0,False
+1e-12,first at the common trusted depth,1e-5,12,12,12,17,total_points,11,4,12,12,0,0,0,0,0,0,0,0,0,0,0,True,12,12,12,12,4,0,4,0,False
+1e-12,first at the common trusted depth,none,12,12,12,16,total_points,11,4,12,12,,,,,,,,,,,,,,,,,,,,,
+1e-12,first at the common trusted depth,resolution,12,12,12,17,total_points,11,4,12,12,0,0,0,0,0,0,0,0,0,0,0,True,12,12,12,12,4,0,4,0,False
+1e-12,last common blast,1e-5,12,12,12,17,total_points,16,4,12,12,0,0,0,0,0,0,0,0,0,0,0,True,12,12,12,12,4,0,4,0,False
+1e-12,last common blast,none,12,12,12,16,total_points,16,4,12,12,,,,,,,,,,,,,,,,,,,,,
+1e-12,last common blast,resolution,12,12,12,17,total_points,16,4,12,12,0,0,0,0,0,0,0,0,0,0,0,True,12,12,12,12,4,0,4,0,False
