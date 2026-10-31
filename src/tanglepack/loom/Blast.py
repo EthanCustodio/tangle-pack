@@ -65,6 +65,21 @@ by the stable factor of the saddle whose stable branch holds its base
 (``Bridge.width_saddle``), and a child thinner than ``WIDTH_SEPARATION_FACTOR``
 chord deviations of its own polyline is below the resolution.
 
+A REPRESENTATIVE blast (``representatives=``, 2026-10-30) iterates one bridge
+per refined class instead of every bridge. By Theorem T the members of a class
+share their reduced itinerary, so iterating them all mostly repeats one fact
+while the cost grows like ``e^{hn}``. Each step links the iterate table,
+computes the topology of the selection and sorts the step's candidates (its
+frontier and every bridge held earlier in the call) with
+:func:`_representatives`: a bridge ending on the pip orbit, one the minimal
+trellis maps and one the class table does not know are always iterated; every
+other goes into the bucket of its refined child (else its unmatched pair, else
+its class; a loop by its class and element), and one per bucket is iterated,
+chosen by the policy. The others are HELD, never remembered on the bridge: the
+next step re-offers them with the new frontier, and a later call sees them as
+ordinary un-iterated bridges, so ``n`` one-step calls equal one ``n``-step call
+and a full blast afterwards takes every held bridge.
+
 This is a loom-layer algorithm: it reads the topological notion of a zone and acts on
 the numerical layer (:meth:`TangleWorkbench.iterate_bridge`). It is exposed on the
 facade as :meth:`tanglepack.loom.TangleSession.blast_zone`.
@@ -322,6 +337,64 @@ def _lean_keep(
     return keep
 
 
+def _representatives(
+    session: "TangleSession",
+    fixed_points: list["FixedPoint"],
+    candidates: list["Bridge"],
+    policy: Literal["fewest_points", "smallest_id", "largest_id"],
+) -> tuple[list["Bridge"], dict["BridgeId", "BridgeId"]]:
+    """The candidates a representative blast iterates, and the ones it holds.
+
+    Read off the topology of the current state, its iterate table linked first
+    (as a call that starts here would see it). Always iterated: a bridge
+    ending on the pip orbit, one the minimal trellis maps (its image feeds the
+    words) and one the class table does not know (a partial piece, a bridge
+    outside the cut trellis, an orphan). Every other bridge is bucketed by its
+    refined child, else its unmatched iterated pair, else its class; a loop by
+    its class and element. One bridge per bucket is iterated: ``fewest_points``
+    (ties by smallest id), ``smallest_id`` or ``largest_id``.
+
+    Returns:
+        The bridges to iterate, and ``{held id: its representative's id}``.
+    """
+    session.workbench.infer_iterates()
+    topology = session.topology(fixed_points)
+    minimal, dynamics = topology.minimal, topology.dynamics
+    mapped = set(minimal.kept_bridge_ids) - set(minimal.inert_hole_bridge_ids)
+    pip_ends = {x for orbit in _pip_orbits(session, fixed_points).values() for x in orbit}
+    members = {
+        member.bridge_id: (entry.bridge_class, member)
+        for entry in minimal.classes for member in entry.members
+    }
+    iterated: list["Bridge"] = []
+    buckets: dict[tuple, list["Bridge"]] = {}
+    for bridge in candidates:
+        if bridge.id not in members or bridge.id in mapped or pip_ends.intersection(bridge.id):
+            iterated.append(bridge)
+            continue
+        bridge_class, member = members[bridge.id]
+        if member.is_loop:
+            bucket = (bridge_class, "loop", member.loop_element)
+        elif (child := dynamics.member_refinement.get(bridge.id)) is not None:
+            bucket = (bridge_class, child.name)
+        elif (pair := dynamics.unmatched_members.get(bridge.id)) is not None:
+            bucket = (bridge_class, "unmatched", pair)
+        else:
+            bucket = (bridge_class,)
+        buckets.setdefault(bucket, []).append(bridge)
+
+    def rank(bridge: "Bridge") -> tuple:
+        return (bridge.point_count, bridge.id) if policy == "fewest_points" else bridge.id
+
+    pick = max if policy == "largest_id" else min
+    held: dict["BridgeId", "BridgeId"] = {}
+    for bucket in buckets.values():
+        representative = pick(bucket, key=rank)
+        iterated.append(representative)
+        held.update((b.id, representative.id) for b in bucket if b is not representative)
+    return iterated, held
+
+
 def _pieces(workbench: "TangleWorkbench", joined: "Bridge") -> list["BridgeId"]:
     """The ids of the consecutive bridges a joined arc runs through."""
     pieces, at = [], joined.first_intersection
@@ -348,6 +421,8 @@ class BlastStep:
             input.
         discarded_exterior: The children that fell outside the zone (dropped, never
             re-iterated).
+        held: For a representative blast, ``{held id: its representative's id}``:
+            the candidates this step left un-iterated (data, nothing reads it).
     """
 
     iteration: int
@@ -357,6 +432,7 @@ class BlastStep:
     discarded_exterior: list["Bridge"]
     discarded_too_close: list["Bridge"] = field(default_factory=list)
     already_known: list["Bridge"] = field(default_factory=list)
+    held: dict["BridgeId", "BridgeId"] = field(default_factory=dict)
 
 
 @dataclass
@@ -398,6 +474,8 @@ class BlastResult:
             decision: nothing reads it, and a smaller value is logged at INFO.
         released_rows: Store rows a lean blast freed, over every step (0 for
             a blast that is not lean).
+        held: The bridges a representative blast left un-iterated at its end
+            (0 without ``representatives``; data, nothing reads it).
     """
 
     zone: "ResonanceZone"
@@ -416,6 +494,7 @@ class BlastResult:
     pip_depth: dict["FixedPoint", int] = field(default_factory=dict)
     trusted_depth: dict["FixedPoint", int] = field(default_factory=dict)
     released_rows: int = 0
+    held: int = 0
 
     def all_interior_bridges(self) -> list["Bridge"]:
         """Every distinct bridge that was ever an interior survivor, in order."""
@@ -437,6 +516,7 @@ def blast_zone(
     max_points: Optional[int] = None,
     predict: bool = True,
     lean: bool = False,
+    representatives: Optional[Literal["fewest_points", "smallest_id", "largest_id"]] = None,
 ) -> BlastResult:
     """
     Repeatedly iterate the bridges inside a resonance zone (see the module docstring).
@@ -503,6 +583,13 @@ def blast_zone(
             re-read freed curve (growth, recomputes, zones, save, a blast
             that is not lean), raising
             :class:`~tanglepack.numerics.Bridge.CurveReleased`.
+        representatives: If given, iterate one bridge per refined class
+            (:func:`_representatives`), chosen by the policy: ``"fewest_points"``
+            (ties by smallest id), ``"smallest_id"`` or ``"largest_id"``. The
+            others are held: re-offered at every later step of the call and
+            ordinary un-iterated bridges to a later call (nothing is
+            remembered on the bridge). ``None`` (default) iterates every
+            interior bridge.
 
     Note:
         Bridges that re-trace curve an existing bridge already holds -- e.g. the
@@ -643,11 +730,19 @@ def blast_zone(
     held: set["BridgeId | int"] = {_seen_key(b) for b in workbench.bridges}
     added: list["Bridge"] = []
     factor: Optional[float] = session._blast_stats.get(zone.key)
+    # The candidates a representative step held: offered again at the next step.
+    waiting: list["Bridge"] = []
 
     for iteration in range(1, num_iterations + 1):
+        if representatives is not None:
+            frontier = [*frontier, *waiting]
         if not frontier:
             result.stop_reason = "frontier_empty"
             break
+        held_now: dict["BridgeId", "BridgeId"] = {}
+        if representatives is not None:
+            candidates = {_seen_key(b): b for b in frontier}
+            frontier, held_now = _representatives(session, fixed_points, frontier, representatives)
 
         frontier_points = sum(b.point_count for b in frontier if not b.iterated)
         if max_points is not None:
@@ -755,8 +850,10 @@ def blast_zone(
                 discarded_exterior=discarded,
                 discarded_too_close=too_close,
                 already_known=already_known,
+                held=held_now,
             )
         )
+        waiting = [candidates[bid] for bid in held_now] if representatives is not None else []
         result.too_close += len(too_close)
         result.already_known += len(already_known)
         # Every child is curve the workbench now holds, dropped or exterior
@@ -796,6 +893,7 @@ def blast_zone(
                 _lean_keep(session, fixed_points, in_zone)
             )
 
+    result.held = len(waiting)
     # The table is exact after every blast: a crossing born early in
     # the blast may only now have its image registered.
     workbench.infer_iterates()

@@ -893,6 +893,7 @@ class TangleSession:
         max_points: Optional[int] = None,
         predict: bool = True,
         lean: bool = False,
+        representatives: Optional[Literal["fewest_points", "smallest_id", "largest_id"]] = None,
     ) -> BlastResult:
         """
         Repeatedly iterate the bridges inside a resonance zone.
@@ -940,6 +941,11 @@ class TangleSession:
                 :class:`~tanglepack.numerics.Bridge.CurveReleased`. A lean blast
                 takes ``min_separation`` None or ``"width"`` and cannot
                 diagnose.
+            representatives: Iterate one bridge per refined class, chosen by
+                the policy (``"fewest_points"``, ``"smallest_id"`` or
+                ``"largest_id"``), and hold the others for the next step;
+                None (default) iterates every interior bridge (see
+                :func:`~tanglepack.loom.Blast.blast_zone`).
 
         Returns:
             A :class:`~tanglepack.loom.Blast.BlastResult` genealogy of the blast.
@@ -965,4 +971,5 @@ class TangleSession:
             max_points=max_points,
             predict=predict,
             lean=lean,
+            representatives=representatives,
         )
