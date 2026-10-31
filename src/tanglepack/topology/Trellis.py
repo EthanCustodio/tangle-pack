@@ -99,9 +99,10 @@ logger.addHandler(logging.NullHandler())
 #: ``per_step_beta`` and two branches of one orbit are refined independently, so
 #: ``c * per_step_beta ** n`` reproduces the recorded image only to the
 #: discretisation error of the two curves -- 1.35e-3 at worst across the
-#: repository's fixtures, not the registry's 1e-6 ``cdist_tol``. This is the AGREEMENT bound: what a test
-#: comparing a derived distance against a registered one may demand, set an
-#: order of magnitude above the observed error.
+#: repository's fixtures, not the registry's 1e-6 ``cdist_tol``. This is the
+#: AGREEMENT bound: what a test comparing a derived distance against a
+#: registered one may demand, set an order of magnitude above the observed
+#: error.
 SCALING_RTOL = 1e-2
 
 
@@ -316,9 +317,8 @@ class Trellis:
         self._bridge_by_endpoints, self._arrangement = None, None
 
     def _pip_orbit_cuts(self, pip: int) -> dict[ManifoldKey, tuple[CdistKey, bool]]:
-        """``{branch: (cdist, placed)}``: the k stable and the k unstable cuts of T(q0),
-        each at its registered orbit point's precise cdist (:meth:`cdist_key`) or,
-        placed by scaling, at a plain one."""
+        """``{branch: (cdist key, placed)}``: the k stable and the k unstable cuts of
+        T(q0), each at its registered orbit point's key (:meth:`image_cdist_key`)."""
         k = self.registry[pip].manifold_b_key[0].k_value
         m = self.registry.iterate_table.forward_depth(pip)
         while self.iterate(pip, m + 1) is not None:
@@ -463,7 +463,7 @@ class Trellis:
             for key in on:
                 branches[key].intersection_ids.append(ix_id)
 
-        # Order each branch by precise canonical distance (anchor outward).
+        # Order each branch by canonical distance (anchor outward; CdistKey).
         for branch in branches.values():
             branch.intersection_ids.sort(key=lambda i: registry[i].cdist_key(branch.stability))
 
@@ -860,24 +860,6 @@ class Trellis:
 
     # ── canonical-distance helpers ──────────────────────────────────────────
 
-    def cdist_key(self, intersection_id: int, stability: Stability) -> CdistKey:
-        """
-        The precise canonical distance of one crossing on one side.
-
-        The one reader of a crossing's residual in topology: every order and
-        exact comparison of REGISTERED cdists reads this, so two crossings whose
-        plain cdists tie are told apart. A scaled cdist (:meth:`image_cdist`
-        off the table) is compared as ``(c, 0.0)``.
-
-        Args:
-            intersection_id: Registry ID of the crossing.
-            stability: Which side.
-
-        Returns:
-            The normalised ``(hi, lo)`` pair (:meth:`.Intersection.cdist_key`).
-        """
-        return self.registry[intersection_id].cdist_key(stability)
-
     def _keyed_cdist(
         self, intersection_id: int, stability: Stability
     ) -> tuple[ManifoldKey, float]:
@@ -937,8 +919,9 @@ class Trellis:
         The derived answer is exact for the true crossing -- canonical distance
         is the linearising coordinate the eigenvalue scales -- but the two cdists
         it is computed from are products of each curve's own stretch,
-        interpolated on independently refined polylines, so it reproduces the table's value only to :data:`SCALING_RTOL`
-        (about 1e-3 on the repository's fixtures), NOT to the registry's
+        interpolated on independently refined polylines, so it reproduces the
+        table's value only to :data:`SCALING_RTOL` (about 1e-3 on the
+        repository's fixtures), NOT to the registry's
         ``cdist_tol``. Callers that compare a derived distance against a
         registered one must budget for that.
 
@@ -1022,8 +1005,8 @@ class Trellis:
         branch: Optional[ManifoldKey] = None,
     ) -> tuple[ManifoldKey, CdistKey, bool]:
         """
-        :meth:`image_cdist` with the cdist precise: a table answer is the image
-        crossing's :meth:`cdist_key`, a scaled one ``(c, 0.0)``.
+        :meth:`image_cdist` as an order key: a table answer is the image
+        crossing's :meth:`.Intersection.cdist_key`, a scaled one ``(c, 0.0)``.
 
         Args:
             intersection_id: Registry ID of the crossing.
@@ -1035,8 +1018,12 @@ class Trellis:
             ``(branch_key, cdist_key, from_table)``.
         """
         key, cdist, from_table = self.image_cdist(intersection_id, n, stability, branch=branch)
-        image = (self.iterate(intersection_id, n) if n else intersection_id) if from_table else None
-        return key, (float(cdist), 0.0) if image is None else self.cdist_key(image, stability), from_table
+        if not from_table:
+            return key, (float(cdist), 0.0), False
+        image = self.iterate(intersection_id, n) if n else intersection_id
+        if image is None:  # an anchor's image, the next point's anchor at (0, 0)
+            return key, (float(cdist), 0.0), True
+        return key, self.registry[image].cdist_key(stability), True
 
     # ── result storage ──────────────────────────────────────────────────────
 

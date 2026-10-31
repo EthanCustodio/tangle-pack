@@ -188,7 +188,7 @@ def is_strong_pip(
         if back is not None:
             if back == intersection_id:
                 continue
-            stable_rep, unstable_rep = trellis.cdist_key(back, "stable"), trellis.cdist_key(back, "unstable")
+            stable_rep, unstable_rep = (trellis.intersection(back).cdist_key(side) for side in ("stable", "unstable"))
         else:
             # Unlinked: backward_steps applications of M^-1 by the cdist
             # definition, through the one scaling path.
@@ -204,7 +204,7 @@ def is_strong_pip(
             if same_point(unstable_rep[0], stable_rep[0], u0[0], s0[0], collision_rtol):
                 continue
 
-        # Precise cdists (Trellis.cdist_key; a scaled one is (c, 0.0)).
+        # Cdist keys (Intersection.cdist_key; a scaled one is (c, 0.0)).
         if stable_rep < s0 and unstable_rep < u0 and unstable_rep < best_rep:
             best_rep = unstable_rep
             best_id = r_id

@@ -78,7 +78,7 @@ _EMPTY_BUCKET: _StableBucket = ([], np.empty(0, dtype=np.int64), np.empty((0, 4)
 
 
 def _close(a: CdistKey, b: CdistKey) -> bool:
-    """The precise ``a`` and ``b`` agree to :data:`DEDUP_RTOL`, relative to the larger.
+    """The precise values of keys ``a`` and ``b`` agree to :data:`DEDUP_RTOL`, relative to the larger.
 
     ``a[0] - b[0]`` is exact wherever it can matter (Sterbenz), so the sum with
     the residuals' difference is the precise difference to far below the tolerance.
@@ -157,10 +157,10 @@ class IntersectionRegistry:
         _generation: int  — bumped by every mutation; read via :attr:`generation`
         _orders_version: int  — bumped by the mutations that change the stored
             crossings (insert, renumber); the ordering-derived views key on it
-        _unstable_order: list[int]  — IDs sorted ascending by precise unstable cdist
-        _unstable_keys: list[CdistKey] — those IDs' precise unstable cdists, same order
-        _stable_order: list[int]    — IDs sorted ascending by precise stable cdist
-        _stable_keys: list[CdistKey]   — those IDs' precise stable cdists, same order
+        _unstable_order: list[int]  — IDs sorted ascending by unstable cdist key
+        _unstable_keys: list[CdistKey] — those IDs' unstable cdist keys, same order
+        _stable_order: list[int]    — IDs sorted ascending by stable cdist key
+        _stable_keys: list[CdistKey]   — those IDs' stable cdist keys, same order
 
     Note:
         The two sorted key arrays are maintained on insertion (bisect), so no
@@ -790,11 +790,11 @@ class IntersectionRegistry:
             branch_key: The stable branch (``manifold_b_key``).
 
         Returns:
-            The stable cdists (a list: the bisect keys, the ``hi`` of the
-            precise values), the ids (int64) and their unpadded precise
-            brackets ``(u_lo, u_hi, s_lo, s_hi)`` per row, as two ``(m, 4)``
-            float arrays, the pairs' ``hi`` and ``lo`` (NaN where a crossing
-            has none). Empty for a branch no crossing is on.
+            The plain stable cdists (a list: the bisect keys), the ids (int64)
+            and their unpadded precise brackets ``(u_lo, u_hi, s_lo, s_hi)``
+            per row, as two ``(m, 4)`` float arrays, the pairs' ``hi`` and
+            ``lo`` (NaN where a crossing has none). Empty for a branch no
+            crossing is on.
 
         Note:
             Rebuilt when the stored crossings change (an insert or a

@@ -40,8 +40,11 @@ SegmentEnd = Union[int, "BranchPoint"]
 #: A ``(lo, hi)`` interval of canonical distance.
 Bracket = tuple[float, float]
 
-#: A precise canonical distance as a normalised ``(hi, lo)`` pair of Python
-#: floats (:func:`.precise.as_key`): tuples compare as the precise values.
+#: A crossing's ORDER key, ``(cdist, residual)`` as Python floats: a tuple
+#: compares the plain float first, so the residual only breaks a plain tie (where
+#: it is the precise order). Where plain cdists differ they decide, as they decide
+#: the merge's chain order: deep chains hold neighbours one ULP apart whose
+#: residuals order them the other way (ManifoldMachine's Dev Notes).
 CdistKey = tuple[float, float]
 
 
@@ -195,20 +198,21 @@ class Intersection:
 
     def cdist_key(self, stability: Stability) -> CdistKey:
         """
-        The precise canonical distance on one side, as a normalised pair.
+        The canonical distance on one side as an order key (:data:`CdistKey`).
 
         Every order or exact comparison of crossings by cdist reads this: two
-        crossings whose plain cdists tie are told apart by their residuals.
+        crossings whose plain cdists tie are told apart by their residuals, and
+        any other two keep their plain order, the chain's.
 
         Args:
             stability: Which side.
 
         Returns:
-            ``(hi, lo)`` Python floats; a tuple compares as the precise value.
+            ``(cdist, residual)`` Python floats.
         """
         if stability == "unstable":
-            return as_key(self.unstable_cdist, self.unstable_cdist_lo)
-        return as_key(self.stable_cdist, self.stable_cdist_lo)
+            return float(self.unstable_cdist), float(self.unstable_cdist_lo)
+        return float(self.stable_cdist), float(self.stable_cdist_lo)
 
     def segment_ends(self, stability: Stability) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         """

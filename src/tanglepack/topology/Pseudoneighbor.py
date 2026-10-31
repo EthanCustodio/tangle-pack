@@ -366,8 +366,8 @@ def _interval_is_clear(
     and the landing is skipped only when it 2D-collides with an endpoint (both
     the scaled unstable and stable positions match within ``collision_rtol``)
     — x0/x1's own orbit up to cdist noise, ``Trellis.same_point``.
-    Every comparison with a registered cdist reads the precise one
-    (``Trellis.cdist_key``; a scaled value is ``(c, 0.0)``).
+    Every comparison with a registered cdist reads its order key
+    (``Intersection.cdist_key``; a scaled value is ``(c, 0.0)``).
 
     The arc is the pair's ``stability`` arc, so the cycle, ``k`` and ``beta``
     are those of ITS fixed point: A's for the unstable arc of a heteroclinic
@@ -382,8 +382,8 @@ def _interval_is_clear(
     other = "stable" if stability == "unstable" else "unstable"
 
     def at(crossing_id: int) -> CdistKey:
-        """A registered crossing's precise cdist on the arc (``Trellis.cdist_key``)."""
-        return trellis.cdist_key(crossing_id, stability)
+        """A registered crossing's cdist key on the arc."""
+        return trellis.intersection(crossing_id).cdist_key(stability)
 
     def point(value: float, other_value: float) -> tuple[float, float]:
         """``(value, other_value)`` as ``same_point`` reads it: (unstable, stable)."""

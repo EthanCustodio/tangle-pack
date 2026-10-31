@@ -1035,8 +1035,9 @@ class Tangle:
         """
         crossings = list(crossings)
         # --- 1. Collect crossings grouped by their parent unstable manifold ---
-        # entry: (precise unstable cdist, Intersection, orig_p0, orig_p1), the
-        # bracket ends rows (or the root BranchPoint)
+        # entry: (unstable cdist key, Intersection, orig_p0, orig_p1), the
+        # bracket ends rows (or the root BranchPoint); the key keeps the chain's
+        # plain order and breaks a plain tie by the residuals (CdistKey)
         manifold_crossings: dict[
             BaseManifold,
             list[tuple[tuple[float, float], Intersection, int | BranchPoint, int | BranchPoint]],
@@ -1090,6 +1091,11 @@ class Tangle:
         cut: list[tuple[BaseManifold, Bridge]] = []  # (parent, bridge)
         for manifold, manifold_group in manifold_crossings.items():
             manifold_group.sort(key=lambda entry: entry[0])
+            # The key keeps the chain's plain order, a residual breaking only a plain
+            # tie (CdistKey): sorted, the lower bracket ends never step back along it.
+            positions = [-1 if isinstance(p0, BranchPoint) else manifold.store.position_of(p0)
+                         for _key, _crossing, p0, _p1 in manifold_group]
+            assert all(a <= b for a, b in zip(positions, positions[1:])), (manifold.manifold_key, positions)
 
             # The real points bracketing each crossing on the CURRENT polyline. A run
             # of crossings on one segment has no node between them, so each one after

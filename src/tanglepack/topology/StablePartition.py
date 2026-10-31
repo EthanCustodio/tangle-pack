@@ -148,11 +148,11 @@ fixed in conversation with the author:
   (the singleton if it has one, else the closed neighbour), any other by its
   exact stable cdist. Ownership reads the PLAIN float, as the intervals are
   sorted by it (:func:`intervals_from_marks`) and ``PartitionFamily`` reads
-  it (2026-10-30: the precise cdists, :meth:`Trellis.cdist_key`, order the
+  it (2026-10-30: the cdist keys, :meth:`.Intersection.cdist_key`, order the
   crossings, a hole bridge's ends and the containers). An absolute cdist
-  slack is no ownership tolerance: deep blasts put real crossings 1e-6 apart
-  (68% of consecutive k=2.8 gaps by blast 14). The topology reads no absolute cdist slack at all: an
-  anchor is told by identity (``Intersection.is_anchor``, synthetic at
+  slack is no ownership tolerance: deep blasts put real crossings 1e-6
+  apart (68% of consecutive k=2.8 gaps by blast 14). The topology reads no
+  absolute cdist slack at all: an anchor is told by identity (``Intersection.is_anchor``, synthetic at
   exactly 0.0), ownership and containment are exact, and the one slack left
   is the RELATIVE error of a scaled cdist (``SCALING_RTOL`` at a scaled
   landing end, ``collision_rtol`` in ``Trellis.same_point``). Forcing the slack
@@ -723,14 +723,14 @@ def _containing_bridge(
 
     Bridges tile an unstable branch between consecutive crossings, so this is
     a bisect over the branch's crossing order (anchor first), memoised per
-    branch in ``orders`` for one propagation, on precise cdists
-    (:meth:`Trellis.cdist_key`; a scaled span end is ``(c, 0.0)``). A span
-    that straddles a crossing, or lies past the last one, has no container;
-    so has a pair of consecutive crossings no Bridge object spans.
+    branch in ``orders`` for one propagation, on cdist keys
+    (:meth:`.Intersection.cdist_key`; a scaled span end is ``(c, 0.0)``). A
+    span that straddles a crossing, or lies past the last one, has no
+    container; so has a pair of consecutive crossings no Bridge object spans.
     """
     if branch_key not in orders:
         ids = trellis.branch(branch_key).intersection_ids
-        orders[branch_key] = (ids, [trellis.cdist_key(i, "unstable") for i in ids])
+        orders[branch_key] = (ids, [trellis.intersection(i).cdist_key("unstable") for i in ids])
     ids, cdists = orders[branch_key]
     i = bisect_right(cdists, span[0]) - 1
     if i < 0 or i + 1 == len(ids) or span[1] > cdists[i + 1]:

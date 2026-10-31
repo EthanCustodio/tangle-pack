@@ -1354,3 +1354,10 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   merge drop, no crossing-order tie or flip and no ambiguous link on either. Cost: +17.3 MiB at the 1e-7 guarded
   plateau (2.10M rows, store 104 -> 121 MiB); blasts about 15% slower deep in the series (13.2 -> 15.2 s at blast 14),
   in the registry's stable buckets and the per-source precise meet test of `infer_iterates`.
+- **Review round 1: the order key is lexicographic.** `Intersection.cdist_key` is `(cdist, residual)` compared as a
+  tuple, not the normalised precise pair: the plain float decides and the residual only breaks a plain tie. A precise
+  order could contradict the plain-merged chain (the one-ULP neighbours above), cutting a bridge backwards and failing
+  the sparse `Arrangement`'s plain-order assertion; the key cannot. `Tangle.create_bridges` asserts its sorted
+  brackets never step back along the chain. Dedup and the iterate brackets still compare the precise value. Left
+  open: two crossings on ONE segment whose ends the residuals reverse, tied as plain floats, are still ordered by
+  their residuals (against `t`); it needs the merge on precise values (the author's decision above).

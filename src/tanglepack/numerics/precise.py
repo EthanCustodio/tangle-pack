@@ -11,8 +11,8 @@ rounding dropped. ``hi + lo`` carries about 32 digits.
 
 Each kernel below returns ``(hi, lo)`` with ``hi`` today's float. The pair is
 NOT normalised (``|lo|`` may exceed half an ULP of ``hi``); :func:`normalise`
-makes it the unique pair of its value, which is what an order or a comparison
-reads. The error-free transforms are Knuth's ``two_sum`` and Dekker's
+makes it the unique pair of its value, which a bracket's ends read
+(:func:`as_key`). The error-free transforms are Knuth's ``two_sum`` and Dekker's
 ``two_prod`` (no fused multiply-add); they hold for finite cdists far from
 overflow, which every cdist is. The kernels use arithmetic operators only, so
 float64 arrays give arrays and Python floats give Python floats (the same IEEE
@@ -118,14 +118,6 @@ def dd_lerp(
     return s, e + e_a + e_b + u_err * hi_a + u * lo_a + t * lo_b
 
 
-def dd_sub(
-    hi_a: Floats, lo_a: Floats, hi_b: Floats, lo_b: Floats
-) -> tuple[Floats, Floats]:
-    """``a - b``, normalised: ``hi`` is the nearest float to the precise difference."""
-    s, e = two_sum(hi_a, -hi_b)
-    return normalise(s, e + (lo_a - lo_b))
-
-
 def compare(
     hi_a: Floats, lo_a: Floats, hi_b: Floats, lo_b: Floats
 ) -> NDArray[np.float64]:
@@ -139,21 +131,7 @@ def compare(
     return np.sign(s + (e + (lo_a - lo_b)))
 
 
-def rank(hi: NDArray[np.float64], lo: NDArray[np.float64]) -> NDArray[np.int64]:
-    """
-    The dense rank of each value: equal values share one, the order is the precise one.
-
-    A merge or a bisect that compares ranks compares the precise values, ties included.
-    """
-    hi, lo = normalise(hi, lo)
-    order = np.lexsort((lo, hi))
-    new = np.ones(len(order), dtype=bool)
-    new[1:] = (hi[order][1:] != hi[order][:-1]) | (lo[order][1:] != lo[order][:-1])
-    ranks = np.empty(len(order), dtype=np.int64)
-    ranks[order] = np.cumsum(new) - 1
-    return ranks
-
-
 def as_key(hi: float, lo: float) -> tuple[float, float]:
-    """One value's normalised pair as Python floats: a tuple compares as the precise value."""
+    """One value's normalised pair as Python floats: a tuple compares as the precise value
+    (a bracket end of the iterate inference)."""
     return normalise(float(hi), float(lo))

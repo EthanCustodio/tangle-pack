@@ -2,9 +2,10 @@
 The point store: every manifold point of a workbench as one row of arrays.
 
 A row holds a point's coordinates, its canonical distance (a float and the
-residual its rounding dropped, :mod:`~.precise`) and its two iterate links (the row of its image and of its preimage). A point is its row: no
-object stands for it (N7b); a curve's end reads as an :class:`End`, a value
-built from the row's columns.
+residual its rounding dropped, :mod:`~.precise`) and its two iterate links
+(the row of its image and of its preimage). A point is its row: no object
+stands for it (N7b); a curve's end reads as an :class:`End`, a value built
+from the row's columns.
 
 The order of points ALONG a curve is a :class:`Chain`: the rows of one
 physical curve, in curve order (away from its periodic point). A row lies on
@@ -55,8 +56,6 @@ from typing import TYPE_CHECKING, NamedTuple, Optional
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-
-from .precise import normalise
 
 if TYPE_CHECKING:
     from .BranchPoint import BranchPoint
@@ -376,24 +375,6 @@ class PointStore:
         x, y = self._xy[row]
         return End(int(row), float(x), float(y), float(self._cdist[row]), float(self._cdist_lo[row]))
 
-    def precise_cdist(self, rows: ArrayLike) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        """
-        The precise canonical distances of rows, as normalised pairs.
-
-        The one reader of the residual column: an order or a comparison that
-        must hold where plain cdists tie reads this (:func:`.precise.rank`,
-        :func:`.precise.compare`). ``hi`` may differ from the plain cdist by
-        an ULP where the residual is that large.
-
-        Args:
-            rows (ArrayLike): Store rows.
-
-        Returns:
-            tuple: ``(hi, lo)``, each of the shape of ``rows``.
-        """
-        rows = np.asarray(rows, dtype=np.int64)
-        return normalise(self._cdist[rows], self._cdist_lo[rows])
-
     @property
     def nbytes(self) -> int:
         """The bytes of the seven columns, capacity included."""
@@ -403,11 +384,11 @@ class PointStore:
         """
         Drops every row ``keep`` does not hold, renumbering the rest in order.
 
-        Each surviving row keeps its coordinates, cdist (with its residual) and the links into rows
-        that survive; a link into a dropped row becomes -1. Every chain keeps
-        its surviving rows in their order, renumbered from position 0 (a
-        retired chain stays empty). The capacity is not shrunk below the rows
-        kept, so the arrays are reallocated once.
+        Each surviving row keeps its coordinates, cdist (with its residual)
+        and the links into rows that survive; a link into a dropped row
+        becomes -1. Every chain keeps its surviving rows in their order,
+        renumbered from position 0 (a retired chain stays empty). The capacity
+        is not shrunk below the rows kept, so the arrays are reallocated once.
 
         Args:
             keep: One bool per written row.

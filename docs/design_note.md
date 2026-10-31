@@ -117,13 +117,16 @@ blast it reaches 3e13 with neighbours `dc / c` below float eps, where plain floa
 keeps beside the plain float a residual column, `cdist_lo`: what each of those expressions' rounding
 dropped (`numerics/precise.py`: error-free `two_sum` and fma-free `two_prod`, so `hi` is the plain
 expression bit for bit and `hi + lo` carries about 32 digits; 0.0 for a seed row and the
-initializer's fictitious tails, NaN with no cdist; 8 bytes a row). `PointStore.precise_cdist` is its
-one reader; `Intersection` carries `unstable_cdist_lo` / `stable_cdist_lo` and `cdist_key(stability)`,
-the normalised pair, and topology reads it through `Trellis.cdist_key` (a scaled cdist is
-`(c, 0.0)`). The precise value orders and compares crossings: the registry orders and dedup, the
-iterate inference's carried brackets (`dd_mul` / `dd_div`), the bridge cut and the
-`_register_bridge` checks, each branch's crossing order, the pip-orbit cuts, the hole bridge's ends,
-the containing bridge, the pseudoneighbor intervals and the strong-pip box. `BRACKET_PAD` stays
+initializer's fictitious tails, NaN with no cdist; 8 bytes a row). `Intersection` carries
+`unstable_cdist_lo` / `stable_cdist_lo`, and `cdist_key(stability)` is a crossing's ORDER key, the
+pair `(cdist, residual)` compared as a tuple (a scaled cdist is `(c, 0.0)`): the plain float decides,
+the residual only breaks a plain tie. It is not the precise value, which the merge's chain can
+contradict (below); the key never does, so a bridge cut in key order runs forward along its chain
+(`Tangle.create_bridges` asserts it) and its id is in plain order too (the sparse `Arrangement`
+asserts that). The key orders the registry, the bridge cut and the `_register_bridge` checks, each
+branch's crossing order, the pip-orbit cuts, the hole bridge's ends, the containing bridge, the
+pseudoneighbor intervals and the strong-pip box. The precise value (`hi + lo`) compares in dedup
+and in the iterate inference's carried brackets (`dd_mul` / `dd_div`). `BRACKET_PAD` stays
 1e-12: at 1e-24 the k=2.8 deep-blast sliver build links three crossings fewer, so the carry does
 not meet every image to double-double precision. The PLAIN float still orders the merge, its run
 cuts and the chain check (a precise merge keeps 17 plain ties the zipper drops on the k=2.8

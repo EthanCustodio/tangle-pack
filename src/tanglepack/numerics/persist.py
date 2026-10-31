@@ -33,9 +33,9 @@ orders, sets sorted (a set's iteration order is its hash table's, not state):
   the generation, the machine's settings.
 
 What is NOT saved is derived and rebuilt lazily: the registry's caches,
-``Intersection.brackets`` and ``precise_brackets``, the fixed points' memos, the system's batchability
-probe (made on the map passed to ``load``) and the rtrees, which are
-bulk-loaded from the saved records.
+``Intersection.brackets`` and ``precise_brackets``, the fixed points' memos,
+the system's batchability probe (made on the map passed to ``load``) and the
+rtrees, which are bulk-loaded from the saved records.
 
 A lean workbench (``TangleWorkbench.lean``) is never saved: the curve a
 lean blast freed cannot be restored, so the save raises ``CurveReleased``.

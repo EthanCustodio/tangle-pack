@@ -45,7 +45,6 @@ from .FixedPointSolver import FixedPointSolver
 from .ManifoldInitializer import ManifoldInitializer
 from .ManifoldMachine import DEFAULT_AREA_CUTOFF, ManifoldMachine
 from .PointStore import Chain, PointStore
-from .precise import as_key
 from .budget import DEFAULT_MAX_POINTS_PER_STEP, GrowthStats
 from .Tangle import Tangle
 from .FixedPoint import FixedPoint, position_letter
@@ -1878,9 +1877,9 @@ class TangleWorkbench:
                 self.Tangle.release_manifold(bridge)
             return existing
 
-        # The precise cdists (:mod:`.precise`): a plain-float tie orders nothing.
+        # The cdist keys (Intersection.CdistKey): a residual breaks a plain tie.
         lo, hi = sorted(
-            (0.0, 0.0) if isinstance(end, BranchPoint) else as_key(end.cdist, end.cdist_lo)
+            (0.0, 0.0) if isinstance(end, BranchPoint) else (end.cdist, end.cdist_lo)
             for end in (bridge.root, bridge.tail)
         )
         slack = DEDUP_RTOL * max(abs(hi[0]), 1.0)
