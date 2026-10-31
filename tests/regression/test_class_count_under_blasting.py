@@ -54,7 +54,9 @@ The per-kind counts are printed in every failure message as diagnostics.
 
 Every law runs twice per series: on the full blast and on the representative
 blast (``representatives="fewest_points"``, one bridge per refined class, the
-rest held). Theorem T is the premise the representative rule rests on, so it
+rest held). A representative series that holds nothing is the full series
+again, so its laws are a visible skip, and some series must hold a bridge (else
+the policy never reached the blast). Theorem T is the premise the representative rule rests on, so it
 is checked on the representative records too. Equivalence with the full series
 (``pip_depth`` included) is not asserted: the representative blast holds
 bridges, so its X is thinner and its topology may arrive later;
@@ -84,6 +86,14 @@ def _series(name: str, representatives: Optional[str]) -> tuple[SeriesStep, ...]
     return blast_series(name, representatives)
 
 
+def _law_series(name: str, representatives: Optional[str]) -> tuple[SeriesStep, ...]:
+    """The records a law reads: a representative series that held nothing is skipped."""
+    steps = _series(name, representatives)
+    if representatives is not None and not any(step.held for step in steps):
+        pytest.skip(f"{name}: the representative series holds nothing, so it is the full series")
+    return steps
+
+
 def _table(steps: tuple[SeriesStep, ...]) -> str:
     """``blasts: holes, classes (active/inert), closed, ambiguous, outside minimal`` per step."""
     return "; ".join(
@@ -104,10 +114,18 @@ def representatives(request: pytest.FixtureRequest) -> Optional[str]:
     return request.param
 
 
+def test_some_representative_series_holds_a_bridge() -> None:
+    """The policy reaches the blast: a representative series holds a bridge at
+    some step, and a full series never does."""
+    assert not any(step.held for name in SERIES for step in _series(name, None))
+    held = {name: [step.held for step in _series(name, "fewest_points")] for name in SERIES}
+    assert any(any(counts) for counts in held.values()), held
+
+
 @pytest.mark.parametrize("name", _params("series_class_count_never_decreases"))
 def test_class_count_never_decreases(name: str, representatives: Optional[str]) -> None:
     """D1: one more blast never loses a class."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     for before, after in zip(steps, steps[1:]):
         assert before.classes <= after.classes, _table(steps)
 
@@ -115,7 +133,7 @@ def test_class_count_never_decreases(name: str, representatives: Optional[str]) 
 @pytest.mark.parametrize("name", _params("series_class_count_constant_while_holes_constant"))
 def test_class_count_constant_while_holes_constant(name: str, representatives: Optional[str]) -> None:
     """D1 + D2: the same hole set gives the same class count."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     same = [(a, b) for a, b in zip(steps, steps[1:]) if a.holes == b.holes]
     assert same, f"no two consecutive recomputes share a hole set: {_table(steps)}"
     for before, after in same:
@@ -126,7 +144,7 @@ def test_class_count_constant_while_holes_constant(name: str, representatives: O
 def test_closed_alphabet_constant_while_holes_constant(name: str, representatives: Optional[str]) -> None:
     """D11: the same hole set gives the same alphabet closed under the word map; a
     class a word names counts whether or not a blast computed a bridge for it."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     same = [(a, b) for a, b in zip(steps, steps[1:]) if a.holes == b.holes]
     assert same, f"no two consecutive recomputes share a hole set: {_table(steps)}"
     for before, after in same:
@@ -136,14 +154,14 @@ def test_closed_alphabet_constant_while_holes_constant(name: str, representative
 @pytest.mark.parametrize("name", _params("series_alphabet_inside_minimal_trellis"))
 def test_alphabet_inside_minimal_trellis_under_blasting(name: str, representatives: Optional[str]) -> None:
     """D2 after every blast: every class has a member the minimal trellis keeps."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     assert all(s.outside_minimal == 0 for s in steps), _table(steps)
 
 
 @pytest.mark.parametrize("name", _params("series_lost_references_are_witnessed"))
 def test_lost_references_are_witnessed(name: str, representatives: Optional[str]) -> None:
     """BCG-4: every reference a blast removes is killed by a point of X the table names."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     for step in steps:
         assert not step.unwitnessed, (step.blasts, sorted(step.unwitnessed), _table(steps))
 
@@ -152,7 +170,7 @@ def test_lost_references_are_witnessed(name: str, representatives: Optional[str]
 def test_letters_follow_element_identity(name: str, representatives: Optional[str]) -> None:
     """C2: a class identified by its elements' bounding crossings keeps its letter
     across recomputes, and a letter names one identity."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     seen: dict = {}
     for step in steps:
         for identity, letter in step.letters:
@@ -164,14 +182,14 @@ def test_letters_follow_element_identity(name: str, representatives: Optional[st
 def test_session_trellis_is_history_free(name: str, representatives: Optional[str]) -> None:
     """D1, D10: what ``session.trellis()`` shows after a blast does not depend on
     whether a product was computed first."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     assert all(s.history_free for s in steps), [s.blasts for s in steps if not s.history_free]
 
 
 @pytest.mark.parametrize("name", _params("series_no_walk_is_ambiguous"))
 def test_no_walk_is_ambiguous(name: str, representatives: Optional[str]) -> None:
     """D3 + D13: after every blast each class has one word (no class is ambiguous)."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     assert all(s.ambiguous == 0 for s in steps), _table(steps)
 
 
@@ -179,7 +197,7 @@ def test_no_walk_is_ambiguous(name: str, representatives: Optional[str]) -> None
 def test_recompute_keeps_the_crossing_set(name: str, representatives: Optional[str]) -> None:
     """B1: ``compute_intersections(preserve_ids=True)`` and ``rebuild_bridges()``
     after a blast find the same N and cut the same bridges."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     drift = [
         (s.blasts, *(f"{len(blast)} -> {len(again)}" for blast, again in zip(s.crossings, s.recomputed)))
         for s in steps
@@ -191,7 +209,7 @@ def test_recompute_keeps_the_crossing_set(name: str, representatives: Optional[s
 @pytest.mark.parametrize("name", _params("series_bridges_end_at_crossings_of_n"))
 def test_every_bridge_ends_at_crossings_of_n(name: str, representatives: Optional[str]) -> None:
     """B1: the blast's cut and the recompute's cut are both at crossings of N only."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     stray = [
         (s.blasts, which, bridge_id)
         for s in steps
@@ -205,7 +223,7 @@ def test_every_bridge_ends_at_crossings_of_n(name: str, representatives: Optiona
 @pytest.mark.parametrize("name", _params("series_pip_orbit_never_shallower"))
 def test_pip_orbit_never_shallower(name: str, representatives: Optional[str]) -> None:
     """B3: one more blast never shortens the registered orbit of the chosen pip."""
-    depths = [s.pip_depth for s in _series(name, representatives)]
+    depths = [s.pip_depth for s in _law_series(name, representatives)]
     assert depths == sorted(depths), depths
 
 
@@ -213,7 +231,7 @@ def test_pip_orbit_never_shallower(name: str, representatives: Optional[str]) ->
 def test_trusted_depth_never_exceeds_pip_depth(name: str, representatives: Optional[str]) -> None:
     """2026-10-29: every blast trusts its registered pip orbit no deeper than it
     registers it, and its ``pip_depth`` is the depth composed here."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     depths = [(s.blasts, s.pip_depth, s.blast_depths) for s in steps if s.blast_depths]
     assert depths
     assert all(trusted <= pip == composed for _b, composed, (pip, trusted) in depths), depths
@@ -223,7 +241,7 @@ def test_trusted_depth_never_exceeds_pip_depth(name: str, representatives: Optio
 def test_members_share_the_P1_itinerary_under_blasting(name: str, representatives: Optional[str]) -> None:
     """Theorem T after every blast: no class's members read different ``P1``
     itineraries (``helpers.laws.p1_itinerary_disagreements``)."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     print(f"{name} p1_tested per step:", [s.p1_tested for s in steps])
     disagreements = [(s.blasts, text) for s in steps for text in s.p1_disagreements]
     assert not disagreements, "\n".join(f"step {blasts}: {text}" for blasts, text in disagreements)
@@ -236,7 +254,7 @@ def test_base_chords_are_inside_the_lobe_image_under_blasting(
     """B7b after every blast: the base-branch gaps of every lobe image alternate
     out/in from the anchor, and the empty ones are exactly its inside gaps
     (``helpers.laws.base_chord_misreadings``)."""
-    steps = _series(name, representatives)
+    steps = _law_series(name, representatives)
     print(f"{name} chords_checked per step:", [s.chords_checked for s in steps])
     misreadings = [(s.blasts, text) for s in steps for text in s.chord_misreadings]
     assert not misreadings, "\n".join(f"step {blasts}: {text}" for blasts, text in misreadings)

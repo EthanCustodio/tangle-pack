@@ -1142,6 +1142,8 @@ class SeriesStep:
             more interior crossings (``helpers.laws.base_chord_misreadings``).
         chord_misreadings: One text per base-branch gap the iterated cut reads
             otherwise than point-in-polygon; recorded, never asserted here.
+        held: The bridges the step's blast held (``BlastResult.held``; 0 for the
+            unblasted step and for a full blast).
     """
 
     blasts: int
@@ -1164,6 +1166,7 @@ class SeriesStep:
     p1_disagreements: tuple
     chords_checked: int
     chord_misreadings: tuple
+    held: int = 0
 
 
 class Series(NamedTuple):
@@ -1266,6 +1269,7 @@ def blast_series(name: str, representatives: Optional[str] = None) -> tuple[Seri
                 p1_disagreements=p1_disagreements,
                 chords_checked=chords_checked,
                 chord_misreadings=chord_misreadings,
+                held=0 if result is None else result.held,
             )
         )
     return tuple(steps)

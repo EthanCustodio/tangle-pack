@@ -11,6 +11,8 @@ builds; no count or word of the case is pinned.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from cases import SERIES
@@ -157,6 +159,40 @@ def test_an_unmatched_member_is_bucketed_by_its_pair():
         assert session.topology([fp]) is topology
         ids = {b.id for b in iterated}
         if pairs[0] == pairs[1]:
+            assert len({bridge_id, representative} & ids) == 1
+            assert {bridge_id, representative} & set(held)
+        else:
+            assert {bridge_id, representative} <= ids
+            assert not {bridge_id, representative} & set(held)
+
+
+def test_a_loop_member_is_bucketed_by_its_element():
+    """No build holds a loop, so a held bridge and its representative are made
+    loop members of their class entry: on two elements both are iterated, on
+    one element one of them is held."""
+    session, fp, zone = _zone()
+    for _ in range(3):
+        _blast(session, fp, zone, 1, None)
+    topology = session.topology([fp])
+    candidates = [
+        session.workbench.bridge(member.bridge_id)
+        for entry in topology.minimal.classes for member in entry.members
+    ]
+    _, held = _representatives(session, [fp], candidates, "fewest_points")
+    assert held, "the build holds nothing: the rule is not exercised"
+    bridge_id, representative = next(iter(held.items()))
+    entry = topology.minimal.classes.entry_of(bridge_id)
+    bridge_class = entry.bridge_class
+    for elements in [(bridge_class.source, bridge_class.target), (bridge_class.source,) * 2]:
+        loops = dict(zip((bridge_id, representative), elements))
+        entry.members[:] = [
+            replace(m, direction=0, loop_element=loops[m.bridge_id]) if m.bridge_id in loops else m
+            for m in entry.members
+        ]
+        iterated, held = _representatives(session, [fp], candidates, "fewest_points")
+        assert session.topology([fp]) is topology
+        ids = {b.id for b in iterated}
+        if elements[0] == elements[1]:
             assert len({bridge_id, representative} & ids) == 1
             assert {bridge_id, representative} & set(held)
         else:

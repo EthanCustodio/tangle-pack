@@ -299,10 +299,10 @@ def lean(args) -> None:
             break
         store = session.workbench.point_store
         rows.append({"cutoff": args.cutoff, "blast": blast, "bridges": len(session.workbench.bridges),
-                     "points": len(session.workbench.point_store), "released": result.released_rows,
+                     "points": len(store), "released": result.released_rows,
                      "held": result.held, "pip_depth": result.pip_depth.get(fp),
                      "trusted_depth": result.trusted_depth.get(fp),
-                     "max_cdist": float(np.nanmax(store._cdist[: len(store)])),
+                     "max_cdist": float(np.nanmax(store.cdist)),
                      "seconds": round(time.perf_counter() - t, 2), "stop": result.stop_reason})
         print(rows[-1], flush=True)
         _write(OUT / "lean.csv", rows)
