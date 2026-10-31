@@ -1365,3 +1365,39 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   the unstable-cdist order up to the ULP a lerped cdist steps back by at a fold of tied nodes) and merged with the
   merge, the crossing sign, `BRACKET_PAD`, ownership and the dual walks left plain. A precise merge would change
   computed results: a `/feature` of its own if wanted.
+
+## 2026-10-30 — Run 4 `class-representatives` of the deeper-blasts campaign (/feature; branch `feature/class-representatives`, base `b4a5582`)
+
+- **The author's rulings (plan):** `blast_zone(representatives=...)` opt-in, policies `fewest_points` (default in the
+  tests and script; ties by smallest id), `smallest_id`, `largest_id`; held bridges are ALWAYS re-offered, nothing is
+  remembered on a bridge (no `numerics/Bridge.py` change); pip-orbit, minimal-mapped and unclassed candidates are always
+  iterated; a bucket is the refined child, else the unmatched pair, else the class, a loop by class and element.
+- **Deviations, forced:** (1) each step links the iterate table (`infer_iterates`) before it reads the topology, so a
+  step inside one call sees what a fresh call would and `n` one-step calls equal one `n`-step call. (2) The regression
+  test is `tests/regression/test_representative_blast_series.py` (the plan's name duplicated the unit test's basename,
+  which the suite forbids); `cases.blast_series` and `cases._blast` take `representatives=` (tests-only, outside the
+  plan's list) so the D1 records are built by the one loop. (3) "The series laws" are the D1 laws of
+  `test_class_count_under_blasting.py`, restated over the representative records: the full `LAYERS` checks fail on the
+  FULL series too at depth (k28 blast 6+, k32 7+, nested_outer 8+: Euler, rows, same-stability, table completeness), so
+  they are no law of a deep blast.
+- **Measured (`scripts/blast_representatives.py`, `figures/blast_representatives/`):** identity probe identical on all
+  62 builds with `representatives=None`. Equivalence against the full series on every `cases.SERIES`,
+  `nested_inner_blasts` and `heteroclinic`, three policies: alphabet, closed alphabet, words, refined matrix up to
+  relabelling, holes, references, `pip_depth`, `trusted_depth` equal at every step, Theorem T never failing on either,
+  except (a) k32_series blasts 6-9 (`fewest_points`; 6 `smallest_id`; 6-10 `largest_id`): the full blast loses its
+  reference `(9, 10)` to crossing 93, born on the image chain of bridge `(34, 35)`, which the representative blast holds
+  (its `(24, 25)`), so the reference switch, and with it holes 12 -> 13 and the alphabet 12 -> 13, arrives when the
+  held bridge is iterated; (b) from blast 4 on k28, inversion, k32 and nested_outer, 1-4 trajectory pseudoneighbor pairs
+  of the full blast are missing (a thinner X), never a reference. Cost on the k=2.5 scale series at 1e-7, blast 12:
+  848 -> 433 bridges, 1.11M -> 0.58M points (1e-5 guard), 1361 -> 529 and 1.80M -> 0.71M (unguarded): 1.9-2.6x, not the
+  10x target. Cause: the pip depth stops at 7 (the near-anchor guard) by blast 6, and from blast 8 the frontier lies past
+  the cut trellis, is unclassed and always iterated (92 candidates at blast 12: 87 unclassed, 5 bucketed). Lean +
+  representatives unguarded, 1e-7: blast 18, 11708 bridges, 15.3M rows held, max unstable cdist 5.8e15, stopped by the
+  6M-point per-call budget at blast 19 (169 s for blast 18), depth 7 / 7 throughout. Prune question (k=2.5 scale,
+  representatives, guard on, 1e-9 / 1e-10 / 1e-11 / 1e-12, `min_separation` 1e-5 / "resolution" / None, capped by 4M
+  points per call, 15M held and 40 min): every run reaches pip = trusted depth 9 / 10 / 11 / 12 (the guard's), and at that
+  common trusted depth and at the last common blast (16-18) the three separations agree on every item (4 classes); the
+  prune hides nothing at trusted depth there. Only the 1e-5 runs at 1e-9 / 1e-10 exhausted their frontier (blasts 34 /
+  36; 1e-10 then has 15 classes, beyond what the other two reached within budget).
+- **Open, the author's call:** the representatives do not pay while the pip depth is stalled; holding unclassed bridges
+  past the cut (or the graded mesh, which lifts the depth to 18) is the lever, not part of this run.

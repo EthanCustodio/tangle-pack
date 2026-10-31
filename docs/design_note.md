@@ -671,6 +671,38 @@ freed 0.5% (1e-7) and 0.01% (1e-9) and grew 1.7x per blast as before; lean width
 rows against full width's 116k / 1.13M (peak RSS 141 / 290 MiB against 165 / 591). Lean mode buys a
 constant factor, and only where a guard ends lineages; it is not a new exponent.
 
+**Representative blasting (class-representatives, 2026-10-30).** `blast_zone(representatives=policy)`
+iterates one bridge per refined class instead of every bridge: by Theorem T (A.8d) the members of a
+class share their reduced itinerary, so iterating all of them mostly repeats one fact. Each step
+links the iterate table, computes `session.topology()` of the selection and sorts the step's
+candidates, its frontier plus every bridge held earlier in the call (`Blast._representatives`).
+Always iterated: a bridge ending on a pip-orbit crossing, one the minimal trellis maps (kept and not
+a zeroth-hole bridge: its image feeds the words), and one the class table does not know (a partial
+piece, a bridge outside the cut trellis, an orphan). Every other bridge goes into the bucket of its
+refined child (`member_refinement`), else its unmatched pair (`unmatched_members`), else its class;
+a loop by its class and element. One bridge per bucket is iterated, by the policy: `fewest_points`
+(ties by smallest id), `smallest_id` or `largest_id`; the others are HELD (`BlastStep.held`, held ->
+representative; `BlastResult.held`, at the call's end; data only). Nothing is remembered on a held
+bridge (the author's choice): each later step of the call re-offers it with the new frontier, and a
+later call sees an ordinary un-iterated bridge, so `n` one-step calls equal one `n`-step call and a
+full blast afterwards takes every held bridge. It composes with `lean` (a held bridge is an
+un-iterated, undropped frontier bridge, kept by `_lean_keep`), `min_separation` (a held bridge was
+never dropped), `max_points` (the prediction counts only the bridges to iterate) and `diagnose`;
+`None` is the full blast byte for byte (identity probe). Measured
+(`scripts/blast_representatives.py`, `figures/blast_representatives/`): against the full series on
+every `cases.SERIES` and the blasting law cases, the alphabet, the closed alphabet, the words, the
+refined matrix, the holes, the references and both depths agree at every step except k32_series
+blasts 6-9 (`fewest_points`; 6 under `smallest_id`, 6-10 under `largest_id`), where the full blast
+switches its reference pair one step after the witness crossing appears on the image of a bridge the
+representative blast holds, and the representative blast switches when that bridge is re-offered
+and iterated; the pseudoneighbor TRAJECTORY pairs are thinner (1-4 fewer) on every other series
+from blast 4, never a reference. On the k=2.5 scale series at 1e-7, blast 12, the saving is 1.9x (1e-5 guard) to 2.6x (none) in bridges and points, not the
+10x the plan hoped: once the pip depth stops (7, the near-anchor guard), the frontier lies past the
+cut trellis, is unclassed and is always iterated, so it still grows like `e^{hn}`. At 1e-9 to 1e-12,
+the separations 1e-5, `"resolution"` and None, all representative, agree on every compared item at
+their common trusted depth and at their last common blast (A.4's depth equals the trusted depth
+there); the prune hides nothing at trusted depth on that series.
+
 **The width guard.** `min_separation="width"` needs no point cloud. A bridge's width is seeded, when
 it is first iterated, as `|area| / L` of the ring it and its stable segment bound (`L` its unstable
 arc length; a bridge whose crossings lie on two stable branches has no ring and is never dropped),
@@ -698,7 +730,7 @@ author's use is a later plan (D8).
 **Implemented by.** `Topology`, `TangleSession.topology`, `blast_zone`, `BlastResult`,
 `TangleWorkbench.compute_intersections`, `ResonanceZone.restore`, `TangleWorkbench.release_curves`,
 `PointStore.compact`, `Bridge.release`, `Blast._lean_keep`, `Blast._ring_width`, `Blast._too_thin`,
-`Blast._trusted_depth`.
+`Blast._trusted_depth`, `Blast._representatives`.
 
 ## A.11 Session and API
 
