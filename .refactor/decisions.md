@@ -1373,11 +1373,12 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   remembered on a bridge (no `numerics/Bridge.py` change); pip-orbit, minimal-mapped and unclassed candidates are always
   iterated; a bucket is the refined child, else the unmatched pair, else the class, a loop by class and element.
 - **Deviations, forced:** (1) each step links the iterate table (`infer_iterates`) before it reads the topology, so a
-  step inside one call sees what a fresh call would and `n` one-step calls equal one `n`-step call. (2) The regression
-  test is `tests/regression/test_representative_blast_series.py` (the plan's name duplicated the unit test's basename,
-  which the suite forbids); `cases.blast_series` and `cases._blast` take `representatives=` (tests-only, outside the
-  plan's list) so the D1 records are built by the one loop. (3) "The series laws" are the D1 laws of
-  `test_class_count_under_blasting.py`, restated over the representative records: the full `LAYERS` checks fail on the
+  step inside one call sees what a fresh call would and `n` one-step calls equal one `n`-step call. (2) No regression
+  file of its own: the D1 series tests of `tests/regression/test_class_count_under_blasting.py` run under both
+  `representatives=None` and `"fewest_points"` (a fixture), Theorem T and the B7b base-chord law included, so each law
+  is stated once; `cases.blast_series` and `cases._blast` take `representatives=` (tests-only, outside the plan's list)
+  so the D1 records are built by the one loop. The plan's "the alphabet stays closed" is no test: `symbolic_dynamics`
+  adds every class a word names to its table, so it holds by construction. (3) "The series laws" are those D1 laws: the full `LAYERS` checks fail on the
   FULL series too at depth (k28 blast 6+, k32 7+, nested_outer 8+: Euler, rows, same-stability, table completeness), so
   they are no law of a deep blast.
 - **Measured (`scripts/blast_representatives.py`, `figures/blast_representatives/`):** identity probe identical on all

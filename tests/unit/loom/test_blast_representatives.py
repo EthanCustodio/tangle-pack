@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 
 from cases import SERIES
-from tanglepack.loom.Blast import _pip_orbits
+from tanglepack.loom.Blast import _pip_orbits, _representatives
 
 POLICIES = ["fewest_points", "smallest_id", "largest_id"]
 
@@ -113,6 +113,55 @@ def test_each_policy_picks_the_member_its_rule_names(policy):
                 assert representative < held
             else:
                 assert representative > held
+
+
+def test_each_step_iterates_or_holds_every_candidate():
+    """A step's candidates (its frontier and the bridges the step before held)
+    are exactly its iterated parents and its held bridges."""
+    session, fp, zone = _zone()
+    result = _blast(session, fp, zone, BLASTS, "fewest_points")
+    assert result.held > 0
+    waiting = []
+    for frontier, step in zip(result.interior_bridges_by_iteration, result.steps):
+        candidates = [*frontier, *waiting]
+        waiting = [b for b in candidates if b.id in step.held]
+        assert len(waiting) == len(step.held)
+        assert sorted(map(id, [*step.interior_parents, *waiting])) == sorted(map(id, candidates))
+
+
+def test_an_unmatched_member_is_bucketed_by_its_pair():
+    """No build has an unmatched member, so a held bridge and its representative
+    are moved to the cached dynamics' ``unmatched_members``: with two pairs both
+    are iterated, with one pair one of them is held."""
+    session, fp, zone = _zone()
+    for _ in range(3):
+        _blast(session, fp, zone, 1, None)
+    topology = session.topology([fp])
+    candidates = [
+        session.workbench.bridge(member.bridge_id)
+        for entry in topology.minimal.classes for member in entry.members
+    ]
+    _, held = _representatives(session, [fp], candidates, "fewest_points")
+    assert held, "the build holds nothing: the rule is not exercised"
+    bridge_id, representative = next(iter(held.items()))
+    bridge_class = topology.minimal.classes.entry_of(bridge_id).bridge_class
+    dynamics = topology.dynamics
+    for pairs in [
+        ((bridge_class.source, bridge_class.target), (bridge_class.target, bridge_class.source)),
+        ((bridge_class.source, bridge_class.target),) * 2,
+    ]:
+        for bid, pair in zip((bridge_id, representative), pairs):
+            dynamics.member_refinement[bid] = None
+            dynamics.unmatched_members[bid] = pair
+        iterated, held = _representatives(session, [fp], candidates, "fewest_points")
+        assert session.topology([fp]) is topology
+        ids = {b.id for b in iterated}
+        if pairs[0] == pairs[1]:
+            assert len({bridge_id, representative} & ids) == 1
+            assert {bridge_id, representative} & set(held)
+        else:
+            assert {bridge_id, representative} <= ids
+            assert not {bridge_id, representative} & set(held)
 
 
 def _state(session):
