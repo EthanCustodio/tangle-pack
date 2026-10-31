@@ -304,6 +304,7 @@ def _blast(
     *,
     diagnose: bool = True,
     min_separation: float = ZONE_MIN_SEPARATION,
+    representatives: Optional[str] = None,
 ) -> "BlastResult":
     """One single-iteration blast of ``zone`` (at ``ZONE_MIN_SEPARATION`` by default)."""
     return session.blast_zone(
@@ -312,6 +313,7 @@ def _blast(
         fixed_point=fixed_points,
         min_separation=min_separation,
         diagnose=diagnose,
+        representatives=representatives,
     )
 
 
@@ -1191,7 +1193,7 @@ SERIES: Mapping[str, Series] = MappingProxyType(
 )
 
 
-def blast_series(name: str) -> tuple[SeriesStep, ...]:
+def blast_series(name: str, representatives: Optional[str] = None) -> tuple[SeriesStep, ...]:
     """
     The D1 loop on one session: recompute the topology, blast once, repeat.
 
@@ -1202,6 +1204,8 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
 
     Args:
         name: A key of :data:`SERIES`.
+        representatives: The blasts' representative policy (None: every
+            interior bridge is iterated, the series as the D1 laws state it).
 
     Returns:
         One step per recompute, the unblasted one first.
@@ -1215,7 +1219,10 @@ def blast_series(name: str) -> tuple[SeriesStep, ...]:
     for blast in range(series.blasts + 1):
         result = None
         if blast:
-            result = _blast(session, zone, [fp], diagnose=False, min_separation=series.min_separation)
+            result = _blast(
+                session, zone, [fp], diagnose=False, min_separation=series.min_separation,
+                representatives=representatives,
+            )
         shown = trellis_view(session.trellis())
         table = session.bridge_classes()
         kept = set(session.minimal_trellis().kept_bridge_ids)
