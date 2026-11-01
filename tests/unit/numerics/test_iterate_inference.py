@@ -263,3 +263,11 @@ def test_a_pass_re_decides_its_own_sources(henon_tangle_with_bridges, monkeypatc
 
     assert registry.unresolved_links == {}
     assert set(registry.iterate_table.items()) == links
+
+
+def test_the_table_depths_are_its_largest_recorded_steps():
+    """A ``+1`` link records depth 1 forward on its source and 1 backward on its image."""
+    table = IterateTable()
+    table[3, 1] = 7
+    assert (table.forward_depth(3), table.backward_depth(7)) == (1, 1)
+    assert (table.forward_depth(7), table.backward_depth(3)) == (0, 0)
