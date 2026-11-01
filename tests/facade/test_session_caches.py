@@ -238,7 +238,7 @@ _NEEDS_ZONE = frozenset({"add_resonance_zones", "restore"})
 def test_trellis_is_fresh_after_every_mutation_path(mutation: str) -> None:
     """Growth, a re-cut, an iterated bridge, a zone and its restore all leave the
     session's trellis equal to a direct build of the workbench, cut at the
-    session's pip when one is chosen (D10, D12).
+    session's pip when one is chosen (D10).
 
     ``restore`` is the regression guard: it is the gap the manual
     ``invalidate_trellises`` calls used to leave open (stale trellises after a

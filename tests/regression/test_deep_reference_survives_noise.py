@@ -14,9 +14,10 @@ and the class count does not decrease (D1); no id or count is pinned.
 
 Since WP9 stages 4-6 run on the selection's trellis, so the references are
 read there (WP10: the per-fixed-point trellises carry no stage output, which
-had left the witness loop empty). Since D12 (WP8b) the deep witnesses that
-made the frame fix necessary lie past the pip orbit, so these states no longer
-exercise it; ``test_unlinked_landing_is_read_against_the_pairs_images`` does.
+had left the witness loop empty). From D12 (WP8b) to its reversal (2026-10-31)
+the deep witnesses that made the frame fix necessary lay past the unstable pip
+cut; ``test_unlinked_landing_is_read_against_the_pairs_images`` exercises the
+fix directly whatever these states hold.
 """
 
 from __future__ import annotations

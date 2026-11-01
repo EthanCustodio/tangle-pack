@@ -196,7 +196,7 @@ def test_partition_of_a_cut_trellis_ends_at_the_pip():
 
     ids = [crossing(float(s), float(7 - s)) for s in range(1, 7)]
     pip = crossing(4.5, 1.5)
-    reg.register_iterate(pip, 1, ids[0])  # f(q0): the unstable cut lies past every crossing
+    reg.register_iterate(pip, 1, ids[0])  # f(q0)
     branch = TrellisBranch(
         key=stable, fixed_point=fp, stability="stable", orbit_index=0, branch_index=0,
         intersection_ids=sorted([*ids, pip], key=lambda i: reg[i].stable_cdist),

@@ -50,7 +50,7 @@ class DirectBuild:
         case: The built case.
         selected: The fixed points of the selection.
         trellis: A fresh trellis of the workbench over the selection, cut at
-            the orbits of the selected pips (D10, D12).
+            the orbits of the selected pips, stable branches only (D10).
         partitions: The stable partitions of the selection's trellis, one per
             ``(branch_key, side)``.
         holes: Every hole of the selection's trellis.

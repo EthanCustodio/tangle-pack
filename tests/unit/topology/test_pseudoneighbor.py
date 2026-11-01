@@ -396,8 +396,7 @@ def test_backward_iterate_punctures_interval():
     landing inside the pair's open unstable interval rejects the pair, even
     though that iterate's stable position lies beyond the pip cut (on the
     removed tail) — e.g. the preimages of blasted crossings. The candidate itself
-    is a crossing of T(q0): the pip's orbit is registered to M^2(q0), so the
-    unstable branch is cut past it (D12)."""
+    is a crossing of T(q0): no unstable branch is cut (D12 reversed 2026-10-31)."""
     fp = _fixed_point(1, 4.0)
     reg = IntersectionRegistry()
     r_n, x1, r_end = _reference_window(fp, reg)
