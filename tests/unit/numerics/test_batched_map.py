@@ -84,6 +84,21 @@ def test_scalar_only_map_falls_back():
     assert shapes == [(2,)] * len(coords)
 
 
+def test_a_map_returning_the_wrong_shape_is_not_batched():
+    """A map that accepts a column batch but returns another shape (here one
+    point per call, whatever it is given) is mapped one point at a time."""
+
+    def first_column(point):
+        arr = np.asarray(point, dtype=float)
+        return _batch_map(arr if arr.ndim == 1 else arr[:, 0])
+
+    system = DynamicalSystem(first_column, _batch_imap)
+    coords = np.array([[0.1, 0.2], [4.0, -4.0], [-3.0, 1.5]])
+
+    assert np.allclose(system.map_batch(coords), np.vstack([_batch_map(p) for p in coords]),
+                       rtol=1e-12, atol=1e-15)
+
+
 def _grow(m, im):
     """Seed the k=10 saddle with maps ``m``/``im`` and grow its unstable branch 5 times."""
     wb = tanglepack.TangleWorkbench(m, im, _jac, area_cutoff=1e-4)
