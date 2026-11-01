@@ -252,22 +252,24 @@ classified on first read; restoring a remembered pip tests that one crossing onl
 pip is the candidate of smallest unstable cdist.
 
 **Definition (the trellis of the pip).** Choosing q0 CUTS the trellis to
-`T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])`, both ends on the pip's orbit (D10, D12, the author's
-rules): stable branch `j` ends at c_s(f^j q0), `j < k_value`, and the unstable branch of
-`f^i(q0)` at c_u(f^i q0) for the `k_value` deepest `i <= m`. `f^-1` maps its unstable half into
-itself and `f` its stable half, so it is a genuine trellis, and a lambda-lemma copy deeper than the
-pip's own orbit is no crossing of it, so blasting cannot reshape the fundamental segment at depth
-(this is what stopped holes and classes from decreasing under blasting, BCG-5). The cut is the ONE
+`T(q0) = (W^u computed, W^s[P, q0])` (D10; D12 reversed 2026-10-31, the author's rule: use every
+computed manifold): stable branch `j` ends at c_s(f^j q0), `j < k_value`, and no unstable branch is
+cut, so every computed unstable crossing whose stable end lies inside the stable cuts is a crossing
+of N. `f` maps its stable half into itself and `f^-1` the computed unstable set (every blast child's
+parent is held), so it is a genuine trellis. A deeper crossing may refute a reference pair and the
+class count may then fall under blasting; the entropy may not (the series law
+"entropy_never_decreases"). D12's unstable cut at the `k_value` deepest orbit points hid such
+crossings (well resolved, ratio 128-9650, persistent at 10x and 100x finer `area_cutoff`) and froze
+the topology whenever the pip orbit stalled (k28 blast 8: 4 classes cut, 15 uncut; k32 blasts
+8-10: 13 cut, 34 / 34 / 30 uncut with h 0.540 -> 0.546 -> 0.548). The cut is the ONE
 place N is decided for every later stage. A crossing past a cut is a point of X, not of N: it leaves
 every branch, and the unstable arc across it joins its two bridges into one (`Bridge.joined`, a
 bridge the workbench never holds; resolve bridges through `Trellis.bridge_between`).
 
 **`m`, the depth.** `m` is the registered `+1` chain of the CHOSEN pip, as far as it consists of
-crossings of N (N-a, plan Q2, B3); `BlastResult.pip_depth` reports it per fixed point. Two consequences:
+crossings of N (N-a, plan Q2, B3); `BlastResult.pip_depth` reports it per fixed point. It is a
+report, no cut: an unresolved orbit point stalls `m`, never the trellis. One consequence:
 
-- the trellis is cut at the deepest RESOLVED orbit point. An unresolved orbit point is never linked,
-  so it FREEZES `T(q0)` at the previous blast's trellis under every further blast until refinement
-  resolves it (B1: k28 at 8 blasts equals 7 blasts; k32 and nested_outer from 9 blasts equal 8);
 - a blast child ending on the chosen pip's composed `+1` orbit is exempt from the `min_separation`
   guard (one INFO), so the guard never decides the depth. The depth is decided by whether
   `f^{m+1}(q0)` is detected and resolved; the three ways it stalls are open (O). The k32 blast 9
@@ -607,10 +609,11 @@ holds one `Topology` per generation, selection and pips; SIMP-8). Grow, blast an
 there is no collapse path (N is the registry's verdict on every path, A.2), and a blast's image curves
 are computed manifold, kept by the workbench, re-indexed query-only by every recompute until growth
 merges them into a branch and cut like any curve (one crossed fewer than twice is a partial piece),
-so a recompute keeps every crossing, bridge, partial piece and `iterated` flag (NUM-12, C20). At a
-fixed depth `m` a blast can only add crossings to `T(q0)`; a deeper `m` is a discovery and may change
-anything. The depth is N-a's (A.4), and D1 is measured as the series law "`pip_depth` non-decreasing";
-an unresolved orbit point freezes `T(q0)` (B1). D1 does not bind the closed alphabet.
+so a recompute keeps every crossing, bridge, partial piece and `iterated` flag (NUM-12, C20). A
+blast only adds computed manifold, and what it finds is a discovery and may change anything, the
+class count included (it may fall when a deeper crossing refutes a reference); the series laws
+measure that the entropy and the depth `pip_depth` (a report, A.4) never decrease. D1 does not bind
+the closed alphabet.
 
 **Blasting.** `blast_zone` iterates the bridges whose INNERMOST zone it is (C4): a bridge belongs to
 the smallest zone holding its midpoint, so an outer blast never iterates a bridge inside an inner
@@ -812,7 +815,7 @@ Athanor workflow on 2026-10-28 and live in git history up to `ab213db`), with me
 - WP6: the alphabet from the minimal trellis; loops fold forward; one letter generator.
 - WP7: the walk always exists; the alphabet closed under the word map.
 - WP8: recompute semantics; reproducible ids; element identity by bounds; one `Topology` per state.
-- WP8b: the trellis of the pip (D10, D12); words need no computed bridge (D11).
+- WP8b: the trellis of the pip (D10, D12; D12 reversed 2026-10-31); words need no computed bridge (D11).
 - WP9: nested and heteroclinic tangles; innermost-zone blasting.
 - WP9b: the non-crossing rule (D13): landing spans, markers.
 - WP9c: every bridge is the same (D14): walls.
@@ -898,7 +901,7 @@ From `stress/numerics/report/report.pdf` (experiments E1-E12; the E12 re-verific
 
 Decisions (`.refactor/decisions.md`, `docs/open_issues.md` "Author decisions"):
 D1 A.10 · D2 A.8 · D3 A.8c · D4 A.2 · D5 A.5 (superseded) · D6 A.6 · D7 A.5 · D8 A.10 · D9 A.8b ·
-D10 A.4 · D11 A.8c · D12 A.4 · D13 A.8c · D14 A.8c · D15 A.6 · DEC-14 S · DEC-25 O, A.11.
+D10 A.4 · D11 A.8c · D12 (reversed 2026-10-31) A.4, A.10 · D13 A.8c · D14 A.8c · D15 A.6 · DEC-14 S · DEC-25 O, A.11.
 
 Claude's calls under D8: C1 A.7 · C2 A.8 · C3 A.6 · C4 A.10 · C5 A.2 · C7 A.4 · C8 A.11 · C9 A.8c
 · C10 A.8 · C11 A.8c · C13 A.8c · C14 A.8c · C15 A.7 · C16 A.1 · C17 A.8c · C19 A.8d (base half

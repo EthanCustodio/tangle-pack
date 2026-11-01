@@ -1402,3 +1402,29 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   36; 1e-10 then has 15 classes, beyond what the other two reached within budget).
 - **Open, the author's call:** the representatives do not pay while the pip depth is stalled; holding unclassed bridges
   past the cut (or the graded mesh, which lifts the depth to 18) is the lever, not part of this run.
+
+## 2026-10-31 — D12 reversed (/feature; branch `feature/drop-unstable-pip-cut`, base `f75fde4`)
+
+- **The author's rule:** use every computed manifold. A chosen pip cuts the STABLE branches only, branch `j` at
+  `c_s(f^j q0)`, `j < k_value`: `T(q0) = (W^u computed, W^s[P, q0])`, and every computed unstable crossing whose
+  stable end lies inside that cut is a crossing of N. The class count may fall under blasting; the entropy may not.
+  `m` (`BlastResult.pip_depth`, `trusted_depth`) stays a report; the blast's pip-orbit `min_separation` exemption
+  stays; no public API changes.
+- **Evidence (the /investigate of 2026-10-31):** D12's unstable cut hid real crossings: the class drops it prevented
+  are refutations of reference pairs by crossings well resolved (ratio 128-9650), 37-43% inside the pair, persistent at
+  10x / 100x finer `area_cutoff`. It froze the topology whenever the pip orbit stalled: k28_series blast 8 gives 15
+  classes uncut against 4 cut; k32_series blasts 8-10 give 34 / 34 / 30 classes uncut (13 cut) with h 0.540465 ->
+  0.545622 -> 0.548464. Every law case but the three inversion ones is unchanged (crossings, holes, classes, words,
+  matrix), and so is `p3_series`; the heteroclinic case's selection trellis now holds all four heteroclinic crossings.
+- **Laws:** `series_class_count_never_decreases` is replaced by `series_entropy_never_decreases` (`ln rho` of the
+  refined transition matrix, 0 for an empty or nilpotent one, per `SeriesStep.entropy`); the cut law states no
+  crossing past a stable cut and every resolved crossing inside the stable cuts held.
+- **New KNOWN_ISSUES, against the "may only shrink" note (INV-12, `wp="author: inversion investigation"`):** the
+  unblasted `inversion` case keeps one reference `(23, 24)`, one hole, one class and no active class, so ten laws
+  (`anchor_bridge_class_leads_its_tangle`, `registered_images_keep_markers`, `partition_singletons`,
+  `backward_holes_keep_bridge_side`, `anchor_opening_faces_its_hole`, `propagated_holes_land_on_predicted_branch`,
+  `propagation_terminates`, `propagated_hole_inside_container`, `refined_matrix_is_an_in_splitting`,
+  `matrix_is_token_counts`) and `base_chords_are_inside_the_lobe_image` check nothing on it; `inversion_series`
+  blast 4 has two ambiguous walks and its entropy falls 0.264 -> 0 (reference switch to `(56, 57)`), under the full
+  and the representative blast alike, so `series_entropy_never_decreases` and `series_no_walk_is_ambiguous` are strict
+  xfails on it without a policy-specific id. `members_share_the_P1_itinerary` x `inversion` left NOT_APPLICABLE.

@@ -37,7 +37,7 @@ Every issue carries the work package (WP) that owns it; the plan is in the "Work
 
 | Theme | High | Medium | Low | Total |
 |---|---|---|---|---|
-| Inversion end-to-end (INV) | 6 | 4 | 1 | 11 |
+| Inversion end-to-end (INV) | 7 | 4 | 1 | 12 |
 | Period-k orbits (PK) | 2 | 2 | 5 | 9 |
 | Nested / heteroclinic (NEST) | 2 | 3 | 1 | 6 |
 | Bridge-class growth (BCG) | 4 | 4 | 0 | 8 |
@@ -48,7 +48,7 @@ Every issue carries the work package (WP) that owns it; the plan is in the "Work
 | Tests & coverage (TEST) | 0 | 2 | 5 | 7 |
 | API traps (API) | 0 | 2 | 5 | 7 |
 | Docs drift (DOC) | 0 | 0 | 5 | 5 |
-| **Total** | **16** | **38** | **49** | **103** |
+| **Total** | **17** | **38** | **49** | **104** |
 
 The audit raised 18 decision questions (DEC-1..18); all are answered or deferred below. The five issues it marked "possibly stale — verify" (INV-10, PK-7, NUM-19, DOC-3, DOC-4) were verified and closed by their WPs. BCG-8 was added by WP12's rerun.
 
@@ -198,6 +198,15 @@ Note that inversion has det J = +1. Earlier notes conflate "inversion" with "ori
 **WP11:** closed by C3: det J < 0 stays out of scope and `orientation_reversing_case_builds` stays a strict xfail. The flip rule is ONE function, `topology.side_after(side, steps, preserving)`, called by `land_element`, the dual-graph markers, backward hole propagation, `_orbit_side` and `side_diagnoses`, and pinned by `test_side_after.py`. The orientation is read off the FixedPoint (C16): `preserves_orientation` is the sign of the solver's single-step Jacobian (any period), and `Trellis.orientation_preserving` no longer calls the map's Jacobian. A period-2 orbit of b = -1 passes `set_k_value` (det DM^2 > 0) and could exercise the rule end to end if the author ever admits det J < 0.
 
 **Evidence:** `src/tanglepack/numerics/FixedPoint.py:185-225`; `src/tanglepack/numerics/FixedPointSolver.py:16-22`; `tests/cases.py:36-39, 826-830`; `tests/conftest.py:108-110`; `src/tanglepack/topology/Trellis.py:32-40`; `stress/numerics/report/report.tex:833-834, 1906`; `docs/dual_graph_symbolic_dynamics_plan.md:338`
+
+---
+
+### INV-12: inversion: entropy 0.264 -> 0 at inversion_series blast 4 (two ambiguous walks, reference switch to (56,57)); the unblasted case keeps one reference whose hole never propagates
+**Status:** open | **Severity:** high | **Related:** BCG-5, BCG-8, DEC-25 | **WP:** author: inversion investigation
+
+Exposed by the reversal of D12 (2026-10-31, `.refactor/decisions.md`): with no unstable branch cut at the pip orbit, every computed crossing inside the stable cuts is a crossing of N. On every law case but the three inversion ones nothing moved. The unblasted `inversion` case now has one reference `(23, 24)`, one hole (its zeroth), one class and no active class, so ten laws check nothing on it (`anchor_bridge_class_leads_its_tangle`, `registered_images_keep_markers`, `partition_singletons`, `backward_holes_keep_bridge_side`, `anchor_opening_faces_its_hole`, `propagated_holes_land_on_predicted_branch`, `propagation_terminates`, `propagated_hole_inside_container`, `refined_matrix_is_an_in_splitting`, `matrix_is_token_counts`), and neither does `base_chords_are_inside_the_lobe_image`. `inversion_series` has two ambiguous walks at blast 4 and its entropy falls from 0.264 to 0 there, after a reference switch to `(56, 57)`. Each pair is a strict xfail in `cases.KNOWN_ISSUES`, waiting on the author's investigation of the inversion tangle.
+
+**Evidence:** `tests/cases.py` (`_INV_12_UNBLASTED`, `_INV_12_SERIES`); `src/tanglepack/topology/Trellis.py` (`_pip_orbit_cuts`)
 
 ---
 
