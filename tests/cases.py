@@ -470,9 +470,9 @@ def build_k28_deep_blast_sliver() -> Case:
 
     The sliver past the pip (stress campaign E11) is made by the ninth blast,
     which the near-anchor guard (2026-10-29) never reaches: it ends the pip
-    orbit first. Its bridge ends on the pip orbit, which the 1e-5 proximity
-    guard drops since the pip-orbit exemption went (2026-10-31). The build is
-    :func:`build_k28` otherwise.
+    orbit first. The 1e-5 proximity guard would drop its bridge, which ends
+    on the pip orbit, since the pip-orbit exemption went (2026-10-31). The
+    build is :func:`build_k28` otherwise.
 
     Returns:
         The partitioned case.
