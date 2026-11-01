@@ -1282,14 +1282,13 @@ def blast_series(name: str, representatives: Optional[str] = None) -> tuple[Seri
 
 
 def _entropy(matrix: np.ndarray) -> float:
-    """``ln rho(matrix)``, 0 for an empty matrix or a spectral radius of 1 or less.
+    """``ln rho(matrix)``, 0 unless the spectral radius exceeds 1.
 
-    A non-negative integer matrix has ``rho = 0`` or ``rho >= 1``; eigvals errs
-    by about ``sqrt(eps)`` on a defective eigenvalue (a Jordan block at 1), so
-    a reading below 1 is clamped to entropy 0 rather than a small negative.
+    That covers an empty or nilpotent matrix (``rho = 0``) and a defective
+    eigenvalue at 1 that eigvals reads just below it.
     """
     rho = np.abs(np.linalg.eigvals(matrix)).max() if matrix.size else 0.0
-    return max(0.0, float(np.log(rho))) if rho > 1e-12 else 0.0
+    return float(np.log(rho)) if rho > 1 else 0.0
 
 
 def _pip_depth(session: TangleSession, fp: "FixedPoint") -> int:

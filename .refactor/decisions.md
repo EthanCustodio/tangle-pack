@@ -1427,4 +1427,6 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   `matrix_is_token_counts`) and `base_chords_are_inside_the_lobe_image` check nothing on it; `inversion_series`
   blast 4 has two ambiguous walks and its entropy falls 0.264 -> 0 (reference switch to `(56, 57)`), under the full
   and the representative blast alike, so `series_entropy_never_decreases` and `series_no_walk_is_ambiguous` are strict
-  xfails on it without a policy-specific id. `members_share_the_P1_itinerary` x `inversion` left NOT_APPLICABLE.
+  xfails on it without a policy-specific id. `members_share_the_P1_itinerary` x `inversion` is out of NOT_APPLICABLE:
+  its one class `u` now has two members with readable image chains, so the law tests one class there and passes
+  (the set-aside test would fail).

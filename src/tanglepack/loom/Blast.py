@@ -209,8 +209,7 @@ def _pip_orbits(
 ) -> dict["FixedPoint", list[int]]:
     """``[q0, f(q0), ..., f^m(q0)]`` per fixed point with a chosen pip: its registered orbit.
 
-    Composed link by link: the iterate table holds ``+1`` links only, so
-    ``IterateTable.forward_depth`` is 1 for any linked crossing. The depth
+    Composed link by link: the iterate table holds ``+1`` links only. The depth
     ``m`` is a report (``BlastResult.pip_depth``); ``T(q0)`` cuts no unstable
     branch at it.
     """
