@@ -5,8 +5,9 @@ until distinct unstable curves run within machine precision and merge into an
 artifact. ``min_separation`` stops the blast on the well-resolved side of that
 limit by dropping a child whose interior comes too close to curve already in
 the tangle (the bridges present when the blast started, every child an
-earlier step produced and the siblings kept so far). A child ending on the chosen pip's orbit is exempt (B3, N-a): the
-guard never decides the depth of ``T(q0)``.
+earlier step produced and the siblings kept so far). Every child is tested, one
+ending on the chosen pip's orbit included: the B3 exemption went on 2026-10-31,
+since the depth of the pip orbit no longer cuts the trellis.
 """
 
 from __future__ import annotations
@@ -61,42 +62,23 @@ def _distance(points: np.ndarray, cloud: list[np.ndarray]) -> float:
     return float(cKDTree(np.vstack(cloud)).query(points)[0].min())
 
 
-def _pip_orbit(session, fp) -> set[int]:
-    """The chosen pip of ``fp`` and its registered forward iterates (empty without one)."""
-    chosen = session.chosen_strong_pip(fp)
-    if chosen is None:
-        return set()
-    trellis = session.trellis(fp)
-    orbit = [trellis.registry.find(chosen)]
-    while (image := trellis.iterate(orbit[-1], 1)) is not None:
-        orbit.append(image)
-    return set(orbit)
+def test_min_separation_drops_close_bridges(henon_p3_session):
+    """Kept children keep their distance; dropped ones really were too close.
 
-
-@pytest.mark.parametrize("pip_chosen", [True, False], ids=["pip", "no_pip"])
-def test_min_separation_drops_close_bridges(henon_p3_session, pip_chosen):
-    """Kept children keep their distance unless they end on the pip's orbit;
-    dropped ones really were too close.
-
-    Guards the 2026 "zig-zag" fix: every kept child's interior that does not
-    end on the chosen pip's orbit stays at least ``min_separation`` from the
-    curve accumulated before it, and every child the guard dropped came within
-    ``min_separation`` of it. With the pip forgotten nothing is exempt, so the
-    guard demonstrably fires (the fixture's one too-close child ends on the
-    orbit).
+    Guards the 2026 "zig-zag" fix: every kept child's interior stays at least
+    ``min_separation`` from the curve accumulated before it, and every child
+    the guard dropped came within ``min_separation`` of it. The pip stays
+    chosen and the guard still fires: no child is exempt (the fixture's one
+    too-close child ends on the pip's orbit).
     """
     session, _fp3, fp1, zone = henon_p3_session
-    if not pip_chosen:
-        session.forget_strong_pip(fp1)
     reference = [_interior(b) for b in session.workbench.bridges]
 
     guarded = session.blast_zone(
         zone, num_iterations=3, fixed_point=fp1, min_separation=MIN_SEPARATION
     )
-    orbit = _pip_orbit(session, fp1)
 
-    if not pip_chosen:
-        assert guarded.too_close > 0
+    assert guarded.too_close > 0
     assert sum(len(s.discarded_too_close) for s in guarded.steps) == guarded.too_close
     assert guarded.completed_iterations == 3
 
@@ -107,8 +89,7 @@ def test_min_separation_drops_close_bridges(henon_p3_session, pip_chosen):
         accepted: list[np.ndarray] = []
         for child in step.kept_interior:
             interior = _interior(child)
-            if not orbit.intersection(child.id or ()):
-                assert _distance(interior, reference + accepted) >= MIN_SEPARATION
+            assert _distance(interior, reference + accepted) >= MIN_SEPARATION
             accepted.append(interior)
             checked += 1
         for child in step.discarded_too_close:
@@ -128,11 +109,10 @@ def test_min_separation_none_is_unchanged_default(henon_p3_session):
 def test_resolution_separation_follows_the_area_cutoff(henon_p3_session):
     """``"resolution"`` drops at ``RESOLUTION_SEPARATION`` scaled as ``area_cutoff ** (2/3)``.
 
-    The fixture's outer saddle is grown at ``1e-4``; with its pip forgotten a
-    six-iteration blast drops a child, which records the derived separation.
+    The fixture's outer saddle is grown at ``1e-4``; a six-iteration blast
+    drops a child, which records the derived separation.
     """
     session, _fp3, fp1, zone = henon_p3_session
-    session.forget_strong_pip(fp1)
     session.anchor_resolution_factor = None  # at 1e-4 the guard ends the blast first
     expected = RESOLUTION_SEPARATION * (session.area_cutoff / DEFAULT_AREA_CUTOFF) ** (2 / 3)
     result = session.blast_zone(

@@ -36,10 +36,9 @@ def _deviation(session, bridge) -> float:
 
 
 def test_a_child_is_dropped_iff_thinner_than_its_deviation():
-    """Every width drop is below the bound; every other child is not, the pip-orbit ones aside."""
+    """Every width drop is below the bound; every other child is not."""
     session, fp, zone = _k28_zone()
     result = _blast(session, fp, zone, 8)
-    orbit = {x for chain in _pip_orbits(session, [fp]).values() for x in chain}
     dropped = [c for step in result.steps for c in step.discarded_too_close]
     kept = [c for step in result.steps for c in step.kept_interior]
     assert dropped and kept
@@ -47,7 +46,7 @@ def test_a_child_is_dropped_iff_thinner_than_its_deviation():
         assert child.dropped_at == WIDTH_DROP
         assert child.width < WIDTH_SEPARATION_FACTOR * _deviation(session, child)
     for child in kept:
-        if not set(child.id or ()) & orbit and child.width is not None:
+        if child.width is not None:
             assert child.width >= WIDTH_SEPARATION_FACTOR * _deviation(session, child)
 
 
@@ -100,16 +99,15 @@ def test_a_heteroclinic_lobe_contracts_by_its_stable_saddle():
         assert base == {parent.width_saddle}
 
 
-def test_the_pip_orbit_child_is_kept(monkeypatch):
-    """With a factor no lobe passes, the only children kept end on the pip's orbit."""
+def test_the_pip_orbit_child_is_not_exempt(monkeypatch):
+    """With a factor no lobe passes, no child with a width is kept, one ending
+    on the pip's orbit included (the exemption went on 2026-10-31)."""
     monkeypatch.setattr(Blast, "WIDTH_SEPARATION_FACTOR", 1e30)
     session, fp, zone = _k28_zone()
     result = _blast(session, fp, zone, 3)
     orbit = {x for chain in _pip_orbits(session, [fp]).values() for x in chain}
-    kept = [c for step in result.steps for c in step.kept_interior]
-    assert kept
-    assert all(set(c.id or ()) & orbit or c.width is None for c in kept)
-    assert any(set(c.id or ()) & orbit for c in kept)
+    assert all(c.width is None for step in result.steps for c in step.kept_interior)
+    assert any(set(c.id or ()) & orbit for step in result.steps for c in step.discarded_too_close)
 
 
 def _state(session, fp):

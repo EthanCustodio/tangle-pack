@@ -229,14 +229,14 @@ def test_pip_orbit_never_shallower(name: str, representatives: Optional[str]) ->
     assert depths == sorted(depths), depths
 
 
-@pytest.mark.parametrize("name", _params("series_trusted_depth_within_pip_depth"))
-def test_trusted_depth_never_exceeds_pip_depth(name: str, representatives: Optional[str]) -> None:
-    """2026-10-29: every blast trusts its registered pip orbit no deeper than it
-    registers it, and its ``pip_depth`` is the depth composed here."""
+@pytest.mark.parametrize("name", _params("series_blast_pip_depth_is_the_composed_depth"))
+def test_blast_pip_depth_is_the_composed_depth(name: str, representatives: Optional[str]) -> None:
+    """Every blast's ``pip_depth`` is the depth of the pip orbit composed here
+    through ``trellis.iterate``."""
     steps = _law_series(name, representatives)
-    depths = [(s.blasts, s.pip_depth, s.blast_depths) for s in steps if s.blast_depths]
+    depths = [(s.blasts, s.pip_depth, s.blast_depth) for s in steps if s.blast_depth is not None]
     assert depths
-    assert all(trusted <= pip == composed for _b, composed, (pip, trusted) in depths), depths
+    assert all(composed == blasted for _b, composed, blasted in depths), depths
 
 
 @pytest.mark.parametrize("name", _params("series_members_share_the_P1_itinerary"))

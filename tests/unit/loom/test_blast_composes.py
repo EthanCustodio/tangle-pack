@@ -15,10 +15,9 @@ from tanglepack.loom.Blast import _pip_orbits
 
 
 def _p3_session_zone():
-    """The ``henon_p3_session`` zone with the outer pip forgotten (nothing exempt)."""
+    """The ``henon_p3_session`` zone, unblasted."""
     case = build_nested(outer_blasts=0, p1_area_cutoff=1e-4, through="zones")
     fp1 = case.fixed_points[0]
-    case.session.forget_strong_pip(fp1)
     zone = max(case.session.resonance_zones.values(), key=lambda z: z.area)
     return case.session, fp1, zone
 

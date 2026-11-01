@@ -11,7 +11,7 @@ script measures what that changes. Subcommands (one process each;
   ``heteroclinic``: the outer zone twice), one iteration at a time to the full
   series' depth, full against each policy. Per step it compares the alphabet
   identities, the closed alphabet, the words per identity, the refined
-  transition matrix up to relabelling, ``pip_depth`` / ``trusted_depth``, the
+  transition matrix up to relabelling, ``pip_depth``, the
   pseudoneighbor pairs (references apart) and the holes, and records Theorem T
   (``helpers.laws.p1_itinerary_disagreements``) on both. The two builds number
   their crossings differently, so a crossing of one is matched to the other's
@@ -27,7 +27,7 @@ script measures what that changes. Subcommands (one process each;
 * ``prune --cutoff 1e-9 --separation none`` -- one prune run: representatives,
   one iteration per call under a time and point budget, a topology snapshot per
   blast (``prune/<cutoff>_<separation>.json``). ``prune-report`` compares the
-  runs of one cutoff at their common trusted depth (``prune.csv``).
+  runs of one cutoff at their common pip depth (``prune.csv``).
 * ``table`` -- ``table.txt`` from every CSV on disk.
 
 Output: ``figures/blast_representatives/``. Pin a timing run (``taskset -c 28-31``).
@@ -109,7 +109,6 @@ def snapshot(session, result, fixed_point, *, with_crossings: bool = True) -> di
         "holes": sorted(([list(h.bounding_ids), h.iterate, h.bridge_side] for h in trellis.holes),
                         key=json.dumps),
         "pip_depth": result.pip_depth.get(fixed_point) if result else None,
-        "trusted_depth": result.trusted_depth.get(fixed_point) if result else None,
         "theorem_t": [tested, len(disagreements)],
         "bridges": len(workbench.bridges),
         "points": len(workbench.point_store),
@@ -188,15 +187,14 @@ def compare(full: dict, other: dict) -> dict[str, Any]:
     common = set(full["words"]) & set(other["words"])
     row["words_differ"] = sum(full["words"][k] != other["words"][k] for k in common)
     row["matrix_iso"] = _isomorphic(full["matrix"], other["matrix"])
-    for part in ("pip_depth", "trusted_depth"):
-        row[f"{part}_full"], row[f"{part}_other"] = full[part], other[part]
+    row["pip_depth_full"], row["pip_depth_other"] = full["pip_depth"], other["pip_depth"]
     row["T_tested_full"], row["T_fail_full"] = full["theorem_t"]
     row["T_tested_other"], row["T_fail_other"] = other["theorem_t"]
     row["differs"] = bool(
         any(row[f"{p}_only_{s}"] for p in ("alphabet", "closed", "pairs", "references", "holes")
             for s in ("full", "other"))
         or row["words_differ"] or not row["matrix_iso"]
-        or full["pip_depth"] != other["pip_depth"] or full["trusted_depth"] != other["trusted_depth"]
+        or full["pip_depth"] != other["pip_depth"]
     )
     return row
 
@@ -276,7 +274,6 @@ def cost(args) -> None:
                              "points": len(session.workbench.point_store),
                              "iterated": sum(len(s.interior_parents) for s in result.steps),
                              "held": result.held, "pip_depth": result.pip_depth.get(fp),
-                             "trusted_depth": result.trusted_depth.get(fp),
                              "seconds": round(time.perf_counter() - t, 2), "stop": result.stop_reason})
                 print(rows[-1], flush=True)
                 if result.stop_reason == "point_budget" or time.perf_counter() - start > args.max_seconds:
@@ -301,7 +298,6 @@ def lean(args) -> None:
         rows.append({"cutoff": args.cutoff, "blast": blast, "bridges": len(session.workbench.bridges),
                      "points": len(store), "released": result.released_rows,
                      "held": result.held, "pip_depth": result.pip_depth.get(fp),
-                     "trusted_depth": result.trusted_depth.get(fp),
                      "max_cdist": float(np.nanmax(store.cdist)),
                      "seconds": round(time.perf_counter() - t, 2), "stop": result.stop_reason})
         print(rows[-1], flush=True)
@@ -341,8 +337,8 @@ def prune(args) -> None:
             break
         snap["blast"], snap["seconds"] = blast, round(time.perf_counter() - t, 2)
         record["blasts"].append(snap)
-        print(f"{args.cutoff:g} {args.separation} blast {blast}: depth {snap['pip_depth']}/"
-              f"{snap['trusted_depth']}, {len(snap['alphabet'])} classes, {snap['points']} points, "
+        print(f"{args.cutoff:g} {args.separation} blast {blast}: depth {snap['pip_depth']}, "
+              f"{len(snap['alphabet'])} classes, {snap['points']} points, "
               f"{snap['seconds']} s", flush=True)
         record["crossings"] = crossings(session)
         path.write_text(json.dumps(record))
@@ -360,7 +356,7 @@ def prune(args) -> None:
 
 
 def prune_report(args) -> None:
-    """Each cutoff's runs compared with the unguarded one, first at their common trusted depth, then
+    """Each cutoff's runs compared with the unguarded one, first at their common pip depth, then
     at the last blast all of them ran; ``prune.csv``."""
     rows = []
     runs: dict[str, dict[str, dict]] = {}
@@ -370,13 +366,13 @@ def prune_report(args) -> None:
             snap["crossings"] = record.get("crossings", {})
         runs.setdefault(f"{record['cutoff']:g}", {})[record["separation"]] = record
     for cutoff, by_separation in runs.items():
-        reached = {s: max((b["trusted_depth"] or 0 for b in r["blasts"]), default=0)
+        reached = {s: max((b["pip_depth"] or 0 for b in r["blasts"]), default=0)
                    for s, r in by_separation.items()}
         common = min(reached.values())
-        at = {s: next((b for b in r["blasts"] if (b["trusted_depth"] or 0) >= common), None)
+        at = {s: next((b for b in r["blasts"] if (b["pip_depth"] or 0) >= common), None)
               for s, r in by_separation.items()}
         last = min(len(r["blasts"]) for r in by_separation.values())
-        for where, chosen in (("first at the common trusted depth", at),
+        for where, chosen in (("first at the common pip depth", at),
                               ("last common blast", {s: r["blasts"][last - 1] for s, r in by_separation.items()})):
             rows += _prune_rows(cutoff, where, chosen, by_separation, common, reached)
     _write(OUT / "prune.csv", rows)
@@ -388,13 +384,12 @@ def _prune_rows(cutoff, where, at, by_separation, common, reached) -> list[dict]
     reference = at.get("none")
     for separation, snap in at.items():
         record = by_separation[separation]
-        row = {"cutoff": cutoff, "compared": where, "separation": separation, "common_trusted_depth": common,
-               "deepest_trusted": reached[separation],
-               "deepest_pip": max((b["pip_depth"] or 0 for b in record["blasts"]), default=0),
+        row = {"cutoff": cutoff, "compared": where, "separation": separation, "common_pip_depth": common,
+               "deepest_pip": reached[separation],
                "blasts_run": len(record["blasts"]), "stop": record["stop"],
                "at_blast": snap["blast"] if snap else None,
                "classes": len(snap["alphabet"]) if snap else None}
-        row["pip_depth"], row["trusted_depth"] = (snap["pip_depth"], snap["trusted_depth"]) if snap else (None, None)
+        row["pip_depth"] = snap["pip_depth"] if snap else None
         if snap and reference and separation != "none":
             row.update({f"vs_none_{k}": v for k, v in compare(reference, snap).items()})
         rows.append(row)

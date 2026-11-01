@@ -40,8 +40,6 @@ diagnose) and ``--separation`` sets its ``min_separation`` (a float,
 ``width`` or ``none``; ``1e-5`` by default, ``width`` with ``--lean``, which
 refuses a float); each scaling row records the rows
 the blast freed (``released_rows``) and its drops (``too_close``).
-``--near-orbit-radius R0`` builds the scaling case with the graded mesh near
-the orbit; each scaling row records ``trusted_depth`` beside ``pip_depth``.
 
 ``--workers N`` builds every session with ``workers=N`` (the labels stay; the
 json records ``workers``; at 1 a checkout without the option runs as before).
@@ -119,7 +117,7 @@ import time
 import tracemalloc
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import numpy as np
 import psutil
@@ -557,15 +555,13 @@ def force_topology(session: Any) -> None:
     topology.dynamics.transition_matrix(refined=True)
 
 
-def scale_build(area_cutoff: float, near_orbit_radius: Optional[float] = None) -> tuple[Any, Any, Any]:
-    """The k = 2.5 period-1 recipe of ``scripts/henon_bridge_classes.py``, unblasted
-    (the graded mesh near the orbit set before growth when ``near_orbit_radius`` is)."""
+def scale_build(area_cutoff: float) -> tuple[Any, Any, Any]:
+    """The k = 2.5 period-1 recipe of ``scripts/henon_bridge_classes.py``, unblasted."""
     from tanglepack import TangleSession
     from tanglepack.examples.henon import henon_jacobian, henon_map, henon_map_inverse
 
     session = TangleSession(henon_map(SCALE_K, 1), henon_map_inverse(SCALE_K, 1),
-                            henon_jacobian(SCALE_K, 1), area_cutoff=area_cutoff,
-                            **({} if near_orbit_radius is None else {"near_orbit_radius": near_orbit_radius}))
+                            henon_jacobian(SCALE_K, 1), area_cutoff=area_cutoff)
     fp = session.construct_fixed_point(list(SCALE_SEED))
     session.orient_eigenvectors(fp, {"unstable": np.array([-1, 0]), "stable": np.array([0, 1])})
     session.initialize_both_manifolds(fp)
@@ -627,10 +623,9 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
             separation = None if text == "none" else text if text == "width" else float(text)
             record["scale"] = {"k": SCALE_K, "area_cutoff": args.scale_cutoff,
                                "min_separation": separation, "lean": args.lean,
-                               "stop_gb": args.scale_stop_gb, "max_blasts": args.scale_max_blasts,
-                               "near_orbit_radius": args.near_orbit_radius}
+                               "stop_gb": args.scale_stop_gb, "max_blasts": args.scale_max_blasts}
             counts = record_counts()
-            session, fp, zone = scale_build(args.scale_cutoff, args.near_orbit_radius)
+            session, fp, zone = scale_build(args.scale_cutoff)
             timer.enter("topology")
             try:
                 force_topology(session)
@@ -666,8 +661,6 @@ def run_worker(case: str, mode: str, args: argparse.Namespace, out: Path) -> Non
                     "step_peak_rss": max(e["peak_rss"] for e in events),
                     "pip_depth": ({str(k.label): v for k, v in result.pip_depth.items()}
                                   if result is not None else None),
-                    "trusted_depth": ({str(k.label): v for k, v in result.trusted_depth.items()}
-                                      if result is not None else None),
                     "points_created": result.points_created if result is not None else 0,
                     "released_rows": result.released_rows if result is not None else 0,
                     "too_close": result.too_close if result is not None else 0,
@@ -756,8 +749,7 @@ def launch(case: str, mode: str, args: argparse.Namespace, out: Path) -> int:
            "--scale-stop-gb", repr(args.scale_stop_gb),
            "--scale-max-blasts", str(args.scale_max_blasts),
            "--scale-trace-blasts", str(args.scale_trace_blasts), "--workers", str(args.workers),
-           "--separation", args.separation, *(["--lean"] if args.lean else []),
-           *([] if args.near_orbit_radius is None else ["--near-orbit-radius", repr(args.near_orbit_radius)])]
+           "--separation", args.separation, *(["--lean"] if args.lean else [])]
     child = subprocess.Popen(cmd, cwd=REPO)
     handle = psutil.Process(child.pid)
     while child.poll() is None:
@@ -792,8 +784,6 @@ def main() -> None:
     parser.add_argument("--separation", default=None,
                         help="the scaling blasts' min_separation: a float, width or none "
                              f"(default {SCALE_MIN_SEPARATION!r}, width with --lean)")
-    parser.add_argument("--near-orbit-radius", type=float, default=None,
-                        help="the scaling build's graded mesh radius r0 near the orbit (default off)")
     parser.add_argument("--plot-only", action="store_true")
     parser.add_argument("--compare", type=Path, default=None,
                         help="a baseline output dir: figures draw it beside --out")

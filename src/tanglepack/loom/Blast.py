@@ -119,13 +119,6 @@ logger.addHandler(logging.NullHandler())
 #: rule, 2026-10-21: the guard follows the resolution.
 RESOLUTION_SEPARATION: float = 1e-5
 
-#: ``BlastResult.trusted_depth``: inside this distance of its orbit point the
-#: pip orbit is in the linear regime, where each period must divide the
-#: distance by the stable multiplier to within :data:`TRUST_BAND` (the test of
-#: ``scripts/henon_k25_errors_figures.py:trustworthy_depth``).
-TRUST_LINEAR_RADIUS: float = 1e-3
-TRUST_BAND: tuple[float, float] = (0.8, 1.25)
-
 #: ``min_separation="width"`` drops a child whose width is below this many
 #: chord deviations ``h = 1.5 * area_cutoff / L`` of its own polyline (``L`` its
 #: median chord): a lobe thinner than the polygon error is not resolved.
@@ -230,29 +223,6 @@ def _registered_orbit(registry: "IntersectionRegistry", pip: "Intersection") -> 
         orbit.append(x)
         x = registry.iterate_table[x, 1]
     return orbit
-
-
-def _trusted_depth(session: "TangleSession", fp: "FixedPoint", orbit: list[int]) -> int:
-    """The deepest ``j`` up to which the registered pip orbit contracts like the real one.
-
-    Each crossing's distance to the orbit point of its stable branch is read
-    off its ``coords`` (no map call). Inside :data:`TRUST_LINEAR_RADIUS` each
-    period must divide it by ``per_step_beta("stable") ** -period`` to within
-    :data:`TRUST_BAND`; the first period that does not ends the trusted orbit.
-    """
-    registry = session.workbench.intersection_registry
-    distances = []
-    for x in orbit:
-        crossing = registry[x]
-        key = crossing.manifold_b_key
-        distances.append(float(np.hypot(*(np.asarray(crossing.coords) - key[0].coordinates[key[2]]))))
-    contraction = fp.per_step_beta("stable") ** -fp.period
-    low, high = TRUST_BAND
-    for j in range(fp.period, len(distances)):
-        before = distances[j - fp.period]
-        if before < TRUST_LINEAR_RADIUS and not low < before / distances[j] / contraction < high:
-            return j - 1
-    return len(distances) - 1
 
 
 def _ring_width(
@@ -468,10 +438,6 @@ class BlastResult:
             the final ``infer_iterates``: the length of the pip's registered
             ``+1`` chain, ``f^m(q0)`` being its deepest registered iterate
             (a report: data, never a stop condition nor a cut).
-        trusted_depth: Per fixed point of ``pip_depth``, the deepest ``j`` up
-            to which that registered orbit contracts like the real one
-            (:func:`_trusted_depth`), at most ``pip_depth``. A flag, never a
-            decision: nothing reads it, and a smaller value is logged at INFO.
         released_rows: Store rows a lean blast freed, over every step (0 for
             a blast that is not lean).
         held: The bridges a representative blast left un-iterated at its end
@@ -492,7 +458,6 @@ class BlastResult:
     skipped_dropped: int = 0
     already_known: int = 0
     pip_depth: dict["FixedPoint", int] = field(default_factory=dict)
-    trusted_depth: dict["FixedPoint", int] = field(default_factory=dict)
     released_rows: int = 0
     held: int = 0
 
@@ -535,11 +500,10 @@ def blast_zone(
             already-kept sibling. Unstable curves can never truly cross, so a
             child this close re-traces existing curve and is about to merge into
             a numerical artifact; stopping there keeps the blast on the
-            well-resolved side of the precision limit. A child ending on the
-            orbit of a selected fixed point's chosen pip is exempt and logged
-            at INFO, so the guard never decides the depth
-            of ``T(q0)``: that is decided by whether ``f^{m+1}(q0)`` is detected
-            and resolved (design note §A.4). ``"resolution"`` ties it to the
+            well-resolved side of the precision limit. Every child is tested,
+            one ending on the pip orbit included (the pip-orbit exemption was
+            removed on 2026-10-31: since D12's reversal the depth ``m`` cuts
+            nothing). ``"resolution"`` ties it to the
             machine's ``area_cutoff``: ``RESOLUTION_SEPARATION * (area_cutoff /
             DEFAULT_AREA_CUTOFF) ** (2/3)``, read when the call starts. A drop
             is remembered on the bridge
@@ -551,8 +515,7 @@ def blast_zone(
             (no point cloud): a child is dropped when its lobe width, carried
             down the image chain from the ring area of the first bridge
             iterated (``Bridge.width``), is below ``WIDTH_SEPARATION_FACTOR``
-            chord deviations of its polyline; the pip-orbit exemption holds,
-            and a width drop (``dropped_at == WIDTH_DROP``) is re-admitted by
+            chord deviations of its polyline, and a width drop (``dropped_at == WIDTH_DROP``) is re-admitted by
             ``None`` only (never after a lean blast released the dropped
             bridge). ``None`` (default) disables the guard.
         diagnose: If True (the default unless ``lean``) finish with ONE
@@ -793,13 +756,6 @@ def blast_zone(
                         child.width_saddle = parent.width_saddle
             produced.extend(children)
 
-        # Iterating the bridge ending at f^m(q0) linked f^{m+1}(q0), so the
-        # orbit read now marks every child ending on it.
-        orbit = {
-            x: (fp, n)
-            for fp, chain in _pip_orbits(session, fixed_points).items()
-            for n, x in enumerate(chain)
-        }
         zone_ends = arriving_ends()
         for child in produced:
             # A bridge already in the trellis (the fixed-point bridge's self-image
@@ -814,15 +770,7 @@ def blast_zone(
                 discarded.append(child)
                 continue
 
-            pip_end = next((x for x in child.id or () if x in orbit), None)
-            if min_separation is not None and pip_end is not None:
-                owner, n = orbit[pip_end]
-                logger.info(
-                    "blast: child %s ends at f^%d(q0) of %s (crossing %d), "
-                    "kept regardless of separation",
-                    child.id, n, owner.label, pip_end,
-                )
-            elif width and _too_thin(session, child):
+            if width and _too_thin(session, child):
                 seen.add(_seen_key(child))
                 child.dropped_at = WIDTH_DROP
                 too_close.append(child)
@@ -897,13 +845,6 @@ def blast_zone(
     workbench.infer_iterates()
     for fp, orbit in _pip_orbits(session, fixed_points).items():
         result.pip_depth[fp] = len(orbit) - 1
-        result.trusted_depth[fp] = _trusted_depth(session, fp, orbit)
-        if result.trusted_depth[fp] < result.pip_depth[fp]:
-            logger.info(
-                "blast: the pip orbit of %s is registered to depth %d and contracts like "
-                "the real one to depth %d only",
-                fp.label, result.pip_depth[fp], result.trusted_depth[fp],
-            )
     if diagnose:
         workbench.report_resolution(fixed_points, new_bridges=added)
     return result

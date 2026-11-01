@@ -1122,8 +1122,8 @@ class SeriesStep:
         pip_depth: ``m``, a report: the deepest registered forward
             iterate of the blasted fixed point's chosen pip, composed here
             through ``trellis.iterate`` (never the library's own count).
-        blast_depths: The blast's own ``(pip_depth, trusted_depth)`` of the
-            blasted fixed point (``BlastResult``), None for the unblasted step.
+        blast_depth: The blast's own ``pip_depth`` of the blasted fixed point
+            (``BlastResult``), None for the unblasted step.
         history_free: Whether ``session.trellis()`` read BEFORE the recompute
             shows the crossings and bridges of the recomputed topology's
             trellis (D1: the snapshot never depends on what ran first).
@@ -1160,7 +1160,7 @@ class SeriesStep:
     unwitnessed: frozenset
     letters: frozenset
     pip_depth: int
-    blast_depths: Optional[tuple[int, int]]
+    blast_depth: Optional[int]
     history_free: bool
     crossings: tuple[frozenset, frozenset]
     recomputed: tuple[frozenset, frozenset]
@@ -1265,8 +1265,7 @@ def blast_series(name: str, representatives: Optional[str] = None) -> tuple[Seri
                     if entry.letter is not None
                 ),
                 pip_depth=_pip_depth(session, fp),
-                blast_depths=None if result is None or fp not in result.pip_depth
-                else (result.pip_depth[fp], result.trusted_depth[fp]),
+                blast_depth=None if result is None else result.pip_depth.get(fp),
                 history_free=shown == trellis_view(session.topology().trellis),
                 crossings=_crossings_and_bridges(session.workbench),
                 recomputed=_recomputed(session.workbench),

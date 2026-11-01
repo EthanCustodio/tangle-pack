@@ -122,11 +122,11 @@ def test_a_dropped_bridge_a_lean_blast_released_is_not_re_admitted():
 
 
 def _blasted_k28():
-    """The k28 zone after six full blasts, and every two consecutive bridges of
+    """The k28 zone after five full blasts, and every two consecutive bridges of
     one blast image curve (off every branch), by id: a joined arc's pieces."""
     case = build_k28(blasts=0, through="zones")
     session, zone = case.session, case.zones[0]
-    session.blast_zone(zone, 6, fixed_point=[zone.fixed_point], min_separation="width", diagnose=False)
+    session.blast_zone(zone, 5, fixed_point=[zone.fixed_point], min_separation="width", diagnose=False)
     workbench = session.workbench
     branches = {m._span(stop_at_final=False)[1].index for m in workbench.manifolds.values()}
     off_branch = {
