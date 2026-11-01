@@ -32,9 +32,9 @@ backward only). Walking each branch's window (the k=1
 extrapolation) finds every trajectory k times and treats each copy as an
 independent reference — colliding hole propagations (author-reported bug).
 N is the trellis's: choosing the pip cuts the trellis to T(q0), its stable
-branches at the pip's orbit and its unstable branches at the deepest
-registered point of that orbit (``Trellis.cut_at_pip_orbit``), so
-a crossing past a cut is a point of X here, never of N. Without a chosen
+branches at the pip's orbit, its unstable branches whole
+(``Trellis.cut_at_pip_orbit``), so a crossing past a stable cut is a point
+of X here, never of N. Without a chosen
 strong pip, the globally outermost intersection plays r_n.
 
 Implementation notes:
@@ -131,8 +131,8 @@ Implementation notes:
   in the scaled fallback. Every detected crossing carries both branch keys
   (Tangle asserts it). Landings stay RAW table lookups: X holds the iterates
   of N outside T(q0) too. The candidates are never the whole registry: a
-  registered crossing past the unstable cut is no point of X unless its orbit
-  meets T (the law case ``inversion`` holds two inside its reference (2, 3)).
+  registered crossing past a stable cut is no point of X unless its orbit
+  meets T.
 """
 
 from __future__ import annotations

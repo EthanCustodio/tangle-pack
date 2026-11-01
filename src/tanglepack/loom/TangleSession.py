@@ -321,7 +321,7 @@ class TangleSession:
         the remembered pip is found again by its cdists and keys and
         tested alone (the other candidates are classified only when read);
         a pip that is no longer a candidate is left unset with a WARNING. Once
-        a pip is chosen the trellis is cut at its orbit
+        a pip is chosen the trellis's stable branches are cut at its orbit
         (``Trellis.cut_at_pip_orbit``): a single fixed point's when
         the pip is set or restored, a selection of several at the pips of its
         fixed points on every read (a no-op while they are unchanged), so the

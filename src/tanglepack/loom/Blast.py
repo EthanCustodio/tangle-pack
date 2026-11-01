@@ -209,9 +209,10 @@ def _pip_orbits(
 ) -> dict["FixedPoint", list[int]]:
     """``[q0, f(q0), ..., f^m(q0)]`` per fixed point with a chosen pip: its registered orbit.
 
-    Composed link by link, as ``Trellis._pip_orbit_cuts`` reads the depth ``m`` of
-    ``T(q0)``: the iterate table holds ``+1`` links only, so
-    ``IterateTable.forward_depth`` is 1 for any linked crossing.
+    Composed link by link: the iterate table holds ``+1`` links only, so
+    ``IterateTable.forward_depth`` is 1 for any linked crossing. The depth
+    ``m`` is a report (``BlastResult.pip_depth``); ``T(q0)`` cuts no unstable
+    branch at it.
     """
     registry = session.workbench.intersection_registry
     orbits = {}
@@ -466,8 +467,8 @@ class BlastResult:
             this blast (kept as the one copy, not re-iterated), over every step.
         pip_depth: ``m`` per selected fixed point with a chosen pip, read after
             the final ``infer_iterates``: the length of the pip's registered
-            ``+1`` chain, ``f^m(q0)`` being its deepest registered iterate and
-            so the depth ``T(q0)`` is cut at (data, never a stop condition).
+            ``+1`` chain, ``f^m(q0)`` being its deepest registered iterate
+            (a report: data, never a stop condition nor a cut).
         trusted_depth: Per fixed point of ``pip_depth``, the deepest ``j`` up
             to which that registered orbit contracts like the real one
             (:func:`_trusted_depth`), at most ``pip_depth``. A flag, never a

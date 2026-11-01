@@ -53,7 +53,8 @@ Dev Notes:
   :meth:`~tanglepack.topology.Trellis.Trellis.image_cdist`; nothing on any
   other branch. A straddling arc is unified and logged at INFO; no pip unifies
   nothing and warns.
-* The trellis is cut at the pip orbit (``Trellis.cut_at_pip_orbit``), so
+* The trellis's stable branches are cut at the pip orbit
+  (``Trellis.cut_at_pip_orbit``), so
   ``S \\ f(S)``, where the image of a bridge may cross the stable manifold
   away from the images of its ends, is exactly the pip window, and the other
   ``k - 1`` branches are walls as a consequence.

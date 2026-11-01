@@ -26,13 +26,13 @@ memoises on top of the snapshot (the endpoint-to-bridge index, the oriented
 bridge polylines) is a function of the snapshot alone and dies with it.
 
 The trellis of the pip (stage 3, design note §A.4). Choosing a strong
-pip q0 CUTS the snapshot to ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])``, both
-ends on the pip's orbit (:meth:`cut_at_pip_orbit`): stable branch ``j`` ends at
-``f^j(q0)``, ``j < k``, and the unstable branch of ``f^i(q0)`` at that point for
-the ``k`` deepest registered ``i`` (``m`` the last). ``f^-1`` maps the unstable
-half into itself and ``f`` the stable half, so it is a genuine trellis, and a
-lambda-lemma copy deeper than the pip's own orbit is no crossing of it, so it
-cannot reshape the fundamental segment. The cut is the ONE place the
+pip q0 CUTS the snapshot to ``T(q0) = (W^u computed, W^s[P, q0])``
+(:meth:`cut_at_pip_orbit`): stable branch ``j`` ends at ``f^j(q0)``, ``j < k``;
+the unstable branches keep every computed crossing (the author's rule, D12
+reversed 2026-10-31: use every computed manifold; the class count may fall
+under blasting, the entropy may not). ``f`` maps the stable half into itself
+and ``f^-1`` the computed unstable set (every blast child's parent is held),
+so it is a genuine trellis. The cut is the ONE place the
 crossing set N is decided: every later stage reads the branches and bridges
 cut here. A crossing past a cut is a point of X (every iterate of N), not of N:
 it leaves the branches, and the unstable arc across it joins its two bridges
@@ -44,9 +44,8 @@ branches are selected, so a tangle's own trellis holds no heteroclinic crossing
 (its unstable arcs are joined across them, as across a crossing past a cut) and
 the selection's trellis holds them. Cut at every selected pip, the selection is
 ``T(q0_A) ∪ T(q0_B)``: each branch at its own pip orbit, a heteroclinic crossing
-of ``W^u(A)`` and ``W^s(B)`` in N iff it lies inside A's unstable cut AND B's
-stable cut. ``f^-1`` maps the union of the unstable halves into itself and ``f``
-the union of the stable halves, so it is a genuine trellis. :attr:`pips` records
+of ``W^u(A)`` and ``W^s(B)`` in N iff it lies inside B's stable cut. ``f`` maps
+the union of the stable halves into itself, so it is a genuine trellis. :attr:`pips` records
 the pip each fixed point is cut at. :meth:`iterate` and :meth:`image_cdist` stay RAW
 registry lookups -- X holds points outside T -- so a consumer that needs an
 iterate AS A CROSSING of the trellis asks ``image in trellis``.
@@ -263,12 +262,11 @@ class Trellis:
 
     def cut_at_pip_orbit(self, pips: Iterable[int]) -> None:
         """
-        Cut N to the crossings of ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])``.
+        Cut N to the crossings of ``T(q0) = (W^u computed, W^s[P, q0])``.
 
-        For each pip: stable branch ``j`` is cut at ``c_s(f^j q0)``, ``j < k``
-        (``k = k_value``), and the unstable branch of ``f^i(q0)`` at
-        ``c_u(f^i q0)`` for the ``k`` deepest registered ``i``, ``m`` the last
-        forward iterate of ``q0`` the table holds. A crossing past a cut leaves
+        For each pip, stable branch ``j`` is cut at ``c_s(f^j q0)``, ``j < k``
+        (``k = k_value``); no unstable branch is cut, so every computed crossing
+        inside the stable cuts is a crossing of N. A crossing past a cut leaves
         every branch and the bridges across it are joined (see the module Dev
         Notes). No pip restores the computed trellis.
 
@@ -317,17 +315,11 @@ class Trellis:
         self._bridge_by_endpoints, self._arrangement = None, None
 
     def _pip_orbit_cuts(self, pip: int) -> dict[ManifoldKey, tuple[CdistKey, bool]]:
-        """``{branch: (cdist key, placed)}``: the k stable and the k unstable cuts of
-        T(q0), each at its registered orbit point's key (:meth:`image_cdist_key`)."""
-        k = self.registry[pip].manifold_b_key[0].k_value
-        m = self.registry.iterate_table.forward_depth(pip)
-        while self.iterate(pip, m + 1) is not None:
-            m += 1
-        steps = [(j, "stable") for j in range(k)]
-        steps += [(i, "unstable") for i in range(m - k + 1, m + 1)]
+        """``{branch: (cdist key, placed)}``: the k stable cuts of T(q0), each at
+        its registered orbit point's key (:meth:`image_cdist_key`)."""
         cuts = {}
-        for n, stability in steps:
-            key, cdist, from_table = self.image_cdist_key(pip, n, stability)
+        for j in range(self.registry[pip].manifold_b_key[0].k_value):
+            key, cdist, from_table = self.image_cdist_key(pip, j, "stable")
             cuts[key] = (cdist, not from_table)
         return cuts
 
