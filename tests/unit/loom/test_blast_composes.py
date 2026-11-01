@@ -51,7 +51,7 @@ def _dropped(session):
 @pytest.mark.parametrize(
     ("build", "separation", "n"),
     [(_p3_session_zone, 0.02, 4), (_k28_zone, ZONE_MIN_SEPARATION, 11)],
-    ids=["p3_session_no_pip", "k28"],
+    ids=["p3_session", "k28"],
 )
 def test_single_blasts_compose(build, separation, n):
     """``n`` calls of one iteration leave the workbench one ``n``-iteration call leaves.

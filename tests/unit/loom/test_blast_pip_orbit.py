@@ -12,6 +12,8 @@ call, so the tests blast three iterations at once. The child is found by rule
 
 from __future__ import annotations
 
+from tanglepack.numerics.geometry import polyline_midpoint
+
 MIN_SEPARATION = 0.02
 
 
@@ -50,3 +52,25 @@ def test_pip_depth_is_the_registered_orbit(henon_p3_session):
     result = _blast(session, zone, fp1)
     orbit = _pip_orbit(session, fp1, session.chosen_strong_pip(fp1))
     assert result.pip_depth == {fp1: len(orbit) - 1}
+
+
+def test_kept_children_are_the_zones_own(henon_p3_session):
+    """Every kept child is the blasted fixed point's, lies in the zone and outside
+    every smaller zone (C4), and was never a parent before (an iterated bridge is
+    not re-fed)."""
+    session, _fp3, fp1, zone = henon_p3_session
+    inner = [
+        z for z in session.resonance_zones.values() if z.key is not zone.key and z.area < zone.area
+    ]
+    result = _blast(session, zone, fp1)
+    fed = {id(b) for b in result.interior_bridges_by_iteration[0]}
+    kept = [c for s in result.steps for c in s.kept_interior]
+    assert kept
+    for step in result.steps:
+        for child in step.kept_interior:
+            midpoint = polyline_midpoint(child.get_point_array())
+            assert child.fixed_point is fp1
+            assert zone.contains_point(midpoint)
+            assert not any(z.contains_point(midpoint) for z in inner)
+            assert id(child) not in fed
+        fed |= {id(b) for b in step.kept_interior}

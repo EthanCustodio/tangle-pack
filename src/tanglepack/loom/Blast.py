@@ -503,19 +503,19 @@ def blast_zone(
             well-resolved side of the precision limit. Every child is tested,
             one ending on the pip orbit included (the pip-orbit exemption was
             removed on 2026-10-31: since D12's reversal the depth ``m`` cuts
-            nothing). ``"resolution"`` ties it to the
-            machine's ``area_cutoff``: ``RESOLUTION_SEPARATION * (area_cutoff /
+            nothing). ``"resolution"`` ties it to the machine's
+            ``area_cutoff``: ``RESOLUTION_SEPARATION * (area_cutoff /
             DEFAULT_AREA_CUTOFF) ** (2/3)``, read when the call starts. A drop
-            is remembered on the bridge
-            (``Bridge.dropped_at``) and the zone's later calls skip it, unless
-            they pass a smaller separation or None. The curve tested against is
-            every curve the workbench holds (dropped and exterior children
-            included), so ``n`` single-iteration blasts equal one
-            ``n``-iteration blast. ``"width"`` is the analytic guard instead
-            (no point cloud): a child is dropped when its lobe width, carried
-            down the image chain from the ring area of the first bridge
-            iterated (``Bridge.width``), is below ``WIDTH_SEPARATION_FACTOR``
-            chord deviations of its polyline, and a width drop (``dropped_at == WIDTH_DROP``) is re-admitted by
+            is remembered on the bridge (``Bridge.dropped_at``) and the zone's
+            later calls skip it, unless they pass a smaller separation or
+            None. The curve tested against is every curve the workbench holds
+            (dropped and exterior children included), so ``n``
+            single-iteration blasts equal one ``n``-iteration blast.
+            ``"width"`` is the analytic guard instead (no point cloud): a child
+            is dropped when its lobe width, carried down the image chain from
+            the ring area of the first bridge iterated (``Bridge.width``), is
+            below ``WIDTH_SEPARATION_FACTOR`` chord deviations of its polyline,
+            and a width drop (``dropped_at == WIDTH_DROP``) is re-admitted by
             ``None`` only (never after a lean blast released the dropped
             bridge). ``None`` (default) disables the guard.
         diagnose: If True (the default unless ``lean``) finish with ONE
