@@ -80,8 +80,10 @@ Cases:
 * ``k28_deep_blast_sliver`` -- ``k28`` from the analytic seed, blasted nine
   times: a crossing sits a sliver narrower than ``2 * cdist_tol`` past the pip
   (stress campaign E11, 2026-10-07; the exact-ownership regression). The blasts
-  run with clause 3 of N off: the near-anchor guard (2026-10-29) ends the pip
-  orbit before the ninth blast makes the sliver.
+  run with clause 3 of N off (the near-anchor guard, 2026-10-29, ends the pip
+  orbit before the ninth blast makes the sliver) and with no ``min_separation``
+  (the sliver's bridge ends on the pip orbit; since that child lost its
+  exemption, 2026-10-31, the 1e-5 guard drops it).
 
 The blast series (:data:`SERIES`, :func:`blast_series`) run the D1 loop --
 blast once, recompute the topology from scratch, compare -- from the zone
@@ -463,11 +465,14 @@ def build_k28(
 
 def build_k28_deep_blast_sliver() -> Case:
     """
-    ``k28`` from the analytic seed, blasted nine times with clause 3 of N off.
+    ``k28`` from the analytic seed, blasted nine times with clause 3 of N off
+    and no ``min_separation``.
 
     The sliver past the pip (stress campaign E11) is made by the ninth blast,
     which the near-anchor guard (2026-10-29) never reaches: it ends the pip
-    orbit first. The build is :func:`build_k28` otherwise.
+    orbit first. Its bridge ends on the pip orbit, which the 1e-5 proximity
+    guard drops since the pip-orbit exemption went (2026-10-31). The build is
+    :func:`build_k28` otherwise.
 
     Returns:
         The partitioned case.
@@ -476,7 +481,7 @@ def build_k28_deep_blast_sliver() -> Case:
     session, (fp,), (zone,) = case.session, case.fixed_points, case.zones
     session.anchor_resolution_factor = None
     for _ in range(9):
-        _blast(session, zone, [fp])
+        _blast(session, zone, [fp], min_separation=None)
     session.topology()
     case.name, case.stage = "k28_9_blasts", "partitioned"
     case.expect = CaseExpect(periods=(1,), area_cutoff=1e-7, blasts=9)

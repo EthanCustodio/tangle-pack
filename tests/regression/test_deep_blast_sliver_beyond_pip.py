@@ -1,8 +1,9 @@
 """
 Regression (2026-10-07, stress campaign E11 error 1): a sliver past the pip.
 
-Nine blasts of the k=2.8 zone (analytic seed, ``area_cutoff = 1e-7``,
-``min_separation = 1e-5``) register a real crossing 1.1e-6 past the zone's pip,
+Nine blasts of the k=2.8 zone (analytic seed, ``area_cutoff = 1e-7``; the
+stress campaign's ``min_separation = 1e-5``, no guard since the pip-orbit
+exemption went on 2026-10-31) register a real crossing 1.1e-6 past the zone's pip,
 so the sliver's midpoint lies within the registry's absolute ``cdist_tol`` of
 the pip. The iterated partition used to find each element's homotopy parent by
 TOLERANT midpoint ownership, so the sliver ``(pip, outer]`` was handed to the
