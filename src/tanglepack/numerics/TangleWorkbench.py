@@ -171,8 +171,6 @@ class TangleWorkbench:
             constructor).
         anchor_resolution_factor: Clause 3 of N, the near-anchor guard (see
             :attr:`anchor_resolution_factor`).
-        near_orbit_radius: The opt-in graded mesh near the periodic orbit
-            (see :attr:`near_orbit_radius`).
 
     Note:
         Bridge iteration and iterate-table inference are delegated to
@@ -218,7 +216,6 @@ class TangleWorkbench:
         map_executor: MapExecutor = "thread",
         resolution_ratio_threshold: Optional[float] = 3.0,
         anchor_resolution_factor: Optional[float] = ANCHOR_RESOLUTION_FACTOR,
-        near_orbit_radius: Optional[float] = None,
     ) -> None:
         """
         Build an empty workbench around one dynamical system.
@@ -263,9 +260,6 @@ class TangleWorkbench:
                 :attr:`anchor_resolution_factor`);
                 :data:`~.IntersectionRegistry.ANCHOR_RESOLUTION_FACTOR` (5) by
                 default, None turns it off.
-            near_orbit_radius (Optional[float]): The radius ``r0`` of the
-                opt-in graded mesh near the periodic orbit (see
-                :attr:`near_orbit_radius`); None (default) refines as always.
         """
 
         self.dynamical_system = DynamicalSystem(
@@ -279,9 +273,7 @@ class TangleWorkbench:
         self._fp_solver = FixedPointSolver(self.dynamical_system)
         # ONE machine refines everything, the initializer's fundamental segments
         # included, so area_cutoff and the point budget reach every refinement.
-        self._man_machine = ManifoldMachine(
-            self.dynamical_system, area_cutoff, max_points_per_step, near_orbit_radius
-        )
+        self._man_machine = ManifoldMachine(self.dynamical_system, area_cutoff, max_points_per_step)
         # Every point the workbench grows is a row of ONE store: the initializer
         # seeds into it and the machine appends to the store of the curve it grows.
         self.point_store = PointStore()
@@ -374,24 +366,6 @@ class TangleWorkbench:
     @max_points_per_step.setter
     def max_points_per_step(self, value: Optional[int]) -> None:
         self._man_machine.max_points_per_step = value
-
-    @property
-    def near_orbit_radius(self) -> Optional[float]:
-        """
-        The radius ``r0`` of the opt-in graded mesh near the periodic orbit.
-
-        Within ``r0`` of an orbit point of a curve's own fixed point the shared
-        machine refines more finely (:attr:`.ManifoldMachine.near_orbit_radius`),
-        so the chord deviation falls like ``r**2`` and the near-anchor guard
-        (:attr:`anchor_resolution_factor`) does not stop the pip orbit. None
-        (default) refines as always. Set it BEFORE growth: it acts on every
-        refinement from then on, and curve already refined is not revisited.
-        """
-        return self._man_machine.near_orbit_radius
-
-    @near_orbit_radius.setter
-    def near_orbit_radius(self, value: Optional[float]) -> None:
-        self._man_machine.near_orbit_radius = value
 
     @property
     def anchor_resolution_factor(self) -> Optional[float]:
@@ -680,8 +654,6 @@ class TangleWorkbench:
         initial_segments = self._man_maker.construct_kevin_way(
             fixed_point, stability, num_branches
         )
-        if self.near_orbit_radius is not None:
-            self._man_machine.grade_seed(fixed_point, stability, initial_segments)
 
         for (orbit_index, branch_index), manifold in initial_segments.items():
 

@@ -95,7 +95,6 @@ class TangleSession:
         escape_radius: Optional[float] = None,
         workers: int = 1,
         map_executor: MapExecutor = "thread",
-        near_orbit_radius: Optional[float] = None,
     ):
         """
         Build a session around a fresh workbench for the given map.
@@ -113,10 +112,6 @@ class TangleSession:
             workers: The workbench's core count (1 by default; see
                 :attr:`~.numerics.TangleWorkbench.TangleWorkbench.workers`).
             map_executor: The workbench's map pool, ``"thread"`` or ``"process"``.
-            near_orbit_radius: The workbench's opt-in graded mesh near the
-                periodic orbit (see
-                :attr:`~.numerics.TangleWorkbench.TangleWorkbench.near_orbit_radius`);
-                None (default) leaves it off.
         """
         self.workbench = TangleWorkbench(
             dynamical_map,
@@ -127,7 +122,6 @@ class TangleSession:
             escape_radius=escape_radius,
             workers=workers,
             map_executor=map_executor,
-            near_orbit_radius=near_orbit_radius,
         )
         # One Trellis snapshot and one Topology per fixed-point selection.
         self._trellises: dict[frozenset, Trellis] = {}
@@ -248,15 +242,6 @@ class TangleSession:
     @escape_radius.setter
     def escape_radius(self, value: Optional[float]) -> None:
         self.workbench.escape_radius = value
-
-    @property
-    def near_orbit_radius(self) -> Optional[float]:
-        """The workbench's graded-mesh radius near the orbit (read and set through)."""
-        return self.workbench.near_orbit_radius
-
-    @near_orbit_radius.setter
-    def near_orbit_radius(self, value: Optional[float]) -> None:
-        self.workbench.near_orbit_radius = value
 
     @property
     def anchor_resolution_factor(self) -> Optional[float]:

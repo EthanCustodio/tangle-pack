@@ -30,7 +30,10 @@ orders, sets sorted (a set's iteration order is its hash table's, not state):
   float bits, so an index rebuilt from scratch would not continue the same (the
   N10a analyst's ablation: 51 of 59 resumed series steps moved in the last bits);
 * the bookkeeping later calls read: growth stats, reported findings, epochs,
-  the generation, the machine's settings.
+  the generation, the machine's settings. Format 3 (2026-10-31) dropped the
+  graded mesh's radius from them: a format-2 save (or a format-1 save written
+  after 2026-10-29) loads when its radius is None and is refused otherwise,
+  since the mesh it was grown with no longer exists.
 
 What is NOT saved is derived and rebuilt lazily: the registry's caches,
 ``Intersection.brackets`` and ``precise_brackets``, the fixed points' memos,
@@ -89,9 +92,10 @@ if TYPE_CHECKING:
 #: of another format is refused rather than misread. The law
 #: ``test_a_load_restores_every_attribute`` fails when a class the save covers
 #: gains an attribute this module does not save.
-FORMAT_VERSION = 2
-#: The formats a load reads: format 1 holds no cdist residuals, read as 0.0.
-READ_FORMATS = (1, FORMAT_VERSION)
+FORMAT_VERSION = 3
+#: The formats a load reads: format 1 holds no cdist residuals, read as 0.0;
+#: formats 1 and 2 may hold a graded-mesh radius, refused unless None.
+READ_FORMATS = (1, 2, FORMAT_VERSION)
 #: How many linked rows :func:`check_map` maps, per direction.
 MAP_CHECK_SAMPLE = 8
 #: The relative disagreement :func:`check_map` tolerates. A link the other map
@@ -450,7 +454,7 @@ def _save_bookkeeping(workbench: TangleWorkbench, encoder: Encoder, meta: dict, 
         [artifact[3] for artifact in artifacts], dtype=np.float64).reshape(-1, 2)
     arrays["settings"], meta["workbench"]["settings_types"] = typed_floats([
         machine.area_cutoff, workbench.escape_radius, workbench.resolution_ratio_threshold,
-        machine.max_abs_coord, workbench.anchor_resolution_factor, machine.near_orbit_radius,
+        machine.max_abs_coord, workbench.anchor_resolution_factor,
     ])
 
 
@@ -548,7 +552,7 @@ def read(path: str | os.PathLike) -> tuple[dict, dict[str, np.ndarray]]:
         meta = json.load(handle)
     if meta.get("format") not in READ_FORMATS:
         raise ValueError(f"{path}.json is save format {meta.get('format')!r}; "
-                         f"this tanglepack reads format {FORMAT_VERSION} (and format 1)")
+                         f"this tanglepack reads format {FORMAT_VERSION} (and formats 1 and 2)")
     with np.load(f"{path}.npz", allow_pickle=False) as npz:
         arrays = {name: npz[name] for name in npz.files}
     return meta, arrays
@@ -568,7 +572,8 @@ def restore_workbench(workbench: TangleWorkbench, meta: dict, arrays: dict) -> D
 
     Raises:
         ValueError: The workbench's map disagrees with the saved points
-            (:func:`check_map`).
+            (:func:`check_map`), or the save was grown with the graded mesh
+            near the orbit, removed on 2026-10-31.
     """
     assert not workbench.fixed_points and not len(workbench.point_store), "load into a fresh workbench"
     decoder = Decoder(_load_fixed_points(meta, arrays), workbench)
@@ -825,14 +830,20 @@ def _load_bookkeeping(workbench: TangleWorkbench, decoder: Decoder, meta: dict, 
     workbench._generation_state = None if state is None else (state[0], state[1], tuple(state[2]))
 
     machine = workbench._man_machine
-    # The last two settings are optional (2026-10-29): an earlier format-1
-    # file has four and loads the default guard and no graded mesh.
-    area_cutoff, escape_radius, threshold, max_abs_coord, anchor_factor, near_orbit_radius = (
-        floats_of(arrays["settings"], saved["settings_types"]) + [ANCHOR_RESOLUTION_FACTOR, None]
-    )[:6]
+    # The fifth setting is optional (2026-10-29): an earlier format-1 file has
+    # four and loads the default guard. A sixth, the graded mesh's radius, is
+    # in formats 1 and 2 only; a curve grown with the mesh is refused.
+    settings = floats_of(arrays["settings"], saved["settings_types"])
+    if len(settings) > 5 and settings[5] is not None:
+        raise ValueError(
+            f"this save was grown with the graded mesh near the orbit (near_orbit_radius="
+            f"{settings[5]!r}), removed on 2026-10-31; rebuild it without the mesh"
+        )
+    area_cutoff, escape_radius, threshold, max_abs_coord, anchor_factor = (
+        settings + [ANCHOR_RESOLUTION_FACTOR]
+    )[:5]
     machine.area_cutoff, machine.max_points_per_step = area_cutoff, saved["max_points_per_step"]
     machine.points_created, machine.max_abs_coord = saved["points_created"], max_abs_coord
     workbench.escape_radius = escape_radius
     workbench.resolution_ratio_threshold = threshold
     workbench.anchor_resolution_factor = anchor_factor
-    machine.near_orbit_radius = near_orbit_radius

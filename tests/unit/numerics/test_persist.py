@@ -57,9 +57,9 @@ def test_a_save_of_another_format_is_refused(tmp_path):
     workbench.save(tmp_path / "k10")
     meta_path = tmp_path / "k10.json"
     meta = json.loads(meta_path.read_text())
-    meta["format"] = 3
+    meta["format"] = 4
     meta_path.write_text(json.dumps(meta))
-    with pytest.raises(ValueError, match="format 3.*format 2"):
+    with pytest.raises(ValueError, match="format 4.*format 3"):
         _load(workbench, tmp_path / "k10")
 
 
@@ -71,7 +71,7 @@ def test_an_older_or_unversioned_save_is_refused(version, tmp_path):
     meta = json.loads(meta_path.read_text())
     meta["format"] = version
     meta_path.write_text(json.dumps(meta))
-    with pytest.raises(ValueError, match=f"format {version}.*format 2"):
+    with pytest.raises(ValueError, match=f"format {version}.*format 3"):
         _load(workbench, tmp_path / "k10")
 
 
@@ -83,7 +83,6 @@ def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
     workbench.escape_radius = 7.5
     workbench.resolution_ratio_threshold = 2.5
     workbench.anchor_resolution_factor = 7.5
-    workbench.near_orbit_radius = 1e-3
     for bridge in workbench.bridges:
         try:
             workbench.iterate_bridge(bridge)
@@ -97,7 +96,7 @@ def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
 
     loaded = _load(workbench, tmp_path / "k10")
     settings = ("area_cutoff", "max_points_per_step", "escape_radius", "resolution_ratio_threshold",
-                "anchor_resolution_factor", "near_orbit_radius")
+                "anchor_resolution_factor")
     assert [getattr(loaded, name) for name in settings] == [getattr(workbench, name) for name in settings]
     assert loaded.intersection_registry.unresolved_links == workbench.intersection_registry.unresolved_links
     assert {bridge.id for bridge in loaded._half_iterated_bridges} == abandoned
@@ -105,24 +104,63 @@ def test_the_state_the_law_cases_leave_at_rest_travels(tmp_path):
         loaded.iterate_bridge(loaded.bridge(next(iter(abandoned))))
 
 
-def test_a_format_1_save_without_the_guard_settings_loads_the_defaults(tmp_path):
-    # Saves written before 2026-10-29 hold four settings: the near-anchor guard
-    # and the graded mesh were optional additions to format 1.
-    workbench = build_k10().workbench
-    workbench.anchor_resolution_factor, workbench.near_orbit_radius = 7.5, 1e-3
-    workbench.save(tmp_path / "k10")
-    meta_path, arrays_path = tmp_path / "k10.json", tmp_path / "k10.npz"
+def _rewrite_settings(path, settings, format=None):
+    """Replace a save's machine settings (and optionally its format) in place."""
+    meta_path, arrays_path = path.with_suffix(".json"), path.with_suffix(".npz")
     meta = json.loads(meta_path.read_text())
-    meta["workbench"]["settings_types"] = meta["workbench"]["settings_types"][:4]
+    values, meta["workbench"]["settings_types"] = persist.typed_floats(settings)
+    if format is not None:
+        meta["format"] = format
     meta_path.write_text(json.dumps(meta))
     with np.load(arrays_path) as saved:
         arrays = dict(saved)
-    arrays["settings"] = arrays["settings"][:4]
+    arrays["settings"] = values
     np.savez(arrays_path, **arrays)
 
+
+def _settings(workbench):
+    """The five settings a format-3 save holds, in its order."""
+    return [workbench.area_cutoff, workbench.escape_radius, workbench.resolution_ratio_threshold,
+            workbench._man_machine.max_abs_coord, workbench.anchor_resolution_factor]
+
+
+def test_a_format_3_save_holds_no_mesh_radius(tmp_path):
+    workbench = build_k10().workbench
+    workbench.save(tmp_path / "k10")
+    meta = json.loads((tmp_path / "k10.json").read_text())
+    assert meta["format"] == 3
+    assert len(meta["workbench"]["settings_types"]) == 5
+    loaded = _load(workbench, tmp_path / "k10")
+    assert _settings(loaded) == _settings(workbench)
+
+
+def test_a_format_1_save_without_the_guard_settings_loads_the_defaults(tmp_path):
+    # Saves written before 2026-10-29 hold four settings: the near-anchor guard
+    # was an optional addition to format 1.
+    workbench = build_k10().workbench
+    workbench.anchor_resolution_factor = 7.5
+    workbench.save(tmp_path / "k10")
+    _rewrite_settings(tmp_path / "k10", _settings(workbench)[:4], format=1)
     loaded = _load(workbench, tmp_path / "k10")
     assert loaded.anchor_resolution_factor == ANCHOR_RESOLUTION_FACTOR
-    assert loaded.near_orbit_radius is None
+
+
+def test_a_format_2_save_without_a_mesh_radius_loads(tmp_path):
+    workbench = build_k10().workbench
+    workbench.anchor_resolution_factor = 7.5
+    workbench.save(tmp_path / "k10")
+    _rewrite_settings(tmp_path / "k10", _settings(workbench) + [None], format=2)
+    loaded = _load(workbench, tmp_path / "k10")
+    assert _settings(loaded) == _settings(workbench)
+
+
+def test_a_format_2_save_with_a_mesh_radius_is_refused(tmp_path):
+    # The graded mesh went on 2026-10-31: curve grown with it cannot be continued.
+    workbench = build_k10().workbench
+    workbench.save(tmp_path / "k10")
+    _rewrite_settings(tmp_path / "k10", _settings(workbench) + [1e-3], format=2)
+    with pytest.raises(ValueError, match="graded mesh"):
+        _load(workbench, tmp_path / "k10")
 
 
 def test_an_object_array_is_refused(tmp_path):

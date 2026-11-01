@@ -65,9 +65,8 @@ DEDUP_RTOL = 1e-9
 #: many chord deviations is out of N. Near the
 #: orbit point ``d = |x - P|`` contracts by beta per step, and a polyline that
 #: strays ``h`` from the curve puts an error of about ``h / d`` on each step's
-#: contraction; the trust band of the registered orbit allows 20%
-#: (``TRUST_BAND`` of ``loom/Blast.py``), so ``h / d <= 1 - 0.8`` gives
-#: ``c = 1 / (1 - 0.8) = 5``.
+#: contraction. A crossing is trusted while that error stays within 20% of the
+#: contraction, so ``h / d <= 1 - 0.8`` gives ``c = 1 / (1 - 0.8) = 5``.
 ANCHOR_RESOLUTION_FACTOR = 5.0
 
 
@@ -563,8 +562,8 @@ class IntersectionRegistry:
             return None
         if ix not in self._orbit_clearances:
             xy = np.asarray(ix.coords, dtype=float)
-            # Floored at the xy resolution: a polyline graded down to it
-            # (near_orbit_radius) places nothing nearer its orbit point than that.
+            # Floored at the xy resolution: no polyline resolves a point nearer
+            # its orbit point than that.
             self._orbit_clearances[ix] = min(
                 float(np.hypot(*(xy - point))) / max(ix.chord_deviation, xy_resolution(point))
                 for point in (np.asarray(key[0].coordinates[key[2]], dtype=float)

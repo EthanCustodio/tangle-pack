@@ -230,7 +230,6 @@ def test_a_loaded_session_blasts_as_the_original(name, tmp_path):
 def test_a_loaded_session_remembers_its_dropped_children(tmp_path):
     case = BUILDERS["nested_unblasted"]()
     session, outer = case.session, case.fixed_points[0]
-    session.forget_strong_pip(outer)  # no child is exempt from the proximity guard
     zone = max(session.resonance_zones.values(), key=lambda zone: zone.area)
     session.blast_zone(zone, 4, fixed_point=[outer], min_separation=0.02, diagnose=False)
     dropped = {b.id: b.dropped_at for b in session.workbench.bridges if b.dropped_at is not None}
@@ -350,7 +349,7 @@ _SAVED: dict[type, frozenset[str]] = {
         "_query_edges", "_intersecting_segments", "_processed_pairs",
     }),
     ManifoldMachine: frozenset({
-        "area_cutoff", "max_points_per_step", "points_created", "max_abs_coord", "near_orbit_radius",
+        "area_cutoff", "max_points_per_step", "points_created", "max_abs_coord",
     }),
     ResonanceZone: frozenset({
         "fixed_point", "stable_branch_key", "boundary_intersection", "cut_intersections",

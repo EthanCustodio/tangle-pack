@@ -64,7 +64,7 @@ def two_prod(a: Floats, b: Floats) -> tuple[Floats, Floats]:
 
 def dd_mul(hi: Floats, lo: Floats, s: Floats) -> tuple[Floats, Floats]:
     """
-    ``(hi + lo) * s``: growth's ``stretch * cdist``, the graded seed's ``scale * cdist``.
+    ``(hi + lo) * s``: growth's ``stretch * cdist``.
 
     Returns:
         ``hi`` is ``fl(hi * s)``; ``lo`` its rounding error plus ``lo * s``.

@@ -430,9 +430,8 @@ def xy_resolution(points: NDArray[np.float64]) -> float:
     """
     The smallest distance float64 coordinates resolve near ``points``: ``64 eps max(1, |x|)``.
 
-    Below it two points near an orbit point are one point; the graded mesh
-    near the orbit stops there and the near-anchor guard of N floors its chord
-    deviation at it (2026-10-29).
+    Below it two points near an orbit point are one point; the near-anchor
+    guard of N floors its chord deviation at it (2026-10-29).
 
     Args:
         points: The orbit points, any shape.
