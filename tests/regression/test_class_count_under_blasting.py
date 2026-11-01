@@ -1,22 +1,19 @@
 """The D1 loop: blast, recompute the topology from scratch, compare.
 
 The author's decisions of 2026-10-07: topology is a pure function of the
-numerical state, recomputed from scratch after every blast (D1), and the class
-count never decreases -- it plateaus and may jump again after much more
-growth, so a decrease, or growth while nothing else changes, is a bug. The
-alphabet is the minimal trellis's bridges only (D2).
+numerical state, recomputed from scratch after every blast (D1), and growth of
+the class count while nothing else changes is a bug. The alphabet is the
+minimal trellis's bridges only (D2). Since D12 was reversed (2026-10-31: use
+every computed manifold) the class count may fall; the entropy may not.
 
 Each series (:data:`cases.SERIES`) blasts one zone once at a time and records
 a :class:`cases.SeriesStep` per recompute. The laws are rule-based, never a
 pinned count:
 
-* the TOTAL class count (active + inert) never decreases -- D1 says "the
-  class count"; per kind it legitimately moves: a first blast registers image
-  loops that turn active classes inert, and a reference-pair switch can merge
-  inert ones (``docs/open_issues.md``, TEST-2). A decrease is a failure even
-  when the lost references are witnessed: the trellis is cut at the pip orbit
-  on both sides (D10, D12), so a lambda-lemma copy deeper than the pip's own
-  orbit is no crossing of it;
+* the topological entropy ``ln rho`` of the refined transition matrix never
+  decreases (2026-10-31). The class count may fall: no unstable branch is cut
+  at the pip orbit, so a deeper crossing can refute a reference pair and merge
+  classes (k32_series blast 10), which is discovery, not a defect;
 * while the hole set stays the same between two recomputes, so does the class
   count (at least one such pair must exist, or the law checked nothing), and so
   does the alphabet closed under the word map: the closure is a function of the
@@ -95,10 +92,11 @@ def _law_series(name: str, representatives: Optional[str]) -> tuple[SeriesStep, 
 
 
 def _table(steps: tuple[SeriesStep, ...]) -> str:
-    """``blasts: holes, classes (active/inert), closed, ambiguous, outside minimal`` per step."""
+    """``blasts: holes, classes (active/inert), closed, ambiguous, outside minimal, h`` per step."""
     return "; ".join(
         f"{s.blasts}: {len(s.holes)} holes, {s.classes} ({s.active}/{s.inert}), "
-        f"{s.closed} closed, {s.ambiguous} ambiguous, {s.outside_minimal} outside"
+        f"{s.closed} closed, {s.ambiguous} ambiguous, {s.outside_minimal} outside, "
+        f"h = {s.entropy:.6f}"
         for s in steps
     )
 
@@ -122,12 +120,12 @@ def test_some_representative_series_holds_a_bridge() -> None:
     assert any(any(counts) for counts in held.values()), held
 
 
-@pytest.mark.parametrize("name", _params("series_class_count_never_decreases"))
-def test_class_count_never_decreases(name: str, representatives: Optional[str]) -> None:
-    """D1: one more blast never loses a class."""
+@pytest.mark.parametrize("name", _params("series_entropy_never_decreases"))
+def test_entropy_never_decreases(name: str, representatives: Optional[str]) -> None:
+    """One more blast never lowers the topological entropy (the class count may fall)."""
     steps = _law_series(name, representatives)
     for before, after in zip(steps, steps[1:]):
-        assert before.classes <= after.classes, _table(steps)
+        assert after.entropy >= before.entropy - 1e-9, _table(steps)
 
 
 @pytest.mark.parametrize("name", _params("series_class_count_constant_while_holes_constant"))

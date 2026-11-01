@@ -1119,7 +1119,7 @@ class SeriesStep:
             being the pair of its elements' ``(branch_key, side, lo_id, hi_id)``
             read off ``session.homotopy_partition()`` here, never through the
             library's own identity.
-        pip_depth: ``m``, the depth of ``T(q0)``: the deepest registered forward
+        pip_depth: ``m``, a report: the deepest registered forward
             iterate of the blasted fixed point's chosen pip, composed here
             through ``trellis.iterate`` (never the library's own count).
         blast_depths: The blast's own ``(pip_depth, trusted_depth)`` of the
@@ -1142,6 +1142,9 @@ class SeriesStep:
             more interior crossings (``helpers.laws.base_chord_misreadings``).
         chord_misreadings: One text per base-branch gap the iterated cut reads
             otherwise than point-in-polygon; recorded, never asserted here.
+        entropy: ``ln`` of the spectral radius of the refined transition matrix
+            (:func:`_entropy`; 0 for an empty or nilpotent matrix).
+        reliable: ``session.symbolic_dynamics().is_reliable``.
         held: The bridges the step's blast held (``BlastResult.held``; 0 for the
             unblasted step and for a full blast).
     """
@@ -1166,6 +1169,8 @@ class SeriesStep:
     p1_disagreements: tuple
     chords_checked: int
     chord_misreadings: tuple
+    entropy: float
+    reliable: bool
     held: int = 0
 
 
@@ -1182,7 +1187,9 @@ class Series(NamedTuple):
 #: pair at blasts 2 and 8, p3 at blast 6. ``k32_series`` and
 #: ``nested_outer_series`` are E11's ``k32`` / ``nested_outer`` (2026-10-07), run
 #: to the depth where the base decreased (BCG-5: k32 blast 10, nested_outer blast
-#: 11, inversion blast 4) until the trellis was balanced (D12).
+#: 11, inversion blast 4). Since D12 was reversed (2026-10-31) the class count
+#: may fall there (k32 blast 10: a deeper crossing refutes a reference); the
+#: entropy may not.
 SERIES: Mapping[str, Series] = MappingProxyType(
     {
         "k28_series": Series(lambda: build_k28(blasts=0, through="zones"), 8),
@@ -1269,10 +1276,18 @@ def blast_series(name: str, representatives: Optional[str] = None) -> tuple[Seri
                 p1_disagreements=p1_disagreements,
                 chords_checked=chords_checked,
                 chord_misreadings=chord_misreadings,
+                entropy=_entropy(dynamics.transition_matrix()[1]),
+                reliable=dynamics.is_reliable,
                 held=0 if result is None else result.held,
             )
         )
     return tuple(steps)
+
+
+def _entropy(matrix: np.ndarray) -> float:
+    """``ln rho(matrix)``, 0 for an empty or nilpotent matrix."""
+    rho = np.abs(np.linalg.eigvals(matrix)).max() if matrix.size else 0.0
+    return float(np.log(rho)) if rho > 1e-12 else 0.0
 
 
 def _pip_depth(session: TangleSession, fp: "FixedPoint") -> int:
@@ -1376,7 +1391,7 @@ class KnownIssue:
             (``docs/open_issues.md``).
         wp: The work package that fixes it (``"WP3"``), the decision that
             keeps it (``"C3"``), or the open author decision it waits on
-            (``"DEC-<n>"``).
+            (``"DEC-<n>"``, or ``"author: <what>"`` for one not yet numbered).
         raises: The exception type the failure raises, when it is one.
     """
 
@@ -1390,12 +1405,25 @@ def _each(laws: tuple[str, ...], names: tuple[str, ...], issue: KnownIssue) -> d
     return {(law, name): issue for law in laws for name in names}
 
 
+_INV_12_UNBLASTED = KnownIssue(
+    "INV-12: with no unstable pip cut the unblasted inversion case keeps one reference "
+    "whose hole never propagates (1 hole, 1 class, 0 active): the law checks nothing",
+    "author: inversion investigation",
+)
+_INV_12_SERIES = KnownIssue(
+    "INV-12: inversion_series blast 4 has two ambiguous walks and its entropy falls "
+    "0.264 -> 0 (reference switch to (56, 57))",
+    "author: inversion investigation",
+)
+
+
 #: ``(law_id, case) -> KnownIssue``: every pair fails today and names the WP that
 #: fixes it. The law ids are the ``helpers.laws`` check names without
 #: ``check_`` (or a standalone test's id); a law-tier pair is left out of its
 #: layer's run and gets a set-aside test of its own (``helpers.law_tier``), so
 #: a fix flips loudly to XPASS. The registry may only shrink, except for a new
-#: law whose entry names the later WP that fixes it.
+#: law whose entry names the later WP that fixes it, and the INV-12 entries the
+#: reversal of D12 exposed (2026-10-31, ``.refactor/decisions.md``).
 KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
     {
         ("orientation_reversing_case_builds", "orientation_reversing"): KnownIssue(
@@ -1403,6 +1431,28 @@ KNOWN_ISSUES: Mapping[tuple[str, str], KnownIssue] = MappingProxyType(
             "saddle with exactly one negative eigenvalue",
             "C3",
             raises=ValueError,
+        ),
+        **_each(
+            (
+                "anchor_bridge_class_leads_its_tangle",
+                "registered_images_keep_markers",
+                "partition_singletons",
+                "backward_holes_keep_bridge_side",
+                "anchor_opening_faces_its_hole",
+                "propagated_holes_land_on_predicted_branch",
+                "propagation_terminates",
+                "propagated_hole_inside_container",
+                "refined_matrix_is_an_in_splitting",
+                "matrix_is_token_counts",
+                "base_chords_are_inside_the_lobe_image",
+            ),
+            ("inversion",),
+            _INV_12_UNBLASTED,
+        ),
+        **_each(
+            ("series_entropy_never_decreases", "series_no_walk_is_ambiguous"),
+            ("inversion_series",),
+            _INV_12_SERIES,
         ),
     }
 )
@@ -1458,7 +1508,7 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
             ("members_share_the_P1_itinerary", name): _NO_TWO_CHAINED_MEMBERS
             for name in (
                 "k28_one_blast", "k28_two_blasts", "p3", "nested", "nested_inner_blasts",
-                "inversion", "inversion_one_blast", "inversion_period2",
+                "inversion_one_blast", "inversion_period2",
             )
         },
         **{

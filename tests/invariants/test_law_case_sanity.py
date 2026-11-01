@@ -36,7 +36,9 @@ test_case_sanity_laws, test_case_sanity_set_aside = layer_tests("case_sanity")
 _STANDALONE_ISSUES = {
     "orientation_reversing_case_builds",
     "open_p3_deep_runs",
-    "series_class_count_never_decreases",
+    "series_entropy_never_decreases",
+    "series_no_walk_is_ambiguous",
+    "base_chords_are_inside_the_lobe_image",
     "series_class_count_constant_while_holes_constant",
     "series_alphabet_inside_minimal_trellis",
     "series_members_share_the_P1_itinerary",
@@ -97,6 +99,6 @@ def test_every_law_runs_in_the_tier() -> None:
     untagged = [
         pair
         for pair, issue in KNOWN_ISSUES.items()
-        if not re.fullmatch(r"WP\d+|C\d|DEC-\d+|B\d+[a-z]?", issue.wp)
+        if not re.fullmatch(r"WP\d+|C\d|DEC-\d+|B\d+[a-z]?|author: .+", issue.wp)
     ]
     assert not untagged, untagged

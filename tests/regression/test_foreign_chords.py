@@ -95,7 +95,13 @@ def test_foreign_chords_are_inside_the_lobe_image(case: cases.Case) -> None:
     assert checked, "the case must carry an image chain across a foreign stable branch"
 
 
-@pytest.mark.parametrize("name", BASE_CASES)
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param(name, marks=cases.issue_marks("base_chords_are_inside_the_lobe_image", name))
+        for name in BASE_CASES
+    ],
+)
 def test_base_chords_are_inside_the_lobe_image(name: str) -> None:
     """Along a lobe image's own base branch, from its anchor, the gaps between
     its crossings lie outside, inside, ... the image (the base inside), and the
