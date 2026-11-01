@@ -297,14 +297,8 @@ class Trellis:
             )
         def inside(crossing_id: int) -> bool:
             ix = self.registry[crossing_id]
-            return ix.is_anchor or all(
-                cdist <= cuts[key][0]
-                for key, cdist in (
-                    (ix.manifold_b_key, ix.cdist_key("stable")),
-                    (ix.manifold_a_key, ix.cdist_key("unstable")),
-                )
-                if key in cuts
-            )
+            key = ix.manifold_b_key
+            return ix.is_anchor or key not in cuts or ix.cdist_key("stable") <= cuts[key][0]
 
         branches, bridges = self._computed
         kept = {i for ids in branches.values() for i in ids if inside(i)}

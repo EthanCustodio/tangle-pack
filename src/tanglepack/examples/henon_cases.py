@@ -55,9 +55,9 @@ Dev Notes:
   growth 9-12) has NO heteroclinic crossing; at 16 unstable steps it has four
   ``W^u(p3) x W^s(p1)`` crossings (0.6-0.8 s), all four inside p1's stable cut
   (two of them lay past p3's unstable cut until D12 was reversed, 2026-10-31).
-  16 / 10 is kept: it passes
-  the law ``dual_face_side_is_geometry`` in every form the law has had (a
-  half-plane test failed at 16 / 9 and 16 / 12). 17 / 9 has 22 heteroclinic crossings but builds in 34 s; 13 / 15 has
+  16 / 10 is kept: it passes the law ``dual_face_side_is_geometry`` in every
+  form the law has had (a half-plane test failed at 16 / 9 and 16 / 12).
+  17 / 9 has 22 heteroclinic crossings but builds in 34 s; 13 / 15 has
   seven ``W^u(p1) x W^s(p3)`` crossings, two of them on one unstable segment
   (it builds; its iterate links fail the beta and area laws). None of the four
   crossings has an iterate link (the preimage lies past p1's stable trim, the

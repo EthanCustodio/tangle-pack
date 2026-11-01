@@ -9,8 +9,10 @@ landed a hair inside the pair. A landing is now read against the pair's
 registered images. Rule-based: every reference lost between the two
 recomputes has a witness the iterate table names, consistent in every frame
 it is registered in (an order flip made by cdist noise -- 725 = M(439)
-between M(37) and M(38) while 439 lies outside (37, 38) -- is no witness),
-and the class count does not decrease (D1); no id or count is pinned.
+between M(37) and M(38) while 439 lies outside (37, 38) -- is no witness);
+no id or count is pinned. The class count is not compared: since D12 was
+reversed (2026-10-31) a deeper crossing may refute a reference and merge
+classes, which is discovery (only the entropy may not fall, a series law).
 
 Since WP9 stages 4-6 run on the selection's trellis, so the references are
 read there (WP10: the per-fixed-point trellises carry no stage output, which
@@ -51,13 +53,12 @@ def test_a_deep_blast_loses_no_reference_to_noise():
     outer = max(case.zones, key=lambda zone: zone.area)
     for _ in range(_OUTER_BLASTS):
         _outer_blast(case, outer)
-    before, classes_before = _references(case), len(case.session.bridge_classes())
+    before = _references(case)
 
     _outer_blast(case, outer)
-    after, classes_after = _references(case), len(case.session.bridge_classes())
+    after = _references(case)
 
     assert before and after, "the selection's trellis carries the references"
     trellis = case.session.topology().trellis
     for pair in before - after:
         assert reference_witness(trellis, pair) is not None, pair
-    assert classes_before <= classes_after

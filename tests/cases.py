@@ -1143,8 +1143,7 @@ class SeriesStep:
         chord_misreadings: One text per base-branch gap the iterated cut reads
             otherwise than point-in-polygon; recorded, never asserted here.
         entropy: ``ln`` of the spectral radius of the refined transition matrix
-            (:func:`_entropy`; 0 for an empty or nilpotent matrix).
-        reliable: ``session.symbolic_dynamics().is_reliable``.
+            (:func:`_entropy`; 0 for an empty matrix or ``rho <= 1``).
         held: The bridges the step's blast held (``BlastResult.held``; 0 for the
             unblasted step and for a full blast).
     """
@@ -1170,7 +1169,6 @@ class SeriesStep:
     chords_checked: int
     chord_misreadings: tuple
     entropy: float
-    reliable: bool
     held: int = 0
 
 
@@ -1277,7 +1275,6 @@ def blast_series(name: str, representatives: Optional[str] = None) -> tuple[Seri
                 chords_checked=chords_checked,
                 chord_misreadings=chord_misreadings,
                 entropy=_entropy(dynamics.transition_matrix()[1]),
-                reliable=dynamics.is_reliable,
                 held=0 if result is None else result.held,
             )
         )
@@ -1285,9 +1282,14 @@ def blast_series(name: str, representatives: Optional[str] = None) -> tuple[Seri
 
 
 def _entropy(matrix: np.ndarray) -> float:
-    """``ln rho(matrix)``, 0 for an empty or nilpotent matrix."""
+    """``ln rho(matrix)``, 0 for an empty matrix or a spectral radius of 1 or less.
+
+    A non-negative integer matrix has ``rho = 0`` or ``rho >= 1``; eigvals errs
+    by about ``sqrt(eps)`` on a defective eigenvalue (a Jordan block at 1), so
+    a reading below 1 is clamped to entropy 0 rather than a small negative.
+    """
     rho = np.abs(np.linalg.eigvals(matrix)).max() if matrix.size else 0.0
-    return float(np.log(rho)) if rho > 1e-12 else 0.0
+    return max(0.0, float(np.log(rho))) if rho > 1e-12 else 0.0
 
 
 def _pip_depth(session: TangleSession, fp: "FixedPoint") -> int:

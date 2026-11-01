@@ -59,8 +59,9 @@ Layout (tiers; every test basename is unique, no ``__init__.py``):
   direct build; reuse only on no change), session = direct build, fan-outs,
   delegates and reports.
 * ``regression/`` -- fixed bugs that need their own build, the open deep
-  period-3 runs, and the D1 blast-series laws (``cases.SERIES``: the class
-  count never decreases, it and the alphabet closed under the word map are
+  period-3 runs, and the D1 blast-series laws (``cases.SERIES``: the entropy
+  never decreases (the class count may: a deeper crossing can refute a
+  reference), the class count and the alphabet closed under the word map are
   constant while the hole set is, every class has a member in the minimal
   trellis, lost references are witnessed and letters follow identity).
 * ``plotting/`` -- smoke plus topological properties of the drawings.

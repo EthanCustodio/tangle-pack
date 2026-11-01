@@ -1,11 +1,13 @@
 """A child ending on the chosen pip's orbit is never dropped by ``min_separation`` (B3, N-a).
 
-The author's decision Q2 (2026-10-09): the depth ``m`` (``BlastResult.pip_depth``,
-a report since D12 was reversed on 2026-10-31) is the deepest registered forward
-iterate of the pip, and the blast's proximity guard, a cost guard, never decides it. The point ``f^{m+1}(q0)`` is born as an END of a
-child of the bridge ending at ``f^m(q0)``; that child is iterated in turn only
-inside a multi-iteration call, so the tests blast three iterations at once.
-The child is found by rule (an end on the composed orbit), never by id.
+The author's decision Q2 (2026-10-09): the depth ``m``
+(``BlastResult.pip_depth``, a report since D12 was reversed on 2026-10-31) is
+the deepest registered forward iterate of the pip, and the blast's proximity
+guard, a cost guard, never decides it. The point ``f^{m+1}(q0)`` is born as an
+END of a child of the bridge ending at ``f^m(q0)``; that child is iterated in
+turn only inside a multi-iteration call, so the tests blast three iterations
+at once. The child is found by rule (an end on the composed orbit), never by
+id.
 """
 
 from __future__ import annotations

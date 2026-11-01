@@ -122,10 +122,14 @@ def test_some_representative_series_holds_a_bridge() -> None:
 
 @pytest.mark.parametrize("name", _params("series_entropy_never_decreases"))
 def test_entropy_never_decreases(name: str, representatives: Optional[str]) -> None:
-    """One more blast never lowers the topological entropy (the class count may fall)."""
+    """One more blast never lowers the topological entropy (the class count may fall).
+
+    The slack 1e-6 is above eigvals' error on a defective eigenvalue (about
+    ``sqrt(eps)``) and far below any entropy step of an integer matrix.
+    """
     steps = _law_series(name, representatives)
     for before, after in zip(steps, steps[1:]):
-        assert after.entropy >= before.entropy - 1e-9, _table(steps)
+        assert after.entropy >= before.entropy - 1e-6, _table(steps)
 
 
 @pytest.mark.parametrize("name", _params("series_class_count_constant_while_holes_constant"))
