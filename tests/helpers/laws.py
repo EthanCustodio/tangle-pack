@@ -1381,13 +1381,12 @@ def check_no_forward_hole(case: "Case") -> int:
 
 def pip_orbit_cuts(trellis, pip: int) -> dict:
     """
-    The cuts of the trellis of the pip ``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])`` (D10, D12),
-    read off the iterate table's ``+1`` links and the registry alone.
+    The cuts of the trellis of the pip ``T(q0) = (W^u computed, W^s[P, q0])`` (D10;
+    D12 reversed 2026-10-31: no unstable branch is cut), read off the iterate
+    table's ``+1`` links and the registry alone.
 
-    Stable branch ``j`` ends at ``f^j(q0)``, ``j < k``; the unstable branch of
-    ``f^i(q0)`` ends there for the ``k`` deepest ``i``, ``m`` the last ``+1`` link of
-    the pip's chain. A point the table does not hold is scaled from the pip by
-    ``per_step_beta`` and flagged as placed.
+    Stable branch ``j`` ends at ``f^j(q0)``, ``j < k``. A point the table does not
+    hold is scaled from the pip by ``per_step_beta`` and flagged as placed.
 
     Args:
         trellis: A trellis holding the pip's registry.
@@ -1396,27 +1395,20 @@ def pip_orbit_cuts(trellis, pip: int) -> dict:
     Returns:
         ``{branch key: (cdist, placed)}``.
     """
-    orbit = [pip]
-    while (image := trellis.iterate(orbit[-1], 1)) is not None:
-        orbit.append(image)
     q0 = trellis.intersection(pip)
     fp = q0.manifold_b_key[0]
-    k, m = fp.k_value, len(orbit) - 1
+    orbit = [pip]
+    while len(orbit) < fp.k_value and (image := trellis.iterate(orbit[-1], 1)) is not None:
+        orbit.append(image)
 
-    def point(i: int, stability: str) -> tuple:
-        key = q0.manifold_b_key if stability == "stable" else q0.manifold_a_key
-        if 0 <= i <= m:
-            ix = trellis.intersection(orbit[i])
-            own = ix.manifold_b_key if stability == "stable" else ix.manifold_a_key
-            cdist = ix.stable_cdist if stability == "stable" else ix.unstable_cdist
-            return own, (float(cdist), False)
-        cdist = q0.stable_cdist if stability == "stable" else q0.unstable_cdist
-        return fp.advance_key(key, i), (float(cdist) * fp.per_step_beta(stability) ** i, True)
+    def point(j: int) -> tuple:
+        if j < len(orbit):
+            ix = trellis.intersection(orbit[j])
+            return ix.manifold_b_key, (float(ix.stable_cdist), False)
+        scaled = float(q0.stable_cdist) * fp.per_step_beta("stable") ** j
+        return fp.advance_key(q0.manifold_b_key, j), (scaled, True)
 
-    return dict(
-        [point(j, "stable") for j in range(k)]
-        + [point(i, "unstable") for i in range(m - k + 1, m + 1)]
-    )
+    return dict(point(j) for j in range(fp.k_value))
 
 
 def check_trellis_crossings_belong_to_its_selection(case: "Case") -> int:
@@ -1439,10 +1431,11 @@ def check_trellis_crossings_belong_to_its_selection(case: "Case") -> int:
 
 
 def check_trellis_is_cut_at_the_pip_orbit(case: "Case") -> int:
-    """D10, D12: once a pip is chosen, the trellis holds exactly the crossings of ``T(q0)``
-    in ``N``: none past a pip-orbit cut on its stable or its unstable branch, and every
-    resolved crossing of its branches inside both cuts. The selection trellis is cut at
-    every pip. A detection the polylines cannot resolve is in no trellis (Q13 a, B1)."""
+    """D10, D12 reversed: once a pip is chosen, the trellis holds exactly the crossings
+    of ``T(q0)`` in ``N``: none past a pip-orbit cut on its stable branch, and every
+    resolved crossing of its branches inside the stable cuts, whatever its unstable
+    depth. The selection trellis is cut at every pip. A detection the polylines cannot
+    resolve is in no trellis (Q13 a, B1)."""
     count = 0
     trellises = _per_fp_trellises(case)
     pips = [trellis.strong_pip for trellis in trellises]
@@ -1462,13 +1455,9 @@ def check_trellis_is_cut_at_the_pip_orbit(case: "Case") -> int:
                 or not {ix.manifold_a_key, ix.manifold_b_key} <= set(trellis.branches)
             ):
                 continue
-            inside = all(
-                float(cdist) <= cuts[key][0] + (tol if cuts[key][1] else 0.0)
-                for key, cdist in (
-                    (ix.manifold_b_key, ix.stable_cdist),
-                    (ix.manifold_a_key, ix.unstable_cdist),
-                )
-                if key in cuts
+            key = ix.manifold_b_key
+            inside = key not in cuts or (
+                float(ix.stable_cdist) <= cuts[key][0] + (tol if cuts[key][1] else 0.0)
             )
             assert (iid in held) == inside, (
                 iid, iid in held, float(ix.unstable_cdist), float(ix.stable_cdist))

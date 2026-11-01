@@ -1,8 +1,8 @@
-"""The trellis of the chosen pip (D10, D12): choosing a pip cuts N at its orbit.
+"""The trellis of the chosen pip (D10, D12 reversed 2026-10-31): choosing a pip cuts N at its orbit.
 
-``T(q0) = (W^u[P, f^m(q0)], W^s[P, q0])``: every stable branch ends at its
-pip-orbit point, every unstable branch at the deepest registered point of the
-pip's forward orbit on it. Choosing a pip cuts; un-choosing restores the
+``T(q0) = (W^u computed, W^s[P, q0])``: every stable branch ends at its
+pip-orbit point, and no unstable branch is cut, so a computed crossing deeper
+than the pip's registered orbit stays in N. Choosing a pip cuts; un-choosing restores the
 computed trellis. The synthetic tests hand-build the registry (explicit
 canonical distances, keys and iterate links); one real build checks that the
 strong-pip classification never sees the cut.
@@ -27,7 +27,8 @@ _LOGGER = "tanglepack.topology.Trellis"
 
 def _window():
     """A period-1 (lambda = 4) window: the pip q0 at (s, u) = (4, 1), a middle
-    crossing, and f(q0) = (1, 4), linked; plus one crossing past each cut."""
+    crossing, and f(q0) = (1, 4), linked; plus one crossing past the stable cut
+    and one past f(q0) on the unstable branch (f^m(q0), m = 1)."""
     fp = bare_fixed_point(1, beta=0.25)
     registry = IntersectionRegistry()
     stable, unstable = (fp, "stable", 0, 0), (fp, "unstable", 0, 0)
@@ -43,19 +44,20 @@ def _window():
     return synthetic_trellis(registry, fp), pip, (middle, image), (past_stable, past_unstable)
 
 
-def test_choosing_a_pip_cuts_both_branches_and_unchoosing_restores():
-    trellis, pip, inside, outside = _window()
+def test_choosing_a_pip_cuts_the_stable_branches_only_and_unchoosing_restores():
+    trellis, pip, inside, (past_stable, past_f_m) = _window()
     computed = {key: list(branch.intersection_ids) for key, branch in trellis.branches.items()}
 
     trellis.strong_pip = pip
-    assert set(trellis.own_intersection_ids) == {pip, *inside}
+    assert set(trellis.own_intersection_ids) == {pip, *inside, past_f_m}
     for branch in trellis.branches.values():
-        assert not set(branch.intersection_ids) & set(outside)
-    assert pip in trellis and all(crossing not in trellis for crossing in outside)
+        assert past_stable not in branch.intersection_ids
+        assert past_f_m in branch.intersection_ids
+    assert pip in trellis and past_f_m in trellis and past_stable not in trellis
 
     trellis.strong_pip = None
     assert {key: branch.intersection_ids for key, branch in trellis.branches.items()} == computed
-    assert all(crossing in trellis for crossing in outside)
+    assert past_stable in trellis
 
 
 def test_iterates_stay_raw_lookups_past_the_cut():
