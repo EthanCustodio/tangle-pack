@@ -1430,3 +1430,31 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   xfails on it without a policy-specific id. `members_share_the_P1_itinerary` x `inversion` is out of NOT_APPLICABLE:
   its one class `u` now has two members with readable image chains, so the law tests one class there and passes
   (the set-aside test would fail).
+
+## 2026-10-31 — pip-depth machinery removed (/feature; branch `feature/drop-pip-depth-machinery`, base `c58f6f5`)
+
+- **The author's rule:** with D12's unstable cut reversed the pip depth `m` limits nothing, so the three pieces built
+  only to deepen it go: the blast's pip-orbit `min_separation` exemption (B3), `BlastResult.trusted_depth` (with
+  `TRUST_BAND` / `TRUST_LINEAR_RADIUS`) and the opt-in graded mesh (`near_orbit_radius`, `ManifoldMachine.grade_seed`).
+  Clause 3 of N (the near-anchor guard, its factor 5 = 1/(1 - 0.8) and its `xy_resolution` floor) stays, `pip_depth`
+  stays as the one depth report, and the pip-end frontier rule (bridges arriving at `f^j(q0)`) stays. Refinement is
+  the old `near_orbit_radius=None` path byte for byte.
+- **Measured (each series to its depth, main with the exemption against the branch; last step shown):**
+
+  | series | blasts | main m / N / bridges | branch m / N / bridges | holes | classes | h |
+  |---|---|---|---|---|---|---|
+  | k28_series | 8 | 8 / 239 / 168 | same | 24 | 15 | 0.528049 |
+  | k32_series | 10 | 7 / 717 / 507 | same | 50 | 30 | 0.548464 |
+  | p3_series | 9 | 23 / 67 / 49 | same | 42 | 23 | 0.101522 |
+  | nested_outer_series | 11 | 8 / 493 / 349 | 7 / 486 / 344 | 12 | 9 | 0.528049 |
+  | inversion_series | 4 | 9 / 47 / 33 | same | 5 | 6 | 0 |
+
+  Holes, classes, `h` and `is_reliable` are equal at every step of all five; only nested_outer moves, from blast 7 on
+  (m 8 -> 7, 4-7 fewer crossings of N and 3-5 fewer bridges). The exemption had kept near-coincident curves near `P`
+  (361 same-stability WARNINGs on nested_outer; 37k-420k per blast at k=2.5, 1e-13).
+- **Save format 3:** its settings hold no mesh radius. A format-1 or format-2 save loads when its stored radius is
+  None (or absent) and raises `ValueError` naming the graded mesh otherwise; format 1 still loads its residuals as 0.0.
+- **Tests:** the exemption and trusted-depth tests are gone; the width and cloud guards are tested on pip-orbit
+  children like any other (`test_pip_bearing_child_is_dropped`, `test_the_pip_orbit_child_is_not_exempt`); the series
+  law compares each blast's `pip_depth` with the depth composed test-side; the lean joined-arc test blasts k28 five
+  times, not six (at six no joined pair is released any more).

@@ -81,24 +81,11 @@ counts the points it creates and raises `PointBudgetExceeded` before the map cal
 pool and concatenates the chunks in order, so for an elementwise map it changes no result
 (cpu-workers, 2026-10-29).
 
-**The graded mesh near the orbit (anchor-depth, 2026-10-29, opt-in).** With `near_orbit_radius = r0`
-set (before growth; None, the default, is the refinement above byte for byte), a pair within `r0` of
-an orbit point of its curve's own fixed point refines when its curvature area is at least
-`area_cutoff * (r / r0) ** 2` (so `h ~ r ** 2` falls faster than `r` and the near-anchor guard of
-A.2 does not stop the pip orbit) or when its chord is longer than `r`, down to a spacing floor
-`max(1e-8 * r / r0, xy_resolution(P))` (`xy_resolution = 64 eps max(1, |P|)`). Two choices are not
-the plan's and were forced. `r` is how near the pair's CHORD passes the orbit point, not its
-midpoint's distance: a deep blast image curve runs straight past `P` between nodes 0.04 apart with
-its closest approach at 8e-6 (1e-7 scale series, blast 7), and the midpoint rule never refined it.
-And growth refines only the images it makes, so the seed's segment at the orbit point would never
-be graded, and a point refined into it would have no iterate (the merge of its image fails). So
-`ManifoldMachine.grade_seed` grades the first fundamental domain of each seed chain once, at
-initialisation, and carries its points inward one piece of the chain per map step, each linked to
-its source as its iterate, placed on the ray from the target piece's orbit point through its
-innermost row at the distance its cdist gives (the seed's own linear approximation), down to the xy
-resolution. They are not mapped: the forward map along a stable seed multiplies the seed's distance
-from the true manifold by `lambda_u / lambda_s` per step (measured: the fourth generation was off by
-its own size). The pair at the orbit point keeps the plain rule. The point budget is unchanged.
+**No graded mesh near the orbit (2026-10-31).** The opt-in graded mesh of the anchor-depth run
+(2026-10-29: `near_orbit_radius`, `ManifoldMachine.grade_seed`) refined `h ~ r ** 2` near the orbit
+point to lift the pip depth `m` from 9 to 18. Since D12's reversal `m` cuts nothing, and the author
+removed it with the other pip-depth machinery (`.refactor/decisions.md`, "pip-depth machinery
+removed"): refinement is the rule above everywhere, byte for byte the old `near_orbit_radius=None`.
 
 The data model (one `PointStore`, chains of its rows, curves as views of a chain whose row ends read
 as `End` records, and `BranchPoint` a view of its `FixedPoint`: the orbit point's coordinates, a cdist
@@ -111,7 +98,7 @@ old-to-new map (`TangleWorkbench.release_curves`, A.10).
 
 **A cdist is a product with a residual (cdist-precision, 2026-10-30).** A canonical distance is a
 PRODUCT, never an arc-length sum: the seed's Euclidean distance, scaled by the chain's stretch one map
-step at a time (`stretch * c`, the graded seed's `scale * c`), averaged by refinement
+step at a time (`stretch * c`), averaged by refinement
 (`0.5 * (c0 + c1)`) and interpolated at a separator or a crossing (`(1 - t) * ca + t * cb`). Deep in a
 blast it reaches 3e13 with neighbours `dc / c` below float eps, where plain floats tie. The store
 keeps beside the plain float a residual column, `cdist_lo`: what each of those expressions' rounding
@@ -133,15 +120,16 @@ cuts and the chain check (a precise merge keeps 17 plain ties the zipper drops o
 one-blast build and reorders neighbours one ULP apart on the k=2.8 and inversion builds: a change
 of what is computed, the author's to make), the crossing sign (the segment's chain order), the
 stable partition's intervals and ownership, and the dual-graph nodes. Scaled cdists and plotting
-stay float. Save format 2 holds the residuals; a format-1 save loads with 0.0. On the unguarded
-k=2.5 scale series at 1e-7 (`near_orbit_radius = 1e-3`, `min_separation=None`) neighbours first tie
+stay float. Save formats 2 and 3 hold the residuals; a format-1 save loads with 0.0. Format 3 (2026-10-31) holds no
+graded-mesh radius: a format-1 or -2 save loads when its radius is None and is refused otherwise. On the unguarded
+k=2.5 scale series at 1e-7 (then with the graded mesh, `near_orbit_radius = 1e-3`, `min_separation=None`) neighbours first tie
 as plain floats at blast 10 (8 ties; 773 at blast 15, 9.1M rows); the residuals tell every one of
 them apart, and none runs against the chain.
 
 **Implemented by.** `ManifoldInitializer.construct_kevin_way`, `ManifoldMachine.iterate_manifold`,
 `ManifoldMachine._image_chains`, `TangleWorkbench.grow_n_times`, `TangleWorkbench.grow_until_bounded`,
 `TangleWorkbench.grow_until_arclength`, `FixedPoint.advance_key`, `FixedPoint.per_step_beta`,
-`FixedPoint.preserves_orientation`, `budget.PointBudgetExceeded`, `ManifoldMachine.grade_seed`.
+`FixedPoint.preserves_orientation`, `budget.PointBudgetExceeded`.
 
 ## A.2 Stage 1 — the crossing set N
 
@@ -171,9 +159,9 @@ Every detection is registered and reported, but N is the RESOLVED subset
    either of its branches is at least `anchor_resolution_factor * max(h, xy_resolution(P))`
    (`IntersectionRegistry.orbit_clearance`). Near the orbit point the pip orbit contracts by the
    stable multiplier, and a polyline straying `h` puts an error of about `h / d` on each step's
-   contraction; the trusted band allows 20%, so `c = 1 / (1 - 0.8) = 5`
-   (`ANCHOR_RESOLUTION_FACTOR`, on by default, None off). The floor at the xy resolution matters only
-   with the graded mesh (A.1), whose `h` falls below what float64 resolves near `P`. The registry
+   contraction; allowing 20% gives `c = 1 / (1 - 0.8) = 5` (`ANCHOR_RESOLUTION_FACTOR`, on by
+   default, None off). The floor at the xy resolution keeps the guard meaningful where `h` falls below
+   what float64 resolves near `P`. The registry
    holds the factor (`IntersectionRegistry.anchor_resolution_factor`; the workbench sets its own on
    every registry it holds and persists it as an optional setting), so every reader of N reads one
    set. The plan's second half, a detection closer to its stable-order neighbour than `c` times the
@@ -268,12 +256,11 @@ bridge the workbench never holds; resolve bridges through `Trellis.bridge_betwee
 
 **`m`, the depth.** `m` is the registered `+1` chain of the CHOSEN pip, as far as it consists of
 crossings of N (N-a, plan Q2, B3); `BlastResult.pip_depth` reports it per fixed point. It is a
-report, no cut: an unresolved orbit point stalls `m`, never the trellis. One consequence:
-
-- a blast child ending on the chosen pip's composed `+1` orbit is exempt from the `min_separation`
-  guard (one INFO), so the guard never decides the depth. The depth is decided by whether
-  `f^{m+1}(q0)` is detected and resolved; the three ways it stalls are open (O). The k32 blast 9
-  stall is an UNRESOLVED `f^10(q0)` (ratio 1.48), not a child dropped by `min_separation`.
+report, no cut: an unresolved orbit point stalls `m`, never the trellis. Since 2026-10-31 a blast
+child ending on the chosen pip's orbit meets the `min_separation` guard like any other (B3's
+exemption removed with the pip-depth machinery): turning it off left classes, holes and entropy
+identical on all five series at every step, nested_outer's `m` going 8 -> 7 with 5 fewer bridges,
+and it had kept near-coincident curves near `P`.
 
 A cut whose orbit point the table does not hold is PLACED by `image_cdist` and flagged in one
 WARNING, never left uncut (PK-6). A crossing is past a cut by any amount: no absolute slack. Restoring
@@ -628,11 +615,8 @@ cannot place a thin lobe's midpoint. Only the arriving arc: `f^j` maps the zone'
 one leaving lies outside (at `q0` it is the turnstile's exit lobe). The plan's "ends on a crossing of
 the orbit" iterated that exit lobe and changed every blasted law case. Other fixed points' pip-orbit
 bridges keep the innermost-zone rule; `classify_bridge` and the class zones are unchanged.
-`BlastResult.trusted_depth` is a flag beside `pip_depth`: the deepest `j` to which the registered
-orbit contracts like the real one (inside `TRUST_LINEAR_RADIUS = 1e-3` each period divides the
-distance to the orbit point, read off `coords`, by `per_step_beta("stable") ** -period` within
-`TRUST_BAND = (0.8, 1.25)`; the test of `scripts/henon_k25_errors_figures.py`), logged at INFO when
-smaller; nothing reads it. Any failure to map a bridge forward propagates
+`pip_depth` is the one depth report (`BlastResult.trusted_depth`, a trust-in-depth flag, was
+removed on 2026-10-31). Any failure to map a bridge forward propagates
 (NUM-10). `max_points` is an opt-in budget checked between iterations, a clean resumable stop.
 A `min_separation` drop is remembered on the bridge (`Bridge.dropped_at`, carried by
 `rebuild_bridges` beside `iterated`), and the zone's later calls skip it unless they pass a smaller
@@ -703,7 +687,7 @@ from blast 4, never a reference. On the k=2.5 scale series at 1e-7, blast 12, th
 10x the plan hoped: once the pip depth stops (7, the near-anchor guard), the frontier lies past the
 cut trellis, is unclassed and is always iterated, so it still grows like `e^{hn}`. At 1e-9 to 1e-12,
 the separations 1e-5, `"resolution"` and None, all representative, agree on every compared item at
-their common trusted depth and at their last common blast (A.4's depth equals the trusted depth
+their common trusted depth (the trust flag, removed 2026-10-31) and at their last common blast (A.4's depth equals the trusted depth
 there); the prune hides nothing at trusted depth on that series.
 
 **The width guard.** `min_separation="width"` needs no point cloud. A bridge's width is seeded, when
@@ -715,8 +699,7 @@ factor is the saddle's whose stable branch holds the seed ring (`Bridge.width_sa
 the width): a lobe of `W^u(A)` based on `W^s(B)` contracts by B's, as NUM-20 reads each side of a
 heteroclinic link by its own saddle. A
 child is dropped when `w < WIDTH_SEPARATION_FACTOR * h`, `h = 1.5 * area_cutoff / L` with `L` its
-median chord: a lobe thinner than its polygon error is not resolved. The pip-orbit exemption holds,
-a width drop is remembered as `dropped_at = WIDTH_DROP` (-1.0, so only `None` re-admits it), widths
+median chord: a lobe thinner than its polygon error is not resolved. A width drop is remembered as `dropped_at = WIDTH_DROP` (-1.0, so only `None` re-admits it), widths
 are saved (a column only when some bridge has one), and `n` single-iteration width blasts equal one
 `n`-iteration blast. Measured on the scale series against `min_separation=1e-5`: the same pip
 depth (9 at 1e-7, 12 at 1e-9), 116k / 1.13M rows against 2.18M / 5.10M, blast 0.5 / 4.8 s against
@@ -733,7 +716,7 @@ author's use is a later plan (D8).
 **Implemented by.** `Topology`, `TangleSession.topology`, `blast_zone`, `BlastResult`,
 `TangleWorkbench.compute_intersections`, `ResonanceZone.restore`, `TangleWorkbench.release_curves`,
 `PointStore.compact`, `Bridge.release`, `Blast._lean_keep`, `Blast._ring_width`, `Blast._too_thin`,
-`Blast._trusted_depth`, `Blast._representatives`.
+`Blast._representatives`.
 
 ## A.11 Session and API
 
@@ -781,7 +764,7 @@ Athanor workflow on 2026-10-28 and live in git history up to `ab213db`), with me
   dedups, the fallback, `epsilon` and `_step_into` deleted; the backward span keeps `image_cdist`'s
   table flag (`from_table`) so the one NUM-5 WARNING watches scaled ends only.
 - B2 `pseudoneighbor-both-intervals` (`9cd29d5`): both open intervals tested (plan Q1, S-a).
-- B3 `depth-of-n` (`7d3a294`): N-a, the `min_separation` exemption, `BlastResult.pip_depth`. N-b (an
+- B3 `depth-of-n` (`7d3a294`): N-a, the `min_separation` exemption (removed 2026-10-31), `BlastResult.pip_depth`. N-b (an
   explicit depth parameter) was offered and NOT chosen.
 - B5 `inertness-is-transience` (`3fb310a`): transience plus the zeroth-hole rule; the evidence fixed
   point (`_resolve_inertness`, `image_classes`, `image_loops`) and PK-8's WARNING deleted.
