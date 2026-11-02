@@ -92,10 +92,11 @@ if TYPE_CHECKING:
 #: of another format is refused rather than misread. The law
 #: ``test_a_load_restores_every_attribute`` fails when a class the save covers
 #: gains an attribute this module does not save.
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 #: The formats a load reads: format 1 holds no cdist residuals, read as 0.0;
-#: formats 1 and 2 may hold a graded-mesh radius, refused unless None.
-READ_FORMATS = (1, 2, FORMAT_VERSION)
+#: formats 1 and 2 may hold a graded-mesh radius, refused unless None; a session
+#: save before format 4 declares no zone nesting.
+READ_FORMATS = (1, 2, 3, FORMAT_VERSION)
 #: How many linked rows :func:`check_map` maps, per direction.
 MAP_CHECK_SAMPLE = 8
 #: The relative disagreement :func:`check_map` tolerates. A link the other map
@@ -552,7 +553,7 @@ def read(path: str | os.PathLike) -> tuple[dict, dict[str, np.ndarray]]:
         meta = json.load(handle)
     if meta.get("format") not in READ_FORMATS:
         raise ValueError(f"{path}.json is save format {meta.get('format')!r}; "
-                         f"this tanglepack reads format {FORMAT_VERSION} (and formats 1 and 2)")
+                         f"this tanglepack reads format {FORMAT_VERSION} (and formats 1, 2 and 3)")
     with np.load(f"{path}.npz", allow_pickle=False) as npz:
         arrays = {name: npz[name] for name in npz.files}
     return meta, arrays

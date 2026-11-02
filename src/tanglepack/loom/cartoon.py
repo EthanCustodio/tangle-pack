@@ -61,7 +61,7 @@ def cartoon_zones(
     Returns:
         ``(interior_side, parents, arc_order)``: ``{branch_key: "left" |
         "right"}`` for every branch bounding a zone, ``{id(fixed_point):
-        id(parent fixed point)}`` for the nested fixed points, and
+        id(parent fixed point)}`` for the fixed points declared nested, and
         ``{id(fixed_point): ZoneArcOrder}``. All empty without zones (the
         cartoon then draws each branch's right side inside its circle, in
         ``branch_cycle`` order, and puts the circles side by side).
@@ -70,7 +70,7 @@ def cartoon_zones(
 
     tol = workbench.intersection_registry.cdist_tol
     interior: dict = {}
-    zones = sorted(zones, key=lambda zone: zone.area)
+    zones = list(zones)
     for zone in zones:
         vertices = zone.boundary_vertices
         if vertices is None or len(vertices) < 3:
@@ -135,20 +135,7 @@ def cartoon_zones(
                 anchor_angles=angles,
             ),
         )
-    parents: dict = {}
-    for zone in zones:
-        fixed_point = zone.fixed_point
-        point = np.asarray(fixed_point.coordinates[0], dtype=float)
-        containers = [
-            other
-            for other in zones
-            if other.fixed_point is not fixed_point
-            and other.area > zone.area
-            and other.contains_point(point)
-        ]
-        if containers:
-            parent = min(containers, key=lambda other: other.area).fixed_point
-            parents[id(fixed_point)] = id(parent)
+    parents = {id(zone.fixed_point): id(zone.inside) for zone in zones if zone.inside is not None}
     return interior, parents, arc_order
 
 

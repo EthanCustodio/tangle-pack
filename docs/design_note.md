@@ -602,9 +602,11 @@ class count included (it may fall when a deeper crossing refutes a reference); t
 measure that the entropy and the depth `pip_depth` (a report, A.4) never decrease. D1 does not bind
 the closed alphabet.
 
-**Blasting.** `blast_zone` iterates the bridges whose INNERMOST zone it is (C4): a bridge belongs to
-the smallest zone holding its midpoint, so an outer blast never iterates a bridge inside an inner
-zone and nested blasting is order independent. One exception (anchor-depth, 2026-10-29): an
+**Blasting.** `blast_zone` iterates the bridges inside its zone and not inside a zone DECLARED inside
+it (C4, amended 2026-11-01, the author's rule): nesting is the caller's to state,
+`add_resonance_zones(nesting={inner_pip: outer_pip})` (`ResonanceZone.inside`), and the code never
+infers it, so an outer blast never iterates a bridge inside a declared inner zone and declared nested
+blasting is order independent. One exception (anchor-depth, 2026-10-29): an
 un-iterated bridge of a selected fixed point ARRIVING at `f^j(q0)`, `j >= 1` (its second crossing on
 the registered orbit of the blasted zone's own corner pip `ResonanceZone.boundary_intersection`,
 not the session's chosen pip, which may differ, read once per iteration), is the zone's whatever
@@ -614,7 +616,7 @@ cannot place a thin lobe's midpoint. Only the arriving arc: `f^j` maps the zone'
 `W^s[P, q0]`, the side an orientation-preserving map keeps, so the arc arriving lies inside and the
 one leaving lies outside (at `q0` it is the turnstile's exit lobe). The plan's "ends on a crossing of
 the orbit" iterated that exit lobe and changed every blasted law case. Other fixed points' pip-orbit
-bridges keep the innermost-zone rule; `classify_bridge` and the class zones are unchanged.
+bridges keep the declared-zone rule; `classify_bridge` and the class zones are unchanged.
 `pip_depth` is the one depth report (`BlastResult.trusted_depth`, a trust-in-depth flag, was
 removed on 2026-10-31). Any failure to map a bridge forward propagates
 (NUM-10). `max_points` is an opt-in budget checked between iterations, a clean resumable stop.

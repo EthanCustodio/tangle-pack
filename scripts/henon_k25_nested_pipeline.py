@@ -165,7 +165,7 @@ def build(
             raise ValueError("the outer default strong pip q0 has no registered image f(q0)")
         print(f"outer pip: f(q0) = crossing {image} (q0 = crossing {pips[0]})")
         pips[0] = image
-    session.add_resonance_zones(pips)
+    session.add_resonance_zones(pips, nesting={pips[1]: pips[0]})
     chosen = session.chosen_strong_pip(fp1)
     print(f"outer chosen strong pip after the trim: cdists (u, s) = ({chosen.unstable_cdist:.6g}, {chosen.stable_cdist:.6g})")
     zones = sorted(session.resonance_zones.values(), key=lambda zone: zone.area)

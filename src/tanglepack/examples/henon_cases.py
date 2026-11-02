@@ -302,9 +302,8 @@ def build_nested(
 
     session.classify_strong_pips()
     pips = [session.trellis(fp).strong_pip for fp in fixed_points]
-    session.add_resonance_zones(pips)
-    zones = sorted(session.resonance_zones.values(), key=lambda zone: zone.area)
-    inner, outer = zones[0], zones[-1]
+    session.add_resonance_zones(pips, nesting={pips[1]: pips[0]})
+    inner, outer = session.resonance_zones[fp3], session.resonance_zones[fp1]
     sizes: list[int] = []
     for zone, count in ((inner, inner_blasts), (outer, outer_blasts)):
         for _ in range(count):

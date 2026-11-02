@@ -109,6 +109,9 @@ class ResonanceZone:
         boundary_vertices: Frozen (N, 2) snapshot of the closed boundary polygon taken
             at definition time, used for in/out-of-zone tests so classification is
             robust to later trims/recomputes. ``None`` until captured.
+        inside: The fixed point of the zone this one is nested in, as the caller
+            declared it (``TangleSession.add_resonance_zones(nesting=...)``); never
+            inferred. ``None`` when not nested.
     """
 
     fixed_point: "FixedPoint"
@@ -121,6 +124,7 @@ class ResonanceZone:
     )
     boundary_arcs: list[Arc] = field(default_factory=list)
     boundary_vertices: Optional[NDArray[np.float64]] = None
+    inside: Optional["FixedPoint"] = None
 
     @property
     def boundary_intersections(self) -> list[Intersection]:
@@ -296,8 +300,8 @@ class ResonanceZone:
         """Enclosed area of the captured boundary via the shoelace formula.
 
         Returns 0.0 if the boundary has not been captured or is degenerate. The value
-        is the absolute area, so it is independent of vertex winding direction; the
-        nested-zone classifier in :class:`TangleSession` orders zones by it.
+        is the absolute area, so it is independent of vertex winding direction. It
+        decides nothing about nesting, which the caller declares (:attr:`inside`).
         """
         return abs(signed_polygon_area(self.boundary_vertices))
 
@@ -311,8 +315,7 @@ class ResonanceZone:
         Whether ``point`` lies inside this zone, boundary included.
 
         A point on the boundary (e.g. the midpoint node of a bridge that forms this
-        zone's own unstable boundary arc) counts as inside — such bridges belong to the
-        innermost zone they bound. That inclusion is the shared policy of
+        zone's own unstable boundary arc) counts as inside. That inclusion is the shared policy of
         :func:`~tanglepack.numerics.geometry.point_in_polygon`, which this delegates
         to, so a zone and a region answer the same way.
 

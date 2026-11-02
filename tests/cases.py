@@ -697,7 +697,7 @@ def _nested_through(
     case.pips = [session.trellis(fp).strong_pip for fp in case.fixed_points]
     if not _reached(through, "zones"):
         return case
-    session.add_resonance_zones(case.pips)
+    session.add_resonance_zones(case.pips, nesting={case.pips[1]: case.pips[0]})
     case.zones = list(session.resonance_zones.values())
     return case
 

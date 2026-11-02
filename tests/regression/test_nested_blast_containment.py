@@ -1,6 +1,6 @@
 """
-Regression (WP9, NEST-4, C4): a blast iterates the bridges whose INNERMOST zone is
-the blasted one.
+Regression (WP9, NEST-4, C4, as amended 2026-11-01): a blast leaves the bridges of a
+zone DECLARED inside the blasted one alone, and nothing is nested unless declared.
 
 With nested zones an outer blast used to take every bridge whose midpoint lay in
 the outer polygon, the inner tangle's bridges inside the inner zone included, so
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 from collections import Counter
+from types import SimpleNamespace
 
 from cases import build_k10, build_nested
 from tanglepack import define_resonance_zone
@@ -113,3 +114,48 @@ def test_an_unfiltered_nested_blast_does_not_depend_on_order():
         _blast(inner_first, zone)
 
     assert _signature(outer_first) == _signature(inner_first)
+
+
+def test_nesting_is_only_what_the_caller_declares():
+    """Zones not declared nested are not nested, whatever their areas (2026-11-01):
+    mirror-image zones have equal areas up to rounding, and that comparison used to
+    hand the bridges in their overlap to whichever came out smaller."""
+    case = build_nested(outer_blasts=0, through="zones")
+    session = case.session
+    inner, outer = _zones(case)
+    assert inner.inside is outer.key and outer.inside is None
+    declared = {
+        bridge.id for bridge in session.workbench.uniiterated_bridges
+        if bridge.fixed_point is outer.fixed_point and session.classify_bridge(bridge) is outer
+    }
+    inner.inside = None
+    held_by_inner = [
+        bridge for bridge in session.workbench.uniiterated_bridges
+        if bridge.fixed_point is inner.fixed_point and inner.contains_point(bridge.test_point)
+    ]
+    assert held_by_inner and all(session.classify_bridge(b) is inner for b in held_by_inner)
+    parents = _blast_parents(session, outer)
+    assert declared <= parents
+    assert parents & {b.id for b in held_by_inner if outer.contains_point(b.test_point)}
+
+
+def test_overlapping_zones_keep_a_bridge_with_its_own_fixed_point():
+    """A bridge in two undeclared zones belongs to its own fixed point's zone, not to
+    the smaller one."""
+    case = build_nested(outer_blasts=0, through="zones")
+    session = case.session
+    inner, outer = _zones(case)
+    inner.inside = None
+    point = next(
+        bridge.test_point for bridge in session.workbench.uniiterated_bridges
+        if inner.contains_point(bridge.test_point) and outer.contains_point(bridge.test_point)
+    )
+    for zone in (inner, outer):
+        stand_in = SimpleNamespace(test_point=point, fixed_point=zone.fixed_point)
+        assert session.classify_bridge(stand_in) is zone
+
+
+def _blast_parents(session, zone) -> set:
+    """The ids of the bridges one unfiltered blast of ``zone`` iterates."""
+    result = session.blast_zone(zone, num_iterations=1, fixed_point=None, min_separation=1e-4)
+    return {bridge.id for bridge in result.steps[0].interior_parents}

@@ -2,16 +2,17 @@
 Blasting — driving the dynamics inside a resonance zone.
 
 "Blasting" a resonance zone repeatedly iterates the bridges that live *inside* it. One
-blast step takes every un-iterated bridge whose INNERMOST zone is this one, maps it
+blast step takes every un-iterated bridge that belongs to this zone, maps it
 forward one step under the dynamical map (which automatically cuts the image into child
 bridges at its new crossings with the stable manifold), then keeps only the children
-whose innermost zone is *still* this one. Those survivors are the next step's input, so
+that *still* belong to this zone. Those survivors are the next step's input, so
 the process recurses up to ``num_iterations`` times.
 
-Zones nest: a bridge belongs to the smallest zone containing its midpoint
-(:meth:`TangleSession.classify_bridge`), so an outer zone's blast never iterates a
-bridge inside a smaller zone of another fixed point stored on the session, and nested
-blasting does not depend on the order of the zones. The one exception is the bridge
+Zones nest only where the caller says so (``add_resonance_zones(nesting=...)``): the
+code never infers it, because overlapping zones are not nested and a comparison of
+areas decides mirror-image zones by rounding error (2026-11-01). An outer zone's blast
+never iterates a bridge inside a zone declared inside it, so declared nested blasting
+does not depend on the order of the zones. The one exception is the bridge
 that carries the zone's own pip orbit (2026-10-29): an un-iterated bridge whose second
 crossing is ``f^j(q0)``, ``j >= 1``, on the registered orbit of the blasted zone's
 own corner pip (``ResonanceZone.boundary_intersection``, which need not be the
@@ -599,12 +600,10 @@ def blast_zone(
             "session.resonance_zone()/add_resonance_zones() before blasting."
         )
 
-    # A bridge belongs to its INNERMOST zone. The blasted zone need not be
-    # stored (define_resonance_zone, a replaced handle), so it is compared with
-    # the stored zones of the OTHER fixed points rather than looked up.
+    # The blasted zone need not be stored (define_resonance_zone, a replaced
+    # handle), so the zones declared inside it are found by its key.
     inner_zones = [
-        other for other in session.resonance_zones.values()
-        if other.key is not zone.key and other.area < zone.area
+        other for other in session.resonance_zones.values() if other.inside is zone.key
     ]
     fixed_points = session._resolve_fixed_points(fixed_point)
 

@@ -57,9 +57,9 @@ def test_a_save_of_another_format_is_refused(tmp_path):
     workbench.save(tmp_path / "k10")
     meta_path = tmp_path / "k10.json"
     meta = json.loads(meta_path.read_text())
-    meta["format"] = 4
+    meta["format"] = 5
     meta_path.write_text(json.dumps(meta))
-    with pytest.raises(ValueError, match="format 4.*format 3"):
+    with pytest.raises(ValueError, match="format 5.*format 4"):
         _load(workbench, tmp_path / "k10")
 
 
@@ -71,7 +71,7 @@ def test_an_older_or_unversioned_save_is_refused(version, tmp_path):
     meta = json.loads(meta_path.read_text())
     meta["format"] = version
     meta_path.write_text(json.dumps(meta))
-    with pytest.raises(ValueError, match=f"format {version}.*format 3"):
+    with pytest.raises(ValueError, match=f"format {version}.*format 4"):
         _load(workbench, tmp_path / "k10")
 
 
@@ -128,7 +128,7 @@ def test_a_format_3_save_holds_no_mesh_radius(tmp_path):
     workbench = build_k10().workbench
     workbench.save(tmp_path / "k10")
     meta = json.loads((tmp_path / "k10.json").read_text())
-    assert meta["format"] == 3
+    assert meta["format"] == 4
     assert len(meta["workbench"]["settings_types"]) == 5
     loaded = _load(workbench, tmp_path / "k10")
     assert _settings(loaded) == _settings(workbench)

@@ -32,7 +32,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from cases import BUILDERS, HENON_K28, LAW_CASES, ZONE_MIN_SEPARATION
+from cases import BUILDERS, HENON_K28, LAW_CASES, ZONE_MIN_SEPARATION, build_nested
 from tanglepack import Intersection, TangleSession, TangleWorkbench
 from tanglepack.loom.BridgeAlphabet import BridgeAlphabet
 from tanglepack.loom.ResonanceZone import ResonanceZone
@@ -353,7 +353,7 @@ _SAVED: dict[type, frozenset[str]] = {
     }),
     ResonanceZone: frozenset({
         "fixed_point", "stable_branch_key", "boundary_intersection", "cut_intersections",
-        "intersection_ids", "previous_tails", "boundary_arcs", "boundary_vertices",
+        "intersection_ids", "previous_tails", "boundary_arcs", "boundary_vertices", "inside",
     }),
     BridgeAlphabet: frozenset({"assigned"}),
 }
@@ -421,3 +421,13 @@ def test_a_load_restores_every_attribute(saved_session):
         assert saved <= before.keys(), f"{cls.__name__} no longer has {sorted(saved - before.keys())}"
         assert after.keys() - not_saved == before.keys() - not_saved, cls.__name__
         assert {n: after[n] for n in saved} == {n: before[n] for n in saved}, cls.__name__
+
+
+def test_a_load_keeps_the_declared_nesting(tmp_path):
+    """Nesting is declared, never re-derived, so a save must carry it."""
+    session = build_nested(outer_blasts=0, through="zones").session
+    session.save(tmp_path / "session")
+    zones = _load_session(session, tmp_path / "session").resonance_zones
+    inside = {zone.fixed_point.period: zone.inside for zone in zones.values()}
+    assert inside[1] is None
+    assert inside[3] in zones and inside[3].period == 1

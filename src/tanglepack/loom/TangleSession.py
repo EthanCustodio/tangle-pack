@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Iterable, Literal, Optional, TYPE_CHECKING
+from typing import Iterable, Literal, Mapping, Optional, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
@@ -802,6 +802,8 @@ class TangleSession:
         self,
         intersection_ids: Iterable[int],
         fixed_points: Optional[Iterable["FixedPoint"]] = None,
+        *,
+        nesting: Optional[Mapping[int, int]] = None,
     ) -> dict[tuple["FixedPoint", int], ResonanceZone]:
         """
         Define resonance zones for several pips at once (one recompute at the end).
@@ -812,17 +814,22 @@ class TangleSession:
         in effect. Use this to build, e.g., the outer period-1 zone and the inner
         period-3 zone together.
 
+        Nesting is the caller's to declare and is never inferred: zones not named in
+        ``nesting`` are not nested, however they overlap.
+
         Args:
             intersection_ids: Boundary-pip registry ids, one per zone.
             fixed_points: Fixed points to re-index on the final recompute. Defaults to all.
+            nesting: ``{inner pip id: outer pip id}``, both in ``intersection_ids``.
 
         Returns:
             The :attr:`resonance_zones` mapping.
         """
         ids = list(intersection_ids)
-        for iid in ids:
-            # Trim only (no recompute) so the remaining ids keep their meaning.
-            self.resonance_zone(iid, recompute=False)
+        # Trim only (no recompute) so the remaining ids keep their meaning.
+        zones = {iid: self.resonance_zone(iid, recompute=False) for iid in ids}
+        for inner, outer in (nesting or {}).items():
+            zones[inner].inside = zones[outer].key
         if ids:
             fps = (
                 list(self.workbench.fixed_points)
@@ -844,16 +851,17 @@ class TangleSession:
         Determine which resonance zone a single bridge lies in.
 
         Tests the bridge's representative midpoint against every stored zone's frozen
-        boundary (boundary included) and returns the innermost containing zone — the
-        one of smallest area when zones nest. A bridge on a zone's own unstable
-        boundary arc is counted as inside that (innermost) zone.
+        boundary (boundary included). A zone holding a zone declared inside it that
+        also contains the bridge gives way to that inner zone. Of zones that merely
+        overlap, the bridge belongs to its own fixed point's zone if that is one of
+        them, else to the first stored.
 
         Args:
             bridge: A :class:`~tanglepack.numerics.Bridge.Bridge`.
 
         Returns:
-            The innermost :class:`ResonanceZone` containing the bridge, or ``None`` if
-            it lies outside every zone (or no zones are defined).
+            The :class:`ResonanceZone` the bridge belongs to, or ``None`` if it lies
+            outside every zone (or no zones are defined).
         """
         point = bridge.test_point
         if point is None:
@@ -861,9 +869,12 @@ class TangleSession:
         containing = [
             rz for rz in self.resonance_zones.values() if rz.contains_point(point)
         ]
-        if not containing:
-            return None
-        return min(containing, key=lambda rz: rz.area)
+        hosts = {rz.inside for rz in containing}
+        innermost = [rz for rz in containing if rz.key not in hosts]
+        return next(
+            (rz for rz in innermost if rz.key is bridge.fixed_point),
+            innermost[0] if innermost else None,
+        )
 
     # ── blasting ─────────────────────────────────────────────────────────────
 
@@ -883,12 +894,12 @@ class TangleSession:
         """
         Repeatedly iterate the bridges inside a resonance zone.
 
-        Each step maps every un-iterated bridge whose INNERMOST zone is this one
-        (:meth:`classify_bridge`) forward (cutting the image into child bridges
+        Each step maps every un-iterated bridge inside this zone and not inside a
+        zone declared inside it forward (cutting the image into child bridges
         at its new stable-manifold crossings) and keeps the children that land back
         in it, recursing up to ``num_iterations`` times. An outer zone's blast never
-        iterates a bridge inside a smaller stored zone of another fixed point (the
-        blasted zone itself need not be stored), so nested blasting does not depend
+        iterates a bridge inside a zone declared inside it (the blasted zone itself
+        need not be stored), so declared nested blasting does not depend
         on the order of the zones; with ``fixed_point=None`` it still iterates an
         inner tangle's bridges in the annulus between them (they are the outer
         zone's). Bridges that leave the zone are never re-iterated — iterating

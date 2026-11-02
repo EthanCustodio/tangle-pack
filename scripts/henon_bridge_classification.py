@@ -77,7 +77,7 @@ T3.classify_strong_pips()
 # candidate with T1.set_strong_pip(id) if a different zone boundary is wanted.
 
 # one resonance zone per fixed point (single final recompute keeps the nesting)
-session.add_resonance_zones([T1.strong_pip, T3.strong_pip])
+session.add_resonance_zones([T1.strong_pip, T3.strong_pip], nesting={T3.strong_pip: T1.strong_pip})
 
 
 # --- classify every bridge: {bridge: ResonanceZone | None} ---------------------

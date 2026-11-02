@@ -1458,3 +1458,10 @@ Revisable by the author; recorded so later runs know they are calls, not the aut
   children like any other (`test_pip_bearing_child_is_dropped`, `test_the_pip_orbit_child_is_not_exempt`); the series
   law compares each blast's `pip_depth` with the depth composed test-side; the lean joined-arc test blasts k28 five
   times, not six (at six no joined pair is released any more).
+
+## 2026-11-01 — Zone nesting is declared, never inferred (the author's rule; /feature; branch `feature/declared-zone-nesting`, base `7732025`)
+
+- **Rule:** "There really shouldn't be any identification of nestedness in the actual code. The user who adds the different zones together should specify that information." `add_resonance_zones(nesting={inner_pip: outer_pip})` sets `ResonanceZone.inside`; zones not named are not nested, however they overlap. This amends C4 (DEC-11, NEST-4): an outer blast still leaves a declared inner zone's bridges alone. Save format 4 holds `inside`; formats 1-3 load with no nesting.
+- **Why:** the hydrogen heteroclinic pair are mirror-image zones under `-I`, with areas equal up to rounding. `other.area < zone.area` in `blast_zone` called the one smaller by 1e-12 inner, so the other lost every bridge in their overlap: `{A: 0, B: 2}` or `{A: 2, B: 0}` by energy, rho 2.699 or 2.0 on the lower plateau where the transition graph gives 2.95231. All 23 energies from 0.27 to 0.325 followed the sign of the area difference.
+- **Removed:** the area comparison in `blast_zone`, the smallest-area choice in `classify_bridge` (a declared inner zone before its host, then the bridge's own fixed point's zone, then the first stored), and the area and containment inference of `cartoon_zones.parents`. `ResonanceZone.area` stays as a measurement.
+

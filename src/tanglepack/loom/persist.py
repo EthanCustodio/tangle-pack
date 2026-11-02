@@ -60,6 +60,7 @@ def save_session(session: TangleSession, path: str | os.PathLike) -> None:
             "fixed_point": fixed_point(zone.fixed_point),
             "stable_branch_key": key(zone.stable_branch_key),
             "boundary_intersection": crossing(zone.boundary_intersection),
+            "inside": None if zone.inside is None else fixed_point(zone.inside),
             "cut_intersections": [crossing(cut) for cut in zone.cut_intersections],
             "intersection_ids": list(zone.intersection_ids),
             "previous_tails": [
@@ -121,6 +122,8 @@ def load_session(session: TangleSession, path: str | os.PathLike) -> None:
                 for kind, lo, hi, branch_key, bridge_id, reverse in zone["boundary_arcs"]
             ],
             boundary_vertices=arrays[f"zone{i}_vertices"] if zone["has_vertices"] else None,
+            # A save before format 4 declared no nesting.
+            inside=None if zone.get("inside") is None else fixed_points[zone["inside"]],
         )
     factors = floats_of(arrays["blast_factors"], saved["blast_factor_types"])
     session._blast_stats = {fixed_points[fp]: factor for fp, factor in zip(saved["blast_stats"], factors)}

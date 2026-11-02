@@ -74,7 +74,7 @@ session.create_bridges(fp1)
 session.classify_strong_pips()
 pips = {fp: session.strong_pip(fp) for fp in (fp3, fp1)}
 print(f"Strong pips: period-3 {pips[fp3]}, period-1 {pips[fp1]}")
-session.add_resonance_zones([pips[fp1], pips[fp3]])
+session.add_resonance_zones([pips[fp1], pips[fp3]], nesting={pips[fp3]: pips[fp1]})
 
 # The pseudoneighbor pipeline, per fixed point on the truncated trellises.
 partitions = {}
