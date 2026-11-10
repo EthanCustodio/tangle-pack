@@ -928,6 +928,56 @@ def walk_itinerary(dual, walk: Walk) -> tuple[ElementRef, ...]:
     return tuple(itinerary)
 
 
+def _ring_position(face: "FaceNode", end: tuple) -> Optional[tuple[int, int, bool]]:
+    """``(ring, index, reverse)`` of a chord end ``(edge key, side)`` on a face."""
+    from .DualGraph import face_side
+
+    edge, side = end
+    for ring, region in enumerate(face.faces):
+        for index, arc in enumerate(region.arcs):
+            if arc.edge_key == edge and face_side(arc) == side:
+                return ring, index, bool(arc.reverse)
+    return None
+
+
+def _crosses_namer(walk: Walk, namer_walls: Sequence[tuple]) -> bool:
+    """
+    Whether a walk must cross the walk that named its class.
+
+    As :meth:`~.DualGraph.DualGraph.chords_cross`, with one more piece of
+    order: this walk's start (goal) is the IMAGE of the source (target) end of
+    the naming piece, and the map contracts along a stable branch, so where
+    the two lie on one edge side the walk's end is the anchor-ward one. Every
+    other pair of ends on one edge side is free, as there.
+    """
+    chords = walk_chords(walk)
+    for position, (face, chord) in enumerate(chords):
+        for wall_face, wall, source_end in namer_walls:
+            if wall_face is not face:
+                continue
+            ends = [chord[:2], chord[2:], wall[:2], wall[2:]]
+            places = [_ring_position(face, end) for end in ends]
+            if None in places or len({ring for ring, _i, _r in places}) != 1:
+                continue
+            spots = [float(index) for _ring, index, _reverse in places]
+            if source_end is not None:
+                images = []
+                if position == 0:
+                    images.append((0, 2 + source_end))
+                if position == len(chords) - 1:
+                    images.append((1, 2 + (1 - source_end)))
+                for mine, theirs in images:
+                    if ends[mine] == ends[theirs]:
+                        # The ring runs anchor-outward along an arc unless it is reversed.
+                        spots[mine] += 0.25 if places[mine][2] else -0.25
+            if len(set(spots)) < 4:
+                continue
+            lo, hi = sorted(spots[:2])
+            if (lo < spots[2] < hi) != (lo < spots[3] < hi):
+                return True
+    return False
+
+
 def _half_toward(node: "StableNode", other: "StableNode") -> tuple:
     """The half of a node's edge facing another node of its branch, named by its end vertex."""
     return (node.edge_key, node.arc.hi_id if other.lo_cdist >= node.hi_cdist else node.arc.lo_id)
@@ -1103,6 +1153,7 @@ def shortest_walks(
     landings: Optional[tuple[ElementLanding, ElementLanding]] = None,
     wanted: Optional[dict["Marker", bool]] = None,
     walls: Sequence[tuple["FaceNode", "Chord"]] = (),
+    namer_walls: Sequence[tuple["FaceNode", "Chord", Optional[int]]] = (),
 ) -> WalkSearch:
     """
     Every shortest walk of the dual graph from one iterated element to another.
@@ -1149,6 +1200,14 @@ def shortest_walks(
         landings: The landings ``start`` and ``goal`` are the targets of.
         wanted: ``{marker: held}`` from a member lobe
             (:func:`lobe_image_markers`), or None for no constraint.
+        namer_walls: ``(face, chord, source end)`` per face of the decided
+            walk of the class whose word NAMED this class (it is a piece of
+            that walk's curve, so its image cannot cross it). ``source end``
+            is None, or on the naming piece itself which chord end (0 the
+            entry, 1 the exit) is this class's source element: this walk's
+            start is the image of that point, so on a shared edge side it
+            lies anchor-ward of it, and its goal anchor-ward of the other end
+            (:func:`_crosses_namer`).
         walls: ``(face, chord)`` per face of the decided walks of classes
             whose arcs lie on other unstable branches (:func:`walk_chords`);
             with them, ``dual`` needs ``chords_cross`` too. A walk of
@@ -1309,6 +1368,18 @@ def shortest_walks(
         found_walks,
         key=lambda walk: tuple(element_sort_key(ref, context) for ref in walk.itinerary),
     )
+    if len(walks) > 1 and namer_walls:
+        apart = [
+            walk for walk in walks
+            if walk.multiplicity > 1 or not _crosses_namer(walk, namer_walls)
+        ]
+        if apart and len(apart) < len(walks):
+            logger.info(
+                "walk %s -> %s: %d of %d tied itineraries cross the walk that named the class",
+                start.label, goal.label, len(walks) - len(apart), len(walks),
+            )
+            rejected += len(walks) - len(apart)
+            walks = apart
     if len(walks) > 1 and walls:
         # A walk standing for several face paths is never judged on one of them.
         clear = [

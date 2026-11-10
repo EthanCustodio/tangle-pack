@@ -1074,6 +1074,7 @@ def _resolve_itinerary(
     cd: ClassDynamics,
     max_walks: int,
     walls: Sequence[tuple["FaceNode", "Chord"]] = (),
+    namer_walls: Sequence[tuple] = (),
 ) -> None:
     """Fill a class's itinerary: landing check, then the trellis or the walk path."""
     trellis = dual_graph.trellis
@@ -1144,6 +1145,7 @@ def _resolve_itinerary(
         landings=(source_landing, target_landing),
         wanted=wanted,
         walls=walls,
+        namer_walls=namer_walls,
     )
     cd.search = search
     if search.status == "unresolved":
@@ -1163,6 +1165,46 @@ def _resolve_itinerary(
     cd.itinerary = walk_itinerary(dual_graph, search.walk)
     cd.source = "walk"
     cd.ambiguous = search.status == "ambiguous"
+
+
+def _namer_walls(namer: Optional[ClassDynamics], cls: BridgeClass, naming, fixed_points) -> list:
+    """
+    The walk of the class whose word named ``cls``, as walls for ``cls``.
+
+    A class a word names is represented by a PIECE of its namer's image: a
+    real arc of the unstable manifold. Its own image is one step further along
+    the same manifold, which never crosses itself, so it cannot cross the
+    namer's image either.
+
+    Args:
+        namer: The naming class's record, or None for a class of the alphabet
+            handed in.
+        cls: The named class.
+        naming: Resolves the namer's iterated elements to their parents.
+        fixed_points: The ordering context of ``oriented_class``.
+
+    Returns:
+        ``(face, chord, source end)`` per face of the namer's walk (see
+        ``shortest_walks(namer_walls=)``); none when the namer has no single
+        decided walk (the trellis path, an unresolved or ambiguous search,
+        several face paths) or holds an anchor bridge, whose image contains it.
+    """
+    if namer is None or namer.search is None or namer.search.status != "resolved":
+        return []
+    if namer.search.walk.multiplicity != 1 or namer.itinerary is None:
+        return []
+    theirs = namer.entry.bridge_class
+    if theirs.source.element_id == 0 and theirs.target.element_id == 0:
+        return []
+    walls = []
+    pairs = zip(namer.itinerary[::2], namer.itinerary[1::2])
+    for (face, chord), (x, y) in zip(walk_chords(namer.search.walk), pairs):
+        named, direction = oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
+        source_end = None
+        if named == cls and direction:
+            source_end = 0 if direction > 0 else 1
+        walls.append((face, chord, source_end))
+    return walls
 
 
 def symbolic_dynamics(
@@ -1253,7 +1295,8 @@ def symbolic_dynamics(
             entry, cls.label, "active", (landings[0], landings[1]), named_by=closure.get(cls)
         )
         walls = [wall for theirs, chords in decided if not theirs & mine for wall in chords]
-        _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls)
+        namer_walls = _namer_walls(records.get(closure.get(cls)), cls, naming, fixed_points)
+        _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls, namer_walls)
         # A walk standing for several face paths names none of them, and an unresolved
         # class (a truncated search) established none: no wall.
         search = cd.search
