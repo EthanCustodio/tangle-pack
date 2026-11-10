@@ -401,6 +401,27 @@ its two ends sit in on their rows (`owner_at_end`), oriented anchor outward (`an
 the homotopy class of arcs between `X` and `Y` relative to the stable manifold and the holes. A
 member traversed in the unstable direction runs `source -> target` (symbol `a`) or back (`a^-1`).
 
+**The ring reading** (2026-11-10). The pair names ONE homotopy class only where the zone is simply
+connected. On an annular zone two arcs between the same elements can pass the inner zone on either
+side (hydrogen E = 0.5, B = 2.141, Mitchell 2009 Fig. 8: the bridge `b` hugging the inner stable
+branch and the bridges running alongside the inner boundary arc `g`, around the cone point). The
+faces of the minimal arrangement ARE simply connected, so an arc through a disk face is determined
+by where its ends sit on the ring, and is homotopic to the kept bridges on either side of it taken
+in turn, provided no hole lies between (`DualGraph.ring_sides`; the paper reads its relations (15),
+(17) off the picture the same way). The rule built on it: an arc that cuts exactly ONE kept bridge
+off its ring is that bridge's class (`DualGraph.alongside`). It is combinatorial: the ends
+are placed by registry order on the stable edges (`DualGraph.chord_of`), a hole by its marker; no
+polyline is read. `DualGraph.parallel_bridges` lists the computed bridges it reads differently from
+their pair, `Trellis.parallel_bridges` holds them and `owner_at_end` reads such a bridge at the kept
+bridge's ends, so every reader of a class agrees. The faces need the minimal trellis and the minimal
+trellis a class table, so `loom.Topology.minimal` takes two passes: the pair reading first (the kept
+bridges, hole bridges and their image tiles, do not depend on how the rest are classed), then, only
+when the table is not empty, the classes again. The ring is silent in a face that is no disk (a
+merged face, the unbounded one) and for an arc cutting several bridges off: there the pair stands. A
+class whose members sit in several ring positions is not split (a product class keyed by its ring
+position is not built): it is one WARNING, `diagnostics.classes_in_several_ring_positions` (seen on
+the same map with the inner zone cut at an ordinary-sign pip).
+
 **Loops fold forward** (the author's rule, D2). A bridge with both ends in one element is the image
 of a bridge that did connect two elements: it joins the class of its IMAGE-CHAIN PARENT, the one
 bridge whose `_image_chain` holds it (one parent per pair, asserted: images of disjoint arcs are
@@ -430,7 +451,8 @@ lettered. The minimal trellis decides BEFORE the words which hole bridges to map
 rule (A.8b). Inert classes keep their symbols in the words and are no nodes of the transition graph
 (A.9).
 
-**Implemented by.** `bridge_classes`, `oriented_class`, `anchor_outward_key`, `_image_chain`,
+**Implemented by.** `bridge_classes`, `DualGraph.ring_sides`, `DualGraph.alongside`,
+`DualGraph.chord_of`, `DualGraph.parallel_bridges`, `oriented_class`, `anchor_outward_key`, `_image_chain`,
 `BridgeClassTable.restricted_to`, `PartitionInterval.identity`, `Topology.identity`,
 `BridgeAlphabet.letter_for`, `letter`, `inert_letters`, `inert_classes`.
 
@@ -490,6 +512,16 @@ construction bug to root out, not a state to model. The walk:
   whose chords cross one (`walk_chords`, `DualGraph.chords_cross`). Every bridge is the same (D14): a
   class joining two branches or two tangles has no special case.
 
+- is read piece by piece off the face rings (`walk_itinerary`): a piece alongside one kept bridge
+  is that bridge's class, whatever pair of elements it joins (A.8, the ring reading);
+- of a class a WORD named, when tied, is the one the homomorphism forces (2026-11-10; Mitchell 2009,
+  Eqs. (16f)-(18)): the class is a piece of its namer's walk, a chord homotopic to the kept bridges
+  on a hole-free side of it, so its image crosses the stable manifold where the decided walks of
+  those bridges' classes do, one after the other, a crossing made and at once undone cancelling
+  (`_product_walk`). A side is unreadable when it holds a hole or a bridge whose class has no single
+  decided walk (the trellis path, a loop, an unresolved or ambiguous class); with no readable side,
+  or no single tied walk equal to every readable one, the tie stays "ambiguous".
+
 A search ends "resolved" (one decided walk; zero crossings included), "ambiguous" (a tie no rule
 decides; the first candidate in deterministic order feeds the rest of the table, and the dynamics is
 unreliable) or "unresolved" with one of six `WalkReason`s: "unreachable", "no_start_node",
@@ -527,7 +559,8 @@ area, INT-10); two open `StableNode`s per stable edge, one solid unified node on
 segment `S \ f(S)`.
 
 **Implemented by.** `DualGraph`, `DualGraph.markers`, `DualGraph.enclosed`, `land_element`,
-`shortest_walks`, `lobe_image_markers`, `holds_markers`, `walk_chords`, `trellis_itinerary`,
+`shortest_walks`, `lobe_image_markers`, `holds_markers`, `walk_chords`, `walk_itinerary`,
+`_product_walk`, `trellis_itinerary`,
 `WalkSearch`, `WalkReason`, `MembersDisagree`, `translate_itinerary`, `free_reduce`,
 `symbolic_dynamics`, `diagnostics.verify_words`, `EvidenceDiagnosis`.
 
