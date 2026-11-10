@@ -870,112 +870,45 @@ def walk_chords(walk: Walk) -> list[tuple["FaceNode", "Chord"]]:
 
 def walk_itinerary(dual, walk: Walk) -> tuple[ElementRef, ...]:
     """
-    A walk's itinerary, with every piece that goes around an anchor re-read.
+    A walk's itinerary, each piece read off the ring of the face it crosses.
 
-    On a stable branch with a :func:`~.diagnostics.reflex_arcs` arc (a zone
-    cut at a pip carrying the anchor's sign), a piece of the walk between two
-    edges of that branch, on the row the arc arrives on, that closes with the
-    stable segment between them AROUND the branch's periodic point runs
-    alongside the arc: it is the arc's class, not that of a bridge hugging the
-    branch between the same two elements. Its anchor-nearer element is
-    replaced by the element the arc's own anchor end sits in, exactly as
+    A piece that cuts exactly one kept bridge off its face ring, with no hole
+    between, runs alongside that bridge and is its class
+    (:meth:`~.DualGraph.DualGraph.alongside`). The two elements a piece
+    joins name that class too, except where two homotopically different arcs
+    join one pair of elements; there the ring decides and the piece is
+    re-read at the kept bridge's ends, as
     :meth:`~.PartitionFamily.PartitionFamily.owner_at_end` re-reads a computed
-    bridge (:func:`~.diagnostics.wrapped_end`).
+    bridge.
 
     Args:
         dual: The dual graph the walk was found on.
         walk: The walk.
 
     Returns:
-        ``walk.itinerary``, unchanged on every trellis without such an arc and
-        for every piece whose closed curve does not hold the periodic point in
-        every routing.
+        ``walk.itinerary`` with the two elements of every such piece replaced
+        by the elements at the kept bridge's ends; unchanged for a piece in a
+        face that is no disk, a piece cutting off several bridges or a hole,
+        and a piece whose elements already name the kept bridge's class.
     """
-    from .diagnostics import reflex_arcs
-    from .DualGraph import _position_of
-
-    trellis = dual.trellis
-    arcs = reflex_arcs(trellis)
-    if not arcs or walk.start_node is None or walk.goal_node is None:
+    if walk.start_node is None or walk.goal_node is None:
         return tuple(walk.itinerary)
-    nodes = [walk.start_node] + [step.node for step in walk.steps] + [walk.goal_node]
     itinerary = list(walk.itinerary)
     for index, (face, chord) in enumerate(walk_chords(walk)):
-        near, far = nodes[index], nodes[index + 1]
-        arc = arcs.get(near.branch_key)
-        if arc is None or near.branch_key != far.branch_key or near.edge_key == far.edge_key:
-            continue
-        first, second = walk.itinerary[2 * index], walk.itinerary[2 * index + 1]
-        if first.side != second.side or first.side != row_of_end(trellis, arc, "second"):
-            continue
-        key = near.branch_key
-        marker = ("orbit", _position_of(key[0], trellis.fixed_points), key[2])
-        if marker not in dual.markers:
-            continue
-        lo, hi = sorted((near.lo_cdist, near.hi_cdist, far.lo_cdist, far.hi_cdist))[1:3]
-        between = _stable_edges_between(dual, key, lo, hi) - {near.edge_key, far.edge_key}
-        halves = {_half_toward(near, far), _half_toward(far, near)}
-        routings = dual.enclosed(between, [(face, chord)], halves)
-        if not routings or {held.get(marker) for held in routings} != {True}:
-            continue
-        position = 2 * index if near.lo_cdist <= far.lo_cdist else 2 * index + 1
-        itinerary[position] = dual.partition.owner_at_end(trellis, arc, "first")
-        logger.info(
-            "walk piece %s -> %s goes around the periodic point of its branch: read as the "
-            "boundary arc %s's class",
-            first.label, second.label, arc,
-        )
+        piece = slice(2 * index, 2 * index + 2)
+        read = dual.read_off_the_ring(face, chord, itinerary[piece])
+        if read is not None:
+            logger.info(
+                "walk piece %s -> %s runs alongside kept bridge %s: read as its class",
+                itinerary[piece][0].label, itinerary[piece][1].label, read[0],
+            )
+            itinerary[piece] = read[2]
     return tuple(itinerary)
 
 
-def _ring_position(face: "FaceNode", end: tuple) -> Optional[tuple[int, int, bool]]:
-    """``(ring, index, reverse)`` of a chord end ``(edge key, side)`` on a face."""
-    from .DualGraph import face_side
-
-    edge, side = end
-    for ring, region in enumerate(face.faces):
-        for index, arc in enumerate(region.arcs):
-            if arc.edge_key == edge and face_side(arc) == side:
-                return ring, index, bool(arc.reverse)
-    return None
-
-
-def _crosses_namer(walk: Walk, namer_walls: Sequence[tuple]) -> bool:
-    """
-    Whether a walk must cross the walk that named its class.
-
-    As :meth:`~.DualGraph.DualGraph.chords_cross`, with one more piece of
-    order: this walk's start (goal) is the IMAGE of the source (target) end of
-    the naming piece, and the map contracts along a stable branch, so where
-    the two lie on one edge side the walk's end is the anchor-ward one. Every
-    other pair of ends on one edge side is free, as there.
-    """
-    chords = walk_chords(walk)
-    for position, (face, chord) in enumerate(chords):
-        for wall_face, wall, source_end in namer_walls:
-            if wall_face is not face:
-                continue
-            ends = [chord[:2], chord[2:], wall[:2], wall[2:]]
-            places = [_ring_position(face, end) for end in ends]
-            if None in places or len({ring for ring, _i, _r in places}) != 1:
-                continue
-            spots = [float(index) for _ring, index, _reverse in places]
-            if source_end is not None:
-                images = []
-                if position == 0:
-                    images.append((0, 2 + source_end))
-                if position == len(chords) - 1:
-                    images.append((1, 2 + (1 - source_end)))
-                for mine, theirs in images:
-                    if ends[mine] == ends[theirs]:
-                        # The ring runs anchor-outward along an arc unless it is reversed.
-                        spots[mine] += 0.25 if places[mine][2] else -0.25
-            if len(set(spots)) < 4:
-                continue
-            lo, hi = sorted(spots[:2])
-            if (lo < spots[2] < hi) != (lo < spots[3] < hi):
-                return True
-    return False
+def crossed_nodes(walk: Walk) -> list[tuple]:
+    """The keys of the stable nodes a walk crosses, in order."""
+    return [step.node.key for step in walk.steps]
 
 
 def _half_toward(node: "StableNode", other: "StableNode") -> tuple:
@@ -1153,7 +1086,6 @@ def shortest_walks(
     landings: Optional[tuple[ElementLanding, ElementLanding]] = None,
     wanted: Optional[dict["Marker", bool]] = None,
     walls: Sequence[tuple["FaceNode", "Chord"]] = (),
-    namer_walls: Sequence[tuple["FaceNode", "Chord", Optional[int]]] = (),
 ) -> WalkSearch:
     """
     Every shortest walk of the dual graph from one iterated element to another.
@@ -1200,14 +1132,6 @@ def shortest_walks(
         landings: The landings ``start`` and ``goal`` are the targets of.
         wanted: ``{marker: held}`` from a member lobe
             (:func:`lobe_image_markers`), or None for no constraint.
-        namer_walls: ``(face, chord, source end)`` per face of the decided
-            walk of the class whose word NAMED this class (it is a piece of
-            that walk's curve, so its image cannot cross it). ``source end``
-            is None, or on the naming piece itself which chord end (0 the
-            entry, 1 the exit) is this class's source element: this walk's
-            start is the image of that point, so on a shared edge side it
-            lies anchor-ward of it, and its goal anchor-ward of the other end
-            (:func:`_crosses_namer`).
         walls: ``(face, chord)`` per face of the decided walks of classes
             whose arcs lie on other unstable branches (:func:`walk_chords`);
             with them, ``dual`` needs ``chords_cross`` too. A walk of
@@ -1368,18 +1292,6 @@ def shortest_walks(
         found_walks,
         key=lambda walk: tuple(element_sort_key(ref, context) for ref in walk.itinerary),
     )
-    if len(walks) > 1 and namer_walls:
-        apart = [
-            walk for walk in walks
-            if walk.multiplicity > 1 or not _crosses_namer(walk, namer_walls)
-        ]
-        if apart and len(apart) < len(walks):
-            logger.info(
-                "walk %s -> %s: %d of %d tied itineraries cross the walk that named the class",
-                start.label, goal.label, len(walks) - len(apart), len(walks),
-            )
-            rejected += len(walks) - len(apart)
-            walks = apart
     if len(walks) > 1 and walls:
         # A walk standing for several face paths is never judged on one of them.
         clear = [

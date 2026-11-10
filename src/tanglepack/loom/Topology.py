@@ -57,6 +57,7 @@ from ..topology.DualGraph import DualGraph
 from ..topology.MinimalTrellis import MinimalTrellis, minimal_trellis
 from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
 from ..topology.SymbolicDynamics import SymbolicDynamics, symbolic_dynamics
+from ..topology.diagnostics import classes_in_several_ring_positions
 
 if TYPE_CHECKING:
     from ..numerics.FixedPoint import FixedPoint
@@ -110,6 +111,7 @@ class Topology:
         # New lists: a later manual stage call clears the trellis slots in place.
         self.holes = list(self.trellis.holes)
         self.partitions: list["StablePartitionResult"] = list(self.trellis.stable_partitions)
+        self.trellis.parallel_bridges = {}  # stage 7 reads the pair of elements until `minimal`
 
     def _choose_pip(self, fixed_point: "FixedPoint") -> Optional[int]:
         """Stage 3 on the fixed point's own trellis: the pip the session carries
@@ -135,10 +137,43 @@ class Topology:
 
     @cached_property
     def minimal(self) -> MinimalTrellis:
-        """The minimal trellis over every bridge's class, the evidence table (stages 7-8)."""
+        """
+        The minimal trellis over every bridge's class, the evidence table (stages 7-8).
+
+        Two passes. A bridge's class is read off the ring of its face
+        (``DualGraph.parallel_bridges``), and the faces are those of the
+        minimal trellis, which needs a class table to be built. So the first
+        pass classes every bridge by its pair of elements; the kept bridges
+        (hole bridges and their image tiles) do not depend on how the others
+        are classed, so its arrangement is the final one. When the ring
+        re-reads a bridge, the table is fixed on the trellis and the classes
+        are read again; otherwise the first pass stands.
+        """
+        first = self._passes[0]
+        if not self.trellis.parallel_bridges:
+            return first
         return minimal_trellis(
             self.trellis, self.holes, bridge_classes(self.trellis, self.partitions)
         )
+
+    @cached_property
+    def _passes(self) -> tuple[MinimalTrellis, IteratedHomotopyPartition, DualGraph]:
+        """The pair-of-elements pass and what was built over it; fixes
+        ``trellis.parallel_bridges`` (see :attr:`minimal`)."""
+        minimal = minimal_trellis(
+            self.trellis, self.holes, bridge_classes(self.trellis, self.partitions)
+        )
+        iterated = IteratedHomotopyPartition.from_minimal(minimal, self.homotopy)
+        pips = [pip for pip in self.strong_pips if pip is not None]
+        dual = DualGraph(minimal, iterated, strong_pips=pips)
+        self.trellis.parallel_bridges = dual.parallel_bridges()
+        if self.trellis.parallel_bridges:
+            logger.info(
+                "%d bridge(s) run alongside a kept bridge of another pair of elements "
+                "and are read as its class: %s",
+                len(self.trellis.parallel_bridges), sorted(self.trellis.parallel_bridges),
+            )
+        return minimal, iterated, dual
 
     @cached_property
     def _alphabet(self) -> BridgeClassTable:
@@ -176,18 +211,34 @@ class Topology:
     @cached_property
     def iterated(self) -> IteratedHomotopyPartition:
         """The homotopy partition cut by the minimal trellis's image bridges."""
+        if self.minimal is self._passes[0]:
+            return self._passes[1]
         return IteratedHomotopyPartition.from_minimal(self.minimal, self.homotopy)
 
     @cached_property
     def dual_graph(self) -> DualGraph:
         """The dual graph, unified on each pip's fundamental segment."""
+        if self.minimal is self._passes[0]:
+            return self._passes[2]
         pips = [pip for pip in self.strong_pips if pip is not None]
         return DualGraph(self.minimal, self.iterated, strong_pips=pips)
 
     @cached_property
     def dynamics(self) -> SymbolicDynamics:
-        """The words, closed under the word map; the verdicts and letters follow them."""
-        return symbolic_dynamics(self.dual_graph, self._alphabet, letter_for=self.letter_for)
+        """The words, closed under the word map; the verdicts and letters follow them.
+
+        A class whose bridges sit in several positions on the face rings is
+        still keyed by its pair of elements: one WARNING each
+        (``diagnostics.classes_in_several_ring_positions``)."""
+        dynamics = symbolic_dynamics(self.dual_graph, self._alphabet, letter_for=self.letter_for)
+        for entry in classes_in_several_ring_positions(self.dual_graph):
+            logger.warning(
+                "class %s holds bridges in several positions on the face rings: they may "
+                "not be one homotopy class, and the class is still keyed by its pair of "
+                "elements",
+                entry.name,
+            )
+        return dynamics
 
     def identity(self, bridge_class: BridgeClass) -> frozenset:
         """

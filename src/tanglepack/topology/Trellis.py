@@ -219,6 +219,10 @@ class Trellis:
         self.pseudoneighbors: list[PseudoneighborPair] = []
         self.holes: list[Hole] = []
         self.stable_partitions: list[StablePartitionResult] = []
+        # Stage 7's ring reading (loom.Topology fills it): a computed bridge
+        # running alongside one kept bridge of another pair of elements ->
+        # (that kept bridge, +1 along it / -1 against it).
+        self.parallel_bridges: dict["BridgeId", tuple["BridgeId", int]] = {}
 
         # The computed trellis, which a pip cut (cut_at_pip_orbit) reduces to
         # T(q0) and un-choosing the pip restores; the joined arcs are memoised
@@ -1295,9 +1299,9 @@ class Trellis:
                 logger.warning(
                     "bridge %s runs from its anchor to a pip carrying the anchor's "
                     "crossing sign (the zone's angle there exceeds pi); the row "
-                    "invariant is waived for it, and a bridge or walk piece going "
-                    "around that anchor alongside it is read as its class "
-                    "(diagnostics.wrapped_end, DualWalk.walk_itinerary)",
+                    "invariant is waived for it, and a bridge or walk piece running "
+                    "alongside it is read as its class off the face ring "
+                    "(DualGraph.alongside)",
                     bridge.id,
                 )
         _check_sides(

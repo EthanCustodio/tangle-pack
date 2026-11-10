@@ -405,12 +405,11 @@ def rounds_the_stable_end(trellis: "Trellis", bridge: "Bridge") -> bool:
         crossing signs are equal.
 
     Dev Notes:
-        A class is a pair of stable elements, and a bridge running alongside
-        this arc on its outer side joins the same two elements as a bridge
-        hugging the stable branch, though the two pass the inner zone on
-        opposite sides (2026-11-09, hydrogen E = 0.5, B = 2.141).
-        :func:`wrapped_end` and :func:`~.DualWalk.walk_itinerary` re-read the
-        former into this arc's class.
+        A bridge running alongside this arc on its outer side has both ends on
+        the row the arc arrives on, in the elements a bridge hugging the
+        stable branch joins. It is told apart on the face ring, where it cuts
+        this arc alone off (:meth:`~.DualGraph.DualGraph.alongside`,
+        2026-11-10, hydrogen E = 0.5, B = 2.141).
     """
     if bridge.id is None:
         return False
@@ -426,119 +425,6 @@ def rounds_the_stable_end(trellis: "Trellis", bridge: "Bridge") -> bool:
     return (
         trellis.intersection(first).crossing_sign == trellis.intersection(second).crossing_sign != 0
     )
-
-
-def reflex_arcs(trellis: "Trellis") -> dict:
-    """
-    The boundary arcs :func:`rounds_the_stable_end` holds for, by stable branch.
-
-    Args:
-        trellis: The trellis to scan (cached on it per bridge count).
-
-    Returns:
-        ``{stable branch key: the arc's BridgeId}``; empty on every trellis
-        whose zones are cut at pips of the ordinary sign.
-    """
-    bridges = getattr(trellis, "bridges", None)
-    if bridges is None:  # a stand-in with crossings only has no zone to speak of
-        return {}
-    cached = trellis.__dict__.get("_reflex_arcs")
-    if cached is not None and cached[0] == len(bridges):
-        return cached[1]
-    arcs: dict = {}
-    for bridge in bridges:
-        if bridge.id is None or not trellis.intersection(bridge.id[0]).is_anchor:
-            continue
-        if rounds_the_stable_end(trellis, bridge):
-            key = trellis.stable_key_at(bridge.id[1], trellis.unstable_key_of(bridge.id))
-            arcs[key] = bridge.id
-    trellis.__dict__["_reflex_arcs"] = (len(bridges), arcs)
-    trellis.__dict__["_wrapped_ends"] = {}
-    return arcs
-
-
-def wrapped_end(trellis: "Trellis", bridge_id) -> Optional[tuple]:
-    """
-    The end of a bridge that reached its stable branch AROUND the anchor.
-
-    Only on a stable branch that has a :func:`reflex_arcs` arc. A bridge with
-    both ends on that branch, on the row the arc arrives on, normally closes
-    with the stable segment between its ends into a lobe on that row's side.
-    When the lobe lies on the OTHER side of the branch, the bridge has gone
-    around both ends of the branch, alongside the arc on its outer side: it is
-    homotopic to the arc, not to a bridge hugging the branch between the same
-    two elements. Its anchor-nearer end is then read where the arc's own
-    anchor end is (:meth:`PartitionFamily.owner_at_end`), which puts it in the
-    arc's class.
-
-    Args:
-        trellis: The trellis holding the bridge.
-        bridge_id: The bridge's two crossings.
-
-    Returns:
-        ``(the arc's BridgeId, "first" | "second")``, the end to re-read, or
-        None for every other bridge.
-
-    Dev Notes:
-        The side of the lobe is the sign of the closed polygon's area (bridge
-        polyline, then the stable polyline back): a GEOMETRIC reading that
-        decides, the one such reading in the topology (2026-11-09, tried on
-        hydrogen E = 0.5, B = 2.141). The crossing signs cannot tell the two
-        apart, and the lobe is of order-one area, far above any chord
-        deviation. A bridge or stable curve that cannot be read (released by a
-        lean blast, or a chain pair no ``Bridge`` spans) is not re-read.
-    """
-    arcs = reflex_arcs(trellis)
-    if not arcs:
-        return None
-    cache = trellis.__dict__.setdefault("_wrapped_ends", {})
-    key = tuple(bridge_id)
-    if key not in cache:
-        cache[key] = _wrapped_end(trellis, key, arcs)
-    return cache[key]
-
-
-def _wrapped_end(trellis: "Trellis", bridge_id: tuple, arcs: dict) -> Optional[tuple]:
-    """:func:`wrapped_end`, uncached."""
-    first, second = bridge_id
-    if trellis.intersection(first).is_anchor:
-        return None
-    try:
-        unstable_key = trellis.unstable_key_of(bridge_id)
-        stable_key = trellis.stable_key_at(first, unstable_key)
-        arc = arcs.get(stable_key)
-        if arc is None or tuple(arc) == bridge_id:
-            return None
-        if stable_key != trellis.stable_key_at(second, unstable_key):
-            return None
-        rows = rows_of_bridge(trellis, bridge_id)
-        if rows[0] != rows[1] or rows[0] != row_of_end(trellis, arc, "second"):
-            return None
-        bridge = trellis.bridge_between(first, second)
-        manifold = trellis.manifolds.get(stable_key)
-        if bridge is None or manifold is None:
-            return None
-        bridge_points = np.asarray(bridge.get_point_array(), dtype=float)
-        stable_points = np.asarray(manifold.get_point_array(), dtype=float)
-        # The cdist getter reads past a trimmed tail; the points do not.
-        stable_cdist = np.ravel(manifold.get_cdist_array())[: len(stable_points)]
-    except Exception:  # an unreadable curve or key decides nothing
-        return None
-    c_first = float(trellis.intersection(first).stable_cdist)
-    c_second = float(trellis.intersection(second).stable_cdist)
-    lo, hi = sorted((c_first, c_second))
-    between = stable_points[(stable_cdist > lo) & (stable_cdist < hi)][::-1]
-    if c_first > c_second:
-        bridge_points = bridge_points[::-1]
-    # lo end -> along the bridge -> hi end -> back along the stable branch, toward the anchor.
-    loop = np.vstack([bridge_points, between])
-    x, y = loop[:, 0], loop[:, 1]
-    area = 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
-    # An ordinary lobe lies on the bridge's row: to the right of the walk back
-    # toward the anchor (clockwise, negative area) for the right row.
-    if area == 0.0 or (area > 0.0) != (rows[0] == "right"):
-        return None
-    return (tuple(arc), "first" if c_first < c_second else "second")
 
 
 def bridge_row_violation(
@@ -1068,6 +954,46 @@ def _order_flip(
             ):
                 return end, bound
     return None
+
+
+def classes_in_several_ring_positions(dual) -> list["BridgeClassEntry"]:
+    """
+    The classes whose member bridges sit in different positions on the face rings.
+
+    A class is still the pair of elements its members join, except for a
+    bridge running alongside ONE kept bridge
+    (:meth:`~.DualGraph.DualGraph.parallel_bridges`). A member that cuts
+    SEVERAL kept bridges off its ring is a product of them, and two members
+    of one pair that cut different bridges off, or one that cuts several off
+    beside a member that is kept or runs alongside a kept one, are not known
+    to be one homotopy class: on an annular zone they can differ by a turn
+    around the inner zone (2026-11-10, hydrogen E = 0.5, B = 2.141 cut at an
+    inner pip of the ordinary sign). Such a class is reported, not split.
+
+    Args:
+        dual: The dual graph (its minimal trellis holds the evidence table).
+
+    Returns:
+        The entries with members in more than one position; a member the ring
+        does not read (a loop, a face that is no disk, an end on a vertex) is
+        left out of the count.
+    """
+    kept = set(dual.unstable_edges)
+    mixed = []
+    for entry in dual.minimal.classes:
+        positions = set()
+        for member in entry.members:
+            placed = None if member.is_loop else dual.chord_of(member.bridge_id)
+            if tuple(member.bridge_id) in kept or (placed and dual.alongside(*placed)):
+                positions.add("beside a kept bridge")
+            elif placed and (sides := dual.ring_sides(*placed)) is not None:
+                positions.add(frozenset(
+                    None if side is None else frozenset(bridge for bridge, _along in side)
+                    for side in sides
+                ))
+        if len(positions) > 1:
+            mixed.append(entry)
+    return mixed
 
 
 def verify_words(

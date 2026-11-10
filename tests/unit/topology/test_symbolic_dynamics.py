@@ -566,7 +566,7 @@ def _drive(layout, monkeypatch, alphabet, evidence, walks, *, crossings=None,
             (ref,), None,
         )
 
-    def resolve(_dual, _iterated, cd, _max_walks, _walls=(), _namer_walls=()):
+    def resolve(_dual, _iterated, cd, _max_walks, _walls=()):
         cd.itinerary, cd.source = tuple(walks[cd.bridge_class]), "walk"
 
     def owner_pair(*_args):

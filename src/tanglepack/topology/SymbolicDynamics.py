@@ -167,7 +167,9 @@ from .BridgeClass import (
 from .DualWalk import (
     ElementLanding,
     MembersDisagree,
+    Walk,
     WalkSearch,
+    crossed_nodes,
     land_element,
     lobe_image_markers,
     shortest_walks,
@@ -1074,7 +1076,6 @@ def _resolve_itinerary(
     cd: ClassDynamics,
     max_walks: int,
     walls: Sequence[tuple["FaceNode", "Chord"]] = (),
-    namer_walls: Sequence[tuple] = (),
 ) -> None:
     """Fill a class's itinerary: landing check, then the trellis or the walk path."""
     trellis = dual_graph.trellis
@@ -1145,7 +1146,6 @@ def _resolve_itinerary(
         landings=(source_landing, target_landing),
         wanted=wanted,
         walls=walls,
-        namer_walls=namer_walls,
     )
     cd.search = search
     if search.status == "unresolved":
@@ -1167,44 +1167,78 @@ def _resolve_itinerary(
     cd.ambiguous = search.status == "ambiguous"
 
 
-def _namer_walls(namer: Optional[ClassDynamics], cls: BridgeClass, naming, fixed_points) -> list:
+def _product_walk(
+    dual_graph: "DualGraph",
+    cd: ClassDynamics,
+    records: dict[BridgeClass, ClassDynamics],
+    naming: ElementNaming,
+) -> Optional[Walk]:
     """
-    The walk of the class whose word named ``cls``, as walls for ``cls``.
+    The one tied walk of a class a word named that the word map forces.
 
-    A class a word names is represented by a PIECE of its namer's image: a
-    real arc of the unstable manifold. Its own image is one step further along
-    the same manifold, which never crosses itself, so it cannot cross the
-    namer's image either.
+    The class is a PIECE of its namer's walk: a chord of a face. In a disk
+    face that chord is homotopic to the kept bridges on either side of it
+    taken in turn (:meth:`~.DualGraph.DualGraph.ring_sides`), and the word map
+    is a homomorphism (Mitchell 2009, Eqs. (16f)-(18)), so its image crosses
+    the stable manifold where the decided walks of those bridges' classes do,
+    one after the other, a crossing made and at once undone cancelling.
 
     Args:
-        namer: The naming class's record, or None for a class of the alphabet
-            handed in.
-        cls: The named class.
-        naming: Resolves the namer's iterated elements to their parents.
-        fixed_points: The ordering context of ``oriented_class``.
+        dual_graph: The dual graph.
+        cd: The class, its search ambiguous.
+        records: The classes resolved before it.
+        naming: Resolves iterated elements to their parents.
 
     Returns:
-        ``(face, chord, source end)`` per face of the namer's walk (see
-        ``shortest_walks(namer_walls=)``); none when the namer has no single
-        decided walk (the trellis path, an unresolved or ambiguous search,
-        several face paths) or holds an anchor bridge, whose image contains it.
+        The tied walk crossing exactly those nodes on every side that can be
+        read, when there is exactly one; None otherwise. A side is unreadable
+        when a hole lies on it or one of its bridges has no single decided
+        walk (a loop, an unclassed bridge, a class on the trellis path, an
+        unresolved or ambiguous one, a walk standing for several face paths).
     """
+    namer = records.get(cd.named_by)
     if namer is None or namer.search is None or namer.search.status != "resolved":
-        return []
-    if namer.search.walk.multiplicity != 1 or namer.itinerary is None:
-        return []
-    theirs = namer.entry.bridge_class
-    if theirs.source.element_id == 0 and theirs.target.element_id == 0:
-        return []
-    walls = []
-    pairs = zip(namer.itinerary[::2], namer.itinerary[1::2])
-    for (face, chord), (x, y) in zip(walk_chords(namer.search.walk), pairs):
+        return None
+    if namer.search.walk.multiplicity != 1:
+        return None
+    table, fixed_points = dual_graph.minimal.classes, dual_graph.trellis.fixed_points
+
+    def crossings(side: Optional[list]) -> Optional[list]:
+        if side is None:
+            return None
+        crossed: list = []
+        for bridge_id, along in side:
+            try:
+                entry = table.entry_of(bridge_id)
+            except KeyError:
+                return None
+            wall = records.get(entry.bridge_class)
+            along *= entry.member(bridge_id).direction
+            if not along or wall is None or wall.search is None:
+                return None
+            if wall.search.status != "resolved" or wall.search.walk.multiplicity != 1:
+                return None
+            for node in crossed_nodes(wall.search.walk)[::along]:
+                if crossed and crossed[-1] == node:
+                    crossed.pop()
+                else:
+                    crossed.append(node)
+        return crossed
+
+    pieces = zip(namer.itinerary[::2], namer.itinerary[1::2])
+    for (face, chord), (x, y) in zip(walk_chords(namer.search.walk), pieces):
         named, direction = oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
-        source_end = None
-        if named == cls and direction:
-            source_end = 0 if direction > 0 else 1
-        walls.append((face, chord, source_end))
-    return walls
+        if named != cd.bridge_class or not direction:
+            continue
+        sides = dual_graph.ring_sides(face, chord) or ()
+        forced = [c[::direction] for c in map(crossings, sides) if c is not None]
+        walks = [
+            walk for walk in cd.search.walks
+            if walk.multiplicity == 1 and all(crossed_nodes(walk) == c for c in forced)
+        ]
+        if forced and len(walks) == 1:
+            return walks[0]
+    return None
 
 
 def symbolic_dynamics(
@@ -1295,8 +1329,17 @@ def symbolic_dynamics(
             entry, cls.label, "active", (landings[0], landings[1]), named_by=closure.get(cls)
         )
         walls = [wall for theirs, chords in decided if not theirs & mine for wall in chords]
-        namer_walls = _namer_walls(records.get(closure.get(cls)), cls, naming, fixed_points)
-        _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls, namer_walls)
+        _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls)
+        forced = _product_walk(dual_graph, cd, records, naming) if cd.ambiguous else None
+        if forced is not None:
+            logger.info(
+                "class %s: of %d tied walks, one is the product of the walks of the kept "
+                "bridges beside the piece of %s that named it",
+                cls.label, len(cd.search.walks), cd.named_by.label,
+            )
+            cd.search.rejected += len(cd.search.walks) - 1
+            cd.search.walks, cd.search.status = [forced], "resolved"
+            cd.itinerary, cd.ambiguous = walk_itinerary(dual_graph, forced), False
         # A walk standing for several face paths names none of them, and an unresolved
         # class (a truncated search) established none: no wall.
         search = cd.search

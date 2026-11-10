@@ -366,6 +366,8 @@ class _ClassTrellis:
     #: The production anchor rules (no crossing here is an anchor).
     unstable_key_of = Trellis.unstable_key_of
     stable_key_at = Trellis.stable_key_at
+    #: No bridge is re-read off a face ring.
+    parallel_bridges: dict = {}
 
     def __init__(
         self, crossings: dict, fixed_points: list, *, bridges=(), iterates=None

@@ -210,6 +210,9 @@ class FakeTrellis:
     unstable_key_of = Trellis.unstable_key_of
     stable_key_at = Trellis.stable_key_at
 
+    #: No bridge is re-read off a face ring.
+    parallel_bridges: dict = {}
+
     def __init__(
         self,
         cdists: dict[int, float],
@@ -275,6 +278,9 @@ class FakeDual:
         faces: The face nodes, ``faces[i].index == i``.
         nodes: Every stable node, in creation order.
     """
+
+    #: The faces here carry no kept bridge: the ring re-reads no walk piece.
+    read_off_the_ring = staticmethod(lambda face, chord, own: None)
 
     def __init__(self) -> None:
         self.faces: list[FaceNode] = []

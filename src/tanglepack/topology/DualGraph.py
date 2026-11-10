@@ -116,6 +116,7 @@ from numpy.typing import NDArray
 from ..numerics.geometry import point_in_polygon, signed_polygon_area
 from .ElementNaming import ElementName, ElementNaming
 from .MinimalTrellis import image_chain
+from .StablePartition import row_of_end
 from .TopologyResults import (
     Arc,
     ElementRef,
@@ -1396,6 +1397,150 @@ class DualGraph:
             lo, hi = sorted((a, b))
             return (lo < c < hi) != (lo < d < hi)
         return False
+
+    # ── the ring reading ────────────────────────────────────────────────────
+
+    def ring_sides(self, face: FaceNode, chord: Chord) -> Optional[tuple]:
+        """
+        The kept bridges on either side of a chord of a disk face.
+
+        A disk face is simply connected, so an arc through it is determined
+        by where its two ends sit on the ring, and it is homotopic to the path
+        along the ring on either side of it: the kept bridges there in turn,
+        joined along the stable manifold, provided no hole lies between.
+
+        Args:
+            face: The face the chord runs through.
+            chord: The chord, read from its first end to its second.
+
+        Returns:
+            ``(one side, the other)``, each the ``(BridgeId, direction)`` of
+            the kept bridges met from the chord's first end to its second
+            (``+1`` along the bridge's dynamical direction, ``-1`` against
+            it), or None for a side with a hole beside one of its bridges.
+            None altogether when the face is no disk (a merged face, or the
+            unbounded one), an end is not on its ring, or both ends sit on one
+            ring arc.
+        """
+        if len(face.faces) != 1 or face.is_unbounded:
+            return None
+        arcs = face.faces[0].arcs
+        i, j = _ring_index(arcs, chord[:2]), _ring_index(arcs, chord[2:])
+        if i is None or j is None or i == j:
+            return None
+        holes = {place[1:] for place in self.markers.values() if place[0] == "beside"}
+
+        def side(indices: Iterable[int], along: int) -> Optional[list]:
+            walls = [arcs[k % len(arcs)] for k in indices if arcs[k % len(arcs)].kind == "unstable"]
+            if any((arc.edge_key, face_side(arc)) in holes for arc in walls):
+                return None
+            return [(tuple(arc.bridge_id), -along if arc.reverse else along) for arc in walls]
+
+        ahead = range(i + 1, i + 1 + (j - i - 1) % len(arcs))
+        behind = range(i - 1, i - 1 - (i - j - 1) % len(arcs), -1)
+        return side(ahead, +1), side(behind, -1)
+
+    def alongside(self, face: FaceNode, chord: Chord) -> list[tuple["BridgeId", int]]:
+        """
+        The kept bridges a chord runs alongside.
+
+        Args:
+            face: The face the chord runs through.
+            chord: The chord, read from its first end to its second.
+
+        Returns:
+            ``(BridgeId, direction)`` for each side on which the chord cuts
+            exactly that one kept bridge off the ring of a disk face with no
+            hole between: the arc is then homotopic to the bridge, run along
+            it for ``+1`` and against it for ``-1``. Two entries in a face
+            that is a strip between two kept bridges (they are homotopic to
+            each other); empty wherever :meth:`ring_sides` is silent.
+        """
+        sides = self.ring_sides(face, chord) or ()
+        return [side[0] for side in sides if side is not None and len(side) == 1]
+
+    def read_off_the_ring(
+        self, face: FaceNode, chord: Chord, own: Sequence[ElementRef]
+    ) -> Optional[tuple["BridgeId", int, list[ElementRef]]]:
+        """
+        The kept bridge an arc is read at, when the ring names another class than its elements.
+
+        Args:
+            face: The face the arc runs through.
+            chord: The arc as a chord, read from its first end to its second.
+            own: The two elements the arc's ends sit in.
+
+        Returns:
+            ``(BridgeId, direction, the two elements at that bridge's ends in
+            the arc's direction)`` for the first kept bridge the arc runs
+            :meth:`alongside`; None when it runs alongside none, or its own
+            elements already name the class of one it runs alongside (two
+            kept bridges bounding a strip may be two classes of one homotopy
+            class, the anchor bridge's and its neighbour's: the pair says
+            which, and stands).
+        """
+        owner, parent_of = self.partition.owner_at_end, self.naming.parent_of
+        mine = [parent_of(ref) for ref in own]
+        reads = []
+        for wall, direction in self.alongside(face, chord):
+            ends = ("first", "second") if direction > 0 else ("second", "first")
+            read = [owner(self.trellis, wall, end) for end in ends]
+            if [parent_of(ref) for ref in read] == mine:
+                return None
+            reads.append((wall, direction, read))
+        return reads[0] if reads else None
+
+    def chord_of(self, bridge_id: "BridgeId") -> Optional[tuple[FaceNode, Chord]]:
+        """
+        A computed bridge the minimal trellis does not keep, as a chord of its face.
+
+        Each end is placed by registry order alone: the stable edge its
+        crossing lies strictly inside, on its row.
+
+        Args:
+            bridge_id: The bridge's two crossings.
+
+        Returns:
+            ``(face, chord)``, or None when an end is a vertex of the
+            arrangement or on no stable edge, or the two ends read in two
+            faces (a crossing misplaced against a kept one by under-resolution).
+        """
+        trellis = self.trellis
+        unstable_key = trellis.unstable_key_of(bridge_id)
+        ends = []
+        for endpoint, crossing_id in zip(("first", "second"), bridge_id):
+            cdist = trellis.intersection(crossing_id).stable_cdist
+            row = row_of_end(trellis, bridge_id, endpoint)
+            ends += [
+                (node.face_on(row), (node.edge_key, row))
+                for node in self.stable_nodes_on(trellis.stable_key_at(crossing_id, unstable_key))
+                if node.lo_cdist < cdist < node.hi_cdist and row in node.sides
+            ]
+        if len(ends) != 2 or ends[0][0] is not ends[1][0]:
+            return None
+        return ends[0][0], ends[0][1] + ends[1][1]
+
+    def parallel_bridges(self) -> dict["BridgeId", tuple["BridgeId", int]]:
+        """
+        The computed bridges whose ring reading differs from their pair of elements.
+
+        Returns:
+            ``{BridgeId: (kept BridgeId, direction)}`` for every bridge the
+            minimal trellis drops that is read at a kept bridge
+            (:meth:`read_off_the_ring`): the table :attr:`~.Trellis.Trellis.parallel_bridges`
+            holds. Empty wherever the pair of elements already names the class.
+        """
+        trellis, owner = self.trellis, self.partition.owner_at_end
+        table = {}
+        for bridge_id in self.minimal.dropped_bridge_ids:
+            placed = self.chord_of(bridge_id)
+            if placed is None:
+                continue
+            own = [owner(trellis, bridge_id, end) for end in ("first", "second")]
+            read = self.read_off_the_ring(*placed, own)
+            if read is not None:
+                table[tuple(bridge_id)] = read[:2]
+        return table
 
     # ── views ───────────────────────────────────────────────────────────────
 
