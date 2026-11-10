@@ -1258,6 +1258,7 @@ class Trellis:
             bridge, not once per hole. Only the bridges that actually carry a
             hole are checked; the rest are not part of this result.
         """
+        from .diagnostics import rounds_the_stable_end as _rounds_the_stable_end
         from .diagnostics import warn_geometry_flags
         from .StablePartition import (
             check_bridge_rows_consistent as _check_rows,
@@ -1290,6 +1291,15 @@ class Trellis:
         ]
         for bridge in hole_bridges:
             _check_rows(self, bridge)
+            if _rounds_the_stable_end(self, bridge):
+                logger.warning(
+                    "bridge %s runs from its anchor to a pip carrying the anchor's "
+                    "crossing sign (the zone's angle there exceeds pi); the row "
+                    "invariant is waived for it, and a bridge or walk piece going "
+                    "around that anchor alongside it is read as its class "
+                    "(diagnostics.wrapped_end, DualWalk.walk_itinerary)",
+                    bridge.id,
+                )
         _check_sides(
             self.holes, orientation_preserving=self.orientation_preserving
         )

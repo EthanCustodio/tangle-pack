@@ -49,6 +49,7 @@ from tanglepack.topology.StablePartition import (
 from tanglepack.topology.diagnostics import (
     bridge_row_diagnosis,
     bridge_row_violation,
+    rounds_the_stable_end,
     bridge_side_violations,
     geometry_flags,
     side_diagnoses,
@@ -346,6 +347,29 @@ def test_bridge_rows_with_equal_signs_raise():
     with pytest.raises(AssertionError):
         check_bridge_rows_consistent(trellis, bridge)
     assert bridge_row_violation(trellis, bridge) is not None
+
+
+def test_anchor_to_branch_end_with_equal_signs_is_exempt():
+    """The arc from the anchor to the END of its stable branch may carry equal
+    signs: it reaches a pip with the anchor's sign around the end of the trimmed
+    branch (Mitchell 2009, Fig. 8, the inner pip). Any other equal-sign bridge on
+    one branch still raises."""
+    trellis, a_id, b_id = _row_trellis()
+    _signed(trellis, a_id, b_id, _EQUAL_SIGNS)
+    anchor = trellis.intersection(a_id)
+    anchor.unstable_cdist = anchor.stable_cdist = 0.0
+    assert anchor.is_anchor
+    bridge = _StubBridge(a_id, b_id, _CROSSING_LOBE)
+    assert rounds_the_stable_end(trellis, bridge)
+    check_bridge_rows_consistent(trellis, bridge)
+    assert bridge_row_violation(trellis, bridge) is None
+
+    # The far crossing is no longer the branch's end: the exemption is gone.
+    stable = trellis.intersection(b_id).manifold_b_key
+    trellis.branch(stable).intersection_ids.append(-1)
+    assert not rounds_the_stable_end(trellis, bridge)
+    with pytest.raises(AssertionError):
+        check_bridge_rows_consistent(trellis, bridge)
 
 
 def test_contradicting_geometry_with_alternating_signs_is_a_flag():

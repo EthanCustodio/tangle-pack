@@ -352,6 +352,13 @@ class PartitionFamily:
         Raises:
             ValueError: As :meth:`owner_of_intersection`.
         """
+        # A bridge that went around the anchor of a zone cut at a pip with the
+        # anchor's sign is read, at that end, where the zone's boundary arc is.
+        from .diagnostics import wrapped_end
+
+        wrapped = wrapped_end(trellis, bridge_id)
+        if wrapped is not None and wrapped[1] == endpoint:
+            return self.owner_at_end(trellis, wrapped[0], "first")
         intersection_id = bridge_id[endpoint_index(endpoint)]
         branch_key = trellis.stable_key_at(intersection_id, trellis.unstable_key_of(bridge_id))
         return self.owner_of_intersection(

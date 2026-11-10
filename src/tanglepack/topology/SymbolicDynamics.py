@@ -172,6 +172,7 @@ from .DualWalk import (
     lobe_image_markers,
     shortest_walks,
     trellis_itinerary,
+    walk_itinerary,
     walk_chords,
 )
 from .ElementNaming import ElementNaming
@@ -1159,7 +1160,7 @@ def _resolve_itinerary(
             cd.unresolved_reason,
         )
         return
-    cd.itinerary = tuple(search.walk.itinerary)
+    cd.itinerary = walk_itinerary(dual_graph, search.walk)
     cd.source = "walk"
     cd.ambiguous = search.status == "ambiguous"
 

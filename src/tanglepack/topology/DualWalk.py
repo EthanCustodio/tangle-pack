@@ -868,6 +868,66 @@ def walk_chords(walk: Walk) -> list[tuple["FaceNode", "Chord"]]:
     return [(face, end_in + end_out) for face, end_in, end_out in zip(walk.faces, ends_in, ends_out)]
 
 
+def walk_itinerary(dual, walk: Walk) -> tuple[ElementRef, ...]:
+    """
+    A walk's itinerary, with every piece that goes around an anchor re-read.
+
+    On a stable branch with a :func:`~.diagnostics.reflex_arcs` arc (a zone
+    cut at a pip carrying the anchor's sign), a piece of the walk between two
+    edges of that branch, on the row the arc arrives on, that closes with the
+    stable segment between them AROUND the branch's periodic point runs
+    alongside the arc: it is the arc's class, not that of a bridge hugging the
+    branch between the same two elements. Its anchor-nearer element is
+    replaced by the element the arc's own anchor end sits in, exactly as
+    :meth:`~.PartitionFamily.PartitionFamily.owner_at_end` re-reads a computed
+    bridge (:func:`~.diagnostics.wrapped_end`).
+
+    Args:
+        dual: The dual graph the walk was found on.
+        walk: The walk.
+
+    Returns:
+        ``walk.itinerary``, unchanged on every trellis without such an arc and
+        for every piece whose closed curve does not hold the periodic point in
+        every routing.
+    """
+    from .diagnostics import reflex_arcs
+    from .DualGraph import _position_of
+
+    trellis = dual.trellis
+    arcs = reflex_arcs(trellis)
+    if not arcs or walk.start_node is None or walk.goal_node is None:
+        return tuple(walk.itinerary)
+    nodes = [walk.start_node] + [step.node for step in walk.steps] + [walk.goal_node]
+    itinerary = list(walk.itinerary)
+    for index, (face, chord) in enumerate(walk_chords(walk)):
+        near, far = nodes[index], nodes[index + 1]
+        arc = arcs.get(near.branch_key)
+        if arc is None or near.branch_key != far.branch_key or near.edge_key == far.edge_key:
+            continue
+        first, second = walk.itinerary[2 * index], walk.itinerary[2 * index + 1]
+        if first.side != second.side or first.side != row_of_end(trellis, arc, "second"):
+            continue
+        key = near.branch_key
+        marker = ("orbit", _position_of(key[0], trellis.fixed_points), key[2])
+        if marker not in dual.markers:
+            continue
+        lo, hi = sorted((near.lo_cdist, near.hi_cdist, far.lo_cdist, far.hi_cdist))[1:3]
+        between = _stable_edges_between(dual, key, lo, hi) - {near.edge_key, far.edge_key}
+        halves = {_half_toward(near, far), _half_toward(far, near)}
+        routings = dual.enclosed(between, [(face, chord)], halves)
+        if not routings or {held.get(marker) for held in routings} != {True}:
+            continue
+        position = 2 * index if near.lo_cdist <= far.lo_cdist else 2 * index + 1
+        itinerary[position] = dual.partition.owner_at_end(trellis, arc, "first")
+        logger.info(
+            "walk piece %s -> %s goes around the periodic point of its branch: read as the "
+            "boundary arc %s's class",
+            first.label, second.label, arc,
+        )
+    return tuple(itinerary)
+
+
 def _half_toward(node: "StableNode", other: "StableNode") -> tuple:
     """The half of a node's edge facing another node of its branch, named by its end vertex."""
     return (node.edge_key, node.arc.hi_id if other.lo_cdist >= node.hi_cdist else node.arc.lo_id)
