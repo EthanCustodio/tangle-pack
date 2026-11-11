@@ -47,13 +47,24 @@ itself after growth is API work for a later plan.
 
 One zone per fixed point: an inversion chain's two branches bound ONE zone,
 keyed by the fixed point (:attr:`ResonanceZone.key`).
+
+Heteroclinic rings (2026-11-10): a heteroclinic pip ``q0 in W^u(A) x W^s(B)``
+cuts B's stable branch, and its ring runs on along ``W^u(B)``; it closes only
+together with pips cutting the other fixed points' stable branches, e.g. the
+"diamond" ``A -u-> q0 -s-> B -u-> q0' -s-> A`` of ``q0`` on ``W^s(B)`` and
+``q0'`` on ``W^s(A)``. The pips whose cuts close one ring bound ONE zone
+(:func:`ring_groups` groups them, :func:`define_resonance_zone` takes them all);
+its :attr:`ResonanceZone.fixed_points` are the stable fixed points of its cuts,
+all of one period, and it is keyed by the first. A heteroclinic ring that stays
+open is refused.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Iterable, Literal, Optional, TYPE_CHECKING
+from numbers import Integral
+from typing import Iterable, Literal, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
@@ -89,15 +100,17 @@ def _stable_cdist(end: "End | BranchPoint") -> float:
 @dataclass
 class ResonanceZone:
     """
-    A resonance zone defined by trimming stable manifold(s) at a pip (+ its iterates).
+    A resonance zone defined by trimming stable manifold(s) at pips (+ their iterates).
 
     Attributes:
-        fixed_point: The periodic point whose zone this is.
+        fixed_point: The periodic point whose zone this is (for a heteroclinic
+            ring, the first pip's stable fixed point; see :attr:`fixed_points`).
         stable_branch_key: Stable branch of the primary pip (the strong pip).
         boundary_intersection: The primary pip (strong pip) as an Intersection.
-        cut_intersections: The pip and its iterates — one per stable branch — that
-            bound the zone. Length 1 for period 1, k for a period-k orbit. Exposed as
-            :attr:`boundary_intersections` (the preferred name).
+        cut_intersections: The pips and their iterates — one per stable branch — that
+            bound the zone, each pip's orbit after the previous one's. Length 1 for
+            period 1, k for a period-k orbit, one orbit per pip of a heteroclinic
+            ring. Exposed as :attr:`boundary_intersections` (the preferred name).
         intersection_ids: Registry ids present after the trim + recompute.
         previous_tails: Each trimmed stable branch's tail before trimming, keyed by
             manifold key, so the trim can be undone with :meth:`restore`.
@@ -137,11 +150,29 @@ class ResonanceZone:
         return self.cut_intersections or [self.boundary_intersection]
 
     @property
+    def fixed_points(self) -> list["FixedPoint"]:
+        """The stable fixed points of the cuts, in first-seen order: the zone's own
+        fixed point, or every saddle of a heteroclinic ring."""
+        return list(dict.fromkeys(cut.manifold_b_key[0] for cut in self.boundary_intersections))
+
+    @property
+    def pips(self) -> list[Intersection]:
+        """The zone's pips, one per fixed point of :attr:`fixed_points`: the primary
+        :attr:`boundary_intersection`, then the first cut on each other fixed
+        point's stable branches (each pip's orbit starts at it)."""
+        first = {self.fixed_point: self.boundary_intersection}
+        for cut in self.boundary_intersections:
+            first.setdefault(cut.manifold_b_key[0], cut)
+        return list(first.values())
+
+    @property
     def key(self) -> "FixedPoint":
         """Storage key: the fixed point -- one zone per fixed point.
 
         An inversion point's two branches are one chain, and its zone is the
         union of the two loops through the periodic point (:func:`ring_cycles`).
+        A heteroclinic ring's zone is keyed by its first pip's stable fixed
+        point and holds the others too (:attr:`fixed_points`).
         """
         return self.fixed_point
 
@@ -424,6 +455,16 @@ def ring_cycles(cuts: list[Intersection]) -> list[list[int]]:
     return cycles
 
 
+def ring_closed(cuts: list[Intersection]) -> bool:
+    """Whether every cycle of :func:`ring_cycles` closes: its last cut's stable
+    branch ``s(o, b)`` leads to the unstable branch ``u(o, b)`` of its first."""
+    def leads_to(cut: Intersection) -> ManifoldKey:
+        fp, _, orbit_index, branch_index = cut.manifold_b_key
+        return (fp, "unstable", orbit_index, branch_index)
+
+    return all(leads_to(cuts[cycle[-1]]) == cuts[cycle[0]].manifold_a_key for cycle in ring_cycles(cuts))
+
+
 def ring_order(cuts: list[Intersection]) -> list[ManifoldKey]:
     """
     The stable branch keys of a zone's boundary in ring order (:func:`ring_cycles`).
@@ -435,10 +476,39 @@ def ring_order(cuts: list[Intersection]) -> list[ManifoldKey]:
         The branch keys, cycle after cycle; empty when a cycle does not close
         (iterates missing).
     """
-    cycles = ring_cycles(cuts)
-    if any(cuts[cycle[-1]].manifold_b_key[2:] != cuts[cycle[0]].manifold_a_key[2:] for cycle in cycles):
+    if not ring_closed(cuts):
         return []
-    return [cuts[index].manifold_b_key for cycle in cycles for index in cycle]
+    return [cuts[index].manifold_b_key for cycle in ring_cycles(cuts) for index in cycle]
+
+
+def ring_groups(registry: "IntersectionRegistry", intersection_ids: Iterable[int]) -> list[list[int]]:
+    """
+    Group pips by the ring their cuts close together.
+
+    Each pip brings its orbit (``registry.iterate_orbit``, one cut per stable
+    branch); two pips are in one group when a cycle of :func:`ring_cycles`
+    over all the orbits runs through cuts of both. A homoclinic pip closes its
+    own ring and is a group of its own; a heteroclinic ring's pips are one group.
+
+    Args:
+        registry: The registry the ids name crossings of.
+        intersection_ids: The pip ids.
+
+    Returns:
+        The groups, each in the order the ids were given, ordered by their first id.
+    """
+    ids = list(dict.fromkeys(intersection_ids))
+    owners = [iid for iid in ids for _ in registry.iterate_orbit(iid)]
+    cuts = [registry[cut] for iid in ids for cut in registry.iterate_orbit(iid)]
+    group = {iid: {iid} for iid in ids}
+    for cycle in ring_cycles(cuts):
+        merged = set().union(*(group[owners[index]] for index in cycle))
+        group.update(dict.fromkeys(merged, merged))
+    groups: list[list[int]] = []
+    for iid in ids:
+        if not any(iid in g for g in groups):
+            groups.append([other for other in ids if other in group[iid]])
+    return groups
 
 
 def _anchor_id(
@@ -482,25 +552,28 @@ def _anchor_id(
 
 def define_resonance_zone(
     workbench: "TangleWorkbench",
-    intersection_id: int,
+    intersection_ids: "int | Sequence[int]",
     fixed_points: Optional[Iterable["FixedPoint"]] = None,
     *,
     recompute: bool = True,
 ) -> ResonanceZone:
     """
-    Define a resonance zone by trimming the stable manifold(s) at a chosen pip.
+    Define a resonance zone by trimming the stable manifold(s) at chosen pips.
 
     For a period-1 anchor this trims the single stable manifold at the pip. For a
     period-k anchor it gathers the pip and its k-1 iterates (one per stable branch,
     via ``registry.iterate_orbit``) and trims each branch at its own cut point, so the
-    whole period-k zone is bounded consistently. By default it then recomputes
+    whole period-k zone is bounded consistently. Several pips (a heteroclinic ring,
+    module Dev Notes) bound ONE zone: every pip's orbit is gathered and every cut
+    branch trimmed. By default it then recomputes
     intersections so the shortened stable arcs take effect and recuts the bridges
     against the new crossings; the recompute spans every fixed point (or
     ``fixed_points`` if given) so a co-indexed nested tangle survives.
 
     Args:
         workbench: The workbench to operate on.
-        intersection_id: Registry id of the boundary pip (e.g. ``trellis.strong_pip``).
+        intersection_ids: Registry id of the boundary pip (e.g. ``trellis.strong_pip``),
+            or the ids of the pips closing one heteroclinic ring.
         fixed_points: Fixed points to re-index on recompute. Defaults to all.
         recompute: If True (default), recompute intersections after trimming.
 
@@ -508,31 +581,44 @@ def define_resonance_zone(
         A :class:`ResonanceZone` recording the cut points, the trimmed branches, the
         recomputed crossings, the pre-trim tails (for :meth:`ResonanceZone.restore`),
         and a frozen boundary snapshot (for bridge classification).
+
+    Raises:
+        ValueError: A pip has no stable side; or the cuts hold a heteroclinic
+            crossing and their ring does not close (:func:`ring_closed`) or
+            joins fixed points of different periods.
     """
     registry = workbench.intersection_registry
-    primary = registry[intersection_id]
+    ids = [intersection_ids] if isinstance(intersection_ids, Integral) else list(intersection_ids)
+    for iid in ids:
+        if registry[iid].manifold_b_key is None:
+            raise ValueError(
+                f"Intersection {iid} has no stable side; cannot define a "
+                "resonance zone from it."
+            )
+    primary = registry[ids[0]]
     key = primary.manifold_b_key
-    if key is None:
-        raise ValueError(
-            f"Intersection {intersection_id} has no stable side; cannot define a "
-            "resonance zone from it."
-        )
-    fixed_point = key[0]
 
-    # Strong pip + its iterates: one cut point per stable branch (k for a period-k orbit).
-    max_len = getattr(fixed_point, "k_value", None)
-    cut_ids = registry.iterate_orbit(intersection_id, max_len=max_len)
-    cut_intersections = [registry[c] for c in cut_ids]
+    # Each pip + its iterates: one cut point per stable branch (k for a period-k orbit).
+    cut_intersections = [registry[c] for iid in ids for c in registry.iterate_orbit(iid)]
+    if any(cut.manifold_a_key[0] is not cut.manifold_b_key[0] for cut in cut_intersections):
+        periods = {branch[0].period for cut in cut_intersections for branch in (cut.manifold_a_key, cut.manifold_b_key)}
+        if len(periods) > 1:
+            raise ValueError(f"the heteroclinic ring of pips {ids} joins fixed points of periods {sorted(periods)}")
+        if not ring_closed(cut_intersections):
+            raise ValueError(
+                f"the heteroclinic pips {ids} close no ring; pass every pip of the ring "
+                "(one per stable fixed point)"
+            )
 
     previous_tails: dict[ManifoldKey, "End | BranchPoint"] = {}
     for ix in cut_intersections:
         bkey = ix.manifold_b_key
-        if bkey is None or bkey in previous_tails:
+        if bkey in previous_tails:
             continue
         previous_tails[bkey] = workbench.manifolds[bkey].tail
         workbench.trim_stable_at(bkey, ix.stable_cdist)
 
-    intersection_ids: list[int] = []
+    recomputed: list[int] = []
     if recompute:
         fps = (
             list(workbench.fixed_points)
@@ -543,14 +629,14 @@ def define_resonance_zone(
         # The trimmed stable arc yields a different crossing set, so the old bridges
         # are stale — recut them against the new (shorter) stable manifold.
         workbench.rebuild_bridges()
-        intersection_ids = workbench.intersection_registry.all_ids()
+        recomputed = workbench.intersection_registry.all_ids()
 
     zone = ResonanceZone(
-        fixed_point=fixed_point,
+        fixed_point=key[0],
         stable_branch_key=key,
         boundary_intersection=primary,
         cut_intersections=cut_intersections,
-        intersection_ids=intersection_ids,
+        intersection_ids=recomputed,
         previous_tails=previous_tails,
     )
     # Freeze the boundary now that this zone's stable branch(es) are trimmed, so the
