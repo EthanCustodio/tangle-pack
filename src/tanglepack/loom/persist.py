@@ -51,9 +51,10 @@ def save_session(session: TangleSession, path: str | os.PathLike) -> None:
     zones = list(session.resonance_zones.values())
     meta["session"] = {
         "pips": [[fixed_point(fp), crossing(pip)] for fp, pip in session._strong_pips.items()],
-        # an identity is a frozenset of (branch key, side, lo id, hi id): sorted, to save one order
+        # an identity is a frozenset of (branch key, side, lo id, hi id), plus ("lobe",
+        # markers) for a class its pair does not name alone: sorted, to save one order
         "letters": [
-            [sorted(([key(branch), side, lo, hi] for branch, side, lo, hi in identity), key=str), letter]
+            [sorted((_encode_identity_item(item, key) for item in identity), key=str), letter]
             for identity, letter in session.bridge_alphabet.assigned.items()
         ],
         "zones": [{
@@ -104,7 +105,7 @@ def load_session(session: TangleSession, path: str | os.PathLike) -> None:
     fixed_points, key, crossings = decoder.fixed_points, decoder.key, decoder.crossings
     session._strong_pips = {fixed_points[fp]: crossings[pip] for fp, pip in saved["pips"]}
     session.bridge_alphabet.assigned = {
-        frozenset((key(branch_key), side, lo, hi) for branch_key, side, lo, hi in identity): letter
+        frozenset(_decode_identity_item(item, key) for item in identity): letter
         for identity, letter in saved["letters"]
     }
     for i, zone in enumerate(saved["zones"]):
@@ -133,3 +134,33 @@ def _tail(decoder: Decoder, row: int, fixed_point: int, orbit_index: int) -> End
     """A zone's saved tail as the zone held it: the row's ``End``, or the periodic point."""
     end = decoder.end(row, fixed_point, orbit_index)
     return decoder.store.end(end) if isinstance(end, int) else end
+
+
+def _encode_identity_item(item: tuple, key) -> list:
+    """One item of a class identity: an element ``(branch, side, lo, hi)`` or
+    ``("lobe", markers)`` (``Topology.identity``)."""
+    if item[0] == "lobe":
+        return ["lobe", sorted((_encode_marker(marker) for marker in item[1]), key=str)]
+    branch, side, lo, hi = item
+    return [key(branch), side, lo, hi]
+
+
+def _decode_identity_item(item: list, key) -> tuple:
+    """The inverse of :func:`_encode_identity_item`."""
+    if item[0] == "lobe":
+        return ("lobe", frozenset(_decode_marker(marker) for marker in item[1]))
+    branch_key, side, lo, hi = item
+    return (key(branch_key), side, lo, hi)
+
+
+def _encode_marker(marker: tuple) -> list:
+    """A dual-graph marker: ``("hole", origin ids, iterate)`` or ``("orbit", position, index)``."""
+    if marker[0] == "hole":
+        return ["hole", list(marker[1]), marker[2]]
+    return list(marker)
+
+
+def _decode_marker(marker: list) -> tuple:
+    if marker[0] == "hole":
+        return ("hole", tuple(marker[1]), marker[2])
+    return tuple(marker)

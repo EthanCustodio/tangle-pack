@@ -88,8 +88,8 @@ Dev Notes:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Iterable, Iterator, Optional, Sequence, TYPE_CHECKING
+from dataclasses import dataclass, field, replace
+from typing import Iterable, Iterator, Mapping, Optional, Sequence, TYPE_CHECKING
 
 from .TopologyResults import (
     ElementRef,
@@ -123,10 +123,17 @@ class BridgeClass:
         source: The anchor-nearer element; the start of the class's direction.
         target: The other element. Equal to ``source`` only for the pseudo-class
             :func:`oriented_class` returns for a loop pair; never a table entry.
+        lobe: Empty unless the pair holds several classes. A pair with both
+            elements on one stable branch names one class only when every arc
+            between them closes with the stable segment into a lobe holding the
+            same markers; where the lobes differ (a cone point lets an arc pass
+            either side of an island; :mod:`.LobeSplit`), each class is the pair
+            plus the markers its lobes hold.
     """
 
     source: ElementRef
     target: ElementRef
+    lobe: frozenset = frozenset()
 
     @property
     def is_loop(self) -> bool:
@@ -138,7 +145,24 @@ class BridgeClass:
         """A short, deterministic name: the two element labels, ``<->``-joined."""
         if self.is_loop:
             return f"{self.source.label} loop"
-        return f"{self.source.label} <-> {self.target.label}"
+        label = f"{self.source.label} <-> {self.target.label}"
+        if self.lobe:
+            label += " {" + ", ".join(sorted(marker_text(m) for m in self.lobe)) + "}"
+        return label
+
+    def with_lobe(self, lobe: Optional[frozenset]) -> "BridgeClass":
+        """The same pair, told apart by ``lobe`` (unchanged for None)."""
+        return self if lobe is None else replace(self, lobe=frozenset(lobe))
+
+
+def marker_text(marker: tuple) -> str:
+    """A short name for a dual-graph marker: ``hole a.b^i`` or ``orbit p.i``."""
+    if marker and marker[0] == "hole":
+        origin, iterate = marker[1], marker[2]
+        return f"hole {'.'.join(map(str, origin))}^{iterate}"
+    if marker and marker[0] == "orbit":
+        return f"orbit {marker[1]}.{marker[2]}"
+    return str(marker)
 
     def __str__(self) -> str:
         return self.label
@@ -526,6 +550,7 @@ def oriented_class(
 def bridge_classes(
     trellis: "Trellis",
     partitions: Iterable[StablePartitionResult],
+    lobes: Optional[Mapping["BridgeId", frozenset]] = None,
 ) -> BridgeClassTable:
     """
     Class a trellis's bridges by the pair of partition elements they connect.
@@ -553,6 +578,10 @@ def bridge_classes(
         partitions: The stable partitions to resolve elements against — every
             per-fixed-point trellis's :attr:`~.Trellis.Trellis.stable_partitions`
             concatenated. Indexed by ``(branch_key, side)``.
+        lobes: ``{bridge id: lobe}`` for the members of a pair that holds
+            several classes (:func:`~.LobeSplit.split_by_lobes`); each such
+            bridge's class is its pair with that lobe. A folded loop takes its
+            parent's.
 
     Returns:
         A :class:`BridgeClassTable` ordered by each class's smallest member
@@ -596,12 +625,14 @@ def bridge_classes(
             family.owner_at_end(trellis, bridge_id, "second"),
         )
 
+    lobes = lobes or {}
     grouped: dict[BridgeClass, list[BridgeMember]] = {}
     orphans: list["BridgeId"] = []
     for bridge_id in ids:
         x, y = ends(bridge_id)
         bridge_class, direction = oriented_class(x, y, fixed_points)
         if direction != 0:
+            bridge_class = bridge_class.with_lobe(lobes.get(tuple(bridge_id)))
             grouped.setdefault(bridge_class, []).append(BridgeMember(bridge_id, direction))
             continue
         folded = _non_loop_parent(bridge_id, image_parent, ends, fixed_points)
@@ -609,6 +640,7 @@ def bridge_classes(
             orphans.append(bridge_id)
             continue
         parent_id, parent_class = folded
+        parent_class = parent_class.with_lobe(lobes.get(tuple(parent_id)))
         grouped.setdefault(parent_class, []).append(
             BridgeMember(bridge_id, 0, folded_from=parent_id, loop_element=x)
         )

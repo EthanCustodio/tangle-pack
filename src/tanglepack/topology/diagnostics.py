@@ -820,7 +820,7 @@ def registered_evidence(
         (:func:`verify_words` fills them). Loop members and members without a
         registered chain contribute nothing.
     """
-    from .SymbolicDynamics import _signature, free_reduce, translate_itinerary
+    from .SymbolicDynamics import _signature, chain_pieces, free_reduce, translate_itinerary
 
     evidence: list[ImageEvidence] = []
     for member in entry.members:
@@ -841,7 +841,8 @@ def registered_evidence(
             )
             continue
         symbols, _loops = translate_itinerary(
-            itinerary, naming, table, letters, trellis.fixed_points
+            itinerary, naming, table, letters, trellis.fixed_points,
+            chain_pieces(table, chain, member.direction) if any(c.bridge_class.lobe for c in table) else None,
         )
         word = [symbols[i] for i in free_reduce(_signature(symbols))]
         evidence.append(

@@ -57,6 +57,7 @@ from ..topology.DualGraph import DualGraph
 from ..topology.MinimalTrellis import MinimalTrellis, minimal_trellis
 from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartition
 from ..topology.SymbolicDynamics import SymbolicDynamics, symbolic_dynamics
+from ..topology.LobeSplit import LobeSplit, split_by_lobes
 
 if TYPE_CHECKING:
     from ..numerics.FixedPoint import FixedPoint
@@ -135,10 +136,40 @@ class Topology:
 
     @cached_property
     def minimal(self) -> MinimalTrellis:
-        """The minimal trellis over every bridge's class, the evidence table (stages 7-8)."""
+        """
+        The minimal trellis over every bridge's class, the evidence table (stages 7-8).
+
+        Two passes when a pair of elements holds several classes. A class is
+        its pair of elements, plus, where the pair's member lobes disagree,
+        the markers its lobes hold (:mod:`~tanglepack.topology.LobeSplit`).
+        Lobes are read on a dual graph, which needs a class table: the first
+        pass names every bridge by its pair. The kept bridges (hole bridges and
+        their image tiles) do not depend on how the others are classed, so that
+        arrangement is final; when no pair splits, the first pass stands.
+        """
+        first, _iterated, _dual, splits, lobes = self._first_pass
+        if not splits:
+            return first
         return minimal_trellis(
-            self.trellis, self.holes, bridge_classes(self.trellis, self.partitions)
+            self.trellis, self.holes, bridge_classes(self.trellis, self.partitions, lobes)
         )
+
+    @cached_property
+    def _first_pass(self) -> tuple:
+        """The pair-named minimal trellis, its iterated partition and dual graph,
+        and the pairs their lobes split (see :attr:`minimal`)."""
+        table = bridge_classes(self.trellis, self.partitions)
+        minimal = minimal_trellis(self.trellis, self.holes, table)
+        iterated = IteratedHomotopyPartition.from_minimal(minimal, self.homotopy)
+        pips = [pip for pip in self.strong_pips if pip is not None]
+        dual = DualGraph(minimal, iterated, strong_pips=pips)
+        splits, lobes = split_by_lobes(dual, table)
+        return minimal, iterated, dual, splits, lobes
+
+    @property
+    def lobe_splits(self) -> dict[BridgeClass, LobeSplit]:
+        """``{pair: LobeSplit}`` for every pair of elements holding several classes."""
+        return self._first_pass[3]
 
     @cached_property
     def _alphabet(self) -> BridgeClassTable:
@@ -176,18 +207,24 @@ class Topology:
     @cached_property
     def iterated(self) -> IteratedHomotopyPartition:
         """The homotopy partition cut by the minimal trellis's image bridges."""
+        if self.minimal is self._first_pass[0]:
+            return self._first_pass[1]
         return IteratedHomotopyPartition.from_minimal(self.minimal, self.homotopy)
 
     @cached_property
     def dual_graph(self) -> DualGraph:
         """The dual graph, unified on each pip's fundamental segment."""
+        if self.minimal is self._first_pass[0]:
+            return self._first_pass[2]
         pips = [pip for pip in self.strong_pips if pip is not None]
         return DualGraph(self.minimal, self.iterated, strong_pips=pips)
 
     @cached_property
     def dynamics(self) -> SymbolicDynamics:
         """The words, closed under the word map; the verdicts and letters follow them."""
-        return symbolic_dynamics(self.dual_graph, self._alphabet, letter_for=self.letter_for)
+        return symbolic_dynamics(
+            self.dual_graph, self._alphabet, letter_for=self.letter_for, splits=self.lobe_splits
+        )
 
     def identity(self, bridge_class: BridgeClass) -> frozenset:
         """
@@ -201,10 +238,11 @@ class Topology:
             The unordered pair of
             :attr:`~tanglepack.topology.TopologyResults.PartitionInterval.identity`.
         """
-        return frozenset(
+        pair = frozenset(
             self.homotopy.element(ref).identity
             for ref in (bridge_class.source, bridge_class.target)
         )
+        return pair | {("lobe", bridge_class.lobe)} if bridge_class.lobe else pair
 
     def letter_for(self, bridge_class: BridgeClass) -> str:
         """The session alphabet's letter for a class, by :meth:`identity`."""

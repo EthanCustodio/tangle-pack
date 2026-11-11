@@ -1211,6 +1211,58 @@ class Trellis:
         )
         return "\n".join(lines)
 
+    def settle_one_branch_anchors(self) -> list[int]:
+        """
+        Put the anchor of a fixed point with ONE stable branch on the row its
+        first arc arrives on.
+
+        An anchor's crossing sign is read off the two eigendirections, as if
+        the stable branch went on through the point. When it does not -- the
+        point is the end of its only stable branch, a cone point of a quotient
+        such as the hydrogen map's identified plane (Mitchell 2009, Fig. 8,
+        the inner fixed point) -- the unstable branch leaves without crossing
+        anything and touches both rows; the sign is a convention. The first
+        arc of the unstable branch, from the anchor to its first crossing,
+        meets no stable arc in between, so when that crossing is on the
+        anchor's own stable branch the arc stays on one row: the anchor takes
+        the sign that puts it there (the opposite of that crossing's). A no-op
+        wherever the sign already agrees, which is every point whose second
+        stable branch is computed.
+
+        Returns:
+            The ids of the anchors whose sign was flipped (once each: after the
+            flip the sign agrees). The flip is written on the registry crossing.
+        """
+        flipped: list[int] = []
+        for crossing_id, crossing in self.registry:
+            if not crossing.is_anchor or crossing_id not in self:
+                continue
+            fp, _stability, orbit_index, branch_index = crossing.manifold_b_key
+            if (fp, "stable", orbit_index, 1 - branch_index) in self.branches:
+                continue
+            unstable_key = crossing.manifold_a_key
+            first = [
+                bridge for bridge in self.bridges
+                if bridge.id is not None and bridge.id[0] == crossing_id
+                and self.unstable_key_of(bridge.id) == unstable_key
+            ]
+            if len(first) != 1:
+                continue
+            arrival = first[0].id[1]
+            if self.stable_key_at(arrival, unstable_key) != crossing.manifold_b_key:
+                continue
+            if self.intersection(arrival).crossing_sign != crossing.crossing_sign:
+                continue
+            crossing.crossing_sign = -crossing.crossing_sign
+            flipped.append(crossing_id)
+            logger.warning(
+                "anchor %d of %s has one stable branch, and its first arc %s arrives on "
+                "the other row than its eigendirections say; the anchor is put on the "
+                "arc's row (a cone point: the unstable branch leaves it touching both rows)",
+                crossing_id, fp.label, tuple(first[0].id),
+            )
+        return flipped
+
     def punch_holes(
         self,
         pairs: Optional[Iterable[PseudoneighborPair]] = None,
@@ -1258,6 +1310,7 @@ class Trellis:
             bridge, not once per hole. Only the bridges that actually carry a
             hole are checked; the rest are not part of this result.
         """
+        self.settle_one_branch_anchors()
         from .diagnostics import warn_geometry_flags
         from .StablePartition import (
             check_bridge_rows_consistent as _check_rows,

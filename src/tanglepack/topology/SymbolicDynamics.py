@@ -151,7 +151,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from typing import Callable, Iterable, Literal, Optional, Sequence, TYPE_CHECKING
+from typing import Callable, Iterable, Literal, Mapping, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
@@ -164,9 +164,11 @@ from .BridgeClass import (
     element_sort_key,
     oriented_class,
 )
+from .DualGraph import _ring_index
 from .DualWalk import (
     ElementLanding,
     MembersDisagree,
+    Walk,
     WalkSearch,
     land_element,
     lobe_image_markers,
@@ -175,6 +177,7 @@ from .DualWalk import (
     walk_chords,
 )
 from .ElementNaming import ElementNaming
+from .LobeSplit import LobeSplit, chord_lobe
 from .TopologyResults import ElementRef
 from .diagnostics import verify_words
 
@@ -295,6 +298,9 @@ class ClassDynamics:
         itinerary_verified: Exact-itinerary agreement, reported only.
         named_by: ``None`` for a class of the alphabet handed in; for a class
             the closure added, the class whose word first named it.
+        pieces: Per itinerary pair, the class it names when its pair of
+            elements holds several classes (read off the piece's lobe, or the
+            registered bridge it is), else ``None`` (the pair is the class).
     """
 
     entry: BridgeClassEntry
@@ -312,6 +318,7 @@ class ClassDynamics:
     verified: Optional[bool] = None
     itinerary_verified: Optional[bool] = None
     named_by: Optional[BridgeClass] = None
+    pieces: Optional[tuple[Optional[BridgeClass], ...]] = None
 
     @property
     def bridge_class(self) -> BridgeClass:
@@ -470,6 +477,7 @@ def translate_itinerary(
     table: BridgeClassTable,
     letters: dict[BridgeClass, str],
     fixed_points: Sequence["FixedPoint"],
+    pieces: Optional[Sequence[Optional[BridgeClass]]] = None,
 ) -> tuple[list[Symbol], list[tuple[ElementRef, ElementRef]]]:
     """
     Read an even-length itinerary of iterated elements as a word.
@@ -493,6 +501,8 @@ def translate_itinerary(
             own letter, then to the class label.
         fixed_points: The ordering context of
             :func:`~tanglepack.topology.BridgeClass.oriented_class`.
+        pieces: Per pair, the class to read it as when its pair of elements
+            holds several classes (``ClassDynamics.pieces``); None keeps the pair.
 
     Returns:
         ``(symbols, loops)``: the non-loop tokens in itinerary order, and the
@@ -517,6 +527,8 @@ def translate_itinerary(
         if direction == 0:
             loops.append((first, second))
             continue
+        if pieces is not None and pieces[position // 2] is not None:
+            bridge_class = pieces[position // 2]
         cross_side = first.branch_key == second.branch_key and first.side != second.side
         if cross_side:
             logger.warning(
@@ -1067,14 +1079,231 @@ def _arc_branches(
     return frozenset(key[0].advance_key(key, 1) for key in namer_branches)
 
 
+def chain_pieces(
+    table: BridgeClassTable, chain: Sequence["BridgeId"], direction: int
+) -> tuple[Optional[BridgeClass], ...]:
+    """
+    The class of each registered bridge tiling an image chain, in the order of
+    :func:`~tanglepack.topology.DualWalk.trellis_itinerary` (reversed for a
+    member run against its class), or None for a pair no class holds.
+    """
+    pairs = [tuple(pair) for pair in chain]
+    if direction < 0:
+        pairs = pairs[::-1]
+    pieces: list[Optional[BridgeClass]] = []
+    for pair in pairs:
+        named = None
+        for bridge_id in (pair, pair[::-1]):
+            try:
+                named = table.entry_of(bridge_id).bridge_class
+                break
+            except KeyError:
+                continue
+        pieces.append(named)
+    return tuple(pieces)
+
+
+def walk_pieces(
+    dual_graph: "DualGraph",
+    walk: Walk,
+    naming: ElementNaming,
+    splits: Mapping[BridgeClass, LobeSplit],
+) -> Optional[tuple[Optional[BridgeClass], ...]]:
+    """
+    The class of each piece of a walk whose pair of elements holds several
+    classes, read off the piece's own lobe (:meth:`LobeSplit.lobe_for`); None
+    for every other piece, and None altogether when no pair is split.
+
+    A piece is the walk's chord through one face, closed with the stable
+    segment between its two ends like a member bridge. A piece of a split pair
+    whose lobe agrees with no single class is left None, with a WARNING.
+    """
+    if not splits or walk.start_node is None or walk.goal_node is None:
+        return None
+    fixed_points = dual_graph.trellis.fixed_points
+    pieces: list[Optional[BridgeClass]] = []
+    pairs = zip(walk.itinerary[::2], walk.itinerary[1::2])
+    for (face, chord), (x, y) in zip(walk_chords(walk), pairs):
+        pair, _direction = oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
+        split = splits.get(pair)
+        if split is None:
+            pieces.append(None)
+            continue
+        lobe = split.lobe_for(chord_lobe(dual_graph, face, chord))
+        if lobe is None:
+            logger.warning(
+                "walk piece %s -> %s: its pair holds several classes and its lobe "
+                "names none of them; read as the pair", x.label, y.label,
+            )
+        pieces.append(pair.with_lobe(lobe))
+    return tuple(pieces)
+
+
+def _end_chord(walk: Walk, end: str) -> Optional[tuple["FaceNode", tuple, tuple]]:
+    """``(face, the edge end the walk leaves at this end, the far end)`` of a
+    walk's first (``"start"``) or last (``"goal"``) chord."""
+    chords = walk_chords(walk)
+    if not chords:
+        return None
+    face, chord = chords[0] if end == "start" else chords[-1]
+    near, far = (chord[:2], chord[2:]) if end == "start" else (chord[2:], chord[:2])
+    return face, tuple(near), tuple(far)
+
+
+def _class_feet(
+    trellis: "Trellis",
+    cd: ClassDynamics,
+    element: ElementRef,
+    records: Mapping[BridgeClass, ClassDynamics],
+    naming: ElementNaming,
+) -> Optional[tuple[float, float, bool]]:
+    """
+    Where a class's arcs leave one of its elements, along the stable branch:
+    ``(lo, hi, strict)`` stable cdists bounding its feet (``strict``: strictly
+    inside); None when unknown.
+
+    A member bridge's foot is its crossing. A class no computed bridge spans
+    yet, named as the first or last piece of its namer's walk, has that piece
+    for its arc, and the piece leaves at the images of the namer's feet: the
+    map pulls them toward the fixed point, strictly inside the image of the
+    namer's element (its landing span).
+    """
+    feet: list[float] = []
+    for member in cd.entry.members:
+        if member.is_loop:
+            continue
+        ends = member.bridge_id if member.direction > 0 else member.bridge_id[::-1]
+        crossing = ends[0] if element == cd.bridge_class.source else ends[1]
+        try:
+            feet.append(float(trellis.intersection(crossing).stable_cdist))
+        except KeyError:
+            return None
+    if feet:
+        return min(feet), max(feet), False
+    namer = records.get(cd.named_by) if cd.named_by is not None else None
+    if namer is None or not namer.itinerary:
+        return None
+    pair = {cd.bridge_class.source, cd.bridge_class.target}
+    itinerary = namer.itinerary
+    for index, (x, y) in ((0, itinerary[:2]), (1, itinerary[-2:][::-1])):
+        landing = namer.landings[index]
+        if naming.parent_of(x) == element and {element, naming.parent_of(y)} == pair:
+            if landing is not None and landing.span is not None:
+                lo, hi = sorted(landing.span)
+                return float(lo), float(hi), True
+    return None
+
+
+def _before(one: tuple[float, float, bool], other: tuple[float, float, bool]) -> bool:
+    """Every foot of ``one`` lies nearer the branch's fixed point than every foot of ``other``."""
+    return one[1] < other[0] or ((one[2] or other[2]) and one[1] <= other[0])
+
+
+def _keeps_the_fan(
+    dual_graph: "DualGraph",
+    cd: ClassDynamics,
+    walk: Walk,
+    end: str,
+    records: Mapping[BridgeClass, ClassDynamics],
+    naming: ElementNaming,
+) -> bool:
+    """Whether a walk's chord at one end stays between those of its nearest
+    decided neighbours on the edge it leaves (see :func:`fan_order`)."""
+    trellis = dual_graph.trellis
+    element = cd.bridge_class.source if end == "start" else cd.bridge_class.target
+    mine = _end_chord(walk, end)
+    feet = _class_feet(trellis, cd, element, records, naming)
+    if mine is None or feet is None or len(mine[0].faces) != 1:
+        return True
+    face, near, far = mine
+    arcs = face.faces[0].arcs
+    at, there = _ring_index(arcs, near), _ring_index(arcs, far)
+    if at is None or there is None:
+        return True
+
+    def ahead(index: int) -> int:
+        return (index - at) % len(arcs)
+
+    # Going round the ring from this edge, an arc leaving nearer the edge's head
+    # ends sooner. Is the head the end nearer the fixed point?
+    edge = arcs[at]
+    head_near = float(trellis.intersection(edge.head_id).stable_cdist) < float(
+        trellis.intersection(edge.tail_id).stable_cdist
+    )
+    nearer, farther = [], []  # (their feet, how far round their chord ends)
+    for other in records.values():
+        search = other.search
+        if other is cd or search is None or search.status != "resolved" or search.walk.multiplicity != 1:
+            continue
+        for other_end, other_element in (
+            ("start", other.bridge_class.source), ("goal", other.bridge_class.target)
+        ):
+            theirs = _end_chord(search.walk, other_end) if other_element == element else None
+            if theirs is None or theirs[0] is not face or theirs[1] != near:
+                continue
+            their_feet = _class_feet(trellis, other, element, records, naming)
+            their_there = _ring_index(arcs, theirs[2])
+            if their_feet is None or their_there is None:
+                continue
+            if _before(their_feet, feet):
+                nearer.append((their_feet, ahead(their_there)))
+            elif _before(feet, their_feet):
+                farther.append((their_feet, ahead(their_there)))
+    mine_ahead = ahead(there)
+    if nearer:
+        _feet, bound = max(nearer, key=lambda item: item[0][1])
+        if (mine_ahead < bound) if head_near else (mine_ahead > bound):
+            return False
+    if farther:
+        _feet, bound = min(farther, key=lambda item: item[0][0])
+        if (mine_ahead > bound) if head_near else (mine_ahead < bound):
+            return False
+    return True
+
+
+def fan_order(
+    dual_graph: "DualGraph",
+    cd: ClassDynamics,
+    records: Mapping[BridgeClass, ClassDynamics],
+    naming: ElementNaming,
+) -> Optional[Walk]:
+    """
+    The one tied walk that keeps the order of the arcs leaving its elements.
+
+    The map keeps the order of points along a stable branch, and the images of
+    disjoint arcs do not cross. So arcs leaving one element in a given order
+    along the branch have images leaving in that order, fanning round the
+    face in that order: the image of an arc lies between the images of its
+    nearest neighbours on either side. The dual graph leaves the order along
+    an edge free; the classes' feet (:func:`_class_feet`) fix it, and a tied
+    walk whose chord at either end would cross the decided walk of such a
+    neighbour is dropped. Mitchell 2009, Fig. 8: ``d2`` leaves its element
+    nearer the fixed point than ``d3``, so its image cannot reach the far side
+    of ``a2``, where the image of ``d3`` stands in the way.
+
+    Returns:
+        The one tied walk left, or None when none or several are.
+    """
+    walks = [walk for walk in cd.search.walks if walk.multiplicity == 1]
+    if len(walks) < 2:
+        return None
+    keep = [
+        walk for walk in walks
+        if all(_keeps_the_fan(dual_graph, cd, walk, end, records, naming) for end in ("start", "goal"))
+    ]
+    return keep[0] if len(keep) == 1 else None
+
+
 def _resolve_itinerary(
     dual_graph: "DualGraph",
     iterated: "PartitionFamily",
     cd: ClassDynamics,
     max_walks: int,
     walls: Sequence[tuple["FaceNode", "Chord"]] = (),
+    splits: Mapping[BridgeClass, LobeSplit] = {},
 ) -> None:
-    """Fill a class's itinerary: landing check, then the trellis or the walk path."""
+    """Fill a class's itinerary: landing check, then the trellis or the walk path;
+    ``pieces`` where a pair holds several classes (``splits``)."""
     trellis = dual_graph.trellis
     source_landing, target_landing = cd.landings
     for landing in (source_landing, target_landing):
@@ -1110,6 +1339,8 @@ def _resolve_itinerary(
                 logger.warning("class %s unresolved: %s", cd.letter, cd.unresolved_reason)
                 return
             cd.source = "trellis"
+            if splits:
+                cd.pieces = chain_pieces(dual_graph.minimal.classes, chain, member.direction)
             logger.debug(
                 "class %s: singleton landing; itinerary read off the image chain of "
                 "member %s (%d pairs)",
@@ -1162,6 +1393,8 @@ def _resolve_itinerary(
     cd.itinerary = tuple(search.walk.itinerary)
     cd.source = "walk"
     cd.ambiguous = search.status == "ambiguous"
+    if splits:
+        cd.pieces = walk_pieces(dual_graph, search.walk, dual_graph.naming, splits)
 
 
 def symbolic_dynamics(
@@ -1170,6 +1403,7 @@ def symbolic_dynamics(
     *,
     max_walks: int = 64,
     letter_for: Optional[Callable[[BridgeClass], str]] = None,
+    splits: Optional[Mapping[BridgeClass, LobeSplit]] = None,
 ) -> SymbolicDynamics:
     """
     Compute the symbolic dynamics of a trellis from its dual graph and classes.
@@ -1200,6 +1434,10 @@ def symbolic_dynamics(
             (normally the session's ``BridgeAlphabet.letter_for``, so the
             letter persists); without it ``letter(i)`` by its position among
             the active classes. Inert classes take the inert series.
+
+        splits: The pairs of elements holding several classes
+            (``Topology.lobe_splits``); a piece of such a pair is read as the
+            class its lobe names (walks) or its bridge's class (image chains).
 
     Returns:
         The :class:`SymbolicDynamics`, its ``table`` the closed alphabet (the
@@ -1252,7 +1490,21 @@ def symbolic_dynamics(
             entry, cls.label, "active", (landings[0], landings[1]), named_by=closure.get(cls)
         )
         walls = [wall for theirs, chords in decided if not theirs & mine for wall in chords]
-        _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls)
+        _resolve_itinerary(dual_graph, iterated, cd, max_walks, walls, splits or {})
+        if cd.ambiguous and cd.search is not None:
+            chosen = fan_order(dual_graph, cd, records, naming)
+            if chosen is not None:
+                logger.info(
+                    "class %s: of %d tied walks, one keeps the order of the arcs leaving "
+                    "its elements (fan order)", cd.letter, len(cd.search.walks),
+                )
+                cd.search = replace(
+                    cd.search, walks=[chosen] + [w for w in cd.search.walks if w is not chosen]
+                )
+                cd.itinerary = tuple(chosen.itinerary)
+                if splits:
+                    cd.pieces = walk_pieces(dual_graph, chosen, dual_graph.naming, splits)
+                cd.ambiguous = False
         # A walk standing for several face paths names none of them, and an unresolved
         # class (a truncated search) established none: no wall.
         search = cd.search
@@ -1263,6 +1515,11 @@ def symbolic_dynamics(
             oriented_class(naming.parent_of(x), naming.parent_of(y), fixed_points)
             for x, y in zip(itinerary[::2], itinerary[1::2])
         ]
+        if cd.pieces is not None:
+            named = [
+                (piece, direction) if piece is not None and direction else (pair, direction)
+                for (pair, direction), piece in zip(named, cd.pieces)
+            ]
         tokens = [(pair, direction) for pair, direction in named if direction]
         word = [tokens[i][0] for i in free_reduce(tokens)]
         words[cls] = None if cd.itinerary is None else word
@@ -1295,7 +1552,7 @@ def symbolic_dynamics(
     for cd in records.values():
         if cd.itinerary is not None:
             symbols, cd.loops = translate_itinerary(
-                cd.itinerary, naming, table, letters, fixed_points
+                cd.itinerary, naming, table, letters, fixed_points, cd.pieces
             )
             cd.symbols = [symbols[i] for i in free_reduce(_signature(symbols))]
     verify_words(records.values(), trellis, naming, table, letters)
