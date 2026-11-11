@@ -14,7 +14,7 @@ Writes four panels and a combined 2x2 figure of one case into
 3. ``minimal_trellis`` -- the minimal trellis's bridges by class, its holes,
    the pip orbit and the stable manifold;
 4. ``cartoon`` -- the trellis cartoon
-   (:func:`tanglepack.loom.plot_trellis_cartoon`): one representative per
+   (:func:`tanglepack.loom.plot_topology_cartoon`): one representative per
    class, holes on;
 5. ``combined`` -- the four on one figure.
 
@@ -49,7 +49,7 @@ from symbolic_figures import (  # noqa: E402
 from henon_minimal_dual_graph import _apply_plane_view, _draw_stable  # noqa: E402
 
 from tanglepack import TangleSession  # noqa: E402
-from tanglepack.loom import plot_trellis_cartoon  # noqa: E402
+from tanglepack.loom import plot_topology_cartoon  # noqa: E402
 from tanglepack.topology import plotting  # noqa: E402
 from tanglepack.topology.TrellisCartoon import pip_orbit  # noqa: E402
 
@@ -58,7 +58,7 @@ logger = logging.getLogger("trellis_figures")
 #: The folder every case's figure folder goes in.
 TRELLIS_DIR = FIGURES_DIR / "trellis_figures"
 
-#: The panels, in drawing order (the combined figure is written after them).
+#: The panel files written, in drawing order (the combined figure is written after them).
 PANELS = ("tangle", "pip_pseudoneighbors", "minimal_trellis", "cartoon")
 
 #: Line width of the manifolds on the tangle panel.
@@ -144,7 +144,7 @@ def draw_minimal_trellis(ax, session: TangleSession, topology, view: tuple, titl
 def draw_cartoon(ax, session: TangleSession, topology, title: str, cartoon_kw: dict) -> None:
     """Panel 4: the trellis cartoon."""
     kwargs = {"holes": True, **cartoon_kw}
-    layout = plot_trellis_cartoon(
+    layout = plot_topology_cartoon(
         topology, session.resonance_zones.values(), session.workbench, ax=ax, **kwargs
     )
     ax.set_title(f"{title} -- trellis cartoon ({len(layout.bridges)} bridges)", fontsize=11)
@@ -169,9 +169,13 @@ def write_trellis_figures(
     cartoon_kw = cartoon_kw or {}
     topology = session.topology()
     view = plane_view(session, topology.fixed_points, topology.minimal)
-    plane = (draw_tangle, draw_pip_pseudoneighbors, draw_minimal_trellis)
+    plane = {
+        "tangle": draw_tangle,
+        "pip_pseudoneighbors": draw_pip_pseudoneighbors,
+        "minimal_trellis": draw_minimal_trellis,
+    }
 
-    for name, draw in zip(PANELS, plane):
+    for name, draw in plane.items():
         fig, ax = plt.subplots(figsize=(11, 10))
         draw(ax, session, topology, view, title)
         fig.tight_layout()
@@ -182,7 +186,7 @@ def write_trellis_figures(
     save_panel(fig, folder, "cartoon")
 
     fig, axes = plt.subplots(2, 2, figsize=(20, 19))
-    for ax, draw in zip(axes.flat, plane):
+    for ax, draw in zip(axes.flat, plane.values()):
         draw(ax, session, topology, view, "")
     draw_cartoon(axes[1, 1], session, topology, "", cartoon_kw)
     for ax in axes.flat:

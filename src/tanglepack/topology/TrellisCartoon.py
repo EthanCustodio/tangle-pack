@@ -267,6 +267,11 @@ def pip_orbit(trellis: "Trellis") -> list[tuple[int, int]]:
     ]
 
 
+def _crossing_of(point) -> int:
+    """The crossing id of a point key (an anchor's key is ``(anchor, branch_key)``)."""
+    return point[0] if isinstance(point, tuple) else point
+
+
 def _rank_crossings(
     trellis: "Trellis", arcs: Iterable, orbit: set, holes: list, compact: bool
 ) -> dict:
@@ -278,21 +283,15 @@ def _rank_crossings(
         if not compact:
             shown |= {i for i in branch.intersection_ids if i not in anchors}
         ranked[branch.key] = shown
-    for pair in arcs:
+    for pair in [*arcs, *(_bridge_order(trellis, hole.bounding_ids) for hole in holes)]:
         for endpoint in ("first", "second"):
             key, branch_key, _row = _end(trellis, pair, endpoint)
             ranked[branch_key].add(key)
     for crossing in orbit:
         ranked[trellis.intersection(crossing).manifold_b_key].add(crossing)
-    for hole in holes:
-        pair = _bridge_order(trellis, hole.bounding_ids)
-        for endpoint in ("first", "second"):
-            key, branch_key, _row = _end(trellis, pair, endpoint)
-            ranked[branch_key].add(key)
 
     def stable_key(point) -> tuple:
-        crossing = point[0] if isinstance(point, tuple) else point
-        return trellis.intersection(crossing).cdist_key("stable")
+        return trellis.intersection(_crossing_of(point)).cdist_key("stable")
 
     return {branch_key: sorted(keys, key=stable_key) for branch_key, keys in ranked.items()}
 
@@ -479,7 +478,7 @@ def plot_trellis_cartoon(
     order = _rank_crossings(trellis, arcs, orbit, shown_holes, compact)
     for branch_key, keys in order.items():
         zone.ranks[branch_key] = [
-            float(trellis.intersection(k[0] if isinstance(k, tuple) else k).stable_cdist)
+            float(trellis.intersection(_crossing_of(k)).stable_cdist)
             for k in keys
         ]
     _zone_circles(zone, list(order), interior_side, parents, arc_order)
@@ -557,7 +556,7 @@ def _draw_frame(target, zone: ZoneLayout, order: dict, points: dict, orbit: set,
         ring = _arc_points(cx, cy, r, 0.0, 2 * np.pi, n=256)
         target.plot(ring[:, 0], ring[:, 1], **ZONE_EMPTY_STYLE)
         extent.extend([(cx - r, cy - r), (cx + r, cy + r)])
-    naming = getattr(dynamics, "naming", None)
+    naming = dynamics.naming if dynamics is not None else None
     for branch_key, (fp_id, alpha, sweep) in zone.arcs.items():
         cx, cy, r = zone.circles[fp_id]
         stable = _arc_points(cx, cy, r, alpha, alpha + sweep)
@@ -574,7 +573,7 @@ def _draw_frame(target, zone: ZoneLayout, order: dict, points: dict, orbit: set,
             target.plot(x, y, marker="o", markersize=7, color="black", zorder=10)
             fixed_point = branch_key[0]
             target.annotate(
-                getattr(fixed_point, "label", None) or "P", (x, y), textcoords="offset points",
+                fixed_point.label or "P", (x, y), textcoords="offset points",
                 xytext=(-6, -10), ha="right", va="top", fontsize=10, zorder=10,
             )
         for point in order[branch_key]:

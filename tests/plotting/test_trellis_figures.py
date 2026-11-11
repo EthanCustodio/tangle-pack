@@ -21,7 +21,7 @@ import numpy as np  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from cases import build_k10, build_nested  # noqa: E402
-from tanglepack.loom import cartoon_zones, plot_trellis_cartoon  # noqa: E402
+from tanglepack.loom import cartoon_zones, plot_topology_cartoon  # noqa: E402
 from tanglepack.topology import TrellisCartoon  # noqa: E402
 from tanglepack.topology.plotting import cartoon_enclosures  # noqa: E402
 
@@ -40,24 +40,29 @@ def test_write_trellis_figures_writes_every_panel(tmp_path: Path) -> None:
 
 
 def test_loom_cartoon_lays_nested_circles_out_on_the_zones() -> None:
-    """The nested tangle's circle sits inside its parent's; every drawn end is a ranked point."""
+    """The nested tangle's circle sits inside its parent's; every drawn end is ranked on the
+    stable branch its unstable arc meets there."""
     case = build_nested()
     session = case.session
     outer, inner = case.fixed_points
     fig, ax = plt.subplots()
     try:
-        layout = plot_trellis_cartoon(
+        layout = plot_topology_cartoon(
             session.topology(), session.resonance_zones.values(), session.workbench,
             ax=ax, show="all", holes=True,
         )
     finally:
         plt.close(fig)
     assert layout.zone.parents == {id(inner): id(outer)}
+    (ix, iy, inner_radius), (ox, oy, outer_radius) = (layout.zone.circles[id(fp)] for fp in (inner, outer))
+    assert np.hypot(ix - ox, iy - oy) + inner_radius < outer_radius
+    trellis = session.topology().trellis
     for bridge_id in layout.bridges:
+        unstable_key = trellis.unstable_key_of(bridge_id)
         for crossing in bridge_id:
-            assert crossing in layout.points or any(
-                key[0] == crossing for key in layout.points if isinstance(key, tuple)
-            )
+            branch_key = trellis.stable_key_at(crossing, unstable_key)
+            key = (crossing, branch_key) if trellis.intersection(crossing).is_anchor else crossing
+            assert key in layout.order[branch_key], (bridge_id, crossing)
 
 
 
@@ -74,7 +79,7 @@ def test_loom_cartoon_routes_the_enclosing_lobes_the_long_way() -> None:
     assert enclosures
     fig, ax = plt.subplots()
     try:
-        wrapped = plot_trellis_cartoon(topology, zones, session.workbench, ax=ax, show="all")
+        wrapped = plot_topology_cartoon(topology, zones, session.workbench, ax=ax, show="all")
         long_way, short_way = (
             TrellisCartoon.plot_trellis_cartoon(
                 trellis, topology.classes, topology.dynamics, minimal=topology.minimal, ax=ax,

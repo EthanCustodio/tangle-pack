@@ -3,7 +3,7 @@ What the drawings need from the resonance zones.
 
 :func:`cartoon_zones` reads the stored zones for the circular dual-graph
 cartoon (which side of each stable branch faces its zone, which zone nests in
-which, and how each zone's arcs go around it), :func:`plot_trellis_cartoon`
+which, and how each zone's arcs go around it), :func:`plot_topology_cartoon`
 passes them to the trellis cartoon of a topology, and
 :func:`plot_resonance_zones` shades them. Both take loom
 :class:`~.ResonanceZone.ResonanceZone` objects (and ``ring_order``), which is
@@ -28,7 +28,7 @@ from typing import Iterable, Optional, TYPE_CHECKING
 
 import numpy as np
 
-from ..topology import TrellisCartoon
+from ..topology.TrellisCartoon import TrellisCartoonLayout, plot_trellis_cartoon
 from ..topology.plotting import cartoon_enclosures
 from .ResonanceZone import ResonanceZone, ring_order
 
@@ -143,12 +143,12 @@ def cartoon_zones(
     return interior, parents, arc_order
 
 
-def plot_trellis_cartoon(
+def plot_topology_cartoon(
     topology: "Topology",
     zones: Iterable[ResonanceZone],
     workbench: "TangleWorkbench",
     **kwargs,
-) -> "TrellisCartoon.TrellisCartoonLayout":
+) -> TrellisCartoonLayout:
     """
     The trellis cartoon of one topology, laid out on its resonance zones.
 
@@ -172,7 +172,7 @@ def plot_trellis_cartoon(
     enclosures = cartoon_enclosures(
         trellis, [b.id for b in trellis.bridges if b.id is not None], parents, workbench.fixed_points
     ) if parents else None
-    return TrellisCartoon.plot_trellis_cartoon(
+    return plot_trellis_cartoon(
         trellis, topology.classes, topology.dynamics, minimal=topology.minimal,
         interior_side=interior, parents=parents, arc_order=order, enclosures=enclosures, **kwargs,
     )

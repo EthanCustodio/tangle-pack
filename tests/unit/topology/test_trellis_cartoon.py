@@ -72,6 +72,36 @@ def test_one_representative_per_class_from_its_members(topology) -> None:
             assert chosen in images
 
 
+def _shown_crossings(trellis, pairs) -> dict:
+    """``{stable branch key: {crossing id}}`` of the non-anchor ends of some unstable arcs."""
+    shown: dict = {}
+    for pair in pairs:
+        unstable_key = trellis.unstable_key_of(pair)
+        for crossing in pair:
+            if not trellis.intersection(crossing).is_anchor:
+                shown.setdefault(trellis.stable_key_at(crossing, unstable_key), set()).add(crossing)
+    return shown
+
+
+def test_compact_ranks_the_shown_crossings_and_full_ranks_every_one(topology, ax) -> None:
+    """``compact=False`` ranks every crossing of a branch; ``compact=True`` only the drawn
+    ends, the pip-orbit points and the hole ends."""
+    trellis = topology.trellis
+    representatives = _draw(topology, ax, holes=True)
+    holes = [
+        tuple(sorted(hole.bounding_ids, key=lambda i: trellis.intersection(i).cdist_key("unstable")))
+        for hole in trellis.holes
+    ]
+    expected = _shown_crossings(trellis, [*representatives.bridges, *holes])
+    for _j, crossing in TrellisCartoon.pip_orbit(trellis):
+        expected.setdefault(trellis.intersection(crossing).manifold_b_key, set()).add(crossing)
+    full = _draw(topology, ax, holes=True, compact=False)
+    for branch in trellis.stable_branches:
+        every = {i for i in branch.intersection_ids if not trellis.intersection(i).is_anchor}
+        assert set(full.order[branch.key][1:]) == every, branch.key
+        assert set(representatives.order[branch.key][1:]) == expected.get(branch.key, set()), branch.key
+
+
 def test_ranks_follow_the_stable_cdist_from_the_anchor(topology, ax) -> None:
     """On every branch the anchor is rank 0 and the ranks increase strictly in stable cdist."""
     trellis = topology.trellis
