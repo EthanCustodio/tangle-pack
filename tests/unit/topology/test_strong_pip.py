@@ -1,12 +1,12 @@
-"""Strong-pip classification is restricted to one periodic point's own tangle.
+"""Strong-pip classification is restricted to q0's own pair of manifolds.
 
-A strong pip is a property of a single periodic point's homoclinic tangle, so
-only crossings between two manifolds of that fixed point may disqualify a
-candidate. A nested session also detects heteroclinic crossings (e.g. a period-1
-outer tangle meeting a period-3 inner tangle); those are real but must not be
-used to classify a strong pip. These tests pin that behaviour with a hand-built
-registry so the heteroclinic disqualifier is present and unambiguous (the heavy
-Henon fixture happens to grow no such crossing).
+A strong pip is a property of one pair, the unstable manifold of q0's unstable
+fixed point and the stable branch cycle of its stable one, so only crossings of
+that pair may disqualify a candidate: a homoclinic q0's own tangle, or for a
+heteroclinic q0 in ``W^u(A) x W^s(B)`` the other ``W^u(A) x W^s(B)`` crossings
+(2026-11-10). A heteroclinic q0 needs A and B of one period. These tests pin
+that behaviour with a hand-built registry so the disqualifier is present and
+unambiguous (the heavy Henon fixture happens to grow no such crossing).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import pytest
 from helpers.fakes import bare_fixed_point
 from tanglepack.numerics.FixedPoint import FixedPoint
 from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
-from tanglepack.topology.StrongPip import is_strong_pip
+from tanglepack.topology.StrongPip import classify_strong_pips, is_strong_pip
 from tanglepack.topology.Trellis import Trellis
 
 #: The default slack of the strong-pip cdist-collision fallback.
@@ -116,3 +116,56 @@ def test_table_linked_own_iterate_does_not_disqualify_strong_pip():
     result = is_strong_pip(_trellis(reg, fp3), q0)
     assert not result.is_strong_pip
     assert result.blocking_intersection_id == image
+
+
+@pytest.mark.parametrize(
+    "q0_pair, inside_pair, disqualifies",
+    [
+        (("A", "B"), ("A", "B"), True),
+        (("A", "B"), ("B", "B"), False),
+        (("B", "B"), ("A", "B"), False),
+        (("B", "B"), ("B", "B"), True),
+    ],
+    ids=["heteroclinic_own_pair_blocks", "heteroclinic_ignores_homoclinic",
+         "homoclinic_ignores_heteroclinic", "homoclinic_own_pair_blocks"],
+)
+def test_only_q0s_own_pair_disqualifies(q0_pair, inside_pair, disqualifies):
+    """Two period-1 saddles A and B; q0 and the one point inside its open box
+    ``(0, 1) x (0, 1)`` both lie on B's stable branch, each named by its
+    ``(unstable, stable)`` fixed points. The point blocks q0 iff it joins q0's
+    own pair: a heteroclinic q0 in ``W^u(A) x W^s(B)`` is blocked by another
+    ``W^u(A) x W^s(B)`` crossing and not by a homoclinic one of B, and a
+    homoclinic q0 is unaffected by heteroclinic crossings (today's rule)."""
+    fps = {"A": _fixed_point(1, 4.0), "B": _fixed_point(1, 6.0)}
+    reg = IntersectionRegistry()
+
+    def crossing(coords, cdist, pair):
+        unstable, stable = (fps[name] for name in pair)
+        return reg.add_synthetic(
+            coords, unstable_cdist=cdist, stable_cdist=cdist,
+            manifold_a_key=(unstable, "unstable", 0, 0), manifold_b_key=(stable, "stable", 0, 0),
+        )
+
+    q0 = crossing((0.0, 0.0), 1.0, q0_pair)
+    inside = crossing((0.1, 0.1), 0.5, inside_pair)
+
+    result = is_strong_pip(_trellis(reg, fps["A"], fps["B"]), q0)
+
+    assert result.is_strong_pip is not disqualifies
+    assert result.blocking_intersection_id == (inside if disqualifies else None)
+
+
+def test_heteroclinic_pip_across_periods_raises():
+    """A heteroclinic q0 between a period-1 and a period-3 fixed point is no
+    strong pip: the direct test raises, and the batch classification skips it."""
+    fp1, fp3 = _fixed_point(1, 6.0), _fixed_point(3, 4.0)
+    reg = IntersectionRegistry()
+    q0 = reg.add_synthetic(
+        (0.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0,
+        manifold_a_key=(fp1, "unstable", 0, 0), manifold_b_key=(fp3, "stable", 0, 0),
+    )
+    trellis = _trellis(reg, fp1, fp3)
+
+    with pytest.raises(ValueError, match="periods"):
+        is_strong_pip(trellis, q0)
+    assert classify_strong_pips(trellis, [q0]) == {}

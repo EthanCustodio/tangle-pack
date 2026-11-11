@@ -631,7 +631,13 @@ class Trellis:
 
     def _is_candidate(self, intersection_id: int) -> bool:
         """Whether a crossing is a strong-pip candidate; while the candidates are not
-        classified, only this one crossing is tested."""
+        classified, only this one crossing is tested. A crossing of another fixed
+        point's unstable manifold with one of this trellis's stable branches is held
+        by no single trellis (it is in N but on no branch here), so it is tested
+        directly: a heteroclinic pip is the pip of its stable branch's fixed point."""
+        ix = self.registry[intersection_id]
+        if ix.manifold_b_key in self.branches and ix.manifold_a_key not in self.branches:
+            return intersection_id in self.resolved_ids and self.is_strong_pip(intersection_id).is_strong_pip
         if self._candidates is not None:
             return intersection_id in self._candidates
         from .StrongPip import classify_strong_pips as _classify_strong_pips

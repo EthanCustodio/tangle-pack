@@ -52,17 +52,25 @@ The fixed point itself is reported by the detector as an intersection at canonic
 distance 0 on both manifolds; it is the anchor z'_0, not a transverse crossing, so
 it is excluded from N (both as a candidate and as a disqualifier).
 
-Same-periodic-point restriction: a strong pip is a property of a single periodic
-point's homoclinic tangle, so only crossings between two manifolds of q0's own
-fixed point may disqualify it. A nested session detects heteroclinic crossings too
-(e.g. a period-1 outer tangle meeting a period-3 inner tangle); those are real and
-kept for other purposes, but they must not enter N for strong-pip classification.
-The disqualifier loop therefore skips any r whose stable branch is not on q0's
-fixed point (it is absent from the branch cycle) or whose unstable branch is known
-to be on a different fixed point. The whole orbit of a period-p point counts as one
-"periodic point" here — the restriction is on the FixedPoint object, not on the
-orbit index or branch index. Every detected crossing carries both keys (the Tangle
-asserts it), blast-born ones included.
+Same-pair restriction: a strong pip is a property of ONE pair of manifolds, the
+unstable manifold of q0's unstable fixed point and the stable branch cycle of its
+stable fixed point, so only crossings of that pair may disqualify q0 (r's unstable
+branch on q0's unstable fixed point, r's stable branch in q0's stable cycle). For
+a homoclinic q0 that is its own tangle, as before; for a heteroclinic q0 in
+``W^u(A) x W^s(B)`` (2026-11-10) it is the other ``W^u(A) x W^s(B)`` crossings,
+mapped back in B's stable cycle, while B's homoclinic crossings are kept out. The
+whole orbit of a period-p point counts as one "periodic point" here -- the
+restriction is on the FixedPoint objects, not on the orbit or branch index. A
+heteroclinic q0 needs A and B of the same period (``ValueError`` otherwise): the
+pair's branch cycles then advance together, and the crossings of one pair are
+carried onto each other by the map. :func:`classify_strong_pips` skips such a
+crossing (it is no candidate); a direct call raises. Every detected crossing
+carries both keys (the Tangle asserts it), blast-born ones included.
+
+Open question (not implemented): a ring of heteroclinic pips bounds one zone whose
+boundary also runs along the OTHER pairs' arcs (``W^u[A, q0]`` and ``W^s[A, q0']``,
+whose crossings are homoclinic). A simple closed boundary would also need the
+ring's pips tested against those crossings; the box test reads only q0's own pair.
 
 Lookup first: a crossing's backward representative is the iterate table's answer
 when it has one, and otherwise Trellis.image_cdist -- the one crossing-level scaling
@@ -99,8 +107,10 @@ def is_strong_pip(
     """
     Classify whether a single intersection is a strong pip.
 
-    Implements Is-Strong-Pip(q0, T): every trellis intersection is mapped back onto
-    q0's stable branch using the canonical-distance scaling law (one map step is
+    Implements Is-Strong-Pip(q0, T): every crossing of q0's own pair (the unstable
+    manifold of q0's unstable fixed point and the stable branch cycle of its
+    stable one, module Dev Notes) is mapped back onto q0's stable branch using
+    the canonical-distance scaling law (one map step is
     :meth:`FixedPoint.per_step_beta`), and q0 is a strong pip iff none of them lands
     strictly inside the open box (0, s0) x (0, u0) — on the stable arc
     W^S(z'_0, q0) and inside the unstable arc.
@@ -129,8 +139,9 @@ def is_strong_pip(
         disqualifier).
 
     Raises:
-        ValueError: If q0 has no stable branch, or q0's branch is missing from
-            the computed branch cycle.
+        ValueError: If q0 has no stable branch, q0's branch is missing from
+            the computed branch cycle, or q0 is heteroclinic between fixed
+            points of different periods.
 
     Note:
         If q0 is itself the anchoring fixed point (canonical distance ~0 on both
@@ -145,7 +156,13 @@ def is_strong_pip(
             "cannot classify as a strong pip."
         )
 
-    fixed_point = branch_key[0]
+    fixed_point, unstable_fixed_point = branch_key[0], q0.manifold_a_key[0]
+    if unstable_fixed_point.period != fixed_point.period:
+        raise ValueError(
+            f"Intersection {intersection_id} joins fixed points of periods "
+            f"{unstable_fixed_point.period} and {fixed_point.period}; a heteroclinic "
+            "strong pip needs both of one period"
+        )
     s0, u0 = q0.cdist_key("stable"), q0.cdist_key("unstable")
     pos_map, k = fixed_point.branch_position_map("stable")
 
@@ -169,12 +186,10 @@ def is_strong_pip(
             continue  # an unresolved detection is no crossing and disqualifies nothing
         if r.is_anchor:
             continue  # the anchoring fixed point, not a transverse intersection
-        # A strong pip is a property of one periodic point's own tangle, so only
-        # crossings between two manifolds of THIS fixed point may disqualify q0:
-        # pos_r below confirms r's stable branch belongs to fixed_point, and a
-        # heteroclinic crossing (e.g. a period-1 outer tangle meeting this
-        # period-3 inner tangle) is real but kept out here.
-        if r.manifold_a_key[0] is not fixed_point:
+        # Only q0's own pair disqualifies it (module Dev Notes): r's unstable
+        # branch on q0's unstable fixed point, and (pos_r below) r's stable branch
+        # in q0's stable cycle.
+        if r.manifold_a_key[0] is not unstable_fixed_point:
             continue
         pos_r = pos_map.get(r.manifold_b_key)
         if pos_r is None:
@@ -231,7 +246,9 @@ def classify_strong_pips(
     """
     Classify many intersections, sharing the branch-cycle cache (pure query).
 
-    Returns a result per intersection without mutating the trellis. The qualifying
+    Returns a result per intersection without mutating the trellis, skipping the
+    anchors and the heteroclinic crossings between fixed points of different
+    periods (neither can be a strong pip). The qualifying
     results (``is_strong_pip is True``) are the strong-pip *candidates*; selecting
     the single actual strong pip from them is the caller's job — see
     Trellis.classify_strong_pips() / set_strong_pip().
@@ -256,6 +273,8 @@ def classify_strong_pips(
         if ix.is_anchor:
             logger.debug("Skipping anchor/fixed-point intersection %s", iid)
             continue
+        if ix.manifold_a_key[0].period != ix.manifold_b_key[0].period:
+            continue  # heteroclinic across periods: no strong pip (is_strong_pip raises)
         results[iid] = is_strong_pip(trellis, iid, collision_rtol=collision_rtol)
 
     logger.debug(
