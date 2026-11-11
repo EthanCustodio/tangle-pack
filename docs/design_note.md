@@ -730,6 +730,20 @@ live in `loom/cartoon.py` (exported from tanglepack.loom), `cartoon_enclosures` 
 `topology/plotting.py`; per-fixed-point plots go through `session.trellis(fp).plot_*`. The cache key
 has no depth.
 
+**The trellis cartoon.** `topology/TrellisCartoon.py` redraws a trellis in standard form (Mitchell,
+Physica D 238, 2009, Fig. 3b), drawing only: the zone circles of the dual-graph cartoon
+(`plotting._zone_circles`, shared), each stable branch an arc from its anchor to its pip end with the
+shown crossings at ordinal ranks in stable-cdist order (`cdist_key`, anchor rank 0), and every bridge a
+smooth curve leaving each end on its row's side (`row_of_end`, signs only): a U-arc (one branch, one
+row), a hairpin round the pip end (one branch, two rows; never round the anchor, where it would cross
+the unstable root arc) or a cross-branch cubic. U-arcs and hairpins of one branch are images of
+non-crossing arcs of one unfolded line under one folding homeomorphism, so they nest as the real arcs
+do (a planarity law on the single-branch cases). It never calls the map or reads a polyline; it draws
+every bridge, one representative per class (`class_representatives`: a minimal-trellis hole bridge,
+else an image bridge, else the smallest unstable cdist), chosen classes or bridges, their `_image_chain`
+iterates and the holes. `loom.plot_trellis_cartoon(topology, zones, workbench)` gathers the zones;
+`scripts/trellis_figures.py` writes the figure package.
+
 **Pips.** The chosen strong pip of each fixed point is remembered as a crossing (cdists and keys),
 never as an id, and found again on every rebuilt trellis (API-1). `resonance_zone` adopts its pip
 only when it is a candidate on the trimmed trellis (else one WARNING, the previous choice kept). A
@@ -745,7 +759,8 @@ and tangle 0 (NEST-6). The inversion series loses classes at blast 6 by a genuin
 **Implemented by.** `TangleSession`, `TangleSession.trellis`, `TangleSession.topology`,
 `TangleSession.set_strong_pip`, `TangleSession.forget_strong_pip`, `TangleSession.chosen_strong_pip`,
 `TangleSession.resonance_zone`, `TangleSession.classify_bridge`, `BridgeAlphabet`,
-`cartoon_zones`, `plot_resonance_zones`, `cartoon_enclosures`.
+`cartoon_zones`, `plot_resonance_zones`, `cartoon_enclosures`, `plot_trellis_cartoon`,
+`class_representatives`.
 
 ## H. History
 
