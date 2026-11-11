@@ -2782,11 +2782,11 @@ class ZoneLayout:
         return 1.0 if self.outside.get(branch_key, "left") == side else -1.0
 
 
-def _branch_order(partition) -> dict:
+def _branch_order(branch_keys) -> dict:
     """``{id(fixed_point): [branch_key, ...]}`` in ``branch_cycle`` order."""
     order: dict = {}
     fixed_points: dict = {}
-    for branch_key in partition.branch_keys:
+    for branch_key in branch_keys:
         fixed_points.setdefault(id(branch_key[0]), branch_key[0])
         order.setdefault(id(branch_key[0]), []).append(branch_key)
     for fp_id, keys in order.items():
@@ -2846,65 +2846,32 @@ def _place_arcs(
         layout.arcs[key] = (fp_id, float(anchor), float(-direction * sweep))
 
 
-def dual_graph_zone_layout(
-    dual_graph: "DualGraph",
-    *,
-    interior_side: Optional[dict] = None,
-    parents: Optional[dict] = None,
-    arc_order: Optional[dict] = None,
-) -> ZoneLayout:
+def _zone_circles(
+    layout: ZoneLayout,
+    branch_keys,
+    interior_side: Optional[dict],
+    parents: Optional[dict],
+    arc_order: Optional[dict],
+) -> None:
     """
-    Lay out the circular-zone cartoon of a dual graph.
+    Place the zone circles of the branches whose ``layout.ranks`` are set.
 
-    Each fixed point is a circle of ``2n`` equal arcs (``n`` partitioned
-    stable branches): stable arcs alternating with empty arcs (the zone's
-    unstable sides). With a :class:`ZoneArcOrder` the arcs follow the zone's
-    boundary exactly: ring order, rotational direction, each arc from its pip
-    end to its anchor with the empty arc after the anchor leading to the next
-    branch's pip end, rotated so the anchors sit near the orbit points' real
-    angles. Without one, ``branch_cycle`` order, running clockwise when the
-    first branch's interior side is its right (a boundary traversed
-    clockwise has its interior on the right), counter-clockwise otherwise.
-    A period-1 fixed point is a circle half stable (the upper half), half
-    empty -- the line cartoon bent over (anchor at angle 0 when clockwise).
-    The radius is chosen so one ordinal step is :data:`ZONE_ARC_UNIT` of arc
-    length.
-    A fixed point with a parent is drawn inside its parent's circle, the
-    parent grown until the child and its drawing fit; circles without a
-    parent go side by side, left to right in partition order.
-
-    Args:
-        dual_graph: The :class:`~.DualGraph.DualGraph`.
-        interior_side: ``{branch_key: side}``, the side of each stable branch
-            that faces its resonance zone's interior (drawn INSIDE the
-            circle). A branch missing from it has its right side inside.
-        parents: ``{id(fixed_point): id(parent fixed point)}``: which circle
-            nests inside which.
-        arc_order: ``{id(fixed_point): ZoneArcOrder}``, read off each zone
-            (:func:`tanglepack.loom.cartoon_zones`).
-            Ignored for a fixed point whose order does not name exactly its
-            partitioned branches.
-
-    Returns:
-        The :class:`ZoneLayout`.
+    Fills ``layout.parents``, ``outside``, ``arcs``, ``circles`` and
+    ``keepout`` (see :func:`dual_graph_zone_layout` for the rules): one
+    circle per fixed point, sized so one ordinal step is
+    :data:`ZONE_ARC_UNIT` of arc, parents grown around their children, roots
+    side by side in ``branch_keys`` order. Shared by the dual-graph cartoon
+    and the trellis cartoon (:mod:`.TrellisCartoon`).
     """
-    partition = dual_graph.partition
-    layout = ZoneLayout()
     interior_side = interior_side or {}
-    order = _branch_order(partition)
+    order = _branch_order(branch_keys)
     known = set(order)
     layout.parents = {
         child: parent
         for child, parent in (parents or {}).items()
         if child in known and parent in known and child != parent
     }
-    for branch_key in partition.branch_keys:
-        layout.ranks[branch_key] = sorted({
-            float(cdist)
-            for side in partition.sides(branch_key)
-            for iv in partition.result(branch_key, side).intervals
-            for cdist in (iv.lo_cdist, iv.hi_cdist)
-        })
+    for branch_key in branch_keys:
         inside = interior_side.get(branch_key, "right")
         layout.outside[branch_key] = "left" if inside == "right" else "right"
 
@@ -2957,6 +2924,60 @@ def dual_graph_zone_layout(
     for child, parent in layout.parents.items():
         reach = radius[child] + _zone_extent(layout, order[child], inward=False) + 0.5 * ZONE_NEST_GAP
         layout.keepout[parent] = max(layout.keepout.get(parent, 0.0), float(reach))
+
+
+def dual_graph_zone_layout(
+    dual_graph: "DualGraph",
+    *,
+    interior_side: Optional[dict] = None,
+    parents: Optional[dict] = None,
+    arc_order: Optional[dict] = None,
+) -> ZoneLayout:
+    """
+    Lay out the circular-zone cartoon of a dual graph.
+
+    Each fixed point is a circle of ``2n`` equal arcs (``n`` partitioned
+    stable branches): stable arcs alternating with empty arcs (the zone's
+    unstable sides). With a :class:`ZoneArcOrder` the arcs follow the zone's
+    boundary exactly: ring order, rotational direction, each arc from its pip
+    end to its anchor with the empty arc after the anchor leading to the next
+    branch's pip end, rotated so the anchors sit near the orbit points' real
+    angles. Without one, ``branch_cycle`` order, running clockwise when the
+    first branch's interior side is its right (a boundary traversed
+    clockwise has its interior on the right), counter-clockwise otherwise.
+    A period-1 fixed point is a circle half stable (the upper half), half
+    empty -- the line cartoon bent over (anchor at angle 0 when clockwise).
+    The radius is chosen so one ordinal step is :data:`ZONE_ARC_UNIT` of arc
+    length.
+    A fixed point with a parent is drawn inside its parent's circle, the
+    parent grown until the child and its drawing fit; circles without a
+    parent go side by side, left to right in partition order.
+
+    Args:
+        dual_graph: The :class:`~.DualGraph.DualGraph`.
+        interior_side: ``{branch_key: side}``, the side of each stable branch
+            that faces its resonance zone's interior (drawn INSIDE the
+            circle). A branch missing from it has its right side inside.
+        parents: ``{id(fixed_point): id(parent fixed point)}``: which circle
+            nests inside which.
+        arc_order: ``{id(fixed_point): ZoneArcOrder}``, read off each zone
+            (:func:`tanglepack.loom.cartoon_zones`).
+            Ignored for a fixed point whose order does not name exactly its
+            partitioned branches.
+
+    Returns:
+        The :class:`ZoneLayout`.
+    """
+    partition = dual_graph.partition
+    layout = ZoneLayout()
+    for branch_key in partition.branch_keys:
+        layout.ranks[branch_key] = sorted({
+            float(cdist)
+            for side in partition.sides(branch_key)
+            for iv in partition.result(branch_key, side).intervals
+            for cdist in (iv.lo_cdist, iv.hi_cdist)
+        })
+    _zone_circles(layout, partition.branch_keys, interior_side, parents, arc_order)
 
     for branch_key in partition.branch_keys:
         cx, cy, _r = layout.circles[layout.arcs[branch_key][0]]
