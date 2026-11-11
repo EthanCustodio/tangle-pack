@@ -276,12 +276,15 @@ def test_one_zone_takes_the_pips_of_one_ring_only():
             define_resonance_zone(workbench, ids)
 
 
-def test_a_heteroclinic_pip_between_periods_bounds_no_zone():
-    """The restriction: a heteroclinic ring joins saddles of one period."""
-    A, C = bare_fixed_point(), bare_fixed_point(period=3)
+@pytest.mark.parametrize("other", [{"period": 3}, {"inversion": True}], ids=["period", "k_value"])
+def test_a_heteroclinic_pip_across_branch_cycles_bounds_no_zone(other):
+    """The restriction: a heteroclinic ring joins saddles of one period and one
+    ``k_value`` (an inversion saddle's two-branch cycle never pairs with a
+    one-branch one)."""
+    A, C = bare_fixed_point(), bare_fixed_point(**other)
     registry = IntersectionRegistry()
     pip = _pip(registry, C, A)
-    with pytest.raises(ValueError, match="periods"):
+    with pytest.raises(ValueError, match="k_value"):
         define_resonance_zone(SimpleNamespace(intersection_registry=registry), pip)
 
 

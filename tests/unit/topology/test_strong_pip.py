@@ -4,7 +4,7 @@ A strong pip is a property of one pair, the unstable manifold of q0's unstable
 fixed point and the stable branch cycle of its stable one, so only crossings of
 that pair may disqualify a candidate: a homoclinic q0's own tangle, or for a
 heteroclinic q0 in ``W^u(A) x W^s(B)`` the other ``W^u(A) x W^s(B)`` crossings
-(2026-11-10). A heteroclinic q0 needs A and B of one period. These tests pin
+(2026-11-10). A heteroclinic q0 needs A and B of one period and one k_value. These tests pin
 that behaviour with a hand-built registry so the disqualifier is present and
 unambiguous (the heavy Henon fixture happens to grow no such crossing).
 """
@@ -167,5 +167,23 @@ def test_heteroclinic_pip_across_periods_raises():
     trellis = _trellis(reg, fp1, fp3)
 
     with pytest.raises(ValueError, match="periods"):
+        is_strong_pip(trellis, q0)
+    assert classify_strong_pips(trellis, [q0]) == {}
+
+
+def test_heteroclinic_pip_across_k_values_raises():
+    """Two period-1 saddles, A with inversion (k = 2) and B without (k = 1): their
+    branch cycles do not advance together, so a crossing of ``W^u(A) x W^s(B)``
+    is no strong pip either."""
+    fp_a = bare_fixed_point(1, inversion=True)
+    fp_b = bare_fixed_point(1)
+    reg = IntersectionRegistry()
+    q0 = reg.add_synthetic(
+        (0.0, 0.0), unstable_cdist=1.0, stable_cdist=1.0,
+        manifold_a_key=(fp_a, "unstable", 0, 0), manifold_b_key=(fp_b, "stable", 0, 0),
+    )
+    trellis = _trellis(reg, fp_a, fp_b)
+
+    with pytest.raises(ValueError, match="k_value"):
         is_strong_pip(trellis, q0)
     assert classify_strong_pips(trellis, [q0]) == {}

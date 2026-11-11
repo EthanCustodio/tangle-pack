@@ -55,7 +55,7 @@ together with pips cutting the other fixed points' stable branches, e.g. the
 ``q0'`` on ``W^s(A)``. The pips whose cuts close one ring bound ONE zone
 (:func:`ring_groups` groups them, :func:`define_resonance_zone` takes them all);
 its :attr:`ResonanceZone.fixed_points` are the stable fixed points of its cuts,
-all of one period, and it is keyed by the first. A heteroclinic ring that stays
+all of one period and one ``k_value``, and it is keyed by the first. A heteroclinic ring that stays
 open is refused.
 """
 
@@ -599,7 +599,8 @@ def define_resonance_zone(
         ValueError: A pip has no stable side; several pips close separate rings
             (:func:`ring_groups`) or cut one branch twice (:func:`ring_cycles`);
             or the cuts hold a heteroclinic crossing and their ring does not
-            close (:func:`ring_closed`) or joins fixed points of different periods.
+            close (:func:`ring_closed`) or joins fixed points of different periods
+            or ``k_value``.
     """
     registry = workbench.intersection_registry
     ids = [intersection_ids] if isinstance(intersection_ids, Integral) else list(intersection_ids)
@@ -620,9 +621,13 @@ def define_resonance_zone(
             "one zone per ring"
         )
     if any(cut.manifold_a_key[0] is not cut.manifold_b_key[0] for cut in cut_intersections):
-        periods = {branch[0].period for cut in cut_intersections for branch in (cut.manifold_a_key, cut.manifold_b_key)}
-        if len(periods) > 1:
-            raise ValueError(f"the heteroclinic ring of pips {ids} joins fixed points of periods {sorted(periods)}")
+        cycles = {(branch[0].period, branch[0].k_value)
+                  for cut in cut_intersections for branch in (cut.manifold_a_key, cut.manifold_b_key)}
+        if len(cycles) > 1:
+            raise ValueError(
+                f"the heteroclinic ring of pips {ids} joins fixed points of (period, k_value) "
+                f"{sorted(cycles)}; its branch cycles must advance together"
+            )
         if not ring_closed(cut_intersections):
             raise ValueError(
                 f"the heteroclinic pips {ids} close no ring; pass every pip of the ring "

@@ -61,8 +61,9 @@ a homoclinic q0 that is its own tangle, as before; for a heteroclinic q0 in
 mapped back in B's stable cycle, while B's homoclinic crossings are kept out. The
 whole orbit of a period-p point counts as one "periodic point" here -- the
 restriction is on the FixedPoint objects, not on the orbit or branch index. A
-heteroclinic q0 needs A and B of the same period (``ValueError`` otherwise): the
-pair's branch cycles then advance together, and the crossings of one pair are
+heteroclinic q0 needs A and B of the same period and the same ``k_value``
+(:func:`same_branch_cycle`; ``ValueError`` otherwise): the pair's branch cycles
+then advance together, and the crossings of one pair are
 carried onto each other by the map. :func:`classify_strong_pips` skips such a
 crossing (it is no candidate); a direct call raises. Every detected crossing
 carries both keys (the Tangle asserts it), blast-born ones included.
@@ -92,10 +93,17 @@ from .TopologyResults import StrongPipResult
 from .Trellis import same_point
 
 if TYPE_CHECKING:
+    from ..numerics.FixedPoint import FixedPoint
     from .Trellis import Trellis
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+
+def same_branch_cycle(a: "FixedPoint", b: "FixedPoint") -> bool:
+    """True when ``a`` and ``b`` have one period and one ``k_value``, so their branch
+    cycles advance together (a heteroclinic pip or ring between them is defined)."""
+    return (a.period, a.k_value) == (b.period, b.k_value)
 
 
 def is_strong_pip(
@@ -141,7 +149,7 @@ def is_strong_pip(
     Raises:
         ValueError: If q0 has no stable branch, q0's branch is missing from
             the computed branch cycle, or q0 is heteroclinic between fixed
-            points of different periods.
+            points of different periods or ``k_value`` (:func:`same_branch_cycle`).
 
     Note:
         If q0 is itself the anchoring fixed point (canonical distance ~0 on both
@@ -157,11 +165,12 @@ def is_strong_pip(
         )
 
     fixed_point, unstable_fixed_point = branch_key[0], q0.manifold_a_key[0]
-    if unstable_fixed_point.period != fixed_point.period:
+    if not same_branch_cycle(unstable_fixed_point, fixed_point):
         raise ValueError(
             f"Intersection {intersection_id} joins fixed points of periods "
-            f"{unstable_fixed_point.period} and {fixed_point.period}; a heteroclinic "
-            "strong pip needs both of one period"
+            f"{unstable_fixed_point.period} and {fixed_point.period} (k_value "
+            f"{unstable_fixed_point.k_value} and {fixed_point.k_value}); a heteroclinic "
+            "strong pip needs both of one period and one k_value"
         )
     s0, u0 = q0.cdist_key("stable"), q0.cdist_key("unstable")
     pos_map, k = fixed_point.branch_position_map("stable")
@@ -247,8 +256,8 @@ def classify_strong_pips(
     Classify many intersections, sharing the branch-cycle cache (pure query).
 
     Returns a result per intersection without mutating the trellis, skipping the
-    anchors and the heteroclinic crossings between fixed points of different
-    periods (neither can be a strong pip). The qualifying
+    anchors and the heteroclinic crossings whose fixed points differ in period
+    or ``k_value`` (neither can be a strong pip, :func:`same_branch_cycle`). The qualifying
     results (``is_strong_pip is True``) are the strong-pip *candidates*; selecting
     the single actual strong pip from them is the caller's job — see
     Trellis.classify_strong_pips() / set_strong_pip().
@@ -273,8 +282,8 @@ def classify_strong_pips(
         if ix.is_anchor:
             logger.debug("Skipping anchor/fixed-point intersection %s", iid)
             continue
-        if ix.manifold_a_key[0].period != ix.manifold_b_key[0].period:
-            continue  # heteroclinic across periods: no strong pip (is_strong_pip raises)
+        if not same_branch_cycle(ix.manifold_a_key[0], ix.manifold_b_key[0]):
+            continue  # heteroclinic across branch cycles: no strong pip (is_strong_pip raises)
         results[iid] = is_strong_pip(trellis, iid, collision_rtol=collision_rtol)
 
     logger.debug(

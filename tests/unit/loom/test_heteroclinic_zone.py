@@ -6,12 +6,14 @@ heteroclinic tangle. ``q0 in W^u(B) x W^s(A)`` is A's pip and ``q0' in W^u(A) x
 W^s(B)`` is B's; together they close ONE ring ``A -u-> q0' -s-> B -u-> q0 -s->
 A``, the "diamond" around the origin. The pips are chosen here, test-side, as
 the balanced crossing (``min |log(c_s / c_u)|``) of the lowest-action
-heteroclinic orbit among the strong-pip candidates (the rule of
-``scripts/hydrogen_pipeline.py``).
+heteroclinic orbit among the strong-pip candidates (``cases.hydrogen_ring_pip``,
+the rule of ``scripts/hydrogen_pipeline.py``).
 
-One build per module (``area_cutoff = 1e-5``, 8 unstable and 7 stable steps)
-is saved once and loaded fresh by every test, so no test sees another's
-mutations. No word, letter, matrix or count is pinned.
+One build per module (``cases.build_hydrogen_ring`` up to its bridges:
+``area_cutoff = 1e-5``, 8 unstable and 7 stable steps) is saved once and loaded
+fresh by every test, so no test sees another's mutations. The per-layer laws run
+on the full build, zone and one blast included, as the law case
+``hydrogen_ring``. No word, letter, matrix or count is pinned.
 """
 
 from __future__ import annotations
@@ -21,38 +23,20 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from cases import build_hydrogen_ring, hydrogen_ring_pip
 from tanglepack import TangleSession
 from tanglepack.examples.hydrogen.hydrogen_map import HydrogenSystem
 from tanglepack.loom.Blast import _registered_orbit
 from tanglepack.loom.ResonanceZone import ring_closed, ring_cycles
 
-ORIENTATION_A = {"unstable": np.array([-1.0, -1.5]), "stable": np.array([-1.0, 1.5])}
-ORIENTATION_B = {stability: -direction for stability, direction in ORIENTATION_A.items()}
-AREA_CUTOFF = 1e-5
-UNSTABLE_STEPS, STABLE_STEPS = 8, 7
-
 
 @pytest.fixture(scope="module")
 def saved(tmp_path_factory) -> tuple[HydrogenSystem, str]:
-    """The heteroclinic tangle up to its bridges, saved once: ``(system, path)``."""
-    system = HydrogenSystem(3.5, 1.0)
-    v_star = system.find_fixed_point()
-    session = TangleSession(system.map, system.map_inverse, system.jacobian,
-                            area_cutoff=AREA_CUTOFF, workers=1)
-    fps = [session.construct_fixed_point(v_star), session.construct_fixed_point(-v_star)]
-    for fp, orientation in zip(fps, (ORIENTATION_A, ORIENTATION_B)):
-        session.orient_eigenvectors(fp, orientation)
-        session.initialize_both_manifolds(fp)
-        session.grow_n_times(fp, "unstable", num_iterations=UNSTABLE_STEPS)
-        session.grow_n_times(fp, "stable", num_iterations=STABLE_STEPS)
-    session.compute_intersections(fps)
-    for fp in fps:
-        session.trim_stable_manifolds(fp)
-    for fp in fps:
-        session.create_bridges(fp)
+    """The heteroclinic tangle up to its bridges (``cases.build_hydrogen_ring``), saved once."""
+    session = build_hydrogen_ring(through="bridges").session
     path = str(tmp_path_factory.mktemp("hydrogen") / "heteroclinic")
     session.save(path)
-    return system, path
+    return HydrogenSystem(3.5, 1.0), path
 
 
 @pytest.fixture
@@ -62,19 +46,7 @@ def tangle(saved) -> tuple[TangleSession, object, object, int, int]:
     session = TangleSession.load(path, system.map, system.map_inverse, system.jacobian)
     session.workers = 1
     A, B = session.fixed_points
-    return session, A, B, _balanced_pip(session, B, A), _balanced_pip(session, A, B)
-
-
-def _balanced_pip(session: TangleSession, unstable_fp, stable_fp) -> int:
-    """The balanced candidate of the lowest-action ``W^u(unstable_fp) x W^s(stable_fp)`` orbit."""
-    registry = session.workbench.intersection_registry
-    candidates = [
-        iid for iid in session.trellis(session.fixed_points).strong_pip_candidates
-        if registry[iid].manifold_a_key[0] is unstable_fp and registry[iid].manifold_b_key[0] is stable_fp
-    ]
-    action = {iid: registry[iid].stable_cdist * registry[iid].unstable_cdist for iid in candidates}
-    primary = [iid for iid in candidates if action[iid] < min(action.values()) * (1 + 1e-3)]
-    return min(primary, key=lambda iid: abs(np.log(registry[iid].stable_cdist / registry[iid].unstable_cdist)))
+    return session, A, B, hydrogen_ring_pip(session, B, A), hydrogen_ring_pip(session, A, B)
 
 
 def _depth(session: TangleSession, fp) -> int:

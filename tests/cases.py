@@ -1,4 +1,4 @@
-"""The tests-only case builders: every Hénon tangle the suite builds, frozen here.
+"""The tests-only case builders: every tangle the suite builds, frozen here.
 
 Each builder returns a :class:`Case`: the session, its fixed points (outermost
 first), the chosen strong pips, the resonance zones it made and the
@@ -71,6 +71,13 @@ Cases:
   below the resolution threshold, outside N, B1): the deep runs every
   non-mutating law holds on since WP10 (two crossings on one segment used to
   cut a bridge past its own end there; two laws over-claimed on p3).
+* ``hydrogen_ring`` -- the hydrogen Poincare map at ``B = 3.5, E = 1``
+  (``tanglepack.examples.hydrogen``), NOT a Hénon map: two period-1 saddles
+  swapped by ``-I``, 8 unstable / 7 stable steps at ``area_cutoff = 1e-5``,
+  each one's pip a heteroclinic crossing on its stable manifold, the pair
+  bounding ONE ring zone (the diamond around the origin), blasted once
+  (heteroclinic-pip, 2026-11-10). The law tier's one trellis cut at
+  heteroclinic pips; every class joins the two saddles.
 * ``near_tangency`` -- the period-1 ``b = 1`` saddle at ``k = -0.999``, close to
   the saddle-centre bifurcation at ``k = -1`` where the splitting angle is
   exponentially small, each arm grown to 20 fixed-point separations of
@@ -245,7 +252,7 @@ class CaseExpect:
 @dataclass
 class Case:
     """
-    One built Hénon tangle.
+    One built tangle.
 
     Attributes:
         name: The case name (a key of :data:`BUILDERS`, or a variant label).
@@ -1097,6 +1104,92 @@ def build_near_tangency() -> Case:
 
 
 # --------------------------------------------------------------------------- #
+# The hydrogen ring: a zone bounded by two heteroclinic pips
+# --------------------------------------------------------------------------- #
+def hydrogen_ring_pip(session: TangleSession, unstable_fp: "FixedPoint", stable_fp: "FixedPoint") -> int:
+    """
+    The balanced candidate of the lowest-action ``W^u(unstable_fp) x W^s(stable_fp)`` orbit.
+
+    The rule of ``scripts/hydrogen_pipeline.py``: among the selection trellis's
+    strong-pip candidates of that pair, the orbit of least ``c_s * c_u`` (to
+    1e-3), and on it the crossing of least ``|log(c_s / c_u)|``.
+
+    Args:
+        session: The session holding both saddles.
+        unstable_fp: The fixed point of the pip's unstable branch.
+        stable_fp: The fixed point of its stable branch (whose pip it is).
+
+    Returns:
+        The pip's registry id.
+    """
+    registry = session.workbench.intersection_registry
+    candidates = [
+        iid for iid in session.trellis(session.fixed_points).strong_pip_candidates
+        if registry[iid].manifold_a_key[0] is unstable_fp and registry[iid].manifold_b_key[0] is stable_fp
+    ]
+    action = {iid: registry[iid].stable_cdist * registry[iid].unstable_cdist for iid in candidates}
+    primary = [iid for iid in candidates if action[iid] < min(action.values()) * (1 + 1e-3)]
+    return min(primary, key=lambda iid: abs(np.log(registry[iid].stable_cdist / registry[iid].unstable_cdist)))
+
+
+def build_hydrogen_ring(*, blasts: int = 1, through: Stage = "partitioned") -> Case:
+    """
+    The hydrogen atom at ``B = 3.5, E = 1``: one zone bounded by two heteroclinic pips.
+
+    Two period-1 saddles ``A = (v*, 0)`` and ``B = (-v*, 0)``, swapped by
+    ``-I``, 8 unstable / 7 stable steps at ``area_cutoff = 1e-5``, ``workers = 1``;
+    the pip of each is the balanced crossing of the lowest-action orbit of
+    ``W^u(other) x W^s(own)`` (:func:`hydrogen_ring_pip`), and the two close
+    ONE ring zone, the diamond around the origin (heteroclinic-pip,
+    2026-11-10), blasted ``blasts`` times with both saddles' bridges at
+    ``ZONE_MIN_SEPARATION``.
+
+    Args:
+        blasts: Single-iteration blasts of the ring zone.
+        through: A stage before ``"zones"`` stops after the bridges (no
+            pip, no zone); ``"zones"`` or ``"partitioned"`` runs every stage.
+
+    Returns:
+        The case ``"hydrogen_ring"``, fixed points ``[A, B]``.
+    """
+    from tanglepack.examples.hydrogen.hydrogen_map import HydrogenSystem
+
+    area_cutoff = 1e-5
+    system = HydrogenSystem(3.5, 1.0)
+    v_star = system.find_fixed_point()
+    session = TangleSession(system.map, system.map_inverse, system.jacobian,
+                            area_cutoff=area_cutoff, workers=1)
+    fps = [session.construct_fixed_point(v_star), session.construct_fixed_point(-v_star)]
+    orientation_a = {"unstable": np.array([-1.0, -1.5]), "stable": np.array([-1.0, 1.5])}
+    for fp, orientation in zip(fps, (orientation_a, {s: -d for s, d in orientation_a.items()})):
+        session.orient_eigenvectors(fp, orientation)
+        session.initialize_both_manifolds(fp)
+        session.grow_n_times(fp, "unstable", num_iterations=8)
+        session.grow_n_times(fp, "stable", num_iterations=7)
+    session.compute_intersections(fps)
+    for fp in fps:
+        session.trim_stable_manifolds(fp)
+    for fp in fps:
+        session.create_bridges(fp)
+    expect = CaseExpect(periods=(1, 1), area_cutoff=area_cutoff, n_tangles=2,
+                        blasts=blasts, heteroclinic=True)
+    case = Case(name="hydrogen_ring", session=session, fixed_points=fps, pips=[None, None],
+                expect=expect, stage="bridges")
+    if not _reached(through, "zones"):
+        return case
+    A, B = fps
+    pips = [hydrogen_ring_pip(session, B, A), hydrogen_ring_pip(session, A, B)]
+    session.add_resonance_zones(pips)
+    (zone,) = session.resonance_zones.values()
+    for _ in range(blasts):
+        _blast(session, zone, fps)
+    session.topology()
+    case.pips = [session.workbench.intersection_registry.find(session.chosen_strong_pip(fp)) for fp in fps]
+    case.zones, case.stage = [zone], through
+    return case
+
+
+# --------------------------------------------------------------------------- #
 # The blast series (D1): blast, recompute the topology from scratch, compare
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
@@ -1344,6 +1437,7 @@ LAW_CASES: tuple[str, ...] = (
     "inversion_two_blasts",
     "inversion_period2",
     "heteroclinic",
+    "hydrogen_ring",
 )
 
 def _named(case: Case, name: str) -> Case:
@@ -1382,6 +1476,7 @@ BUILDERS: Mapping[str, Callable[[], Case]] = MappingProxyType(
         "p3_coarse_blasts": build_period3_coarse_blasts,
         "near_tangency": build_near_tangency,
         "k28_deep_blast_sliver": build_k28_deep_blast_sliver,
+        "hydrogen_ring": build_hydrogen_ring,
     }
 )
 
@@ -1481,11 +1576,11 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
         ("arrangement_preimage_inverts_image", "k10"): "no region has a closed image",
         **{
             ("partition_singletons", name): _NO_PINCH
-            for name in ("k10", "k28_two_blasts")
+            for name in ("k10", "k28_two_blasts", "hydrogen_ring")
         },
         **{
             ("anchor_opening_faces_its_hole", name): _NO_ANCHOR_OPENING
-            for name in ("k10", "k28_two_blasts")
+            for name in ("k10", "k28_two_blasts", "hydrogen_ring")
         },
         **{
             ("iterated_cut_provenance", name): _NO_IMAGE_BRIDGES
@@ -1506,7 +1601,8 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
         **{
             ("walks_avoid_disjoint_images", name): _NO_DISJOINT_WALLS
             for name in (
-                "k10", "k28_one_blast", "k28_two_blasts", "p3", "inversion", "inversion_period2"
+                "k10", "k28_one_blast", "k28_two_blasts", "p3", "inversion", "inversion_period2",
+                "hydrogen_ring",
             )
         },
         **{
@@ -1515,6 +1611,13 @@ NOT_APPLICABLE: Mapping[tuple[str, str], str] = MappingProxyType(
                 "k28_one_blast", "k28_two_blasts", "p3", "nested", "nested_inner_blasts",
                 "inversion_one_blast", "inversion_period2",
             )
+        },
+        **{
+            (law, "hydrogen_ring"): (
+                "every class of the ring joins the two saddles' elements (tangle None): "
+                "no class belongs to one tangle"
+            )
+            for law in ("anchor_bridge_class_leads_its_tangle", "tangles_in_case_order")
         },
         **{
             ("k10_is_the_full_shift", name): "the textbook answer is known for k=10 only"

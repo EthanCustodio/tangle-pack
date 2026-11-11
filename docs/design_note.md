@@ -241,7 +241,7 @@ classified on first read; restoring a remembered pip tests that one crossing onl
 pip is the candidate of smallest unstable cdist.
 
 **A heteroclinic pip (heteroclinic-pip, 2026-11-10).** `q0 in W^u(A) x W^s(B)` may be B's strong
-pip when A and B have the same period (the restriction; `is_strong_pip` raises otherwise and
+pip when A and B have the same period and the same `k_value` (the restriction, `same_branch_cycle`; `is_strong_pip` raises otherwise and
 `classify_strong_pips` skips such a crossing). Its disqualifiers are the other `W^u(A) x W^s(B)`
 crossings, mapped back in B's cycle; for a homoclinic q0 the pair rule is the old one, so no
 homoclinic number changed. The pip is the pip of its STABLE branch's fixed point (`Trellis.pips`
@@ -771,7 +771,7 @@ the pips whose cuts close one ring together (`ring_groups`, by `ring_cycles` ove
 bound ONE zone, e.g. the diamond `A -u-> q0 -s-> B -u-> q0' -s-> A`; it is keyed by its first pip's
 stable fixed point, `ResonanceZone.fixed_points` (derived from the cuts) holds all of them, storing
 it drops any zone sharing one, and each ring pip becomes its stable fixed point's chosen pip. A
-heteroclinic pip whose ring stays open, or a ring across periods, raises `ValueError`, and so do
+heteroclinic pip whose ring stays open, or a ring across periods or `k_value`s, raises `ValueError`, and so do
 pips of separate rings passed as one zone and two cuts on one branch (which would splice two rings
 into one cycle). A bridge of any of the ring's fixed points belongs to it (`classify_bridge`). Fixed
 points are constructed OUTERMOST first, so the period-1 saddle is `A` and tangle 0 (NEST-6). The inversion series loses classes at blast 6 by a genuine reference switch
