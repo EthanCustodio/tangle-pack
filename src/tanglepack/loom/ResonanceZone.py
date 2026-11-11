@@ -497,9 +497,10 @@ def ring_groups(registry: "IntersectionRegistry", intersection_ids: Iterable[int
     Returns:
         The groups, each in the order the ids were given, ordered by their first id.
     """
-    ids = list(dict.fromkeys(intersection_ids))
-    owners = [iid for iid in ids for _ in registry.iterate_orbit(iid)]
-    cuts = [registry[cut] for iid in ids for cut in registry.iterate_orbit(iid)]
+    orbits = {iid: registry.iterate_orbit(iid) for iid in intersection_ids}
+    ids = list(orbits)
+    owners = [iid for iid in ids for _ in orbits[iid]]
+    cuts = [registry[cut] for iid in ids for cut in orbits[iid]]
     group = {iid: {iid} for iid in ids}
     for cycle in ring_cycles(cuts):
         merged = set().union(*(group[owners[index]] for index in cycle))

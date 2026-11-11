@@ -14,7 +14,7 @@ import pytest
 
 from cases import build_k10, build_period3
 from helpers.fakes import bare_fixed_point
-from tanglepack.loom.ResonanceZone import ring_cycles, ring_order
+from tanglepack.loom.ResonanceZone import ring_closed, ring_cycles, ring_order
 from tanglepack.numerics.Intersection import Intersection
 from tanglepack.numerics.geometry import polyline_midpoint
 from tanglepack.topology.TopologyResults import Arc
@@ -213,6 +213,19 @@ def test_a_missing_iterate_leaves_the_ring_open():
     cuts = [_cut(fp, (0, 0), (1, 0)), _cut(fp, (1, 0), (2, 0))]
     assert ring_cycles(cuts) == [[0, 1]]
     assert ring_order(cuts) == []
+
+
+def test_a_heteroclinic_ring_closes_only_through_both_saddles():
+    """The diamond: ``q0' in W^u(B) x W^s(A)`` and ``q0 in W^u(A) x W^s(B)`` close one
+    ring by FULL key (fixed point included); either alone stays open."""
+    A, B = bare_fixed_point(), bare_fixed_point()
+    on_a = Intersection.synthetic((0.0, 0.0), 1.0, 1.0, manifold_a_key=(B, "unstable", 0, 0),
+                                  manifold_b_key=(A, "stable", 0, 0))
+    on_b = Intersection.synthetic((0.0, 0.0), 1.0, 1.0, manifold_a_key=(A, "unstable", 0, 0),
+                                  manifold_b_key=(B, "stable", 0, 0))
+    assert ring_closed([on_a, on_b]) and ring_cycles([on_a, on_b]) == [[0, 1]]
+    assert not ring_closed([on_a]) and not ring_closed([on_b])
+    assert ring_order([on_a]) == []
 
 
 def test_p3_ring_order_visits_each_stable_branch_once_in_ring_order():
