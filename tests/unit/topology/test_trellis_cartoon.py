@@ -4,7 +4,9 @@ Drawing properties over the law cases (each built fresh, function scope):
 one representative per class, ranks in stable-cdist order, the route kind
 read off the rows, the drawn selection, the iterates as image chains, and the
 planarity law on the single-branch cases (two unstable curves never cross, so
-neither do their cartoon curves). No case fact is pinned.
+neither do their cartoon curves). No law case has a hairpin (a one-branch
+bridge with two rows), so the fold is held to the same law on synthetic nested
+ends, and a flipped row makes one. No case fact is pinned.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 from cases import BUILDERS, LAW_CASES  # noqa: E402
-from tanglepack.topology import class_representatives, plot_trellis_cartoon  # noqa: E402
+from tanglepack.topology import TrellisCartoon, class_representatives, plot_trellis_cartoon  # noqa: E402
 from tanglepack.topology.MinimalTrellis import image_chain  # noqa: E402
 from tanglepack.topology.StablePartition import rows_of_bridge  # noqa: E402
 
@@ -158,6 +160,76 @@ def test_single_branch_cartoon_is_planar(name: str, ax) -> None:
         trim_a = slice(3 if id_a[0] in id_b else 0, -3 if id_a[1] in id_b else None)
         trim_b = slice(3 if id_b[0] in id_a else 0, -3 if id_b[1] in id_a else None)
         assert _crossings(a[trim_a], b[trim_b]) == 0, (id_a, id_b)
+
+
+def _random_nesting(count: int, rng: np.random.Generator) -> list[tuple[int, int]]:
+    """A random non-crossing perfect matching of ``0..count-1`` (a random Dyck word)."""
+    pairs, stack, opened = [], [], 0
+    for i in range(count):
+        if stack and (opened == count // 2 or rng.random() < 0.5):
+            pairs.append((stack.pop(), i))
+        else:
+            stack.append(i)
+            opened += 1
+    return pairs
+
+
+def _past_the_pip_end(layout, curve: np.ndarray) -> np.ndarray:
+    """The angular progress of a curve along its branch's arc: 0 at the anchor, 1 at the pip end."""
+    (branch_key,) = layout.order
+    fp_id, alpha, sweep = layout.zone.arcs[branch_key]
+    cx, cy, _radius = layout.zone.circles[fp_id]
+    return np.unwrap(np.arctan2(curve[:, 1] - cy, curve[:, 0] - cx) - alpha) / sweep
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_folded_hairpins_and_u_arcs_of_one_branch_never_cross(seed: int, ax) -> None:
+    """Arcs nesting on the unfolded line give curves that never cross, hairpins included.
+
+    No law case has a one-branch bridge with two rows, so the fold is held to
+    the planarity law on synthetic ends: every rank on both rows of a branch,
+    matched at random without crossing on the unfolded line (``w = 0`` the pip
+    end). A matched pair straddling ``w = 0`` is a hairpin; it must run past
+    the pip end and never wrap the anchor.
+    """
+    layout = _draw(BUILDERS["k10"]().session.topology(), ax)
+    (branch_key,) = layout.order
+    chart = TrellisCartoon._Chart(layout.zone, branch_key, 9)
+    rows = sorted(chart.sigma)
+    ends = sorted((chart.unfolded(rank, row), rank, row) for rank in range(1, 9) for row in rows)
+    # The outermost pair joins the two rows' last ranks: one hairpin at least.
+    inner = _random_nesting(len(ends) - 2, np.random.default_rng(seed))
+    pairs = [(0, len(ends) - 1)] + [(i + 1, j + 1) for i, j in inner]
+    curves = {(i, j): chart.arc(ends[i][0], ends[j][0]) for i, j in pairs}
+    hairpins = [(i, j) for i, j in pairs if ends[i][2] != ends[j][2]]
+    assert hairpins
+
+    for i, j in hairpins:
+        progress = _past_the_pip_end(layout, curves[i, j])
+        assert progress.max() > 1.0 and progress.min() >= 0.0, (ends[i], ends[j])
+    for (a, curve_a), (b, curve_b) in itertools.combinations(curves.items(), 2):
+        # Two ends at one rank on the two rows are one crossing: touching there, not crossing.
+        assert _crossings(curve_a, curve_b) == 0, (a, b)
+
+
+def test_a_one_branch_bridge_with_two_rows_is_a_hairpin(monkeypatch, ax) -> None:
+    """Flipping one end's row turns a bridge's U-arc into a hairpin round its pip end."""
+    topology = BUILDERS["k10"]().session.topology()
+    layout = _draw(topology, ax)
+    bridge_id, kind = next(iter(layout.bridges.items()))
+    assert kind == "u"
+    flip = {"left": "right", "right": "left"}
+    signed_row = TrellisCartoon.row_of_end
+
+    def row_of_end(trellis, pair, endpoint):
+        row = signed_row(trellis, pair, endpoint)
+        return flip[row] if pair == bridge_id and endpoint == "second" else row
+
+    monkeypatch.setattr(TrellisCartoon, "row_of_end", row_of_end)
+    layout = _draw(topology, ax, bridge_ids=[bridge_id])
+    assert layout.bridges == {bridge_id: "hairpin"}
+    progress = _past_the_pip_end(layout, layout.paths[bridge_id])
+    assert progress.max() > 1.0 and progress.min() >= 0.0
 
 
 def test_representatives_need_the_minimal_trellis(ax) -> None:

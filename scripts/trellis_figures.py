@@ -51,6 +51,7 @@ from henon_minimal_dual_graph import _apply_plane_view, _draw_stable  # noqa: E4
 from tanglepack import TangleSession  # noqa: E402
 from tanglepack.loom import plot_trellis_cartoon  # noqa: E402
 from tanglepack.topology import plotting  # noqa: E402
+from tanglepack.topology.TrellisCartoon import pip_orbit  # noqa: E402
 
 logger = logging.getLogger("trellis_figures")
 
@@ -67,19 +68,9 @@ TANGLE_LINEWIDTH = 0.4
 PAIR_COLORS = plt.get_cmap("tab10").colors
 
 
-def _pip_orbit(trellis) -> list[tuple[int, int]]:
-    """``(j, crossing id)`` of every registered pip-orbit point in the trellis."""
-    return [
-        (j, image)
-        for pip in trellis.pips.values()
-        for j in range(trellis.registry[pip].manifold_b_key[0].k_value)
-        if (image := trellis.iterate(pip, j)) in trellis
-    ]
-
-
 def _draw_pip_orbit(ax, trellis, *, labels: bool) -> None:
     """The chosen pips and their orbits as large open rings, ``q_j`` beside each."""
-    for j, crossing in _pip_orbit(trellis):
+    for j, crossing in pip_orbit(trellis):
         x, y = trellis.intersection(crossing).get_point()
         ax.scatter(x, y, s=150, facecolors="none", edgecolors="green", linewidths=1.5, zorder=20)
         if labels:

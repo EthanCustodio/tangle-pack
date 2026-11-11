@@ -31,8 +31,9 @@ Dev Notes:
     (``r`` the rank, ``E`` one rank past the last: the pip end is ``w = 0``),
     draw every arc as a flat half ellipse over its interval in the upper half
     ``w``-plane (the semicircles squeezed vertically, so they still do not
-    cross, and only an arc near ``w = 0`` folds round the pip end), and fold the half plane onto the plane slit along the branch
-    by doubling the angle (``|w| e^{i arg w} -> |w| e^{2 i arg w}``). The fold
+    cross, and only an arc near ``w = 0`` folds round the pip end), and fold
+    the half plane onto the plane slit along the branch by doubling the angle
+    (``|w| e^{i arg w} -> |w| e^{2 i arg w}``). The fold
     is a bijection of the open half plane onto the slit plane and every later
     step (angle and radius along the circle, the monotone compressions that
     keep a curve within its circle's room) is monotone, so arcs that do not
@@ -256,8 +257,18 @@ def _end(trellis: "Trellis", pair, endpoint: Literal["first", "second"]) -> tupl
     return key, branch_key, row_of_end(trellis, pair, endpoint)
 
 
+def pip_orbit(trellis: "Trellis") -> list[tuple[int, int]]:
+    """``(j, crossing id)`` of every registered pip-orbit point ``f^j(q0)``, ``j < k``, in the trellis."""
+    return [
+        (j, image)
+        for pip in trellis.pips.values()
+        for j in range(trellis.registry[pip].manifold_b_key[0].k_value)
+        if (image := trellis.iterate(pip, j)) in trellis
+    ]
+
+
 def _rank_crossings(
-    trellis: "Trellis", arcs: Iterable, holes: list, compact: bool
+    trellis: "Trellis", arcs: Iterable, orbit: set, holes: list, compact: bool
 ) -> dict:
     """``{branch_key: [point key, ...]}`` in stable-cdist order, anchor first."""
     ranked: dict = {}
@@ -271,11 +282,8 @@ def _rank_crossings(
         for endpoint in ("first", "second"):
             key, branch_key, _row = _end(trellis, pair, endpoint)
             ranked[branch_key].add(key)
-    for pip in trellis.pips.values():
-        for j in range(trellis.registry[pip].manifold_b_key[0].k_value):
-            image = trellis.iterate(pip, j)
-            if image in trellis:
-                ranked[trellis.intersection(image).manifold_b_key].add(image)
+    for crossing in orbit:
+        ranked[trellis.intersection(crossing).manifold_b_key].add(crossing)
     for hole in holes:
         pair = _bridge_order(trellis, hole.bounding_ids)
         for endpoint in ("first", "second"):
@@ -466,8 +474,9 @@ def plot_trellis_cartoon(
     shown_holes = list(trellis.holes) if holes else []
     arcs = drawn + [pair for steps in images.values() for pairs in steps for pair in pairs]
 
+    orbit = {crossing for _j, crossing in pip_orbit(trellis)}
     zone = ZoneLayout()
-    order = _rank_crossings(trellis, arcs, shown_holes, compact)
+    order = _rank_crossings(trellis, arcs, orbit, shown_holes, compact)
     for branch_key, keys in order.items():
         zone.ranks[branch_key] = [
             float(trellis.intersection(k[0] if isinstance(k, tuple) else k).stable_cdist)
@@ -486,7 +495,7 @@ def plot_trellis_cartoon(
         zone=zone, points=points, order=order, iterates=images,
         representatives={name: b for name, b in representatives.items() if b in shown},
     )
-    extent = _draw_frame(target, trellis, zone, order, points, dynamics)
+    extent = _draw_frame(target, zone, order, points, orbit, dynamics)
 
     palette = class_colors(dynamics, refined=False) if dynamics is not None else {}
     arrowed = set(layout.representatives.values())
@@ -527,7 +536,8 @@ def plot_trellis_cartoon(
                 )
     for hole in shown_holes:
         pair = _bridge_order(trellis, hole.bounding_ids)
-        extent.append(_draw_hole(target, trellis, zone, charts, ranks, points, hole, pair in enclosed_ids))
+        extent.append(_draw_hole(target, trellis, zone, charts, ranks, points, hole, pair,
+                                 pair in enclosed_ids))
 
     xy = np.array(extent, dtype=float).reshape(-1, 2)
     lo, hi = xy.min(axis=0), xy.max(axis=0)
@@ -539,7 +549,7 @@ def plot_trellis_cartoon(
     return layout
 
 
-def _draw_frame(target, trellis: "Trellis", zone: ZoneLayout, order: dict, points: dict,
+def _draw_frame(target, zone: ZoneLayout, order: dict, points: dict, orbit: set,
                 dynamics: Optional["SymbolicDynamics"]) -> list:
     """The circles, stable arcs, branch codes, anchors and pip-orbit points; returns their extent."""
     extent: list = []
@@ -548,12 +558,6 @@ def _draw_frame(target, trellis: "Trellis", zone: ZoneLayout, order: dict, point
         target.plot(ring[:, 0], ring[:, 1], **ZONE_EMPTY_STYLE)
         extent.extend([(cx - r, cy - r), (cx + r, cy + r)])
     naming = getattr(dynamics, "naming", None)
-    pip_orbit = {
-        image
-        for pip in trellis.pips.values()
-        for j in range(trellis.registry[pip].manifold_b_key[0].k_value)
-        if (image := trellis.iterate(pip, j)) in trellis
-    }
     for branch_key, (fp_id, alpha, sweep) in zone.arcs.items():
         cx, cy, r = zone.circles[fp_id]
         stable = _arc_points(cx, cy, r, alpha, alpha + sweep)
@@ -574,7 +578,7 @@ def _draw_frame(target, trellis: "Trellis", zone: ZoneLayout, order: dict, point
                 xytext=(-6, -10), ha="right", va="top", fontsize=10, zorder=10,
             )
         for point in order[branch_key]:
-            if point in pip_orbit:
+            if point in orbit:
                 target.scatter(*points[point], s=60, facecolors="none", edgecolors=STRONG_PIP_STYLE["color"],
                                linewidths=1.5, zorder=STRONG_PIP_STYLE["zorder"])
     return extent
@@ -594,12 +598,13 @@ def _arrow(target, curve: NDArray[np.float64], direction: int, color: str) -> No
 
 
 def _draw_hole(target, trellis: "Trellis", zone: ZoneLayout, charts: dict, ranks: dict,
-               points: dict, hole, enclosed: bool) -> tuple:
-    """One hole inside its bridge's lobe, near its own crossing, labelled with its iterate."""
-    pair = _bridge_order(trellis, hole.bounding_ids)
+               points: dict, hole, pair: tuple, enclosed: bool) -> tuple:
+    """One hole inside its bridge's lobe (``pair``, in bridge order), near its own crossing,
+    labelled with its iterate."""
     _kind, curve = _route(trellis, zone, charts, ranks, points, pair, enclosed)
-    on_bridge = curve[int((0.3 if pair[0] == hole.near_intersection_id else 0.7) * (len(curve) - 1))]
-    _near, branch_key, _row = _end(trellis, pair, "first" if pair[0] == hole.near_intersection_id else "second")
+    near_first = pair[0] == hole.near_intersection_id
+    on_bridge = curve[int((0.3 if near_first else 0.7) * (len(curve) - 1))]
+    _near, branch_key, _row = _end(trellis, pair, "first" if near_first else "second")
     cx, cy, radius = zone.circles[zone.arcs[branch_key][0]]
     radial = on_bridge - (cx, cy)
     on_stable = np.array([cx, cy]) + radius * radial / np.linalg.norm(radial)

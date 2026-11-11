@@ -16,11 +16,14 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from cases import build_k10, build_nested  # noqa: E402
-from tanglepack.loom import plot_trellis_cartoon  # noqa: E402
+from tanglepack.loom import cartoon_zones, plot_trellis_cartoon  # noqa: E402
+from tanglepack.topology import TrellisCartoon  # noqa: E402
+from tanglepack.topology.plotting import cartoon_enclosures  # noqa: E402
 
 
 def test_write_trellis_figures_writes_every_panel(tmp_path: Path) -> None:
@@ -55,3 +58,36 @@ def test_loom_cartoon_lays_nested_circles_out_on_the_zones() -> None:
             assert crossing in layout.points or any(
                 key[0] == crossing for key in layout.points if isinstance(key, tuple)
             )
+
+
+
+def test_loom_cartoon_routes_the_enclosing_lobes_the_long_way() -> None:
+    """The wrapper's enclosures reach the drawing: every enclosing lobe is drawn as
+    with ``cartoon_enclosures`` passed by hand, and some differ from the short way."""
+    session = build_nested().session
+    topology, zones = session.topology(), list(session.resonance_zones.values())
+    trellis = topology.trellis
+    interior, parents, order = cartoon_zones(zones, session.workbench)
+    enclosures = cartoon_enclosures(
+        trellis, [b.id for b in trellis.bridges if b.id is not None], parents, session.fixed_points
+    )
+    assert enclosures
+    fig, ax = plt.subplots()
+    try:
+        wrapped = plot_trellis_cartoon(topology, zones, session.workbench, ax=ax, show="all")
+        long_way, short_way = (
+            TrellisCartoon.plot_trellis_cartoon(
+                trellis, topology.classes, topology.dynamics, minimal=topology.minimal, ax=ax,
+                show="all", interior_side=interior, parents=parents, arc_order=order,
+                enclosures=given,
+            )
+            for given in (enclosures, None)
+        )
+    finally:
+        plt.close(fig)
+    for bridge_id in enclosures:
+        np.testing.assert_array_equal(wrapped.paths[bridge_id], long_way.paths[bridge_id])
+    assert any(
+        not np.allclose(long_way.paths[bridge_id], short_way.paths[bridge_id])
+        for bridge_id in enclosures
+    )
