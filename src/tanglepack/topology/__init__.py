@@ -75,6 +75,11 @@ from .SymbolicDynamics import (
     letter,
     symbolic_dynamics,
 )
+from .TrellisCartoon import (
+    TrellisCartoonLayout,
+    class_representatives,
+    plot_trellis_cartoon,
+)
 from .StablePartition import check_holes_share_bridge_side
 from .diagnostics import bridge_row_diagnosis
 
@@ -130,4 +135,7 @@ __all__ = [
     "ZoneArcOrder",
     "ZoneLayout",
     "dual_graph_zone_layout",
+    "TrellisCartoonLayout",
+    "class_representatives",
+    "plot_trellis_cartoon",
 ]
