@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Iterable, Literal, Mapping, Optional, TYPE_CHECKING
+from typing import Iterable, Literal, Mapping, Optional, Sequence, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
@@ -29,7 +29,7 @@ from ..topology.PartitionFamily import HomotopyPartition, IteratedHomotopyPartit
 from ..topology.SymbolicDynamics import SymbolicDynamics
 from ..topology.Trellis import Trellis, _is_single_fixed_point
 from . import persist
-from .ResonanceZone import ResonanceZone, define_resonance_zone
+from .ResonanceZone import ResonanceZone, define_resonance_zone, ring_groups
 from .Blast import BlastResult, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
 from .Topology import Topology
@@ -709,7 +709,19 @@ class TangleSession:
 
     def set_strong_pip(self, fixed_point: "FixedPoint", intersection_id: int) -> int:
         """Choose ``intersection_id`` as the strong pip of ``fixed_point``, for
-        every later generation too (it is remembered as a crossing)."""
+        every later generation too (it is remembered as a crossing).
+
+        Raises:
+            ValueError: The crossing's stable branch is another fixed point's: a
+                pip, heteroclinic ones included, is the pip of its stable
+                branch's fixed point; or it is not a strong-pip candidate.
+        """
+        owner = self.workbench.intersection_registry[intersection_id].manifold_b_key[0]
+        if owner is not fixed_point:
+            raise ValueError(
+                f"intersection {intersection_id} lies on a stable branch of {owner!r}, not "
+                f"{fixed_point!r}: choose it as the strong pip of {owner!r}"
+            )
         trellis = self.trellis(fixed_point)
         trellis.set_strong_pip(intersection_id)
         self._strong_pips[fixed_point] = trellis.strong_pip_intersection
@@ -739,7 +751,7 @@ class TangleSession:
 
     def resonance_zone(
         self,
-        intersection_id: int,
+        intersection_id: "int | Sequence[int]",
         fixed_points: Optional[Iterable["FixedPoint"]] = None,
         *,
         recompute: bool = True,
@@ -749,8 +761,9 @@ class TangleSession:
 
         The zone is stored in :attr:`resonance_zones` keyed by its fixed point
         (one zone per fixed point, inversion included), so a later call for a
-        different fixed point does not overwrite it. The zone's pip becomes
-        that fixed point's chosen strong pip (the zone is cut at it) when it is
+        different fixed point does not overwrite it; a stored zone sharing one of
+        its :attr:`~ResonanceZone.fixed_points` is dropped. Each zone pip becomes
+        its stable fixed point's chosen strong pip (the zone is cut at it) when it is
         a strong-pip candidate on the trimmed trellis; otherwise the zone is
         still stored, the previous choice stays and a WARNING says so.
         Trims are cumulative (each sets a manifold's tail), so building zones for
@@ -759,7 +772,8 @@ class TangleSession:
         Trellis is rebuilt on the next :meth:`trellis` call.
 
         Args:
-            intersection_id: Registry id of the boundary pip (e.g. ``trellis.strong_pip``).
+            intersection_id: Registry id of the boundary pip (e.g. ``trellis.strong_pip``),
+                or the ids of the pips closing one heteroclinic ring.
             fixed_points: Fixed points to re-index on recompute. Defaults to all.
             recompute: If True (default), recompute intersections after trimming. Pass
                 False when batching several zones (see :meth:`add_resonance_zones`),
@@ -770,32 +784,38 @@ class TangleSession:
             The stored :class:`ResonanceZone`.
 
         Raises:
+            ValueError: A heteroclinic pip closes no ring with the others
+                (:func:`~tanglepack.loom.ResonanceZone.define_resonance_zone`).
             CurveReleased: A lean blast has freed curve (the trim recomputes
                 the crossings).
         """
         self.workbench._refuse_if_lean("resonance_zone")
-        pip = self.workbench.intersection_registry[intersection_id]
         rz = define_resonance_zone(
             self.workbench, intersection_id, fixed_points, recompute=recompute
         )
+        for key, other in list(self.resonance_zones.items()):
+            if any(fp in rz.fixed_points for fp in other.fixed_points):
+                del self.resonance_zones[key]
         self.resonance_zones[rz.key] = rz
-        # The trimmed trellis is built without the previous choice, which the
-        # trim may have cut away: only the zone's pip is tested here.
-        previous = self._strong_pips.pop(rz.key, None)
-        trellis = self.trellis(rz.key)
-        found = trellis.registry.find(pip)
-        if found is not None and trellis._is_candidate(found):
-            trellis.strong_pip = found  # tested just now, as _restore_strong_pip does
-            self._strong_pips[rz.key] = pip
-            return rz
-        logger.warning(
-            "the zone pip %d of %r is not a strong-pip candidate; the zone is "
-            "stored, the chosen strong pip is unchanged",
-            intersection_id, rz.key,
-        )
-        if previous is not None:
-            self._strong_pips[rz.key] = previous
-            self._restore_strong_pip(trellis)
+        # Each pip is tested on its fixed point's trimmed trellis, built without the
+        # previous choice, which the trim may have cut away.
+        for pip in rz.pips:
+            fixed_point = pip.manifold_b_key[0]
+            previous = self._strong_pips.pop(fixed_point, None)
+            trellis = self.trellis(fixed_point)
+            found = trellis.registry.find(pip)
+            if found is not None and trellis._is_candidate(found):
+                trellis.strong_pip = found  # tested just now, as _restore_strong_pip does
+                self._strong_pips[fixed_point] = pip
+                continue
+            logger.warning(
+                "the zone pip of %r (stable cdist %.6g on %s) is not a strong-pip "
+                "candidate; the zone is stored, the chosen strong pip is unchanged",
+                fixed_point, pip.stable_cdist, pip.manifold_b_key[1:],
+            )
+            if previous is not None:
+                self._strong_pips[fixed_point] = previous
+                self._restore_strong_pip(trellis)
         return rz
 
     def add_resonance_zones(
@@ -804,7 +824,7 @@ class TangleSession:
         fixed_points: Optional[Iterable["FixedPoint"]] = None,
         *,
         nesting: Optional[Mapping[int, int]] = None,
-    ) -> dict[tuple["FixedPoint", int], ResonanceZone]:
+    ) -> dict["FixedPoint", ResonanceZone]:
         """
         Define resonance zones for several pips at once (one recompute at the end).
 
@@ -812,22 +832,33 @@ class TangleSession:
         ``intersection_ids`` stays valid against the registry that exists now; a
         single recompute then re-indexes the whole co-indexed tangle with every trim
         in effect. Use this to build, e.g., the outer period-1 zone and the inner
-        period-3 zone together.
+        period-3 zone together. The pips are grouped by ring
+        (:func:`~tanglepack.loom.ResonanceZone.ring_groups`): a homoclinic pip
+        bounds its own zone, the pips of a heteroclinic ring bound ONE zone.
 
         Nesting is the caller's to declare and is never inferred: zones not named in
         ``nesting`` are not nested, however they overlap.
 
         Args:
-            intersection_ids: Boundary-pip registry ids, one per zone.
+            intersection_ids: Boundary-pip registry ids, one per zone, or every
+                pip of a heteroclinic ring.
             fixed_points: Fixed points to re-index on the final recompute. Defaults to all.
             nesting: ``{inner pip id: outer pip id}``, both in ``intersection_ids``.
 
         Returns:
             The :attr:`resonance_zones` mapping.
+
+        Raises:
+            ValueError: A heteroclinic pip's ring does not close.
         """
         ids = list(intersection_ids)
         # Trim only (no recompute) so the remaining ids keep their meaning.
-        zones = {iid: self.resonance_zone(iid, recompute=False) for iid in ids}
+        zones = {
+            iid: zone
+            for group in ring_groups(self.workbench.intersection_registry, ids)
+            for zone in [self.resonance_zone(group, recompute=False)]
+            for iid in group
+        }
         for inner, outer in (nesting or {}).items():
             zones[inner].inside = zones[outer].key
         if ids:
@@ -853,8 +884,9 @@ class TangleSession:
         Tests the bridge's representative midpoint against every stored zone's frozen
         boundary (boundary included). A zone holding a zone declared inside it that
         also contains the bridge gives way to that inner zone. Of zones that merely
-        overlap, the bridge belongs to its own fixed point's zone if that is one of
-        them, else to the first stored.
+        overlap, the bridge belongs to its own fixed point's zone (one whose
+        :attr:`~ResonanceZone.fixed_points` hold it) if that is one of them, else
+        to the first stored.
 
         Args:
             bridge: A :class:`~tanglepack.numerics.Bridge.Bridge`.
@@ -872,7 +904,7 @@ class TangleSession:
         hosts = {rz.inside for rz in containing}
         innermost = [rz for rz in containing if rz.key not in hosts]
         return next(
-            (rz for rz in innermost if rz.key is bridge.fixed_point),
+            (rz for rz in innermost if bridge.fixed_point in rz.fixed_points),
             innermost[0] if innermost else None,
         )
 

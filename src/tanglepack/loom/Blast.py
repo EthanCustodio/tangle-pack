@@ -14,9 +14,9 @@ areas decides mirror-image zones by rounding error (2026-11-01). An outer zone's
 never iterates a bridge inside a zone declared inside it, so declared nested blasting
 does not depend on the order of the zones. The one exception is the bridge
 that carries the zone's own pip orbit (2026-10-29): an un-iterated bridge whose second
-crossing is ``f^j(q0)``, ``j >= 1``, on the registered orbit of the blasted zone's
-own corner pip (``ResonanceZone.boundary_intersection``, which need not be the
-session's chosen pip) is the zone's whatever its midpoint says, because near the periodic point
+crossing is ``f^j(q0)``, ``j >= 1``, on the registered orbit of one of the blasted
+zone's own corner pips (``ResonanceZone.pips``, one per fixed point of a
+heteroclinic ring, which need not be the session's chosen pips) is the zone's whatever its midpoint says, because near the periodic point
 the frozen zone polygon cannot tell a thin lobe's midpoint from the outside, and that
 filter, not the dynamics, set the depth of ``T(q0)`` at fine cutoffs. Only that bridge:
 ``f^j`` maps the zone's corner at ``q0``, between ``W^u[P, q0]`` arriving and
@@ -610,11 +610,13 @@ def blast_zone(
     def fp_ok(bridge: "Bridge") -> bool:
         return any(bridge.fixed_point is fp for fp in fixed_points)
 
-    # f(q0), ..., f^m(q0) of the zone's own corner pip (not the session's chosen
-    # one, which may differ), re-read once per iteration: the bridge arriving at
-    # one of them is inside (module docstring).
+    # f(q0), ..., f^m(q0) of the zone's own corner pips (not the session's chosen
+    # ones, which may differ; one per fixed point of a heteroclinic ring), re-read
+    # once per iteration: the bridge arriving at one of them is inside (module
+    # docstring).
     def arriving_ends() -> set[int]:
-        return set(_registered_orbit(session.workbench.intersection_registry, zone.boundary_intersection)[1:])
+        registry = session.workbench.intersection_registry
+        return {end for pip in zone.pips for end in _registered_orbit(registry, pip)[1:]}
 
     zone_ends = arriving_ends()
 
