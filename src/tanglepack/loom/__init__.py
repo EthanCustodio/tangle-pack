@@ -15,7 +15,8 @@ Entry points:
     * :func:`define_resonance_zone` / :class:`ResonanceZone` — the first loom algorithm.
     * :class:`Topology` — one recompute of the topology (stages 3-9) for a state and pip choice.
     * :class:`BridgeAlphabet` — the persistent letters of the session's bridge classes.
-    * :func:`cartoon_zones` / :func:`plot_resonance_zones` — what the drawings need from the zones.
+    * :func:`cartoon_zones` / :func:`plot_trellis_cartoon` / :func:`plot_resonance_zones` — what the
+      drawings need from the zones.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from .ResonanceZone import (
 )
 from .Blast import BlastResult, BlastStep, blast_zone
 from .BridgeAlphabet import BridgeAlphabet
-from .cartoon import cartoon_zones, plot_resonance_zones
+from .cartoon import cartoon_zones, plot_resonance_zones, plot_trellis_cartoon
 from .TangleSession import TangleSession
 from .Topology import Topology
 
@@ -43,4 +44,5 @@ __all__ = [
     "BridgeAlphabet",
     "cartoon_zones",
     "plot_resonance_zones",
+    "plot_trellis_cartoon",
 ]
