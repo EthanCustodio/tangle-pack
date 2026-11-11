@@ -751,7 +751,7 @@ class TangleSession:
 
     def resonance_zone(
         self,
-        intersection_id: "int | Sequence[int]",
+        intersection_ids: "int | Sequence[int]",
         fixed_points: Optional[Iterable["FixedPoint"]] = None,
         *,
         recompute: bool = True,
@@ -772,7 +772,7 @@ class TangleSession:
         Trellis is rebuilt on the next :meth:`trellis` call.
 
         Args:
-            intersection_id: Registry id of the boundary pip (e.g. ``trellis.strong_pip``),
+            intersection_ids: Registry id of the boundary pip (e.g. ``trellis.strong_pip``),
                 or the ids of the pips closing one heteroclinic ring.
             fixed_points: Fixed points to re-index on recompute. Defaults to all.
             recompute: If True (default), recompute intersections after trimming. Pass
@@ -784,14 +784,15 @@ class TangleSession:
             The stored :class:`ResonanceZone`.
 
         Raises:
-            ValueError: A heteroclinic pip closes no ring with the others
+            ValueError: The pips close separate rings or cut one branch twice, or
+                a heteroclinic pip closes no ring with the others
                 (:func:`~tanglepack.loom.ResonanceZone.define_resonance_zone`).
             CurveReleased: A lean blast has freed curve (the trim recomputes
                 the crossings).
         """
         self.workbench._refuse_if_lean("resonance_zone")
         rz = define_resonance_zone(
-            self.workbench, intersection_id, fixed_points, recompute=recompute
+            self.workbench, intersection_ids, fixed_points, recompute=recompute
         )
         for key, other in list(self.resonance_zones.items()):
             if any(fp in rz.fixed_points for fp in other.fixed_points):
@@ -849,16 +850,15 @@ class TangleSession:
             The :attr:`resonance_zones` mapping.
 
         Raises:
-            ValueError: A heteroclinic pip's ring does not close.
+            ValueError: A heteroclinic pip's ring does not close, or two pips cut
+                one branch (one zone per fixed point).
         """
         ids = list(intersection_ids)
         # Trim only (no recompute) so the remaining ids keep their meaning.
-        zones = {
-            iid: zone
-            for group in ring_groups(self.workbench.intersection_registry, ids)
-            for zone in [self.resonance_zone(group, recompute=False)]
-            for iid in group
-        }
+        zones: dict[int, ResonanceZone] = {}
+        for group in ring_groups(self.workbench.intersection_registry, ids):
+            zone = self.resonance_zone(group, recompute=False)
+            zones.update(dict.fromkeys(group, zone))
         for inner, outer in (nesting or {}).items():
             zones[inner].inside = zones[outer].key
         if ids:

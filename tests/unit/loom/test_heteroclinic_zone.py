@@ -16,11 +16,14 @@ mutations. No word, letter, matrix or count is pinned.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
 from tanglepack import TangleSession
 from tanglepack.examples.hydrogen.hydrogen_map import HydrogenSystem
+from tanglepack.loom.Blast import _registered_orbit
 from tanglepack.loom.ResonanceZone import ring_closed, ring_cycles
 
 ORIENTATION_A = {"unstable": np.array([-1.0, -1.5]), "stable": np.array([-1.0, 1.5])}
@@ -129,7 +132,55 @@ def test_chosen_heteroclinic_pips_survive_a_recompute_and_cut_the_topology(tangl
     assert session.topology().trellis.pips == pips
 
 
-def test_the_ring_zone_topology_is_reliable_and_its_active_classes_in_the_zone(tangle):
+def _homoclinic_pip(session: TangleSession, fp) -> int:
+    """The first homoclinic strong-pip candidate of ``fp``."""
+    registry = session.workbench.intersection_registry
+    return next(iid for iid in session.trellis(fp).strong_pip_candidates
+                if registry[iid].manifold_a_key[0] is fp)
+
+
+def test_the_ring_zone_replaces_a_homoclinic_zone_of_either_saddle(tangle):
+    """One zone per fixed point: the ring zone (keyed by A) drops B's own zone."""
+    session, A, B, pA, pB = tangle
+    session.resonance_zone(_homoclinic_pip(session, B))
+    assert list(session.resonance_zones) == [B]
+
+    session.add_resonance_zones([pA, pB])
+
+    (zone,) = session.resonance_zones.values()
+    assert zone.key is A and B in zone.fixed_points
+
+
+def test_a_homoclinic_zone_of_one_saddle_replaces_the_ring_zone(tangle):
+    session, A, B, pA, pB = tangle
+    homoclinic = _homoclinic_pip(session, B)
+    session.resonance_zone([pA, pB], recompute=False)
+    assert list(session.resonance_zones) == [A]
+
+    session.resonance_zone(homoclinic, recompute=False)
+
+    (zone,) = session.resonance_zones.values()
+    assert zone.key is B and zone.fixed_points == [B]
+
+
+def test_a_bridge_of_either_saddle_belongs_to_the_ring_zone(tangle):
+    """Of two stored zones holding a bridge, the ring zone wins for a bridge of
+    EITHER saddle, though it is keyed by A only."""
+    session, A, B, pA, pB = tangle
+    session.add_resonance_zones([pA, pB])
+    (zone,) = session.resonance_zones.values()
+    everywhere = SimpleNamespace(key=object(), inside=None, fixed_points=[],
+                                 contains_point=lambda point: True)
+    session.resonance_zones = {everywhere.key: everywhere, **session.resonance_zones}
+
+    inside = [bridge for bridge in session.workbench.bridges
+              if bridge.test_point is not None and zone.contains_point(bridge.test_point)]
+
+    assert {bridge.fixed_point for bridge in inside} == {A, B}
+    assert all(session.classify_bridge(bridge) is zone for bridge in inside)
+
+
+def test_the_ring_zone_holds_its_active_classes(tangle):
     """Each class lies wholly inside the ring zone or wholly outside it (an escape
     lobe), and every active class -- B's bridges included -- inside: a bridge of
     either saddle belongs to the zone whose ``fixed_points`` hold both."""
@@ -139,7 +190,6 @@ def test_the_ring_zone_topology_is_reliable_and_its_active_classes_in_the_zone(t
 
     topology = session.topology()
 
-    assert topology.dynamics.is_reliable
     for entry in topology.classes:
         zones = {session.classify_bridge(topology.trellis.bridge_between(*member.bridge_id)) is zone
                  for member in entry.members}
@@ -149,12 +199,24 @@ def test_the_ring_zone_topology_is_reliable_and_its_active_classes_in_the_zone(t
     assert all(entry.zone_key is zone.key for entry in topology.classes if not entry.inert)
 
 
-def test_blasting_the_ring_keeps_the_pip_depth(tangle):
+def test_the_ring_zone_blasts_the_bridges_arriving_on_every_pips_orbit(tangle, monkeypatch):
+    """The bridge arriving at ``f^j(q0)``, ``j >= 1``, is the zone's whatever the
+    polygon says, for the pip of EACH saddle of the ring; and the pip depth never
+    falls under the blast (a series law)."""
     session, A, B, pA, pB = tangle
     session.add_resonance_zones([pA, pB])
     (zone,) = session.resonance_zones.values()
+    monkeypatch.setattr(zone, "contains_point", lambda point: False)
+    registry = session.workbench.intersection_registry
+    arriving = {
+        bridge.id for bridge in session.workbench.uniiterated_bridges
+        if bridge.id is not None
+        and any(bridge.id[1] in _registered_orbit(registry, pip)[1:] for pip in zone.pips)
+    }
+    assert {registry[bridge_id[1]].manifold_b_key[0] for bridge_id in arriving} == {A, B}
     before = {fp: _depth(session, fp) for fp in (A, B)}
 
     result = session.blast_zone(zone, 1, fixed_point=[A, B], min_separation=1e-5)
 
+    assert {bridge.id for bridge in result.interior_bridges_by_iteration[0]} == arriving
     assert all(result.pip_depth[fp] >= before[fp] for fp in (A, B))

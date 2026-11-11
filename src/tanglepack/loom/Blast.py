@@ -13,12 +13,13 @@ code never infers it, because overlapping zones are not nested and a comparison 
 areas decides mirror-image zones by rounding error (2026-11-01). An outer zone's blast
 never iterates a bridge inside a zone declared inside it, so declared nested blasting
 does not depend on the order of the zones. The one exception is the bridge
-that carries the zone's own pip orbit (2026-10-29): an un-iterated bridge whose second
-crossing is ``f^j(q0)``, ``j >= 1``, on the registered orbit of one of the blasted
-zone's own corner pips (``ResonanceZone.pips``, one per fixed point of a
-heteroclinic ring, which need not be the session's chosen pips) is the zone's whatever its midpoint says, because near the periodic point
-the frozen zone polygon cannot tell a thin lobe's midpoint from the outside, and that
-filter, not the dynamics, set the depth of ``T(q0)`` at fine cutoffs. Only that bridge:
+that carries the zone's own pip orbit (2026-10-29): an un-iterated bridge whose
+second crossing is ``f^j(q0)``, ``j >= 1``, on the registered orbit of one of the
+blasted zone's own corner pips (``ResonanceZone.pips``, one per fixed point of a
+heteroclinic ring, which need not be the session's chosen pips) is the zone's
+whatever its midpoint says, because near the periodic point the frozen zone polygon
+cannot tell a thin lobe's midpoint from the outside, and that filter, not the
+dynamics, set the depth of ``T(q0)`` at fine cutoffs. Only that bridge:
 ``f^j`` maps the zone's corner at ``q0``, between ``W^u[P, q0]`` arriving and
 ``W^s[P, q0]``, onto the corner at ``f^j(q0)`` on the zone's side of ``W^s[P, q0]``
 (an orientation-preserving map keeps the side), so the unstable arc ARRIVING at

@@ -9,13 +9,18 @@ regions use.
 from __future__ import annotations
 
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
 from cases import build_k10, build_period3
 from helpers.fakes import bare_fixed_point
-from tanglepack.loom.ResonanceZone import ring_closed, ring_cycles, ring_order
+from tanglepack.loom.ResonanceZone import (
+    define_resonance_zone, ring_closed, ring_cycles, ring_groups, ring_order,
+)
 from tanglepack.numerics.Intersection import Intersection
+from tanglepack.numerics.IntersectionRegistry import IntersectionRegistry
 from tanglepack.numerics.geometry import polyline_midpoint
 from tanglepack.topology.TopologyResults import Arc
 
@@ -226,6 +231,58 @@ def test_a_heteroclinic_ring_closes_only_through_both_saddles():
     assert ring_closed([on_a, on_b]) and ring_cycles([on_a, on_b]) == [[0, 1]]
     assert not ring_closed([on_a]) and not ring_closed([on_b])
     assert ring_order([on_a]) == []
+
+
+def _pip(registry: IntersectionRegistry, unstable_fp, stable_fp, cdist: float = 1.0) -> int:
+    """A registered ``W^u(unstable_fp) x W^s(stable_fp)`` crossing on branch ``(0, 0)``, no links."""
+    return registry.add_synthetic((cdist, cdist), cdist, cdist,
+                                  manifold_a_key=(unstable_fp, "unstable", 0, 0),
+                                  manifold_b_key=(stable_fp, "stable", 0, 0))
+
+
+def test_ring_groups_keep_a_homoclinic_pip_apart_from_a_heteroclinic_ring():
+    """``[homoclinic pip of C, pip on W^s(A), pip on W^s(B)]``: two rings, two groups."""
+    A, B, C = bare_fixed_point(), bare_fixed_point(), bare_fixed_point()
+    registry = IntersectionRegistry()
+    on_c, on_a, on_b = _pip(registry, C, C), _pip(registry, B, A), _pip(registry, A, B)
+
+    assert ring_groups(registry, [on_c, on_a, on_b]) == [[on_c], [on_a, on_b]]
+    assert ring_groups(registry, [on_a, on_c, on_b]) == [[on_a, on_b], [on_c]]
+
+
+def test_two_cuts_on_one_branch_splice_no_rings():
+    """A homoclinic pip of A beside the diamond shares A's branches with it: refused,
+    never spliced into the diamond's cycle."""
+    A, B = bare_fixed_point(), bare_fixed_point()
+    registry = IntersectionRegistry()
+    ids = [_pip(registry, B, A), _pip(registry, A, B), _pip(registry, A, A, cdist=0.5)]
+    with pytest.raises(ValueError, match="one branch"):
+        ring_cycles([registry[iid] for iid in ids])
+    with pytest.raises(ValueError, match="one branch"):
+        ring_groups(registry, ids)
+    with pytest.raises(ValueError, match="one branch"):
+        define_resonance_zone(SimpleNamespace(intersection_registry=registry), ids)
+
+
+def test_one_zone_takes_the_pips_of_one_ring_only():
+    """Pips closing separate rings never bound one zone, homoclinic ones included."""
+    A, B, C = bare_fixed_point(), bare_fixed_point(), bare_fixed_point()
+    registry = IntersectionRegistry()
+    workbench = SimpleNamespace(intersection_registry=registry)
+    on_c, other_c = _pip(registry, C, C), _pip(registry, A, A)
+    on_a, on_b = _pip(registry, B, A, cdist=0.5), _pip(registry, A, B)
+    for ids in ([on_c, other_c], [on_c, on_a, on_b]):
+        with pytest.raises(ValueError, match="separate rings"):
+            define_resonance_zone(workbench, ids)
+
+
+def test_a_heteroclinic_pip_between_periods_bounds_no_zone():
+    """The restriction: a heteroclinic ring joins saddles of one period."""
+    A, C = bare_fixed_point(), bare_fixed_point(period=3)
+    registry = IntersectionRegistry()
+    pip = _pip(registry, C, A)
+    with pytest.raises(ValueError, match="periods"):
+        define_resonance_zone(SimpleNamespace(intersection_registry=registry), pip)
 
 
 def test_p3_ring_order_visits_each_stable_branch_once_in_ring_order():

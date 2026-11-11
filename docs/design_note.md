@@ -771,9 +771,10 @@ the pips whose cuts close one ring together (`ring_groups`, by `ring_cycles` ove
 bound ONE zone, e.g. the diamond `A -u-> q0 -s-> B -u-> q0' -s-> A`; it is keyed by its first pip's
 stable fixed point, `ResonanceZone.fixed_points` (derived from the cuts) holds all of them, storing
 it drops any zone sharing one, and each ring pip becomes its stable fixed point's chosen pip. A
-heteroclinic pip whose ring stays open, or a ring across periods, raises `ValueError`. A bridge of
-any of the ring's fixed points belongs to it (`classify_bridge`). Fixed points are constructed OUTERMOST first, so the period-1 saddle is `A`
-and tangle 0 (NEST-6). The inversion series loses classes at blast 6 by a genuine reference switch
+heteroclinic pip whose ring stays open, or a ring across periods, raises `ValueError`, and so do
+pips of separate rings passed as one zone and two cuts on one branch (which would splice two rings
+into one cycle). A bridge of any of the ring's fixed points belongs to it (`classify_bridge`). Fixed
+points are constructed OUTERMOST first, so the period-1 saddle is `A` and tangle 0 (NEST-6). The inversion series loses classes at blast 6 by a genuine reference switch
 (BCG-8), still open as DEC-25 (O).
 
 **Implemented by.** `TangleSession`, `TangleSession.trellis`, `TangleSession.topology`,

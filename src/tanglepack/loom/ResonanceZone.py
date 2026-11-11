@@ -439,7 +439,16 @@ def ring_cycles(cuts: list[Intersection]) -> list[list[int]]:
         when the last cut's stable branch leads back to the first cut's
         unstable one; a run that reaches a branch with no cut (iterates
         incomplete) stops there, open.
+
+    Raises:
+        ValueError: Two cuts lie on one branch: one zone per fixed point cuts
+            each branch once, and two cuts on one unstable branch would splice
+            different rings into one cycle.
     """
+    for side in ("manifold_a_key", "manifold_b_key"):
+        keys = [getattr(cut, side) for cut in cuts]
+        if len(set(keys)) < len(keys):
+            raise ValueError(f"two cuts on one branch ({side}): a zone cuts each branch once")
     by_unstable = {cut.manifold_a_key: index for index, cut in enumerate(cuts)}
     cycles: list[list[int]] = []
     seen: set[int] = set()
@@ -496,6 +505,9 @@ def ring_groups(registry: "IntersectionRegistry", intersection_ids: Iterable[int
 
     Returns:
         The groups, each in the order the ids were given, ordered by their first id.
+
+    Raises:
+        ValueError: Two of the cuts lie on one branch (:func:`ring_cycles`).
     """
     orbits = {iid: registry.iterate_orbit(iid) for iid in intersection_ids}
     ids = list(orbits)
@@ -584,9 +596,10 @@ def define_resonance_zone(
         and a frozen boundary snapshot (for bridge classification).
 
     Raises:
-        ValueError: A pip has no stable side; or the cuts hold a heteroclinic
-            crossing and their ring does not close (:func:`ring_closed`) or
-            joins fixed points of different periods.
+        ValueError: A pip has no stable side; several pips close separate rings
+            (:func:`ring_groups`) or cut one branch twice (:func:`ring_cycles`);
+            or the cuts hold a heteroclinic crossing and their ring does not
+            close (:func:`ring_closed`) or joins fixed points of different periods.
     """
     registry = workbench.intersection_registry
     ids = [intersection_ids] if isinstance(intersection_ids, Integral) else list(intersection_ids)
@@ -601,6 +614,11 @@ def define_resonance_zone(
 
     # Each pip + its iterates: one cut point per stable branch (k for a period-k orbit).
     cut_intersections = [registry[c] for iid in ids for c in registry.iterate_orbit(iid)]
+    if len(ids) > 1 and len(ring_groups(registry, ids)) > 1:
+        raise ValueError(
+            f"the pips {ids} close separate rings; pass them to add_resonance_zones, "
+            "one zone per ring"
+        )
     if any(cut.manifold_a_key[0] is not cut.manifold_b_key[0] for cut in cut_intersections):
         periods = {branch[0].period for cut in cut_intersections for branch in (cut.manifold_a_key, cut.manifold_b_key)}
         if len(periods) > 1:
