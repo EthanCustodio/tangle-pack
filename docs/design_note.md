@@ -230,14 +230,27 @@ their heteroclinic links (NUM-20); no recipe in the corpus depends on those link
 
 ## A.4 Stage 3 — the strong pip and the trellis of the pip
 
-**Definition (strong pip).** q0 is a strong pip iff no crossing of q0's fixed point, mapped onto
-q0's stable branch by the minimal number of backward steps in the branch cycle (table first, else
+**Definition (strong pip).** q0 is a strong pip iff no crossing of q0's own PAIR (its unstable
+branch on q0's unstable fixed point, its stable branch in the stable branch cycle of q0's stable
+fixed point), mapped onto q0's stable branch by the minimal number of backward steps in the branch cycle (table first, else
 scaling), lands strictly inside the open box `(0, c_s(q0)) x (0, c_u(q0))`; q0's own orbit is
 recognised by id (table) or by a 2-D collision (`same_point`, `collision_rtol`). One
 representative per crossing suffices because the box lies inside the computed trellis. An unresolved
 detection is no crossing and disqualifies nothing (`is_strong_pip` skips it). The candidates are
 classified on first read; restoring a remembered pip tests that one crossing only (F7). The default
 pip is the candidate of smallest unstable cdist.
+
+**A heteroclinic pip (heteroclinic-pip, 2026-11-10).** `q0 in W^u(A) x W^s(B)` may be B's strong
+pip when A and B have the same period (the restriction; `is_strong_pip` raises otherwise and
+`classify_strong_pips` skips such a crossing). Its disqualifiers are the other `W^u(A) x W^s(B)`
+crossings, mapped back in B's cycle; for a homoclinic q0 the pair rule is the old one, so no
+homoclinic number changed. The pip is the pip of its STABLE branch's fixed point (`Trellis.pips`
+keys it so, `TangleSession.set_strong_pip` refuses another fixed point): B's own trellis holds no
+heteroclinic crossing, so `Trellis._is_candidate` tests one on its stable branches directly, and a
+remembered heteroclinic pip is restored across generations like any other. Open, not implemented:
+a ring of such pips bounds a zone whose boundary also runs along the other pairs' arcs
+(`W^u[A, q0]`, `W^s[A, q0']`), and a simple closed boundary would also need the pips tested against
+those crossings.
 
 **Definition (the trellis of the pip).** Choosing q0 CUTS the trellis to
 `T(q0) = (W^u computed, W^s[P, q0])` (D10; D12 reversed 2026-10-31, the author's rule: use every
@@ -272,7 +285,7 @@ construction and is checked by the law "trellis_is_cut_at_the_pip_orbit".
 **Several fixed points.** A trellis holds a crossing only when BOTH its branches are selected: a
 tangle's own trellis holds no heteroclinic crossing (its arcs are joined across them), the
 selection's does. Cut at every pip it is `T(q0_A) ∪ T(q0_B)`; `Trellis.pips` records the pip per
-fixed point.
+fixed point. With heteroclinic pips on both, `T = (W^u computed, W^s(A)[A, q0'], W^s(B)[B, q0])`.
 
 **Implemented by.** `StrongPip.is_strong_pip`, `Trellis.strong_pip_candidates`,
 `Trellis.cut_at_pip_orbit`, `Trellis.image_cdist`, `Trellis.stable_key_at`,
@@ -608,8 +621,9 @@ it (C4, amended 2026-11-01, the author's rule): nesting is the caller's to state
 infers it, so an outer blast never iterates a bridge inside a declared inner zone and declared nested
 blasting is order independent. One exception (anchor-depth, 2026-10-29): an
 un-iterated bridge of a selected fixed point ARRIVING at `f^j(q0)`, `j >= 1` (its second crossing on
-the registered orbit of the blasted zone's own corner pip `ResonanceZone.boundary_intersection`,
-not the session's chosen pip, which may differ, read once per iteration), is the zone's whatever
+the registered orbit of one of the blasted zone's own corner pips `ResonanceZone.pips`, one per
+fixed point of a heteroclinic ring, not the session's chosen pips, which may differ, read once per
+iteration), is the zone's whatever
 its midpoint says, in the initial frontier and among the children: near `P` the frozen zone polygon
 cannot place a thin lobe's midpoint. Only the arriving arc: `f^j` maps the zone's corner at `q0`
 (between `W^u[P, q0]` arriving and `W^s[P, q0]`) onto the corner at `f^j(q0)` on the zone's side of
@@ -752,7 +766,13 @@ naming both ways out, and `forget_strong_pip` is the remedy (B8). Partitions, ho
 from the SELECTED fixed points only, and stages 4-6 run on the selection's trellis (API-2).
 
 **Zones and tangles.** One resonance zone per fixed point, keyed by it; an inversion zone is the union
-of its two loops (C8). Fixed points are constructed OUTERMOST first, so the period-1 saddle is `A`
+of its two loops (C8). A heteroclinic ring (heteroclinic-pip, 2026-11-10, the author's choice):
+the pips whose cuts close one ring together (`ring_groups`, by `ring_cycles` over all their orbits)
+bound ONE zone, e.g. the diamond `A -u-> q0 -s-> B -u-> q0' -s-> A`; it is keyed by its first pip's
+stable fixed point, `ResonanceZone.fixed_points` (derived from the cuts) holds all of them, storing
+it drops any zone sharing one, and each ring pip becomes its stable fixed point's chosen pip. A
+heteroclinic pip whose ring stays open, or a ring across periods, raises `ValueError`. A bridge of
+any of the ring's fixed points belongs to it (`classify_bridge`). Fixed points are constructed OUTERMOST first, so the period-1 saddle is `A`
 and tangle 0 (NEST-6). The inversion series loses classes at blast 6 by a genuine reference switch
 (BCG-8), still open as DEC-25 (O).
 
